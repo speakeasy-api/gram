@@ -4,7 +4,10 @@
 
 import { environmentsCreate } from "../funcs/environmentsCreate.js";
 import { environmentsDeleteBySlug } from "../funcs/environmentsDeleteBySlug.js";
+import { environmentsDeleteSourceLink } from "../funcs/environmentsDeleteSourceLink.js";
+import { environmentsGetBySource } from "../funcs/environmentsGetBySource.js";
 import { environmentsList } from "../funcs/environmentsList.js";
+import { environmentsSetSourceLink } from "../funcs/environmentsSetSourceLink.js";
 import { environmentsUpdateBySlug } from "../funcs/environmentsUpdateBySlug.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -51,6 +54,44 @@ export class Environments extends ClientSDK {
   }
 
   /**
+   * deleteSourceEnvironmentLink environments
+   *
+   * @remarks
+   * Delete a link between a source and an environment
+   */
+  async deleteSourceLink(
+    request: operations.DeleteSourceEnvironmentLinkRequest,
+    security?: operations.DeleteSourceEnvironmentLinkSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(environmentsDeleteSourceLink(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getSourceEnvironment environments
+   *
+   * @remarks
+   * Get the environment linked to a source
+   */
+  async getBySource(
+    request: operations.GetSourceEnvironmentRequest,
+    security?: operations.GetSourceEnvironmentSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Environment> {
+    return unwrapAsync(environmentsGetBySource(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listEnvironments environments
    *
    * @remarks
@@ -62,6 +103,25 @@ export class Environments extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListEnvironmentsResult> {
     return unwrapAsync(environmentsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setSourceEnvironmentLink environments
+   *
+   * @remarks
+   * Set (upsert) a link between a source and an environment
+   */
+  async setSourceLink(
+    request: operations.SetSourceEnvironmentLinkRequest,
+    security?: operations.SetSourceEnvironmentLinkSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.SourceEnvironmentLink> {
+    return unwrapAsync(environmentsSetSourceLink(
       this,
       request,
       security,

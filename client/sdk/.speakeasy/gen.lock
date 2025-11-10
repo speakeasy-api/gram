@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 0684be80b4739e8e8db308ea3bf3bf33
+  docChecksum: 6195b8448750de8ea617958f9bfbeedc
   docVersion: 0.0.1
   speakeasyVersion: 1.641.1
   generationVersion: 2.730.5
-  releaseVersion: 0.17.5
-  configChecksum: dcf9345addff965fc92efdc647a57b97
+  releaseVersion: 0.17.6
+  configChecksum: 3e8c5745085f1d52b04f3bab6a7b9afb
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -148,6 +148,10 @@ generatedFiles:
   - docs/models/components/setproductfeaturerequestbody.md
   - docs/models/components/setprojectlogoform.md
   - docs/models/components/setprojectlogoresult.md
+  - docs/models/components/setsourceenvironmentlinkrequestbody.md
+  - docs/models/components/sourceenvironmentlink.md
+  - docs/models/components/sourceenvironmentlinksourcekind.md
+  - docs/models/components/sourcekind.md
   - docs/models/components/tierlimits.md
   - docs/models/components/tool.md
   - docs/models/components/toolentry.md
@@ -231,6 +235,8 @@ generatedFiles:
   - docs/models/operations/deleteglobalvariationsecurityoption2.md
   - docs/models/operations/deleteslackconnectionrequest.md
   - docs/models/operations/deleteslackconnectionsecurity.md
+  - docs/models/operations/deletesourceenvironmentlinkrequest.md
+  - docs/models/operations/deletesourceenvironmentlinksecurity.md
   - docs/models/operations/deletetemplaterequest.md
   - docs/models/operations/deletetemplatesecurity.md
   - docs/models/operations/deletetemplatesecurityoption1.md
@@ -272,6 +278,8 @@ generatedFiles:
   - docs/models/operations/getperiodusagesecurity.md
   - docs/models/operations/getslackconnectionrequest.md
   - docs/models/operations/getslackconnectionsecurity.md
+  - docs/models/operations/getsourceenvironmentrequest.md
+  - docs/models/operations/getsourceenvironmentsecurity.md
   - docs/models/operations/gettemplaterequest.md
   - docs/models/operations/gettemplatesecurity.md
   - docs/models/operations/gettemplatesecurityoption1.md
@@ -338,6 +346,7 @@ generatedFiles:
   - docs/models/operations/publishsecurity.md
   - docs/models/operations/publishsecurityoption1.md
   - docs/models/operations/publishsecurityoption2.md
+  - docs/models/operations/queryparamsourcekind.md
   - docs/models/operations/redeploydeploymentrequest.md
   - docs/models/operations/redeploydeploymentsecurity.md
   - docs/models/operations/redeploydeploymentsecurityoption1.md
@@ -381,12 +390,15 @@ generatedFiles:
   - docs/models/operations/setprojectlogosecurity.md
   - docs/models/operations/setprojectlogosecurityoption1.md
   - docs/models/operations/setprojectlogosecurityoption2.md
+  - docs/models/operations/setsourceenvironmentlinkrequest.md
+  - docs/models/operations/setsourceenvironmentlinksecurity.md
   - docs/models/operations/slackcallbackrequest.md
   - docs/models/operations/slackcallbackresponse.md
   - docs/models/operations/slackloginrequest.md
   - docs/models/operations/slackloginresponse.md
   - docs/models/operations/slackloginsecurity.md
   - docs/models/operations/sort.md
+  - docs/models/operations/sourcekind.md
   - docs/models/operations/status.md
   - docs/models/operations/switchauthscopesrequest.md
   - docs/models/operations/switchauthscopesresponse.md
@@ -485,7 +497,10 @@ generatedFiles:
   - src/funcs/domainsRegisterDomain.ts
   - src/funcs/environmentsCreate.ts
   - src/funcs/environmentsDeleteBySlug.ts
+  - src/funcs/environmentsDeleteSourceLink.ts
+  - src/funcs/environmentsGetBySource.ts
   - src/funcs/environmentsList.ts
+  - src/funcs/environmentsSetSourceLink.ts
   - src/funcs/environmentsUpdateBySlug.ts
   - src/funcs/featuresSet.ts
   - src/funcs/instancesGetBySlug.ts
@@ -659,6 +674,8 @@ generatedFiles:
   - src/models/components/setproductfeaturerequestbody.ts
   - src/models/components/setprojectlogoform.ts
   - src/models/components/setprojectlogoresult.ts
+  - src/models/components/setsourceenvironmentlinkrequestbody.ts
+  - src/models/components/sourceenvironmentlink.ts
   - src/models/components/tierlimits.ts
   - src/models/components/tool.ts
   - src/models/components/toolentry.ts
@@ -707,6 +724,7 @@ generatedFiles:
   - src/models/operations/deleteenvironment.ts
   - src/models/operations/deleteglobalvariation.ts
   - src/models/operations/deleteslackconnection.ts
+  - src/models/operations/deletesourceenvironmentlink.ts
   - src/models/operations/deletetemplate.ts
   - src/models/operations/deletetoolset.ts
   - src/models/operations/evolvedeployment.ts
@@ -719,6 +737,7 @@ generatedFiles:
   - src/models/operations/getmcpmetadata.ts
   - src/models/operations/getperiodusage.ts
   - src/models/operations/getslackconnection.ts
+  - src/models/operations/getsourceenvironment.ts
   - src/models/operations/gettemplate.ts
   - src/models/operations/gettoolset.ts
   - src/models/operations/index.ts
@@ -755,6 +774,7 @@ generatedFiles:
   - src/models/operations/setmcpmetadata.ts
   - src/models/operations/setproductfeature.ts
   - src/models/operations/setprojectlogo.ts
+  - src/models/operations/setsourceenvironmentlink.ts
   - src/models/operations/slackcallback.ts
   - src/models/operations/slacklogin.ts
   - src/models/operations/switchauthscopes.ts
@@ -787,6 +807,7 @@ generatedFiles:
   - src/react-query/deleteEnvironment.ts
   - src/react-query/deleteGlobalVariation.ts
   - src/react-query/deleteSlackConnection.ts
+  - src/react-query/deleteSourceEnvironmentLink.ts
   - src/react-query/deleteTemplate.ts
   - src/react-query/deleteToolset.ts
   - src/react-query/deployment.ts
@@ -798,6 +819,7 @@ generatedFiles:
   - src/react-query/getMcpMetadata.ts
   - src/react-query/getPeriodUsage.ts
   - src/react-query/getSlackConnection.ts
+  - src/react-query/getSourceEnvironment.ts
   - src/react-query/getUsageTiers.ts
   - src/react-query/globalVariations.ts
   - src/react-query/index.ts
@@ -833,6 +855,7 @@ generatedFiles:
   - src/react-query/serveOpenAPIv3.ts
   - src/react-query/sessionInfo.ts
   - src/react-query/setProjectLogo.ts
+  - src/react-query/setSourceEnvironmentLink.ts
   - src/react-query/switchScopes.ts
   - src/react-query/template.ts
   - src/react-query/templates.ts
@@ -1758,5 +1781,40 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  deleteSourceEnvironmentLink:
+    speakeasy-default-delete-source-environment-link:
+      parameters:
+        query:
+          source_kind: "http"
+          source_slug: "<value>"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getSourceEnvironment:
+    speakeasy-default-get-source-environment:
+      parameters:
+        query:
+          source_kind: "function"
+          source_slug: "<value>"
+      responses:
+        "200":
+          application/json: {"created_at": "2023-01-11T14:35:37.868Z", "entries": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-02-18T13:02:10.518Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  setSourceEnvironmentLink:
+    speakeasy-default-set-source-environment-link:
+      requestBody:
+        application/json: {"environment_id": "4ae52ad0-d89f-4f61-bd88-82a51db4ea75", "source_kind": "http", "source_slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"environment_id": "6c2f94a0-03ab-4d64-b8c7-d480b5dbdb7c", "id": "ae670781-d986-4261-819c-2599dc7bcd58", "source_kind": "function", "source_slug": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

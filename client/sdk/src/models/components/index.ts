@@ -104,6 +104,8 @@ export * from "./setmcpmetadatarequestbody.js";
 export * from "./setproductfeaturerequestbody.js";
 export * from "./setprojectlogoform.js";
 export * from "./setprojectlogoresult.js";
+export * from "./setsourceenvironmentlinkrequestbody.js";
+export * from "./sourceenvironmentlink.js";
 export * from "./tierlimits.js";
 export * from "./tool.js";
 export * from "./toolentry.js";
