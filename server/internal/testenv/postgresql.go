@@ -32,7 +32,7 @@ type PostgresDBCloneFunc func(t *testing.T, name string) (*pgxpool.Pool, error)
 func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, PostgresDBCloneFunc, error) {
 	container, err := postgres.Run(
 		ctx,
-		"postgres:17",
+		"pgvector/pgvector:pg17",
 		postgres.WithUsername("gotest"),
 		postgres.WithPassword("gotest"),
 		postgres.WithDatabase("gotestdb"),
