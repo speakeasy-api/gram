@@ -35,6 +35,7 @@ func InitAuthContext(t *testing.T, ctx context.Context, conn *pgxpool.Pool, sess
 	require.NoError(t, err)
 
 	authctx.ProjectID = &p.ID
+	authctx.ProjectSlug = &p.Slug
 
 	return ctx
 }
