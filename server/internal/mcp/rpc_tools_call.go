@@ -38,8 +38,10 @@ type toolsCallParams struct {
 }
 
 const (
-	findToolsToolName   = "find_tools"
-	executeToolToolName = "execute_tool"
+	listToolsToolName     = "list_tools"
+	describeToolsToolName = "describe_tools"
+	findToolsToolName     = "find_tools"
+	executeToolToolName   = "execute_tool"
 )
 
 func handleToolsCall(
@@ -73,12 +75,15 @@ func handleToolsCall(
 		return nil, err
 	}
 
-	if payload.isDynamicMCPSession {
-		if params.Name == findToolsToolName {
-			return handleFindToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorStore)
-		}
-
-		if params.Name == executeToolToolName {
+	if payload.mode != ToolModeStatic {
+		switch params.Name {
+		case findToolsToolName:
+			return handleFindToolsCallVector(ctx, logger, req.ID, params.Arguments, toolset, vectorStore)
+		case listToolsToolName:
+			return handleListToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
+		case describeToolsToolName:
+			return handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
+		case executeToolToolName:
 			proxyName, proxyArgs, err := processExecuteToolCall(ctx, logger, params.Arguments)
 			if err != nil {
 				return nil, err
@@ -306,7 +311,7 @@ func (a findToolsArguments) resolvedLimit() int {
 	return defaultFindToolsResultSize
 }
 
-func handleFindToolsCall(
+func handleFindToolsCallVector(
 	ctx context.Context,
 	logger *slog.Logger,
 	reqID msgID,
@@ -375,6 +380,188 @@ func handleFindToolsCall(
 type executeToolArguments struct {
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments"`
+}
+
+type listToolsArguments struct {
+	Paths []string `json:"paths"`
+}
+
+func handleListToolsCall(
+	ctx context.Context,
+	logger *slog.Logger,
+	reqID msgID,
+	argsRaw json.RawMessage,
+	toolset *types.Toolset,
+) (json.RawMessage, error) {
+	var args listToolsArguments
+	if len(argsRaw) > 0 {
+		if err := json.Unmarshal(argsRaw, &args); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "failed to parse list_tools arguments").Log(ctx, logger)
+		}
+	}
+
+	if len(args.Paths) == 0 {
+		return nil, oops.E(oops.CodeInvalid, errors.New("missing paths"), "paths are required").Log(ctx, logger)
+	}
+
+	// Build a map of tools by their hierarchical path (source/group/tool)
+	toolsByPath, err := buildToolsByPath(toolset.Tools)
+	if err != nil {
+		return nil, err
+	}
+
+	// Match tools based on requested paths
+	matchedTools := make(map[string]*types.Tool)
+	for _, path := range args.Paths {
+		path = strings.TrimSpace(path)
+		for toolPath, tool := range toolsByPath {
+			if strings.HasPrefix(toolPath, path) {
+				matchedTools[tool.HTTPToolDefinition.Name] = tool
+			}
+		}
+	}
+
+	// Convert to list entries
+	entries := make([]*toolListEntry, 0, len(matchedTools))
+	for _, tool := range matchedTools {
+		if entry := toolToListEntry(tool); entry != nil {
+			entry.Meta = nil
+			entry.InputSchema = nil
+			entries = append(entries, entry)
+		}
+	}
+
+	payload, err := json.Marshal(toolsListResult{Tools: entries})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool list result").Log(ctx, logger)
+	}
+
+	chunk, err := json.Marshal(contentChunk[string, json.RawMessage]{
+		Type:     "text",
+		Text:     string(payload),
+		MimeType: nil,
+		Data:     nil,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool list chunk").Log(ctx, logger)
+	}
+
+	response, err := json.Marshal(result[toolCallResult]{
+		ID: reqID,
+		Result: toolCallResult{
+			Content: []json.RawMessage{chunk},
+			IsError: false,
+		},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize list_tools response").Log(ctx, logger)
+	}
+
+	return response, nil
+}
+
+// buildToolsByPath creates a map of hierarchical paths to tools for filtering/matching
+func buildToolsByPath(tools []*types.Tool) (map[string]*types.Tool, error) {
+	toolsByPath := make(map[string]*types.Tool)
+	for _, tool := range tools {
+		if tool.HTTPToolDefinition == nil {
+			continue
+		}
+
+		toolURN, err := conv.GetToolURN(*tool)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn")
+		}
+
+		source := toolURN.Source
+		group := "no-group"
+		tags := tool.HTTPToolDefinition.Tags
+		if len(tags) > 0 {
+			group = tags[0]
+		}
+
+		// Store tool at multiple path levels for matching
+		toolsByPath[fmt.Sprintf("/%s/%s/%s", source, group, tool.HTTPToolDefinition.Name)] = tool
+		toolsByPath[fmt.Sprintf("/%s/%s", source, group)] = tool
+		toolsByPath[fmt.Sprintf("/%s", source)] = tool
+	}
+	return toolsByPath, nil
+}
+
+type describeToolsArguments struct {
+	ToolNames []string `json:"tool_names"`
+}
+
+func handleDescribeToolsCall(
+	ctx context.Context,
+	logger *slog.Logger,
+	reqID msgID,
+	argsRaw json.RawMessage,
+	toolset *types.Toolset,
+) (json.RawMessage, error) {
+	var args describeToolsArguments
+	if len(argsRaw) > 0 {
+		if err := json.Unmarshal(argsRaw, &args); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "failed to parse describe_tools arguments").Log(ctx, logger)
+		}
+	}
+
+	if len(args.ToolNames) == 0 {
+		return nil, oops.E(oops.CodeInvalid, errors.New("missing tool_names"), "tool_names are required").Log(ctx, logger)
+	}
+
+	// Build a map of tools by name for quick lookup
+	toolsByName := make(map[string]*types.Tool)
+	for _, tool := range toolset.Tools {
+		baseTool := conv.ToBaseTool(tool)
+		toolsByName[baseTool.Name] = tool
+	}
+
+	// Find requested tools
+	entries := make([]*toolListEntry, 0, len(args.ToolNames))
+	notFound := make([]string, 0)
+	for _, name := range args.ToolNames {
+		name = strings.TrimSpace(name)
+		if tool, exists := toolsByName[name]; exists {
+			if entry := toolToListEntry(tool); entry != nil {
+				entries = append(entries, entry)
+			}
+		} else {
+			notFound = append(notFound, name)
+		}
+	}
+
+	if len(notFound) > 0 {
+		logger.WarnContext(ctx, "some tools not found", attr.SlogExpected(notFound))
+	}
+
+	payload, err := json.Marshal(toolsListResult{Tools: entries})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool description result").Log(ctx, logger)
+	}
+
+	chunk, err := json.Marshal(contentChunk[string, json.RawMessage]{
+		Type:     "text",
+		Text:     string(payload),
+		MimeType: nil,
+		Data:     nil,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool description chunk").Log(ctx, logger)
+	}
+
+	response, err := json.Marshal(result[toolCallResult]{
+		ID: reqID,
+		Result: toolCallResult{
+			Content: []json.RawMessage{chunk},
+			IsError: false,
+		},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize describe_tools response").Log(ctx, logger)
+	}
+
+	return response, nil
 }
 
 func processExecuteToolCall(ctx context.Context, logger *slog.Logger, argsRaw json.RawMessage) (string, json.RawMessage, error) {

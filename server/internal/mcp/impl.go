@@ -78,15 +78,23 @@ type oauthTokenInputs struct {
 	Token        string
 }
 
+type ToolMode string
+
+const (
+	ToolModeEmbeddings  ToolMode = "embeddings"
+	ToolModeProgressive ToolMode = "progressive"
+	ToolModeStatic      ToolMode = "static"
+)
+
 type mcpInputs struct {
-	projectID           uuid.UUID
-	toolset             string
-	environment         string
-	mcpEnvVariables     map[string]string
-	oauthTokenInputs    []oauthTokenInputs
-	authenticated       bool
-	sessionID           string
-	isDynamicMCPSession bool
+	projectID        uuid.UUID
+	toolset          string
+	environment      string
+	mcpEnvVariables  map[string]string
+	oauthTokenInputs []oauthTokenInputs
+	authenticated    bool
+	sessionID        string
+	mode             ToolMode
 }
 
 func NewService(
@@ -435,19 +443,16 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 	sessionID := parseMcpSessionID(r.Header)
 	w.Header().Set("Mcp-Session-Id", sessionID)
-	// TODO: this is for demo. There probably needs to still be annotation per toolset on if it allows dynamic tool calling
-	// Realistically you would need to embed and vectorize ahead of time
-	isDynamicMCP := r.Header.Get("Gram-Dynamic-MCP") == "true"
 
 	mcpInputs := &mcpInputs{
-		projectID:           toolset.ProjectID,
-		toolset:             toolset.Slug,
-		environment:         selectedEnvironment,
-		mcpEnvVariables:     parseMcpEnvVariables(r),
-		authenticated:       authenticated,
-		oauthTokenInputs:    tokenInputs,
-		sessionID:           sessionID,
-		isDynamicMCPSession: isDynamicMCP,
+		projectID:        toolset.ProjectID,
+		toolset:          toolset.Slug,
+		environment:      selectedEnvironment,
+		mcpEnvVariables:  parseMcpEnvVariables(r),
+		authenticated:    authenticated,
+		oauthTokenInputs: tokenInputs,
+		sessionID:        sessionID,
+		mode:             readToolMode(r),
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
@@ -558,17 +563,15 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 	sessionID := parseMcpSessionID(r.Header)
 	w.Header().Set("Mcp-Session-Id", sessionID)
 
-	isDynamicMCP := r.Header.Get("Gram-Dynamic-MCP") == "true"
-
 	mcpInputs := &mcpInputs{
-		projectID:           *authCtx.ProjectID,
-		toolset:             toolsetSlug,
-		environment:         environmentSlug,
-		mcpEnvVariables:     parseMcpEnvVariables(r),
-		authenticated:       true,
-		oauthTokenInputs:    []oauthTokenInputs{},
-		sessionID:           sessionID,
-		isDynamicMCPSession: isDynamicMCP,
+		projectID:        *authCtx.ProjectID,
+		toolset:          toolsetSlug,
+		environment:      environmentSlug,
+		mcpEnvVariables:  parseMcpEnvVariables(r),
+		authenticated:    true,
+		oauthTokenInputs: []oauthTokenInputs{},
+		sessionID:        sessionID,
+		mode:             readToolMode(r),
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
@@ -586,6 +589,18 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body").Log(ctx, s.logger)
 	}
 	return nil
+}
+
+// TODO: this is for demo. There probably needs to still be annotation per toolset on if it allows dynamic tool calling
+// Realistically you would need to embed and vectorize ahead of time
+func readToolMode(r *http.Request) ToolMode {
+	mode := r.Header.Get("Gram-Mode")
+	mode = strings.TrimSpace(mode)
+	mode = strings.ToLower(mode)
+	if mode == "" {
+		return ToolModeStatic
+	}
+	return ToolMode(mode)
 }
 
 func (s *Service) handleBatch(ctx context.Context, payload *mcpInputs, batch batchedRawRequest) (json.RawMessage, error) {
