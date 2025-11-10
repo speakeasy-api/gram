@@ -40,7 +40,6 @@ type toolsCallParams struct {
 const (
 	listToolsToolName     = "list_tools"
 	describeToolsToolName = "describe_tools"
-	findToolsToolName     = "find_tools"
 	executeToolToolName   = "execute_tool"
 )
 
@@ -57,7 +56,6 @@ func handleToolsCall(
 	billingRepository billing.Repository,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	tcm tm.ToolMetricsProvider,
-	vectorStore *toolVectorStore,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -77,8 +75,6 @@ func handleToolsCall(
 
 	if payload.mode != ToolModeStatic {
 		switch params.Name {
-		case findToolsToolName:
-			return handleFindToolsCallVector(ctx, logger, req.ID, params.Arguments, toolset, vectorStore)
 		case listToolsToolName:
 			return handleListToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
 		case describeToolsToolName:
@@ -297,84 +293,6 @@ func handleToolsCall(
 	}
 
 	return bs, nil
-}
-
-type findToolsArguments struct {
-	Query      string `json:"query"`
-	NumResults int    `json:"num_results"`
-}
-
-func (a findToolsArguments) resolvedLimit() int {
-	if a.NumResults > 0 {
-		return a.NumResults
-	}
-	return defaultFindToolsResultSize
-}
-
-func handleFindToolsCallVector(
-	ctx context.Context,
-	logger *slog.Logger,
-	reqID msgID,
-	argsRaw json.RawMessage,
-	toolset *types.Toolset,
-	vectorStore *toolVectorStore,
-) (json.RawMessage, error) {
-	if vectorStore == nil {
-		return nil, oops.E(oops.CodeUnexpected, errors.New("vector store unavailable"), "vector search is not enabled").Log(ctx, logger)
-	}
-
-	var args findToolsArguments
-	if len(argsRaw) > 0 {
-		if err := json.Unmarshal(argsRaw, &args); err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "failed to parse find_tools arguments").Log(ctx, logger)
-		}
-	}
-
-	query := strings.TrimSpace(args.Query)
-	if query == "" {
-		return nil, oops.E(oops.CodeInvalid, errors.New("missing query"), "query is required").Log(ctx, logger)
-	}
-
-	limit := args.resolvedLimit()
-	results, err := vectorStore.SearchToolset(ctx, toolset.ID, query, limit)
-	if errors.Is(err, errToolVectorCollectionNotFound) {
-		entries := buildToolListEntries(toolset.Tools)
-		if indexErr := vectorStore.IndexToolset(ctx, toolset.ID, entries); indexErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, indexErr, "failed to prepare tool search index").Log(ctx, logger)
-		}
-		results, err = vectorStore.SearchToolset(ctx, toolset.ID, query, limit)
-	}
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to search tools").Log(ctx, logger)
-	}
-
-	payload, err := json.Marshal(toolsListResult{Tools: results})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool search result").Log(ctx, logger)
-	}
-
-	chunk, err := json.Marshal(contentChunk[string, json.RawMessage]{
-		Type:     "text",
-		Text:     string(payload),
-		MimeType: nil,
-		Data:     nil,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool search chunk").Log(ctx, logger)
-	}
-
-	response, err := json.Marshal(result[toolCallResult]{
-		ID: reqID,
-		Result: toolCallResult{
-			Content: []json.RawMessage{chunk},
-			IsError: false,
-		},
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize find_tools response").Log(ctx, logger)
-	}
-
-	return response, nil
 }
 
 type executeToolArguments struct {

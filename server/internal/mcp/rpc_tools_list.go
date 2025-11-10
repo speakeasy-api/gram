@@ -31,7 +31,7 @@ type toolListEntry struct {
 	Meta        map[string]any  `json:"_meta,omitempty"`
 }
 
-func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, productMetrics *posthog.Posthog, toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents], vectorStore *toolVectorStore) (json.RawMessage, error) {
+func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, productMetrics *posthog.Posthog, toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents]) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
 	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache)
@@ -59,8 +59,6 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 
 	var tools []*toolListEntry
 	switch payload.mode {
-	case ToolModeEmbeddings:
-		tools = buildEmbeddingsSessionTools(toolset)
 	case ToolModeProgressive:
 		tools = buildProgressiveSessionTools(toolset)
 	case ToolModeStatic:
@@ -111,42 +109,6 @@ func toolToListEntry(tool *types.Tool) *toolListEntry {
 		Description: baseTool.Description,
 		InputSchema: json.RawMessage(baseTool.Schema),
 		Meta:        meta,
-	}
-}
-
-func buildEmbeddingsSessionTools(toolset *types.Toolset) []*toolListEntry {
-	toolsetName := ""
-	toolsetDescription := ""
-	if toolset != nil {
-		toolsetName = toolset.Name
-		toolsetDescription = conv.PtrValOrEmpty(toolset.Description, "")
-	}
-	contextDescription := toolsetName
-	if contextDescription != "" && toolsetDescription != "" {
-		contextDescription = fmt.Sprintf("%s (%s)", toolsetName, toolsetDescription)
-	}
-	if contextDescription == "" && toolsetDescription != "" {
-		contextDescription = toolsetDescription
-	}
-
-	findDescription := "Search the available tools in this MCP server using a search query."
-	executeDescription := "Execute a specific tool by name, passing through the correct arguments for that tool's schema."
-	if contextDescription != "" {
-		findDescription = fmt.Sprintf("Search the available tools in %s using a search query.", contextDescription)
-		executeDescription = fmt.Sprintf("Execute a specific tool from %s by name, passing through the correct arguments for that tool's schema.", contextDescription)
-	}
-
-	return []*toolListEntry{
-		{
-			Name:        findToolsToolName,
-			Description: findDescription,
-			InputSchema: dynamicFindToolsSchema,
-		},
-		{
-			Name:        executeToolToolName,
-			Description: executeDescription,
-			InputSchema: dynamicExecuteToolSchema,
-		},
 	}
 }
 

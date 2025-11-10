@@ -70,7 +70,6 @@ type Service struct {
 	billingRepository billing.Repository
 	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
 	tcm               tm.ToolMetricsProvider
-	toolVectorStore   *toolVectorStore
 }
 
 type oauthTokenInputs struct {
@@ -148,7 +147,6 @@ func NewService(
 		billingRepository: billingRepository,
 		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		tcm:               tcm,
-		toolVectorStore:   newToolVectorStore(),
 	}
 }
 
@@ -668,9 +666,9 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog, &s.toolsetCache, s.toolVectorStore)
+		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog, &s.toolsetCache)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.tcm, s.toolVectorStore)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.tcm)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "prompts/get":
