@@ -56,11 +56,11 @@ func doInstallClaudeDesktop(c *cli.Context) error {
 	outputDir := c.String("output-dir")
 	if outputDir == "" {
 		outputDir = getDownloadsDir()
-	}
-
-	// Ensure output directory exists
-	if err := os.MkdirAll(outputDir, 0750); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
+	} else {
+		err := os.MkdirAll(outputDir, 0750)
+		if err != nil && !errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("failed to create output directory: %w", err)
+		}
 	}
 
 	// Create filename from server name
