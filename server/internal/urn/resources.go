@@ -248,6 +248,7 @@ func (u Resource) Value() (driver.Value, error) {
 	return u.String(), nil
 }
 
+// server nudge
 func (u Resource) MarshalText() (text []byte, err error) {
 	if err := u.validate(); err != nil {
 		return nil, fmt.Errorf("marshal resource urn text: %w", err)
