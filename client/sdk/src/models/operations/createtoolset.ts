@@ -4,10 +4,7 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { safeParse } from "../../lib/schemas.js";
-import { Result as SafeParseResult } from "../../types/fp.js";
 import * as components from "../components/index.js";
-import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type CreateToolsetSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -25,21 +22,6 @@ export type CreateToolsetRequest = {
   gramProject?: string | undefined;
   createToolsetRequestBody: components.CreateToolsetRequestBody;
 };
-
-/** @internal */
-export const CreateToolsetSecurity$inboundSchema: z.ZodType<
-  CreateToolsetSecurity,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  "project_slug_header_Gram-Project": z.string().optional(),
-  "session_header_Gram-Session": z.string().optional(),
-}).transform((v) => {
-  return remap$(v, {
-    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
-    "session_header_Gram-Session": "sessionHeaderGramSession",
-  });
-});
 
 /** @internal */
 export type CreateToolsetSecurity$Outbound = {
@@ -62,19 +44,6 @@ export const CreateToolsetSecurity$outboundSchema: z.ZodType<
   });
 });
 
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace CreateToolsetSecurity$ {
-  /** @deprecated use `CreateToolsetSecurity$inboundSchema` instead. */
-  export const inboundSchema = CreateToolsetSecurity$inboundSchema;
-  /** @deprecated use `CreateToolsetSecurity$outboundSchema` instead. */
-  export const outboundSchema = CreateToolsetSecurity$outboundSchema;
-  /** @deprecated use `CreateToolsetSecurity$Outbound` instead. */
-  export type Outbound = CreateToolsetSecurity$Outbound;
-}
-
 export function createToolsetSecurityToJSON(
   createToolsetSecurity: CreateToolsetSecurity,
 ): string {
@@ -82,33 +51,6 @@ export function createToolsetSecurityToJSON(
     CreateToolsetSecurity$outboundSchema.parse(createToolsetSecurity),
   );
 }
-
-export function createToolsetSecurityFromJSON(
-  jsonString: string,
-): SafeParseResult<CreateToolsetSecurity, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => CreateToolsetSecurity$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'CreateToolsetSecurity' from JSON`,
-  );
-}
-
-/** @internal */
-export const CreateToolsetRequest$inboundSchema: z.ZodType<
-  CreateToolsetRequest,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  "Gram-Session": z.string().optional(),
-  "Gram-Project": z.string().optional(),
-  CreateToolsetRequestBody: components.CreateToolsetRequestBody$inboundSchema,
-}).transform((v) => {
-  return remap$(v, {
-    "Gram-Session": "gramSession",
-    "Gram-Project": "gramProject",
-    "CreateToolsetRequestBody": "createToolsetRequestBody",
-  });
-});
 
 /** @internal */
 export type CreateToolsetRequest$Outbound = {
@@ -134,33 +76,10 @@ export const CreateToolsetRequest$outboundSchema: z.ZodType<
   });
 });
 
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace CreateToolsetRequest$ {
-  /** @deprecated use `CreateToolsetRequest$inboundSchema` instead. */
-  export const inboundSchema = CreateToolsetRequest$inboundSchema;
-  /** @deprecated use `CreateToolsetRequest$outboundSchema` instead. */
-  export const outboundSchema = CreateToolsetRequest$outboundSchema;
-  /** @deprecated use `CreateToolsetRequest$Outbound` instead. */
-  export type Outbound = CreateToolsetRequest$Outbound;
-}
-
 export function createToolsetRequestToJSON(
   createToolsetRequest: CreateToolsetRequest,
 ): string {
   return JSON.stringify(
     CreateToolsetRequest$outboundSchema.parse(createToolsetRequest),
-  );
-}
-
-export function createToolsetRequestFromJSON(
-  jsonString: string,
-): SafeParseResult<CreateToolsetRequest, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => CreateToolsetRequest$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'CreateToolsetRequest' from JSON`,
   );
 }

@@ -128,6 +128,7 @@ const (
 	PackageNameKey                 = attribute.Key("gram.package.name")
 	PackageVersionKey              = attribute.Key("gram.package.version")
 	PKCEMethodKey                  = attribute.Key("gram.pkce.method")
+	ProductFeatureNameKey          = attribute.Key("gram.product.feature.name")
 	ProjectIDKey                   = attribute.Key("gram.project.id")
 	ProjectNameKey                 = attribute.Key("gram.project.name")
 	ProjectSlugKey                 = attribute.Key("gram.project.slug")
@@ -536,6 +537,11 @@ func SlogPackageVersion(v string) slog.Attr      { return slog.String(string(Pac
 
 func PKCEMethod(v string) attribute.KeyValue { return PKCEMethodKey.String(v) }
 func SlogPKCEMethod(v string) slog.Attr      { return slog.String(string(PKCEMethodKey), v) }
+
+func ProductFeatureName(v string) attribute.KeyValue { return ProductFeatureNameKey.String(v) }
+func SlogProductFeatureName(v string) slog.Attr {
+	return slog.String(string(ProductFeatureNameKey), v)
+}
 
 func ProjectID(v string) attribute.KeyValue { return ProjectIDKey.String(v) }
 func SlogProjectID(v string) slog.Attr      { return slog.String(string(ProjectIDKey), v) }

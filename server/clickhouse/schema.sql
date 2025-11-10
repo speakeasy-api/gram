@@ -4,7 +4,7 @@ create table if not exists http_requests_raw
     ts                  DateTime64(3, 'UTC'),
     organization_id     UUID,
     project_id          UUID,
-    deployment_id       UUID,
+    deployment_id       Nullable(UUID),
     tool_id             UUID,
     tool_urn            String,
     tool_type           LowCardinality(String),
@@ -13,6 +13,7 @@ create table if not exists http_requests_raw
     span_id             FixedString(16),
 
     http_method         LowCardinality(String),
+    http_server_url     String,
     http_route          String,
     status_code         Int64,
     duration_ms         Float64,
@@ -24,9 +25,8 @@ create table if not exists http_requests_raw
     response_headers    Map(String, String) CODEC (ZSTD),
     response_body_bytes Int64
 ) engine = MergeTree
-      PARTITION BY toDate(ts)
       ORDER BY (toUInt128(project_id), ts)
-      TTL ts + toIntervalDay(60)
+      TTL ts + toIntervalDay(30)
       SETTINGS index_granularity = 8192
       COMMENT 'Stores raw HTTP tool call requests and responses';
 

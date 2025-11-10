@@ -17,6 +17,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 )
 
 func processSecurity(
@@ -30,7 +31,17 @@ func processSecurity(
 	cacheImpl cache.Cache,
 	envVars *CaseInsensitiveEnv,
 	serverURL string,
+	toolCallLogger tm.ToolCallLogger,
 ) bool {
+	securityHeadersProcessed := make(map[string]string)
+	setHeader := func(key, value string) {
+		req.Header.Set(key, value)
+		securityHeadersProcessed[http.CanonicalHeaderKey(key)] = value
+	}
+	defer func() {
+		// if tool calling logging is enabled this will record the headers that were set with redaction
+		toolCallLogger.RecordRequestHeaders(securityHeadersProcessed, true)
+	}()
 	for _, security := range plan.Security {
 		if !security.Type.Valid {
 			logger.ErrorContext(ctx, "invalid security type in tool definition")
@@ -49,7 +60,7 @@ func processSecurity(
 				key := security.EnvVariables[0]
 				switch security.Placement.Value {
 				case "header":
-					req.Header.Set(security.Name.Value, envVars.Get(key))
+					setHeader(security.Name.Value, envVars.Get(key))
 				case "query":
 					values := req.URL.Query()
 					values.Set(security.Name.Value, envVars.Get(key))
@@ -67,7 +78,7 @@ func processSecurity(
 					logger.ErrorContext(ctx, "token value is empty for bearer auth", attr.SlogEnvVarName(security.EnvVariables[0]), attr.SlogSecurityScheme(security.Scheme.Value))
 				} else {
 					token := envVars.Get(security.EnvVariables[0])
-					req.Header.Set("Authorization", formatForBearer(token))
+					setHeader("Authorization", formatForBearer(token))
 				}
 			case "basic":
 				if len(security.EnvVariables) < 2 {
@@ -88,6 +99,8 @@ func processSecurity(
 							attr.SlogSecurityScheme(security.Scheme.Value))
 					} else {
 						req.SetBasicAuth(username, password)
+						// special case doesn't go through normal setHeader function
+						securityHeadersProcessed[http.CanonicalHeaderKey("Authorization")] = req.Header.Get("Authorization")
 					}
 				}
 			default:
@@ -100,7 +113,7 @@ func processSecurity(
 					if token := envVars.Get(envVar); token == "" {
 						logger.ErrorContext(ctx, "missing authorization code", attr.SlogEnvVarName(envVar))
 					} else {
-						req.Header.Set("Authorization", formatForBearer(token))
+						setHeader("Authorization", formatForBearer(token))
 					}
 				}
 			}
@@ -117,12 +130,13 @@ func processSecurity(
 							if token := envVars.Get(envVar); token == "" {
 								logger.ErrorContext(ctx, "missing authorization code", attr.SlogEnvVarName(envVar))
 							} else {
-								req.Header.Set("Authorization", formatForBearer(token))
+								setHeader("Authorization", formatForBearer(token))
 							}
 						}
 					}
 				case "client_credentials":
-					if err := processClientCredentials(ctx, logger, req, cacheImpl, tool, plan.SecurityScopes, security, envVars, serverURL); err != nil {
+					token, err := processClientCredentials(ctx, logger, req, cacheImpl, tool, plan.SecurityScopes, security, envVars, serverURL)
+					if err != nil {
 						logger.ErrorContext(ctx, "could not process client credentials", attr.SlogError(err))
 						if strings.Contains(err.Error(), "failed to make client credentials token request") {
 							w.Header().Set("Content-Type", "application/json")
@@ -138,6 +152,7 @@ func processSecurity(
 							return false
 						}
 					}
+					setHeader("Authorization", formatForBearer(token))
 				}
 			}
 		default:
@@ -210,7 +225,7 @@ type clientCredentialsTokenResponseCamelCase struct {
 	ExpiresIn   int    `json:"expiresIn"`
 }
 
-func processClientCredentials(ctx context.Context, logger *slog.Logger, req *http.Request, cacheImpl cache.Cache, tool *ToolDescriptor, planScopes map[string][]string, security *HTTPToolSecurity, envVars *CaseInsensitiveEnv, serverURL string) error {
+func processClientCredentials(ctx context.Context, logger *slog.Logger, req *http.Request, cacheImpl cache.Cache, tool *ToolDescriptor, planScopes map[string][]string, security *HTTPToolSecurity, envVars *CaseInsensitiveEnv, serverURL string) (string, error) {
 	// To discuss, currently we are taking the approach of exact scope match for reused tokens
 	// We could look into enabling a prefix match feature for caches where we return multiple entries matching the projectID, clientID, tokenURL and then check scopes against all returned values
 	// We would want to make sure any underlying cache implementation supports this feature
@@ -229,16 +244,15 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 	}
 
 	if accessToken != "" {
-		req.Header.Set("Authorization", formatForBearer(accessToken))
-		return nil
+		return accessToken, nil
 	}
 
 	if clientSecret == "" {
-		return fmt.Errorf("missing client secret for client credentials")
+		return "", fmt.Errorf("missing client secret for client credentials")
 	}
 
 	if clientID == "" {
-		return fmt.Errorf("missing client id for client credentials")
+		return "", fmt.Errorf("missing client id for client credentials")
 	}
 
 	var requestedScopes []string
@@ -248,11 +262,11 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 
 	var oauthFlows oAuthFlows
 	if err := json.Unmarshal(security.OAuthFlows, &oauthFlows); err != nil {
-		return fmt.Errorf("failed to unmarshal oauth flows for client credentials: %w", err)
+		return "", fmt.Errorf("failed to unmarshal oauth flows for client credentials: %w", err)
 	}
 
 	if oauthFlows.ClientCredentials == nil {
-		return fmt.Errorf("no client credentials flow found")
+		return "", fmt.Errorf("no client credentials flow found")
 	}
 
 	tokenURL := oauthFlows.ClientCredentials.TokenUrl
@@ -265,13 +279,13 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 	}
 
 	if tokenURL == "" {
-		return fmt.Errorf("no client credentials token url found")
+		return "", fmt.Errorf("no client credentials token url found")
 	}
 
 	cacheKey := clientCredentialsTokenCacheCacheKey(tool.ProjectID, clientID, tokenURL, requestedScopes)
 	if token := getTokenFromCache(ctx, logger, tokenCache, cacheKey); token != "" {
 		req.Header.Set("Authorization", formatForBearer(token))
-		return nil
+		return token, nil
 	}
 
 	// Prepare the token request
@@ -287,7 +301,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 
 	tokenReq, err := http.NewRequestWithContext(ctx, "POST", tokenURL, data)
 	if err != nil {
-		return fmt.Errorf("failed to create client credentials token request: %w", err)
+		return "", fmt.Errorf("failed to create client credentials token request: %w", err)
 	}
 
 	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -302,7 +316,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 	}
 	resp, err := client.Do(tokenReq)
 	if err != nil {
-		return fmt.Errorf("failed to make client credentials token request: %w", err)
+		return "", fmt.Errorf("failed to make client credentials token request: %w", err)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
@@ -322,7 +336,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 
 			retryResp, retryErr := retryTokenRequestWithBasicAuth(ctx, client, tokenURL, clientID, clientSecret, requestedScopes)
 			if retryErr != nil {
-				return fmt.Errorf("failed to make client credentials token request: %w", retryErr)
+				return "", fmt.Errorf("failed to make client credentials token request: %w", retryErr)
 			}
 
 			resp = retryResp
@@ -332,21 +346,21 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 		if resp.StatusCode != http.StatusOK {
 			bodyBytes, err := io.ReadAll(resp.Body)
 			if err != nil {
-				return fmt.Errorf("failed to make client credentials token request: status %d, failed to read response body: %w", resp.StatusCode, err)
+				return "", fmt.Errorf("failed to make client credentials token request: status %d, failed to read response body: %w", resp.StatusCode, err)
 			}
 
-			return fmt.Errorf("failed to make client credentials token request: status %d, response: %s", resp.StatusCode, string(bodyBytes))
+			return "", fmt.Errorf("failed to make client credentials token request: status %d, response: %s", resp.StatusCode, string(bodyBytes))
 		}
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("failed to read client credentials token response body: %w", err)
+		return "", fmt.Errorf("failed to read client credentials token response body: %w", err)
 	}
 
 	accessToken, expiresIn, err := parseClientCredentialsTokenResponse(bodyBytes)
 	if err != nil {
-		return fmt.Errorf("failed to parse client credentials token response: %w", err)
+		return "", fmt.Errorf("failed to parse client credentials token response: %w", err)
 	}
 
 	// If we are passed an expiry value we will use the cache
@@ -364,9 +378,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 		}
 	}
 
-	req.Header.Set("Authorization", formatForBearer(accessToken))
-
-	return nil
+	return accessToken, nil
 }
 
 // Technically the OAuth spec does expect snake_case field names in the response but we will be generous to mistakes and try with camelCase

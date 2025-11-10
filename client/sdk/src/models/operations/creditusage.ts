@@ -4,9 +4,6 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { safeParse } from "../../lib/schemas.js";
-import { Result as SafeParseResult } from "../../types/fp.js";
-import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type CreditUsageSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -23,21 +20,6 @@ export type CreditUsageRequest = {
    */
   gramProject?: string | undefined;
 };
-
-/** @internal */
-export const CreditUsageSecurity$inboundSchema: z.ZodType<
-  CreditUsageSecurity,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  "project_slug_header_Gram-Project": z.string().optional(),
-  "session_header_Gram-Session": z.string().optional(),
-}).transform((v) => {
-  return remap$(v, {
-    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
-    "session_header_Gram-Session": "sessionHeaderGramSession",
-  });
-});
 
 /** @internal */
 export type CreditUsageSecurity$Outbound = {
@@ -60,19 +42,6 @@ export const CreditUsageSecurity$outboundSchema: z.ZodType<
   });
 });
 
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace CreditUsageSecurity$ {
-  /** @deprecated use `CreditUsageSecurity$inboundSchema` instead. */
-  export const inboundSchema = CreditUsageSecurity$inboundSchema;
-  /** @deprecated use `CreditUsageSecurity$outboundSchema` instead. */
-  export const outboundSchema = CreditUsageSecurity$outboundSchema;
-  /** @deprecated use `CreditUsageSecurity$Outbound` instead. */
-  export type Outbound = CreditUsageSecurity$Outbound;
-}
-
 export function creditUsageSecurityToJSON(
   creditUsageSecurity: CreditUsageSecurity,
 ): string {
@@ -80,31 +49,6 @@ export function creditUsageSecurityToJSON(
     CreditUsageSecurity$outboundSchema.parse(creditUsageSecurity),
   );
 }
-
-export function creditUsageSecurityFromJSON(
-  jsonString: string,
-): SafeParseResult<CreditUsageSecurity, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => CreditUsageSecurity$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'CreditUsageSecurity' from JSON`,
-  );
-}
-
-/** @internal */
-export const CreditUsageRequest$inboundSchema: z.ZodType<
-  CreditUsageRequest,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  "Gram-Session": z.string().optional(),
-  "Gram-Project": z.string().optional(),
-}).transform((v) => {
-  return remap$(v, {
-    "Gram-Session": "gramSession",
-    "Gram-Project": "gramProject",
-  });
-});
 
 /** @internal */
 export type CreditUsageRequest$Outbound = {
@@ -127,33 +71,10 @@ export const CreditUsageRequest$outboundSchema: z.ZodType<
   });
 });
 
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace CreditUsageRequest$ {
-  /** @deprecated use `CreditUsageRequest$inboundSchema` instead. */
-  export const inboundSchema = CreditUsageRequest$inboundSchema;
-  /** @deprecated use `CreditUsageRequest$outboundSchema` instead. */
-  export const outboundSchema = CreditUsageRequest$outboundSchema;
-  /** @deprecated use `CreditUsageRequest$Outbound` instead. */
-  export type Outbound = CreditUsageRequest$Outbound;
-}
-
 export function creditUsageRequestToJSON(
   creditUsageRequest: CreditUsageRequest,
 ): string {
   return JSON.stringify(
     CreditUsageRequest$outboundSchema.parse(creditUsageRequest),
-  );
-}
-
-export function creditUsageRequestFromJSON(
-  jsonString: string,
-): SafeParseResult<CreditUsageRequest, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => CreditUsageRequest$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'CreditUsageRequest' from JSON`,
   );
 }

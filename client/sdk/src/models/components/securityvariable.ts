@@ -68,63 +68,6 @@ export const SecurityVariable$inboundSchema: z.ZodType<
   });
 });
 
-/** @internal */
-export type SecurityVariable$Outbound = {
-  bearer_format?: string | undefined;
-  env_variables: Array<string>;
-  in_placement: string;
-  name: string;
-  oauth_flows?: Uint8Array | undefined;
-  oauth_types?: Array<string> | undefined;
-  scheme: string;
-  type?: string | undefined;
-};
-
-/** @internal */
-export const SecurityVariable$outboundSchema: z.ZodType<
-  SecurityVariable$Outbound,
-  z.ZodTypeDef,
-  SecurityVariable
-> = z.object({
-  bearerFormat: z.string().optional(),
-  envVariables: z.array(z.string()),
-  inPlacement: z.string(),
-  name: z.string(),
-  oauthFlows: b64$.zodOutbound.optional(),
-  oauthTypes: z.array(z.string()).optional(),
-  scheme: z.string(),
-  type: z.string().optional(),
-}).transform((v) => {
-  return remap$(v, {
-    bearerFormat: "bearer_format",
-    envVariables: "env_variables",
-    inPlacement: "in_placement",
-    oauthFlows: "oauth_flows",
-    oauthTypes: "oauth_types",
-  });
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace SecurityVariable$ {
-  /** @deprecated use `SecurityVariable$inboundSchema` instead. */
-  export const inboundSchema = SecurityVariable$inboundSchema;
-  /** @deprecated use `SecurityVariable$outboundSchema` instead. */
-  export const outboundSchema = SecurityVariable$outboundSchema;
-  /** @deprecated use `SecurityVariable$Outbound` instead. */
-  export type Outbound = SecurityVariable$Outbound;
-}
-
-export function securityVariableToJSON(
-  securityVariable: SecurityVariable,
-): string {
-  return JSON.stringify(
-    SecurityVariable$outboundSchema.parse(securityVariable),
-  );
-}
-
 export function securityVariableFromJSON(
   jsonString: string,
 ): SafeParseResult<SecurityVariable, SDKValidationError> {

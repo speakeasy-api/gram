@@ -176,8 +176,8 @@ func TestTemplatesService_UpdateTemplateName_Success(t *testing.T) {
 
 	// Update the template name
 	result, err := ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
-		ID:               created.Template.ID,
-		Name:             conv.Ptr("New name"),
+		ID:   created.Template.ID,
+		Name: conv.Ptr("New name"),
 	})
 	require.NoError(t, err, "update template name")
 

@@ -2,10 +2,16 @@ import {Page} from "@/components/page-layout";
 import {SearchBar} from "@/components/ui/search-bar";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue,} from "@/components/ui/select";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow,} from "@/components/ui/table";
-import {useListToolLogs, useListToolsets} from "@gram/client/react-query";
-import {HTTPToolLog} from "@gram/client/models/components";
-import {Icon} from "@speakeasy-api/moonshine";
+import {
+    invalidateAllListToolLogs,
+    useFeaturesSetMutation,
+    useListToolLogs,
+    useListToolsets
+} from "@gram/client/react-query";
+import {FeatureName, HTTPToolLog} from "@gram/client/models/components";
+import {Button, Icon} from "@speakeasy-api/moonshine";
 import {useEffect, useMemo, useRef, useState} from "react";
+import {useQueryClient} from "@tanstack/react-query";
 import {LogDetailSheet} from "./LogDetailSheet";
 import {formatTimestamp, getSourceFromUrn, getToolIcon, getToolNameFromUrn, isSuccessfulCall,} from "./utils";
 import {formatDuration} from "@/lib/dates";
@@ -22,12 +28,12 @@ export default function LogsPage() {
     const [filters, setFilters] = useState<{
         searchQuery: string | null;
         toolTypeFilter: string | null;
-        serverNameFilter: string | null;
+        sourceFilter: string | null;
         statusFilter: string | null;
     }>({
         searchQuery: null,
         toolTypeFilter: null,
-        serverNameFilter: null,
+        sourceFilter: null,
         statusFilter: null,
     });
     const [selectedLog, setSelectedLog] = useState<HTTPToolLog | null>(null);
@@ -45,22 +51,22 @@ export default function LogsPage() {
         return () => clearTimeout(timeoutId);
     }, [searchInput]);
 
-    // Fetch toolsets for server name dropdown
+    // Fetch toolsets for source dropdown
     const {data: toolsetsData} = useListToolsets();
-    const serverNames = useMemo(() => {
+    const sources = useMemo(() => {
         return toolsetsData?.toolsets?.map(t =>
             ({slug: t.slug, id: t.id, toolUrns: t.toolUrns}))
             .filter(Boolean) || [];
     }, [toolsetsData]);
 
-    // Get tool URNs for selected server
+    // Get tool URNs for selected source
     const selectedToolUrns = useMemo(() => {
-        if (!filters.serverNameFilter) return undefined;
-        const selectedToolset = serverNames.find(s => s.slug === filters.serverNameFilter);
+        if (!filters.sourceFilter) return undefined;
+        const selectedToolset = sources.find(s => s.slug === filters.sourceFilter);
         return selectedToolset?.toolUrns && selectedToolset.toolUrns.length > 0
             ? selectedToolset.toolUrns
             : undefined;
-    }, [filters.serverNameFilter, serverNames]);
+    }, [filters.sourceFilter, sources]);
 
     // Infinite scroll state
     const [allLogs, setAllLogs] = useState<HTTPToolLog[]>([]);
@@ -70,7 +76,8 @@ export default function LogsPage() {
     const tableContainerRef = useRef<HTMLDivElement>(null);
     const perPage = 25;
 
-    const {data, isLoading, error} = useListToolLogs(
+    const queryClient = useQueryClient();
+    const listToolLogsQuery = useListToolLogs(
         {
             perPage,
             cursor: currentCursor,
@@ -85,6 +92,41 @@ export default function LogsPage() {
             refetchOnWindowFocus: false,
         },
     );
+    const {data, isLoading, error, refetch} = listToolLogsQuery;
+
+    const [logsMutationError, setLogsMutationError] = useState<string | null>(null);
+    const {mutateAsync: setLogsFeature, status: logsMutationStatus} = useFeaturesSetMutation({
+        onSuccess: async () => {
+            setLogsMutationError(null);
+            await invalidateAllListToolLogs(queryClient);
+            setCurrentCursor(undefined);
+            lastProcessedCursorRef.current = undefined;
+            setAllLogs([]);
+            await refetch();
+        },
+        onError: (err) => {
+            const message = err instanceof Error ? err.message : "Failed to update logs";
+            setLogsMutationError(message);
+        },
+    });
+
+    const isMutatingLogs = logsMutationStatus === "pending";
+
+    const handleSetLogs = async (enabled: boolean) => {
+        setLogsMutationError(null);
+        try {
+            await setLogsFeature({
+                request: {
+                    setProductFeatureRequestBody: {
+                        featureName: FeatureName.Logs,
+                        enabled,
+                    },
+                },
+            });
+        } catch {
+            // error state handled in onError callback
+        }
+    };
 
     // Update accumulated logs when new data arrives
     useEffect(() => {
@@ -112,6 +154,7 @@ export default function LogsPage() {
         }
     }, [data, isLoading, currentCursor]);
 
+    const logsEnabled = data?.enabled ?? true;
     const pagination = data?.pagination;
     const hasNextPage = pagination?.hasNextPage ?? false;
 
@@ -120,7 +163,7 @@ export default function LogsPage() {
         setCurrentCursor(undefined);
         lastProcessedCursorRef.current = undefined;
         setIsFetchingMore(false);
-    }, [filters.toolTypeFilter, filters.serverNameFilter, filters.statusFilter, filters.searchQuery]);
+    }, [filters.toolTypeFilter, filters.sourceFilter, filters.statusFilter, filters.searchQuery]);
 
     // Auto-load more if container isn't scrollable after initial load
     useEffect(() => {
@@ -194,43 +237,52 @@ export default function LogsPage() {
                                         <SelectContent>
                                             <SelectItem value="all">All Types</SelectItem>
                                             <SelectItem value="http">HTTP</SelectItem>
+                                            <SelectItem value="function">Function</SelectItem>
+                                            <SelectItem value="prompt">Custom</SelectItem>
                                         </SelectContent>
                                     </Select>
 
                                     <Select
-                                        value={filters.serverNameFilter ?? "all"}
+                                        value={filters.sourceFilter ?? "all"}
                                         onValueChange={(value) => setFilters(prev => ({
                                             ...prev,
-                                            serverNameFilter: value === "all" ? null : value
+                                            sourceFilter: value === "all" ? null : value
                                         }))}>
                                         <SelectTrigger className="w-[180px]">
-                                            <SelectValue placeholder="Server Name"/>
+                                            <SelectValue placeholder="Source"/>
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="all">All Servers</SelectItem>
-                                            {serverNames.map((serverName) => (
-                                                <SelectItem key={serverName.id} value={serverName.slug}>
-                                                    {serverName.slug}
+                                            <SelectItem value="all">All Sources</SelectItem>
+                                            {sources.map((source) => (
+                                                <SelectItem key={source.id} value={source.slug}>
+                                                    {source.slug}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
                                     </Select>
 
-                                    <Select
-                                        value={filters.statusFilter ?? "all"}
-                                        onValueChange={(value) => setFilters(prev => ({
-                                            ...prev,
-                                            statusFilter: value === "all" ? null : value
-                                        }))}>
-                                        <SelectTrigger className="w-[180px]">
-                                            <SelectValue placeholder="Status"/>
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">All Statuses</SelectItem>
-                                            <SelectItem value="success">Success</SelectItem>
-                                            <SelectItem value="failure">Failure</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                                    <div className="flex flex-col gap-2">
+                                        <Select
+                                            value={filters.statusFilter ?? "all"}
+                                            onValueChange={(value) => setFilters(prev => ({
+                                                ...prev,
+                                                statusFilter: value === "all" ? null : value
+                                            }))}>
+                                            <SelectTrigger className="w-[180px]">
+                                                <SelectValue placeholder="Status"/>
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">All Statuses</SelectItem>
+                                                <SelectItem value="success">Success</SelectItem>
+                                                <SelectItem value="failure">Failure</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        {logsEnabled && logsMutationError && (
+                                            <span className="text-xs text-destructive-default">
+                                                {logsMutationError}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
@@ -253,17 +305,16 @@ export default function LogsPage() {
                                             <TableRow
                                                 className="bg-surface-secondary-default border-b border-neutral-softest">
                                                 <TableHead className="font-mono">TIMESTAMP</TableHead>
-                                                <TableHead className="font-mono">SERVER NAME</TableHead>
+                                                <TableHead className="font-mono">SOURCE NAME</TableHead>
                                                 <TableHead className="font-mono">TOOL NAME</TableHead>
                                                 <TableHead className="font-mono">STATUS</TableHead>
-                                                <TableHead className="font-mono">CLIENT</TableHead>
                                                 <TableHead className="font-mono">DURATION</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {error ? (
                                                 <TableRow>
-                                                    <TableCell colSpan={6}
+                                                    <TableCell colSpan={5}
                                                                className="text-center py-8">
                                                         <div className="flex flex-col items-center gap-2">
                                                             <XIcon className="size-6 stroke-destructive-default"/>
@@ -276,21 +327,44 @@ export default function LogsPage() {
                                                         </div>
                                                     </TableCell>
                                                 </TableRow>
-                                            ) : isLoading && allLogs.length === 0 ? (
+                                            ) : isLoading &&allLogs.length === 0 ? (
                                                 <TableRow>
-                                                    <TableCell colSpan={6}
+                                                    <TableCell colSpan={5}
                                                                className="text-center py-8 text-muted-foreground">
                                                         Loading logs...
                                                     </TableCell>
                                                 </TableRow>
                                             ) : allLogs.length === 0 ? (
                                                 <TableRow>
-                                                    <TableCell colSpan={6}
+                                                    <TableCell colSpan={5}
                                                                className="text-center py-8 text-muted-foreground">
-                                                        {data?.enabled ?
-                                                            "No logs found" :
-                                                            "Logs are opt-in feature. Please reach out to gram@speakeasy.com if you would like this enabled for your account"
-                                                        }
+                                                        {logsEnabled ? (
+                                                            "No logs found"
+                                                        ) : (
+                                                            <div className="flex flex-col items-center gap-3">
+                                                                <span>
+                                                                    Logs are disabled for your organization.
+                                                                </span>
+                                                                <Button
+                                                                    onClick={() => handleSetLogs(true)}
+                                                                    disabled={isMutatingLogs}
+                                                                    size="sm"
+                                                                    variant="secondary"
+                                                                >
+                                                                    <Button.LeftIcon>
+                                                                        <Icon name="test-tube-diagonal" className="size-4" />
+                                                                    </Button.LeftIcon>
+                                                                    <Button.Text>
+                                                                        {isMutatingLogs ? "Updating Logs" : "Enable Logs"}
+                                                                    </Button.Text>
+                                                                </Button>
+                                                                {logsMutationError && (
+                                                                    <span className="text-sm text-destructive-default">
+                                                                        {logsMutationError}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </TableCell>
                                                 </TableRow>
                                             ) : allLogs.map((log) => {
@@ -321,10 +395,6 @@ export default function LogsPage() {
                                                                 <StatusIcon isSuccess={isSuccessfulCall(log)}/>
                                                             </div>
                                                         </TableCell>
-                                                        <TableCell
-                                                            className="text-muted-foreground flex text-sm py-4">
-                                                            {log.userAgent || "-"}
-                                                        </TableCell>
                                                         <TableCell className="text-muted-foreground font-mono py-4">
                                                             {formatDuration(log.durationMs)}
                                                         </TableCell>
@@ -335,7 +405,7 @@ export default function LogsPage() {
                                             {/* Loading indicator at bottom when fetching more */}
                                             {isFetchingMore && (
                                                 <TableRow>
-                                                    <TableCell colSpan={6}
+                                                    <TableCell colSpan={5}
                                                                className="text-center py-4 text-muted-foreground">
                                                         <div className="flex items-center justify-center gap-2">
                                                             <Icon name="loader-circle" className="size-4 animate-spin"/>
@@ -350,10 +420,37 @@ export default function LogsPage() {
 
                                 {/* Footer with total count */}
                                 {allLogs.length > 0 && (
-                                    <div
-                                        className="px-4 py-3 bg-surface-secondary-default border-t border-neutral-softest text-sm text-muted-foreground">
-                                        Showing {allLogs.length} {allLogs.length === 1 ? "log" : "logs"}
-                                        {hasNextPage && " • Scroll down to load more"}
+                                    <div className="flex items-center justify-between gap-4 px-4 py-3 bg-surface-secondary-default border-t border-neutral-softest text-sm text-muted-foreground">
+                                        <span>
+                                            Showing {allLogs.length} {allLogs.length === 1 ? "log" : "logs"}
+                                            {hasNextPage && " • Scroll down to load more"}
+                                        </span>
+                                        {logsEnabled ? (
+                                            <Button
+                                                onClick={() => handleSetLogs(false)}
+                                                disabled={isMutatingLogs}
+                                                size="sm"
+                                                variant="secondary"
+                                            >
+                                                <Button.Text>
+                                                    {isMutatingLogs ? "Updating Logs" : "Disable Logs"}
+                                                </Button.Text>
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                onClick={() => handleSetLogs(true)}
+                                                disabled={isMutatingLogs}
+                                                size="sm"
+                                                variant="secondary"
+                                            >
+                                                <Button.LeftIcon>
+                                                    <Icon name="test-tube-diagonal" className="size-4" />
+                                                </Button.LeftIcon>
+                                                <Button.Text>
+                                                    {isMutatingLogs ? "Updating Logs" : "Enable Logs"}
+                                                </Button.Text>
+                                            </Button>
+                                        )}
                                     </div>
                                 )}
                             </div>

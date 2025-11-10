@@ -1,5 +1,5 @@
 import { HTTPToolLog } from "@gram/client/models/components";
-import { FileCode, SquareFunction } from "lucide-react";
+import { FileCode, PencilRuler, SquareFunction } from "lucide-react";
 import { dateTimeFormatters } from "@/lib/dates";
 
 export interface ParsedUrn {
@@ -22,6 +22,9 @@ export const getToolIcon = (toolUrn: string) => {
   const { kind } = parseUrn(toolUrn);
   if (kind === "http") {
     return FileCode;
+  }
+  if (kind === "prompt") {
+    return PencilRuler;
   }
   // Otherwise it's a function tool
   return SquareFunction;

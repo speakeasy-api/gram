@@ -53,11 +53,12 @@ type ToolHTTPRequest struct {
 	SpanID  string `ch:"span_id"`  // FixedString(16)
 
 	// request metadata
-	HTTPMethod string  `ch:"http_method"` // LowCardinality(String)
-	HTTPRoute  string  `ch:"http_route"`  // String
-	StatusCode int64   `ch:"status_code"` // Int64
-	DurationMs float64 `ch:"duration_ms"` // Float64
-	UserAgent  string  `ch:"user_agent"`  // LowCardinality(String)
+	HTTPMethod    string  `ch:"http_method"`     // LowCardinality(String)
+	HTTPServerURL string  `ch:"http_server_url"` // String
+	HTTPRoute     string  `ch:"http_route"`      // String
+	StatusCode    int64   `ch:"status_code"`     // Int64
+	DurationMs    float64 `ch:"duration_ms"`     // Float64
+	UserAgent     string  `ch:"user_agent"`      // LowCardinality(String)
 
 	// request payload
 	RequestHeaders   map[string]string `ch:"request_headers"`    // Map(String, String)

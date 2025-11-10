@@ -32,11 +32,7 @@ import { Type } from "./ui/type";
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const [metricsModalOpen, setMetricsModalOpen] = React.useState(false);
-  const session = useSession();
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
-
-  // For free tier users, show the upgrade modal
-  const isFreeUser = session.gramAccountType === "free";
 
   const topNavGroups = {
     create: [routes.toolsets, routes.customTools, routes.prompts],
@@ -84,20 +80,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 />
               </SidebarMenuItem>
               <SidebarMenuItem>
-                {isFreeUser ? (
-                  <NavButton
-                    title="Logs"
-                    Icon={routes.logs.Icon}
-                    onClick={() => setIsUpgradeModalOpen(true)}
-                  />
-                ) : (
-                  <NavButton
-                    title="Logs"
-                    Icon={routes.logs.Icon}
-                    href={routes.logs.href()}
-                    active={routes.logs.active}
-                  />
-                )}
+                <NavButton
+                  title="Logs"
+                  Icon={routes.logs.Icon}
+                  href={routes.logs.href()}
+                  active={routes.logs.active}
+                />
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>

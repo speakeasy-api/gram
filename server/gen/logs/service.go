@@ -66,6 +66,8 @@ type HTTPToolLog struct {
 	SpanID string
 	// HTTP method
 	HTTPMethod string
+	// HTTP Server URL
+	HTTPServerURL string
 	// HTTP route
 	HTTPRoute string
 	// HTTP status code

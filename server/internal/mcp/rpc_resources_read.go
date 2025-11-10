@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -46,7 +47,7 @@ type resourceContent struct {
 	Blob     string  `json:"blob,omitempty"`
 }
 
-func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, toolProxy *gateway.ToolProxy, env gateway.EnvironmentLoader, billingTracker billing.Tracker, billingRepository billing.Repository) (json.RawMessage, error) {
+func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, toolProxy *gateway.ToolProxy, env gateway.EnvironmentLoader, billingTracker billing.Tracker, billingRepository billing.Repository, tcm tm.ToolMetricsProvider) (json.RawMessage, error) {
 	var params resourceReadParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse get resource request").Log(ctx, logger)
@@ -86,6 +87,22 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	}
 
 	descriptor := plan.Descriptor
+	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, tcm, descriptor.OrganizationID, tm.ToolInfo{
+		ID:             descriptor.ID,
+		Urn:            descriptor.URN.String(),
+		Name:           descriptor.Name,
+		ProjectID:      descriptor.ProjectID,
+		DeploymentID:   descriptor.DeploymentID,
+		OrganizationID: descriptor.OrganizationID,
+	}, descriptor.Name, tm.ToolTypeFunction)
+	if logErr != nil {
+		logger.ErrorContext(ctx,
+			"failed to prepare resource call log entry",
+			attr.SlogError(logErr),
+			attr.SlogToolName(descriptor.Name),
+			attr.SlogToolURN(descriptor.URN.String()),
+		)
+	}
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
 	ciEnv := gateway.NewCaseInsensitiveEnv()
@@ -144,14 +161,18 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 			FunctionMemUsage:      functionMem,
 			FunctionExecutionTime: functionsExecutionTime,
 		})
+
+		toolCallLogger.RecordStatusCode(rw.statusCode)
+		toolCallLogger.RecordRequestBodyBytes(requestBytes)
+		toolCallLogger.RecordResponseBodyBytes(outputBytes)
+		toolCallLogger.Emit(context.WithoutCancel(ctx), logger)
 	}()
 
-	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), ciEnv, plan)
+	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), ciEnv, plan, toolCallLogger)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").Log(ctx, logger)
 	}
 
-	// Track output bytes
 	outputBytes = int64(rw.body.Len())
 
 	// Extract function metrics from headers (originally trailers from functions runner)
