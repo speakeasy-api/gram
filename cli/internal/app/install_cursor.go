@@ -55,20 +55,27 @@ func doInstallCursor(c *cli.Context) error {
 
 	logger.InfoContext(ctx, "opening Cursor deep link", slog.String("name", info.Name))
 
-	// Open the deep link
+	// Try to open the deep link, but don't fail if it doesn't work
 	if err := mcp.OpenURL(deepLink); err != nil {
-		return fmt.Errorf("failed to open Cursor deep link: %w", err)
+		logger.WarnContext(ctx, "failed to open browser automatically, you can copy the URL manually",
+			slog.String("error", err.Error()))
+		fmt.Printf("\n⚠ Could not open Cursor automatically\n")
+		fmt.Printf("  Please copy and paste this URL into your browser:\n")
+		fmt.Printf("  %s\n\n", deepLink)
+	} else {
+		fmt.Printf("\n✓ Opening Cursor to install MCP server '%s'\n", info.Name)
 	}
 
-	fmt.Printf("\n✓ Opening Cursor to install MCP server '%s'\n", info.Name)
-	fmt.Printf("  URL: %s\n", info.URL)
+	fmt.Printf("  MCP Server URL: %s\n", info.URL)
 
 	if useEnvVar {
 		fmt.Printf("\n⚠ Remember to set the environment variable before using:\n")
 		fmt.Printf("  export %s='your-api-key-value'\n", info.EnvVarName)
 	}
 
-	fmt.Printf("\nCursor should open and prompt you to install the MCP server.\n")
+	if err == nil {
+		fmt.Printf("\nCursor should open and prompt you to install the MCP server.\n")
+	}
 
 	return nil
 }

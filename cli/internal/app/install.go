@@ -28,9 +28,9 @@ var installFlags = []cli.Flag{
 		Usage: "The name to use for this MCP server in Cursor (defaults to toolset name or derived from URL)",
 	},
 	&cli.StringFlag{
-		Name:  "header-name",
-		Usage: "The HTTP header name for the API key (defaults to Gram-Apikey)",
-		Value: "Gram-Apikey",
+		Name:  "header",
+		Usage: "The HTTP header name for the API key (defaults to Authorization)",
+		Value: "Authorization",
 	},
 	&cli.StringFlag{
 		Name:  "env-var",
@@ -87,11 +87,11 @@ func resolveToolsetInfo(c *cli.Context) (*mcp.ToolsetInfo, error) {
 		MCPURL:          mcpURL,
 		ServerName:      c.String("name"),
 		APIKey:          apiKey,
-		HeaderName:      c.String("header-name"),
+		HeaderName:      c.String("header"),
 		EnvVar:          c.String("env-var"),
 		APIURL:          apiURL,
 		Logger:          logger,
-		IsHeaderNameSet: c.IsSet("header-name"),
+		IsHeaderNameSet: c.IsSet("header"),
 		IsEnvVarSet:     c.IsSet("env-var"),
 	})
 }

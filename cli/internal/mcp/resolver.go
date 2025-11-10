@@ -142,7 +142,7 @@ func constructMCPURL(toolset *types.Toolset, baseURL string) string {
 
 func deriveAuthConfig(toolset *types.Toolset) (headerName string, envVarName string) {
 	// Default values
-	headerName = "Gram-Apikey"
+	headerName = "Authorization"
 	envVarName = ""
 
 	// Check if there are security variables

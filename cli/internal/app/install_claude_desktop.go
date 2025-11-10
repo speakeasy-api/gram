@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -23,12 +24,20 @@ func newInstallClaudeDesktopCommand() *cli.Command {
 	}
 }
 
-func getDownloadsDir() string {
+func getDownloadsDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return "."
+		return "", fmt.Errorf("failed to get user home directory: %w", err)
 	}
-	return filepath.Join(homeDir, "Downloads")
+	downloadsDir := filepath.Join(homeDir, "Downloads")
+
+	// Check if Downloads directory exists
+	if _, err := os.Stat(downloadsDir); err == nil {
+		return downloadsDir, nil
+	}
+
+	// Fallback to current directory if Downloads doesn't exist
+	return ".", nil
 }
 
 func doInstallClaudeDesktop(c *cli.Context) error {
@@ -55,8 +64,12 @@ func doInstallClaudeDesktop(c *cli.Context) error {
 	// Determine output directory
 	outputDir := c.String("output-dir")
 	if outputDir == "" {
-		outputDir = getDownloadsDir()
+		outputDir, err = getDownloadsDir()
+		if err != nil {
+			return fmt.Errorf("failed to determine downloads directory: %w", err)
+		}
 	} else {
+		// Only create directory if user explicitly specified it
 		err := os.MkdirAll(outputDir, 0750)
 		if err != nil && !errors.Is(err, os.ErrExist) {
 			return fmt.Errorf("failed to create output directory: %w", err)
