@@ -20,7 +20,7 @@ import { TriangleAlertIcon } from "lucide-react";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useRoutes } from "@/routes";
 
-interface ApplyEnvironmentDialogContentProps {
+interface AttachEnvironmentDialogContentProps {
   asset: NamedAsset;
   onClose: () => void;
 }
@@ -152,10 +152,10 @@ function useSourceEnvironmentData(asset: NamedAsset) {
   };
 }
 
-export function ApplyEnvironmentDialogContent({
+export function AttachEnvironmentDialogContent({
   asset,
   onClose,
-}: ApplyEnvironmentDialogContentProps) {
+}: AttachEnvironmentDialogContentProps) {
   const { sourceEnvironment } = useSourceEnvironmentData(asset);
 
   const [activeEnvironmentId, setActiveEnvironmentId] = useState<
@@ -213,7 +213,7 @@ export function ApplyEnvironmentDialogContent({
   return (
     <>
       <Dialog.Header>
-        <Dialog.Title>Apply Environment</Dialog.Title>
+        <Dialog.Title>Attach Environment</Dialog.Title>
         <Dialog.Description>
           <p className="text-warning">
             <TriangleAlertIcon className="inline mr-2 w-4 h-4" />
@@ -241,7 +241,7 @@ export function ApplyEnvironmentDialogContent({
             deleteSourceEnvironmentMutation.isPending
           }
         >
-          Apply Environment
+          Attach Environment
         </Button>
       </Dialog.Footer>
     </>

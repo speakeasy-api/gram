@@ -31,13 +31,13 @@ export function SourceCard({
   asset,
   causingFailure,
   handleRemove,
-  handleApplyEnvironment,
+  handleAttachEnvironment,
   setChangeDocumentTargetSlug,
 }: {
   asset: NamedAsset;
   causingFailure?: boolean | undefined;
   handleRemove: (assetId: string) => void;
-  handleApplyEnvironment: (assetId: string) => void;
+  handleAttachEnvironment: (assetId: string) => void;
   setChangeDocumentTargetSlug: (slug: string) => void;
 }) {
   const [documentViewOpen, setDocumentViewOpen] = useState(false);
@@ -59,9 +59,9 @@ export function SourceCard({
         ]
       : []),
     {
-      label: "Apply Environment",
+      label: "Attach Environment",
       onClick: () => {
-        requestAnimationFrame(() => handleApplyEnvironment(asset.id));
+        requestAnimationFrame(() => handleAttachEnvironment(asset.id));
       },
       icon: "globe" as const,
     },

@@ -22,21 +22,21 @@ import { RemoveSourceDialogContent } from "./RemoveSourceDialogContent";
 import { NamedAsset, SourceCard } from "./SourceCard";
 import { SourcesEmptyState } from "./SourcesEmptyState";
 import { UploadOpenApiDialogContent } from "./UploadOpenApiDialogContent";
-import { ApplyEnvironmentDialogContent } from "./ApplyEnvironmentDialogContent";
+import { AttachEnvironmentDialogContent } from "./AttachEnvironmentDialogContent";
 
 type DialogState =
   | { type: "closed" }
   | { type: "add-source" }
   | { type: "remove-source"; asset: NamedAsset }
   | { type: "upload-openapi"; documentSlug: string }
-  | { type: "apply-environment"; asset: NamedAsset };
+  | { type: "attach-environment"; asset: NamedAsset };
 
 interface DialogStore {
   dialogState: DialogState;
   openAddSource: () => void;
   openRemoveSource: (asset: NamedAsset) => void;
   openUploadOpenApi: (documentSlug: string) => void;
-  openApplyEnvironment: (asset: NamedAsset) => void;
+  openAttachEnvironment: (asset: NamedAsset) => void;
   closeDialog: () => void;
 }
 
@@ -47,8 +47,8 @@ const useDialogStore = create<DialogStore>((set) => ({
     set({ dialogState: { type: "remove-source", asset } }),
   openUploadOpenApi: (documentSlug) =>
     set({ dialogState: { type: "upload-openapi", documentSlug } }),
-  openApplyEnvironment: (asset) =>
-    set({ dialogState: { type: "apply-environment", asset } }),
+  openAttachEnvironment: (asset) =>
+    set({ dialogState: { type: "attach-environment", asset } }),
   closeDialog: () => set({ dialogState: { type: "closed" } }),
 }));
 
@@ -84,7 +84,7 @@ export default function Sources() {
     openAddSource,
     openRemoveSource,
     openUploadOpenApi,
-    openApplyEnvironment,
+    openAttachEnvironment,
     closeDialog,
   } = useDialogStore();
   const deploymentIsEmpty = useDeploymentIsEmpty();
@@ -206,7 +206,7 @@ export default function Sources() {
                   asset.deploymentAssetId,
                 )}
                 handleRemove={() => openRemoveSource(asset)}
-                handleApplyEnvironment={() => openApplyEnvironment(asset)}
+                handleAttachEnvironment={() => openAttachEnvironment(asset)}
                 setChangeDocumentTargetSlug={openUploadOpenApi}
               />
             ))}
@@ -230,8 +230,8 @@ export default function Sources() {
                   onSuccess={handleDialogSuccess}
                 />
               )}
-              {dialogState.type === "apply-environment" && (
-                <ApplyEnvironmentDialogContent
+              {dialogState.type === "attach-environment" && (
+                <AttachEnvironmentDialogContent
                   asset={dialogState.asset}
                   onClose={closeDialog}
                 />
