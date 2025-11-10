@@ -54,6 +54,7 @@ func (c *ToolsetsClient) GetToolset(
 	key := apiKey.Reveal()
 	payload := &toolsets.GetToolsetPayload{
 		ApikeyToken:      &key,
+		SessionToken:     nil,
 		ProjectSlugInput: &projectSlug,
 		Slug:             slug,
 	}
@@ -70,6 +71,7 @@ func (c *ToolsetsClient) ListToolsets(ctx context.Context, apiKey secret.Secret,
 	key := apiKey.Reveal()
 	payload := &toolsets.ListToolsetsPayload{
 		ApikeyToken:      &key,
+		SessionToken:     nil,
 		ProjectSlugInput: &projectSlug,
 	}
 

@@ -81,7 +81,7 @@ func resolveToolsetInfo(c *cli.Context) (*mcp.ToolsetInfo, error) {
 	apiKey := workflow.ResolveKey(c, prof)
 
 	// Resolve toolset information using shared logic
-	return mcp.ResolveToolsetInfo(ctx, &mcp.ResolverOptions{
+	info, err := mcp.ResolveToolsetInfo(ctx, &mcp.ResolverOptions{
 		ProjectSlug:     projectSlug,
 		ToolsetSlug:     toolsetSlug,
 		MCPURL:          mcpURL,
@@ -94,4 +94,8 @@ func resolveToolsetInfo(c *cli.Context) (*mcp.ToolsetInfo, error) {
 		IsHeaderNameSet: c.IsSet("header"),
 		IsEnvVarSet:     c.IsSet("env-var"),
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve toolset info: %w", err)
+	}
+	return info, nil
 }

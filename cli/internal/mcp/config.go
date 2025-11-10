@@ -32,6 +32,9 @@ func BuildMCPConfig(info *ToolsetInfo, useEnvVar bool) MCPServerConfig {
 	}
 
 	return MCPServerConfig{
+		Command: "",
+		Args:    nil,
+		Env:     nil,
 		Type:    "http",
 		URL:     info.URL,
 		Headers: headers,

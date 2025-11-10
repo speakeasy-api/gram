@@ -75,6 +75,7 @@ func New(
 		NewOpenAPIAssets:  nil,
 		NewFunctionAssets: nil,
 		Deployment:        nil,
+		Toolsets:          nil,
 		Err:               nil,
 	}
 
