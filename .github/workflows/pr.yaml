@@ -25,6 +25,7 @@ jobs:
     outputs:
       server: ${{ steps.gates.outputs.server }}
       client: ${{ steps.gates.outputs.client }}
+      cli: ${{ steps.gates.outputs.cli }}
       functions: ${{ steps.gates.outputs.functions }}
       tsframework: ${{ steps.gates.outputs.tsframework }}
     steps:
