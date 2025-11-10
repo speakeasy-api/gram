@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"mime"
 	"net/http"
 	"slices"
@@ -33,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type toolsCallParams struct {
@@ -104,7 +106,6 @@ func handleToolsCall(
 	}
 
 	toolsetHelpers := toolsets.NewToolsets(db)
-	envSlug := payload.environment
 	var tool *types.Tool
 
 	for _, t := range toolset.Tools {
@@ -124,51 +125,14 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
 	}
 
-	ciEnv := gateway.NewCaseInsensitiveEnv()
-
-	envRepo := repo.New(db)
-	sourceEnv, err := envRepo.GetEnvironmentForSource(ctx, repo.GetEnvironmentForSourceParams{
-		SourceKind: string(toolURN.Kind),
-		SourceSlug: toolURN.Source,
-	})
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment from source").Log(ctx, logger)
-	}
-
-	if err == nil {
-		sourceEnvVars, err := env.Load(ctx, payload.projectID, gateway.ID(sourceEnv.ID))
-		if err != nil && !errors.Is(err, gateway.ErrNotFound) {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to load source environment variables").Log(ctx, logger)
-		}
-
-		for k, v := range sourceEnvVars {
-			ciEnv.Set(k, v)
-		}
-	}
-
-	// IMPORTANT: MCP servers accessed in a public manner or not gram authenticated, there is no concept of using stored environments for them
-	if envSlug != "" && payload.authenticated {
-		storedEnvVars, err := env.Load(ctx, payload.projectID, gateway.Slug(envSlug))
-		switch {
-		case errors.Is(err, gateway.ErrNotFound):
-			return nil, oops.E(oops.CodeBadRequest, err, "environment not found").Log(ctx, logger)
-		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, logger)
-		}
-
-		for k, v := range storedEnvVars {
-			ciEnv.Set(k, v)
-		}
-	}
-
-	// user supplied variables comes after stored environment variables to allow overrides in the case of conflicts
-	for k, v := range payload.mcpEnvVariables {
-		ciEnv.Set(k, v)
-	}
-
 	plan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, *toolURN, uuid.UUID(projectID))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed get tool call plan").Log(ctx, logger)
+	}
+
+	ciEnv, err := resolveEnvironment(ctx, logger, db, env, toolURN, uuid.UUID(projectID), payload, plan)
+	if err != nil {
+		return nil, err
 	}
 
 	descriptor := plan.Descriptor
@@ -200,19 +164,6 @@ func handleToolsCall(
 	}
 
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
-	if plan.Kind == gateway.ToolKindHTTP {
-		for _, security := range plan.HTTP.Security {
-			for _, token := range payload.oauthTokenInputs {
-				if (slices.Contains(security.OAuthTypes, "authorization_code") || security.Type.Value == "openIdConnect") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
-					for _, envVar := range security.EnvVariables {
-						if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
-							ciEnv.Set(envVar, token.Token)
-						}
-					}
-				}
-			}
-		}
-	}
 
 	rw := &toolCallResponseWriter{
 		headers:    make(http.Header),
@@ -319,6 +270,156 @@ func handleToolsCall(
 	}
 
 	return bs, nil
+}
+
+func resolveEnvironment(
+	ctx context.Context,
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	env gateway.EnvironmentLoader,
+	toolURN *urn.Tool,
+	projectID uuid.UUID,
+	payload *mcpInputs,
+	plan *gateway.ToolCallPlan,
+) (*gateway.CaseInsensitiveEnv, error) {
+	systemVars, err := resolveSystemVariables(ctx, logger, db, env, toolURN, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	userConfig, err := resolveUserConfiguration(ctx, logger, env, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	// IMPORTANT: when we receive any system environment variables, we _always_ disallow passing
+	// through a user-supplied server URL. System environment variables should be invisible to users
+	// and allowing them to pass in URL would allow them to exfiltrate those variables to their own servers.
+	allowServerUrl := len(systemVars) == 0
+	filteredUserConfig := filterUserConfiguration(userConfig, systemVars, plan, allowServerUrl)
+
+	ciEnv := gateway.NewCaseInsensitiveEnv()
+	for k, v := range systemVars {
+		ciEnv.Set(k, v)
+	}
+	for k, v := range filteredUserConfig {
+		ciEnv.Set(k, v)
+	}
+
+	if plan.Kind == gateway.ToolKindHTTP {
+		for _, security := range plan.HTTP.Security {
+			for _, token := range payload.oauthTokenInputs {
+				if (slices.Contains(security.OAuthTypes, "authorization_code") || security.Type.Value == "openIdConnect") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
+					for _, envVar := range security.EnvVariables {
+						if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
+							ciEnv.Set(envVar, token.Token)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return ciEnv, nil
+}
+
+func resolveSystemVariables(
+	ctx context.Context,
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	env gateway.EnvironmentLoader,
+	toolURN *urn.Tool,
+	projectID uuid.UUID,
+) (map[string]string, error) {
+	envRepo := repo.New(db)
+	sourceEnv, err := envRepo.GetEnvironmentForSource(ctx, repo.GetEnvironmentForSourceParams{
+		SourceKind: string(toolURN.Kind),
+		SourceSlug: toolURN.Source,
+		ProjectID:  projectID,
+	})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment from source").Log(ctx, logger)
+	}
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return map[string]string{}, nil
+	}
+
+	sourceEnvVars, err := env.Load(ctx, projectID, gateway.ID(sourceEnv.ID))
+	if err != nil && !errors.Is(err, gateway.ErrNotFound) {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load source environment variables").Log(ctx, logger)
+	}
+
+	return sourceEnvVars, nil
+}
+
+func resolveUserConfiguration(
+	ctx context.Context,
+	logger *slog.Logger,
+	env gateway.EnvironmentLoader,
+	payload *mcpInputs,
+) (map[string]string, error) {
+	userConfig := make(map[string]string)
+
+	// IMPORTANT: MCP servers accessed in a public manner or not gram authenticated, there is no concept of using stored environments for them
+	if payload.environment != "" && payload.authenticated {
+		storedEnvVars, err := env.Load(ctx, payload.projectID, gateway.Slug(payload.environment))
+		switch {
+		case errors.Is(err, gateway.ErrNotFound):
+			return nil, oops.E(oops.CodeBadRequest, err, "environment not found").Log(ctx, logger)
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, logger)
+		}
+
+		maps.Copy(userConfig, storedEnvVars)
+	}
+
+	maps.Copy(userConfig, payload.mcpEnvVariables)
+
+	return userConfig, nil
+}
+
+func filterUserConfiguration(userConfig map[string]string, systemVars map[string]string, plan *gateway.ToolCallPlan, allowServerUrl bool) map[string]string {
+	filtered := make(map[string]string)
+	allowedByPlan := make(map[string]bool)
+
+	switch plan.Kind {
+	case gateway.ToolKindFunction:
+		if plan.Function != nil {
+			for _, varName := range plan.Function.Variables {
+				allowedByPlan[varName] = true
+			}
+		}
+
+	case gateway.ToolKindHTTP:
+		if plan.HTTP != nil {
+			for _, security := range plan.HTTP.Security {
+				for _, envVar := range security.EnvVariables {
+					allowedByPlan[envVar] = true
+				}
+			}
+
+			if allowServerUrl && plan.HTTP.ServerEnvVar != "" {
+				allowedByPlan[plan.HTTP.ServerEnvVar] = true
+			}
+		}
+
+	case gateway.ToolKindPrompt:
+		return map[string]string{}
+	}
+
+	for key, value := range userConfig {
+		_, isSystemVar := systemVars[key]
+		_, isAllowedByPlan := allowedByPlan[key]
+
+		if isSystemVar && !isAllowedByPlan {
+			continue
+		}
+
+		filtered[key] = value
+	}
+
+	return filtered
 }
 
 func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string, accountType string, billingRepository billing.Repository) error {
