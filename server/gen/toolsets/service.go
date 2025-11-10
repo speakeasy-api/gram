@@ -63,6 +63,7 @@ var MethodNames = [9]string{"createToolset", "listToolsets", "updateToolset", "d
 // addExternalOAuthServer method.
 type AddExternalOAuthServerPayload struct {
 	SessionToken *string
+	ApikeyToken  *string
 	// The slug of the toolset to update
 	Slug types.Slug
 	// The external OAuth server data to create and associate with the toolset
@@ -76,6 +77,7 @@ type CheckMCPSlugAvailabilityPayload struct {
 	// The slug to check
 	Slug             types.Slug
 	SessionToken     *string
+	ApikeyToken      *string
 	ProjectSlugInput *string
 }
 
@@ -85,6 +87,7 @@ type CloneToolsetPayload struct {
 	// The slug of the toolset to clone
 	Slug             types.Slug
 	SessionToken     *string
+	ApikeyToken      *string
 	ProjectSlugInput *string
 }
 
@@ -92,6 +95,7 @@ type CloneToolsetPayload struct {
 // createToolset method.
 type CreateToolsetPayload struct {
 	SessionToken *string
+	ApikeyToken  *string
 	// The name of the toolset
 	Name string
 	// Description of the toolset
@@ -111,6 +115,7 @@ type DeleteToolsetPayload struct {
 	// The slug of the toolset
 	Slug             types.Slug
 	SessionToken     *string
+	ApikeyToken      *string
 	ProjectSlugInput *string
 }
 
@@ -120,6 +125,7 @@ type GetToolsetPayload struct {
 	// The slug of the toolset
 	Slug             types.Slug
 	SessionToken     *string
+	ApikeyToken      *string
 	ProjectSlugInput *string
 }
 
@@ -127,6 +133,7 @@ type GetToolsetPayload struct {
 // method.
 type ListToolsetsPayload struct {
 	SessionToken     *string
+	ApikeyToken      *string
 	ProjectSlugInput *string
 }
 
@@ -143,6 +150,7 @@ type RemoveOAuthServerPayload struct {
 	// The slug of the toolset
 	Slug             types.Slug
 	SessionToken     *string
+	ApikeyToken      *string
 	ProjectSlugInput *string
 }
 
@@ -150,6 +158,7 @@ type RemoveOAuthServerPayload struct {
 // updateToolset method.
 type UpdateToolsetPayload struct {
 	SessionToken *string
+	ApikeyToken  *string
 	// The slug of the toolset to update
 	Slug types.Slug
 	// The new name of the toolset

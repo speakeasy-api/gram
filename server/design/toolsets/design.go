@@ -8,7 +8,12 @@ import (
 
 var _ = Service("toolsets", func() {
 	Description("Managed toolsets for gram AI consumers.")
+
 	Security(security.Session, security.ProjectSlug)
+	Security(security.ByKey, security.ProjectSlug, func() {
+		Scope("producer")
+	})
+
 	shared.DeclareErrorResponses()
 
 	Method("createToolset", func() {
@@ -17,6 +22,7 @@ var _ = Service("toolsets", func() {
 		Payload(func() {
 			Extend(CreateToolsetForm)
 			security.SessionPayload()
+			security.ByKeyPayload()
 		})
 
 		Result(shared.Toolset)
@@ -24,6 +30,7 @@ var _ = Service("toolsets", func() {
 		HTTP(func() {
 			POST("/rpc/toolsets.create")
 			security.SessionHeader()
+			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
 		})
@@ -38,6 +45,7 @@ var _ = Service("toolsets", func() {
 
 		Payload(func() {
 			security.SessionPayload()
+			security.ByKeyPayload()
 			security.ProjectPayload()
 		})
 
@@ -46,6 +54,7 @@ var _ = Service("toolsets", func() {
 		HTTP(func() {
 			GET("/rpc/toolsets.list")
 			security.SessionHeader()
+			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
 		})
@@ -61,6 +70,7 @@ var _ = Service("toolsets", func() {
 		Payload(func() {
 			Extend(UpdateToolsetForm)
 			security.SessionPayload()
+			security.ByKeyPayload()
 		})
 
 		Result(shared.Toolset)
@@ -69,6 +79,7 @@ var _ = Service("toolsets", func() {
 			Param("slug")
 			POST("/rpc/toolsets.update")
 			security.SessionHeader()
+			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
 		})
@@ -85,12 +96,14 @@ var _ = Service("toolsets", func() {
 			Required("slug")
 			Attribute("slug", shared.Slug, "The slug of the toolset")
 			security.SessionPayload()
+			security.ByKeyPayload()
 			security.ProjectPayload()
 		})
 
 		HTTP(func() {
 			Param("slug")
 			security.SessionHeader()
+			security.ByKeyHeader()
 			security.ProjectHeader()
 			DELETE("/rpc/toolsets.delete")
 			Response(StatusNoContent)
@@ -108,6 +121,7 @@ var _ = Service("toolsets", func() {
 			Required("slug")
 			Attribute("slug", shared.Slug, "The slug of the toolset")
 			security.SessionPayload()
+			security.ByKeyPayload()
 			security.ProjectPayload()
 		})
 
@@ -117,6 +131,7 @@ var _ = Service("toolsets", func() {
 			GET("/rpc/toolsets.get")
 			Param("slug")
 			security.SessionHeader()
+			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
 		})
@@ -133,6 +148,7 @@ var _ = Service("toolsets", func() {
 			Required("slug")
 			Attribute("slug", shared.Slug, "The slug to check")
 			security.SessionPayload()
+			security.ByKeyPayload()
 			security.ProjectPayload()
 		})
 
@@ -142,6 +158,7 @@ var _ = Service("toolsets", func() {
 			GET("/rpc/toolsets.checkMCPSlugAvailability")
 			Param("slug")
 			security.SessionHeader()
+			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
 		})
@@ -158,6 +175,7 @@ var _ = Service("toolsets", func() {
 			Required("slug")
 			Attribute("slug", shared.Slug, "The slug of the toolset to clone")
 			security.SessionPayload()
+			security.ByKeyPayload()
 			security.ProjectPayload()
 		})
 
@@ -182,6 +200,7 @@ var _ = Service("toolsets", func() {
 		Payload(func() {
 			Extend(AddExternalOAuthServerForm)
 			security.SessionPayload()
+			security.ByKeyPayload()
 		})
 
 		Result(shared.Toolset)
@@ -190,6 +209,7 @@ var _ = Service("toolsets", func() {
 			Param("slug")
 			POST("/rpc/toolsets.addExternalOAuthServer")
 			security.SessionHeader()
+			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
 		})
@@ -206,6 +226,7 @@ var _ = Service("toolsets", func() {
 			Required("slug")
 			Attribute("slug", shared.Slug, "The slug of the toolset")
 			security.SessionPayload()
+			security.ByKeyPayload()
 			security.ProjectPayload()
 		})
 
@@ -215,6 +236,7 @@ var _ = Service("toolsets", func() {
 			Param("slug")
 			POST("/rpc/toolsets.removeOAuthServer")
 			security.SessionHeader()
+			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
 		})
