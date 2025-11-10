@@ -18,9 +18,9 @@ import (
 func newStatusCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "status",
-		Usage: "Check the status of a project",
+		Usage: "Check the status of a deployment",
 		Description: `
-Check the status of a project.
+Check the status of a deployment.
 
 If no deployment ID is provided, shows the status of the latest deployment.`,
 		Flags: []cli.Flag{
@@ -59,15 +59,10 @@ If no deployment ID is provided, shows the status of the latest deployment.`,
 				return fmt.Errorf("failed to get status: %w", result.Err)
 			}
 
-			result.ListToolsets(ctx)
-			if result.Failed() {
-				return result.Err
-			}
-
 			if jsonOutput {
-				return printProjectStatusJSON(result)
+				return printDeploymentStatusJSON(result.Deployment)
 			} else {
-				printProjectStatus(result)
+				printDeploymentStatus(result.Deployment)
 			}
 
 			return nil
@@ -75,27 +70,17 @@ If no deployment ID is provided, shows the status of the latest deployment.`,
 	}
 }
 
-func printProjectStatus(workflow *workflow.Workflow) {
-	deployment := workflow.Deployment
+func printDeploymentStatus(deployment *types.Deployment) {
 	if deployment == nil {
 		fmt.Println("No deployments found for this project")
 		return
 	}
 
-	nameAndSlug := func(name string, slug types.Slug) string {
-		if name == string(slug) {
-			return name
-		} else {
-			return fmt.Sprintf("%s (%s)", name, slug)
-		}
-	}
-
-	fmt.Printf("Project Status\n")
+	fmt.Printf("Deployment Status\n")
 	fmt.Printf("=================\n\n")
 
-	fmt.Printf("Deployment\n")
-	fmt.Printf("  ID:      %s\n", deployment.ID)
-	fmt.Printf("  Status:  %s\n", deployment.Status)
+	fmt.Printf("ID:           %s\n", deployment.ID)
+	fmt.Printf("Status:       %s\n", deployment.Status)
 
 	if deployment.ExternalID != nil {
 		fmt.Printf("External ID:  %s\n", *deployment.ExternalID)
@@ -124,43 +109,28 @@ func printProjectStatus(workflow *workflow.Workflow) {
 	if len(deployment.Openapiv3Assets) > 0 {
 		fmt.Printf("\nOpenAPI Assets:\n")
 		for _, asset := range deployment.Openapiv3Assets {
-			fmt.Printf("  - %s\n", nameAndSlug(asset.Name, asset.Slug))
+			fmt.Printf("  - %s (%s)\n", asset.Name, asset.Slug)
 		}
 	}
 
 	if len(deployment.FunctionsAssets) > 0 {
 		fmt.Printf("\nFunctions Assets:\n")
 		for _, asset := range deployment.FunctionsAssets {
-			fmt.Printf("  - %s [%s]\n", nameAndSlug(asset.Name, asset.Slug), asset.Runtime)
+			fmt.Printf("  - %s (%s) - %s\n", asset.Name, asset.Slug, asset.Runtime)
 		}
 	}
 
-	fmt.Printf("\nToolsets:\n")
-	if len(workflow.Toolsets) > 0 {
-		for _, toolset := range workflow.Toolsets {
-			fmt.Printf("  - %s [%d tools]\n", nameAndSlug(toolset.Name, toolset.Slug), len(toolset.ToolUrns))
-		}
-	} else {
-		fmt.Printf("  None\n")
-	}
 }
 
-func printProjectStatusJSON(workflow *workflow.Workflow) error {
-	fmt.Printf("Deployment\n")
-	fmt.Printf("=================\n\n")
+func printDeploymentStatusJSON(deployment *types.Deployment) error {
+	if deployment == nil {
+		fmt.Println("{}")
+		return nil
+	}
 
-	jsonData, err := json.MarshalIndent(workflow.Deployment, "", "  ")
+	jsonData, err := json.MarshalIndent(deployment, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal deployment to JSON: %w", err)
-	}
-	fmt.Println(string(jsonData))
-
-	fmt.Printf("\nToolsets\n")
-	fmt.Printf("========\n\n")
-
-	jsonData, err = json.MarshalIndent(workflow.Toolsets, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal toolsets to JSON: %w", err)
 	}
 	fmt.Println(string(jsonData))
 	return nil

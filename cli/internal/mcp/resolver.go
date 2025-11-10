@@ -141,7 +141,7 @@ func constructMCPURL(toolset *types.Toolset, baseURL string) string {
 }
 
 func deriveAuthConfig(toolset *types.Toolset) (headerName string, envVarName string) {
-	// Default values
+	// Default to standard Authorization header
 	headerName = "Authorization"
 	envVarName = ""
 
@@ -150,22 +150,8 @@ func deriveAuthConfig(toolset *types.Toolset) (headerName string, envVarName str
 		return
 	}
 
-	// Use the first security variable to determine auth config
+	// Use the first security variable's environment variable if available
 	secVar := toolset.SecurityVariables[0]
-
-	// Derive header name from the security variable name
-	if secVar.Name != "" {
-		headerName = strings.ReplaceAll(secVar.Name, "_", "-")
-		parts := strings.Split(headerName, "-")
-		for i, part := range parts {
-			if len(part) > 0 {
-				parts[i] = strings.ToUpper(part[:1]) + strings.ToLower(part[1:])
-			}
-		}
-		headerName = strings.Join(parts, "-")
-	}
-
-	// Use the first environment variable name if available
 	if len(secVar.EnvVariables) > 0 {
 		envVarName = secVar.EnvVariables[0]
 	}
