@@ -231,7 +231,10 @@ export default function Sources() {
                 />
               )}
               {dialogState.type === "apply-environment" && (
-                <ApplyEnvironmentDialogContent asset={dialogState.asset} />
+                <ApplyEnvironmentDialogContent
+                  asset={dialogState.asset}
+                  onClose={closeDialog}
+                />
               )}
             </Dialog.Content>
           </Dialog>
