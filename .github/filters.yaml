@@ -12,5 +12,10 @@ client:
 functions:
   - 'functions/**'
 
+cli:
+  - 'cli/**'
+  - 'server/design/**'
+  - 'server/gen/**'
+
 tsframework:
   - 'ts-framework/**'
