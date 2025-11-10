@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	packagesRepo "github.com/speakeasy-api/gram/server/internal/packages/repo"
 	"github.com/speakeasy-api/gram/server/internal/packages/semver"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"go.temporal.io/sdk/client"
 )
 
@@ -45,11 +48,20 @@ type Service struct {
 	packages     *packagesRepo.Queries
 	assetStorage assets.BlobStore
 	temporal     client.Client
+	posthog      *posthog.Posthog
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, temporal client.Client, sessions *sessions.Manager, assetStorage assets.BlobStore) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	temporal client.Client,
+	sessions *sessions.Manager,
+	assetStorage assets.BlobStore,
+	posthog *posthog.Posthog,
+) *Service {
 	logger = logger.With(attr.SlogComponent("deployments"))
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/deployments")
 
@@ -63,6 +75,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		packages:     packagesRepo.New(db),
 		assetStorage: assetStorage,
 		temporal:     temporal,
+		posthog:      posthog,
 	}
 }
 
@@ -459,6 +472,8 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		return nil, err
 	}
 
+	s.captureDeploymentProcessedEvent(ctx, logger, authCtx.OrganizationSlug, *authCtx.ProjectSlug, "create", dep)
+
 	return &gen.CreateDeploymentResult{
 		Deployment: dep,
 	}, nil
@@ -670,6 +685,8 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		return nil, err
 	}
 
+	s.captureDeploymentProcessedEvent(ctx, logger, authCtx.OrganizationSlug, *authCtx.ProjectSlug, "evolve", dep)
+
 	return &gen.EvolveResult{Deployment: dep}, nil
 }
 
@@ -750,6 +767,8 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 
 		dep.Status = status
 	}
+
+	s.captureDeploymentProcessedEvent(ctx, logger, authCtx.OrganizationSlug, *authCtx.ProjectSlug, "redeploy", dep)
 
 	return &gen.RedeployResult{Deployment: dep}, nil
 }
@@ -862,4 +881,23 @@ func validatePackageInclusion(ctx context.Context, logger *slog.Logger, targetPr
 	}
 
 	return nil
+}
+
+func (s *Service) captureDeploymentProcessedEvent(ctx context.Context, logger *slog.Logger, organizationSlug string, projectSlug string, deploymentType string, dep *types.Deployment) {
+	if err := s.posthog.CaptureEvent(ctx, "deployment_processed", dep.ID, map[string]any{
+		"deployment_id":         dep.ID,
+		"project_id":            dep.ProjectID,
+		"organization_id":       dep.OrganizationID,
+		"organization_slug":     organizationSlug,
+		"project_slug":          projectSlug,
+		"deployment_type":       deploymentType,
+		"status":                dep.Status,
+		"openapiv3_tool_count":  dep.Openapiv3ToolCount,
+		"functions_tool_count":  dep.FunctionsToolCount,
+		"functions_asset_count": len(dep.FunctionsAssets),
+		"openapiv3_asset_count": len(dep.Openapiv3Assets),
+		"logs_url":              fmt.Sprintf("%s/%s/%s/deployments/%s", os.Getenv("GRAM_SITE_URL"), organizationSlug, projectSlug, dep.ID),
+	}); err != nil {
+		logger.ErrorContext(ctx, "error capturing deployment_processed event", attr.SlogError(err))
+	}
 }

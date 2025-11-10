@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
 var (
@@ -90,7 +91,9 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage)
+	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
+
+	svc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthog)
 	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage)
 	packagesSvc := packages.NewService(logger, conn, sessionManager)
 
