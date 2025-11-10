@@ -73,8 +73,8 @@ GRAM_CONTROL_ADDRESS = ":8081"
 GRAM_WORKER_CONTROL_ADDRESS = ":8082"
 ## The following variable can be one of: local, test, prod
 GRAM_ENVIRONMENT = "local"
-GRAM_SERVER_URL = "http://localhost:8080"
-GRAM_SITE_URL = "http://localhost:5173"
+GRAM_SERVER_URL = "https://localhost:8080"
+GRAM_SITE_URL = "https://localhost:5173"
 GRAM_ASSETS_BACKEND = "fs"
 GRAM_ASSETS_URI = ".assets"
 ## The following variable is used to encrypt env vars stored in the database.
@@ -89,8 +89,8 @@ SPEAKEASY_SECRET_KEY = "unset"
 ## The following variables are only needed if you want to do one of the following:
 ## - Run the server with SSL enabled and not rely on SSL termination at a load balancer.
 ## - Local development with SSL enabled.
-# GRAM_SSL_CERT_FILE = "{{config_root}}/local/ssl/certs/local.pem"
-# GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
+GRAM_SSL_CERT_FILE = "{{config_root}}/local/ssl/certs/local.pem"
+GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
 
 ##########################
 ## Observability config ##
