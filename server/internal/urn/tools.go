@@ -167,19 +167,19 @@ func (u *Tool) validate() error {
 	}
 
 	for _, part := range parts {
-		v := part[1]
+		segment, v := part[0], part[1]
 		if v == "" {
-			u.err = fmt.Errorf("%w: empty %s", ErrInvalid, part[0])
+			u.err = fmt.Errorf("%w: empty %s", ErrInvalid, segment)
 			return u.err
 		}
 
-		if len(part[1]) > maxSegmentLength {
-			u.err = fmt.Errorf("%w: %s segment is too long (max %d, got %d)", ErrInvalid, part[0], maxSegmentLength, len(part[1]))
+		if len(v) > maxSegmentLength {
+			u.err = fmt.Errorf("%w: %s segment is too long (max %d, got %d)", ErrInvalid, segment, maxSegmentLength, len(v))
 			return u.err
 		}
 
 		if !constants.SlugPatternRE.MatchString(v) {
-			u.err = fmt.Errorf("%w: disallowed characters in %s: %q", ErrInvalid, part[0], part[1])
+			u.err = fmt.Errorf("%w: disallowed characters in %s: %q", ErrInvalid, segment, v)
 			return u.err
 		}
 	}
