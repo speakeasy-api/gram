@@ -16,10 +16,13 @@ import (
 
 // Endpoints wraps the "environments" service endpoints.
 type Endpoints struct {
-	CreateEnvironment goa.Endpoint
-	ListEnvironments  goa.Endpoint
-	UpdateEnvironment goa.Endpoint
-	DeleteEnvironment goa.Endpoint
+	CreateEnvironment           goa.Endpoint
+	ListEnvironments            goa.Endpoint
+	UpdateEnvironment           goa.Endpoint
+	DeleteEnvironment           goa.Endpoint
+	SetSourceEnvironmentLink    goa.Endpoint
+	DeleteSourceEnvironmentLink goa.Endpoint
+	GetSourceEnvironment        goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "environments" service with endpoints.
@@ -27,10 +30,13 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateEnvironment: NewCreateEnvironmentEndpoint(s, a.APIKeyAuth),
-		ListEnvironments:  NewListEnvironmentsEndpoint(s, a.APIKeyAuth),
-		UpdateEnvironment: NewUpdateEnvironmentEndpoint(s, a.APIKeyAuth),
-		DeleteEnvironment: NewDeleteEnvironmentEndpoint(s, a.APIKeyAuth),
+		CreateEnvironment:           NewCreateEnvironmentEndpoint(s, a.APIKeyAuth),
+		ListEnvironments:            NewListEnvironmentsEndpoint(s, a.APIKeyAuth),
+		UpdateEnvironment:           NewUpdateEnvironmentEndpoint(s, a.APIKeyAuth),
+		DeleteEnvironment:           NewDeleteEnvironmentEndpoint(s, a.APIKeyAuth),
+		SetSourceEnvironmentLink:    NewSetSourceEnvironmentLinkEndpoint(s, a.APIKeyAuth),
+		DeleteSourceEnvironmentLink: NewDeleteSourceEnvironmentLinkEndpoint(s, a.APIKeyAuth),
+		GetSourceEnvironment:        NewGetSourceEnvironmentEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -40,6 +46,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListEnvironments = m(e.ListEnvironments)
 	e.UpdateEnvironment = m(e.UpdateEnvironment)
 	e.DeleteEnvironment = m(e.DeleteEnvironment)
+	e.SetSourceEnvironmentLink = m(e.SetSourceEnvironmentLink)
+	e.DeleteSourceEnvironmentLink = m(e.DeleteSourceEnvironmentLink)
+	e.GetSourceEnvironment = m(e.GetSourceEnvironment)
 }
 
 // NewCreateEnvironmentEndpoint returns an endpoint function that calls the
@@ -179,5 +188,110 @@ func NewDeleteEnvironmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return nil, s.DeleteEnvironment(ctx, p)
+	}
+}
+
+// NewSetSourceEnvironmentLinkEndpoint returns an endpoint function that calls
+// the method "setSourceEnvironmentLink" of service "environments".
+func NewSetSourceEnvironmentLinkEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetSourceEnvironmentLinkPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SetSourceEnvironmentLink(ctx, p)
+	}
+}
+
+// NewDeleteSourceEnvironmentLinkEndpoint returns an endpoint function that
+// calls the method "deleteSourceEnvironmentLink" of service "environments".
+func NewDeleteSourceEnvironmentLinkEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteSourceEnvironmentLinkPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteSourceEnvironmentLink(ctx, p)
+	}
+}
+
+// NewGetSourceEnvironmentEndpoint returns an endpoint function that calls the
+// method "getSourceEnvironment" of service "environments".
+func NewGetSourceEnvironmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSourceEnvironmentPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetSourceEnvironment(ctx, p)
 	}
 }

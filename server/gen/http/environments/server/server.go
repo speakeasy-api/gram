@@ -19,11 +19,14 @@ import (
 
 // Server lists the environments service endpoint HTTP handlers.
 type Server struct {
-	Mounts            []*MountPoint
-	CreateEnvironment http.Handler
-	ListEnvironments  http.Handler
-	UpdateEnvironment http.Handler
-	DeleteEnvironment http.Handler
+	Mounts                      []*MountPoint
+	CreateEnvironment           http.Handler
+	ListEnvironments            http.Handler
+	UpdateEnvironment           http.Handler
+	DeleteEnvironment           http.Handler
+	SetSourceEnvironmentLink    http.Handler
+	DeleteSourceEnvironmentLink http.Handler
+	GetSourceEnvironment        http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -57,11 +60,17 @@ func New(
 			{"ListEnvironments", "GET", "/rpc/environments.list"},
 			{"UpdateEnvironment", "POST", "/rpc/environments.update"},
 			{"DeleteEnvironment", "DELETE", "/rpc/environments.delete"},
+			{"SetSourceEnvironmentLink", "PUT", "/rpc/environments.setSourceLink"},
+			{"DeleteSourceEnvironmentLink", "DELETE", "/rpc/environments.deleteSourceLink"},
+			{"GetSourceEnvironment", "GET", "/rpc/environments.getSourceEnvironment"},
 		},
-		CreateEnvironment: NewCreateEnvironmentHandler(e.CreateEnvironment, mux, decoder, encoder, errhandler, formatter),
-		ListEnvironments:  NewListEnvironmentsHandler(e.ListEnvironments, mux, decoder, encoder, errhandler, formatter),
-		UpdateEnvironment: NewUpdateEnvironmentHandler(e.UpdateEnvironment, mux, decoder, encoder, errhandler, formatter),
-		DeleteEnvironment: NewDeleteEnvironmentHandler(e.DeleteEnvironment, mux, decoder, encoder, errhandler, formatter),
+		CreateEnvironment:           NewCreateEnvironmentHandler(e.CreateEnvironment, mux, decoder, encoder, errhandler, formatter),
+		ListEnvironments:            NewListEnvironmentsHandler(e.ListEnvironments, mux, decoder, encoder, errhandler, formatter),
+		UpdateEnvironment:           NewUpdateEnvironmentHandler(e.UpdateEnvironment, mux, decoder, encoder, errhandler, formatter),
+		DeleteEnvironment:           NewDeleteEnvironmentHandler(e.DeleteEnvironment, mux, decoder, encoder, errhandler, formatter),
+		SetSourceEnvironmentLink:    NewSetSourceEnvironmentLinkHandler(e.SetSourceEnvironmentLink, mux, decoder, encoder, errhandler, formatter),
+		DeleteSourceEnvironmentLink: NewDeleteSourceEnvironmentLinkHandler(e.DeleteSourceEnvironmentLink, mux, decoder, encoder, errhandler, formatter),
+		GetSourceEnvironment:        NewGetSourceEnvironmentHandler(e.GetSourceEnvironment, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -74,6 +83,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListEnvironments = m(s.ListEnvironments)
 	s.UpdateEnvironment = m(s.UpdateEnvironment)
 	s.DeleteEnvironment = m(s.DeleteEnvironment)
+	s.SetSourceEnvironmentLink = m(s.SetSourceEnvironmentLink)
+	s.DeleteSourceEnvironmentLink = m(s.DeleteSourceEnvironmentLink)
+	s.GetSourceEnvironment = m(s.GetSourceEnvironment)
 }
 
 // MethodNames returns the methods served.
@@ -85,6 +97,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListEnvironmentsHandler(mux, h.ListEnvironments)
 	MountUpdateEnvironmentHandler(mux, h.UpdateEnvironment)
 	MountDeleteEnvironmentHandler(mux, h.DeleteEnvironment)
+	MountSetSourceEnvironmentLinkHandler(mux, h.SetSourceEnvironmentLink)
+	MountDeleteSourceEnvironmentLinkHandler(mux, h.DeleteSourceEnvironmentLink)
+	MountGetSourceEnvironmentHandler(mux, h.GetSourceEnvironment)
 }
 
 // Mount configures the mux to serve the environments endpoints.
@@ -281,6 +296,167 @@ func NewDeleteEnvironmentHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteEnvironment")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "environments")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetSourceEnvironmentLinkHandler configures the mux to serve the
+// "environments" service "setSourceEnvironmentLink" endpoint.
+func MountSetSourceEnvironmentLinkHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("PUT", "/rpc/environments.setSourceLink", otelhttp.WithRouteTag("/rpc/environments.setSourceLink", f).ServeHTTP)
+}
+
+// NewSetSourceEnvironmentLinkHandler creates a HTTP handler which loads the
+// HTTP request and calls the "environments" service "setSourceEnvironmentLink"
+// endpoint.
+func NewSetSourceEnvironmentLinkHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetSourceEnvironmentLinkRequest(mux, decoder)
+		encodeResponse = EncodeSetSourceEnvironmentLinkResponse(encoder)
+		encodeError    = EncodeSetSourceEnvironmentLinkError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setSourceEnvironmentLink")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "environments")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteSourceEnvironmentLinkHandler configures the mux to serve the
+// "environments" service "deleteSourceEnvironmentLink" endpoint.
+func MountDeleteSourceEnvironmentLinkHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/environments.deleteSourceLink", otelhttp.WithRouteTag("/rpc/environments.deleteSourceLink", f).ServeHTTP)
+}
+
+// NewDeleteSourceEnvironmentLinkHandler creates a HTTP handler which loads the
+// HTTP request and calls the "environments" service
+// "deleteSourceEnvironmentLink" endpoint.
+func NewDeleteSourceEnvironmentLinkHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteSourceEnvironmentLinkRequest(mux, decoder)
+		encodeResponse = EncodeDeleteSourceEnvironmentLinkResponse(encoder)
+		encodeError    = EncodeDeleteSourceEnvironmentLinkError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteSourceEnvironmentLink")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "environments")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetSourceEnvironmentHandler configures the mux to serve the
+// "environments" service "getSourceEnvironment" endpoint.
+func MountGetSourceEnvironmentHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/environments.getSourceEnvironment", otelhttp.WithRouteTag("/rpc/environments.getSourceEnvironment", f).ServeHTTP)
+}
+
+// NewGetSourceEnvironmentHandler creates a HTTP handler which loads the HTTP
+// request and calls the "environments" service "getSourceEnvironment" endpoint.
+func NewGetSourceEnvironmentHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetSourceEnvironmentRequest(mux, decoder)
+		encodeResponse = EncodeGetSourceEnvironmentResponse(encoder)
+		encodeError    = EncodeGetSourceEnvironmentError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getSourceEnvironment")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "environments")
 		payload, err := decodeRequest(r)
 		if err != nil {

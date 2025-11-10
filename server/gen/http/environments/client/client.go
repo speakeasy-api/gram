@@ -33,6 +33,18 @@ type Client struct {
 	// deleteEnvironment endpoint.
 	DeleteEnvironmentDoer goahttp.Doer
 
+	// SetSourceEnvironmentLink Doer is the HTTP client used to make requests to
+	// the setSourceEnvironmentLink endpoint.
+	SetSourceEnvironmentLinkDoer goahttp.Doer
+
+	// DeleteSourceEnvironmentLink Doer is the HTTP client used to make requests to
+	// the deleteSourceEnvironmentLink endpoint.
+	DeleteSourceEnvironmentLinkDoer goahttp.Doer
+
+	// GetSourceEnvironment Doer is the HTTP client used to make requests to the
+	// getSourceEnvironment endpoint.
+	GetSourceEnvironmentDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -53,15 +65,18 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateEnvironmentDoer: doer,
-		ListEnvironmentsDoer:  doer,
-		UpdateEnvironmentDoer: doer,
-		DeleteEnvironmentDoer: doer,
-		RestoreResponseBody:   restoreBody,
-		scheme:                scheme,
-		host:                  host,
-		decoder:               dec,
-		encoder:               enc,
+		CreateEnvironmentDoer:           doer,
+		ListEnvironmentsDoer:            doer,
+		UpdateEnvironmentDoer:           doer,
+		DeleteEnvironmentDoer:           doer,
+		SetSourceEnvironmentLinkDoer:    doer,
+		DeleteSourceEnvironmentLinkDoer: doer,
+		GetSourceEnvironmentDoer:        doer,
+		RestoreResponseBody:             restoreBody,
+		scheme:                          scheme,
+		host:                            host,
+		decoder:                         dec,
+		encoder:                         enc,
 	}
 }
 
@@ -156,6 +171,78 @@ func (c *Client) DeleteEnvironment() goa.Endpoint {
 		resp, err := c.DeleteEnvironmentDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("environments", "deleteEnvironment", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetSourceEnvironmentLink returns an endpoint that makes HTTP requests to the
+// environments service setSourceEnvironmentLink server.
+func (c *Client) SetSourceEnvironmentLink() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetSourceEnvironmentLinkRequest(c.encoder)
+		decodeResponse = DecodeSetSourceEnvironmentLinkResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetSourceEnvironmentLinkRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetSourceEnvironmentLinkDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("environments", "setSourceEnvironmentLink", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteSourceEnvironmentLink returns an endpoint that makes HTTP requests to
+// the environments service deleteSourceEnvironmentLink server.
+func (c *Client) DeleteSourceEnvironmentLink() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteSourceEnvironmentLinkRequest(c.encoder)
+		decodeResponse = DecodeDeleteSourceEnvironmentLinkResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteSourceEnvironmentLinkRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteSourceEnvironmentLinkDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("environments", "deleteSourceEnvironmentLink", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetSourceEnvironment returns an endpoint that makes HTTP requests to the
+// environments service getSourceEnvironment server.
+func (c *Client) GetSourceEnvironment() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetSourceEnvironmentRequest(c.encoder)
+		decodeResponse = DecodeGetSourceEnvironmentResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetSourceEnvironmentRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetSourceEnvironmentDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("environments", "getSourceEnvironment", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -16,19 +16,25 @@ import (
 
 // Client is the "environments" service client.
 type Client struct {
-	CreateEnvironmentEndpoint goa.Endpoint
-	ListEnvironmentsEndpoint  goa.Endpoint
-	UpdateEnvironmentEndpoint goa.Endpoint
-	DeleteEnvironmentEndpoint goa.Endpoint
+	CreateEnvironmentEndpoint           goa.Endpoint
+	ListEnvironmentsEndpoint            goa.Endpoint
+	UpdateEnvironmentEndpoint           goa.Endpoint
+	DeleteEnvironmentEndpoint           goa.Endpoint
+	SetSourceEnvironmentLinkEndpoint    goa.Endpoint
+	DeleteSourceEnvironmentLinkEndpoint goa.Endpoint
+	GetSourceEnvironmentEndpoint        goa.Endpoint
 }
 
 // NewClient initializes a "environments" service client given the endpoints.
-func NewClient(createEnvironment, listEnvironments, updateEnvironment, deleteEnvironment goa.Endpoint) *Client {
+func NewClient(createEnvironment, listEnvironments, updateEnvironment, deleteEnvironment, setSourceEnvironmentLink, deleteSourceEnvironmentLink, getSourceEnvironment goa.Endpoint) *Client {
 	return &Client{
-		CreateEnvironmentEndpoint: createEnvironment,
-		ListEnvironmentsEndpoint:  listEnvironments,
-		UpdateEnvironmentEndpoint: updateEnvironment,
-		DeleteEnvironmentEndpoint: deleteEnvironment,
+		CreateEnvironmentEndpoint:           createEnvironment,
+		ListEnvironmentsEndpoint:            listEnvironments,
+		UpdateEnvironmentEndpoint:           updateEnvironment,
+		DeleteEnvironmentEndpoint:           deleteEnvironment,
+		SetSourceEnvironmentLinkEndpoint:    setSourceEnvironmentLink,
+		DeleteSourceEnvironmentLinkEndpoint: deleteSourceEnvironmentLink,
+		GetSourceEnvironmentEndpoint:        getSourceEnvironment,
 	}
 }
 
@@ -118,4 +124,69 @@ func (c *Client) UpdateEnvironment(ctx context.Context, p *UpdateEnvironmentPayl
 func (c *Client) DeleteEnvironment(ctx context.Context, p *DeleteEnvironmentPayload) (err error) {
 	_, err = c.DeleteEnvironmentEndpoint(ctx, p)
 	return
+}
+
+// SetSourceEnvironmentLink calls the "setSourceEnvironmentLink" endpoint of
+// the "environments" service.
+// SetSourceEnvironmentLink may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetSourceEnvironmentLink(ctx context.Context, p *SetSourceEnvironmentLinkPayload) (res *SourceEnvironmentLink, err error) {
+	var ires any
+	ires, err = c.SetSourceEnvironmentLinkEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SourceEnvironmentLink), nil
+}
+
+// DeleteSourceEnvironmentLink calls the "deleteSourceEnvironmentLink" endpoint
+// of the "environments" service.
+// DeleteSourceEnvironmentLink may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteSourceEnvironmentLink(ctx context.Context, p *DeleteSourceEnvironmentLinkPayload) (err error) {
+	_, err = c.DeleteSourceEnvironmentLinkEndpoint(ctx, p)
+	return
+}
+
+// GetSourceEnvironment calls the "getSourceEnvironment" endpoint of the
+// "environments" service.
+// GetSourceEnvironment may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetSourceEnvironment(ctx context.Context, p *GetSourceEnvironmentPayload) (res *types.Environment, err error) {
+	var ires any
+	ires, err = c.GetSourceEnvironmentEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.Environment), nil
 }

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
@@ -267,6 +268,109 @@ func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvi
 	}
 
 	return nil
+}
+
+func (s *Service) SetSourceEnvironmentLink(ctx context.Context, payload *gen.SetSourceEnvironmentLinkPayload) (*gen.SourceEnvironmentLink, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	environmentID, err := uuid.Parse(payload.EnvironmentID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid environment_id").Log(ctx, s.logger)
+	}
+
+	// Verify the environment exists and belongs to the project
+	_, err = s.repo.GetEnvironmentByID(ctx, repo.GetEnvironmentByIDParams{
+		ID:        environmentID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "environment not found").Log(ctx, s.logger)
+	}
+
+	link, err := s.repo.SetSourceEnvironment(ctx, repo.SetSourceEnvironmentParams{
+		SourceKind:    string(payload.SourceKind),
+		SourceSlug:    payload.SourceSlug,
+		ProjectID:     *authCtx.ProjectID,
+		EnvironmentID: environmentID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to set source environment link").Log(ctx, s.logger)
+	}
+
+	return &gen.SourceEnvironmentLink{
+		ID:            link.ID.String(),
+		SourceKind:    gen.SourceKind(link.SourceKind),
+		SourceSlug:    link.SourceSlug,
+		EnvironmentID: link.EnvironmentID.String(),
+	}, nil
+}
+
+func (s *Service) DeleteSourceEnvironmentLink(ctx context.Context, payload *gen.DeleteSourceEnvironmentLinkPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	err := s.repo.DeleteSourceEnvironment(ctx, repo.DeleteSourceEnvironmentParams{
+		SourceKind: string(payload.SourceKind),
+		SourceSlug: payload.SourceSlug,
+		ProjectID:  *authCtx.ProjectID,
+	})
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return oops.E(oops.CodeUnexpected, err, "failed to delete source environment link").Log(ctx, s.logger)
+	}
+
+	return nil
+}
+
+func (s *Service) GetSourceEnvironment(ctx context.Context, payload *gen.GetSourceEnvironmentPayload) (*types.Environment, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	environment, err := s.repo.GetEnvironmentForSource(ctx, repo.GetEnvironmentForSourceParams{
+		SourceKind: string(payload.SourceKind),
+		SourceSlug: payload.SourceSlug,
+		ProjectID:  *authCtx.ProjectID,
+	})
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "environment not found for source").Log(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment for source").Log(ctx, s.logger)
+	}
+
+	entries, err := s.entries.ListEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID, true)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").Log(ctx, s.logger)
+	}
+
+	genEntries := make([]*types.EnvironmentEntry, len(entries))
+	for i, entry := range entries {
+		genEntries[i] = &types.EnvironmentEntry{
+			Name:      entry.Name,
+			Value:     entry.Value,
+			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
+		}
+	}
+
+	return &types.Environment{
+		ID:             environment.ID.String(),
+		OrganizationID: environment.OrganizationID,
+		ProjectID:      environment.ProjectID.String(),
+		Name:           environment.Name,
+		Slug:           types.Slug(environment.Slug),
+		Description:    conv.FromPGText[string](environment.Description),
+		Entries:        genEntries,
+		CreatedAt:      environment.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:      environment.UpdatedAt.Time.Format(time.RFC3339),
+	}, nil
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

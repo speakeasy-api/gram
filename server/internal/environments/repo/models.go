@@ -29,3 +29,13 @@ type EnvironmentEntry struct {
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
 }
+
+type SourceEnvironment struct {
+	ID            uuid.UUID
+	SourceKind    string
+	SourceSlug    string
+	ProjectID     uuid.UUID
+	EnvironmentID uuid.UUID
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}

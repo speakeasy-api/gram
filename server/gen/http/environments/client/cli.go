@@ -25,7 +25,7 @@ func BuildCreateEnvironmentPayload(environmentsCreateEnvironmentBody string, env
 	{
 		err = json.Unmarshal([]byte(environmentsCreateEnvironmentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Et ut error animi voluptate.\",\n      \"entries\": [\n         {\n            \"name\": \"Vel quia omnis.\",\n            \"value\": \"Iste cumque pariatur et qui sequi.\"\n         },\n         {\n            \"name\": \"Vel quia omnis.\",\n            \"value\": \"Iste cumque pariatur et qui sequi.\"\n         },\n         {\n            \"name\": \"Vel quia omnis.\",\n            \"value\": \"Iste cumque pariatur et qui sequi.\"\n         },\n         {\n            \"name\": \"Vel quia omnis.\",\n            \"value\": \"Iste cumque pariatur et qui sequi.\"\n         }\n      ],\n      \"name\": \"Repellat reprehenderit odit rerum voluptate a.\",\n      \"organization_id\": \"Doloribus consequuntur nihil delectus impedit.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Nemo enim sit.\",\n      \"entries\": [\n         {\n            \"name\": \"Esse architecto asperiores.\",\n            \"value\": \"Molestiae maxime.\"\n         },\n         {\n            \"name\": \"Esse architecto asperiores.\",\n            \"value\": \"Molestiae maxime.\"\n         },\n         {\n            \"name\": \"Esse architecto asperiores.\",\n            \"value\": \"Molestiae maxime.\"\n         },\n         {\n            \"name\": \"Esse architecto asperiores.\",\n            \"value\": \"Molestiae maxime.\"\n         }\n      ],\n      \"name\": \"Nesciunt nulla rem blanditiis eveniet ex consectetur.\",\n      \"organization_id\": \"Provident quia cum et natus.\"\n   }'")
 		}
 		if body.Entries == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("entries", "body"))
@@ -95,7 +95,7 @@ func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, env
 	{
 		err = json.Unmarshal([]byte(environmentsUpdateEnvironmentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Iusto iusto quam ab sunt.\",\n      \"entries_to_remove\": [\n         \"Sed deserunt necessitatibus voluptas cum in.\",\n         \"Laudantium itaque minima voluptates qui magnam.\"\n      ],\n      \"entries_to_update\": [\n         {\n            \"name\": \"Vel quia omnis.\",\n            \"value\": \"Iste cumque pariatur et qui sequi.\"\n         },\n         {\n            \"name\": \"Vel quia omnis.\",\n            \"value\": \"Iste cumque pariatur et qui sequi.\"\n         }\n      ],\n      \"name\": \"Deserunt neque et.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Enim deserunt et.\",\n      \"entries_to_remove\": [\n         \"Provident deleniti.\",\n         \"Quia omnis aut veniam.\",\n         \"Quod voluptatem illo ut facere soluta.\"\n      ],\n      \"entries_to_update\": [\n         {\n            \"name\": \"Esse architecto asperiores.\",\n            \"value\": \"Molestiae maxime.\"\n         },\n         {\n            \"name\": \"Esse architecto asperiores.\",\n            \"value\": \"Molestiae maxime.\"\n         },\n         {\n            \"name\": \"Esse architecto asperiores.\",\n            \"value\": \"Molestiae maxime.\"\n         }\n      ],\n      \"name\": \"Quod soluta voluptatibus cum.\"\n   }'")
 		}
 		if body.EntriesToUpdate == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("entries_to_update", "body"))
@@ -186,6 +186,125 @@ func BuildDeleteEnvironmentPayload(environmentsDeleteEnvironmentSlug string, env
 	}
 	v := &environments.DeleteEnvironmentPayload{}
 	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSetSourceEnvironmentLinkPayload builds the payload for the environments
+// setSourceEnvironmentLink endpoint from CLI flags.
+func BuildSetSourceEnvironmentLinkPayload(environmentsSetSourceEnvironmentLinkBody string, environmentsSetSourceEnvironmentLinkSessionToken string, environmentsSetSourceEnvironmentLinkProjectSlugInput string) (*environments.SetSourceEnvironmentLinkPayload, error) {
+	var err error
+	var body SetSourceEnvironmentLinkRequestBody
+	{
+		err = json.Unmarshal([]byte(environmentsSetSourceEnvironmentLinkBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"b2deaf3c-1e3e-4bcf-9afd-d144566055cd\",\n      \"source_kind\": \"http\",\n      \"source_slug\": \"Optio autem cupiditate rem explicabo.\"\n   }'")
+		}
+		if !(body.SourceKind == "http" || body.SourceKind == "function") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source_kind", body.SourceKind, []any{"http", "function"}))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", body.EnvironmentID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if environmentsSetSourceEnvironmentLinkSessionToken != "" {
+			sessionToken = &environmentsSetSourceEnvironmentLinkSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if environmentsSetSourceEnvironmentLinkProjectSlugInput != "" {
+			projectSlugInput = &environmentsSetSourceEnvironmentLinkProjectSlugInput
+		}
+	}
+	v := &environments.SetSourceEnvironmentLinkPayload{
+		SourceKind:    environments.SourceKind(body.SourceKind),
+		SourceSlug:    body.SourceSlug,
+		EnvironmentID: body.EnvironmentID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDeleteSourceEnvironmentLinkPayload builds the payload for the
+// environments deleteSourceEnvironmentLink endpoint from CLI flags.
+func BuildDeleteSourceEnvironmentLinkPayload(environmentsDeleteSourceEnvironmentLinkSourceKind string, environmentsDeleteSourceEnvironmentLinkSourceSlug string, environmentsDeleteSourceEnvironmentLinkSessionToken string, environmentsDeleteSourceEnvironmentLinkProjectSlugInput string) (*environments.DeleteSourceEnvironmentLinkPayload, error) {
+	var err error
+	var sourceKind string
+	{
+		sourceKind = environmentsDeleteSourceEnvironmentLinkSourceKind
+		if !(sourceKind == "http" || sourceKind == "function") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("source_kind", sourceKind, []any{"http", "function"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sourceSlug string
+	{
+		sourceSlug = environmentsDeleteSourceEnvironmentLinkSourceSlug
+	}
+	var sessionToken *string
+	{
+		if environmentsDeleteSourceEnvironmentLinkSessionToken != "" {
+			sessionToken = &environmentsDeleteSourceEnvironmentLinkSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if environmentsDeleteSourceEnvironmentLinkProjectSlugInput != "" {
+			projectSlugInput = &environmentsDeleteSourceEnvironmentLinkProjectSlugInput
+		}
+	}
+	v := &environments.DeleteSourceEnvironmentLinkPayload{}
+	v.SourceKind = environments.SourceKind(sourceKind)
+	v.SourceSlug = sourceSlug
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetSourceEnvironmentPayload builds the payload for the environments
+// getSourceEnvironment endpoint from CLI flags.
+func BuildGetSourceEnvironmentPayload(environmentsGetSourceEnvironmentSourceKind string, environmentsGetSourceEnvironmentSourceSlug string, environmentsGetSourceEnvironmentSessionToken string, environmentsGetSourceEnvironmentProjectSlugInput string) (*environments.GetSourceEnvironmentPayload, error) {
+	var err error
+	var sourceKind string
+	{
+		sourceKind = environmentsGetSourceEnvironmentSourceKind
+		if !(sourceKind == "http" || sourceKind == "function") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("source_kind", sourceKind, []any{"http", "function"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sourceSlug string
+	{
+		sourceSlug = environmentsGetSourceEnvironmentSourceSlug
+	}
+	var sessionToken *string
+	{
+		if environmentsGetSourceEnvironmentSessionToken != "" {
+			sessionToken = &environmentsGetSourceEnvironmentSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if environmentsGetSourceEnvironmentProjectSlugInput != "" {
+			projectSlugInput = &environmentsGetSourceEnvironmentProjectSlugInput
+		}
+	}
+	v := &environments.GetSourceEnvironmentPayload{}
+	v.SourceKind = environments.SourceKind(sourceKind)
+	v.SourceSlug = sourceSlug
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
