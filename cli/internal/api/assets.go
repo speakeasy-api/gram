@@ -34,6 +34,7 @@ func NewAssetsClient(options *AssetsClientOptions) *AssetsClient {
 		h.UploadFunctions(),
 		h.UploadOpenAPIv3(),
 		h.ServeOpenAPIv3(),
+		h.ServeFunction(),
 		h.ListAssets(),
 	)
 

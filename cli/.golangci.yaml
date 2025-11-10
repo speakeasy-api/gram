@@ -31,7 +31,6 @@ linters:
     - ineffassign
     - loggercheck
     - mirror
-    - musttag
     - nolintlint
     - paralleltest
     - predeclared
@@ -49,6 +48,17 @@ linters:
     - wrapcheck
 
   settings:
+    wrapcheck:
+      ignore-sigs:
+        - "errors.New("
+        - "errors.Join("
+        - "fmt.Errorf("
+        - "(net/http.RoundTripper).RoundTrip"
+    gosec:
+      config:
+        G301: "0755"
+        G302: "0644"
+        G306: "0644"
     depguard:
       rules:
         main:

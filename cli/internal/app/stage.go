@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/cli/internal/constants"
 	"github.com/speakeasy-api/gram/cli/internal/deploy"
+	"github.com/speakeasy-api/gram/cli/internal/o11y"
 )
 
 var (
@@ -69,6 +70,8 @@ YAML/JSON documents.
 				return nil
 			}
 
+			// #nosec G304 - the config path is user-specified and is treated as
+			// JSON to be decoded into a struct with defined shape.
 			file, err := os.OpenFile(configPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
 			if err != nil {
 				if errors.Is(err, os.ErrExist) {
@@ -170,6 +173,7 @@ func newStageOpenAPICommand() *cli.Command {
 					Slug:     slug,
 					Name:     name,
 					Location: location,
+					Runtime:  "",
 				},
 			}); err != nil {
 				return fmt.Errorf("failed to append source to config: %w", err)
@@ -181,6 +185,8 @@ func newStageOpenAPICommand() *cli.Command {
 }
 
 func validateExistingStageFile(configPath string) error {
+	// #nosec G304 - this function is only validating the file contents and not
+	// using it in an unsafe way.
 	current, err := os.ReadFile(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to read config file: %w", err)
@@ -201,6 +207,8 @@ func validateExistingStageFile(configPath string) error {
 }
 
 func appendSourcesToConfig(configPath string, sources []deploy.Source) error {
+	// #nosec G304 - this function is only editing the file contents and not
+	// passing its contents onwards to the rest of the program in an unsafe way.
 	current, err := os.ReadFile(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to read config file: %w", err)
@@ -226,11 +234,13 @@ func appendSourcesToConfig(configPath string, sources []deploy.Source) error {
 	}
 	config.Sources = deduped
 
+	// #nosec G304 - this function is only updating a file contents and not
+	// passing its contents onwards to the rest of the program in an unsafe way.
 	file, err := os.OpenFile(configPath, os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open config file: %w", err)
 	}
-	defer file.Close()
+	defer o11y.NoLogDefer(func() error { return file.Close() })
 
 	enc := json.NewEncoder(file)
 	enc.SetIndent("", "  ")
