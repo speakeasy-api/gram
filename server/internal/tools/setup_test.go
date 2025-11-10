@@ -26,6 +26,7 @@ import (
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/templates"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/tools"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
@@ -80,6 +81,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	require.NoError(t, err)
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
+	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
 	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "", billingClient)
 	require.NoError(t, err)
@@ -101,7 +103,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	require.NoError(t, worker.Start(), "start temporal worker")
 
 	toolsSvc := tools.NewService(logger, conn, sessionManager)
-	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage)
+	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthog)
 	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage)
 	packagesSvc := packages.NewService(logger, conn, sessionManager)
 	toolsetsSvc := toolsets.NewService(logger, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient))
