@@ -21,7 +21,6 @@ import (
 	assetsRepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
@@ -175,23 +174,7 @@ func (p *ProcessDeployment) doOpenAPIv3(
 	projectSlug string,
 	deployment *types.Deployment,
 ) error {
-	f := conv.Default[feature.Provider](p.features, &feature.InMemory{})
-	useSpeakeasy, err := f.IsFlagEnabled(ctx, feature.FlagSpeakeasyOpenAPIParserV0, projectID.String())
-	if err != nil {
-		useSpeakeasy = false
-		p.logger.ErrorContext(
-			ctx, "error checking openapi parser feature flag for organization",
-			attr.SlogError(err),
-			attr.SlogOrganizationSlug(orgSlug),
-			attr.SlogProjectID(projectID.String()),
-			attr.SlogProjectSlug(projectSlug),
-		)
-	}
-
-	parser := "libopenapi"
-	if useSpeakeasy {
-		parser = "speakeasy"
-	}
+	parser := "speakeasy"
 
 	for _, docInfo := range deployment.Openapiv3Assets {
 		logger := p.logger.With(

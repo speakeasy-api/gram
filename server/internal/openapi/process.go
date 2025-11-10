@@ -217,15 +217,11 @@ func (p *ToolExtractor) Do(
 	}
 
 	var res *ToolExtractorResult
-	switch task.Parser {
-	case "speakeasy":
-		res, err = p.doSpeakeasy(ctx, logger, p.tracer, tx, doc, task)
-	default:
-		if task.Parser != "libopenapi" {
-			logger.ErrorContext(ctx, "unrecognized parser specified: defaulting to libopenapi", attr.SlogDeploymentOpenAPIParser(task.Parser))
-		}
-		res, err = p.doLibOpenAPI(ctx, logger, p.tracer, tx, doc, task)
+	if task.Parser == "speakeasy" {
+		logger.ErrorContext(ctx, "unrecognized parser specified: defaulting to speakeasy", attr.SlogDeploymentOpenAPIParser(task.Parser))
 	}
+
+	res, err = p.doSpeakeasy(ctx, logger, p.tracer, tx, doc, task)
 	if err != nil {
 		return nil, err
 	}
