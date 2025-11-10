@@ -4351,7 +4351,7 @@ func NewRemoveOAuthServerGatewayErrorResponseBody(res *goa.ServiceError) *Remove
 
 // NewCreateToolsetPayload builds a toolsets service createToolset endpoint
 // payload.
-func NewCreateToolsetPayload(body *CreateToolsetRequestBody, sessionToken *string, projectSlugInput *string) *toolsets.CreateToolsetPayload {
+func NewCreateToolsetPayload(body *CreateToolsetRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.CreateToolsetPayload {
 	v := &toolsets.CreateToolsetPayload{
 		Name:        *body.Name,
 		Description: body.Description,
@@ -4373,6 +4373,7 @@ func NewCreateToolsetPayload(body *CreateToolsetRequestBody, sessionToken *strin
 		}
 	}
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
@@ -4380,9 +4381,10 @@ func NewCreateToolsetPayload(body *CreateToolsetRequestBody, sessionToken *strin
 
 // NewListToolsetsPayload builds a toolsets service listToolsets endpoint
 // payload.
-func NewListToolsetsPayload(sessionToken *string, projectSlugInput *string) *toolsets.ListToolsetsPayload {
+func NewListToolsetsPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.ListToolsetsPayload {
 	v := &toolsets.ListToolsetsPayload{}
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
@@ -4390,7 +4392,7 @@ func NewListToolsetsPayload(sessionToken *string, projectSlugInput *string) *too
 
 // NewUpdateToolsetPayload builds a toolsets service updateToolset endpoint
 // payload.
-func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessionToken *string, projectSlugInput *string) *toolsets.UpdateToolsetPayload {
+func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.UpdateToolsetPayload {
 	v := &toolsets.UpdateToolsetPayload{
 		Name:           body.Name,
 		Description:    body.Description,
@@ -4426,6 +4428,7 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessio
 	}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
@@ -4433,20 +4436,22 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessio
 
 // NewDeleteToolsetPayload builds a toolsets service deleteToolset endpoint
 // payload.
-func NewDeleteToolsetPayload(slug string, sessionToken *string, projectSlugInput *string) *toolsets.DeleteToolsetPayload {
+func NewDeleteToolsetPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.DeleteToolsetPayload {
 	v := &toolsets.DeleteToolsetPayload{}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewGetToolsetPayload builds a toolsets service getToolset endpoint payload.
-func NewGetToolsetPayload(slug string, sessionToken *string, projectSlugInput *string) *toolsets.GetToolsetPayload {
+func NewGetToolsetPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.GetToolsetPayload {
 	v := &toolsets.GetToolsetPayload{}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
@@ -4454,10 +4459,11 @@ func NewGetToolsetPayload(slug string, sessionToken *string, projectSlugInput *s
 
 // NewCheckMCPSlugAvailabilityPayload builds a toolsets service
 // checkMCPSlugAvailability endpoint payload.
-func NewCheckMCPSlugAvailabilityPayload(slug string, sessionToken *string, projectSlugInput *string) *toolsets.CheckMCPSlugAvailabilityPayload {
+func NewCheckMCPSlugAvailabilityPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.CheckMCPSlugAvailabilityPayload {
 	v := &toolsets.CheckMCPSlugAvailabilityPayload{}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
@@ -4465,22 +4471,24 @@ func NewCheckMCPSlugAvailabilityPayload(slug string, sessionToken *string, proje
 
 // NewCloneToolsetPayload builds a toolsets service cloneToolset endpoint
 // payload.
-func NewCloneToolsetPayload(slug string, sessionToken *string, projectSlugInput *string) *toolsets.CloneToolsetPayload {
+func NewCloneToolsetPayload(slug string, sessionToken *string, projectSlugInput *string, apikeyToken *string) *toolsets.CloneToolsetPayload {
 	v := &toolsets.CloneToolsetPayload{}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
+	v.ApikeyToken = apikeyToken
 
 	return v
 }
 
 // NewAddExternalOAuthServerPayload builds a toolsets service
 // addExternalOAuthServer endpoint payload.
-func NewAddExternalOAuthServerPayload(body *AddExternalOAuthServerRequestBody, slug string, sessionToken *string, projectSlugInput *string) *toolsets.AddExternalOAuthServerPayload {
+func NewAddExternalOAuthServerPayload(body *AddExternalOAuthServerRequestBody, slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.AddExternalOAuthServerPayload {
 	v := &toolsets.AddExternalOAuthServerPayload{}
 	v.ExternalOauthServer = unmarshalExternalOAuthServerFormRequestBodyToTypesExternalOAuthServerForm(body.ExternalOauthServer)
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
@@ -4488,10 +4496,11 @@ func NewAddExternalOAuthServerPayload(body *AddExternalOAuthServerRequestBody, s
 
 // NewRemoveOAuthServerPayload builds a toolsets service removeOAuthServer
 // endpoint payload.
-func NewRemoveOAuthServerPayload(slug string, sessionToken *string, projectSlugInput *string) *toolsets.RemoveOAuthServerPayload {
+func NewRemoveOAuthServerPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.RemoveOAuthServerPayload {
 	v := &toolsets.RemoveOAuthServerPayload{}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v

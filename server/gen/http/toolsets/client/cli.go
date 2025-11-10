@@ -19,7 +19,7 @@ import (
 
 // BuildCreateToolsetPayload builds the payload for the toolsets createToolset
 // endpoint from CLI flags.
-func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateToolsetSessionToken string, toolsetsCreateToolsetProjectSlugInput string) (*toolsets.CreateToolsetPayload, error) {
+func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateToolsetSessionToken string, toolsetsCreateToolsetApikeyToken string, toolsetsCreateToolsetProjectSlugInput string) (*toolsets.CreateToolsetPayload, error) {
 	var err error
 	var body CreateToolsetRequestBody
 	{
@@ -43,6 +43,12 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		if toolsetsCreateToolsetSessionToken != "" {
 			sessionToken = &toolsetsCreateToolsetSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if toolsetsCreateToolsetApikeyToken != "" {
+			apikeyToken = &toolsetsCreateToolsetApikeyToken
 		}
 	}
 	var projectSlugInput *string
@@ -72,6 +78,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 		}
 	}
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
@@ -79,11 +86,17 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 
 // BuildListToolsetsPayload builds the payload for the toolsets listToolsets
 // endpoint from CLI flags.
-func BuildListToolsetsPayload(toolsetsListToolsetsSessionToken string, toolsetsListToolsetsProjectSlugInput string) (*toolsets.ListToolsetsPayload, error) {
+func BuildListToolsetsPayload(toolsetsListToolsetsSessionToken string, toolsetsListToolsetsApikeyToken string, toolsetsListToolsetsProjectSlugInput string) (*toolsets.ListToolsetsPayload, error) {
 	var sessionToken *string
 	{
 		if toolsetsListToolsetsSessionToken != "" {
 			sessionToken = &toolsetsListToolsetsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if toolsetsListToolsetsApikeyToken != "" {
+			apikeyToken = &toolsetsListToolsetsApikeyToken
 		}
 	}
 	var projectSlugInput *string
@@ -94,6 +107,7 @@ func BuildListToolsetsPayload(toolsetsListToolsetsSessionToken string, toolsetsL
 	}
 	v := &toolsets.ListToolsetsPayload{}
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
@@ -101,13 +115,13 @@ func BuildListToolsetsPayload(toolsetsListToolsetsSessionToken string, toolsetsL
 
 // BuildUpdateToolsetPayload builds the payload for the toolsets updateToolset
 // endpoint from CLI flags.
-func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateToolsetSlug string, toolsetsUpdateToolsetSessionToken string, toolsetsUpdateToolsetProjectSlugInput string) (*toolsets.UpdateToolsetPayload, error) {
+func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateToolsetSlug string, toolsetsUpdateToolsetSessionToken string, toolsetsUpdateToolsetApikeyToken string, toolsetsUpdateToolsetProjectSlugInput string) (*toolsets.UpdateToolsetPayload, error) {
 	var err error
 	var body UpdateToolsetRequestBody
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"Libero fugiat molestiae architecto.\",\n      \"default_environment_slug\": \"f49\",\n      \"description\": \"Eum est quisquam.\",\n      \"mcp_enabled\": true,\n      \"mcp_is_public\": false,\n      \"mcp_slug\": \"mz5\",\n      \"name\": \"Dolor consectetur occaecati excepturi eligendi impedit.\",\n      \"prompt_template_names\": [\n         \"Optio magni voluptatibus iste nesciunt eaque quo.\",\n         \"Ut dolorum beatae consequatur sapiente aut.\",\n         \"Ut molestias qui excepturi fugiat enim nihil.\",\n         \"Voluptas voluptatem exercitationem nihil voluptatem ea.\"\n      ],\n      \"resource_urns\": [\n         \"Saepe saepe sit maiores et ea ut.\",\n         \"Neque tenetur exercitationem et dolorum.\"\n      ],\n      \"tool_urns\": [\n         \"Sint praesentium nesciunt at omnis.\",\n         \"Ipsum numquam enim tempora facilis.\",\n         \"Architecto et voluptas.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"Porro voluptate deserunt sunt quae rem laborum.\",\n      \"default_environment_slug\": \"wc2\",\n      \"description\": \"Ut molestias qui excepturi fugiat enim nihil.\",\n      \"mcp_enabled\": false,\n      \"mcp_is_public\": true,\n      \"mcp_slug\": \"9sy\",\n      \"name\": \"Sapiente aut.\",\n      \"prompt_template_names\": [\n         \"Ea et eaque sint praesentium nesciunt.\",\n         \"Omnis reiciendis ipsum numquam.\",\n         \"Tempora facilis rerum.\"\n      ],\n      \"resource_urns\": [\n         \"Fugiat molestiae architecto eligendi et et.\",\n         \"Rem qui.\",\n         \"Aliquid veniam placeat omnis.\",\n         \"Illo nisi dolorum.\"\n      ],\n      \"tool_urns\": [\n         \"Voluptas vero ad.\",\n         \"Saepe sit maiores et ea.\",\n         \"Molestias neque tenetur exercitationem et dolorum omnis.\",\n         \"Voluptas ab id vel.\"\n      ]\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
@@ -144,6 +158,12 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		if toolsetsUpdateToolsetSessionToken != "" {
 			sessionToken = &toolsetsUpdateToolsetSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if toolsetsUpdateToolsetApikeyToken != "" {
+			apikeyToken = &toolsetsUpdateToolsetApikeyToken
 		}
 	}
 	var projectSlugInput *string
@@ -187,6 +207,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
@@ -194,7 +215,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 
 // BuildDeleteToolsetPayload builds the payload for the toolsets deleteToolset
 // endpoint from CLI flags.
-func BuildDeleteToolsetPayload(toolsetsDeleteToolsetSlug string, toolsetsDeleteToolsetSessionToken string, toolsetsDeleteToolsetProjectSlugInput string) (*toolsets.DeleteToolsetPayload, error) {
+func BuildDeleteToolsetPayload(toolsetsDeleteToolsetSlug string, toolsetsDeleteToolsetSessionToken string, toolsetsDeleteToolsetApikeyToken string, toolsetsDeleteToolsetProjectSlugInput string) (*toolsets.DeleteToolsetPayload, error) {
 	var err error
 	var slug string
 	{
@@ -213,6 +234,12 @@ func BuildDeleteToolsetPayload(toolsetsDeleteToolsetSlug string, toolsetsDeleteT
 			sessionToken = &toolsetsDeleteToolsetSessionToken
 		}
 	}
+	var apikeyToken *string
+	{
+		if toolsetsDeleteToolsetApikeyToken != "" {
+			apikeyToken = &toolsetsDeleteToolsetApikeyToken
+		}
+	}
 	var projectSlugInput *string
 	{
 		if toolsetsDeleteToolsetProjectSlugInput != "" {
@@ -222,6 +249,7 @@ func BuildDeleteToolsetPayload(toolsetsDeleteToolsetSlug string, toolsetsDeleteT
 	v := &toolsets.DeleteToolsetPayload{}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
@@ -229,7 +257,7 @@ func BuildDeleteToolsetPayload(toolsetsDeleteToolsetSlug string, toolsetsDeleteT
 
 // BuildGetToolsetPayload builds the payload for the toolsets getToolset
 // endpoint from CLI flags.
-func BuildGetToolsetPayload(toolsetsGetToolsetSlug string, toolsetsGetToolsetSessionToken string, toolsetsGetToolsetProjectSlugInput string) (*toolsets.GetToolsetPayload, error) {
+func BuildGetToolsetPayload(toolsetsGetToolsetSlug string, toolsetsGetToolsetSessionToken string, toolsetsGetToolsetApikeyToken string, toolsetsGetToolsetProjectSlugInput string) (*toolsets.GetToolsetPayload, error) {
 	var err error
 	var slug string
 	{
@@ -248,6 +276,12 @@ func BuildGetToolsetPayload(toolsetsGetToolsetSlug string, toolsetsGetToolsetSes
 			sessionToken = &toolsetsGetToolsetSessionToken
 		}
 	}
+	var apikeyToken *string
+	{
+		if toolsetsGetToolsetApikeyToken != "" {
+			apikeyToken = &toolsetsGetToolsetApikeyToken
+		}
+	}
 	var projectSlugInput *string
 	{
 		if toolsetsGetToolsetProjectSlugInput != "" {
@@ -257,6 +291,7 @@ func BuildGetToolsetPayload(toolsetsGetToolsetSlug string, toolsetsGetToolsetSes
 	v := &toolsets.GetToolsetPayload{}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
@@ -264,7 +299,7 @@ func BuildGetToolsetPayload(toolsetsGetToolsetSlug string, toolsetsGetToolsetSes
 
 // BuildCheckMCPSlugAvailabilityPayload builds the payload for the toolsets
 // checkMCPSlugAvailability endpoint from CLI flags.
-func BuildCheckMCPSlugAvailabilityPayload(toolsetsCheckMCPSlugAvailabilitySlug string, toolsetsCheckMCPSlugAvailabilitySessionToken string, toolsetsCheckMCPSlugAvailabilityProjectSlugInput string) (*toolsets.CheckMCPSlugAvailabilityPayload, error) {
+func BuildCheckMCPSlugAvailabilityPayload(toolsetsCheckMCPSlugAvailabilitySlug string, toolsetsCheckMCPSlugAvailabilitySessionToken string, toolsetsCheckMCPSlugAvailabilityApikeyToken string, toolsetsCheckMCPSlugAvailabilityProjectSlugInput string) (*toolsets.CheckMCPSlugAvailabilityPayload, error) {
 	var err error
 	var slug string
 	{
@@ -283,6 +318,12 @@ func BuildCheckMCPSlugAvailabilityPayload(toolsetsCheckMCPSlugAvailabilitySlug s
 			sessionToken = &toolsetsCheckMCPSlugAvailabilitySessionToken
 		}
 	}
+	var apikeyToken *string
+	{
+		if toolsetsCheckMCPSlugAvailabilityApikeyToken != "" {
+			apikeyToken = &toolsetsCheckMCPSlugAvailabilityApikeyToken
+		}
+	}
 	var projectSlugInput *string
 	{
 		if toolsetsCheckMCPSlugAvailabilityProjectSlugInput != "" {
@@ -292,6 +333,7 @@ func BuildCheckMCPSlugAvailabilityPayload(toolsetsCheckMCPSlugAvailabilitySlug s
 	v := &toolsets.CheckMCPSlugAvailabilityPayload{}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
@@ -299,7 +341,7 @@ func BuildCheckMCPSlugAvailabilityPayload(toolsetsCheckMCPSlugAvailabilitySlug s
 
 // BuildCloneToolsetPayload builds the payload for the toolsets cloneToolset
 // endpoint from CLI flags.
-func BuildCloneToolsetPayload(toolsetsCloneToolsetSlug string, toolsetsCloneToolsetSessionToken string, toolsetsCloneToolsetProjectSlugInput string) (*toolsets.CloneToolsetPayload, error) {
+func BuildCloneToolsetPayload(toolsetsCloneToolsetSlug string, toolsetsCloneToolsetSessionToken string, toolsetsCloneToolsetProjectSlugInput string, toolsetsCloneToolsetApikeyToken string) (*toolsets.CloneToolsetPayload, error) {
 	var err error
 	var slug string
 	{
@@ -324,23 +366,30 @@ func BuildCloneToolsetPayload(toolsetsCloneToolsetSlug string, toolsetsCloneTool
 			projectSlugInput = &toolsetsCloneToolsetProjectSlugInput
 		}
 	}
+	var apikeyToken *string
+	{
+		if toolsetsCloneToolsetApikeyToken != "" {
+			apikeyToken = &toolsetsCloneToolsetApikeyToken
+		}
+	}
 	v := &toolsets.CloneToolsetPayload{}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
+	v.ApikeyToken = apikeyToken
 
 	return v, nil
 }
 
 // BuildAddExternalOAuthServerPayload builds the payload for the toolsets
 // addExternalOAuthServer endpoint from CLI flags.
-func BuildAddExternalOAuthServerPayload(toolsetsAddExternalOAuthServerBody string, toolsetsAddExternalOAuthServerSlug string, toolsetsAddExternalOAuthServerSessionToken string, toolsetsAddExternalOAuthServerProjectSlugInput string) (*toolsets.AddExternalOAuthServerPayload, error) {
+func BuildAddExternalOAuthServerPayload(toolsetsAddExternalOAuthServerBody string, toolsetsAddExternalOAuthServerSlug string, toolsetsAddExternalOAuthServerSessionToken string, toolsetsAddExternalOAuthServerApikeyToken string, toolsetsAddExternalOAuthServerProjectSlugInput string) (*toolsets.AddExternalOAuthServerPayload, error) {
 	var err error
 	var body AddExternalOAuthServerRequestBody
 	{
 		err = json.Unmarshal([]byte(toolsetsAddExternalOAuthServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_oauth_server\": {\n         \"metadata\": \"Aut mollitia consequuntur commodi veniam laudantium.\",\n         \"slug\": \"zla\"\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_oauth_server\": {\n         \"metadata\": \"Perferendis expedita autem et.\",\n         \"slug\": \"kk2\"\n      }\n   }'")
 		}
 		if body.ExternalOauthServer == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("external_oauth_server", "body"))
@@ -371,6 +420,12 @@ func BuildAddExternalOAuthServerPayload(toolsetsAddExternalOAuthServerBody strin
 			sessionToken = &toolsetsAddExternalOAuthServerSessionToken
 		}
 	}
+	var apikeyToken *string
+	{
+		if toolsetsAddExternalOAuthServerApikeyToken != "" {
+			apikeyToken = &toolsetsAddExternalOAuthServerApikeyToken
+		}
+	}
 	var projectSlugInput *string
 	{
 		if toolsetsAddExternalOAuthServerProjectSlugInput != "" {
@@ -383,6 +438,7 @@ func BuildAddExternalOAuthServerPayload(toolsetsAddExternalOAuthServerBody strin
 	}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
@@ -390,7 +446,7 @@ func BuildAddExternalOAuthServerPayload(toolsetsAddExternalOAuthServerBody strin
 
 // BuildRemoveOAuthServerPayload builds the payload for the toolsets
 // removeOAuthServer endpoint from CLI flags.
-func BuildRemoveOAuthServerPayload(toolsetsRemoveOAuthServerSlug string, toolsetsRemoveOAuthServerSessionToken string, toolsetsRemoveOAuthServerProjectSlugInput string) (*toolsets.RemoveOAuthServerPayload, error) {
+func BuildRemoveOAuthServerPayload(toolsetsRemoveOAuthServerSlug string, toolsetsRemoveOAuthServerSessionToken string, toolsetsRemoveOAuthServerApikeyToken string, toolsetsRemoveOAuthServerProjectSlugInput string) (*toolsets.RemoveOAuthServerPayload, error) {
 	var err error
 	var slug string
 	{
@@ -409,6 +465,12 @@ func BuildRemoveOAuthServerPayload(toolsetsRemoveOAuthServerSlug string, toolset
 			sessionToken = &toolsetsRemoveOAuthServerSessionToken
 		}
 	}
+	var apikeyToken *string
+	{
+		if toolsetsRemoveOAuthServerApikeyToken != "" {
+			apikeyToken = &toolsetsRemoveOAuthServerApikeyToken
+		}
+	}
 	var projectSlugInput *string
 	{
 		if toolsetsRemoveOAuthServerProjectSlugInput != "" {
@@ -418,6 +480,7 @@ func BuildRemoveOAuthServerPayload(toolsetsRemoveOAuthServerSlug string, toolset
 	v := &toolsets.RemoveOAuthServerPayload{}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
