@@ -75,13 +75,15 @@ func handleToolsCall(
 		return nil, err
 	}
 
-	if payload.mode != ToolModeStatic {
-		switch params.Name {
-		case listToolsToolName:
+	if payload.mode == ToolModeProgressive {
+		switch {
+		case params.Name == listToolsToolName && payload.mode == ToolModeProgressive:
 			return handleListToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
-		case describeToolsToolName:
+		case params.Name == describeToolsToolName && payload.mode == ToolModeProgressive:
 			return handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
-		case executeToolToolName:
+		case params.Name == findToolsToolName && payload.mode == ToolModeEmbeddings:
+			return handleFindToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore)
+		case params.Name == executeToolToolName:
 			proxyName, proxyArgs, err := processExecuteToolCall(ctx, logger, params.Arguments)
 			if err != nil {
 				return nil, err

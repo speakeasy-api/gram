@@ -58,6 +58,8 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 	switch payload.mode {
 	case ToolModeProgressive:
 		tools = buildProgressiveSessionTools(toolset)
+	case ToolModeEmbeddings:
+		tools = buildDynamicSessionTools(toolset, vectorToolStore)
 	case ToolModeStatic:
 		fallthrough
 	default:
