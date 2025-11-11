@@ -1,4 +1,4 @@
-h1:Qm7TluoIHDgRPjohVd9rnZiUJZci3BU+Kp9X/ZLqV1s=
+h1:PCVupIl2TsqOQIgZK7nhJwr3FzxoBIYF60VTUTSY6TY=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -67,3 +67,4 @@ h1:Qm7TluoIHDgRPjohVd9rnZiUJZci3BU+Kp9X/ZLqV1s=
 20251110195659_add-pgvector-extension.sql h1:JWfchfuTbSewGzYrDlymV5RiwYvaFcC2tvKBjdulhNI=
 20251111165847_add-toolset-embedding-migration.sql h1:1cuNc8gF7U8EKK7agVmvP3FdS6+U36oSwVc8G6yyzHg=
 20251111180235_fly-apps-reap-state.sql h1:7ml5z97oDOZwEf26Lc57uA/SA7Q7dOktOmaxv1IZ9Ck=
+20251111230942_tool_selection_mode.sql h1:GLV/qHo+WIcnUgmIAyBgGrRCTK/Nk64PmNX4pDDNX0o=
