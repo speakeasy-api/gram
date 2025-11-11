@@ -1,4 +1,11 @@
--- name: UpsertToolsetEmbedding :one
+-- name: DeleteToolsetEmbeddings :exec
+UPDATE toolset_embeddings
+SET deleted_at = clock_timestamp()
+WHERE toolset_id = @toolset_id
+  AND entry_key LIKE 'tool:%'
+  AND deleted IS FALSE;
+
+-- name: InsertToolsetEmbedding :one
 INSERT INTO toolset_embeddings (
     project_id,
     toolset_id,
@@ -13,14 +20,7 @@ INSERT INTO toolset_embeddings (
     @embedding_model,
     @embedding_1536,
     @payload
-) ON CONFLICT (toolset_id, entry_key)
-WHERE deleted IS FALSE
-DO UPDATE SET
-    embedding_model = EXCLUDED.embedding_model,
-    embedding_1536 = EXCLUDED.embedding_1536,
-    payload = EXCLUDED.payload,
-    updated_at = clock_timestamp(),
-    deleted_at = NULL
+)
 RETURNING *;
 
 -- name: ToolsetToolsAreIndexed :one

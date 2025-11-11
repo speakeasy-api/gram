@@ -96,9 +96,15 @@ func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Too
 		return err
 	}
 
+	// Delete all existing tool embeddings for this toolset first
+	if err := s.queries.DeleteToolsetEmbeddings(ctx, toolsetUUID); err != nil {
+		return fmt.Errorf("delete existing toolset embeddings: %w", err)
+	}
+
+	// Insert new embeddings
 	for i, candidate := range candidates {
 		vector := pgvector_go.NewVector(vectors[i])
-		if err := s.upsertToolEmbedding(ctx, uuid.MustParse(toolset.ProjectID), toolsetUUID, candidate.entryKey, candidate.payload, vector); err != nil {
+		if err := s.insertToolEmbedding(ctx, uuid.MustParse(toolset.ProjectID), toolsetUUID, candidate.entryKey, candidate.payload, vector); err != nil {
 			return err
 		}
 	}
@@ -207,12 +213,12 @@ func (s *ToolsetVectorStore) prepareEmbeddingCandidates(tools []*types.Tool) ([]
 	return candidates, nil
 }
 
-func (s *ToolsetVectorStore) upsertToolEmbedding(ctx context.Context, projectID uuid.UUID, toolsetID uuid.UUID, entryKey string, payload []byte, vector pgvector_go.Vector) error {
+func (s *ToolsetVectorStore) insertToolEmbedding(ctx context.Context, projectID uuid.UUID, toolsetID uuid.UUID, entryKey string, payload []byte, vector pgvector_go.Vector) error {
 	if entryKey == "" {
 		return errors.New("entry key is required")
 	}
 
-	_, err := s.queries.UpsertToolsetEmbedding(ctx, repo.UpsertToolsetEmbeddingParams{
+	_, err := s.queries.InsertToolsetEmbedding(ctx, repo.InsertToolsetEmbeddingParams{
 		ProjectID:      projectID,
 		ToolsetID:      toolsetID,
 		EntryKey:       entryKey,
@@ -221,7 +227,7 @@ func (s *ToolsetVectorStore) upsertToolEmbedding(ctx context.Context, projectID 
 		Payload:        payload,
 	})
 	if err != nil {
-		return fmt.Errorf("upsert tool embedding %s: %w", entryKey, err)
+		return fmt.Errorf("insert tool embedding %s: %w", entryKey, err)
 	}
 
 	return nil

@@ -13,6 +13,73 @@ import (
 	pgvector_go "github.com/pgvector/pgvector-go"
 )
 
+const deleteToolsetEmbeddings = `-- name: DeleteToolsetEmbeddings :exec
+UPDATE toolset_embeddings
+SET deleted_at = clock_timestamp()
+WHERE toolset_id = $1
+  AND entry_key LIKE 'tool:%'
+  AND deleted IS FALSE
+`
+
+func (q *Queries) DeleteToolsetEmbeddings(ctx context.Context, toolsetID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteToolsetEmbeddings, toolsetID)
+	return err
+}
+
+const insertToolsetEmbedding = `-- name: InsertToolsetEmbedding :one
+INSERT INTO toolset_embeddings (
+    project_id,
+    toolset_id,
+    entry_key,
+    embedding_model,
+    embedding_1536,
+    payload
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+RETURNING id, project_id, toolset_id, entry_key, embedding_model, embedding_1536, payload, created_at, updated_at, deleted_at, deleted
+`
+
+type InsertToolsetEmbeddingParams struct {
+	ProjectID      uuid.UUID
+	ToolsetID      uuid.UUID
+	EntryKey       string
+	EmbeddingModel string
+	Embedding1536  pgvector_go.Vector
+	Payload        []byte
+}
+
+func (q *Queries) InsertToolsetEmbedding(ctx context.Context, arg InsertToolsetEmbeddingParams) (ToolsetEmbedding, error) {
+	row := q.db.QueryRow(ctx, insertToolsetEmbedding,
+		arg.ProjectID,
+		arg.ToolsetID,
+		arg.EntryKey,
+		arg.EmbeddingModel,
+		arg.Embedding1536,
+		arg.Payload,
+	)
+	var i ToolsetEmbedding
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.ToolsetID,
+		&i.EntryKey,
+		&i.EmbeddingModel,
+		&i.Embedding1536,
+		&i.Payload,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const searchToolsetToolEmbeddings = `-- name: SearchToolsetToolEmbeddings :many
 SELECT
     id,
@@ -133,65 +200,4 @@ func (q *Queries) ToolsetToolsAreIndexed(ctx context.Context, arg ToolsetToolsAr
 	var indexed bool
 	err := row.Scan(&indexed)
 	return indexed, err
-}
-
-const upsertToolsetEmbedding = `-- name: UpsertToolsetEmbedding :one
-INSERT INTO toolset_embeddings (
-    project_id,
-    toolset_id,
-    entry_key,
-    embedding_model,
-    embedding_1536,
-    payload
-) VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    $6
-) ON CONFLICT (toolset_id, entry_key)
-WHERE deleted IS FALSE
-DO UPDATE SET
-    embedding_model = EXCLUDED.embedding_model,
-    embedding_1536 = EXCLUDED.embedding_1536,
-    payload = EXCLUDED.payload,
-    updated_at = clock_timestamp(),
-    deleted_at = NULL
-RETURNING id, project_id, toolset_id, entry_key, embedding_model, embedding_1536, payload, created_at, updated_at, deleted_at, deleted
-`
-
-type UpsertToolsetEmbeddingParams struct {
-	ProjectID      uuid.UUID
-	ToolsetID      uuid.UUID
-	EntryKey       string
-	EmbeddingModel string
-	Embedding1536  pgvector_go.Vector
-	Payload        []byte
-}
-
-func (q *Queries) UpsertToolsetEmbedding(ctx context.Context, arg UpsertToolsetEmbeddingParams) (ToolsetEmbedding, error) {
-	row := q.db.QueryRow(ctx, upsertToolsetEmbedding,
-		arg.ProjectID,
-		arg.ToolsetID,
-		arg.EntryKey,
-		arg.EmbeddingModel,
-		arg.Embedding1536,
-		arg.Payload,
-	)
-	var i ToolsetEmbedding
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.ToolsetID,
-		&i.EntryKey,
-		&i.EmbeddingModel,
-		&i.Embedding1536,
-		&i.Payload,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
 }
