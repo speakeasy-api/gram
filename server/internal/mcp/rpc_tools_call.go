@@ -133,7 +133,7 @@ func handleToolsCall(
 
 	systemConfig, err := env.LoadSourceEnv(ctx, payload.projectID, string(toolURN.Kind), toolURN.Source)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
 	}
 
 	descriptor := plan.Descriptor
