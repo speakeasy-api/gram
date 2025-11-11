@@ -769,7 +769,8 @@ export function ToolList({
 
   const handleSelectAllInGroup = (group: ToolGroup) => {
     const groupToolIds = group.tools.map(getToolIdentifier);
-    const currentSelection = selectionMode === "add" ? selectedSet : selectedForRemoval;
+    const currentSelection =
+      selectionMode === "add" ? selectedSet : selectedForRemoval;
     const allSelected = groupToolIds.every((id) => currentSelection.has(id));
 
     if (selectionMode === "add" && onSelectionChange) {
@@ -809,57 +810,63 @@ export function ToolList({
       >
         {groups.map((group, index) => {
           const groupToolIds = group.tools.map(getToolIdentifier);
-          const currentSelection = selectionMode === "add" ? selectedSet : selectedForRemoval;
-          const allSelected = groupToolIds.every((id) => currentSelection.has(id));
+          const currentSelection =
+            selectionMode === "add" ? selectedSet : selectedForRemoval;
+          const allSelected = groupToolIds.every((id) =>
+            currentSelection.has(id),
+          );
 
           return (
-          <div key={`${group.type}-${group.title}-${index}`} className="w-full">
-            <ToolGroupHeader
-              group={group}
-              isExpanded={expandedGroups.has(index)}
-              onToggle={() => toggleGroup(index)}
-              isFirstGroup={index === 0}
-              allSelected={allSelected}
-              onSelectAll={() => handleSelectAllInGroup(group)}
-            />
-            {expandedGroups.has(index) && (
-              <div className="w-full">
-                {group.tools.map((tool) => {
-                  const toolId = getToolIdentifier(tool);
-                  const toolIndex = toolIndexMap.get(toolId) ?? -1;
+            <div
+              key={`${group.type}-${group.title}-${index}`}
+              className="w-full"
+            >
+              <ToolGroupHeader
+                group={group}
+                isExpanded={expandedGroups.has(index)}
+                onToggle={() => toggleGroup(index)}
+                isFirstGroup={index === 0}
+                allSelected={allSelected}
+                onSelectAll={() => handleSelectAllInGroup(group)}
+              />
+              {expandedGroups.has(index) && (
+                <div className="w-full">
+                  {group.tools.map((tool) => {
+                    const toolId = getToolIdentifier(tool);
+                    const toolIndex = toolIndexMap.get(toolId) ?? -1;
 
-                  return (
-                    <ToolRow
-                      key={tool.canonicalName}
-                      groupName={group.title}
-                      availableToolUrns={toolset?.tools
-                        ?.map((t) => t.toolUrn)
-                        .concat(selectionMode === "add" ? selectedUrns : [])
-                        .filter((urn) => !selectedForRemoval.has(urn))}
-                      tool={tool}
-                      onUpdate={(updates) => onToolUpdate?.(tool, updates)}
-                      isSelected={
-                        selectionMode === "add"
-                          ? selectedSet.has(toolId)
-                          : selectedForRemoval.has(toolId)
-                      }
-                      isFocused={toolIndex === focusedToolIndex}
-                      onCheckboxChange={(checked) =>
-                        handleCheckboxChange(toolId, checked)
-                      }
-                      onTestInPlayground={onTestInPlayground}
-                      onRemove={
-                        selectionMode !== "add" && onToolsRemove
-                          ? () => onToolsRemove([toolId])
-                          : undefined
-                      }
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
+                    return (
+                      <ToolRow
+                        key={tool.canonicalName}
+                        groupName={group.title}
+                        availableToolUrns={toolset?.tools
+                          ?.map((t) => t.toolUrn)
+                          .concat(selectionMode === "add" ? selectedUrns : [])
+                          .filter((urn) => !selectedForRemoval.has(urn))}
+                        tool={tool}
+                        onUpdate={(updates) => onToolUpdate?.(tool, updates)}
+                        isSelected={
+                          selectionMode === "add"
+                            ? selectedSet.has(toolId)
+                            : selectedForRemoval.has(toolId)
+                        }
+                        isFocused={toolIndex === focusedToolIndex}
+                        onCheckboxChange={(checked) =>
+                          handleCheckboxChange(toolId, checked)
+                        }
+                        onTestInPlayground={onTestInPlayground}
+                        onRemove={
+                          selectionMode !== "add" && onToolsRemove
+                            ? () => onToolsRemove([toolId])
+                            : undefined
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
         })}
       </div>
 
