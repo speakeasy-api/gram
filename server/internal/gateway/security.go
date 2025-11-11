@@ -29,7 +29,7 @@ func processSecurity(
 	tool *ToolDescriptor,
 	plan *HTTPToolCallPlan,
 	cacheImpl cache.Cache,
-	envVars *CaseInsensitiveEnv,
+	env ToolCallEnv,
 	serverURL string,
 	toolCallLogger tm.ToolCallLogger,
 ) bool {

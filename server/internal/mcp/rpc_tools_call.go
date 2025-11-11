@@ -361,7 +361,8 @@ func resolveUserConfiguration(
 ) (map[string]string, error) {
 	userConfig := make(map[string]string)
 
-	// IMPORTANT: MCP servers accessed in a public manner or not gram authenticated, there is no concept of using stored environments for them
+	// IMPORTANT: we must only attach gram environments to authenticated payloads. Gram environments contain
+	// secrets owned by Gram projects and should not be usable by public clients
 	if payload.environment != "" && payload.authenticated {
 		storedEnvVars, err := env.Load(ctx, payload.projectID, gateway.Slug(payload.environment))
 		switch {

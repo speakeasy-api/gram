@@ -74,26 +74,6 @@ type ToolCallBody struct {
 	GramRequestSummary   string            `json:"gram-request-summary"`
 }
 
-// CaseInsensitiveEnv provides case-insensitive environment variable lookup.
-type CaseInsensitiveEnv struct {
-	data map[string]string
-}
-
-// NewCaseInsensitiveEnv creates a new empty case-insensitive environment.
-func NewCaseInsensitiveEnv() *CaseInsensitiveEnv {
-	return &CaseInsensitiveEnv{data: make(map[string]string)}
-}
-
-// Get retrieves an environment variable value by key (case-insensitive).
-func (c *CaseInsensitiveEnv) Get(key string) string {
-	return c.data[strings.ToLower(key)]
-}
-
-// Set sets an environment variable value by key (case-insensitive).
-func (c *CaseInsensitiveEnv) Set(key, value string) {
-	c.data[strings.ToLower(key)] = value
-}
-
 type toolcallErrorSchema struct {
 	Error string `json:"error"`
 }
@@ -146,7 +126,7 @@ func (tp *ToolProxy) Do(
 	ctx context.Context,
 	w http.ResponseWriter,
 	requestBody io.Reader,
-	env *CaseInsensitiveEnv,
+	env ToolCallEnv,
 	plan *ToolCallPlan,
 	toolCallLogger tm.ToolCallLogger,
 ) (err error) {
@@ -172,10 +152,6 @@ func (tp *ToolProxy) Do(
 		attr.SlogToolCallSource(string(tp.source)),
 	)
 
-	if env == nil {
-		env = NewCaseInsensitiveEnv()
-	}
-
 	switch plan.Kind {
 	case "":
 		return oops.E(oops.CodeInvariantViolation, nil, "tool kind is not set").Log(ctx, tp.logger)
@@ -195,7 +171,7 @@ func (tp *ToolProxy) doFunction(
 	logger *slog.Logger,
 	w http.ResponseWriter,
 	requestBody io.Reader,
-	env *CaseInsensitiveEnv,
+	env ToolCallEnv,
 	descriptor *ToolDescriptor,
 	plan *FunctionToolCallPlan,
 	toolCallLogger tm.ToolCallLogger,
@@ -307,7 +283,7 @@ func (tp *ToolProxy) doHTTP(
 	logger *slog.Logger,
 	w http.ResponseWriter,
 	requestBody io.Reader,
-	env *CaseInsensitiveEnv,
+	env ToolCallEnv,
 	descriptor *ToolDescriptor,
 	plan *HTTPToolCallPlan,
 	toolCallLogger tm.ToolCallLogger,
@@ -570,7 +546,7 @@ type promptGetParams struct {
 	Arguments map[string]any `json:"arguments"`
 }
 
-func (tp *ToolProxy) doPrompt(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, requestBody io.Reader, env *CaseInsensitiveEnv, descriptor *ToolDescriptor, plan *PromptToolCallPlan) error {
+func (tp *ToolProxy) doPrompt(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, requestBody io.Reader, env ToolCallEnv, descriptor *ToolDescriptor, plan *PromptToolCallPlan) error {
 	var params promptGetParams
 	if err := json.NewDecoder(requestBody).Decode(&params); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to parse get prompt request").Log(ctx, logger)
@@ -622,7 +598,7 @@ func retryWithBackoff(
 		if err != nil {
 			continue
 		}
-
+		// check if we should retry based on method and status code
 		if !slices.Contains(retryBackoff.methods, resp.Request.Method) || !slices.Contains(retryBackoff.statusCodes, resp.StatusCode) {
 			return resp, err
 		}
