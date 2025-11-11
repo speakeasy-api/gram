@@ -11,8 +11,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	pgvector_go "github.com/pgvector/pgvector-go"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/rag/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -28,18 +31,20 @@ const (
 )
 
 type ToolsetVectorStore struct {
+	tracer         trace.Tracer
 	db             repo.DBTX
 	queries        *repo.Queries
 	chatClient     *openrouter.ChatClient
 	embeddingModel string
 }
 
-func NewToolsetVectorStore(db *pgxpool.Pool, chatClient *openrouter.ChatClient) *ToolsetVectorStore {
+func NewToolsetVectorStore(tracerProvider trace.TracerProvider, db *pgxpool.Pool, chatClient *openrouter.ChatClient) *ToolsetVectorStore {
 	if db == nil {
 		return nil
 	}
 
 	return &ToolsetVectorStore{
+		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/rag"),
 		db:             db,
 		queries:        repo.New(db),
 		chatClient:     chatClient,
@@ -47,7 +52,18 @@ func NewToolsetVectorStore(db *pgxpool.Pool, chatClient *openrouter.ChatClient) 
 	}
 }
 
-func (s *ToolsetVectorStore) ToolsetToolsAreIndexed(ctx context.Context, toolset types.Toolset) (bool, error) {
+func (s *ToolsetVectorStore) ToolsetToolsAreIndexed(ctx context.Context, toolset types.Toolset) (indexed bool, err error) {
+	ctx, span := s.tracer.Start(ctx, "rag.toolsetToolsAreIndexed", trace.WithAttributes(
+		attr.ToolsetID(toolset.ID),
+		attr.ProjectID(toolset.ProjectID),
+	))
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
 	toolsetUUID, err := uuid.Parse(toolset.ID)
 	if err != nil {
 		return false, fmt.Errorf("parse toolset id: %w", err)
@@ -58,7 +74,7 @@ func (s *ToolsetVectorStore) ToolsetToolsAreIndexed(ctx context.Context, toolset
 		return false, fmt.Errorf("parse project id: %w", err)
 	}
 
-	indexed, err := s.queries.ToolsetToolsAreIndexed(ctx, repo.ToolsetToolsAreIndexedParams{
+	indexed, err = s.queries.ToolsetToolsAreIndexed(ctx, repo.ToolsetToolsAreIndexedParams{
 		ProjectID:      projectUUID,
 		ToolsetID:      toolsetUUID,
 		ToolsetVersion: toolset.ToolsetVersion,
@@ -70,7 +86,18 @@ func (s *ToolsetVectorStore) ToolsetToolsAreIndexed(ctx context.Context, toolset
 	return indexed, nil
 }
 
-func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Toolset) error {
+func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Toolset) (err error) {
+	ctx, span := s.tracer.Start(ctx, "rag.indexToolset", trace.WithAttributes(
+		attr.ToolsetID(toolset.ID),
+		attr.ProjectID(toolset.ProjectID),
+	))
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
 	toolsetUUID, err := uuid.Parse(toolset.ID)
 	if err != nil {
 		return fmt.Errorf("parse toolset id: %w", err)
@@ -112,7 +139,18 @@ type ToolSearchResult struct {
 	SimilarityScore float64
 }
 
-func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset types.Toolset, query string, limit int) ([]*ToolSearchResult, error) {
+func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset types.Toolset, query string, limit int) (matches []*ToolSearchResult, err error) {
+	ctx, span := s.tracer.Start(ctx, "rag.searchToolsetTools", trace.WithAttributes(
+		attr.ToolsetID(toolset.ID),
+		attr.ProjectID(toolset.ProjectID),
+	))
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
 	toolsetUUID, err := uuid.Parse(toolset.ID)
 	if err != nil {
 		return nil, fmt.Errorf("parse toolset id: %w", err)
@@ -149,7 +187,7 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 		return nil, nil
 	}
 
-	matches := make([]*ToolSearchResult, 0, len(rows))
+	matches = make([]*ToolSearchResult, 0, len(rows))
 	for _, row := range rows {
 		var entry toolListEntry
 		if err := json.Unmarshal(row.Payload, &entry); err != nil {
