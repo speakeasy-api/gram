@@ -1,17 +1,19 @@
 -- name: UpsertToolsetEmbedding :one
 INSERT INTO toolset_embeddings (
+    project_id,
     toolset_id,
     entry_key,
     embedding_model,
     embedding_1536,
     payload
 ) VALUES (
+    @project_id,
     @toolset_id,
     @entry_key,
     @embedding_model,
     @embedding_1536,
     @payload
-) ON CONFLICT (toolset_id, entry_key)
+) ON CONFLICT (project_id, toolset_id, entry_key)
 WHERE deleted IS FALSE
 DO UPDATE SET
     embedding_model = EXCLUDED.embedding_model,
@@ -25,12 +27,14 @@ RETURNING *;
 SELECT *
 FROM toolset_embeddings
 WHERE toolset_id = @toolset_id
+  AND project_id = @project_id
   AND entry_key = @entry_key
   AND deleted IS FALSE;
 
 -- name: SearchToolsetEmbeddings :many
 SELECT
     id,
+    project_id,
     toolset_id,
     entry_key,
     embedding_model,
@@ -39,7 +43,8 @@ SELECT
     updated_at,
     1 - (embedding_1536 <=> @query_embedding_1536) AS similarity
 FROM toolset_embeddings
-WHERE toolset_id = @toolset_id
+WHERE project_id = @project_id
+  AND toolset_id = @toolset_id
   AND deleted IS FALSE
 ORDER BY embedding_1536 <=> @query_embedding_1536
 LIMIT @result_limit;

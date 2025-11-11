@@ -14,23 +14,26 @@ import (
 )
 
 const getToolsetEmbedding = `-- name: GetToolsetEmbedding :one
-SELECT id, toolset_id, entry_key, embedding_model, embedding_1536, payload, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, toolset_id, entry_key, embedding_model, embedding_1536, payload, created_at, updated_at, deleted_at, deleted
 FROM toolset_embeddings
 WHERE toolset_id = $1
-  AND entry_key = $2
+  AND project_id = $2
+  AND entry_key = $3
   AND deleted IS FALSE
 `
 
 type GetToolsetEmbeddingParams struct {
 	ToolsetID uuid.UUID
+	ProjectID uuid.UUID
 	EntryKey  string
 }
 
 func (q *Queries) GetToolsetEmbedding(ctx context.Context, arg GetToolsetEmbeddingParams) (ToolsetEmbedding, error) {
-	row := q.db.QueryRow(ctx, getToolsetEmbedding, arg.ToolsetID, arg.EntryKey)
+	row := q.db.QueryRow(ctx, getToolsetEmbedding, arg.ToolsetID, arg.ProjectID, arg.EntryKey)
 	var i ToolsetEmbedding
 	err := row.Scan(
 		&i.ID,
+		&i.ProjectID,
 		&i.ToolsetID,
 		&i.EntryKey,
 		&i.EmbeddingModel,
@@ -47,6 +50,7 @@ func (q *Queries) GetToolsetEmbedding(ctx context.Context, arg GetToolsetEmbeddi
 const searchToolsetEmbeddings = `-- name: SearchToolsetEmbeddings :many
 SELECT
     id,
+    project_id,
     toolset_id,
     entry_key,
     embedding_model,
@@ -55,20 +59,23 @@ SELECT
     updated_at,
     1 - (embedding_1536 <=> $1) AS similarity
 FROM toolset_embeddings
-WHERE toolset_id = $2
+WHERE project_id = $2
+  AND toolset_id = $3
   AND deleted IS FALSE
 ORDER BY embedding_1536 <=> $1
-LIMIT $3
+LIMIT $4
 `
 
 type SearchToolsetEmbeddingsParams struct {
 	QueryEmbedding1536 pgvector_go.Vector
+	ProjectID          uuid.UUID
 	ToolsetID          uuid.UUID
 	ResultLimit        int32
 }
 
 type SearchToolsetEmbeddingsRow struct {
 	ID             uuid.UUID
+	ProjectID      uuid.UUID
 	ToolsetID      uuid.UUID
 	EntryKey       string
 	EmbeddingModel string
@@ -79,7 +86,12 @@ type SearchToolsetEmbeddingsRow struct {
 }
 
 func (q *Queries) SearchToolsetEmbeddings(ctx context.Context, arg SearchToolsetEmbeddingsParams) ([]SearchToolsetEmbeddingsRow, error) {
-	rows, err := q.db.Query(ctx, searchToolsetEmbeddings, arg.QueryEmbedding1536, arg.ToolsetID, arg.ResultLimit)
+	rows, err := q.db.Query(ctx, searchToolsetEmbeddings,
+		arg.QueryEmbedding1536,
+		arg.ProjectID,
+		arg.ToolsetID,
+		arg.ResultLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -89,6 +101,7 @@ func (q *Queries) SearchToolsetEmbeddings(ctx context.Context, arg SearchToolset
 		var i SearchToolsetEmbeddingsRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.ProjectID,
 			&i.ToolsetID,
 			&i.EntryKey,
 			&i.EmbeddingModel,
@@ -109,6 +122,7 @@ func (q *Queries) SearchToolsetEmbeddings(ctx context.Context, arg SearchToolset
 
 const upsertToolsetEmbedding = `-- name: UpsertToolsetEmbedding :one
 INSERT INTO toolset_embeddings (
+    project_id,
     toolset_id,
     entry_key,
     embedding_model,
@@ -119,8 +133,9 @@ INSERT INTO toolset_embeddings (
     $2,
     $3,
     $4,
-    $5
-) ON CONFLICT (toolset_id, entry_key)
+    $5,
+    $6
+) ON CONFLICT (project_id, toolset_id, entry_key)
 WHERE deleted IS FALSE
 DO UPDATE SET
     embedding_model = EXCLUDED.embedding_model,
@@ -128,10 +143,11 @@ DO UPDATE SET
     payload = EXCLUDED.payload,
     updated_at = clock_timestamp(),
     deleted_at = NULL
-RETURNING id, toolset_id, entry_key, embedding_model, embedding_1536, payload, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, toolset_id, entry_key, embedding_model, embedding_1536, payload, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertToolsetEmbeddingParams struct {
+	ProjectID      uuid.UUID
 	ToolsetID      uuid.UUID
 	EntryKey       string
 	EmbeddingModel string
@@ -141,6 +157,7 @@ type UpsertToolsetEmbeddingParams struct {
 
 func (q *Queries) UpsertToolsetEmbedding(ctx context.Context, arg UpsertToolsetEmbeddingParams) (ToolsetEmbedding, error) {
 	row := q.db.QueryRow(ctx, upsertToolsetEmbedding,
+		arg.ProjectID,
 		arg.ToolsetID,
 		arg.EntryKey,
 		arg.EmbeddingModel,
@@ -150,6 +167,7 @@ func (q *Queries) UpsertToolsetEmbedding(ctx context.Context, arg UpsertToolsetE
 	var i ToolsetEmbedding
 	err := row.Scan(
 		&i.ID,
+		&i.ProjectID,
 		&i.ToolsetID,
 		&i.EntryKey,
 		&i.EmbeddingModel,

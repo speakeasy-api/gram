@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	pgvector_go "github.com/pgvector/pgvector-go"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/rag/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -23,21 +24,19 @@ const (
 	embeddingMaxConcurrentBatches = 5
 )
 
-var errToolVectorCollectionNotFound = errors.New("toolset vector collection not found")
-
-type toolsetVectorStore struct {
+type ToolsetVectorStore struct {
 	db             repo.DBTX
 	queries        *repo.Queries
 	chatClient     *openrouter.ChatClient
 	embeddingModel string
 }
 
-func NewToolsetVectorStore(db *pgxpool.Pool, chatClient *openrouter.ChatClient) *toolsetVectorStore {
+func NewToolsetVectorStore(db *pgxpool.Pool, chatClient *openrouter.ChatClient) *ToolsetVectorStore {
 	if db == nil {
 		return nil
 	}
 
-	return &toolsetVectorStore{
+	return &ToolsetVectorStore{
 		db:             db,
 		queries:        repo.New(db),
 		chatClient:     chatClient,
@@ -45,20 +44,8 @@ func NewToolsetVectorStore(db *pgxpool.Pool, chatClient *openrouter.ChatClient) 
 	}
 }
 
-func (s *toolsetVectorStore) IndexToolset(ctx context.Context, orgID, toolsetID string, entries []*toolListEntry) error {
-	if s == nil {
-		return errors.New("tool vector store is not initialized")
-	}
-	if s.chatClient == nil {
-		return errors.New("embedding client is not configured")
-	}
-
-	orgID = strings.TrimSpace(orgID)
-	if orgID == "" {
-		return errors.New("organization id is required")
-	}
-
-	toolsetUUID, err := uuid.Parse(toolsetID)
+func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Toolset, entries []*ToolListEntry) error {
+	toolsetUUID, err := uuid.Parse(toolset.ID)
 	if err != nil {
 		return fmt.Errorf("parse toolset id: %w", err)
 	}
@@ -72,14 +59,14 @@ func (s *toolsetVectorStore) IndexToolset(ctx context.Context, orgID, toolsetID 
 		return nil
 	}
 
-	vectors, err := s.generateEmbeddings(ctx, orgID, candidates)
+	vectors, err := s.generateEmbeddings(ctx, toolset.OrganizationID, candidates)
 	if err != nil {
 		return err
 	}
 
 	for i, candidate := range candidates {
 		vector := pgvector_go.NewVector(vectors[i])
-		if err := s.upsertToolEmbedding(ctx, toolsetUUID, candidate.entryKey, candidate.payload, vector); err != nil {
+		if err := s.upsertToolEmbedding(ctx, uuid.MustParse(toolset.ProjectID), toolsetUUID, candidate.entryKey, candidate.payload, vector); err != nil {
 			return err
 		}
 	}
@@ -87,20 +74,8 @@ func (s *toolsetVectorStore) IndexToolset(ctx context.Context, orgID, toolsetID 
 	return nil
 }
 
-func (s *toolsetVectorStore) SearchToolset(ctx context.Context, orgID, toolsetID, query string, limit int) ([]*toolListEntry, error) {
-	if s == nil {
-		return nil, errors.New("tool vector store is not initialized")
-	}
-	if s.chatClient == nil {
-		return nil, errors.New("embedding client is not configured")
-	}
-
-	orgID = strings.TrimSpace(orgID)
-	if orgID == "" {
-		return nil, errors.New("organization id is required")
-	}
-
-	toolsetUUID, err := uuid.Parse(toolsetID)
+func (s *ToolsetVectorStore) SearchToolset(ctx context.Context, toolset types.Toolset, query string, limit int) ([]*ToolListEntry, error) {
+	toolsetUUID, err := uuid.Parse(toolset.ID)
 	if err != nil {
 		return nil, fmt.Errorf("parse toolset id: %w", err)
 	}
@@ -114,7 +89,7 @@ func (s *toolsetVectorStore) SearchToolset(ctx context.Context, orgID, toolsetID
 		limit = defaultFindToolsResultSize
 	}
 
-	queryVectors, err := s.chatClient.CreateEmbeddings(ctx, orgID, s.embeddingModel, []string{query})
+	queryVectors, err := s.chatClient.CreateEmbeddings(ctx, toolset.OrganizationID, s.embeddingModel, []string{query})
 	if err != nil {
 		return nil, fmt.Errorf("create query embedding: %w", err)
 	}
@@ -124,8 +99,9 @@ func (s *toolsetVectorStore) SearchToolset(ctx context.Context, orgID, toolsetID
 
 	rows, err := s.queries.SearchToolsetEmbeddings(ctx, repo.SearchToolsetEmbeddingsParams{
 		QueryEmbedding1536: pgvector_go.NewVector(queryVectors[0]),
+		ProjectID:          uuid.MustParse(toolset.ProjectID),
 		ToolsetID:          toolsetUUID,
-		ResultLimit:        int32(limit),
+		ResultLimit:        int32(limit), //nolint:gosec // limit is validated to be positive
 	})
 	if err != nil {
 		return nil, fmt.Errorf("search toolset embeddings: %w", err)
@@ -134,9 +110,9 @@ func (s *toolsetVectorStore) SearchToolset(ctx context.Context, orgID, toolsetID
 		return nil, nil
 	}
 
-	matches := make([]*toolListEntry, 0, len(rows))
+	matches := make([]*ToolListEntry, 0, len(rows))
 	for _, row := range rows {
-		var entry toolListEntry
+		var entry ToolListEntry
 		if err := json.Unmarshal(row.Payload, &entry); err != nil {
 			return nil, fmt.Errorf("unmarshal tool entry payload: %w", err)
 		}
@@ -155,7 +131,7 @@ type embeddingCandidate struct {
 	content  string
 }
 
-func (s *toolsetVectorStore) prepareEmbeddingCandidates(entries []*toolListEntry) ([]embeddingCandidate, error) {
+func (s *ToolsetVectorStore) prepareEmbeddingCandidates(entries []*ToolListEntry) ([]embeddingCandidate, error) {
 	candidates := make([]embeddingCandidate, 0, len(entries))
 
 	for _, entry := range entries {
@@ -189,12 +165,13 @@ func (s *toolsetVectorStore) prepareEmbeddingCandidates(entries []*toolListEntry
 	return candidates, nil
 }
 
-func (s *toolsetVectorStore) upsertToolEmbedding(ctx context.Context, toolsetID uuid.UUID, entryKey string, payload []byte, vector pgvector_go.Vector) error {
+func (s *ToolsetVectorStore) upsertToolEmbedding(ctx context.Context, projectID uuid.UUID, toolsetID uuid.UUID, entryKey string, payload []byte, vector pgvector_go.Vector) error {
 	if entryKey == "" {
 		return errors.New("entry key is required")
 	}
 
 	_, err := s.queries.UpsertToolsetEmbedding(ctx, repo.UpsertToolsetEmbeddingParams{
+		ProjectID:      projectID,
 		ToolsetID:      toolsetID,
 		EntryKey:       entryKey,
 		EmbeddingModel: s.embeddingModel,
@@ -208,7 +185,7 @@ func (s *toolsetVectorStore) upsertToolEmbedding(ctx context.Context, toolsetID 
 	return nil
 }
 
-func (s *toolsetVectorStore) generateEmbeddings(ctx context.Context, orgID string, candidates []embeddingCandidate) ([][]float32, error) {
+func (s *ToolsetVectorStore) generateEmbeddings(ctx context.Context, orgID string, candidates []embeddingCandidate) ([][]float32, error) {
 	if len(candidates) == 0 {
 		return nil, nil
 	}
@@ -299,7 +276,7 @@ func (s *toolsetVectorStore) generateEmbeddings(ctx context.Context, orgID strin
 	return results, nil
 }
 
-type toolListEntry struct {
+type ToolListEntry struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	InputSchema json.RawMessage `json:"inputSchema,omitempty"`
@@ -313,7 +290,7 @@ func ensureMetaMap(meta map[string]any) map[string]any {
 	return meta
 }
 
-func buildEmbeddableContent(entry *toolListEntry) string {
+func buildEmbeddableContent(entry *ToolListEntry) string {
 	var schema string
 	if len(entry.InputSchema) > 0 {
 		schema = string(entry.InputSchema)

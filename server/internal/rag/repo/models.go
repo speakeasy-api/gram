@@ -12,6 +12,7 @@ import (
 
 type ToolsetEmbedding struct {
 	ID             uuid.UUID
+	ProjectID      uuid.UUID
 	ToolsetID      uuid.UUID
 	EntryKey       string
 	EmbeddingModel string

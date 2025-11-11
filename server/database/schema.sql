@@ -944,6 +944,7 @@ WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS toolset_embeddings (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
   toolset_id uuid NOT NULL,
   entry_key TEXT NOT NULL CHECK (entry_key <> '' AND CHAR_LENGTH(entry_key) <= 255),
   embedding_model TEXT NOT NULL CHECK (embedding_model <> '' AND CHAR_LENGTH(embedding_model) <= 100),
@@ -955,7 +956,8 @@ CREATE TABLE IF NOT EXISTS toolset_embeddings (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT toolset_embeddings_pkey PRIMARY KEY (id)
+  CONSTRAINT toolset_embeddings_pkey PRIMARY KEY (id),
+  CONSTRAINT toolset_embeddings_project_id FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
 -- Unique constraint on toolset_id + entry_key for non-deleted records

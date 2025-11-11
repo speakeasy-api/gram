@@ -6,12 +6,14 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
@@ -26,7 +28,7 @@ type toolListEntry struct {
 	Meta        map[string]any  `json:"_meta,omitempty"`
 }
 
-func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, productMetrics *posthog.Posthog, toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents]) (json.RawMessage, error) {
+func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, productMetrics *posthog.Posthog, toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents], vectorToolStore *rag.ToolsetVectorStore) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
 	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache)
@@ -75,4 +77,34 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 	}
 
 	return bs, nil
+}
+
+func buildToolListEntries(tools []*types.Tool) []*toolListEntry {
+	result := make([]*toolListEntry, 0, len(tools))
+	for _, tool := range tools {
+		if entry := toolToListEntry(tool); entry != nil {
+			result = append(result, entry)
+		}
+	}
+	return result
+}
+
+func toolToListEntry(tool *types.Tool) *toolListEntry {
+	if tool == nil {
+		return nil
+	}
+
+	var meta map[string]any
+	if tool.FunctionToolDefinition != nil {
+		meta = tool.FunctionToolDefinition.Meta
+	}
+
+	baseTool := conv.ToBaseTool(tool)
+
+	return &toolListEntry{
+		Name:        baseTool.Name,
+		Description: baseTool.Description,
+		InputSchema: json.RawMessage(baseTool.Schema),
+		Meta:        meta,
+	}
 }
