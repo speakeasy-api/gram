@@ -56,9 +56,9 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 
 	var tools []*toolListEntry
 	switch payload.mode {
-	case ToolModeProgressive:
+	case ToolModeProgressiveSearch:
 		tools = buildProgressiveSessionTools(toolset)
-	case ToolModeEmbedding:
+	case ToolModeSemanticSearch:
 		tools = buildDynamicSessionTools(toolset, vectorToolStore)
 	case ToolModeStatic:
 		fallthrough
