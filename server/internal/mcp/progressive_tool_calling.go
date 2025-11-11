@@ -71,6 +71,9 @@ func buildDescribeToolsTool(tools []*types.Tool, listToolRequired bool) (*toolLi
 	} else {
 		toolNames := []string{}
 		for _, tool := range tools {
+			if tool.HTTPToolDefinition == nil {
+				continue
+			}
 			toolNames = append(toolNames, tool.HTTPToolDefinition.Name)
 		}
 		description += fmt.Sprintf(" The available tools are: %s.", strings.Join(toolNames, ", "))
