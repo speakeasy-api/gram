@@ -20,7 +20,7 @@ const (
 	defaultEmbeddingModel         = "text-embedding-3-small"
 	defaultFindToolsResultSize    = 5
 	embeddingBatchSize            = 50
-	embeddingMaxConcurrentBatches = 50
+	embeddingMaxConcurrentBatches = 5
 )
 
 var errToolVectorCollectionNotFound = errors.New("toolset vector collection not found")
@@ -234,6 +234,7 @@ func (s *toolsetVectorStore) generateEmbeddings(ctx context.Context, orgID strin
 	close(workChan)
 
 	var wg sync.WaitGroup
+	var mu sync.Mutex
 	var firstErrOnce sync.Once
 	var firstErr error
 
@@ -273,9 +274,12 @@ func (s *toolsetVectorStore) generateEmbeddings(ctx context.Context, orgID strin
 					return
 				}
 
+				// Mutex prevents race condition from multiple goroutines writing to shared results slice
+				mu.Lock()
 				for i := start; i < end; i++ {
 					results[i] = vectors[i-start]
 				}
+				mu.Unlock()
 			}
 		}()
 	}
