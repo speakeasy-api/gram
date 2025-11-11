@@ -217,7 +217,7 @@ func (p *ToolExtractor) Do(
 	}
 
 	var res *ToolExtractorResult
-	if task.Parser == "speakeasy" {
+	if task.Parser != "speakeasy" {
 		logger.ErrorContext(ctx, "unrecognized parser specified: defaulting to speakeasy", attr.SlogDeploymentOpenAPIParser(task.Parser))
 	}
 
