@@ -74,7 +74,7 @@ const gram = new Gram({
         file,
         partition: input["partitionId"],
         metadata: input["metadata"],
-        mode: input["mode"] as any,
+        mode: "fast",
       });
 
       return ctx.json({
@@ -102,7 +102,7 @@ const gram = new Gram({
         url: input["url"],
         partition: input["partitionId"],
         metadata: input["metadata"],
-        mode: input["mode"] as any,
+        mode: "fast",
       });
 
       return ctx.json({
