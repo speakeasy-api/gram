@@ -50,6 +50,7 @@ var Toolset = Type("Toolset", func() {
 	Attribute("function_environment_variables", ArrayOf(FunctionEnvironmentVariable), "The function environment variables that are relevant to the toolset")
 	Attribute("tools", ArrayOf(Tool), "The tools in this toolset")
 	Attribute("tool_urns", ArrayOf(String), "The tool URNs in this toolset")
+	Attribute("toolset_version", Int64, "The version of the toolset (will be 0 if none exists)")
 	Attribute("resources", ArrayOf(Resource), "The resources in this toolset")
 	Attribute("resource_urns", ArrayOf(String), "The resource URNs in this toolset")
 
@@ -68,7 +69,7 @@ var Toolset = Type("Toolset", func() {
 		Description("When the toolset was last updated.")
 		Format(FormatDateTime)
 	})
-	Required("id", "project_id", "organization_id", "account_type", "name", "slug", "tools", "prompt_templates", "tool_urns", "resources", "resource_urns", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "account_type", "name", "slug", "tools", "toolset_version", "prompt_templates", "tool_urns", "resources", "resource_urns", "created_at", "updated_at")
 })
 
 var ToolsetEntry = Type("ToolsetEntry", func() {

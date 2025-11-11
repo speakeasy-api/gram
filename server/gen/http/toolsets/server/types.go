@@ -92,6 +92,8 @@ type CreateToolsetResponseBody struct {
 	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
 	// The resource URNs in this toolset
@@ -153,6 +155,8 @@ type UpdateToolsetResponseBody struct {
 	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
 	// The resource URNs in this toolset
@@ -207,6 +211,8 @@ type GetToolsetResponseBody struct {
 	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
 	// The resource URNs in this toolset
@@ -261,6 +267,8 @@ type CloneToolsetResponseBody struct {
 	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
 	// The resource URNs in this toolset
@@ -315,6 +323,8 @@ type AddExternalOAuthServerResponseBody struct {
 	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
 	// The resource URNs in this toolset
@@ -369,6 +379,8 @@ type RemoveOAuthServerResponseBody struct {
 	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
 	// The resource URNs in this toolset
@@ -2507,6 +2519,7 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 		Name:           res.Name,
 		Slug:           string(res.Slug),
 		Description:    res.Description,
+		ToolsetVersion: res.ToolsetVersion,
 		McpIsPublic:    res.McpIsPublic,
 		McpEnabled:     res.McpEnabled,
 		CustomDomainID: res.CustomDomainID,
@@ -2614,6 +2627,7 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 		Name:           res.Name,
 		Slug:           string(res.Slug),
 		Description:    res.Description,
+		ToolsetVersion: res.ToolsetVersion,
 		McpIsPublic:    res.McpIsPublic,
 		McpEnabled:     res.McpEnabled,
 		CustomDomainID: res.CustomDomainID,
@@ -2706,6 +2720,7 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 		Name:           res.Name,
 		Slug:           string(res.Slug),
 		Description:    res.Description,
+		ToolsetVersion: res.ToolsetVersion,
 		McpIsPublic:    res.McpIsPublic,
 		McpEnabled:     res.McpEnabled,
 		CustomDomainID: res.CustomDomainID,
@@ -2798,6 +2813,7 @@ func NewCloneToolsetResponseBody(res *types.Toolset) *CloneToolsetResponseBody {
 		Name:           res.Name,
 		Slug:           string(res.Slug),
 		Description:    res.Description,
+		ToolsetVersion: res.ToolsetVersion,
 		McpIsPublic:    res.McpIsPublic,
 		McpEnabled:     res.McpEnabled,
 		CustomDomainID: res.CustomDomainID,
@@ -2890,6 +2906,7 @@ func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuth
 		Name:           res.Name,
 		Slug:           string(res.Slug),
 		Description:    res.Description,
+		ToolsetVersion: res.ToolsetVersion,
 		McpIsPublic:    res.McpIsPublic,
 		McpEnabled:     res.McpEnabled,
 		CustomDomainID: res.CustomDomainID,
@@ -2982,6 +2999,7 @@ func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResp
 		Name:           res.Name,
 		Slug:           string(res.Slug),
 		Description:    res.Description,
+		ToolsetVersion: res.ToolsetVersion,
 		McpIsPublic:    res.McpIsPublic,
 		McpEnabled:     res.McpEnabled,
 		CustomDomainID: res.CustomDomainID,

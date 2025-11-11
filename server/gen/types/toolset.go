@@ -35,6 +35,8 @@ type Toolset struct {
 	Tools []*Tool
 	// The tool URNs in this toolset
 	ToolUrns []string
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion int64
 	// The resources in this toolset
 	Resources []*Resource
 	// The resource URNs in this toolset

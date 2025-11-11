@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric/noop"
@@ -94,6 +96,9 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	guardianPolicy := guardian.NewDefaultPolicy()
 	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env)
 	billingStub := billing.NewStubClient(logger, tracerProvider)
+	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
+	chatClient := openrouter.NewChatClient(logger, devProvisioner)
+	vectorToolStore := rag.NewToolsetVectorStore(tracerProvider, conn, chatClient)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
@@ -102,7 +107,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		return true, nil
 	})
 
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, toolMetrics)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, toolMetrics, vectorToolStore)
 
 	return ctx, &testInstance{
 		service:        svc,

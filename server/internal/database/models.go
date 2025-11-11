@@ -7,7 +7,7 @@ package database
 import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/pgvector/pgvector-go"
+	pgvector_go "github.com/pgvector/pgvector-go"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -540,7 +540,7 @@ type ToolsetEmbedding struct {
 	ToolsetVersion int64
 	EntryKey       string
 	EmbeddingModel string
-	Embedding1536  pgvector.Vector
+	Embedding1536  pgvector_go.Vector
 	Payload        []byte
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz

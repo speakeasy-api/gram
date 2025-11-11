@@ -33,6 +33,84 @@ func NewChatClient(logger *slog.Logger, openRouter Provisioner) *ChatClient {
 	}
 }
 
+func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string) ([][]float32, error) {
+	openrouterKey, err := c.openRouter.ProvisionAPIKey(ctx, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("provisioning OpenRouter key: %w", err)
+	}
+
+	if model == "" {
+		return nil, fmt.Errorf("model is required")
+	}
+
+	if len(inputs) == 0 {
+		return nil, fmt.Errorf("at least one input is required")
+	}
+
+	reqBody := AIEmbeddingRequest{Model: model, Input: inputs}
+
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request error: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/v1/embeddings", OpenRouterBaseURL), bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("create request error: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+openrouterKey)
+
+	resp, err := c.chatClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("embedding request failed: %w", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.logger.ErrorContext(ctx, "failed to close response body", attr.SlogError(err))
+		}
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response error: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("OpenRouter API error: %s", strings.TrimSpace(string(body)))
+	}
+
+	var embeddingResp AIEmbeddingResponse
+	if err := json.Unmarshal(body, &embeddingResp); err != nil {
+		return nil, fmt.Errorf("unmarshal response error: %w", err)
+	}
+
+	if len(embeddingResp.Data) == 0 {
+		return nil, fmt.Errorf("embedding data missing in response")
+	}
+
+	results := make([][]float32, len(inputs))
+	for _, data := range embeddingResp.Data {
+		if data.Index < 0 || data.Index >= len(results) {
+			return nil, fmt.Errorf("embedding index out of range: %d", data.Index)
+		}
+
+		vector := make([]float32, len(data.Embedding))
+		for i, v := range data.Embedding {
+			vector[i] = float32(v)
+		}
+		results[data.Index] = vector
+	}
+
+	for i, vector := range results {
+		if vector == nil {
+			return nil, fmt.Errorf("missing embedding for input index %d", i)
+		}
+	}
+
+	return results, nil
+}
+
 func (c *ChatClient) GetCompletion(ctx context.Context, orgID string, systemPrompt, prompt string, tools []Tool) (*OpenAIChatMessage, error) {
 	var messages []OpenAIChatMessage
 
