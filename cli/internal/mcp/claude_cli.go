@@ -12,9 +12,10 @@ func IsClaudeCLIAvailable() bool {
 }
 
 // InstallViaClaudeCLI installs an MCP server using the native claude CLI
-// Uses: claude mcp add --transport http "name" "url" --header "Header:${VAR}"
+// Uses: claude mcp add --transport http --scope <scope> "name" "url" --header "Header:${VAR}"
+// scope: "project" (maps to claude CLI's "local") or "user"
 // Returns an error if the claude CLI is not available
-func InstallViaClaudeCLI(info *ToolsetInfo, useEnvVar bool) error {
+func InstallViaClaudeCLI(info *ToolsetInfo, useEnvVar bool, scope string) error {
 	var headerValue string
 
 	if useEnvVar {
@@ -25,11 +26,20 @@ func InstallViaClaudeCLI(info *ToolsetInfo, useEnvVar bool) error {
 		headerValue = fmt.Sprintf("%s:%s", info.HeaderName, info.APIKey)
 	}
 
-	// Build command: claude mcp add --transport http "name" "url" --header "Header:value"
+	// Map our scope terminology to claude CLI's scope terminology
+	// Our "project" -> Claude CLI's "local" (.mcp.json in current directory)
+	// Our "user" -> Claude CLI's "user" (~/.claude/settings.local.json)
+	claudeScope := scope
+	if scope == "project" {
+		claudeScope = "local"
+	}
+
+	// Build command: claude mcp add --transport http --scope <scope> "name" "url" --header "Header:value"
 	args := []string{
 		"mcp",
 		"add",
 		"--transport", "http",
+		"--scope", claudeScope,
 		info.Name,
 		info.URL,
 		"--header", headerValue,

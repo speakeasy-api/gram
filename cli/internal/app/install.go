@@ -36,6 +36,11 @@ var installFlags = []cli.Flag{
 		Name:  "env-var",
 		Usage: "Environment variable name to use for API key substitution (e.g., MCP_API_KEY). If provided, uses ${VAR} syntax instead of hardcoding the key",
 	},
+	&cli.StringFlag{
+		Name:  "scope",
+		Usage: "Configuration scope: 'project' for .mcp.json in current directory, 'user' for ~/.claude/settings.local.json (defaults to user)",
+		Value: "user",
+	},
 }
 
 func newInstallCommand() *cli.Command {
