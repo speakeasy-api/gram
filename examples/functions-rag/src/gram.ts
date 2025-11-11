@@ -63,7 +63,6 @@ const gram = new Gram({
       filePath: z.string(),
       partitionId: z.optional(z.string()),
       metadata: z.optional(z.record(z.string(), z.string())),
-      mode: z.optional(z.string()),
     },
     async execute(ctx, input) {
       const ragie = new Ragie({ auth: ctx.env["RAGIE_API_KEY"] });
@@ -93,7 +92,6 @@ const gram = new Gram({
       url: z.string(),
       partitionId: z.optional(z.string()),
       metadata: z.optional(z.record(z.string(), z.string())),
-      mode: z.optional(z.string()),
     },
     async execute(ctx, input) {
       const ragie = new Ragie({ auth: ctx.env["RAGIE_API_KEY"] });
