@@ -1,4 +1,3 @@
-import { Button, Icon } from "@speakeasy-api/moonshine";
 import { Input } from "@/components/ui/input";
 import { Link } from "@/components/ui/link";
 import { Separator } from "@/components/ui/separator";
@@ -18,6 +17,7 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { Slot } from "@radix-ui/react-slot";
+import { Button, Icon } from "@speakeasy-api/moonshine";
 import { VariantProps, cva } from "class-variance-authority";
 import * as React from "react";
 
@@ -528,6 +528,7 @@ function SidebarMenuButton({
       )}
       {...(props.href && { to: props.href })}
       {...(props.href && props.href.startsWith("http") && { external: true })}
+      {...(props.href && { noIcon: true })}
       {...props}
     />
   );

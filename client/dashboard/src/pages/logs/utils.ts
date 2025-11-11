@@ -58,7 +58,9 @@ export const formatDetailTimestamp = (date: Date) => {
   return dateTimeFormatters.full.format(date);
 };
 
-export const getHttpMethodVariant = (method: string): "default" | "secondary" => {
+export const getHttpMethodVariant = (
+  method: string,
+): "default" | "secondary" => {
   if (method === "POST") return "default";
   return "secondary";
 };
