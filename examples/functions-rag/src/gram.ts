@@ -2,6 +2,7 @@ import { Gram } from "@gram-ai/functions";
 import { openAsBlob } from "node:fs";
 import { Ragie } from "ragie";
 import * as z from "zod/mini";
+import type { FetchResult, SearchResult } from "./types.ts";
 
 const gram = new Gram({
   envSchema: {
@@ -160,21 +161,20 @@ const gram = new Gram({
         rerank: input["rerank"],
       });
 
-      return ctx.json({
-        scored_chunks: result.scoredChunks?.map((chunk) => ({
-          text: chunk.text,
-          score: chunk.score,
-          document_id: chunk.documentId,
-          document_name: chunk.documentName,
-          chunk_id: chunk.id,
-          metadata: chunk.documentMetadata,
-        })),
-        query: input["query"],
-      });
+      const results: SearchResult[] = [];
+      for (const chunk of result.scoredChunks || []) {
+        results.push({
+          id: chunk.id,
+          url: chunk.metadata?.["source_url"] || "",
+          title: chunk.documentName || "Untitled Document",
+        });
+      }
+
+      return ctx.json({ results });
     },
   })
   .tool({
-    name: "get_document",
+    name: "fetch",
     description:
       "Download a document by its ID and save it to disk. Returns the file path where the document was saved along with metadata.",
     inputSchema: {
@@ -190,17 +190,15 @@ const gram = new Gram({
         partition: input["partitionId"],
       });
 
-      return ctx.json({
+      return ctx.json<FetchResult>({
         id: result.id,
-        name: result.name,
-        status: result.status,
-        file_size_bytes: result.content.length,
+        title: result.name,
+        url:
+          typeof result.metadata["source_url"] === "string"
+            ? result.metadata["source_url"]
+            : "",
+        text: result.content,
         metadata: result.metadata,
-        partition: result.partition,
-        chunk_count: result.chunkCount,
-        page_count: result.pageCount,
-        created_at: result.createdAt,
-        updated_at: result.updatedAt,
       });
     },
   });
