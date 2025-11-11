@@ -268,41 +268,6 @@ func (q *Queries) GetFunctionsRunnerVersion(ctx context.Context, arg GetFunction
 	return runner_version, err
 }
 
-const getPendingFlyApp = `-- name: GetPendingFlyApp :one
-SELECT
-    id
-  , fly_org_slug
-  , app_name
-FROM fly_apps
-WHERE
-  project_id = $1
-  AND deployment_id = $2
-  AND function_id = $3
-  AND status = 'pending'
-  AND reaped_at IS NULL
-ORDER BY created_at DESC
-LIMIT 1
-`
-
-type GetPendingFlyAppParams struct {
-	ProjectID    uuid.UUID
-	DeploymentID uuid.UUID
-	FunctionID   uuid.UUID
-}
-
-type GetPendingFlyAppRow struct {
-	ID         uuid.UUID
-	FlyOrgSlug string
-	AppName    string
-}
-
-func (q *Queries) GetPendingFlyApp(ctx context.Context, arg GetPendingFlyAppParams) (GetPendingFlyAppRow, error) {
-	row := q.db.QueryRow(ctx, getPendingFlyApp, arg.ProjectID, arg.DeploymentID, arg.FunctionID)
-	var i GetPendingFlyAppRow
-	err := row.Scan(&i.ID, &i.FlyOrgSlug, &i.AppName)
-	return i, err
-}
-
 const initFlyApp = `-- name: InitFlyApp :one
 INSERT INTO fly_apps (
     project_id

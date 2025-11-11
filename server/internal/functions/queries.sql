@@ -83,21 +83,6 @@ WHERE
   AND function_id = @function_id
 RETURNING id;
 
--- name: GetPendingFlyApp :one
-SELECT
-    id
-  , fly_org_slug
-  , app_name
-FROM fly_apps
-WHERE
-  project_id = @project_id
-  AND deployment_id = @deployment_id
-  AND function_id = @function_id
-  AND status = 'pending'
-  AND reaped_at IS NULL
-ORDER BY created_at DESC
-LIMIT 1;
-
 -- name: GetFlyAppsToReap :many
 WITH ranked_deployments AS (
   -- This CTE ranks deployments within each project by their creation time.
