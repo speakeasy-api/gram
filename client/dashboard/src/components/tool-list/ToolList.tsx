@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ToolVariationBadge } from "../tool-variation-badge";
+import { SimpleTooltip } from "../ui/tooltip";
 import { Type } from "../ui/type";
 import { MethodBadge } from "./MethodBadge";
 import { SubtoolsBadge } from "./SubtoolsBadge";
@@ -457,7 +458,7 @@ function ToolGroupHeader({
   return (
     <div
       className={cn(
-        "bg-surface-secondary-default flex items-center justify-between pl-4 pr-3 py-4 w-full",
+        "group/header bg-surface-secondary-default flex items-center justify-between pl-4 pr-3 py-4 w-full",
         isExpanded && "border-b border-neutral-softest",
         !isFirstGroup && "border-t border-neutral-softest",
       )}
@@ -468,36 +469,46 @@ function ToolGroupHeader({
         aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.title} group`}
         className="flex gap-4 items-center hover:opacity-70 transition-opacity"
       >
-        <Icon className="size-4 shrink-0" strokeWidth={1.5} />
-        <p className="text-sm leading-6 text-foreground">{group.title}</p>
-      </button>
-      <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelectAll();
-          }}
-          className="h-7 text-xs"
-        >
-          {allSelected ? "Deselect All" : "Select All"}
-        </Button>
-        <button
-          onClick={onToggle}
-          aria-expanded={isExpanded}
-          aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.title} group`}
-          className="hover:opacity-70 transition-opacity"
-        >
-          <ChevronDown
+        <div className="relative size-4 shrink-0">
+          <Icon
             className={cn(
-              "size-4 transition-transform",
-              isExpanded ? "rotate-180" : "rotate-0",
+              "size-4 absolute inset-0 transition-opacity",
+              "group-hover/header:opacity-0",
             )}
             strokeWidth={1.5}
           />
-        </button>
-      </div>
+          <SimpleTooltip
+            tooltip={`${allSelected ? "Deselect" : "Select"} ${group.tools.length} tools`}
+          >
+            <Checkbox
+              checked={allSelected}
+              onCheckedChange={onSelectAll}
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
+              className={cn(
+                "absolute inset-0 transition-opacity opacity-0",
+                "group-hover/header:opacity-100",
+              )}
+            />
+          </SimpleTooltip>
+        </div>
+        <p className="text-sm leading-6 text-foreground">{group.title}</p>
+      </button>
+      <button
+        onClick={onToggle}
+        aria-expanded={isExpanded}
+        aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.title} group`}
+        className="hover:opacity-70 transition-opacity"
+      >
+        <ChevronDown
+          className={cn(
+            "size-4 transition-transform",
+            isExpanded ? "rotate-180" : "rotate-0",
+          )}
+          strokeWidth={1.5}
+        />
+      </button>
     </div>
   );
 }
