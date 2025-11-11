@@ -198,6 +198,7 @@ type FlyApp struct {
 	PrimaryRegion string
 	Status        string
 	ReapedAt      pgtype.Timestamptz
+	ReapError     pgtype.Text
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
 }
