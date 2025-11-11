@@ -13,15 +13,25 @@ import (
 	pgvector_go "github.com/pgvector/pgvector-go"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/rag/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 const (
-	defaultEmbeddingModel         = "text-embedding-3-small"
+	defaultEmbeddingModel         = "openai/text-embedding-3-small"
 	defaultFindToolsResultSize    = 5
 	embeddingBatchSize            = 50
 	embeddingMaxConcurrentBatches = 5
+)
+
+// EntryKeyPrefix represents the prefix for different types of entries in the vector store.
+// This allows for multiple constucts within a toolset to be embedded and searched separately.
+// Right now we only have tools.
+type EntryKeyPrefix string
+
+const (
+	EntryKeyPrefixTool EntryKeyPrefix = "tool:"
 )
 
 type ToolsetVectorStore struct {
@@ -44,13 +54,13 @@ func NewToolsetVectorStore(db *pgxpool.Pool, chatClient *openrouter.ChatClient) 
 	}
 }
 
-func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Toolset, entries []*ToolListEntry) error {
+func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Toolset) error {
 	toolsetUUID, err := uuid.Parse(toolset.ID)
 	if err != nil {
 		return fmt.Errorf("parse toolset id: %w", err)
 	}
 
-	candidates, err := s.prepareEmbeddingCandidates(entries)
+	candidates, err := s.prepareEmbeddingCandidates(toolset.Tools)
 	if err != nil {
 		return err
 	}
@@ -74,7 +84,13 @@ func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Too
 	return nil
 }
 
-func (s *ToolsetVectorStore) SearchToolset(ctx context.Context, toolset types.Toolset, query string, limit int) ([]*ToolListEntry, error) {
+// ToolSearchResult represents a search result with tool name and similarity score.
+type ToolSearchResult struct {
+	ToolName        string
+	SimilarityScore float64
+}
+
+func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset types.Toolset, query string, limit int) ([]*ToolSearchResult, error) {
 	toolsetUUID, err := uuid.Parse(toolset.ID)
 	if err != nil {
 		return nil, fmt.Errorf("parse toolset id: %w", err)
@@ -97,7 +113,7 @@ func (s *ToolsetVectorStore) SearchToolset(ctx context.Context, toolset types.To
 		return nil, fmt.Errorf("query embedding response contained %d vectors, expected 1", len(queryVectors))
 	}
 
-	rows, err := s.queries.SearchToolsetEmbeddings(ctx, repo.SearchToolsetEmbeddingsParams{
+	rows, err := s.queries.SearchToolsetToolEmbeddings(ctx, repo.SearchToolsetToolEmbeddingsParams{
 		QueryEmbedding1536: pgvector_go.NewVector(queryVectors[0]),
 		ProjectID:          uuid.MustParse(toolset.ProjectID),
 		ToolsetID:          toolsetUUID,
@@ -110,16 +126,17 @@ func (s *ToolsetVectorStore) SearchToolset(ctx context.Context, toolset types.To
 		return nil, nil
 	}
 
-	matches := make([]*ToolListEntry, 0, len(rows))
+	matches := make([]*ToolSearchResult, 0, len(rows))
 	for _, row := range rows {
-		var entry ToolListEntry
+		var entry toolListEntry
 		if err := json.Unmarshal(row.Payload, &entry); err != nil {
 			return nil, fmt.Errorf("unmarshal tool entry payload: %w", err)
 		}
 
-		entry.Meta = ensureMetaMap(entry.Meta)
-		entry.Meta["similarity_score"] = float64(row.Similarity)
-		matches = append(matches, &entry)
+		matches = append(matches, &ToolSearchResult{
+			ToolName:        entry.Name,
+			SimilarityScore: float64(row.Similarity),
+		})
 	}
 
 	return matches, nil
@@ -131,32 +148,35 @@ type embeddingCandidate struct {
 	content  string
 }
 
-func (s *ToolsetVectorStore) prepareEmbeddingCandidates(entries []*ToolListEntry) ([]embeddingCandidate, error) {
-	candidates := make([]embeddingCandidate, 0, len(entries))
+func (s *ToolsetVectorStore) prepareEmbeddingCandidates(tools []*types.Tool) ([]embeddingCandidate, error) {
+	candidates := make([]embeddingCandidate, 0, len(tools))
 
-	for _, entry := range entries {
-		if entry == nil {
+	for _, tool := range tools {
+		name, description, inputSchema, meta := conv.ToToolListEntry(tool)
+		name = strings.TrimSpace(name)
+		if name == "" {
 			continue
 		}
 
-		entryCopy := *entry
-		entryCopy.Name = strings.TrimSpace(entryCopy.Name)
-		if entryCopy.Name == "" {
-			continue
+		entry := toolListEntry{
+			Name:        name,
+			Description: description,
+			InputSchema: inputSchema,
+			Meta:        meta,
 		}
 
-		payload, err := json.Marshal(&entryCopy)
+		payload, err := json.Marshal(&entry)
 		if err != nil {
-			return nil, fmt.Errorf("marshal tool entry %s: %w", entryCopy.Name, err)
+			return nil, fmt.Errorf("marshal tool entry %s: %w", name, err)
 		}
 
-		content := buildEmbeddableContent(&entryCopy)
+		content := buildEmbeddableContent(&entry)
 		if strings.TrimSpace(content) == "" {
 			continue
 		}
 
 		candidates = append(candidates, embeddingCandidate{
-			entryKey: entryCopy.Name,
+			entryKey: string(EntryKeyPrefixTool) + name,
 			payload:  payload,
 			content:  content,
 		})
@@ -276,21 +296,14 @@ func (s *ToolsetVectorStore) generateEmbeddings(ctx context.Context, orgID strin
 	return results, nil
 }
 
-type ToolListEntry struct {
+type toolListEntry struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	InputSchema json.RawMessage `json:"inputSchema,omitempty"`
 	Meta        map[string]any  `json:"_meta,omitempty"`
 }
 
-func ensureMetaMap(meta map[string]any) map[string]any {
-	if meta == nil {
-		return map[string]any{}
-	}
-	return meta
-}
-
-func buildEmbeddableContent(entry *ToolListEntry) string {
+func buildEmbeddableContent(entry *toolListEntry) string {
 	var schema string
 	if len(entry.InputSchema) > 0 {
 		schema = string(entry.InputSchema)

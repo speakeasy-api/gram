@@ -212,3 +212,20 @@ func variedToolSchema(baseSchema string, summarizer *string) (string, error) {
 
 	return schema, nil
 }
+
+// ToToolListEntry converts a Tool to basic list entry fields.
+// Returns name, description, inputSchema, and meta map.
+// Returns empty values if the tool is nil.
+func ToToolListEntry(tool *types.Tool) (name, description string, inputSchema json.RawMessage, meta map[string]any) {
+	if tool == nil {
+		return "", "", nil, nil
+	}
+
+	if tool.FunctionToolDefinition != nil {
+		meta = tool.FunctionToolDefinition.Meta
+	}
+
+	baseTool := ToBaseTool(tool)
+
+	return baseTool.Name, baseTool.Description, json.RawMessage(baseTool.Schema), meta
+}

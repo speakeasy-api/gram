@@ -96,17 +96,12 @@ func toolToListEntry(tool *types.Tool) *toolListEntry {
 		return nil
 	}
 
-	var meta map[string]any
-	if tool.FunctionToolDefinition != nil {
-		meta = tool.FunctionToolDefinition.Meta
-	}
-
-	baseTool := conv.ToBaseTool(tool)
+	name, description, inputSchema, meta := conv.ToToolListEntry(tool)
 
 	return &toolListEntry{
-		Name:        baseTool.Name,
-		Description: baseTool.Description,
-		InputSchema: json.RawMessage(baseTool.Schema),
+		Name:        name,
+		Description: description,
+		InputSchema: inputSchema,
 		Meta:        meta,
 	}
 }

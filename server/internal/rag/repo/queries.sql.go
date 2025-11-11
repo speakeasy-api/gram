@@ -47,7 +47,7 @@ func (q *Queries) GetToolsetEmbedding(ctx context.Context, arg GetToolsetEmbeddi
 	return i, err
 }
 
-const searchToolsetEmbeddings = `-- name: SearchToolsetEmbeddings :many
+const searchToolsetToolEmbeddings = `-- name: SearchToolsetToolEmbeddings :many
 SELECT
     id,
     project_id,
@@ -57,23 +57,24 @@ SELECT
     payload,
     created_at,
     updated_at,
-    1 - (embedding_1536 <=> $1) AS similarity
+    (1 - (embedding_1536 <=> $1))::float8 AS similarity
 FROM toolset_embeddings
 WHERE project_id = $2
   AND toolset_id = $3
+  AND entry_key LIKE 'tool:%'
   AND deleted IS FALSE
 ORDER BY embedding_1536 <=> $1
 LIMIT $4
 `
 
-type SearchToolsetEmbeddingsParams struct {
+type SearchToolsetToolEmbeddingsParams struct {
 	QueryEmbedding1536 pgvector_go.Vector
 	ProjectID          uuid.UUID
 	ToolsetID          uuid.UUID
 	ResultLimit        int32
 }
 
-type SearchToolsetEmbeddingsRow struct {
+type SearchToolsetToolEmbeddingsRow struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID
 	ToolsetID      uuid.UUID
@@ -82,11 +83,11 @@ type SearchToolsetEmbeddingsRow struct {
 	Payload        []byte
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
-	Similarity     int32
+	Similarity     float64
 }
 
-func (q *Queries) SearchToolsetEmbeddings(ctx context.Context, arg SearchToolsetEmbeddingsParams) ([]SearchToolsetEmbeddingsRow, error) {
-	rows, err := q.db.Query(ctx, searchToolsetEmbeddings,
+func (q *Queries) SearchToolsetToolEmbeddings(ctx context.Context, arg SearchToolsetToolEmbeddingsParams) ([]SearchToolsetToolEmbeddingsRow, error) {
+	rows, err := q.db.Query(ctx, searchToolsetToolEmbeddings,
 		arg.QueryEmbedding1536,
 		arg.ProjectID,
 		arg.ToolsetID,
@@ -96,9 +97,9 @@ func (q *Queries) SearchToolsetEmbeddings(ctx context.Context, arg SearchToolset
 		return nil, err
 	}
 	defer rows.Close()
-	var items []SearchToolsetEmbeddingsRow
+	var items []SearchToolsetToolEmbeddingsRow
 	for rows.Next() {
-		var i SearchToolsetEmbeddingsRow
+		var i SearchToolsetToolEmbeddingsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
@@ -135,7 +136,7 @@ INSERT INTO toolset_embeddings (
     $4,
     $5,
     $6
-) ON CONFLICT (project_id, toolset_id, entry_key)
+) ON CONFLICT (toolset_id, entry_key)
 WHERE deleted IS FALSE
 DO UPDATE SET
     embedding_model = EXCLUDED.embedding_model,

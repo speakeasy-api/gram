@@ -75,7 +75,7 @@ func handleToolsCall(
 		return nil, err
 	}
 
-	if payload.mode == ToolModeProgressive {
+	if payload.mode != ToolModeStatic {
 		switch {
 		case params.Name == listToolsToolName && payload.mode == ToolModeProgressive:
 			return handleListToolsCall(ctx, logger, req.ID, params.Arguments, toolset)

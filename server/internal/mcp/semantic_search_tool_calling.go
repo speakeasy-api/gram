@@ -49,10 +49,10 @@ func buildDynamicSessionTools(toolset *types.Toolset, vectorToolStore *rag.Tools
 		contextDescription = toolsetDescription
 	}
 
-	findDescription := "Search the available tools in this MCP server using a search query."
+	findDescription := "Search the available tools in this MCP server using a search query. The result will be tools that could help you complete your task"
 	executeDescription := "Execute a specific tool by name, passing through the correct arguments for that tool's schema."
 	if contextDescription != "" {
-		findDescription = fmt.Sprintf("Search the available tools in %s using a search query.", contextDescription)
+		findDescription = fmt.Sprintf("Search the available tools in %s using a search query. The result will be tools to help you complete your task", contextDescription)
 		executeDescription = fmt.Sprintf("Execute a specific tool from %s by name, passing through the correct arguments for that tool's schema.", contextDescription)
 	}
 
@@ -83,18 +83,7 @@ func handleFindToolsCall(
 	toolset *types.Toolset,
 	vectorToolStore *rag.ToolsetVectorStore,
 ) (json.RawMessage, error) {
-	entries := buildToolListEntries(toolset.Tools)
-	var ragEntries []*rag.ToolListEntry
-	// TODO: factor out into some non MCP package util.
-	for _, entry := range entries {
-		ragEntries = append(ragEntries, &rag.ToolListEntry{
-			Name:        entry.Name,
-			Description: entry.Description,
-			InputSchema: entry.InputSchema,
-			Meta:        entry.Meta,
-		})
-	}
-	if indexErr := vectorToolStore.IndexToolset(ctx, *toolset, ragEntries); indexErr != nil {
+	if indexErr := vectorToolStore.IndexToolset(ctx, *toolset); indexErr != nil {
 		return nil, oops.E(oops.CodeUnexpected, indexErr, "failed to prepare tool search index").Log(ctx, logger)
 	}
 
@@ -110,19 +99,42 @@ func handleFindToolsCall(
 		return nil, oops.E(oops.CodeInvalid, errors.New("missing query"), "query is required").Log(ctx, logger)
 	}
 
-	ragResults, err := vectorToolStore.SearchToolset(ctx, *toolset, query, args.NumResults)
+	searchResults, err := vectorToolStore.SearchToolsetTools(ctx, *toolset, query, args.NumResults)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to search tools").Log(ctx, logger)
 	}
 
-	// TODO: factor out into some non MCP package util.
+	// Build a map of tools by name for quick lookup
+	toolsByName := make(map[string]*types.Tool)
+	for _, tool := range toolset.Tools {
+		baseTool := conv.ToBaseTool(tool)
+		toolsByName[baseTool.Name] = tool
+	}
+
+	// constuct full tool entries with similarity scores
 	var results []*toolListEntry
-	for _, ragEntry := range ragResults {
+	for _, searchResult := range searchResults {
+		tool, exists := toolsByName[searchResult.ToolName]
+		if !exists {
+			continue
+		}
+
+		name, description, inputSchema, meta := conv.ToToolListEntry(tool)
+		if name == "" {
+			continue
+		}
+
+		// Add similarity score to meta
+		if meta == nil {
+			meta = make(map[string]any)
+		}
+		meta["similarity_score"] = searchResult.SimilarityScore
+
 		results = append(results, &toolListEntry{
-			Name:        ragEntry.Name,
-			Description: ragEntry.Description,
-			InputSchema: ragEntry.InputSchema,
-			Meta:        ragEntry.Meta,
+			Name:        name,
+			Description: description,
+			InputSchema: inputSchema,
+			Meta:        meta,
 		})
 	}
 
