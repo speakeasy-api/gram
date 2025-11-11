@@ -83,8 +83,18 @@ func handleFindToolsCall(
 	toolset *types.Toolset,
 	vectorToolStore *rag.ToolsetVectorStore,
 ) (json.RawMessage, error) {
-	if indexErr := vectorToolStore.IndexToolset(ctx, *toolset); indexErr != nil {
-		return nil, oops.E(oops.CodeUnexpected, indexErr, "failed to prepare tool search index").Log(ctx, logger)
+	indexed, err := vectorToolStore.ToolsetToolsAreIndexed(ctx, *toolset)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to check toolset indexing status").Log(ctx, logger)
+	}
+	// TODO: Since we're currently in experimental mode, this index will be updated as needed.
+	// The long-term goal is to migrate this into an executable Temporal workflow.
+	// Once a toolset can be marked as dynamically indexed, we can trigger asynchronous actions
+	// to automatically update indexes whenever toolsets or deployments change.
+	if !indexed {
+		if indexErr := vectorToolStore.IndexToolset(ctx, *toolset); indexErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, indexErr, "failed to prepare tool search index").Log(ctx, logger)
+		}
 	}
 
 	var args findToolsArguments

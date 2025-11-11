@@ -23,13 +23,40 @@ DO UPDATE SET
     deleted_at = NULL
 RETURNING *;
 
--- name: GetToolsetEmbedding :one
-SELECT *
-FROM toolset_embeddings
-WHERE toolset_id = @toolset_id
-  AND project_id = @project_id
-  AND entry_key = @entry_key
-  AND deleted IS FALSE;
+-- name: ToolsetToolsAreIndexed :one
+WITH latest_deployment AS (
+  SELECT d.created_at
+  FROM deployments d
+  JOIN deployment_statuses ds ON d.id = ds.deployment_id
+  WHERE d.project_id = @project_id
+    AND ds.status = 'completed'
+  ORDER BY d.created_at DESC
+  LIMIT 1
+),
+latest_toolset_version AS (
+  SELECT created_at
+  FROM toolset_versions
+  WHERE toolset_versions.toolset_id = @toolset_id
+  ORDER BY created_at DESC
+  LIMIT 1
+),
+latest_embedding AS (
+  SELECT MAX(created_at) as created_at
+  FROM toolset_embeddings
+  WHERE toolset_embeddings.toolset_id = @toolset_id
+    AND entry_key LIKE 'tool:%'
+    AND deleted IS FALSE
+)
+SELECT
+  CASE
+    WHEN le.created_at IS NULL THEN FALSE
+    WHEN ld.created_at IS NOT NULL AND le.created_at < ld.created_at THEN FALSE
+    WHEN ltv.created_at IS NOT NULL AND le.created_at < ltv.created_at THEN FALSE
+    ELSE TRUE
+  END as indexed
+FROM latest_embedding le
+LEFT JOIN latest_deployment ld ON true
+LEFT JOIN latest_toolset_version ltv ON true;
 
 -- name: SearchToolsetToolEmbeddings :many
 SELECT

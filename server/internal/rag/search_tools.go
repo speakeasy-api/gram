@@ -54,6 +54,28 @@ func NewToolsetVectorStore(db *pgxpool.Pool, chatClient *openrouter.ChatClient) 
 	}
 }
 
+func (s *ToolsetVectorStore) ToolsetToolsAreIndexed(ctx context.Context, toolset types.Toolset) (bool, error) {
+	toolsetUUID, err := uuid.Parse(toolset.ID)
+	if err != nil {
+		return false, fmt.Errorf("parse toolset id: %w", err)
+	}
+
+	projectUUID, err := uuid.Parse(toolset.ProjectID)
+	if err != nil {
+		return false, fmt.Errorf("parse project id: %w", err)
+	}
+
+	indexed, err := s.queries.ToolsetToolsAreIndexed(ctx, repo.ToolsetToolsAreIndexedParams{
+		ProjectID: projectUUID,
+		ToolsetID: toolsetUUID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("check toolset indexed status: %w", err)
+	}
+
+	return indexed, nil
+}
+
 func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Toolset) error {
 	toolsetUUID, err := uuid.Parse(toolset.ID)
 	if err != nil {

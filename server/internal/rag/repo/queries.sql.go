@@ -13,40 +13,6 @@ import (
 	pgvector_go "github.com/pgvector/pgvector-go"
 )
 
-const getToolsetEmbedding = `-- name: GetToolsetEmbedding :one
-SELECT id, project_id, toolset_id, entry_key, embedding_model, embedding_1536, payload, created_at, updated_at, deleted_at, deleted
-FROM toolset_embeddings
-WHERE toolset_id = $1
-  AND project_id = $2
-  AND entry_key = $3
-  AND deleted IS FALSE
-`
-
-type GetToolsetEmbeddingParams struct {
-	ToolsetID uuid.UUID
-	ProjectID uuid.UUID
-	EntryKey  string
-}
-
-func (q *Queries) GetToolsetEmbedding(ctx context.Context, arg GetToolsetEmbeddingParams) (ToolsetEmbedding, error) {
-	row := q.db.QueryRow(ctx, getToolsetEmbedding, arg.ToolsetID, arg.ProjectID, arg.EntryKey)
-	var i ToolsetEmbedding
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.ToolsetID,
-		&i.EntryKey,
-		&i.EmbeddingModel,
-		&i.Embedding1536,
-		&i.Payload,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
 const searchToolsetToolEmbeddings = `-- name: SearchToolsetToolEmbeddings :many
 SELECT
     id,
@@ -119,6 +85,54 @@ func (q *Queries) SearchToolsetToolEmbeddings(ctx context.Context, arg SearchToo
 		return nil, err
 	}
 	return items, nil
+}
+
+const toolsetToolsAreIndexed = `-- name: ToolsetToolsAreIndexed :one
+WITH latest_deployment AS (
+  SELECT d.created_at
+  FROM deployments d
+  JOIN deployment_statuses ds ON d.id = ds.deployment_id
+  WHERE d.project_id = $1
+    AND ds.status = 'completed'
+  ORDER BY d.created_at DESC
+  LIMIT 1
+),
+latest_toolset_version AS (
+  SELECT created_at
+  FROM toolset_versions
+  WHERE toolset_versions.toolset_id = $2
+  ORDER BY created_at DESC
+  LIMIT 1
+),
+latest_embedding AS (
+  SELECT MAX(created_at) as created_at
+  FROM toolset_embeddings
+  WHERE toolset_embeddings.toolset_id = $2
+    AND entry_key LIKE 'tool:%'
+    AND deleted IS FALSE
+)
+SELECT
+  CASE
+    WHEN le.created_at IS NULL THEN FALSE
+    WHEN ld.created_at IS NOT NULL AND le.created_at < ld.created_at THEN FALSE
+    WHEN ltv.created_at IS NOT NULL AND le.created_at < ltv.created_at THEN FALSE
+    ELSE TRUE
+  END as indexed
+FROM latest_embedding le
+LEFT JOIN latest_deployment ld ON true
+LEFT JOIN latest_toolset_version ltv ON true
+`
+
+type ToolsetToolsAreIndexedParams struct {
+	ProjectID uuid.UUID
+	ToolsetID uuid.UUID
+}
+
+func (q *Queries) ToolsetToolsAreIndexed(ctx context.Context, arg ToolsetToolsAreIndexedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, toolsetToolsAreIndexed, arg.ProjectID, arg.ToolsetID)
+	var indexed bool
+	err := row.Scan(&indexed)
+	return indexed, err
 }
 
 const upsertToolsetEmbedding = `-- name: UpsertToolsetEmbedding :one
