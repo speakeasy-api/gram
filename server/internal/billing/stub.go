@@ -158,9 +158,20 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 			PricePerAdditionalServer:   0,
 			IncludedCredits:            25,
 			PricePerAdditionalCredit:   1,
-			FeatureBullets:             []string{},
-			IncludedBullets:            []string{},
-			AddOnBullets:               []string{},
+			FeatureBullets: []string{
+				"Custom tool creation",
+				"Hosted server deployments",
+				"14 day log retention",
+				"Built in MCP Playground",
+				"Connect to Claude, Cursor, Gemini and more",
+			},
+			IncludedBullets: []string{
+				"3 MCP servers (public or private)",
+				"10000 tool calls / month",
+				"$25 in playground credits",
+				"Slack community support",
+			},
+			AddOnBullets: []string{},
 		},
 		Pro: &gen.TierLimits{
 			BasePrice:                  500,
@@ -170,9 +181,22 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 			PricePerAdditionalServer:   0.5,
 			IncludedCredits:            25,
 			PricePerAdditionalCredit:   1,
-			FeatureBullets:             []string{},
-			IncludedBullets:            []string{},
-			AddOnBullets:               []string{},
+			FeatureBullets: []string{
+				"Custom domain",
+				"Register your own OAuth server",
+				"30 day log retention",
+			},
+			IncludedBullets: []string{
+				"50 MCP servers (public or private)",
+				"100000000 tool calls / month",
+				"$25 in playground credits",
+				"Email support",
+			},
+			AddOnBullets: []string{
+				"$0.50 / month / additional MCP server",
+				"$0.05 / month / additional 5000 tool calls",
+				"$1 / month / 1 playground credit",
+			},
 		},
 		Enterprise: &gen.TierLimits{
 			BasePrice:                  0,
@@ -182,9 +206,19 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 			PricePerAdditionalServer:   0,
 			IncludedCredits:            0,
 			PricePerAdditionalCredit:   0,
-			FeatureBullets:             []string{},
-			IncludedBullets:            []string{},
-			AddOnBullets:               []string{},
+			FeatureBullets: []string{
+				"Oauth 2.1 proxy support",
+				"SSO",
+				"Audit logs",
+				"Self-hosting Gram dataplane",
+			},
+			IncludedBullets: []string{
+				"Dedicated slack channel",
+				"Concierge onboarding",
+				"Tool design support",
+				"SLA-backed support",
+			},
+			AddOnBullets: []string{},
 		},
 	}, nil
 }
