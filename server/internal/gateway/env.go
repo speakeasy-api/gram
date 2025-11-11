@@ -84,6 +84,14 @@ func (c *CaseInsensitiveEnv) Set(key, value string) {
 	c.data[strings.ToLower(key)] = value
 }
 
+func (c *CaseInsensitiveEnv) All() map[string]string {
+	result := make(map[string]string, len(c.data))
+	for k, v := range c.data {
+		result[k] = v
+	}
+	return result
+}
+
 type ToolCallEnv struct {
 	SystemEnv  *CaseInsensitiveEnv
 	UserConfig *CaseInsensitiveEnv

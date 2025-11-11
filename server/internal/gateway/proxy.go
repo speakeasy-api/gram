@@ -204,10 +204,17 @@ func (tp *ToolProxy) doFunction(
 		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, logger)
 	}
 
-	payloadEnv := make(map[string]string, len(plan.Variables))
-	for _, v := range plan.Variables {
-		if val := env.Get(v); val != "" {
-			payloadEnv[v] = val
+	payloadEnv := make(map[string]string)
+
+	// Start with system environment variables
+	for k, v := range env.SystemEnv.All() {
+		payloadEnv[k] = v
+	}
+
+	// For each variable required by the function, allow user config to merge/override
+	for _, varName := range plan.Variables {
+		if val := env.UserConfig.Get(varName); val != "" {
+			payloadEnv[varName] = val
 		}
 	}
 
