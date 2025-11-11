@@ -1,12 +1,10 @@
 package background
 
 import (
-	"context"
 	"fmt"
 	"time"
 
 	"go.temporal.io/api/enums/v1"
-	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
@@ -26,27 +24,17 @@ type FunctionsReaperWorkflowResult struct {
 }
 
 func ExecuteProjectFunctionsReaperChildWorkflow(ctx workflow.Context, projectID uuid.UUID) (workflow.ChildWorkflowFuture, error) {
-	return workflow.ExecuteChildWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                       "v1:functions-reaper:" + projectID.String(),
-		TaskQueue:                string(TaskQueueMain),
-		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowRunTimeout:       time.Minute * 5,
-	}, FunctionsReaperWorkflow, FunctionsReaperWorkflowParams{
+	ctx = workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+		WorkflowID:            "v1:functions-reaper:" + projectID.String(),
+		TaskQueue:             string(TaskQueueMain),
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
+		WorkflowRunTimeout:    time.Minute * 10,
+	})
+
+	return workflow.ExecuteChildWorkflow(ctx, FunctionsReaperWorkflow, FunctionsReaperWorkflowParams{
 		Scope:     activities.FunctionsReaperScopeProject,
 		ProjectID: uuid.NullUUID{UUID: projectID, Valid: projectID != uuid.Nil},
 	}), nil
-}
-
-func ExecuteFunctionsReaperWorkflow(ctx context.Context, temporalClient client.Client, params FunctionsReaperWorkflowParams) (client.WorkflowRun, error) {
-	// Use a fixed workflow ID so that only one reaper workflow can run at a time
-	return temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                       "v1:functions-reaper",
-		TaskQueue:                string(TaskQueueMain),
-		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowRunTimeout:       time.Minute * 10,
-	}, FunctionsReaperWorkflow, params)
 }
 
 func FunctionsReaperWorkflow(ctx workflow.Context, params FunctionsReaperWorkflowParams) (*FunctionsReaperWorkflowResult, error) {

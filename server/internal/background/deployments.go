@@ -193,7 +193,7 @@ func ProcessDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWor
 			string(attr.DeploymentIDKey), params.DeploymentID,
 		)
 		_, err = ExecuteProjectFunctionsReaperChildWorkflow(ctx, params.ProjectID)
-		if err != nil {
+		if err != nil && !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
 			logger.Error(
 				"failed to start project-scoped functions reaper workflow",
 				"error", err.Error(),
