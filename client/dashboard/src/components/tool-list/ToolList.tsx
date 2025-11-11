@@ -442,37 +442,63 @@ function ToolGroupHeader({
   isExpanded,
   onToggle,
   isFirstGroup = false,
+  allSelected,
+  onSelectAll,
 }: {
   group: ToolGroup;
   isExpanded: boolean;
   onToggle: () => void;
   isFirstGroup?: boolean;
+  allSelected: boolean;
+  onSelectAll: () => void;
 }) {
   const Icon = getIcon(group.icon);
 
   return (
-    <button
-      onClick={onToggle}
-      aria-expanded={isExpanded}
-      aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.title} group`}
+    <div
       className={cn(
-        "bg-surface-secondary-default flex items-center justify-between pl-4 pr-3 py-4 w-full hover:bg-active transition-colors",
+        "bg-surface-secondary-default flex items-center justify-between pl-4 pr-3 py-4 w-full",
         isExpanded && "border-b border-neutral-softest",
         !isFirstGroup && "border-t border-neutral-softest",
       )}
     >
-      <div className="flex gap-4 items-center">
+      <button
+        onClick={onToggle}
+        aria-expanded={isExpanded}
+        aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.title} group`}
+        className="flex gap-4 items-center hover:opacity-70 transition-opacity"
+      >
         <Icon className="size-4 shrink-0" strokeWidth={1.5} />
         <p className="text-sm leading-6 text-foreground">{group.title}</p>
+      </button>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelectAll();
+          }}
+          className="h-7 text-xs"
+        >
+          {allSelected ? "Deselect All" : "Select All"}
+        </Button>
+        <button
+          onClick={onToggle}
+          aria-expanded={isExpanded}
+          aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.title} group`}
+          className="hover:opacity-70 transition-opacity"
+        >
+          <ChevronDown
+            className={cn(
+              "size-4 transition-transform",
+              isExpanded ? "rotate-180" : "rotate-0",
+            )}
+            strokeWidth={1.5}
+          />
+        </button>
       </div>
-      <ChevronDown
-        className={cn(
-          "size-4 transition-transform",
-          isExpanded ? "rotate-180" : "rotate-0",
-        )}
-        strokeWidth={1.5}
-      />
-    </button>
+    </div>
   );
 }
 
@@ -741,6 +767,38 @@ export function ToolList({
     setSelectedForRemoval(new Set());
   };
 
+  const handleSelectAllInGroup = (group: ToolGroup) => {
+    const groupToolIds = group.tools.map(getToolIdentifier);
+    const currentSelection = selectionMode === "add" ? selectedSet : selectedForRemoval;
+    const allSelected = groupToolIds.every((id) => currentSelection.has(id));
+
+    if (selectionMode === "add" && onSelectionChange) {
+      // For selection mode, update parent state
+      const next = new Set(selectedUrns);
+      if (allSelected) {
+        // Deselect all in group
+        groupToolIds.forEach((id) => next.delete(id));
+      } else {
+        // Select all in group
+        groupToolIds.forEach((id) => next.add(id));
+      }
+      onSelectionChange(Array.from(next));
+    } else {
+      // For normal mode, update local state
+      setSelectedForRemoval((prev) => {
+        const next = new Set(prev);
+        if (allSelected) {
+          // Deselect all in group
+          groupToolIds.forEach((id) => next.delete(id));
+        } else {
+          // Select all in group
+          groupToolIds.forEach((id) => next.add(id));
+        }
+        return next;
+      });
+    }
+  };
+
   return (
     <div className="relative w-full">
       <div
@@ -749,13 +807,20 @@ export function ToolList({
           className,
         )}
       >
-        {groups.map((group, index) => (
+        {groups.map((group, index) => {
+          const groupToolIds = group.tools.map(getToolIdentifier);
+          const currentSelection = selectionMode === "add" ? selectedSet : selectedForRemoval;
+          const allSelected = groupToolIds.every((id) => currentSelection.has(id));
+
+          return (
           <div key={`${group.type}-${group.title}-${index}`} className="w-full">
             <ToolGroupHeader
               group={group}
               isExpanded={expandedGroups.has(index)}
               onToggle={() => toggleGroup(index)}
               isFirstGroup={index === 0}
+              allSelected={allSelected}
+              onSelectAll={() => handleSelectAllInGroup(group)}
             />
             {expandedGroups.has(index) && (
               <div className="w-full">
@@ -794,7 +859,8 @@ export function ToolList({
               </div>
             )}
           </div>
-        ))}
+        );
+        })}
       </div>
 
       {hasChanges && !selectionMode && (

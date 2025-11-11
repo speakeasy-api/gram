@@ -5,9 +5,9 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { AppRoute } from "@/routes";
-import { Type } from "./ui/type";
 import React from "react";
 import { ProductTierBadge } from "./product-tier-badge";
+import { Type } from "./ui/type";
 
 export function NavMenu({
   items,
