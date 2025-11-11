@@ -14,13 +14,14 @@ import (
 )
 
 const deleteToolsetEmbeddings = `-- name: DeleteToolsetEmbeddings :exec
-UPDATE toolset_embeddings
-SET deleted_at = clock_timestamp()
+DELETE FROM toolset_embeddings
 WHERE toolset_id = $1
-  AND entry_key LIKE 'tool:%'
+  AND entry_key LIKE 'tools:%'
   AND deleted IS FALSE
 `
 
+// NOTE: Hard delete while in experimentation phase to preserve space.
+// Consider switching to soft delete when feature is production-ready.
 func (q *Queries) DeleteToolsetEmbeddings(ctx context.Context, toolsetID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteToolsetEmbeddings, toolsetID)
 	return err
@@ -30,6 +31,7 @@ const insertToolsetEmbedding = `-- name: InsertToolsetEmbedding :one
 INSERT INTO toolset_embeddings (
     project_id,
     toolset_id,
+    toolset_version,
     entry_key,
     embedding_model,
     embedding_1536,
@@ -40,14 +42,16 @@ INSERT INTO toolset_embeddings (
     $3,
     $4,
     $5,
-    $6
+    $6,
+    $7
 )
-RETURNING id, project_id, toolset_id, entry_key, embedding_model, embedding_1536, payload, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, toolset_id, toolset_version, entry_key, embedding_model, embedding_1536, payload, created_at, updated_at, deleted_at, deleted
 `
 
 type InsertToolsetEmbeddingParams struct {
 	ProjectID      uuid.UUID
 	ToolsetID      uuid.UUID
+	ToolsetVersion int64
 	EntryKey       string
 	EmbeddingModel string
 	Embedding1536  pgvector_go.Vector
@@ -58,6 +62,7 @@ func (q *Queries) InsertToolsetEmbedding(ctx context.Context, arg InsertToolsetE
 	row := q.db.QueryRow(ctx, insertToolsetEmbedding,
 		arg.ProjectID,
 		arg.ToolsetID,
+		arg.ToolsetVersion,
 		arg.EntryKey,
 		arg.EmbeddingModel,
 		arg.Embedding1536,
@@ -68,6 +73,7 @@ func (q *Queries) InsertToolsetEmbedding(ctx context.Context, arg InsertToolsetE
 		&i.ID,
 		&i.ProjectID,
 		&i.ToolsetID,
+		&i.ToolsetVersion,
 		&i.EntryKey,
 		&i.EmbeddingModel,
 		&i.Embedding1536,
@@ -85,6 +91,7 @@ SELECT
     id,
     project_id,
     toolset_id,
+    toolset_version,
     entry_key,
     embedding_model,
     payload,
@@ -94,16 +101,18 @@ SELECT
 FROM toolset_embeddings
 WHERE project_id = $2
   AND toolset_id = $3
-  AND entry_key LIKE 'tool:%'
+  AND toolset_version = $4
+  AND entry_key LIKE 'tools:%'
   AND deleted IS FALSE
 ORDER BY embedding_1536 <=> $1
-LIMIT $4
+LIMIT $5
 `
 
 type SearchToolsetToolEmbeddingsParams struct {
 	QueryEmbedding1536 pgvector_go.Vector
 	ProjectID          uuid.UUID
 	ToolsetID          uuid.UUID
+	ToolsetVersion     int64
 	ResultLimit        int32
 }
 
@@ -111,6 +120,7 @@ type SearchToolsetToolEmbeddingsRow struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID
 	ToolsetID      uuid.UUID
+	ToolsetVersion int64
 	EntryKey       string
 	EmbeddingModel string
 	Payload        []byte
@@ -124,6 +134,7 @@ func (q *Queries) SearchToolsetToolEmbeddings(ctx context.Context, arg SearchToo
 		arg.QueryEmbedding1536,
 		arg.ProjectID,
 		arg.ToolsetID,
+		arg.ToolsetVersion,
 		arg.ResultLimit,
 	)
 	if err != nil {
@@ -137,6 +148,7 @@ func (q *Queries) SearchToolsetToolEmbeddings(ctx context.Context, arg SearchToo
 			&i.ID,
 			&i.ProjectID,
 			&i.ToolsetID,
+			&i.ToolsetVersion,
 			&i.EntryKey,
 			&i.EmbeddingModel,
 			&i.Payload,
@@ -164,42 +176,34 @@ WITH latest_deployment AS (
   ORDER BY d.created_at DESC
   LIMIT 1
 ),
-latest_toolset_version AS (
-  SELECT created_at
-  FROM toolset_versions
-  WHERE toolset_versions.toolset_id = $2
-  ORDER BY created_at DESC
-  LIMIT 1
-),
 latest_embedding AS (
   SELECT MAX(created_at) as created_at
   FROM toolset_embeddings
   WHERE toolset_embeddings.toolset_id = $2
-    AND entry_key LIKE 'tool:%'
+    AND toolset_embeddings.toolset_version = $3
+    AND entry_key LIKE 'tools:%'
     AND deleted IS FALSE
 )
 SELECT
   CASE
-    -- If no embeddings exist, not indexed
+    -- If no embeddings exist for this version, not indexed
     WHEN (SELECT created_at FROM latest_embedding) IS NULL THEN FALSE
     -- If embeddings exist but are older than latest deployment, not indexed
     WHEN (SELECT created_at FROM latest_deployment) IS NOT NULL
          AND (SELECT created_at FROM latest_embedding) < (SELECT created_at FROM latest_deployment) THEN FALSE
-    -- If embeddings exist but are older than latest toolset version, not indexed
-    WHEN (SELECT created_at FROM latest_toolset_version) IS NOT NULL
-         AND (SELECT created_at FROM latest_embedding) < (SELECT created_at FROM latest_toolset_version) THEN FALSE
     -- Otherwise, embeddings are up to date
     ELSE TRUE
   END as indexed
 `
 
 type ToolsetToolsAreIndexedParams struct {
-	ProjectID uuid.UUID
-	ToolsetID uuid.UUID
+	ProjectID      uuid.UUID
+	ToolsetID      uuid.UUID
+	ToolsetVersion int64
 }
 
 func (q *Queries) ToolsetToolsAreIndexed(ctx context.Context, arg ToolsetToolsAreIndexedParams) (bool, error) {
-	row := q.db.QueryRow(ctx, toolsetToolsAreIndexed, arg.ProjectID, arg.ToolsetID)
+	row := q.db.QueryRow(ctx, toolsetToolsAreIndexed, arg.ProjectID, arg.ToolsetID, arg.ToolsetVersion)
 	var indexed bool
 	err := row.Scan(&indexed)
 	return indexed, err

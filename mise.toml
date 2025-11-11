@@ -13,7 +13,7 @@
 apko = "0.30.13"
 flyctl = "0.3.189"
 go = "1.25.3"
-golangci-lint = "2.4.0"
+golangci-lint = "2.6.1"
 gum = "0.16.0"
 jq = "1.7.1"
 melange = "0.30.6"

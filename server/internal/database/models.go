@@ -537,6 +537,7 @@ type ToolsetEmbedding struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID
 	ToolsetID      uuid.UUID
+	ToolsetVersion int64
 	EntryKey       string
 	EmbeddingModel string
 	Embedding1536  pgvector_go.Vector

@@ -28,16 +28,19 @@ func doInstallGeminiCLI(c *cli.Context) error {
 	}
 
 	useEnvVar := info.EnvVarName != ""
+	scope := c.String("scope")
+
 	if useEnvVar {
 		logger.InfoContext(ctx, "using environment variable substitution",
 			slog.String("var", info.EnvVarName),
 			slog.String("header", info.HeaderName))
 	}
 
-	// Execute: gemini mcp add --transport http "name" "url" --header "Header:${VAR}"
-	logger.InfoContext(ctx, "installing via gemini CLI with native HTTP transport")
+	// Execute: gemini mcp add --transport http --scope <scope> "name" "url" --header "Header:${VAR}"
+	logger.InfoContext(ctx, "installing via gemini CLI with native HTTP transport",
+		slog.String("scope", scope))
 
-	if err := mcp.InstallViaGeminiCLI(info, useEnvVar); err != nil {
+	if err := mcp.InstallViaGeminiCLI(info, useEnvVar, scope); err != nil {
 		return fmt.Errorf("failed to install via gemini CLI: %w", err)
 	}
 

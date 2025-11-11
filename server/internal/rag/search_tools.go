@@ -27,15 +27,6 @@ const (
 	embeddingMaxConcurrentBatches = 5
 )
 
-// EntryKeyPrefix represents the prefix for different types of entries in the vector store.
-// This allows for multiple constucts within a toolset to be embedded and searched separately.
-// Right now we only have tools.
-type EntryKeyPrefix string
-
-const (
-	EntryKeyPrefixTool EntryKeyPrefix = "tool:"
-)
-
 type ToolsetVectorStore struct {
 	db             repo.DBTX
 	queries        *repo.Queries
@@ -68,8 +59,9 @@ func (s *ToolsetVectorStore) ToolsetToolsAreIndexed(ctx context.Context, toolset
 	}
 
 	indexed, err := s.queries.ToolsetToolsAreIndexed(ctx, repo.ToolsetToolsAreIndexedParams{
-		ProjectID: projectUUID,
-		ToolsetID: toolsetUUID,
+		ProjectID:      projectUUID,
+		ToolsetID:      toolsetUUID,
+		ToolsetVersion: toolset.ToolsetVersion,
 	})
 	if err != nil {
 		return false, fmt.Errorf("check toolset indexed status: %w", err)
@@ -106,7 +98,7 @@ func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Too
 	// Insert new embeddings
 	for i, candidate := range candidates {
 		vector := pgvector_go.NewVector(vectors[i])
-		if err := s.insertToolEmbedding(ctx, uuid.MustParse(toolset.ProjectID), toolsetUUID, candidate.entryKey, candidate.payload, vector); err != nil {
+		if err := s.insertToolEmbedding(ctx, uuid.MustParse(toolset.ProjectID), toolsetUUID, toolset.ToolsetVersion, candidate.entryKey, candidate.payload, vector); err != nil {
 			return err
 		}
 	}
@@ -147,6 +139,7 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 		QueryEmbedding1536: pgvector_go.NewVector(queryVectors[0]),
 		ProjectID:          uuid.MustParse(toolset.ProjectID),
 		ToolsetID:          toolsetUUID,
+		ToolsetVersion:     toolset.ToolsetVersion,
 		ResultLimit:        int32(limit), //nolint:gosec // limit is validated to be positive
 	})
 	if err != nil {
@@ -182,6 +175,7 @@ func (s *ToolsetVectorStore) prepareEmbeddingCandidates(tools []*types.Tool) ([]
 	candidates := make([]embeddingCandidate, 0, len(tools))
 
 	for _, tool := range tools {
+		baseTool := conv.ToBaseTool(tool)
 		name, description, inputSchema, meta := conv.ToToolListEntry(tool)
 		name = strings.TrimSpace(name)
 		if name == "" {
@@ -206,7 +200,7 @@ func (s *ToolsetVectorStore) prepareEmbeddingCandidates(tools []*types.Tool) ([]
 		}
 
 		candidates = append(candidates, embeddingCandidate{
-			entryKey: string(EntryKeyPrefixTool) + name,
+			entryKey: baseTool.ToolUrn,
 			payload:  payload,
 			content:  content,
 		})
@@ -215,7 +209,7 @@ func (s *ToolsetVectorStore) prepareEmbeddingCandidates(tools []*types.Tool) ([]
 	return candidates, nil
 }
 
-func (s *ToolsetVectorStore) insertToolEmbedding(ctx context.Context, projectID uuid.UUID, toolsetID uuid.UUID, entryKey string, payload []byte, vector pgvector_go.Vector) error {
+func (s *ToolsetVectorStore) insertToolEmbedding(ctx context.Context, projectID uuid.UUID, toolsetID uuid.UUID, toolsetVersion int64, entryKey string, payload []byte, vector pgvector_go.Vector) error {
 	if entryKey == "" {
 		return errors.New("entry key is required")
 	}
@@ -223,6 +217,7 @@ func (s *ToolsetVectorStore) insertToolEmbedding(ctx context.Context, projectID 
 	_, err := s.queries.InsertToolsetEmbedding(ctx, repo.InsertToolsetEmbeddingParams{
 		ProjectID:      projectID,
 		ToolsetID:      toolsetID,
+		ToolsetVersion: toolsetVersion,
 		EntryKey:       entryKey,
 		EmbeddingModel: s.embeddingModel,
 		Embedding1536:  vector,

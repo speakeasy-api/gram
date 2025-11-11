@@ -92,6 +92,8 @@ type CreateToolsetResponseBody struct {
 	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion *int64 `form:"toolset_version,omitempty" json:"toolset_version,omitempty" xml:"toolset_version,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 	// The resource URNs in this toolset
@@ -153,6 +155,8 @@ type UpdateToolsetResponseBody struct {
 	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion *int64 `form:"toolset_version,omitempty" json:"toolset_version,omitempty" xml:"toolset_version,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 	// The resource URNs in this toolset
@@ -207,6 +211,8 @@ type GetToolsetResponseBody struct {
 	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion *int64 `form:"toolset_version,omitempty" json:"toolset_version,omitempty" xml:"toolset_version,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 	// The resource URNs in this toolset
@@ -261,6 +267,8 @@ type CloneToolsetResponseBody struct {
 	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion *int64 `form:"toolset_version,omitempty" json:"toolset_version,omitempty" xml:"toolset_version,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 	// The resource URNs in this toolset
@@ -315,6 +323,8 @@ type AddExternalOAuthServerResponseBody struct {
 	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion *int64 `form:"toolset_version,omitempty" json:"toolset_version,omitempty" xml:"toolset_version,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 	// The resource URNs in this toolset
@@ -369,6 +379,8 @@ type RemoveOAuthServerResponseBody struct {
 	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion *int64 `form:"toolset_version,omitempty" json:"toolset_version,omitempty" xml:"toolset_version,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 	// The resource URNs in this toolset
@@ -2582,6 +2594,7 @@ func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *types.Toolset {
 		Name:           *body.Name,
 		Slug:           types.Slug(*body.Slug),
 		Description:    body.Description,
+		ToolsetVersion: *body.ToolsetVersion,
 		McpIsPublic:    body.McpIsPublic,
 		McpEnabled:     body.McpEnabled,
 		CustomDomainID: body.CustomDomainID,
@@ -2967,6 +2980,7 @@ func NewUpdateToolsetToolsetOK(body *UpdateToolsetResponseBody) *types.Toolset {
 		Name:           *body.Name,
 		Slug:           types.Slug(*body.Slug),
 		Description:    body.Description,
+		ToolsetVersion: *body.ToolsetVersion,
 		McpIsPublic:    body.McpIsPublic,
 		McpEnabled:     body.McpEnabled,
 		CustomDomainID: body.CustomDomainID,
@@ -3340,6 +3354,7 @@ func NewGetToolsetToolsetOK(body *GetToolsetResponseBody) *types.Toolset {
 		Name:           *body.Name,
 		Slug:           types.Slug(*body.Slug),
 		Description:    body.Description,
+		ToolsetVersion: *body.ToolsetVersion,
 		McpIsPublic:    body.McpIsPublic,
 		McpEnabled:     body.McpEnabled,
 		CustomDomainID: body.CustomDomainID,
@@ -3713,6 +3728,7 @@ func NewCloneToolsetToolsetOK(body *CloneToolsetResponseBody) *types.Toolset {
 		Name:           *body.Name,
 		Slug:           types.Slug(*body.Slug),
 		Description:    body.Description,
+		ToolsetVersion: *body.ToolsetVersion,
 		McpIsPublic:    body.McpIsPublic,
 		McpEnabled:     body.McpEnabled,
 		CustomDomainID: body.CustomDomainID,
@@ -3936,6 +3952,7 @@ func NewAddExternalOAuthServerToolsetOK(body *AddExternalOAuthServerResponseBody
 		Name:           *body.Name,
 		Slug:           types.Slug(*body.Slug),
 		Description:    body.Description,
+		ToolsetVersion: *body.ToolsetVersion,
 		McpIsPublic:    body.McpIsPublic,
 		McpEnabled:     body.McpEnabled,
 		CustomDomainID: body.CustomDomainID,
@@ -4159,6 +4176,7 @@ func NewRemoveOAuthServerToolsetOK(body *RemoveOAuthServerResponseBody) *types.T
 		Name:           *body.Name,
 		Slug:           types.Slug(*body.Slug),
 		Description:    body.Description,
+		ToolsetVersion: *body.ToolsetVersion,
 		McpIsPublic:    body.McpIsPublic,
 		McpEnabled:     body.McpEnabled,
 		CustomDomainID: body.CustomDomainID,
@@ -4395,6 +4413,9 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 	if body.Tools == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
+	if body.ToolsetVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
+	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
 	}
@@ -4538,6 +4559,9 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 	if body.Tools == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
+	if body.ToolsetVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
+	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
 	}
@@ -4664,6 +4688,9 @@ func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 	}
 	if body.Tools == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	}
+	if body.ToolsetVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
 	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
@@ -4792,6 +4819,9 @@ func ValidateCloneToolsetResponseBody(body *CloneToolsetResponseBody) (err error
 	if body.Tools == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
+	if body.ToolsetVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
+	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
 	}
@@ -4919,6 +4949,9 @@ func ValidateAddExternalOAuthServerResponseBody(body *AddExternalOAuthServerResp
 	if body.Tools == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
+	if body.ToolsetVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
+	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
 	}
@@ -5045,6 +5078,9 @@ func ValidateRemoveOAuthServerResponseBody(body *RemoveOAuthServerResponseBody) 
 	}
 	if body.Tools == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	}
+	if body.ToolsetVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
 	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))

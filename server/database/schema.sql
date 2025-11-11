@@ -946,7 +946,9 @@ CREATE TABLE IF NOT EXISTS toolset_embeddings (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   toolset_id uuid NOT NULL,
-  entry_key TEXT NOT NULL CHECK (entry_key <> '' AND CHAR_LENGTH(entry_key) <= 255),
+  toolset_version BIGINT NOT NULL,
+  -- unique key for the embedded entry entity urn or some other unique identifier
+  entry_key TEXT NOT NULL,
   embedding_model TEXT NOT NULL CHECK (embedding_model <> '' AND CHAR_LENGTH(embedding_model) <= 100),
   -- 1536 dimensions for text-embedding-3-small
   embedding_1536 vector(1536) NOT NULL,
@@ -960,9 +962,9 @@ CREATE TABLE IF NOT EXISTS toolset_embeddings (
   CONSTRAINT toolset_embeddings_project_id FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
--- Unique constraint on toolset_id + entry_key for non-deleted records
+-- Unique constraint on toolset_id + + toolset_version + entry_key for non-deleted records
 CREATE UNIQUE INDEX IF NOT EXISTS toolset_embeddings_toolset_entry_key
-ON toolset_embeddings (toolset_id, entry_key)
+ON toolset_embeddings (toolset_id, toolset_version, entry_key)
 WHERE deleted IS FALSE;
 
 -- HNSW index for fast similarity search within a toolset

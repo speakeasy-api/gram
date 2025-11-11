@@ -1,14 +1,16 @@
 -- name: DeleteToolsetEmbeddings :exec
-UPDATE toolset_embeddings
-SET deleted_at = clock_timestamp()
+-- NOTE: Hard delete while in experimentation phase to preserve space.
+-- Consider switching to soft delete when feature is production-ready.
+DELETE FROM toolset_embeddings
 WHERE toolset_id = @toolset_id
-  AND entry_key LIKE 'tool:%'
+  AND entry_key LIKE 'tools:%'
   AND deleted IS FALSE;
 
 -- name: InsertToolsetEmbedding :one
 INSERT INTO toolset_embeddings (
     project_id,
     toolset_id,
+    toolset_version,
     entry_key,
     embedding_model,
     embedding_1536,
@@ -16,6 +18,7 @@ INSERT INTO toolset_embeddings (
 ) VALUES (
     @project_id,
     @toolset_id,
+    @toolset_version,
     @entry_key,
     @embedding_model,
     @embedding_1536,
@@ -33,30 +36,21 @@ WITH latest_deployment AS (
   ORDER BY d.created_at DESC
   LIMIT 1
 ),
-latest_toolset_version AS (
-  SELECT created_at
-  FROM toolset_versions
-  WHERE toolset_versions.toolset_id = @toolset_id
-  ORDER BY created_at DESC
-  LIMIT 1
-),
 latest_embedding AS (
   SELECT MAX(created_at) as created_at
   FROM toolset_embeddings
   WHERE toolset_embeddings.toolset_id = @toolset_id
-    AND entry_key LIKE 'tool:%'
+    AND toolset_embeddings.toolset_version = @toolset_version
+    AND entry_key LIKE 'tools:%'
     AND deleted IS FALSE
 )
 SELECT
   CASE
-    -- If no embeddings exist, not indexed
+    -- If no embeddings exist for this version, not indexed
     WHEN (SELECT created_at FROM latest_embedding) IS NULL THEN FALSE
     -- If embeddings exist but are older than latest deployment, not indexed
     WHEN (SELECT created_at FROM latest_deployment) IS NOT NULL
          AND (SELECT created_at FROM latest_embedding) < (SELECT created_at FROM latest_deployment) THEN FALSE
-    -- If embeddings exist but are older than latest toolset version, not indexed
-    WHEN (SELECT created_at FROM latest_toolset_version) IS NOT NULL
-         AND (SELECT created_at FROM latest_embedding) < (SELECT created_at FROM latest_toolset_version) THEN FALSE
     -- Otherwise, embeddings are up to date
     ELSE TRUE
   END as indexed;
@@ -66,6 +60,7 @@ SELECT
     id,
     project_id,
     toolset_id,
+    toolset_version,
     entry_key,
     embedding_model,
     payload,
@@ -75,7 +70,8 @@ SELECT
 FROM toolset_embeddings
 WHERE project_id = @project_id
   AND toolset_id = @toolset_id
-  AND entry_key LIKE 'tool:%'
+  AND toolset_version = @toolset_version
+  AND entry_key LIKE 'tools:%'
   AND deleted IS FALSE
 ORDER BY embedding_1536 <=> @query_embedding_1536
 LIMIT @result_limit;

@@ -12,8 +12,9 @@ func IsGeminiCLIAvailable() bool {
 }
 
 // InstallViaGeminiCLI installs an MCP server using the native gemini CLI
-// Uses: gemini mcp add --transport http "name" "url" --header "Header:${VAR}"
-func InstallViaGeminiCLI(info *ToolsetInfo, useEnvVar bool) error {
+// Uses: gemini mcp add --transport http --scope <scope> "name" "url" --header "Header:${VAR}"
+// scope: "project" or "user" (will be passed as-is if gemini CLI supports it)
+func InstallViaGeminiCLI(info *ToolsetInfo, useEnvVar bool, scope string) error {
 	var headerValue string
 
 	if useEnvVar {
@@ -24,11 +25,13 @@ func InstallViaGeminiCLI(info *ToolsetInfo, useEnvVar bool) error {
 		headerValue = fmt.Sprintf("%s:%s", info.HeaderName, info.APIKey)
 	}
 
-	// Build command: gemini mcp add --transport http "name" "url" --header "Header:value"
+	// Build command: gemini mcp add --transport http --scope <scope> "name" "url" --header "Header:value"
+	// Note: scope support depends on gemini CLI version
 	args := []string{
 		"mcp",
 		"add",
 		"--transport", "http",
+		"--scope", scope,
 		info.Name,
 		info.URL,
 		"--header", headerValue,

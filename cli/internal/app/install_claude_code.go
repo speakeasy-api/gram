@@ -30,6 +30,8 @@ func doInstallClaudeCode(c *cli.Context) error {
 	}
 
 	useEnvVar := info.EnvVarName != ""
+	scope := c.String("scope")
+
 	if useEnvVar {
 		logger.InfoContext(ctx, "using environment variable substitution",
 			slog.String("var", info.EnvVarName),
@@ -38,9 +40,10 @@ func doInstallClaudeCode(c *cli.Context) error {
 
 	// Try to use native claude CLI with HTTP transport first
 	if mcp.IsClaudeCLIAvailable() {
-		logger.InfoContext(ctx, "using claude CLI with native HTTP transport")
+		logger.InfoContext(ctx, "using claude CLI with native HTTP transport",
+			slog.String("scope", scope))
 
-		if err := mcp.InstallViaClaudeCLI(info, useEnvVar); err != nil {
+		if err := mcp.InstallViaClaudeCLI(info, useEnvVar, scope); err != nil {
 			logger.WarnContext(ctx, "claude CLI installation failed, falling back to config file",
 				slog.String("error", err.Error()))
 		} else {
@@ -69,10 +72,26 @@ func doInstallClaudeCode(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to get config locations: %w", err)
 	}
-	configPath := locations[0].Path
+
+	// Determine config path based on scope flag (already declared above)
+	var configPath string
+	var configDesc string
+
+	switch scope {
+	case "project":
+		configPath = locations[0].Path
+		configDesc = locations[0].Description
+	case "user":
+		configPath = locations[1].Path
+		configDesc = locations[1].Description
+	default:
+		return fmt.Errorf("invalid scope '%s': must be 'project' or 'user'", scope)
+	}
+
 	logger.InfoContext(ctx, "using config location",
 		slog.String("path", configPath),
-		slog.String("type", locations[0].Description))
+		slog.String("type", configDesc),
+		slog.String("scope", scope))
 
 	config, err := claudecode.ReadConfig(configPath)
 	if err != nil {
