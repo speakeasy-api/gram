@@ -180,14 +180,17 @@ latest_embedding AS (
 )
 SELECT
   CASE
-    WHEN le.created_at IS NULL THEN FALSE
-    WHEN ld.created_at IS NOT NULL AND le.created_at < ld.created_at THEN FALSE
-    WHEN ltv.created_at IS NOT NULL AND le.created_at < ltv.created_at THEN FALSE
+    -- If no embeddings exist, not indexed
+    WHEN (SELECT created_at FROM latest_embedding) IS NULL THEN FALSE
+    -- If embeddings exist but are older than latest deployment, not indexed
+    WHEN (SELECT created_at FROM latest_deployment) IS NOT NULL
+         AND (SELECT created_at FROM latest_embedding) < (SELECT created_at FROM latest_deployment) THEN FALSE
+    -- If embeddings exist but are older than latest toolset version, not indexed
+    WHEN (SELECT created_at FROM latest_toolset_version) IS NOT NULL
+         AND (SELECT created_at FROM latest_embedding) < (SELECT created_at FROM latest_toolset_version) THEN FALSE
+    -- Otherwise, embeddings are up to date
     ELSE TRUE
   END as indexed
-FROM latest_embedding le
-LEFT JOIN latest_deployment ld ON true
-LEFT JOIN latest_toolset_version ltv ON true
 `
 
 type ToolsetToolsAreIndexedParams struct {
