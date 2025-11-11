@@ -32,7 +32,7 @@ func ExecuteProjectFunctionsReaperWorkflow(ctx context.Context, temporalClient c
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowRunTimeout:       time.Minute * 10,
-	}, ProcessDeploymentWorkflow, FunctionsReaperWorkflowParams{
+	}, FunctionsReaperWorkflow, FunctionsReaperWorkflowParams{
 		Scope:     activities.FunctionsReaperScopeProject,
 		ProjectID: uuid.NullUUID{UUID: projectID, Valid: projectID != uuid.Nil},
 	})
