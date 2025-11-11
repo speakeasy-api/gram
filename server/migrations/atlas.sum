@@ -1,4 +1,4 @@
-h1:KcpXwKvJjNVzBiq/6iH2AMZepVLwPk8L5C6CR2f+M1A=
+h1:wogdDQltJwCokZjsdCSpOhzcsGWHVCLvKNJJNhRKxuE=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -65,3 +65,4 @@ h1:KcpXwKvJjNVzBiq/6iH2AMZepVLwPk8L5C6CR2f+M1A=
 20251023235208_add_meta_tags_to_datamodel.sql h1:pQtvf+I0G7Y66RxxsHLyR0HzbsfNSeF0UpqgsIeRl5k=
 20251105184547_add-organization-features-table.sql h1:1OTlrIlL1jagd9BRvB1hO3B7c+1XRMvHhw1GSGKPPWA=
 20251110195659_add-pgvector-extension.sql h1:JWfchfuTbSewGzYrDlymV5RiwYvaFcC2tvKBjdulhNI=
+20251111165847_add-toolset-embedding-migration.sql h1:1cuNc8gF7U8EKK7agVmvP3FdS6+U36oSwVc8G6yyzHg=
