@@ -6,7 +6,6 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -53,20 +52,14 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 		}
 	}
 
-	tools := make([]*toolListEntry, 0)
-
-	for _, tool := range toolset.Tools {
-		var meta map[string]any
-		if tool.FunctionToolDefinition != nil {
-			meta = tool.FunctionToolDefinition.Meta
-		}
-		baseTool := conv.ToBaseTool(tool)
-		tools = append(tools, &toolListEntry{
-			Name:        baseTool.Name,
-			Description: baseTool.Description,
-			InputSchema: json.RawMessage(baseTool.Schema),
-			Meta:        meta,
-		})
+	var tools []*toolListEntry
+	switch payload.mode {
+	case ToolModeProgressive:
+		tools = buildProgressiveSessionTools(toolset)
+	case ToolModeStatic:
+		fallthrough
+	default:
+		tools = buildToolListEntries(toolset.Tools)
 	}
 
 	result := &result[toolsListResult]{

@@ -37,6 +37,12 @@ type toolsCallParams struct {
 	Arguments json.RawMessage `json:"arguments"`
 }
 
+const (
+	listToolsToolName     = "list_tools"
+	describeToolsToolName = "describe_tools"
+	executeToolToolName   = "execute_tool"
+)
+
 func handleToolsCall(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -65,6 +71,24 @@ func handleToolsCall(
 	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache)
 	if err != nil {
 		return nil, err
+	}
+
+	if payload.mode != ToolModeStatic {
+		switch params.Name {
+		case listToolsToolName:
+			return handleListToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
+		case describeToolsToolName:
+			return handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
+		case executeToolToolName:
+			proxyName, proxyArgs, err := processExecuteToolCall(ctx, logger, params.Arguments)
+			if err != nil {
+				return nil, err
+			}
+
+			// TODO: we would want some way in metrics/logging/billing to track this is a dynamic tool call
+			params.Name = proxyName
+			params.Arguments = proxyArgs
+		}
 	}
 
 	var mcpURL string
