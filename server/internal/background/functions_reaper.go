@@ -31,7 +31,7 @@ func ExecuteProjectFunctionsReaperWorkflow(ctx context.Context, temporalClient c
 		TaskQueue:                string(TaskQueueMain),
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowRunTimeout:       time.Minute * 2,
+		WorkflowRunTimeout:       time.Minute * 10,
 	}, ProcessDeploymentWorkflow, FunctionsReaperWorkflowParams{
 		Scope:     activities.FunctionsReaperScopeProject,
 		ProjectID: uuid.NullUUID{UUID: projectID, Valid: projectID != uuid.Nil},
@@ -46,10 +46,10 @@ func FunctionsReaperWorkflow(ctx workflow.Context, params FunctionsReaperWorkflo
 	logger := workflow.GetLogger(ctx)
 
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Minute,
+		StartToCloseTimeout: 3 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
-			MaximumInterval:    time.Minute,
+			MaximumInterval:    1 * time.Minute,
 			BackoffCoefficient: 2,
 			MaximumAttempts:    3,
 		},
