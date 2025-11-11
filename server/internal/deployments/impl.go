@@ -472,7 +472,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		return nil, err
 	}
 
-	s.captureDeploymentProcessedEvent(ctx, logger, authCtx.OrganizationSlug, *authCtx.ProjectSlug, "create", dep)
+	s.captureDeploymentProcessedEvent(ctx, logger, authCtx.OrganizationSlug, *authCtx.ProjectSlug, "create", dep, nil)
 
 	return &gen.CreateDeploymentResult{
 		Deployment: dep,
@@ -590,6 +590,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	}
 
 	var cloneID uuid.UUID
+	var previousDeployment *types.Deployment
 
 	latestDeploymentID, err := tx.GetLatestDeploymentID(ctx, projectID)
 	switch {
@@ -630,6 +631,11 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting latest deployment").Log(ctx, logger)
 	// 3️⃣ We found a latest deployment, we need to clone it
 	default:
+		previousDeployment, err = mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(projectID), mv.DeploymentID(latestDeploymentID))
+		if err != nil {
+			return nil, err
+		}
+
 		newID, err := cloneDeployment(
 			ctx, s.tracer, logger, tx,
 			ProjectID(projectID), DeploymentID(latestDeploymentID),
@@ -685,7 +691,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		return nil, err
 	}
 
-	s.captureDeploymentProcessedEvent(ctx, logger, authCtx.OrganizationSlug, *authCtx.ProjectSlug, "evolve", dep)
+	s.captureDeploymentProcessedEvent(ctx, logger, authCtx.OrganizationSlug, *authCtx.ProjectSlug, "evolve", dep, previousDeployment)
 
 	return &gen.EvolveResult{Deployment: dep}, nil
 }
@@ -768,7 +774,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 		dep.Status = status
 	}
 
-	s.captureDeploymentProcessedEvent(ctx, logger, authCtx.OrganizationSlug, *authCtx.ProjectSlug, "redeploy", dep)
+	s.captureDeploymentProcessedEvent(ctx, logger, authCtx.OrganizationSlug, *authCtx.ProjectSlug, "redeploy", dep, nil)
 
 	return &gen.RedeployResult{Deployment: dep}, nil
 }
@@ -883,21 +889,43 @@ func validatePackageInclusion(ctx context.Context, logger *slog.Logger, targetPr
 	return nil
 }
 
-func (s *Service) captureDeploymentProcessedEvent(ctx context.Context, logger *slog.Logger, organizationSlug string, projectSlug string, deploymentType string, dep *types.Deployment) {
-	if err := s.posthog.CaptureEvent(ctx, "deployment_processed", dep.ID, map[string]any{
-		"deployment_id":         dep.ID,
-		"project_id":            dep.ProjectID,
-		"organization_id":       dep.OrganizationID,
-		"organization_slug":     organizationSlug,
-		"project_slug":          projectSlug,
-		"deployment_type":       deploymentType,
-		"status":                dep.Status,
-		"openapiv3_tool_count":  dep.Openapiv3ToolCount,
-		"functions_tool_count":  dep.FunctionsToolCount,
-		"functions_asset_count": len(dep.FunctionsAssets),
-		"openapiv3_asset_count": len(dep.Openapiv3Assets),
-		"logs_url":              fmt.Sprintf("%s/%s/%s/deployments/%s", os.Getenv("GRAM_SITE_URL"), organizationSlug, projectSlug, dep.ID),
-	}); err != nil {
+func (s *Service) captureDeploymentProcessedEvent(
+	ctx context.Context,
+	logger *slog.Logger,
+	organizationSlug string,
+	projectSlug string,
+	deploymentType string,
+	dep *types.Deployment,
+	previousDeployment *types.Deployment,
+) {
+	prevDeploymentHasFunctions := previousDeployment != nil && len(previousDeployment.FunctionsAssets) > 0
+	firstDeploymentWithFunctions := !prevDeploymentHasFunctions && len(dep.FunctionsAssets) > 0
+
+	properties := map[string]any{
+		"deployment_id":                   dep.ID,
+		"project_id":                      dep.ProjectID,
+		"organization_id":                 dep.OrganizationID,
+		"organization_slug":               organizationSlug,
+		"project_slug":                    projectSlug,
+		"deployment_type":                 deploymentType,
+		"status":                          dep.Status,
+		"openapiv3_tool_count":            dep.Openapiv3ToolCount,
+		"functions_tool_count":            dep.FunctionsToolCount,
+		"functions_asset_count":           len(dep.FunctionsAssets),
+		"openapiv3_asset_count":           len(dep.Openapiv3Assets),
+		"first_deployment_with_functions": firstDeploymentWithFunctions,
+		"logs_url":                        fmt.Sprintf("%s/%s/%s/deployments/%s", os.Getenv("GRAM_SITE_URL"), organizationSlug, projectSlug, dep.ID),
+	}
+
+	if previousDeployment != nil {
+		properties["previous_status"] = previousDeployment.Status
+		properties["previous_openapiv3_tool_count"] = previousDeployment.Openapiv3ToolCount
+		properties["previous_functions_tool_count"] = previousDeployment.FunctionsToolCount
+		properties["previous_functions_asset_count"] = len(previousDeployment.FunctionsAssets)
+		properties["previous_openapiv3_asset_count"] = len(previousDeployment.Openapiv3Assets)
+	}
+
+	if err := s.posthog.CaptureEvent(ctx, "deployment_processed", dep.ID, properties); err != nil {
 		logger.ErrorContext(ctx, "error capturing deployment_processed event", attr.SlogError(err))
 	}
 }
