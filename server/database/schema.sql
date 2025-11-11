@@ -430,6 +430,7 @@ CREATE TABLE IF NOT EXISTS fly_apps (
   status TEXT NOT NULL, -- pending, ready, failed
   
   reaped_at timestamptz, -- when we deleted an app and its resources on fly.io
+  reap_error TEXT, -- error message if reaping failed
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -441,7 +442,8 @@ CREATE TABLE IF NOT EXISTS fly_apps (
   CONSTRAINT fly_apps_access_id_fkey FOREIGN KEY (access_id) REFERENCES functions_access (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS fly_apps_project_deployment_function_key ON fly_apps (project_id, deployment_id, function_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS fly_apps_project_deployment_function_active_key ON fly_apps (project_id, deployment_id, function_id) WHERE reaped_at IS NULL;
+CREATE INDEX IF NOT EXISTS fly_apps_reaper_idx ON fly_apps (project_id, created_at DESC) WHERE status = 'ready' AND reaped_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS fly_apps_seq_key ON fly_apps (seq DESC);
 CREATE INDEX IF NOT EXISTS fly_apps_access_id_idx ON fly_apps (access_id DESC);
 
