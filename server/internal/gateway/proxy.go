@@ -359,10 +359,10 @@ func (tp *ToolProxy) doHTTP(
 		}
 	}
 
-	// environment variable overrides on tool calls typically defined in the SDK
+	// We prefer tool call specified arguments over user-specified config
 	if toolCallBody.EnvironmentVariables != nil {
 		for k, v := range toolCallBody.EnvironmentVariables {
-			env.Set(k, v)
+			env.UserConfig.Set(k, v)
 		}
 	}
 
@@ -845,9 +845,15 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 	return nil
 }
 
-func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPToolCallPlan, envVars *CaseInsensitiveEnv) string {
+func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPToolCallPlan, env ToolCallEnv) string {
+	// IMPORTANT: when system environment variables exist, we _always_ disallow user-supplied
+	// server URLs to prevent exfiltration of system environment variables to user-controlled servers.
+	if len(env.SystemEnv.All()) > 0 {
+		return ""
+	}
+
 	if tool.ServerEnvVar != "" {
-		envVar := envVars.Get(tool.ServerEnvVar)
+		envVar := env.UserConfig.Get(tool.ServerEnvVar)
 		if envVar != "" {
 			return envVar
 		} else {

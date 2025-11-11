@@ -33,6 +33,17 @@ func processSecurity(
 	serverURL string,
 	toolCallLogger tm.ToolCallLogger,
 ) bool {
+	// Merge user config into system config: system env is base, user config fills gaps
+	mergedEnv := NewCaseInsensitiveEnv()
+	for k, v := range env.SystemEnv.All() {
+		mergedEnv.Set(k, v)
+	}
+	for k, v := range env.UserConfig.All() {
+		if mergedEnv.Get(k) == "" {
+			mergedEnv.Set(k, v)
+		}
+	}
+
 	securityHeadersProcessed := make(map[string]string)
 	setHeader := func(key, value string) {
 		req.Header.Set(key, value)
@@ -52,7 +63,7 @@ func processSecurity(
 		case "apiKey":
 			if len(security.EnvVariables) == 0 {
 				logger.ErrorContext(ctx, "no environment variables provided for api key auth", attr.SlogSecurityScheme(security.Scheme.Value))
-			} else if envVars.Get(security.EnvVariables[0]) == "" {
+			} else if mergedEnv.Get(security.EnvVariables[0]) == "" {
 				logger.ErrorContext(ctx, "missing value for environment variable in api key auth", attr.SlogEnvVarName(security.EnvVariables[0]), attr.SlogSecurityScheme(security.Scheme.Value))
 			} else if !security.Name.Valid || security.Name.Value == "" {
 				logger.ErrorContext(ctx, "no name provided for api key auth", attr.SlogSecurityScheme(security.Scheme.Value))
@@ -60,10 +71,10 @@ func processSecurity(
 				key := security.EnvVariables[0]
 				switch security.Placement.Value {
 				case "header":
-					setHeader(security.Name.Value, envVars.Get(key))
+					setHeader(security.Name.Value, mergedEnv.Get(key))
 				case "query":
 					values := req.URL.Query()
-					values.Set(security.Name.Value, envVars.Get(key))
+					values.Set(security.Name.Value, mergedEnv.Get(key))
 					req.URL.RawQuery = values.Encode()
 				default:
 					logger.ErrorContext(ctx, "unsupported api key placement", attr.SlogSecurityPlacement(security.Placement.Value))
@@ -74,10 +85,10 @@ func processSecurity(
 			case "bearer":
 				if len(security.EnvVariables) == 0 {
 					logger.ErrorContext(ctx, "no environment variables provided for bearer auth", attr.SlogSecurityScheme(security.Scheme.Value))
-				} else if envVars.Get(security.EnvVariables[0]) == "" {
+				} else if mergedEnv.Get(security.EnvVariables[0]) == "" {
 					logger.ErrorContext(ctx, "token value is empty for bearer auth", attr.SlogEnvVarName(security.EnvVariables[0]), attr.SlogSecurityScheme(security.Scheme.Value))
 				} else {
-					token := envVars.Get(security.EnvVariables[0])
+					token := mergedEnv.Get(security.EnvVariables[0])
 					setHeader("Authorization", formatForBearer(token))
 				}
 			case "basic":
@@ -87,9 +98,9 @@ func processSecurity(
 					var username, password string
 					for _, envVar := range security.EnvVariables {
 						if strings.Contains(envVar, "USERNAME") {
-							username = envVars.Get(envVar)
+							username = mergedEnv.Get(envVar)
 						} else if strings.Contains(envVar, "PASSWORD") {
-							password = envVars.Get(envVar)
+							password = mergedEnv.Get(envVar)
 						}
 					}
 
@@ -110,7 +121,7 @@ func processSecurity(
 		case "openIdConnect":
 			for _, envVar := range security.EnvVariables {
 				if strings.Contains(envVar, "ACCESS_TOKEN") {
-					if token := envVars.Get(envVar); token == "" {
+					if token := mergedEnv.Get(envVar); token == "" {
 						logger.ErrorContext(ctx, "missing authorization code", attr.SlogEnvVarName(envVar))
 					} else {
 						setHeader("Authorization", formatForBearer(token))
@@ -127,7 +138,7 @@ func processSecurity(
 				case "authorization_code", "implicit":
 					for _, envVar := range security.EnvVariables {
 						if strings.Contains(envVar, "ACCESS_TOKEN") {
-							if token := envVars.Get(envVar); token == "" {
+							if token := mergedEnv.Get(envVar); token == "" {
 								logger.ErrorContext(ctx, "missing authorization code", attr.SlogEnvVarName(envVar))
 							} else {
 								setHeader("Authorization", formatForBearer(token))
@@ -135,7 +146,7 @@ func processSecurity(
 						}
 					}
 				case "client_credentials":
-					token, err := processClientCredentials(ctx, logger, req, cacheImpl, tool, plan.SecurityScopes, security, envVars, serverURL)
+					token, err := processClientCredentials(ctx, logger, req, cacheImpl, tool, plan.SecurityScopes, security, mergedEnv, serverURL)
 					if err != nil {
 						logger.ErrorContext(ctx, "could not process client credentials", attr.SlogError(err))
 						if strings.Contains(err.Error(), "failed to make client credentials token request") {
@@ -158,6 +169,13 @@ func processSecurity(
 		default:
 			logger.ErrorContext(ctx, "unsupported security scheme type", attr.SlogSecurityType(security.Type.Value))
 			continue
+		}
+	}
+
+	for key, value := range env.SystemEnv.All() {
+		canonicalKey := http.CanonicalHeaderKey(key)
+		if _, alreadyProcessed := securityHeadersProcessed[canonicalKey]; !alreadyProcessed {
+			req.Header.Set(key, value)
 		}
 	}
 
@@ -225,7 +243,7 @@ type clientCredentialsTokenResponseCamelCase struct {
 	ExpiresIn   int    `json:"expiresIn"`
 }
 
-func processClientCredentials(ctx context.Context, logger *slog.Logger, req *http.Request, cacheImpl cache.Cache, tool *ToolDescriptor, planScopes map[string][]string, security *HTTPToolSecurity, envVars *CaseInsensitiveEnv, serverURL string) (string, error) {
+func processClientCredentials(ctx context.Context, logger *slog.Logger, req *http.Request, cacheImpl cache.Cache, tool *ToolDescriptor, planScopes map[string][]string, security *HTTPToolSecurity, mergedEnv *CaseInsensitiveEnv, serverURL string) (string, error) {
 	// To discuss, currently we are taking the approach of exact scope match for reused tokens
 	// We could look into enabling a prefix match feature for caches where we return multiple entries matching the projectID, clientID, tokenURL and then check scopes against all returned values
 	// We would want to make sure any underlying cache implementation supports this feature
@@ -233,13 +251,13 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 	var clientSecret, clientID, tokenURLOverride, accessToken string
 	for _, v := range security.EnvVariables {
 		if strings.Contains(v, "CLIENT_SECRET") {
-			clientSecret = envVars.Get(v)
+			clientSecret = mergedEnv.Get(v)
 		} else if strings.Contains(v, "CLIENT_ID") {
-			clientID = envVars.Get(v)
+			clientID = mergedEnv.Get(v)
 		} else if strings.Contains(v, "TOKEN_URL") {
-			tokenURLOverride = envVars.Get(v)
+			tokenURLOverride = mergedEnv.Get(v)
 		} else if strings.Contains(v, "ACCESS_TOKEN") {
-			accessToken = envVars.Get(v)
+			accessToken = mergedEnv.Get(v)
 		}
 	}
 
