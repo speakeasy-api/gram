@@ -70,7 +70,10 @@ func (r *ReapFlyApps) Do(ctx context.Context, req ReapFlyAppsRequest) (*ReapFlyA
 	repo := funcrepo.New(r.db)
 
 	// Get all apps that should be reaped (keeping only the most recent N per project)
-	appsToReap, err := repo.GetFlyAppsToReap(ctx, pgtype.Int8{Int64: r.keepCount, Valid: true})
+	appsToReap, err := repo.GetFlyAppsToReap(ctx, funcrepo.GetFlyAppsToReapParams{
+		KeepCount: pgtype.Int8{Int64: r.keepCount, Valid: true},
+		BatchSize: pgtype.Int8{Int64: 20, Valid: true},
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to query apps to reap").Log(ctx, logger)
 	}

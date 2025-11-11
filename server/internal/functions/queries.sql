@@ -135,7 +135,8 @@ WHERE
   rd.deployment_rank > @keep_count
   AND fa.status = 'ready'
   AND fa.reaped_at IS NULL
-ORDER BY fa.created_at ASC;
+ORDER BY fa.created_at ASC
+LIMIT @batch_size;
 
 -- name: MarkFlyAppReaped :exec
 UPDATE fly_apps SET

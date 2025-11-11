@@ -186,7 +186,13 @@ WHERE
   AND fa.status = 'ready'
   AND fa.reaped_at IS NULL
 ORDER BY fa.created_at ASC
+LIMIT $2
 `
+
+type GetFlyAppsToReapParams struct {
+	KeepCount pgtype.Int8
+	BatchSize pgtype.Int8
+}
 
 type GetFlyAppsToReapRow struct {
 	ID           uuid.UUID
@@ -198,8 +204,8 @@ type GetFlyAppsToReapRow struct {
 	CreatedAt    pgtype.Timestamptz
 }
 
-func (q *Queries) GetFlyAppsToReap(ctx context.Context, keepCount pgtype.Int8) ([]GetFlyAppsToReapRow, error) {
-	rows, err := q.db.Query(ctx, getFlyAppsToReap, keepCount)
+func (q *Queries) GetFlyAppsToReap(ctx context.Context, arg GetFlyAppsToReapParams) ([]GetFlyAppsToReapRow, error) {
+	rows, err := q.db.Query(ctx, getFlyAppsToReap, arg.KeepCount, arg.BatchSize)
 	if err != nil {
 		return nil, err
 	}
