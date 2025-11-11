@@ -33,15 +33,13 @@ func processSecurity(
 	serverURL string,
 	toolCallLogger tm.ToolCallLogger,
 ) bool {
-	// Merge user config into system config: system env is base, user config fills gaps
+	// Merge: system env is base, user config overrides
 	mergedEnv := NewCaseInsensitiveEnv()
 	for k, v := range env.SystemEnv.All() {
 		mergedEnv.Set(k, v)
 	}
 	for k, v := range env.UserConfig.All() {
-		if mergedEnv.Get(k) == "" {
-			mergedEnv.Set(k, v)
-		}
+		mergedEnv.Set(k, v)
 	}
 
 	securityHeadersProcessed := make(map[string]string)
