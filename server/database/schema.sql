@@ -941,3 +941,32 @@ CREATE TABLE IF NOT EXISTS organization_features (
 CREATE UNIQUE INDEX IF NOT EXISTS organization_features_organization_id_feature_name_key
 ON organization_features (organization_id, feature_name)
 WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS toolset_embeddings (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  toolset_id uuid NOT NULL,
+  entry_key TEXT NOT NULL CHECK (entry_key <> '' AND CHAR_LENGTH(entry_key) <= 255),
+  embedding_model TEXT NOT NULL CHECK (embedding_model <> '' AND CHAR_LENGTH(embedding_model) <= 100),
+  -- 1536 dimensions for text-embedding-3-small
+  embedding_1536 vector(1536) NOT NULL,
+  payload JSONB NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT toolset_embeddings_pkey PRIMARY KEY (id),
+  CONSTRAINT toolset_embeddings_project_id FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+-- Unique constraint on toolset_id + entry_key for non-deleted records
+CREATE UNIQUE INDEX IF NOT EXISTS toolset_embeddings_toolset_entry_key
+ON toolset_embeddings (toolset_id, entry_key)
+WHERE deleted IS FALSE;
+
+-- HNSW index for fast similarity search within a toolset
+CREATE INDEX IF NOT EXISTS toolset_embeddings_embedding_1536_idx
+ON toolset_embeddings
+USING hnsw (embedding_1536 vector_cosine_ops)
+WHERE deleted IS FALSE;
