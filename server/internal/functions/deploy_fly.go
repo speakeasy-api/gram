@@ -582,10 +582,18 @@ func (f *FlyRunner) reap(ctx context.Context, logger *slog.Logger, appsRepo *rep
 	}
 
 	reapErrorMessage := ""
-	if err := f.client.DeleteApp(ctx, app.AppName); err != nil {
-		// Log error but continue - we still want to mark it as reaped in the database
-		reapErrorMessage = err.Error()
-		logger.WarnContext(ctx, "delete app request failed", attr.SlogError(err))
+	if res.StatusCode >= 400 {
+		bodyBytes, readErr := io.ReadAll(res.Body)
+		if readErr == nil {
+			message := string(bodyBytes)
+			if len(message) > 500 {
+				message = message[:500]
+			}
+
+			reapErrorMessage = fmt.Sprintf("status %d: %s", res.StatusCode, message)
+		} else {
+			reapErrorMessage = fmt.Sprintf("status %d: failed to read response body: %v", res.StatusCode, readErr)
+		}
 	}
 
 	// Mark the app as reaped in the database

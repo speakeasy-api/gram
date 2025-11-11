@@ -184,28 +184,6 @@ func ProcessDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWor
 		)
 	}
 
-	// Trigger project-scoped functions reaper workflow after successful deployment
-	// This runs asynchronously and doesn't block the deployment workflow
-	if finalStatus == "completed" {
-		logger.Info(
-			"starting project-scoped function reaper",
-			string(attr.ProjectIDKey), params.ProjectID,
-			string(attr.DeploymentIDKey), params.DeploymentID,
-		)
-		_, err = ExecuteProjectFunctionsReaperChildWorkflow(ctx, params.ProjectID)
-		// Many deployments can run in parallel in a given project but only one
-		// reaper should be active at a time, so we ignore the already started
-		// error if we get that back.
-		if err != nil && !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
-			logger.Error(
-				"failed to start project-scoped functions reaper workflow",
-				"error", err.Error(),
-				string(attr.ProjectIDKey), params.ProjectID,
-				string(attr.DeploymentIDKey), params.DeploymentID,
-			)
-		}
-	}
-
 	return &ProcessDeploymentWorkflowResult{
 		ProjectID:    params.ProjectID,
 		DeploymentID: params.DeploymentID,

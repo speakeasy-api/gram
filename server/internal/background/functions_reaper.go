@@ -1,10 +1,12 @@
 package background
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
@@ -23,18 +25,17 @@ type FunctionsReaperWorkflowResult struct {
 	Errors     int
 }
 
-func ExecuteProjectFunctionsReaperChildWorkflow(ctx workflow.Context, projectID uuid.UUID) (workflow.ChildWorkflowFuture, error) {
-	ctx = workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-		WorkflowID:            "v1:functions-reaper:" + projectID.String(),
-		TaskQueue:             string(TaskQueueMain),
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
-		WorkflowRunTimeout:    time.Minute * 10,
-	})
-
-	return workflow.ExecuteChildWorkflow(ctx, FunctionsReaperWorkflow, FunctionsReaperWorkflowParams{
+func ExecuteProjectFunctionsReaperWorkflow(ctx context.Context, temporalClient client.Client, projectID uuid.UUID) (client.WorkflowRun, error) {
+	return temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:                       "v1:functions-reaper:" + projectID.String(),
+		TaskQueue:                string(TaskQueueMain),
+		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowRunTimeout:       time.Minute * 2,
+	}, ProcessDeploymentWorkflow, FunctionsReaperWorkflowParams{
 		Scope:     activities.FunctionsReaperScopeProject,
 		ProjectID: uuid.NullUUID{UUID: projectID, Valid: projectID != uuid.Nil},
-	}), nil
+	})
 }
 
 func FunctionsReaperWorkflow(ctx workflow.Context, params FunctionsReaperWorkflowParams) (*FunctionsReaperWorkflowResult, error) {
