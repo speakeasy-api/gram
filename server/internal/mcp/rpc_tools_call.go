@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
@@ -56,6 +57,7 @@ func handleToolsCall(
 	billingRepository billing.Repository,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	tcm tm.ToolMetricsProvider,
+	vectorToolStore *rag.ToolsetVectorStore,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -74,12 +76,14 @@ func handleToolsCall(
 	}
 
 	if payload.mode != ToolModeStatic {
-		switch params.Name {
-		case listToolsToolName:
+		switch {
+		case params.Name == listToolsToolName && payload.mode == ToolModeProgressive:
 			return handleListToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
-		case describeToolsToolName:
+		case params.Name == describeToolsToolName && payload.mode == ToolModeProgressive:
 			return handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
-		case executeToolToolName:
+		case params.Name == findToolsToolName && payload.mode == ToolModeEmbedding:
+			return handleFindToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore)
+		case params.Name == executeToolToolName:
 			proxyName, proxyArgs, err := processExecuteToolCall(ctx, logger, params.Arguments)
 			if err != nil {
 				return nil, err
@@ -318,6 +322,58 @@ func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string
 	}
 
 	return nil
+}
+
+var dynamicExecuteToolSchema = json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"name": {
+				"type": "string",
+				"description": "Exact name of the tool to execute."
+			},
+			"arguments": {
+				"description": "JSON payload to forward to the tool as its arguments."
+			}
+		},
+		"required": ["name"],
+		"additionalProperties": false
+	}`)
+
+type executeToolArguments struct {
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments"`
+}
+
+func processExecuteToolCall(ctx context.Context, logger *slog.Logger, argsRaw json.RawMessage) (string, json.RawMessage, error) {
+	var args executeToolArguments
+	if len(argsRaw) == 0 {
+		return "", nil, oops.E(oops.CodeInvalid, errors.New("missing execute arguments"), "execute_tool arguments are required").Log(ctx, logger)
+	}
+	if err := json.Unmarshal(argsRaw, &args); err != nil {
+		return "", nil, oops.E(oops.CodeBadRequest, err, "failed to parse execute_tool arguments").Log(ctx, logger)
+	}
+
+	name := strings.TrimSpace(args.Name)
+	if name == "" {
+		return "", nil, oops.E(oops.CodeInvalid, errors.New("missing tool name"), "name is required for execute_tool").Log(ctx, logger)
+	}
+
+	payload := args.Arguments
+	if len(payload) != 0 {
+		trimmed := bytes.TrimSpace(payload)
+		if len(trimmed) > 0 && trimmed[0] == '"' {
+			var payloadString string
+			if err := json.Unmarshal(payload, &payloadString); err != nil {
+				return "", nil, oops.E(oops.CodeBadRequest, err, "failed to parse execute_tool payload").Log(ctx, logger)
+			}
+			payload = json.RawMessage(payloadString)
+		}
+		if !json.Valid(payload) {
+			return "", nil, oops.E(oops.CodeBadRequest, errors.New("invalid payload"), "arguments must be valid JSON").Log(ctx, logger)
+		}
+	}
+
+	return name, payload, nil
 }
 
 type toolCallResponseWriter struct {

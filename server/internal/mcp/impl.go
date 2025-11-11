@@ -19,6 +19,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -70,6 +71,7 @@ type Service struct {
 	billingRepository billing.Repository
 	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
 	tcm               tm.ToolMetricsProvider
+	vectorToolStore   *rag.ToolsetVectorStore
 }
 
 type oauthTokenInputs struct {
@@ -80,7 +82,7 @@ type oauthTokenInputs struct {
 type ToolMode string
 
 const (
-	ToolModeEmbeddings  ToolMode = "embeddings"
+	ToolModeEmbedding   ToolMode = "embedding"
 	ToolModeProgressive ToolMode = "progressive"
 	ToolModeStatic      ToolMode = "static"
 )
@@ -113,6 +115,7 @@ func NewService(
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
 	tcm tm.ToolMetricsProvider,
+	vectorToolStore *rag.ToolsetVectorStore,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -147,6 +150,7 @@ func NewService(
 		billingRepository: billingRepository,
 		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		tcm:               tcm,
+		vectorToolStore:   vectorToolStore,
 	}
 }
 
@@ -666,9 +670,9 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog, &s.toolsetCache)
+		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.tcm)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.tcm, s.vectorToolStore)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "prompts/get":
