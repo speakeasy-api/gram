@@ -113,6 +113,125 @@ func (q *Queries) GetFlyAppAccess(ctx context.Context, arg GetFlyAppAccessParams
 	return i, err
 }
 
+const getFlyAppNameForFunction = `-- name: GetFlyAppNameForFunction :one
+SELECT
+    id
+  , fly_org_slug
+  , app_name
+FROM fly_apps
+WHERE
+  project_id = $1
+  AND deployment_id = $2
+  AND function_id = $3
+  AND status = 'ready'
+  AND reaped_at IS NULL
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type GetFlyAppNameForFunctionParams struct {
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+	FunctionID   uuid.UUID
+}
+
+type GetFlyAppNameForFunctionRow struct {
+	ID         uuid.UUID
+	FlyOrgSlug string
+	AppName    string
+}
+
+func (q *Queries) GetFlyAppNameForFunction(ctx context.Context, arg GetFlyAppNameForFunctionParams) (GetFlyAppNameForFunctionRow, error) {
+	row := q.db.QueryRow(ctx, getFlyAppNameForFunction, arg.ProjectID, arg.DeploymentID, arg.FunctionID)
+	var i GetFlyAppNameForFunctionRow
+	err := row.Scan(&i.ID, &i.FlyOrgSlug, &i.AppName)
+	return i, err
+}
+
+const getFlyAppsToReap = `-- name: GetFlyAppsToReap :many
+WITH ranked_deployments AS (
+  -- This CTE ranks deployments within each project by their creation time.
+  -- Using d.created_at (deployment timestamp) ensures all functions within
+  -- a deployment share the same rank, preventing partial reaping where some
+  -- functions are deleted but others remain. DENSE_RANK ensures consecutive
+  -- ranks even if multiple deployments have the same timestamp.
+  SELECT DISTINCT
+      fa.project_id
+    , fa.deployment_id
+    , d.created_at
+    , DENSE_RANK() OVER (
+        PARTITION BY fa.project_id
+        ORDER BY d.created_at DESC
+      ) as deployment_rank
+  FROM fly_apps fa
+  INNER JOIN deployments d ON d.id = fa.deployment_id
+  WHERE
+    fa.status = 'ready'
+    AND fa.reaped_at IS NULL
+)
+SELECT
+    fa.id
+  , fa.project_id
+  , fa.deployment_id
+  , fa.function_id
+  , fa.fly_org_slug
+  , fa.app_name
+  , fa.created_at
+FROM fly_apps fa
+INNER JOIN ranked_deployments rd
+  ON fa.project_id = rd.project_id
+  AND fa.deployment_id = rd.deployment_id
+WHERE
+  rd.deployment_rank > $1
+  AND fa.status = 'ready'
+  AND fa.reaped_at IS NULL
+ORDER BY fa.created_at ASC
+LIMIT $2
+`
+
+type GetFlyAppsToReapParams struct {
+	KeepCount pgtype.Int8
+	BatchSize pgtype.Int8
+}
+
+type GetFlyAppsToReapRow struct {
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+	FunctionID   uuid.UUID
+	FlyOrgSlug   string
+	AppName      string
+	CreatedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) GetFlyAppsToReap(ctx context.Context, arg GetFlyAppsToReapParams) ([]GetFlyAppsToReapRow, error) {
+	rows, err := q.db.Query(ctx, getFlyAppsToReap, arg.KeepCount, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetFlyAppsToReapRow
+	for rows.Next() {
+		var i GetFlyAppsToReapRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.DeploymentID,
+			&i.FunctionID,
+			&i.FlyOrgSlug,
+			&i.AppName,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getFunctionsRunnerVersion = `-- name: GetFunctionsRunnerVersion :one
 WITH project_preference AS (
   SELECT p.functions_runner_version as v
@@ -206,4 +325,43 @@ func (q *Queries) InitFlyApp(ctx context.Context, arg InitFlyAppParams) (uuid.UU
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const isReapingEnabledForProject = `-- name: IsReapingEnabledForProject :one
+SELECT true AS enabled
+FROM projects
+WHERE
+  id = $1
+  AND organization_id = ANY($2)
+`
+
+type IsReapingEnabledForProjectParams struct {
+	ProjectID       uuid.UUID
+	OrganizationIds []string
+}
+
+func (q *Queries) IsReapingEnabledForProject(ctx context.Context, arg IsReapingEnabledForProjectParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isReapingEnabledForProject, arg.ProjectID, arg.OrganizationIds)
+	var enabled bool
+	err := row.Scan(&enabled)
+	return enabled, err
+}
+
+const markFlyAppReaped = `-- name: MarkFlyAppReaped :exec
+UPDATE fly_apps SET
+  reap_error = $1,
+  reaped_at = $2,
+  updated_at = clock_timestamp()
+WHERE id = $3
+`
+
+type MarkFlyAppReapedParams struct {
+	ReapError pgtype.Text
+	ReapedAt  pgtype.Timestamptz
+	ID        uuid.UUID
+}
+
+func (q *Queries) MarkFlyAppReaped(ctx context.Context, arg MarkFlyAppReapedParams) error {
+	_, err := q.db.Exec(ctx, markFlyAppReaped, arg.ReapError, arg.ReapedAt, arg.ID)
+	return err
 }

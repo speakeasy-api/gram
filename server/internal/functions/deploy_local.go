@@ -47,3 +47,8 @@ func (l *LocalRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (*Run
 		Scale:     1,
 	}, nil
 }
+
+func (l *LocalRunner) Reap(ctx context.Context, req ReapRequest) error {
+	// Local runner doesn't need to clean up anything - it's ephemeral
+	return nil
+}

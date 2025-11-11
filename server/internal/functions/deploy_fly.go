@@ -326,6 +326,14 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 		return nil, oops.E(oops.CodeInvalid, err, "invalid function runner deploy request").Log(ctx, logger)
 	}
 
+	if err := f.reap(ctx, logger, appsRepo, ReapRequest{
+		ProjectID:    req.ProjectID,
+		DeploymentID: req.DeploymentID,
+		FunctionID:   req.FunctionID,
+	}); err != nil {
+		logger.ErrorContext(ctx, "failed to reap existing app before deploy", attr.SlogError(err))
+	}
+
 	networkName := fmt.Sprint("gram-fn-", req.FunctionID.String())
 	orgSlug := f.defaultOrg
 	region := f.defaultRegion
@@ -496,6 +504,113 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 		PublicURL: appURL,
 		Scale:     len(ms),
 	}, nil
+}
+
+func (f *FlyRunner) Reap(ctx context.Context, req ReapRequest) error {
+	logger := f.logger.With(
+		attr.SlogProjectID(req.ProjectID.String()),
+		attr.SlogDeploymentID(req.DeploymentID.String()),
+		attr.SlogDeploymentFunctionsID(req.FunctionID.String()),
+	)
+
+	appsRepo := repo.New(f.db)
+
+	if err := f.reap(ctx, logger, appsRepo, req); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to reap app").Log(ctx, logger)
+	}
+
+	return nil
+}
+
+func (f *FlyRunner) reap(ctx context.Context, logger *slog.Logger, appsRepo *repo.Queries, req ReapRequest) error {
+	app, err := appsRepo.GetFlyAppNameForFunction(ctx, repo.GetFlyAppNameForFunctionParams{
+		ProjectID:    req.ProjectID,
+		DeploymentID: req.DeploymentID,
+		FunctionID:   req.FunctionID,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		logger.InfoContext(ctx, "no existing app found")
+		return nil
+	case err != nil:
+		return fmt.Errorf("get existing app name: %w", err)
+	}
+
+	enabled, err := appsRepo.IsReapingEnabledForProject(ctx, repo.IsReapingEnabledForProjectParams{
+		ProjectID:       req.ProjectID,
+		OrganizationIds: []string{"5ad61845-b72e-4f0d-9dde-e0bdcf98e374", "5a25158b-24dc-4d49-b03d-e85acfbea59c"},
+	})
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("check reaping enabled for project: %w", err)
+	}
+	if !enabled {
+		logger.InfoContext(ctx, "reaping is not enabled for project")
+		return nil
+	}
+
+	logger = logger.With(
+		attr.SlogFlyAppName(app.AppName),
+		attr.SlogFlyOrgSlug(app.FlyOrgSlug),
+	)
+
+	logger.InfoContext(ctx, fmt.Sprintf("deleting existing app: %s", app.AppName))
+
+	if app.AppName == "" {
+		logger.InfoContext(ctx, "app name is empty, skipping reap")
+		return nil
+	}
+
+	deleteRequest, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodDelete,
+		fmt.Sprintf("%s/v1/apps/%s", f.machinesAPIBase, app.AppName),
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("create delete app request: %w", err)
+	}
+
+	res, err := f.machinesClient.Do(deleteRequest)
+	if err != nil {
+		return fmt.Errorf("send delete app request: %w", err)
+	}
+	defer o11y.LogDefer(ctx, logger, func() error { return res.Body.Close() })
+
+	if res.StatusCode == http.StatusNotFound {
+		logger.InfoContext(ctx, "app not found during delete, assuming already deleted")
+		return nil
+	}
+
+	reapErrorMessage := ""
+	if res.StatusCode >= 400 {
+		bodyBytes, readErr := io.ReadAll(res.Body)
+		if readErr == nil {
+			message := string(bodyBytes)
+			if len(message) > 500 {
+				message = message[:500]
+			}
+
+			reapErrorMessage = fmt.Sprintf("status %d: %s", res.StatusCode, message)
+		} else {
+			reapErrorMessage = fmt.Sprintf("status %d: failed to read response body: %v", res.StatusCode, readErr)
+		}
+	}
+
+	// Mark the app as reaped in the database
+	if err := appsRepo.MarkFlyAppReaped(ctx, repo.MarkFlyAppReapedParams{
+		ID:        app.ID,
+		ReapError: conv.ToPGTextEmpty(reapErrorMessage),
+		ReapedAt: pgtype.Timestamptz{
+			Time:             time.Now().UTC(),
+			Valid:            true,
+			InfinityModifier: 0,
+		},
+	}); err != nil {
+		return fmt.Errorf("mark app as reaped: %w", err)
+	}
+
+	logger.InfoContext(ctx, fmt.Sprintf("successfully reaped app: %s", app.AppName))
+	return nil
 }
 
 func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, files []*fly.File, baseMetadata map[string]string) *fly.MachineConfig {

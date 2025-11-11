@@ -19,6 +19,7 @@ type Orchestrator interface {
 
 type Deployer interface {
 	Deploy(context.Context, RunnerDeployRequest) (*RunnerDeployResult, error)
+	Reap(context.Context, ReapRequest) error
 }
 
 type ToolCaller interface {
@@ -101,4 +102,10 @@ type RunnerResourceReadRequest struct {
 	ResourceURN  urn.Resource
 	ResourceURI  string
 	ResourceName string
+}
+
+type ReapRequest struct {
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+	FunctionID   uuid.UUID
 }
