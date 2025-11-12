@@ -127,12 +127,12 @@ type PromptToolCallPlan struct {
 }
 
 type ResourceFunctionCallPlan struct {
-	FunctionID        string            `json:"function_id" yaml:"function_id"`
-	FunctionsAccessID string            `json:"functions_access_id" yaml:"functions_access_id"`
-	Runtime           string            `json:"runtime" yaml:"runtime"`
-	URI               string            `json:"uri" yaml:"uri"`
-	MimeType          string            `json:"mime_type" yaml:"mime_type"`
-	Variables         map[string]string `json:"variables" yaml:"variables"`
+	FunctionID        string   `json:"function_id" yaml:"function_id"`
+	FunctionsAccessID string   `json:"functions_access_id" yaml:"functions_access_id"`
+	Runtime           string   `json:"runtime" yaml:"runtime"`
+	URI               string   `json:"uri" yaml:"uri"`
+	MimeType          string   `json:"mime_type" yaml:"mime_type"`
+	Variables         []string `json:"variables" yaml:"variables"`
 }
 
 type ToolKind string
