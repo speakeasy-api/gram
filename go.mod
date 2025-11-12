@@ -65,7 +65,7 @@ require (
 	goa.design/clue v1.2.3
 	goa.design/goa/v3 v3.22.6
 	goa.design/plugins/v3 v3.22.6
-	golang.org/x/sync v0.17.0
+	golang.org/x/sync v0.18.0
 	golang.org/x/sys v0.38.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.34.1
