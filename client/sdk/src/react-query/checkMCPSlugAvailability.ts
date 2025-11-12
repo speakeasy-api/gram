@@ -94,6 +94,7 @@ export function setCheckMCPSlugAvailabilityData(
     parameters: {
       slug: string;
       gramSession?: string | undefined;
+      gramKey?: string | undefined;
       gramProject?: string | undefined;
     },
   ],
@@ -110,6 +111,7 @@ export function invalidateCheckMCPSlugAvailability(
     [parameters: {
       slug: string;
       gramSession?: string | undefined;
+      gramKey?: string | undefined;
       gramProject?: string | undefined;
     }]
   >,
@@ -151,6 +153,7 @@ export function buildCheckMCPSlugAvailabilityQuery(
     queryKey: queryKeyCheckMCPSlugAvailability({
       slug: request.slug,
       gramSession: request.gramSession,
+      gramKey: request.gramKey,
       gramProject: request.gramProject,
     }),
     queryFn: async function checkMCPSlugAvailabilityQueryFn(
@@ -176,6 +179,7 @@ export function queryKeyCheckMCPSlugAvailability(
   parameters: {
     slug: string;
     gramSession?: string | undefined;
+    gramKey?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {

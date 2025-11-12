@@ -4,10 +4,23 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+export type RemoveOAuthServerSecurityOption1 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
+export type RemoveOAuthServerSecurityOption2 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
 
 export type RemoveOAuthServerSecurity = {
-  projectSlugHeaderGramProject?: string | undefined;
-  sessionHeaderGramSession?: string | undefined;
+  option1?: RemoveOAuthServerSecurityOption1 | undefined;
+  option2?: RemoveOAuthServerSecurityOption2 | undefined;
 };
 
 export type RemoveOAuthServerRequest = {
@@ -20,15 +33,174 @@ export type RemoveOAuthServerRequest = {
    */
   gramSession?: string | undefined;
   /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
+  /**
    * project header
    */
   gramProject?: string | undefined;
 };
 
 /** @internal */
+export const RemoveOAuthServerSecurityOption1$inboundSchema: z.ZodType<
+  RemoveOAuthServerSecurityOption1,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "project_slug_header_Gram-Project": z.string(),
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type RemoveOAuthServerSecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const RemoveOAuthServerSecurityOption1$outboundSchema: z.ZodType<
+  RemoveOAuthServerSecurityOption1$Outbound,
+  z.ZodTypeDef,
+  RemoveOAuthServerSecurityOption1
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace RemoveOAuthServerSecurityOption1$ {
+  /** @deprecated use `RemoveOAuthServerSecurityOption1$inboundSchema` instead. */
+  export const inboundSchema = RemoveOAuthServerSecurityOption1$inboundSchema;
+  /** @deprecated use `RemoveOAuthServerSecurityOption1$outboundSchema` instead. */
+  export const outboundSchema = RemoveOAuthServerSecurityOption1$outboundSchema;
+  /** @deprecated use `RemoveOAuthServerSecurityOption1$Outbound` instead. */
+  export type Outbound = RemoveOAuthServerSecurityOption1$Outbound;
+}
+
+export function removeOAuthServerSecurityOption1ToJSON(
+  removeOAuthServerSecurityOption1: RemoveOAuthServerSecurityOption1,
+): string {
+  return JSON.stringify(
+    RemoveOAuthServerSecurityOption1$outboundSchema.parse(
+      removeOAuthServerSecurityOption1,
+    ),
+  );
+}
+
+export function removeOAuthServerSecurityOption1FromJSON(
+  jsonString: string,
+): SafeParseResult<RemoveOAuthServerSecurityOption1, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => RemoveOAuthServerSecurityOption1$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RemoveOAuthServerSecurityOption1' from JSON`,
+  );
+}
+
+/** @internal */
+export const RemoveOAuthServerSecurityOption2$inboundSchema: z.ZodType<
+  RemoveOAuthServerSecurityOption2,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "apikey_header_Gram-Key": z.string(),
+  "project_slug_header_Gram-Project": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+  });
+});
+
+/** @internal */
+export type RemoveOAuthServerSecurityOption2$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const RemoveOAuthServerSecurityOption2$outboundSchema: z.ZodType<
+  RemoveOAuthServerSecurityOption2$Outbound,
+  z.ZodTypeDef,
+  RemoveOAuthServerSecurityOption2
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace RemoveOAuthServerSecurityOption2$ {
+  /** @deprecated use `RemoveOAuthServerSecurityOption2$inboundSchema` instead. */
+  export const inboundSchema = RemoveOAuthServerSecurityOption2$inboundSchema;
+  /** @deprecated use `RemoveOAuthServerSecurityOption2$outboundSchema` instead. */
+  export const outboundSchema = RemoveOAuthServerSecurityOption2$outboundSchema;
+  /** @deprecated use `RemoveOAuthServerSecurityOption2$Outbound` instead. */
+  export type Outbound = RemoveOAuthServerSecurityOption2$Outbound;
+}
+
+export function removeOAuthServerSecurityOption2ToJSON(
+  removeOAuthServerSecurityOption2: RemoveOAuthServerSecurityOption2,
+): string {
+  return JSON.stringify(
+    RemoveOAuthServerSecurityOption2$outboundSchema.parse(
+      removeOAuthServerSecurityOption2,
+    ),
+  );
+}
+
+export function removeOAuthServerSecurityOption2FromJSON(
+  jsonString: string,
+): SafeParseResult<RemoveOAuthServerSecurityOption2, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => RemoveOAuthServerSecurityOption2$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RemoveOAuthServerSecurityOption2' from JSON`,
+  );
+}
+
+/** @internal */
+export const RemoveOAuthServerSecurity$inboundSchema: z.ZodType<
+  RemoveOAuthServerSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  Option1: z.lazy(() => RemoveOAuthServerSecurityOption1$inboundSchema)
+    .optional(),
+  Option2: z.lazy(() => RemoveOAuthServerSecurityOption2$inboundSchema)
+    .optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Option1": "option1",
+    "Option2": "option2",
+  });
+});
+
+/** @internal */
 export type RemoveOAuthServerSecurity$Outbound = {
-  "project_slug_header_Gram-Project"?: string | undefined;
-  "session_header_Gram-Session"?: string | undefined;
+  Option1?: RemoveOAuthServerSecurityOption1$Outbound | undefined;
+  Option2?: RemoveOAuthServerSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -37,14 +209,29 @@ export const RemoveOAuthServerSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   RemoveOAuthServerSecurity
 > = z.object({
-  projectSlugHeaderGramProject: z.string().optional(),
-  sessionHeaderGramSession: z.string().optional(),
+  option1: z.lazy(() => RemoveOAuthServerSecurityOption1$outboundSchema)
+    .optional(),
+  option2: z.lazy(() => RemoveOAuthServerSecurityOption2$outboundSchema)
+    .optional(),
 }).transform((v) => {
   return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
+    option1: "Option1",
+    option2: "Option2",
   });
 });
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace RemoveOAuthServerSecurity$ {
+  /** @deprecated use `RemoveOAuthServerSecurity$inboundSchema` instead. */
+  export const inboundSchema = RemoveOAuthServerSecurity$inboundSchema;
+  /** @deprecated use `RemoveOAuthServerSecurity$outboundSchema` instead. */
+  export const outboundSchema = RemoveOAuthServerSecurity$outboundSchema;
+  /** @deprecated use `RemoveOAuthServerSecurity$Outbound` instead. */
+  export type Outbound = RemoveOAuthServerSecurity$Outbound;
+}
 
 export function removeOAuthServerSecurityToJSON(
   removeOAuthServerSecurity: RemoveOAuthServerSecurity,
@@ -54,10 +241,39 @@ export function removeOAuthServerSecurityToJSON(
   );
 }
 
+export function removeOAuthServerSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<RemoveOAuthServerSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => RemoveOAuthServerSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RemoveOAuthServerSecurity' from JSON`,
+  );
+}
+
+/** @internal */
+export const RemoveOAuthServerRequest$inboundSchema: z.ZodType<
+  RemoveOAuthServerRequest,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  slug: z.string(),
+  "Gram-Session": z.string().optional(),
+  "Gram-Key": z.string().optional(),
+  "Gram-Project": z.string().optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Gram-Session": "gramSession",
+    "Gram-Key": "gramKey",
+    "Gram-Project": "gramProject",
+  });
+});
+
 /** @internal */
 export type RemoveOAuthServerRequest$Outbound = {
   slug: string;
   "Gram-Session"?: string | undefined;
+  "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
 
@@ -69,18 +285,43 @@ export const RemoveOAuthServerRequest$outboundSchema: z.ZodType<
 > = z.object({
   slug: z.string(),
   gramSession: z.string().optional(),
+  gramKey: z.string().optional(),
   gramProject: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     gramSession: "Gram-Session",
+    gramKey: "Gram-Key",
     gramProject: "Gram-Project",
   });
 });
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace RemoveOAuthServerRequest$ {
+  /** @deprecated use `RemoveOAuthServerRequest$inboundSchema` instead. */
+  export const inboundSchema = RemoveOAuthServerRequest$inboundSchema;
+  /** @deprecated use `RemoveOAuthServerRequest$outboundSchema` instead. */
+  export const outboundSchema = RemoveOAuthServerRequest$outboundSchema;
+  /** @deprecated use `RemoveOAuthServerRequest$Outbound` instead. */
+  export type Outbound = RemoveOAuthServerRequest$Outbound;
+}
 
 export function removeOAuthServerRequestToJSON(
   removeOAuthServerRequest: RemoveOAuthServerRequest,
 ): string {
   return JSON.stringify(
     RemoveOAuthServerRequest$outboundSchema.parse(removeOAuthServerRequest),
+  );
+}
+
+export function removeOAuthServerRequestFromJSON(
+  jsonString: string,
+): SafeParseResult<RemoveOAuthServerRequest, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => RemoveOAuthServerRequest$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RemoveOAuthServerRequest' from JSON`,
   );
 }

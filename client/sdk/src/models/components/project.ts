@@ -62,6 +62,56 @@ export const Project$inboundSchema: z.ZodType<Project, z.ZodTypeDef, unknown> =
     });
   });
 
+/** @internal */
+export type Project$Outbound = {
+  created_at: string;
+  id: string;
+  logo_asset_id?: string | undefined;
+  name: string;
+  organization_id: string;
+  slug: string;
+  updated_at: string;
+};
+
+/** @internal */
+export const Project$outboundSchema: z.ZodType<
+  Project$Outbound,
+  z.ZodTypeDef,
+  Project
+> = z.object({
+  createdAt: z.date().transform(v => v.toISOString()),
+  id: z.string(),
+  logoAssetId: z.string().optional(),
+  name: z.string(),
+  organizationId: z.string(),
+  slug: z.string(),
+  updatedAt: z.date().transform(v => v.toISOString()),
+}).transform((v) => {
+  return remap$(v, {
+    createdAt: "created_at",
+    logoAssetId: "logo_asset_id",
+    organizationId: "organization_id",
+    updatedAt: "updated_at",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace Project$ {
+  /** @deprecated use `Project$inboundSchema` instead. */
+  export const inboundSchema = Project$inboundSchema;
+  /** @deprecated use `Project$outboundSchema` instead. */
+  export const outboundSchema = Project$outboundSchema;
+  /** @deprecated use `Project$Outbound` instead. */
+  export type Outbound = Project$Outbound;
+}
+
+export function projectToJSON(project: Project): string {
+  return JSON.stringify(Project$outboundSchema.parse(project));
+}
+
 export function projectFromJSON(
   jsonString: string,
 ): SafeParseResult<Project, SDKValidationError> {

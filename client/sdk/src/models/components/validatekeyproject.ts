@@ -33,6 +33,45 @@ export const ValidateKeyProject$inboundSchema: z.ZodType<
   slug: z.string(),
 });
 
+/** @internal */
+export type ValidateKeyProject$Outbound = {
+  id: string;
+  name: string;
+  slug: string;
+};
+
+/** @internal */
+export const ValidateKeyProject$outboundSchema: z.ZodType<
+  ValidateKeyProject$Outbound,
+  z.ZodTypeDef,
+  ValidateKeyProject
+> = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace ValidateKeyProject$ {
+  /** @deprecated use `ValidateKeyProject$inboundSchema` instead. */
+  export const inboundSchema = ValidateKeyProject$inboundSchema;
+  /** @deprecated use `ValidateKeyProject$outboundSchema` instead. */
+  export const outboundSchema = ValidateKeyProject$outboundSchema;
+  /** @deprecated use `ValidateKeyProject$Outbound` instead. */
+  export type Outbound = ValidateKeyProject$Outbound;
+}
+
+export function validateKeyProjectToJSON(
+  validateKeyProject: ValidateKeyProject,
+): string {
+  return JSON.stringify(
+    ValidateKeyProject$outboundSchema.parse(validateKeyProject),
+  );
+}
+
 export function validateKeyProjectFromJSON(
   jsonString: string,
 ): SafeParseResult<ValidateKeyProject, SDKValidationError> {
