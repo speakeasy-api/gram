@@ -1,5 +1,12 @@
 # dashboard
 
+## 0.18.6
+
+### Patch Changes
+
+- 900d4cc: Adds the option to select/deselect all during tool management, for example when adding tools to a toolset
+- 4b5a511: fix: logs page dialog content warning
+
 ## 0.18.5
 
 ### Patch Changes

@@ -1,5 +1,18 @@
 # server
 
+## 0.9.13
+
+### Patch Changes
+
+- 51f5349: Added the necessary Authorization header to the Fly API delete machine request
+  to ensure proper authentication. We also increase the reap batch size to 50.
+- ab8d2fe: adds experimental gram-mode:embedding for dynamic MCP tool selection based on semantic search
+- 43f8702: Fixed a bug in logging the chosen OpenAPI parser.
+- 0f70699: Fixed a bug in `ExecuteProjectFunctionsReaperWorkflow` where it was running the
+  wrong workflow (`ProcessDeploymentWorkflow` instead of
+  `FunctionsReaperWorkflow`).
+- 181971a: fix resource env config incorrectly unmarshaled
+
 ## 0.9.12
 
 ### Patch Changes
