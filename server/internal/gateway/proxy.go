@@ -846,13 +846,15 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 }
 
 func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPToolCallPlan, env ToolCallEnv) string {
-	// IMPORTANT: when system environment variables exist, we _always_ disallow user-supplied
-	// server URLs to prevent exfiltration of system environment variables to user-controlled servers.
-	if len(env.SystemEnv.All()) > 0 {
-		return ""
-	}
-
 	if tool.ServerEnvVar != "" {
+		if envVar := env.SystemEnv.Get(tool.ServerEnvVar); envVar != "" {
+			return envVar
+		} else if len(env.SystemEnv.All()) > 0 {
+			// IMPORTANT: when system environment variables exist, we _always_ disallow user-supplied
+			// server URLs to prevent exfiltration of system environment variables to user-controlled servers.
+			return ""
+		}
+
 		envVar := env.UserConfig.Get(tool.ServerEnvVar)
 		if envVar != "" {
 			return envVar
