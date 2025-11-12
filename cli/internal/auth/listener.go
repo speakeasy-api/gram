@@ -14,11 +14,17 @@ const (
 	callbackTimeout = 5 * time.Minute
 )
 
+// CallbackResult contains the data returned from the auth callback.
+type CallbackResult struct {
+	APIKey  string
+	Project string
+}
+
 // Listener manages an HTTP server that waits for OAuth callback.
 type Listener struct {
 	server   *http.Server
 	listener net.Listener
-	apiKey   chan string
+	result   chan CallbackResult
 	errChan  chan error
 }
 
@@ -32,7 +38,7 @@ func NewListener() (*Listener, error) {
 	l := &Listener{
 		server:   nil,
 		listener: ln,
-		apiKey:   make(chan string, 1),
+		result:   make(chan CallbackResult, 1),
 		errChan:  make(chan error, 1),
 	}
 
@@ -67,17 +73,17 @@ func (l *Listener) Start() {
 }
 
 // Wait blocks until an API key is received or timeout occurs.
-func (l *Listener) Wait(ctx context.Context) (string, error) {
+func (l *Listener) Wait(ctx context.Context) (CallbackResult, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, callbackTimeout)
 	defer cancel()
 
 	select {
-	case key := <-l.apiKey:
-		return key, nil
+	case result := <-l.result:
+		return result, nil
 	case err := <-l.errChan:
-		return "", err
+		return CallbackResult{}, err
 	case <-timeoutCtx.Done():
-		return "", fmt.Errorf("timeout waiting for authentication callback")
+		return CallbackResult{}, fmt.Errorf("timeout waiting for authentication callback")
 	}
 }
 
@@ -203,7 +209,12 @@ func (l *Listener) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	l.apiKey <- apiKey
+	project := r.URL.Query().Get("project")
+
+	l.result <- CallbackResult{
+		APIKey:  apiKey,
+		Project: project,
+	}
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 	_, _ = fmt.Fprint(w, authSuccessHTML)

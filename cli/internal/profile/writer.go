@@ -52,6 +52,18 @@ func preserveDefaultProjectSlug(existingProfile *Profile) string {
 	return ""
 }
 
+func validateProjectSlug(projectSlug string, projects []*keys.ValidateKeyProject) bool {
+	if projectSlug == "" {
+		return true
+	}
+	for _, proj := range projects {
+		if proj != nil && proj.Slug == projectSlug {
+			return true
+		}
+	}
+	return false
+}
+
 func buildProfile(
 	name string,
 	apiKey string,
@@ -59,8 +71,13 @@ func buildProfile(
 	defaultProjectSlug string,
 	org *keys.ValidateKeyOrganization,
 	projects []*keys.ValidateKeyProject,
+	providedProjectSlug string,
 ) *Profile {
-	if defaultProjectSlug == "" && len(projects) > 0 {
+	// Use provided project slug if it's valid
+	if providedProjectSlug != "" && validateProjectSlug(providedProjectSlug, projects) {
+		defaultProjectSlug = providedProjectSlug
+	} else if defaultProjectSlug == "" && len(projects) > 0 {
+		// Fall back to first project if no default and no valid provided
 		defaultProjectSlug = projects[0].Slug
 	}
 
@@ -83,6 +100,7 @@ func UpdateOrCreate(
 	projects []*keys.ValidateKeyProject,
 	path string,
 	profileName string,
+	projectSlug string,
 ) error {
 	config, err := loadOrCreateConfig(path)
 	if err != nil {
@@ -96,6 +114,7 @@ func UpdateOrCreate(
 		preserveDefaultProjectSlug(config.Profiles[profileName]),
 		org,
 		projects,
+		projectSlug,
 	)
 
 	config.Current = profileName
