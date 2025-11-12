@@ -1860,10 +1860,10 @@ func TestToolProxy_Do_FunctionTool_UserConfigNotInPlanNotSent(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
 
-	// Verify only ALLOWED_VAR was sent
-	require.Equal(t, "this-should-be-sent", capturedEnvironment["ALLOWED_VAR"])
-	require.NotContains(t, capturedEnvironment, "NOT_IN_PLAN")
-	require.NotContains(t, capturedEnvironment, "SECRET_KEY")
+	// Verify only ALLOWED_VAR was sent (keys are lowercase due to CaseInsensitiveEnv)
+	require.Equal(t, "this-should-be-sent", capturedEnvironment["allowed_var"])
+	require.NotContains(t, capturedEnvironment, "not_in_plan")
+	require.NotContains(t, capturedEnvironment, "secret_key")
 }
 
 func TestToolProxy_Do_HTTPTool_SystemEnvSentWhenInPlan(t *testing.T) {
@@ -2275,7 +2275,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigPrefersOverSystemEnv(t *testing.T) 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
 
-	// Verify the USER CONFIG values were used (not system env)
-	require.Equal(t, "postgres://user-override-db", capturedEnvironment["DATABASE_URL"])
-	require.Equal(t, "user-override-key", capturedEnvironment["API_KEY"])
+	// Verify the USER CONFIG values were used (not system env) (keys are lowercase due to CaseInsensitiveEnv)
+	require.Equal(t, "postgres://user-override-db", capturedEnvironment["database_url"])
+	require.Equal(t, "user-override-key", capturedEnvironment["api_key"])
 }
