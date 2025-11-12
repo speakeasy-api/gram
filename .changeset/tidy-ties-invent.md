@@ -2,4 +2,4 @@
 "dashboard": patch
 ---
 
-Fix onboarding steps
+Fix onboarding steps to use `npm run` prefix
