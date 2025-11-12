@@ -6539,6 +6539,13 @@ paths:
             description: Session header
             type: string
         - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
           description: project header
           in: header
           name: Gram-Project
@@ -6615,6 +6622,8 @@ paths:
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - {}
       summary: addExternalOAuthServer toolsets
       tags:
@@ -6643,6 +6652,13 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
             type: string
         - allowEmptyValue: true
           description: project header
@@ -6715,6 +6731,8 @@ paths:
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - {}
       summary: checkMCPSlugAvailability toolsets
       tags:
@@ -6815,6 +6833,8 @@ paths:
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
+        - apikey_header_Authorization: []
+          project_slug_header_Gram-Project: []
         - {}
       summary: cloneToolset toolsets
       tags:
@@ -6833,6 +6853,13 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
             type: string
         - allowEmptyValue: true
           description: project header
@@ -6911,6 +6938,8 @@ paths:
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - {}
       summary: createToolset toolsets
       tags:
@@ -6939,6 +6968,13 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
             type: string
         - allowEmptyValue: true
           description: project header
@@ -7007,6 +7043,8 @@ paths:
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - {}
       summary: deleteToolset toolsets
       tags:
@@ -7035,6 +7073,13 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
             type: string
         - allowEmptyValue: true
           description: project header
@@ -7107,6 +7152,8 @@ paths:
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - {}
       summary: getToolset toolsets
       tags:
@@ -7125,6 +7172,13 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
             type: string
         - allowEmptyValue: true
           description: project header
@@ -7197,6 +7251,8 @@ paths:
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - {}
       summary: listToolsets toolsets
       tags:
@@ -7225,6 +7281,13 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
             type: string
         - allowEmptyValue: true
           description: project header
@@ -7297,6 +7360,8 @@ paths:
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - {}
       summary: removeOAuthServer toolsets
       tags:
@@ -7325,6 +7390,13 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
             type: string
         - allowEmptyValue: true
           description: project header
@@ -7403,6 +7475,8 @@ paths:
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - {}
       summary: updateToolset toolsets
       tags:
@@ -11256,6 +11330,9 @@ components:
           description: A short url-friendly label that uniquely identifies a resource.
           pattern: ^[a-z0-9_-]{1,128}$
           maxLength: 40
+        tool_selection_mode:
+          type: string
+          description: The mode to use for tool selection
         tool_urns:
           type: array
           items:
@@ -11266,6 +11343,10 @@ components:
           items:
             $ref: '#/components/schemas/Tool'
           description: The tools in this toolset
+        toolset_version:
+          type: integer
+          description: The version of the toolset (will be 0 if none exists)
+          format: int64
         updated_at:
           type: string
           description: When the toolset was last updated.
@@ -11278,6 +11359,8 @@ components:
         - name
         - slug
         - tools
+        - tool_selection_mode
+        - toolset_version
         - prompt_templates
         - tool_urns
         - resources
@@ -11360,6 +11443,9 @@ components:
           description: A short url-friendly label that uniquely identifies a resource.
           pattern: ^[a-z0-9_-]{1,128}$
           maxLength: 40
+        tool_selection_mode:
+          type: string
+          description: The mode to use for tool selection
         tool_urns:
           type: array
           items:
@@ -11381,6 +11467,7 @@ components:
         - name
         - slug
         - tools
+        - tool_selection_mode
         - prompt_templates
         - tool_urns
         - resources
@@ -11584,6 +11671,9 @@ components:
           description: A short url-friendly label that uniquely identifies a resource.
           pattern: ^[a-z0-9_-]{1,128}$
           maxLength: 40
+        tool_selection_mode:
+          type: string
+          description: The mode to use for tool selection
         tool_urns:
           type: array
           items:
@@ -11629,6 +11719,9 @@ components:
           items:
             type: string
           description: List of resource URNs to include in the toolset
+        tool_selection_mode:
+          type: string
+          description: The mode to use for tool selection
         tool_urns:
           type: array
           items:
@@ -11817,6 +11910,11 @@ components:
         - projects
         - scopes
   securitySchemes:
+    apikey_header_Authorization:
+      type: apiKey
+      description: key based auth.
+      name: Authorization
+      in: header
     apikey_header_Gram-Key:
       type: apiKey
       description: key based auth.

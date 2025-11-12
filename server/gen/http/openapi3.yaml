@@ -11254,6 +11254,9 @@ components:
                     description: A short url-friendly label that uniquely identifies a resource.
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
+                tool_selection_mode:
+                    type: string
+                    description: The mode to use for tool selection
                 tool_urns:
                     type: array
                     items:
@@ -11280,6 +11283,7 @@ components:
                 - name
                 - slug
                 - tools
+                - tool_selection_mode
                 - toolset_version
                 - prompt_templates
                 - tool_urns
@@ -11363,6 +11367,9 @@ components:
                     description: A short url-friendly label that uniquely identifies a resource.
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
+                tool_selection_mode:
+                    type: string
+                    description: The mode to use for tool selection
                 tool_urns:
                     type: array
                     items:
@@ -11384,6 +11391,7 @@ components:
                 - name
                 - slug
                 - tools
+                - tool_selection_mode
                 - prompt_templates
                 - tool_urns
                 - resources
@@ -11587,6 +11595,9 @@ components:
                     description: A short url-friendly label that uniquely identifies a resource.
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
+                tool_selection_mode:
+                    type: string
+                    description: The mode to use for tool selection
                 tool_urns:
                     type: array
                     items:
@@ -11632,6 +11643,9 @@ components:
                     items:
                         type: string
                     description: List of resource URNs to include in the toolset
+                tool_selection_mode:
+                    type: string
+                    description: The mode to use for tool selection
                 tool_urns:
                     type: array
                     items:

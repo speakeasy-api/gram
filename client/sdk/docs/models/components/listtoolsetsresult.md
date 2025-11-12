@@ -20,6 +20,7 @@ let value: ListToolsetsResult = {
       ],
       resources: [],
       slug: "<value>",
+      toolSelectionMode: "<value>",
       toolUrns: [
         "<value 1>",
         "<value 2>",

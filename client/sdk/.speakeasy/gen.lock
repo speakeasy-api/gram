@@ -1,24 +1,24 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 3b37da65a45289d78ea5416df260ea2d
+  docChecksum: 0684be80b4739e8e8db308ea3bf3bf33
   docVersion: 0.0.1
-  speakeasyVersion: 1.650.0
-  generationVersion: 2.743.2
-  releaseVersion: 0.17.2
-  configChecksum: 9c4afa43816512d97cd2ab47708c973b
+  speakeasyVersion: 1.641.1
+  generationVersion: 2.730.5
+  releaseVersion: 0.17.5
+  configChecksum: dcf9345addff965fc92efdc647a57b97
 features:
   typescript:
     additionalDependencies: 0.1.0
     constsAndDefaults: 0.1.12
-    core: 3.26.3
+    core: 3.24.1
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
     downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
     globalSecurityCallbacks: 0.1.0
-    globalServerURLs: 2.83.0
+    globalServerURLs: 2.82.5
     methodArguments: 0.1.2
     methodSecurity: 2.82.6
     nameOverrides: 2.81.2
@@ -179,14 +179,20 @@ generatedFiles:
   - docs/models/errors/serviceerror.md
   - docs/models/operations/addexternaloauthserverrequest.md
   - docs/models/operations/addexternaloauthserversecurity.md
+  - docs/models/operations/addexternaloauthserversecurityoption1.md
+  - docs/models/operations/addexternaloauthserversecurityoption2.md
   - docs/models/operations/authcallbackrequest.md
   - docs/models/operations/authcallbackresponse.md
   - docs/models/operations/authloginrequest.md
   - docs/models/operations/authloginresponse.md
   - docs/models/operations/checkmcpslugavailabilityrequest.md
   - docs/models/operations/checkmcpslugavailabilitysecurity.md
+  - docs/models/operations/checkmcpslugavailabilitysecurityoption1.md
+  - docs/models/operations/checkmcpslugavailabilitysecurityoption2.md
   - docs/models/operations/clonetoolsetrequest.md
   - docs/models/operations/clonetoolsetsecurity.md
+  - docs/models/operations/clonetoolsetsecurityoption1.md
+  - docs/models/operations/clonetoolsetsecurityoption2.md
   - docs/models/operations/createapikeyrequest.md
   - docs/models/operations/createapikeysecurity.md
   - docs/models/operations/createcheckoutrequest.md
@@ -211,6 +217,8 @@ generatedFiles:
   - docs/models/operations/createtemplatesecurityoption2.md
   - docs/models/operations/createtoolsetrequest.md
   - docs/models/operations/createtoolsetsecurity.md
+  - docs/models/operations/createtoolsetsecurityoption1.md
+  - docs/models/operations/createtoolsetsecurityoption2.md
   - docs/models/operations/creditusagerequest.md
   - docs/models/operations/creditusagesecurity.md
   - docs/models/operations/deletedomainrequest.md
@@ -229,6 +237,8 @@ generatedFiles:
   - docs/models/operations/deletetemplatesecurityoption2.md
   - docs/models/operations/deletetoolsetrequest.md
   - docs/models/operations/deletetoolsetsecurity.md
+  - docs/models/operations/deletetoolsetsecurityoption1.md
+  - docs/models/operations/deletetoolsetsecurityoption2.md
   - docs/models/operations/direction.md
   - docs/models/operations/evolvedeploymentrequest.md
   - docs/models/operations/evolvedeploymentsecurity.md
@@ -269,6 +279,8 @@ generatedFiles:
   - docs/models/operations/gettemplatesecurityoption3.md
   - docs/models/operations/gettoolsetrequest.md
   - docs/models/operations/gettoolsetsecurity.md
+  - docs/models/operations/gettoolsetsecurityoption1.md
+  - docs/models/operations/gettoolsetsecurityoption2.md
   - docs/models/operations/integrationsnumbergetrequest.md
   - docs/models/operations/integrationsnumbergetsecurity.md
   - docs/models/operations/listapikeysrequest.md
@@ -309,6 +321,8 @@ generatedFiles:
   - docs/models/operations/listtoollogssecurityoption2.md
   - docs/models/operations/listtoolsetsrequest.md
   - docs/models/operations/listtoolsetssecurity.md
+  - docs/models/operations/listtoolsetssecurityoption1.md
+  - docs/models/operations/listtoolsetssecurityoption2.md
   - docs/models/operations/listtoolsrequest.md
   - docs/models/operations/listtoolssecurity.md
   - docs/models/operations/listversionsrequest.md
@@ -334,6 +348,8 @@ generatedFiles:
   - docs/models/operations/registersecurity.md
   - docs/models/operations/removeoauthserverrequest.md
   - docs/models/operations/removeoauthserversecurity.md
+  - docs/models/operations/removeoauthserversecurityoption1.md
+  - docs/models/operations/removeoauthserversecurityoption2.md
   - docs/models/operations/rendertemplatebyidrequest.md
   - docs/models/operations/rendertemplatebyidsecurity.md
   - docs/models/operations/rendertemplatebyidsecurityoption1.md
@@ -391,6 +407,8 @@ generatedFiles:
   - docs/models/operations/updatetemplatesecurityoption2.md
   - docs/models/operations/updatetoolsetrequest.md
   - docs/models/operations/updatetoolsetsecurity.md
+  - docs/models/operations/updatetoolsetsecurityoption1.md
+  - docs/models/operations/updatetoolsetsecurityoption2.md
   - docs/models/operations/uploadfunctionsrequest.md
   - docs/models/operations/uploadfunctionssecurity.md
   - docs/models/operations/uploadfunctionssecurityoption1.md
@@ -1364,7 +1382,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-03-22T17:12:26.250Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>"], "resources": [], "slug": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "tools": [{}], "updated_at": "2024-05-10T06:01:51.541Z"}
+          application/json: {"account_type": "<value>", "created_at": "2025-03-22T17:12:26.250Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "tools": [{}], "toolset_version": 740618, "updated_at": "2024-05-10T06:01:51.541Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1386,7 +1404,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_urns": [], "tools": [], "updated_at": "2025-12-20T03:22:44.412Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 157800, "updated_at": "2025-12-20T03:22:44.412Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1409,7 +1427,7 @@ examples:
         application/json: {}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "description": "mushy comparison messy lady fly", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2023-07-28T22:54:49.336Z"}], "resource_urns": ["<value 1>", "<value 2>", "<value 3>"], "resources": [], "slug": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [{}], "updated_at": "2025-08-07T19:20:12.233Z"}
+          application/json: {"account_type": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "description": "mushy comparison messy lady fly", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2023-07-28T22:54:49.336Z"}], "resource_urns": ["<value 1>", "<value 2>", "<value 3>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [{}], "toolset_version": 873620, "updated_at": "2025-08-07T19:20:12.233Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1543,7 +1561,7 @@ examples:
         application/json: {"external_oauth_server": {"metadata": "<value>", "slug": "<value>"}}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-08-31T03:23:36.997Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_urns": [], "tools": [], "updated_at": "2025-03-28T09:33:33.851Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-08-31T03:23:36.997Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 220932, "updated_at": "2025-03-28T09:33:33.851Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1567,7 +1585,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-08-30T05:28:04.458Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_urns": [], "tools": [], "updated_at": "2023-10-21T14:21:06.001Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-08-30T05:28:04.458Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 220098, "updated_at": "2023-10-21T14:21:06.001Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1670,7 +1688,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-07-27T03:45:28.599Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2024-10-23T10:29:38.107Z", "description": "chap whoa gee lightly devastation vivacious about t-shirt", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2024-11-26T08:12:18.787Z"}], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_urns": ["<value 1>"], "tools": [], "updated_at": "2024-04-29T05:29:07.967Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-07-27T03:45:28.599Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2024-10-23T10:29:38.107Z", "description": "chap whoa gee lightly devastation vivacious about t-shirt", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2024-11-26T08:12:18.787Z"}], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>"], "tools": [], "toolset_version": 189011, "updated_at": "2024-04-29T05:29:07.967Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

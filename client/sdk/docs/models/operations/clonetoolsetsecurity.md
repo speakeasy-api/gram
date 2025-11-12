@@ -10,7 +10,7 @@ let value: CloneToolsetSecurity = {};
 
 ## Fields
 
-| Field                          | Type                           | Required                       | Description                    |
-| ------------------------------ | ------------------------------ | ------------------------------ | ------------------------------ |
-| `projectSlugHeaderGramProject` | *string*                       | :heavy_minus_sign:             | N/A                            |
-| `sessionHeaderGramSession`     | *string*                       | :heavy_minus_sign:             | N/A                            |
+| Field                                                                                            | Type                                                                                             | Required                                                                                         | Description                                                                                      |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `option1`                                                                                        | [operations.CloneToolsetSecurityOption1](../../models/operations/clonetoolsetsecurityoption1.md) | :heavy_minus_sign:                                                                               | N/A                                                                                              |
+| `option2`                                                                                        | [operations.CloneToolsetSecurityOption2](../../models/operations/clonetoolsetsecurityoption2.md) | :heavy_minus_sign:                                                                               | N/A                                                                                              |

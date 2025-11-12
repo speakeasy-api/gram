@@ -95,6 +95,7 @@ export function setToolsetData(
     parameters: {
       slug: string;
       gramSession?: string | undefined;
+      gramKey?: string | undefined;
       gramProject?: string | undefined;
     },
   ],
@@ -111,6 +112,7 @@ export function invalidateToolset(
     [parameters: {
       slug: string;
       gramSession?: string | undefined;
+      gramKey?: string | undefined;
       gramProject?: string | undefined;
     }]
   >,
@@ -145,6 +147,7 @@ export function buildToolsetQuery(
     queryKey: queryKeyToolset({
       slug: request.slug,
       gramSession: request.gramSession,
+      gramKey: request.gramKey,
       gramProject: request.gramProject,
     }),
     queryFn: async function toolsetQueryFn(ctx): Promise<ToolsetQueryData> {
@@ -168,6 +171,7 @@ export function queryKeyToolset(
   parameters: {
     slug: string;
     gramSession?: string | undefined;
+    gramKey?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {

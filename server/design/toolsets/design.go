@@ -274,6 +274,7 @@ var UpdateToolsetForm = Type("UpdateToolsetForm", func() {
 	Attribute("mcp_slug", shared.Slug, "The slug of the MCP to use for the toolset")
 	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
+	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
 	security.ProjectPayload()
 	Required("slug")
 })

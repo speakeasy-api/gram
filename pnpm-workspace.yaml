@@ -3,6 +3,7 @@ packages:
   - sdks/*
   - ts-framework/*
   - ts-framework/create-function/*
+  - '!ts-framework/create-function/gram-template-*'
   - server
   - cli
   - functions

@@ -4,10 +4,23 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+export type CloneToolsetSecurityOption1 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
+export type CloneToolsetSecurityOption2 = {
+  apikeyHeaderAuthorization: string;
+  projectSlugHeaderGramProject: string;
+};
 
 export type CloneToolsetSecurity = {
-  projectSlugHeaderGramProject?: string | undefined;
-  sessionHeaderGramSession?: string | undefined;
+  option1?: CloneToolsetSecurityOption1 | undefined;
+  option2?: CloneToolsetSecurityOption2 | undefined;
 };
 
 export type CloneToolsetRequest = {
@@ -26,9 +39,162 @@ export type CloneToolsetRequest = {
 };
 
 /** @internal */
+export const CloneToolsetSecurityOption1$inboundSchema: z.ZodType<
+  CloneToolsetSecurityOption1,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "project_slug_header_Gram-Project": z.string(),
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type CloneToolsetSecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const CloneToolsetSecurityOption1$outboundSchema: z.ZodType<
+  CloneToolsetSecurityOption1$Outbound,
+  z.ZodTypeDef,
+  CloneToolsetSecurityOption1
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace CloneToolsetSecurityOption1$ {
+  /** @deprecated use `CloneToolsetSecurityOption1$inboundSchema` instead. */
+  export const inboundSchema = CloneToolsetSecurityOption1$inboundSchema;
+  /** @deprecated use `CloneToolsetSecurityOption1$outboundSchema` instead. */
+  export const outboundSchema = CloneToolsetSecurityOption1$outboundSchema;
+  /** @deprecated use `CloneToolsetSecurityOption1$Outbound` instead. */
+  export type Outbound = CloneToolsetSecurityOption1$Outbound;
+}
+
+export function cloneToolsetSecurityOption1ToJSON(
+  cloneToolsetSecurityOption1: CloneToolsetSecurityOption1,
+): string {
+  return JSON.stringify(
+    CloneToolsetSecurityOption1$outboundSchema.parse(
+      cloneToolsetSecurityOption1,
+    ),
+  );
+}
+
+export function cloneToolsetSecurityOption1FromJSON(
+  jsonString: string,
+): SafeParseResult<CloneToolsetSecurityOption1, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => CloneToolsetSecurityOption1$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CloneToolsetSecurityOption1' from JSON`,
+  );
+}
+
+/** @internal */
+export const CloneToolsetSecurityOption2$inboundSchema: z.ZodType<
+  CloneToolsetSecurityOption2,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  apikey_header_Authorization: z.string(),
+  "project_slug_header_Gram-Project": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "apikey_header_Authorization": "apikeyHeaderAuthorization",
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+  });
+});
+
+/** @internal */
+export type CloneToolsetSecurityOption2$Outbound = {
+  apikey_header_Authorization: string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const CloneToolsetSecurityOption2$outboundSchema: z.ZodType<
+  CloneToolsetSecurityOption2$Outbound,
+  z.ZodTypeDef,
+  CloneToolsetSecurityOption2
+> = z.object({
+  apikeyHeaderAuthorization: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderAuthorization: "apikey_header_Authorization",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace CloneToolsetSecurityOption2$ {
+  /** @deprecated use `CloneToolsetSecurityOption2$inboundSchema` instead. */
+  export const inboundSchema = CloneToolsetSecurityOption2$inboundSchema;
+  /** @deprecated use `CloneToolsetSecurityOption2$outboundSchema` instead. */
+  export const outboundSchema = CloneToolsetSecurityOption2$outboundSchema;
+  /** @deprecated use `CloneToolsetSecurityOption2$Outbound` instead. */
+  export type Outbound = CloneToolsetSecurityOption2$Outbound;
+}
+
+export function cloneToolsetSecurityOption2ToJSON(
+  cloneToolsetSecurityOption2: CloneToolsetSecurityOption2,
+): string {
+  return JSON.stringify(
+    CloneToolsetSecurityOption2$outboundSchema.parse(
+      cloneToolsetSecurityOption2,
+    ),
+  );
+}
+
+export function cloneToolsetSecurityOption2FromJSON(
+  jsonString: string,
+): SafeParseResult<CloneToolsetSecurityOption2, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => CloneToolsetSecurityOption2$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CloneToolsetSecurityOption2' from JSON`,
+  );
+}
+
+/** @internal */
+export const CloneToolsetSecurity$inboundSchema: z.ZodType<
+  CloneToolsetSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  Option1: z.lazy(() => CloneToolsetSecurityOption1$inboundSchema).optional(),
+  Option2: z.lazy(() => CloneToolsetSecurityOption2$inboundSchema).optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Option1": "option1",
+    "Option2": "option2",
+  });
+});
+
+/** @internal */
 export type CloneToolsetSecurity$Outbound = {
-  "project_slug_header_Gram-Project"?: string | undefined;
-  "session_header_Gram-Session"?: string | undefined;
+  Option1?: CloneToolsetSecurityOption1$Outbound | undefined;
+  Option2?: CloneToolsetSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -37,14 +203,27 @@ export const CloneToolsetSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   CloneToolsetSecurity
 > = z.object({
-  projectSlugHeaderGramProject: z.string().optional(),
-  sessionHeaderGramSession: z.string().optional(),
+  option1: z.lazy(() => CloneToolsetSecurityOption1$outboundSchema).optional(),
+  option2: z.lazy(() => CloneToolsetSecurityOption2$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
+    option1: "Option1",
+    option2: "Option2",
   });
 });
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace CloneToolsetSecurity$ {
+  /** @deprecated use `CloneToolsetSecurity$inboundSchema` instead. */
+  export const inboundSchema = CloneToolsetSecurity$inboundSchema;
+  /** @deprecated use `CloneToolsetSecurity$outboundSchema` instead. */
+  export const outboundSchema = CloneToolsetSecurity$outboundSchema;
+  /** @deprecated use `CloneToolsetSecurity$Outbound` instead. */
+  export type Outbound = CloneToolsetSecurity$Outbound;
+}
 
 export function cloneToolsetSecurityToJSON(
   cloneToolsetSecurity: CloneToolsetSecurity,
@@ -53,6 +232,32 @@ export function cloneToolsetSecurityToJSON(
     CloneToolsetSecurity$outboundSchema.parse(cloneToolsetSecurity),
   );
 }
+
+export function cloneToolsetSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<CloneToolsetSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => CloneToolsetSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CloneToolsetSecurity' from JSON`,
+  );
+}
+
+/** @internal */
+export const CloneToolsetRequest$inboundSchema: z.ZodType<
+  CloneToolsetRequest,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  slug: z.string(),
+  "Gram-Session": z.string().optional(),
+  "Gram-Project": z.string().optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Gram-Session": "gramSession",
+    "Gram-Project": "gramProject",
+  });
+});
 
 /** @internal */
 export type CloneToolsetRequest$Outbound = {
@@ -77,10 +282,33 @@ export const CloneToolsetRequest$outboundSchema: z.ZodType<
   });
 });
 
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace CloneToolsetRequest$ {
+  /** @deprecated use `CloneToolsetRequest$inboundSchema` instead. */
+  export const inboundSchema = CloneToolsetRequest$inboundSchema;
+  /** @deprecated use `CloneToolsetRequest$outboundSchema` instead. */
+  export const outboundSchema = CloneToolsetRequest$outboundSchema;
+  /** @deprecated use `CloneToolsetRequest$Outbound` instead. */
+  export type Outbound = CloneToolsetRequest$Outbound;
+}
+
 export function cloneToolsetRequestToJSON(
   cloneToolsetRequest: CloneToolsetRequest,
 ): string {
   return JSON.stringify(
     CloneToolsetRequest$outboundSchema.parse(cloneToolsetRequest),
+  );
+}
+
+export function cloneToolsetRequestFromJSON(
+  jsonString: string,
+): SafeParseResult<CloneToolsetRequest, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => CloneToolsetRequest$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CloneToolsetRequest' from JSON`,
   );
 }

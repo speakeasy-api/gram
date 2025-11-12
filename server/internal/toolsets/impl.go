@@ -231,6 +231,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		ProjectID:              *authCtx.ProjectID,
 		McpSlug:                existingToolset.McpSlug,
 		McpEnabled:             existingToolset.McpEnabled,
+		ToolSelectionMode:      existingToolset.ToolSelectionMode,
 		CustomDomainID:         existingToolset.CustomDomainID,
 		McpIsPublic:            existingToolset.McpIsPublic,
 	}
@@ -310,6 +311,10 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		}
 
 		updateParams.McpIsPublic = *payload.McpIsPublic
+	}
+
+	if payload.ToolSelectionMode != nil {
+		updateParams.ToolSelectionMode = *payload.ToolSelectionMode
 	}
 
 	err = s.createToolsetVersion(ctx, payload.ToolUrns, payload.ResourceUrns, existingToolset.ID, tr)
