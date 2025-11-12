@@ -2,8 +2,6 @@
 
 #MISE description="Build the gram cli"
 #MISE dir="{{ config_root }}/cli"
-#MISE sources=["go.mod", "go.sum", "**/*.go"]
-#MISE outputs={ auto = true }
 #MISE depends=["go:tidy"]
 
 #USAGE flag "--readonly" help="Build with -mod=readonly"
