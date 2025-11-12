@@ -485,6 +485,16 @@ type SlackAppConnection struct {
 	UpdatedAt          pgtype.Timestamptz
 }
 
+type SourceEnvironment struct {
+	ID            uuid.UUID
+	SourceKind    string
+	SourceSlug    string
+	ProjectID     uuid.UUID
+	EnvironmentID uuid.UUID
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
 type ToolVariation struct {
 	ID            uuid.UUID
 	GroupID       uuid.UUID

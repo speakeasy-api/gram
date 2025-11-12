@@ -1,0 +1,4 @@
+-- Create "source_environments" table
+CREATE TABLE "source_environments" ("id" uuid NOT NULL DEFAULT generate_uuidv7(), "source_kind" text NOT NULL, "source_slug" text NOT NULL, "project_id" uuid NOT NULL, "environment_id" uuid NOT NULL, "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(), "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(), PRIMARY KEY ("id"), CONSTRAINT "source_environments_environment_id_fkey" FOREIGN KEY ("environment_id") REFERENCES "environments" ("id") ON UPDATE NO ACTION ON DELETE CASCADE, CONSTRAINT "source_environments_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE);
+-- Create index "source_environments_source_kind_source_slug_idx" to table: "source_environments"
+CREATE UNIQUE INDEX "source_environments_source_kind_source_slug_idx" ON "source_environments" ("project_id", "source_kind", "source_slug");
