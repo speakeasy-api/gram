@@ -146,7 +146,7 @@ CREATE TABLE IF NOT EXISTS assets (
 CREATE TABLE IF NOT EXISTS packages (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
-  
+
   title TEXT CHECK (title <> '' AND CHAR_LENGTH(title) <= 100),
   summary TEXT CHECK (summary <> '' AND CHAR_LENGTH(summary) <= 80),
   description_raw TEXT CHECK (description_raw <> '' AND CHAR_LENGTH(description_raw) <= 10000),
@@ -183,7 +183,7 @@ CREATE TABLE IF NOT EXISTS package_versions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   package_id uuid NOT NULL,
   deployment_id uuid NOT NULL,
-  
+
   visibility TEXT NOT NULL CHECK (visibility <> '' AND CHAR_LENGTH(visibility) <= 20),
   major BIGINT NOT NULL CHECK (major >= 0 AND major <= 32767),
   minor BIGINT NOT NULL CHECK (minor >= 0 AND minor <= 32767),
@@ -428,7 +428,7 @@ CREATE TABLE IF NOT EXISTS fly_apps (
   runner_version TEXT NOT NULL,
   primary_region TEXT NOT NULL,
   status TEXT NOT NULL, -- pending, ready, failed
-  
+
   reaped_at timestamptz, -- when we deleted an app and its resources on fly.io
   reap_error TEXT, -- error message if reaping failed
 
@@ -479,6 +479,23 @@ CREATE TABLE IF NOT EXISTS environment_entries (
   CONSTRAINT environments_entries_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS source_environments (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  source_kind TEXT NOT NULL,
+  source_slug TEXT NOT NULL,
+  project_id UUID NOT NULL,
+  environment_id UUID NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT source_environments_pkey PRIMARY KEY (id),
+  CONSTRAINT source_environments_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE CASCADE,
+  CONSTRAINT source_environments_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS source_environments_source_kind_source_slug_idx ON source_environments (project_id, source_kind, source_slug);
+
 CREATE TABLE IF NOT EXISTS custom_domains (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
@@ -491,9 +508,9 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-  
+
   CONSTRAINT custom_domains_pkey PRIMARY KEY (id)
-  
+
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_domain_key
@@ -508,15 +525,15 @@ WHERE deleted IS FALSE;
 CREATE TABLE IF NOT EXISTS external_oauth_server_metadata (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
-  
+
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
   metadata JSONB NOT NULL,
-  
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-  
+
   CONSTRAINT external_oauth_server_metadata_pkey PRIMARY KEY (id),
   CONSTRAINT external_oauth_server_metadata_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
@@ -531,12 +548,12 @@ CREATE TABLE IF NOT EXISTS oauth_proxy_servers (
   project_id uuid NOT NULL,
 
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
-  
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-  
+
   CONSTRAINT oauth_proxy_servers_pkey PRIMARY KEY (id),
   CONSTRAINT oauth_proxy_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
@@ -550,27 +567,27 @@ CREATE TABLE IF NOT EXISTS oauth_proxy_providers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   oauth_proxy_server_id uuid NOT NULL,
-  
+
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
   authorization_endpoint TEXT NOT NULL,
   token_endpoint TEXT NOT NULL,
   registration_endpoint TEXT,
-  
+
   -- OAuth server capabilities
   scopes_supported TEXT[] DEFAULT ARRAY[]::TEXT[],
   response_types_supported TEXT[] DEFAULT ARRAY[]::TEXT[],
   response_modes_supported TEXT[] DEFAULT ARRAY[]::TEXT[],
   grant_types_supported TEXT[] DEFAULT ARRAY[]::TEXT[],
   token_endpoint_auth_methods_supported TEXT[] DEFAULT ARRAY[]::TEXT[],
-  
+
   security_key_names TEXT[] DEFAULT ARRAY[]::TEXT[],
   secrets JSONB,
-  
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-  
+
   CONSTRAINT oauth_proxy_providers_pkey PRIMARY KEY (id),
   CONSTRAINT oauth_proxy_providers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT oauth_proxy_providers_oauth_proxy_server_id_fkey FOREIGN KEY (oauth_proxy_server_id) REFERENCES oauth_proxy_servers (id) ON DELETE CASCADE
@@ -649,7 +666,7 @@ CREATE INDEX IF NOT EXISTS toolset_versions_toolset_id_version_idx ON toolset_ve
 
 CREATE TABLE IF NOT EXISTS http_security (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  
+
   deployment_id uuid NOT NULL,
   project_id uuid,
   openapiv3_document_id uuid,
@@ -664,37 +681,37 @@ CREATE TABLE IF NOT EXISTS http_security (
   oauth_flows JSONB,
 
   env_variables TEXT[] DEFAULT ARRAY[]::TEXT[],
-  
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-  
+
   CONSTRAINT http_security_pkey PRIMARY KEY (id),
   CONSTRAINT http_security_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
   CONSTRAINT http_security_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT http_security_openapiv3_document_id_fkey FOREIGN key (openapiv3_document_id) REFERENCES deployments_openapiv3_assets (id) ON DELETE RESTRICT
 );
 
-CREATE INDEX IF NOT EXISTS http_security_deleted_idx 
+CREATE INDEX IF NOT EXISTS http_security_deleted_idx
 ON http_security (deleted);
 
-CREATE INDEX IF NOT EXISTS http_security_type_scheme_idx 
+CREATE INDEX IF NOT EXISTS http_security_type_scheme_idx
 ON http_security (type, scheme);
 
 CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   organization_id TEXT NOT NULL,
-  
+
   key TEXT NOT NULL,
   key_hash TEXT NOT NULL,
   monthly_credits BIGINT NOT NULL DEFAULT 0,
   disabled BOOLEAN NOT NULL DEFAULT FALSE,
-  
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-  
+
   CONSTRAINT openrouter_api_keys_pkey PRIMARY KEY (organization_id)
 );
 
@@ -710,7 +727,7 @@ CREATE TABLE IF NOT EXISTS chats (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-  
+
   CONSTRAINT chats_pkey PRIMARY KEY (id),
   CONSTRAINT chats_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
@@ -718,7 +735,7 @@ CREATE TABLE IF NOT EXISTS chats (
 -- Create the chat_messages table to store individual messages in each chat
 CREATE TABLE IF NOT EXISTS chat_messages (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  
+
   chat_id uuid NOT NULL,
   project_id uuid,
   role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'tool')),
@@ -732,9 +749,9 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   prompt_tokens BIGINT NOT NULL DEFAULT 0,
   completion_tokens BIGINT NOT NULL DEFAULT 0,
   total_tokens BIGINT NOT NULL DEFAULT 0,
-  
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  
+
   CONSTRAINT chat_messages_pkey PRIMARY KEY (id),
   CONSTRAINT chat_messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
 );

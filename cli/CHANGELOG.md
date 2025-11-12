@@ -1,5 +1,11 @@
 # cli
 
+## 0.13.2
+
+### Patch Changes
+
+- 3552ff0: modifies gram auth so it respects current project context on the initial auth and sets that as defaultProjectSlug
+
 ## 0.13.1
 
 ### Patch Changes

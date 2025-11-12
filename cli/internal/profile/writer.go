@@ -52,6 +52,18 @@ func preserveDefaultProjectSlug(existingProfile *Profile) string {
 	return ""
 }
 
+func validateProjectSlug(projectSlug string, projects []*keys.ValidateKeyProject) bool {
+	if projectSlug == "" {
+		return true
+	}
+	for _, proj := range projects {
+		if proj != nil && proj.Slug == projectSlug {
+			return true
+		}
+	}
+	return false
+}
+
 func buildProfile(
 	name string,
 	apiKey string,
@@ -59,8 +71,13 @@ func buildProfile(
 	defaultProjectSlug string,
 	org *keys.ValidateKeyOrganization,
 	projects []*keys.ValidateKeyProject,
+	providedProjectSlug string,
 ) *Profile {
-	if defaultProjectSlug == "" && len(projects) > 0 {
+	// Use provided project slug if it's valid
+	if providedProjectSlug != "" && validateProjectSlug(providedProjectSlug, projects) {
+		defaultProjectSlug = providedProjectSlug
+	} else if defaultProjectSlug == "" && len(projects) > 0 {
+		// Fall back to first project if no default and no valid provided
 		defaultProjectSlug = projects[0].Slug
 	}
 
@@ -83,6 +100,7 @@ func UpdateOrCreate(
 	projects []*keys.ValidateKeyProject,
 	path string,
 	profileName string,
+	projectSlug string,
 ) error {
 	config, err := loadOrCreateConfig(path)
 	if err != nil {
@@ -96,6 +114,7 @@ func UpdateOrCreate(
 		preserveDefaultProjectSlug(config.Profiles[profileName]),
 		org,
 		projects,
+		projectSlug,
 	)
 
 	config.Current = profileName
@@ -119,4 +138,39 @@ func loadConfig(path string) (*Config, error) {
 	}
 
 	return &config, nil
+}
+
+// UpdateProjectSlug updates the default project slug for the current profile.
+func UpdateProjectSlug(path string, projectSlug string) error {
+	config, err := loadConfig(path)
+	if err != nil {
+		return fmt.Errorf("failed to load profile: %w", err)
+	}
+
+	if config == nil {
+		return fmt.Errorf("no profile configuration found")
+	}
+
+	if config.Current == "" {
+		return fmt.Errorf("no current profile set")
+	}
+
+	profile, ok := config.Profiles[config.Current]
+	if !ok {
+		return fmt.Errorf("current profile '%s' not found", config.Current)
+	}
+
+	// Validate that the project slug exists in the profile's projects
+	if !validateProjectSlug(projectSlug, profile.Projects) {
+		return fmt.Errorf("project '%s' not found in available projects", projectSlug)
+	}
+
+	profile.DefaultProjectSlug = projectSlug
+	return Save(config, path)
+}
+
+// Clear removes all profiles from the configuration file.
+func Clear(path string) error {
+	config := EmptyConfig()
+	return Save(config, path)
 }
