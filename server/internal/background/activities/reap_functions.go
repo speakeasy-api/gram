@@ -74,7 +74,7 @@ func (r *ReapFlyApps) Do(ctx context.Context, req ReapFlyAppsRequest) (*ReapFlyA
 		KeepCount: pgtype.Int8{Int64: r.keepCount, Valid: true},
 		// Starting with a small batch size for now and we'll increase later on
 		// after some observation.
-		BatchSize: pgtype.Int8{Int64: 20, Valid: true},
+		BatchSize: pgtype.Int8{Int64: 50, Valid: true},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to query apps to reap").Log(ctx, logger)

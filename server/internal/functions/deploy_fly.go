@@ -570,6 +570,11 @@ func (f *FlyRunner) reap(ctx context.Context, logger *slog.Logger, appsRepo *rep
 		return fmt.Errorf("create delete app request: %w", err)
 	}
 
+	bearer := "Bearer " + f.tokens.GraphQL()
+	deleteRequest.Header.Set("User-Agent", f.ua)
+	deleteRequest.Header.Set("Content-Type", "application/json")
+	deleteRequest.Header.Set("Authorization", bearer)
+
 	res, err := f.machinesClient.Do(deleteRequest)
 	if err != nil {
 		return fmt.Errorf("send delete app request: %w", err)
