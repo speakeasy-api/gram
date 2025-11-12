@@ -138,7 +138,7 @@ export type Toolset = {
   /**
    * The mode to use for tool selection
    */
-  toolSelectionMode?: string | undefined;
+  toolSelectionMode: string;
   /**
    * The tool URNs in this toolset
    */
@@ -185,7 +185,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
     security_variables: z.array(SecurityVariable$inboundSchema).optional(),
     server_variables: z.array(ServerVariable$inboundSchema).optional(),
     slug: z.string(),
-    tool_selection_mode: z.string().optional(),
+    tool_selection_mode: z.string(),
     tool_urns: z.array(z.string()),
     tools: z.array(Tool$inboundSchema),
     toolset_version: z.number().int(),
@@ -242,7 +242,7 @@ export type Toolset$Outbound = {
   security_variables?: Array<SecurityVariable$Outbound> | undefined;
   server_variables?: Array<ServerVariable$Outbound> | undefined;
   slug: string;
-  tool_selection_mode?: string | undefined;
+  tool_selection_mode: string;
   tool_urns: Array<string>;
   tools: Array<Tool$Outbound>;
   toolset_version: number;
@@ -278,7 +278,7 @@ export const Toolset$outboundSchema: z.ZodType<
   securityVariables: z.array(SecurityVariable$outboundSchema).optional(),
   serverVariables: z.array(ServerVariable$outboundSchema).optional(),
   slug: z.string(),
-  toolSelectionMode: z.string().optional(),
+  toolSelectionMode: z.string(),
   toolUrns: z.array(z.string()),
   tools: z.array(Tool$outboundSchema),
   toolsetVersion: z.number().int(),

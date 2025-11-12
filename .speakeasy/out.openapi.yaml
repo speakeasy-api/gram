@@ -11359,6 +11359,7 @@ components:
         - name
         - slug
         - tools
+        - tool_selection_mode
         - toolset_version
         - prompt_templates
         - tool_urns
@@ -11466,6 +11467,7 @@ components:
         - name
         - slug
         - tools
+        - tool_selection_mode
         - prompt_templates
         - tool_urns
         - resources

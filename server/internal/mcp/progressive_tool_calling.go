@@ -101,10 +101,6 @@ func buildDescribeToolsTool(tools []*types.Tool, listToolRequired bool) (*toolLi
 }
 
 func buildListToolsTool(tools []*types.Tool) (*toolListEntry, error) {
-	type sourceGroup struct {
-		groups map[string][]string
-	}
-
 	tree, err := buildToolTree(tools)
 	if err != nil {
 		return nil, err
