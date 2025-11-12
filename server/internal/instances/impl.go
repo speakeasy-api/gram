@@ -329,6 +329,11 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 
+	systemConfig, err := s.env.LoadSourceEnv(ctx, *authCtx.ProjectID, string(toolURN.Kind), toolURN.Source)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
+	}
+
 	requestBody := r.Body
 	requestBodyBytes, err := io.ReadAll(requestBody)
 	if err != nil {
@@ -341,7 +346,10 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	interceptor := newResponseInterceptor(w)
 
-	err = s.toolProxy.Do(ctx, interceptor, requestBody, ciEnv, plan, toolCallLogger)
+	err = s.toolProxy.Do(ctx, interceptor, requestBody, gateway.ToolCallEnv{
+		SystemEnv:  gateway.CIEnvFrom(systemConfig),
+		UserConfig: ciEnv,
+	}, plan, toolCallLogger)
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)
 	}

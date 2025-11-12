@@ -65,7 +65,7 @@ INSERT INTO environment_entries (
     environment_id,
     name,
     value
-) 
+)
 /*
  Parameters:
  - environment_id: uuid
@@ -150,6 +150,22 @@ func (q *Queries) DeleteEnvironmentEntry(ctx context.Context, arg DeleteEnvironm
 	return err
 }
 
+const deleteSourceEnvironment = `-- name: DeleteSourceEnvironment :exec
+DELETE FROM source_environments
+WHERE source_kind = $1 AND source_slug = $2 AND project_id = $3
+`
+
+type DeleteSourceEnvironmentParams struct {
+	SourceKind string
+	SourceSlug string
+	ProjectID  uuid.UUID
+}
+
+func (q *Queries) DeleteSourceEnvironment(ctx context.Context, arg DeleteSourceEnvironmentParams) error {
+	_, err := q.db.Exec(ctx, deleteSourceEnvironment, arg.SourceKind, arg.SourceSlug, arg.ProjectID)
+	return err
+}
+
 const getEnvironmentByID = `-- name: GetEnvironmentByID :one
 SELECT id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted_at, deleted
 FROM environments e
@@ -209,11 +225,45 @@ func (q *Queries) GetEnvironmentBySlug(ctx context.Context, arg GetEnvironmentBy
 	return i, err
 }
 
+const getEnvironmentForSource = `-- name: GetEnvironmentForSource :one
+SELECT e.id, e.organization_id, e.project_id, e.name, e.slug, e.description, e.created_at, e.updated_at, e.deleted_at, e.deleted
+FROM environments e
+INNER JOIN source_environments se ON se.environment_id = e.id
+WHERE se.source_kind = $1
+    AND se.source_slug = $2
+    AND se.project_id = $3
+    AND e.deleted IS FALSE
+`
+
+type GetEnvironmentForSourceParams struct {
+	SourceKind string
+	SourceSlug string
+	ProjectID  uuid.UUID
+}
+
+func (q *Queries) GetEnvironmentForSource(ctx context.Context, arg GetEnvironmentForSourceParams) (Environment, error) {
+	row := q.db.QueryRow(ctx, getEnvironmentForSource, arg.SourceKind, arg.SourceSlug, arg.ProjectID)
+	var i Environment
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const listEnvironmentEntries = `-- name: ListEnvironmentEntries :many
 SELECT ee.name, ee.value, ee.environment_id, ee.created_at, ee.updated_at
 FROM environment_entries ee
 INNER JOIN environments e ON ee.environment_id = e.id
-WHERE 
+WHERE
     e.project_id = $1 AND
     ee.environment_id = $2
 ORDER BY ee.name ASC
@@ -288,9 +338,55 @@ func (q *Queries) ListEnvironments(ctx context.Context, projectID uuid.UUID) ([]
 	return items, nil
 }
 
+const setSourceEnvironment = `-- name: SetSourceEnvironment :one
+INSERT INTO source_environments (
+    source_kind,
+    source_slug,
+    project_id,
+    environment_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4
+)
+ON CONFLICT (source_kind, source_slug, project_id)
+DO UPDATE SET
+    environment_id = EXCLUDED.environment_id,
+    updated_at = now()
+RETURNING id, source_kind, source_slug, project_id, environment_id, created_at, updated_at
+`
+
+type SetSourceEnvironmentParams struct {
+	SourceKind    string
+	SourceSlug    string
+	ProjectID     uuid.UUID
+	EnvironmentID uuid.UUID
+}
+
+func (q *Queries) SetSourceEnvironment(ctx context.Context, arg SetSourceEnvironmentParams) (SourceEnvironment, error) {
+	row := q.db.QueryRow(ctx, setSourceEnvironment,
+		arg.SourceKind,
+		arg.SourceSlug,
+		arg.ProjectID,
+		arg.EnvironmentID,
+	)
+	var i SourceEnvironment
+	err := row.Scan(
+		&i.ID,
+		&i.SourceKind,
+		&i.SourceSlug,
+		&i.ProjectID,
+		&i.EnvironmentID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateEnvironment = `-- name: UpdateEnvironment :one
 UPDATE environments
-SET 
+SET
     name = COALESCE($1, name),
     description = COALESCE($2, description),
     updated_at = now()
@@ -331,8 +427,8 @@ func (q *Queries) UpdateEnvironment(ctx context.Context, arg UpdateEnvironmentPa
 const upsertEnvironmentEntry = `-- name: UpsertEnvironmentEntry :one
 INSERT INTO environment_entries (environment_id, name, value, updated_at)
 VALUES ($1, $2, $3, now())
-ON CONFLICT (environment_id, name) 
-DO UPDATE SET 
+ON CONFLICT (environment_id, name)
+DO UPDATE SET
     value = EXCLUDED.value,
     updated_at = now()
 RETURNING name, value, environment_id, created_at, updated_at

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"mime"
 	"net/http"
 	"slices"
@@ -102,7 +103,6 @@ func handleToolsCall(
 	}
 
 	toolsetHelpers := toolsets.NewToolsets(db)
-	envSlug := payload.environment
 	var tool *types.Tool
 
 	for _, t := range toolset.Tools {
@@ -117,28 +117,6 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeNotFound, errors.New("tool not found"), "tool not found").Log(ctx, logger)
 	}
 
-	ciEnv := gateway.NewCaseInsensitiveEnv()
-
-	// IMPORTANT: MCP servers accessed in a public manner or not gram authenticated, there is no concept of using stored environments for them
-	if envSlug != "" && payload.authenticated {
-		storedEnvVars, err := env.Load(ctx, payload.projectID, gateway.Slug(envSlug))
-		switch {
-		case errors.Is(err, gateway.ErrNotFound):
-			return nil, oops.E(oops.CodeBadRequest, err, "environment not found").Log(ctx, logger)
-		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, logger)
-		}
-
-		for k, v := range storedEnvVars {
-			ciEnv.Set(k, v)
-		}
-	}
-
-	// user supplied variables comes after stored environment variables to allow overrides in the case of conflicts
-	for k, v := range payload.mcpEnvVariables {
-		ciEnv.Set(k, v)
-	}
-
 	toolURN, err := conv.GetToolURN(*tool)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
@@ -147,6 +125,16 @@ func handleToolsCall(
 	plan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, *toolURN, uuid.UUID(projectID))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed get tool call plan").Log(ctx, logger)
+	}
+
+	userConfig, err := resolveUserConfiguration(ctx, logger, env, payload, plan)
+	if err != nil {
+		return nil, err
+	}
+
+	systemConfig, err := env.LoadSourceEnv(ctx, payload.projectID, string(toolURN.Kind), toolURN.Source)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
 	}
 
 	descriptor := plan.Descriptor
@@ -178,19 +166,6 @@ func handleToolsCall(
 	}
 
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
-	if plan.Kind == gateway.ToolKindHTTP {
-		for _, security := range plan.HTTP.Security {
-			for _, token := range payload.oauthTokenInputs {
-				if (slices.Contains(security.OAuthTypes, "authorization_code") || security.Type.Value == "openIdConnect") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
-					for _, envVar := range security.EnvVariables {
-						if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
-							ciEnv.Set(envVar, token.Token)
-						}
-					}
-				}
-			}
-		}
-	}
 
 	rw := &toolCallResponseWriter{
 		headers:    make(http.Header),
@@ -238,7 +213,8 @@ func handleToolsCall(
 		toolCallLogger.Emit(context.WithoutCancel(ctx), logger)
 	}()
 
-	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), ciEnv, plan, toolCallLogger)
+	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), gateway.ToolCallEnv{
+		UserConfig: gateway.CIEnvFrom(userConfig), SystemEnv: gateway.CIEnvFrom(systemConfig)}, plan, toolCallLogger)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
 	}
@@ -297,6 +273,49 @@ func handleToolsCall(
 	}
 
 	return bs, nil
+}
+
+func resolveUserConfiguration(
+	ctx context.Context,
+	logger *slog.Logger,
+	env gateway.EnvironmentLoader,
+	payload *mcpInputs,
+	plan *gateway.ToolCallPlan,
+) (map[string]string, error) {
+	userConfig := make(map[string]string)
+
+	// IMPORTANT: we must only attach gram environments to authenticated payloads. Gram environments contain
+	// secrets owned by Gram projects and should not be usable by public clients
+	if payload.environment != "" && payload.authenticated {
+		storedEnvVars, err := env.Load(ctx, payload.projectID, gateway.Slug(payload.environment))
+		switch {
+		case errors.Is(err, gateway.ErrNotFound):
+			return nil, oops.E(oops.CodeBadRequest, err, "environment not found").Log(ctx, logger)
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, logger)
+		}
+
+		maps.Copy(userConfig, storedEnvVars)
+	}
+
+	maps.Copy(userConfig, payload.mcpEnvVariables)
+
+	// Process OAuth tokens for HTTP tools
+	if plan != nil && plan.Kind == gateway.ToolKindHTTP {
+		for _, security := range plan.HTTP.Security {
+			for _, token := range payload.oauthTokenInputs {
+				if (slices.Contains(security.OAuthTypes, "authorization_code") || security.Type.Value == "openIdConnect") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
+					for _, envVar := range security.EnvVariables {
+						if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
+							userConfig[envVar] = token.Token
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return userConfig, nil
 }
 
 func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string, accountType string, billingRepository billing.Repository) error {

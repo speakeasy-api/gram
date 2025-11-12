@@ -74,26 +74,6 @@ type ToolCallBody struct {
 	GramRequestSummary   string            `json:"gram-request-summary"`
 }
 
-// CaseInsensitiveEnv provides case-insensitive environment variable lookup.
-type CaseInsensitiveEnv struct {
-	data map[string]string
-}
-
-// NewCaseInsensitiveEnv creates a new empty case-insensitive environment.
-func NewCaseInsensitiveEnv() *CaseInsensitiveEnv {
-	return &CaseInsensitiveEnv{data: make(map[string]string)}
-}
-
-// Get retrieves an environment variable value by key (case-insensitive).
-func (c *CaseInsensitiveEnv) Get(key string) string {
-	return c.data[strings.ToLower(key)]
-}
-
-// Set sets an environment variable value by key (case-insensitive).
-func (c *CaseInsensitiveEnv) Set(key, value string) {
-	c.data[strings.ToLower(key)] = value
-}
-
 type toolcallErrorSchema struct {
 	Error string `json:"error"`
 }
@@ -146,7 +126,7 @@ func (tp *ToolProxy) Do(
 	ctx context.Context,
 	w http.ResponseWriter,
 	requestBody io.Reader,
-	env *CaseInsensitiveEnv,
+	env ToolCallEnv,
 	plan *ToolCallPlan,
 	toolCallLogger tm.ToolCallLogger,
 ) (err error) {
@@ -172,10 +152,6 @@ func (tp *ToolProxy) Do(
 		attr.SlogToolCallSource(string(tp.source)),
 	)
 
-	if env == nil {
-		env = NewCaseInsensitiveEnv()
-	}
-
 	switch plan.Kind {
 	case "":
 		return oops.E(oops.CodeInvariantViolation, nil, "tool kind is not set").Log(ctx, tp.logger)
@@ -195,7 +171,7 @@ func (tp *ToolProxy) doFunction(
 	logger *slog.Logger,
 	w http.ResponseWriter,
 	requestBody io.Reader,
-	env *CaseInsensitiveEnv,
+	env ToolCallEnv,
 	descriptor *ToolDescriptor,
 	plan *FunctionToolCallPlan,
 	toolCallLogger tm.ToolCallLogger,
@@ -228,10 +204,17 @@ func (tp *ToolProxy) doFunction(
 		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, logger)
 	}
 
-	payloadEnv := make(map[string]string, len(plan.Variables))
-	for _, v := range plan.Variables {
-		if val := env.Get(v); val != "" {
-			payloadEnv[v] = val
+	payloadEnv := make(map[string]string)
+
+	// Start with system environment variables (uppercase keys)
+	for k, v := range env.SystemEnv.All() {
+		payloadEnv[strings.ToUpper(k)] = v
+	}
+
+	// For each variable required by the function, allow user config to merge/override
+	for _, varName := range plan.Variables {
+		if val := env.UserConfig.Get(varName); val != "" {
+			payloadEnv[varName] = val
 		}
 	}
 
@@ -307,7 +290,7 @@ func (tp *ToolProxy) doHTTP(
 	logger *slog.Logger,
 	w http.ResponseWriter,
 	requestBody io.Reader,
-	env *CaseInsensitiveEnv,
+	env ToolCallEnv,
 	descriptor *ToolDescriptor,
 	plan *HTTPToolCallPlan,
 	toolCallLogger tm.ToolCallLogger,
@@ -376,10 +359,10 @@ func (tp *ToolProxy) doHTTP(
 		}
 	}
 
-	// environment variable overrides on tool calls typically defined in the SDK
+	// We prefer tool call specified arguments over user-specified config
 	if toolCallBody.EnvironmentVariables != nil {
 		for k, v := range toolCallBody.EnvironmentVariables {
-			env.Set(k, v)
+			env.UserConfig.Set(k, v)
 		}
 	}
 
@@ -570,7 +553,7 @@ type promptGetParams struct {
 	Arguments map[string]any `json:"arguments"`
 }
 
-func (tp *ToolProxy) doPrompt(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, requestBody io.Reader, env *CaseInsensitiveEnv, descriptor *ToolDescriptor, plan *PromptToolCallPlan) error {
+func (tp *ToolProxy) doPrompt(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, requestBody io.Reader, env ToolCallEnv, descriptor *ToolDescriptor, plan *PromptToolCallPlan) error {
 	var params promptGetParams
 	if err := json.NewDecoder(requestBody).Decode(&params); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to parse get prompt request").Log(ctx, logger)
@@ -622,7 +605,6 @@ func retryWithBackoff(
 		if err != nil {
 			continue
 		}
-
 		if !slices.Contains(retryBackoff.methods, resp.Request.Method) || !slices.Contains(retryBackoff.statusCodes, resp.StatusCode) {
 			return resp, err
 		}
@@ -862,9 +844,17 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 	return nil
 }
 
-func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPToolCallPlan, envVars *CaseInsensitiveEnv) string {
+func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPToolCallPlan, env ToolCallEnv) string {
 	if tool.ServerEnvVar != "" {
-		envVar := envVars.Get(tool.ServerEnvVar)
+		if envVar := env.SystemEnv.Get(tool.ServerEnvVar); envVar != "" {
+			return envVar
+		} else if len(env.SystemEnv.All()) > 0 {
+			// IMPORTANT: when system environment variables exist, we _always_ disallow user-supplied
+			// server URLs to prevent exfiltration of system environment variables to user-controlled servers.
+			return ""
+		}
+
+		envVar := env.UserConfig.Get(tool.ServerEnvVar)
 		if envVar != "" {
 			return envVar
 		} else {

@@ -168,7 +168,10 @@ run();
 
 * [create](docs/sdks/environments/README.md#create) - createEnvironment environments
 * [deleteBySlug](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
+* [deleteSourceLink](docs/sdks/environments/README.md#deletesourcelink) - deleteSourceEnvironmentLink environments
+* [getBySource](docs/sdks/environments/README.md#getbysource) - getSourceEnvironment environments
 * [list](docs/sdks/environments/README.md#list) - listEnvironments environments
+* [setSourceLink](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 * [updateBySlug](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 
 ### [features](docs/sdks/features/README.md)
@@ -312,7 +315,10 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`domainsRegisterDomain`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`environmentsCreate`](docs/sdks/environments/README.md#create) - createEnvironment environments
 - [`environmentsDeleteBySlug`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
+- [`environmentsDeleteSourceLink`](docs/sdks/environments/README.md#deletesourcelink) - deleteSourceEnvironmentLink environments
+- [`environmentsGetBySource`](docs/sdks/environments/README.md#getbysource) - getSourceEnvironment environments
 - [`environmentsList`](docs/sdks/environments/README.md#list) - listEnvironments environments
+- [`environmentsSetSourceLink`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`environmentsUpdateBySlug`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`featuresSet`](docs/sdks/features/README.md#set) - setProductFeature features
 - [`instancesGetBySlug`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
@@ -406,6 +412,7 @@ To learn about this feature and how to get started, check
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`useDeleteSlackConnectionMutation`](docs/sdks/slack/README.md#deleteslackconnection) - deleteSlackConnection slack
+- [`useDeleteSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletesourcelink) - deleteSourceEnvironmentLink environments
 - [`useDeleteTemplateMutation`](docs/sdks/templates/README.md#delete) - deleteTemplate templates
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
@@ -417,6 +424,7 @@ To learn about this feature and how to get started, check
 - [`useGetMcpMetadata`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 - [`useGetPeriodUsage`](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
 - [`useGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
+- [`useGetSourceEnvironment`](docs/sdks/environments/README.md#getbysource) - getSourceEnvironment environments
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
 - [`useInstance`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
@@ -451,6 +459,7 @@ To learn about this feature and how to get started, check
 - [`useServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
 - [`useSetProjectLogoMutation`](docs/sdks/projects/README.md#setlogo) - setLogo projects
+- [`useSetSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates
 - [`useTemplates`](docs/sdks/templates/README.md#list) - listTemplates templates

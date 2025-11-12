@@ -33,7 +33,7 @@ WHERE e.id = $1 AND e.project_id = $2 AND e.deleted IS FALSE;
 
 -- name: UpdateEnvironment :one
 UPDATE environments
-SET 
+SET
     name = COALESCE(@name, name),
     description = COALESCE(@description, description),
     updated_at = now()
@@ -44,7 +44,7 @@ RETURNING *;
 SELECT ee.*
 FROM environment_entries ee
 INNER JOIN environments e ON ee.environment_id = e.id
-WHERE 
+WHERE
     e.project_id = @project_id AND
     ee.environment_id = @environment_id
 ORDER BY ee.name ASC;
@@ -66,7 +66,7 @@ INSERT INTO environment_entries (
     environment_id,
     name,
     value
-) 
+)
 /*
  Parameters:
  - environment_id: uuid
@@ -83,8 +83,8 @@ RETURNING *;
 -- name: UpsertEnvironmentEntry :one
 INSERT INTO environment_entries (environment_id, name, value, updated_at)
 VALUES ($1, $2, $3, now())
-ON CONFLICT (environment_id, name) 
-DO UPDATE SET 
+ON CONFLICT (environment_id, name)
+DO UPDATE SET
     value = EXCLUDED.value,
     updated_at = now()
 RETURNING *;
@@ -92,3 +92,34 @@ RETURNING *;
 -- name: DeleteEnvironmentEntry :exec
 DELETE FROM environment_entries
 WHERE environment_id = $1 AND name = $2;
+
+-- name: GetEnvironmentForSource :one
+SELECT e.*
+FROM environments e
+INNER JOIN source_environments se ON se.environment_id = e.id
+WHERE se.source_kind = @source_kind
+    AND se.source_slug = @source_slug
+    AND se.project_id = @project_id
+    AND e.deleted IS FALSE;
+
+-- name: SetSourceEnvironment :one
+INSERT INTO source_environments (
+    source_kind,
+    source_slug,
+    project_id,
+    environment_id
+) VALUES (
+    @source_kind,
+    @source_slug,
+    @project_id,
+    @environment_id
+)
+ON CONFLICT (source_kind, source_slug, project_id)
+DO UPDATE SET
+    environment_id = EXCLUDED.environment_id,
+    updated_at = now()
+RETURNING *;
+
+-- name: DeleteSourceEnvironment :exec
+DELETE FROM source_environments
+WHERE source_kind = @source_kind AND source_slug = @source_slug AND project_id = @project_id;

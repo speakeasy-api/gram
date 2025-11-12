@@ -12,7 +12,7 @@ import { Button } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Outlet } from "react-router";
-import Sources, { useDeploymentIsEmpty } from "./sources/Sources";
+import Sources, { useDeploymentIsEmpty } from "@/components/sources/Sources";
 import { useCloneToolset } from "./Toolset";
 import { ToolsetsEmptyState } from "./ToolsetsEmptyState";
 

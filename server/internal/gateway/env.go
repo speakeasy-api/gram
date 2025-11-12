@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -14,6 +15,13 @@ type EnvironmentLoader interface {
 	//   * [ErrNotFound]: when the environment does not exist.
 	//   * `error`: when an unrecognized error occurs.
 	Load(ctx context.Context, projectID uuid.UUID, environmentID SlugOrID) (map[string]string, error)
+
+	// LoadSourceEnv retrieves the environment variables associated with a tool's source.
+	// Returns an empty map if no source environment exists.
+	//
+	// # Errors
+	//   * `error`: when an unrecognized error occurs.
+	LoadSourceEnv(ctx context.Context, projectID uuid.UUID, sourceKind string, sourceSlug string) (map[string]string, error)
 }
 
 type SlugOrID struct {
@@ -50,4 +58,41 @@ func (s *SlugOrID) String() string {
 
 func (s *SlugOrID) IsEmpty() bool {
 	return s.ID == uuid.Nil && s.Slug == ""
+}
+
+type CaseInsensitiveEnv struct {
+	data map[string]string
+}
+
+func NewCaseInsensitiveEnv() *CaseInsensitiveEnv {
+	return &CaseInsensitiveEnv{data: make(map[string]string)}
+}
+
+func CIEnvFrom(vars map[string]string) *CaseInsensitiveEnv {
+	env := NewCaseInsensitiveEnv()
+	for k, v := range vars {
+		env.Set(k, v)
+	}
+	return env
+}
+
+func (c *CaseInsensitiveEnv) Get(key string) string {
+	return c.data[strings.ToLower(key)]
+}
+
+func (c *CaseInsensitiveEnv) Set(key, value string) {
+	c.data[strings.ToLower(key)] = value
+}
+
+func (c *CaseInsensitiveEnv) All() map[string]string {
+	result := make(map[string]string, len(c.data))
+	for k, v := range c.data {
+		result[k] = v
+	}
+	return result
+}
+
+type ToolCallEnv struct {
+	SystemEnv  *CaseInsensitiveEnv
+	UserConfig *CaseInsensitiveEnv
 }

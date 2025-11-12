@@ -103,6 +103,86 @@ var _ = Service("environments", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteBySlug")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteEnvironment"}`)
 	})
+
+	Method("setSourceEnvironmentLink", func() {
+		Description("Set (upsert) a link between a source and an environment")
+
+		Payload(func() {
+			Attribute("source_kind", SourceKind, "The kind of source (http or function)")
+			Attribute("source_slug", String, "The slug of the source")
+			Attribute("environment_id", String, "The ID of the environment to link", func() {
+				Format(FormatUUID)
+			})
+			Required("source_kind", "source_slug", "environment_id")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(SourceEnvironmentLink)
+
+		HTTP(func() {
+			PUT("/rpc/environments.setSourceLink")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setSourceEnvironmentLink")
+		Meta("openapi:extension:x-speakeasy-name-override", "setSourceLink")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetSourceEnvironmentLink"}`)
+	})
+
+	Method("deleteSourceEnvironmentLink", func() {
+		Description("Delete a link between a source and an environment")
+
+		Payload(func() {
+			Attribute("source_kind", SourceKind, "The kind of source (http or function)")
+			Attribute("source_slug", String, "The slug of the source")
+			Required("source_kind", "source_slug")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/environments.deleteSourceLink")
+			Param("source_kind")
+			Param("source_slug")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "deleteSourceEnvironmentLink")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteSourceLink")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteSourceEnvironmentLink"}`)
+	})
+
+	Method("getSourceEnvironment", func() {
+		Description("Get the environment linked to a source")
+
+		Payload(func() {
+			Attribute("source_kind", SourceKind, "The kind of source (http or function)")
+			Attribute("source_slug", String, "The slug of the source")
+			Required("source_kind", "source_slug")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(shared.Environment)
+
+		HTTP(func() {
+			GET("/rpc/environments.getSourceEnvironment")
+			Param("source_kind")
+			Param("source_slug")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getSourceEnvironment")
+		Meta("openapi:extension:x-speakeasy-name-override", "getBySource")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetSourceEnvironment"}`)
+	})
 })
 
 var EnvironmentEntryInput = Type("EnvironmentEntryInput", func() {
@@ -142,4 +222,24 @@ var ListEnvironmentsResult = Type("ListEnvironmentsResult", func() {
 
 	Attribute("environments", ArrayOf(shared.Environment))
 	Required("environments")
+})
+
+var SourceKind = Type("SourceKind", String, func() {
+	Description("The kind of source that can be linked to an environment")
+	Enum("http", "function")
+})
+
+var SourceEnvironmentLink = Type("SourceEnvironmentLink", func() {
+	Description("A link between a source and an environment")
+
+	Attribute("id", String, "The ID of the source environment link", func() {
+		Format(FormatUUID)
+	})
+	Attribute("source_kind", SourceKind, "The kind of source (http or function)")
+	Attribute("source_slug", String, "The slug of the source")
+	Attribute("environment_id", String, "The ID of the environment", func() {
+		Format(FormatUUID)
+	})
+
+	Required("id", "source_kind", "source_slug", "environment_id")
 })
