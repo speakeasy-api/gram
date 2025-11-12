@@ -70,7 +70,7 @@ var Toolset = Type("Toolset", func() {
 		Description("When the toolset was last updated.")
 		Format(FormatDateTime)
 	})
-	Required("id", "project_id", "organization_id", "account_type", "name", "slug", "tools", "toolset_version", "prompt_templates", "tool_urns", "resources", "resource_urns", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "account_type", "name", "slug", "tools", "tool_selection_mode", "toolset_version", "prompt_templates", "tool_urns", "resources", "resource_urns", "created_at", "updated_at")
 })
 
 var ToolsetEntry = Type("ToolsetEntry", func() {
@@ -105,7 +105,7 @@ var ToolsetEntry = Type("ToolsetEntry", func() {
 		Description("When the toolset was last updated.")
 		Format(FormatDateTime)
 	})
-	Required("id", "project_id", "organization_id", "name", "slug", "tools", "prompt_templates", "tool_urns", "resources", "resource_urns", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "name", "slug", "tools", "tool_selection_mode", "prompt_templates", "tool_urns", "resources", "resource_urns", "created_at", "updated_at")
 })
 
 var ExternalOAuthServer = Type("ExternalOAuthServer", func() {

@@ -314,7 +314,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	}
 
 	if payload.ToolSelectionMode != nil {
-		updateParams.ToolSelectionMode = conv.ToPGText(*payload.ToolSelectionMode)
+		updateParams.ToolSelectionMode = *payload.ToolSelectionMode
 	}
 
 	err = s.createToolsetVersion(ctx, payload.ToolUrns, payload.ResourceUrns, existingToolset.ID, tr)

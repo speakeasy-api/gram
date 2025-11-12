@@ -110,7 +110,7 @@ type CreateToolsetResponseBody struct {
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
-	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The external OAuth server details
@@ -175,7 +175,7 @@ type UpdateToolsetResponseBody struct {
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
-	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The external OAuth server details
@@ -233,7 +233,7 @@ type GetToolsetResponseBody struct {
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
-	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The external OAuth server details
@@ -291,7 +291,7 @@ type CloneToolsetResponseBody struct {
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
-	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The external OAuth server details
@@ -349,7 +349,7 @@ type AddExternalOAuthServerResponseBody struct {
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
-	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The external OAuth server details
@@ -407,7 +407,7 @@ type RemoveOAuthServerResponseBody struct {
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
-	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The external OAuth server details
@@ -2471,7 +2471,7 @@ type ToolsetEntryResponseBody struct {
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
-	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// When the toolset was created.

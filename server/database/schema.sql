@@ -594,7 +594,7 @@ CREATE TABLE IF NOT EXISTS toolsets (
   ),
   mcp_is_public BOOLEAN NOT NULL DEFAULT FALSE,
   mcp_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-  tool_selection_mode TEXT,
+  tool_selection_mode TEXT NOT NULL DEFAULT 'static',
   custom_domain_id uuid,
 
   -- OAuth configuration - mutually exclusive

@@ -5295,6 +5295,7 @@ paths:
                             - name
                             - slug
                             - tools
+                            - tool_selection_mode
                             - toolset_version
                             - prompt_templates
                             - tool_urns
@@ -5481,6 +5482,7 @@ paths:
                             - name
                             - slug
                             - tools
+                            - tool_selection_mode
                             - toolset_version
                             - prompt_templates
                             - tool_urns
@@ -5584,6 +5586,7 @@ paths:
                             - name
                             - slug
                             - tools
+                            - tool_selection_mode
                             - toolset_version
                             - prompt_templates
                             - tool_urns
@@ -5769,6 +5772,7 @@ paths:
                             - name
                             - slug
                             - tools
+                            - tool_selection_mode
                             - toolset_version
                             - prompt_templates
                             - tool_urns
@@ -5953,6 +5957,7 @@ paths:
                             - name
                             - slug
                             - tools
+                            - tool_selection_mode
                             - toolset_version
                             - prompt_templates
                             - tool_urns
@@ -6059,6 +6064,7 @@ paths:
                             - name
                             - slug
                             - tools
+                            - tool_selection_mode
                             - toolset_version
                             - prompt_templates
                             - tool_urns
@@ -45314,6 +45320,7 @@ definitions:
             - name
             - slug
             - tools
+            - tool_selection_mode
             - toolset_version
             - prompt_templates
             - tool_urns
@@ -45831,6 +45838,7 @@ definitions:
             - name
             - slug
             - tools
+            - tool_selection_mode
             - prompt_templates
             - tool_urns
             - resources

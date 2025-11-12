@@ -605,7 +605,7 @@ type GetToolsetsByToolURNRow struct {
 	McpSlug                pgtype.Text
 	McpIsPublic            bool
 	McpEnabled             bool
-	ToolSelectionMode      pgtype.Text
+	ToolSelectionMode      string
 	CustomDomainID         uuid.NullUUID
 	ExternalOauthServerID  uuid.NullUUID
 	OauthProxyServerID     uuid.NullUUID
@@ -777,7 +777,7 @@ type UpdateToolsetParams struct {
 	McpIsPublic            bool
 	CustomDomainID         uuid.NullUUID
 	McpEnabled             bool
-	ToolSelectionMode      pgtype.Text
+	ToolSelectionMode      string
 	Slug                   string
 	ProjectID              uuid.UUID
 }

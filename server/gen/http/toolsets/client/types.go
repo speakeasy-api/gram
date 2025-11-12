@@ -2614,7 +2614,7 @@ func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *types.Toolset {
 		ToolsetVersion:    *body.ToolsetVersion,
 		McpIsPublic:       body.McpIsPublic,
 		McpEnabled:        body.McpEnabled,
-		ToolSelectionMode: body.ToolSelectionMode,
+		ToolSelectionMode: *body.ToolSelectionMode,
 		CustomDomainID:    body.CustomDomainID,
 		CreatedAt:         *body.CreatedAt,
 		UpdatedAt:         *body.UpdatedAt,
@@ -3001,7 +3001,7 @@ func NewUpdateToolsetToolsetOK(body *UpdateToolsetResponseBody) *types.Toolset {
 		ToolsetVersion:    *body.ToolsetVersion,
 		McpIsPublic:       body.McpIsPublic,
 		McpEnabled:        body.McpEnabled,
-		ToolSelectionMode: body.ToolSelectionMode,
+		ToolSelectionMode: *body.ToolSelectionMode,
 		CustomDomainID:    body.CustomDomainID,
 		CreatedAt:         *body.CreatedAt,
 		UpdatedAt:         *body.UpdatedAt,
@@ -3376,7 +3376,7 @@ func NewGetToolsetToolsetOK(body *GetToolsetResponseBody) *types.Toolset {
 		ToolsetVersion:    *body.ToolsetVersion,
 		McpIsPublic:       body.McpIsPublic,
 		McpEnabled:        body.McpEnabled,
-		ToolSelectionMode: body.ToolSelectionMode,
+		ToolSelectionMode: *body.ToolSelectionMode,
 		CustomDomainID:    body.CustomDomainID,
 		CreatedAt:         *body.CreatedAt,
 		UpdatedAt:         *body.UpdatedAt,
@@ -3751,7 +3751,7 @@ func NewCloneToolsetToolsetOK(body *CloneToolsetResponseBody) *types.Toolset {
 		ToolsetVersion:    *body.ToolsetVersion,
 		McpIsPublic:       body.McpIsPublic,
 		McpEnabled:        body.McpEnabled,
-		ToolSelectionMode: body.ToolSelectionMode,
+		ToolSelectionMode: *body.ToolSelectionMode,
 		CustomDomainID:    body.CustomDomainID,
 		CreatedAt:         *body.CreatedAt,
 		UpdatedAt:         *body.UpdatedAt,
@@ -3976,7 +3976,7 @@ func NewAddExternalOAuthServerToolsetOK(body *AddExternalOAuthServerResponseBody
 		ToolsetVersion:    *body.ToolsetVersion,
 		McpIsPublic:       body.McpIsPublic,
 		McpEnabled:        body.McpEnabled,
-		ToolSelectionMode: body.ToolSelectionMode,
+		ToolSelectionMode: *body.ToolSelectionMode,
 		CustomDomainID:    body.CustomDomainID,
 		CreatedAt:         *body.CreatedAt,
 		UpdatedAt:         *body.UpdatedAt,
@@ -4201,7 +4201,7 @@ func NewRemoveOAuthServerToolsetOK(body *RemoveOAuthServerResponseBody) *types.T
 		ToolsetVersion:    *body.ToolsetVersion,
 		McpIsPublic:       body.McpIsPublic,
 		McpEnabled:        body.McpEnabled,
-		ToolSelectionMode: body.ToolSelectionMode,
+		ToolSelectionMode: *body.ToolSelectionMode,
 		CustomDomainID:    body.CustomDomainID,
 		CreatedAt:         *body.CreatedAt,
 		UpdatedAt:         *body.UpdatedAt,
@@ -4436,6 +4436,9 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 	if body.Tools == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
+	if body.ToolSelectionMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
+	}
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
 	}
@@ -4582,6 +4585,9 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 	if body.Tools == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
+	if body.ToolSelectionMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
+	}
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
 	}
@@ -4711,6 +4717,9 @@ func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 	}
 	if body.Tools == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	}
+	if body.ToolSelectionMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
 	}
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
@@ -4842,6 +4851,9 @@ func ValidateCloneToolsetResponseBody(body *CloneToolsetResponseBody) (err error
 	if body.Tools == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
+	if body.ToolSelectionMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
+	}
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
 	}
@@ -4972,6 +4984,9 @@ func ValidateAddExternalOAuthServerResponseBody(body *AddExternalOAuthServerResp
 	if body.Tools == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
+	if body.ToolSelectionMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
+	}
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
 	}
@@ -5101,6 +5116,9 @@ func ValidateRemoveOAuthServerResponseBody(body *RemoveOAuthServerResponseBody) 
 	}
 	if body.Tools == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	}
+	if body.ToolSelectionMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
 	}
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
@@ -7891,6 +7909,9 @@ func ValidateToolsetEntryResponseBody(body *ToolsetEntryResponseBody) (err error
 	}
 	if body.Tools == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	}
+	if body.ToolSelectionMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
 	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))

@@ -610,8 +610,8 @@ func resolveToolMode(r *http.Request, toolset toolsets_repo.Toolset) ToolMode {
 
 	if mode != "" {
 		return ToolMode(mode)
-	} else if toolset.ToolSelectionMode.String != "" {
-		return ToolMode(toolset.ToolSelectionMode.String)
+	} else if toolset.ToolSelectionMode != "" {
+		return ToolMode(toolset.ToolSelectionMode)
 	}
 
 	return ToolModeStatic

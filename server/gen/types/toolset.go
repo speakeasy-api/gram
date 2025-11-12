@@ -51,7 +51,7 @@ type Toolset struct {
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool
 	// The mode to use for tool selection
-	ToolSelectionMode *string
+	ToolSelectionMode string
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string
 	// The external OAuth server details
