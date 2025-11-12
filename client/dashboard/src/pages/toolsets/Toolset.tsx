@@ -274,8 +274,16 @@ export function ToolsetView({
   // Get initial tab from URL hash, default to "tools"
   const getTabFromHash = (): ToolsetTabs => {
     const hash = location.hash.slice(1); // Remove the # character
-    const validTabs: ToolsetTabs[] = ["tools", "prompts", "resources", "auth", "mcp"];
-    return validTabs.includes(hash as ToolsetTabs) ? (hash as ToolsetTabs) : "tools";
+    const validTabs: ToolsetTabs[] = [
+      "tools",
+      "prompts",
+      "resources",
+      "auth",
+      "mcp",
+    ];
+    return validTabs.includes(hash as ToolsetTabs)
+      ? (hash as ToolsetTabs)
+      : "tools";
   };
 
   const [activeTab, setActiveTab] = useState<ToolsetTabs>(getTabFromHash());
