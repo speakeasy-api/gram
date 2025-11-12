@@ -432,6 +432,8 @@ const CliSetupStep = ({
   const [installMethod, setInstallMethod] = useState<"npm" | "pnpm">("npm");
   const client = useSdkClient();
 
+  const installCommandPrefix = installMethod === "npm" ? "npm run" : "pnpm";
+
   // We explicitly don't poll to advance this step because the expected flow is that the CLI opens a new window with the next step.
 
   const commands = [
@@ -454,11 +456,11 @@ const CliSetupStep = ({
     },
     {
       label: "Build your functions",
-      command: `${installMethod} build`,
+      command: `${installCommandPrefix} build`,
     },
     {
       label: "Push your functions to Gram",
-      command: `${installMethod} push`,
+      command: `${installCommandPrefix} push`,
     },
   ];
 

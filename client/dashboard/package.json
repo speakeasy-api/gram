@@ -40,7 +40,7 @@
     "@radix-ui/react-toggle-group": "^1.1.11",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@react-three/drei": "^10.0.7",
-    "@react-three/fiber": "^9.1.2",
+    "@react-three/fiber": "^9.4.0",
     "@react-three/postprocessing": "^3.0.4",
     "@speakeasy-api/moonshine": "1.32.5",
     "@tailwindcss/typography": "^0.5.16",
