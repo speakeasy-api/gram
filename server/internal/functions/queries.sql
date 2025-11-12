@@ -102,6 +102,7 @@ WITH ranked_deployments AS (
   INNER JOIN deployments d ON d.id = fa.deployment_id
   WHERE
     fa.status = 'ready'
+    AND (@project_id::uuid IS NULL OR fa.project_id = @project_id)
     AND fa.reaped_at IS NULL
 )
 SELECT
