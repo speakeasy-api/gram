@@ -75,13 +75,14 @@ func (r *ReapFlyApps) Do(ctx context.Context, req ReapFlyAppsRequest) (*ReapFlyA
 		// Starting with a small batch size for now and we'll increase later on
 		// after some observation.
 		BatchSize: pgtype.Int8{Int64: 50, Valid: true},
+
+		ProjectID: req.ProjectID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to query apps to reap").Log(ctx, logger)
 	}
 
 	if len(appsToReap) == 0 {
-		logger.InfoContext(ctx, "no apps to reap")
 		return &ReapFlyAppsResult{
 			Reaped: 0,
 			Errors: 0,
@@ -103,8 +104,6 @@ func (r *ReapFlyApps) Do(ctx context.Context, req ReapFlyAppsRequest) (*ReapFlyA
 			attr.SlogDeploymentFunctionsID(app.FunctionID.String()),
 		)
 
-		appLogger.InfoContext(ctx, "reaping fly app")
-
 		if err := r.deployer.Reap(ctx, functions.ReapRequest{
 			ProjectID:    app.ProjectID,
 			DeploymentID: app.DeploymentID,
@@ -116,7 +115,7 @@ func (r *ReapFlyApps) Do(ctx context.Context, req ReapFlyAppsRequest) (*ReapFlyA
 		}
 
 		result.Reaped++
-		appLogger.InfoContext(ctx, "successfully reaped fly app")
+		appLogger.InfoContext(ctx, "successfully reaped fly app", attr.SlogVisibilityInternal())
 	}
 
 	r.metrics.RecordFlyAppReaperReapCount(ctx, int64(result.Reaped), int64(result.Errors))

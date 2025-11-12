@@ -167,6 +167,7 @@ WITH ranked_deployments AS (
   INNER JOIN deployments d ON d.id = fa.deployment_id
   WHERE
     fa.status = 'ready'
+    AND ($3::uuid IS NULL OR fa.project_id = $3)
     AND fa.reaped_at IS NULL
 )
 SELECT
@@ -192,6 +193,7 @@ LIMIT $2
 type GetFlyAppsToReapParams struct {
 	KeepCount pgtype.Int8
 	BatchSize pgtype.Int8
+	ProjectID uuid.NullUUID
 }
 
 type GetFlyAppsToReapRow struct {
@@ -205,7 +207,7 @@ type GetFlyAppsToReapRow struct {
 }
 
 func (q *Queries) GetFlyAppsToReap(ctx context.Context, arg GetFlyAppsToReapParams) ([]GetFlyAppsToReapRow, error) {
-	rows, err := q.db.Query(ctx, getFlyAppsToReap, arg.KeepCount, arg.BatchSize)
+	rows, err := q.db.Query(ctx, getFlyAppsToReap, arg.KeepCount, arg.BatchSize, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -325,26 +327,6 @@ func (q *Queries) InitFlyApp(ctx context.Context, arg InitFlyAppParams) (uuid.UU
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
-}
-
-const isReapingEnabledForProject = `-- name: IsReapingEnabledForProject :one
-SELECT true AS enabled
-FROM projects
-WHERE
-  id = $1
-  AND organization_id = ANY($2)
-`
-
-type IsReapingEnabledForProjectParams struct {
-	ProjectID       uuid.UUID
-	OrganizationIds []string
-}
-
-func (q *Queries) IsReapingEnabledForProject(ctx context.Context, arg IsReapingEnabledForProjectParams) (bool, error) {
-	row := q.db.QueryRow(ctx, isReapingEnabledForProject, arg.ProjectID, arg.OrganizationIds)
-	var enabled bool
-	err := row.Scan(&enabled)
-	return enabled, err
 }
 
 const markFlyAppReaped = `-- name: MarkFlyAppReaped :exec

@@ -57,6 +57,7 @@ type FlyRunnerOptions struct {
 
 type FlyRunner struct {
 	logger          *slog.Logger
+	tracer          trace.Tracer
 	db              *pgxpool.Pool
 	assetStorage    assets.BlobStore
 	client          *fly.Client
@@ -116,6 +117,7 @@ func NewFlyRunner(
 
 	return &FlyRunner{
 		logger:          logger.With(attr.SlogComponent("flyio-orchestrator")),
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/functions"),
 		db:              db,
 		assetStorage:    assetStorage,
 		client:          c,
@@ -507,7 +509,11 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 }
 
 func (f *FlyRunner) Reap(ctx context.Context, req ReapRequest) error {
+	ctx, span := f.tracer.Start(ctx, "FlyRunner.Reap")
+	defer span.End()
+
 	logger := f.logger.With(
+		attr.SlogVisibilityInternal(),
 		attr.SlogProjectID(req.ProjectID.String()),
 		attr.SlogDeploymentID(req.DeploymentID.String()),
 		attr.SlogDeploymentFunctionsID(req.FunctionID.String()),
@@ -530,22 +536,9 @@ func (f *FlyRunner) reap(ctx context.Context, logger *slog.Logger, appsRepo *rep
 	})
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		logger.InfoContext(ctx, "no existing app found")
 		return nil
 	case err != nil:
 		return fmt.Errorf("get existing app name: %w", err)
-	}
-
-	enabled, err := appsRepo.IsReapingEnabledForProject(ctx, repo.IsReapingEnabledForProjectParams{
-		ProjectID:       req.ProjectID,
-		OrganizationIds: []string{"5ad61845-b72e-4f0d-9dde-e0bdcf98e374", "5a25158b-24dc-4d49-b03d-e85acfbea59c"},
-	})
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("check reaping enabled for project: %w", err)
-	}
-	if !enabled {
-		logger.InfoContext(ctx, "reaping is not enabled for project")
-		return nil
 	}
 
 	logger = logger.With(

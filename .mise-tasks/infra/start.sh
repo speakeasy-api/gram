@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 #MISE description="Start up databases, caches and so on"
-#MISE sources=["/dev/null"]
 
 profile=()
 if [[ "$GRAM_ENABLE_OTEL_TRACES" == "1" || "$GRAM_ENABLE_OTEL_METRICS" == "1" ]]; then

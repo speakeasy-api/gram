@@ -53,6 +53,7 @@ func (l *LogHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (l *LogHandler) Handle(ctx context.Context, record slog.Record) error {
+	internal := false
 	event := l.attrEvent
 	projectID := l.attrProjectID
 	deploymentID := l.attrDeploymentID
@@ -60,6 +61,8 @@ func (l *LogHandler) Handle(ctx context.Context, record slog.Record) error {
 
 	record.Attrs(func(a slog.Attr) bool {
 		switch {
+		case a.Key == string(attr.VisibilityKey) && a.Value.Kind() == slog.KindString:
+			internal = a.Value.String() == attr.VisibilityInternalValue
 		case a.Key == string(attr.EventKey) && a.Value.Kind() == slog.KindString:
 			event = a.Value.String()
 		case a.Key == string(attr.ProjectIDKey) && a.Value.Kind() == slog.KindString:
@@ -78,6 +81,10 @@ func (l *LogHandler) Handle(ctx context.Context, record slog.Record) error {
 
 		return true
 	})
+
+	if internal {
+		return nil
+	}
 
 	if event == "" {
 		event = fmt.Sprintf("log:%s", strings.ToLower(record.Level.String()))
