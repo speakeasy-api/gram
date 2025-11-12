@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -95,15 +96,17 @@ func (tp *ToolProxy) doFunctionResource(
 		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, logger)
 	}
 
-	payloadEnv := NewCaseInsensitiveEnv()
+	payloadEnv := make(map[string]string)
 
+	// Start with system environment variables (uppercase keys)
 	for k, v := range env.SystemEnv.All() {
-		payloadEnv.Set(k, v)
+		payloadEnv[strings.ToUpper(k)] = v
 	}
 
+	// For each variable required by the function, allow user config to merge/override
 	for _, varName := range plan.Variables {
 		if val := env.UserConfig.Get(varName); val != "" {
-			payloadEnv.Set(varName, val)
+			payloadEnv[varName] = val
 		}
 	}
 
@@ -118,7 +121,7 @@ func (tp *ToolProxy) doFunctionResource(
 			FunctionsID:       functionID,
 			FunctionsAccessID: accessID,
 			Input:             input,
-			Environment:       payloadEnv.All(),
+			Environment:       payloadEnv,
 		},
 		ResourceURN:  descriptor.URN,
 		ResourceURI:  descriptor.URI,
