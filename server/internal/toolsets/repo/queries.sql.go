@@ -763,8 +763,9 @@ SET
   , mcp_is_public = COALESCE($5, mcp_is_public)
   , custom_domain_id = COALESCE($6, custom_domain_id)
   , mcp_enabled = COALESCE($7, mcp_enabled)
+  , tool_selection_mode = COALESCE($8, tool_selection_mode)
   , updated_at = clock_timestamp()
-WHERE slug = $8 AND project_id = $9
+WHERE slug = $9 AND project_id = $10
 RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
 `
 
@@ -776,6 +777,7 @@ type UpdateToolsetParams struct {
 	McpIsPublic            bool
 	CustomDomainID         uuid.NullUUID
 	McpEnabled             bool
+	ToolSelectionMode      pgtype.Text
 	Slug                   string
 	ProjectID              uuid.UUID
 }
@@ -789,6 +791,7 @@ func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (T
 		arg.McpIsPublic,
 		arg.CustomDomainID,
 		arg.McpEnabled,
+		arg.ToolSelectionMode,
 		arg.Slug,
 		arg.ProjectID,
 	)

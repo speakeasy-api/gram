@@ -4,10 +4,23 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+export type GetToolsetSecurityOption1 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
+export type GetToolsetSecurityOption2 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
 
 export type GetToolsetSecurity = {
-  projectSlugHeaderGramProject?: string | undefined;
-  sessionHeaderGramSession?: string | undefined;
+  option1?: GetToolsetSecurityOption1 | undefined;
+  option2?: GetToolsetSecurityOption2 | undefined;
 };
 
 export type GetToolsetRequest = {
@@ -20,15 +33,168 @@ export type GetToolsetRequest = {
    */
   gramSession?: string | undefined;
   /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
+  /**
    * project header
    */
   gramProject?: string | undefined;
 };
 
 /** @internal */
+export const GetToolsetSecurityOption1$inboundSchema: z.ZodType<
+  GetToolsetSecurityOption1,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "project_slug_header_Gram-Project": z.string(),
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type GetToolsetSecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const GetToolsetSecurityOption1$outboundSchema: z.ZodType<
+  GetToolsetSecurityOption1$Outbound,
+  z.ZodTypeDef,
+  GetToolsetSecurityOption1
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace GetToolsetSecurityOption1$ {
+  /** @deprecated use `GetToolsetSecurityOption1$inboundSchema` instead. */
+  export const inboundSchema = GetToolsetSecurityOption1$inboundSchema;
+  /** @deprecated use `GetToolsetSecurityOption1$outboundSchema` instead. */
+  export const outboundSchema = GetToolsetSecurityOption1$outboundSchema;
+  /** @deprecated use `GetToolsetSecurityOption1$Outbound` instead. */
+  export type Outbound = GetToolsetSecurityOption1$Outbound;
+}
+
+export function getToolsetSecurityOption1ToJSON(
+  getToolsetSecurityOption1: GetToolsetSecurityOption1,
+): string {
+  return JSON.stringify(
+    GetToolsetSecurityOption1$outboundSchema.parse(getToolsetSecurityOption1),
+  );
+}
+
+export function getToolsetSecurityOption1FromJSON(
+  jsonString: string,
+): SafeParseResult<GetToolsetSecurityOption1, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => GetToolsetSecurityOption1$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetToolsetSecurityOption1' from JSON`,
+  );
+}
+
+/** @internal */
+export const GetToolsetSecurityOption2$inboundSchema: z.ZodType<
+  GetToolsetSecurityOption2,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "apikey_header_Gram-Key": z.string(),
+  "project_slug_header_Gram-Project": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+  });
+});
+
+/** @internal */
+export type GetToolsetSecurityOption2$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const GetToolsetSecurityOption2$outboundSchema: z.ZodType<
+  GetToolsetSecurityOption2$Outbound,
+  z.ZodTypeDef,
+  GetToolsetSecurityOption2
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace GetToolsetSecurityOption2$ {
+  /** @deprecated use `GetToolsetSecurityOption2$inboundSchema` instead. */
+  export const inboundSchema = GetToolsetSecurityOption2$inboundSchema;
+  /** @deprecated use `GetToolsetSecurityOption2$outboundSchema` instead. */
+  export const outboundSchema = GetToolsetSecurityOption2$outboundSchema;
+  /** @deprecated use `GetToolsetSecurityOption2$Outbound` instead. */
+  export type Outbound = GetToolsetSecurityOption2$Outbound;
+}
+
+export function getToolsetSecurityOption2ToJSON(
+  getToolsetSecurityOption2: GetToolsetSecurityOption2,
+): string {
+  return JSON.stringify(
+    GetToolsetSecurityOption2$outboundSchema.parse(getToolsetSecurityOption2),
+  );
+}
+
+export function getToolsetSecurityOption2FromJSON(
+  jsonString: string,
+): SafeParseResult<GetToolsetSecurityOption2, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => GetToolsetSecurityOption2$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetToolsetSecurityOption2' from JSON`,
+  );
+}
+
+/** @internal */
+export const GetToolsetSecurity$inboundSchema: z.ZodType<
+  GetToolsetSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  Option1: z.lazy(() => GetToolsetSecurityOption1$inboundSchema).optional(),
+  Option2: z.lazy(() => GetToolsetSecurityOption2$inboundSchema).optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Option1": "option1",
+    "Option2": "option2",
+  });
+});
+
+/** @internal */
 export type GetToolsetSecurity$Outbound = {
-  "project_slug_header_Gram-Project"?: string | undefined;
-  "session_header_Gram-Session"?: string | undefined;
+  Option1?: GetToolsetSecurityOption1$Outbound | undefined;
+  Option2?: GetToolsetSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -37,14 +203,27 @@ export const GetToolsetSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   GetToolsetSecurity
 > = z.object({
-  projectSlugHeaderGramProject: z.string().optional(),
-  sessionHeaderGramSession: z.string().optional(),
+  option1: z.lazy(() => GetToolsetSecurityOption1$outboundSchema).optional(),
+  option2: z.lazy(() => GetToolsetSecurityOption2$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
+    option1: "Option1",
+    option2: "Option2",
   });
 });
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace GetToolsetSecurity$ {
+  /** @deprecated use `GetToolsetSecurity$inboundSchema` instead. */
+  export const inboundSchema = GetToolsetSecurity$inboundSchema;
+  /** @deprecated use `GetToolsetSecurity$outboundSchema` instead. */
+  export const outboundSchema = GetToolsetSecurity$outboundSchema;
+  /** @deprecated use `GetToolsetSecurity$Outbound` instead. */
+  export type Outbound = GetToolsetSecurity$Outbound;
+}
 
 export function getToolsetSecurityToJSON(
   getToolsetSecurity: GetToolsetSecurity,
@@ -54,10 +233,39 @@ export function getToolsetSecurityToJSON(
   );
 }
 
+export function getToolsetSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<GetToolsetSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => GetToolsetSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetToolsetSecurity' from JSON`,
+  );
+}
+
+/** @internal */
+export const GetToolsetRequest$inboundSchema: z.ZodType<
+  GetToolsetRequest,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  slug: z.string(),
+  "Gram-Session": z.string().optional(),
+  "Gram-Key": z.string().optional(),
+  "Gram-Project": z.string().optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Gram-Session": "gramSession",
+    "Gram-Key": "gramKey",
+    "Gram-Project": "gramProject",
+  });
+});
+
 /** @internal */
 export type GetToolsetRequest$Outbound = {
   slug: string;
   "Gram-Session"?: string | undefined;
+  "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
 
@@ -69,18 +277,43 @@ export const GetToolsetRequest$outboundSchema: z.ZodType<
 > = z.object({
   slug: z.string(),
   gramSession: z.string().optional(),
+  gramKey: z.string().optional(),
   gramProject: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     gramSession: "Gram-Session",
+    gramKey: "Gram-Key",
     gramProject: "Gram-Project",
   });
 });
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace GetToolsetRequest$ {
+  /** @deprecated use `GetToolsetRequest$inboundSchema` instead. */
+  export const inboundSchema = GetToolsetRequest$inboundSchema;
+  /** @deprecated use `GetToolsetRequest$outboundSchema` instead. */
+  export const outboundSchema = GetToolsetRequest$outboundSchema;
+  /** @deprecated use `GetToolsetRequest$Outbound` instead. */
+  export type Outbound = GetToolsetRequest$Outbound;
+}
 
 export function getToolsetRequestToJSON(
   getToolsetRequest: GetToolsetRequest,
 ): string {
   return JSON.stringify(
     GetToolsetRequest$outboundSchema.parse(getToolsetRequest),
+  );
+}
+
+export function getToolsetRequestFromJSON(
+  jsonString: string,
+): SafeParseResult<GetToolsetRequest, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => GetToolsetRequest$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetToolsetRequest' from JSON`,
   );
 }

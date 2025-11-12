@@ -43,6 +43,51 @@ export const PaginationResponse$inboundSchema: z.ZodType<
   });
 });
 
+/** @internal */
+export type PaginationResponse$Outbound = {
+  has_next_page?: boolean | undefined;
+  next_page_cursor?: string | undefined;
+  per_page?: number | undefined;
+};
+
+/** @internal */
+export const PaginationResponse$outboundSchema: z.ZodType<
+  PaginationResponse$Outbound,
+  z.ZodTypeDef,
+  PaginationResponse
+> = z.object({
+  hasNextPage: z.boolean().optional(),
+  nextPageCursor: z.string().optional(),
+  perPage: z.number().int().optional(),
+}).transform((v) => {
+  return remap$(v, {
+    hasNextPage: "has_next_page",
+    nextPageCursor: "next_page_cursor",
+    perPage: "per_page",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace PaginationResponse$ {
+  /** @deprecated use `PaginationResponse$inboundSchema` instead. */
+  export const inboundSchema = PaginationResponse$inboundSchema;
+  /** @deprecated use `PaginationResponse$outboundSchema` instead. */
+  export const outboundSchema = PaginationResponse$outboundSchema;
+  /** @deprecated use `PaginationResponse$Outbound` instead. */
+  export type Outbound = PaginationResponse$Outbound;
+}
+
+export function paginationResponseToJSON(
+  paginationResponse: PaginationResponse,
+): string {
+  return JSON.stringify(
+    PaginationResponse$outboundSchema.parse(paginationResponse),
+  );
+}
+
 export function paginationResponseFromJSON(
   jsonString: string,
 ): SafeParseResult<PaginationResponse, SDKValidationError> {

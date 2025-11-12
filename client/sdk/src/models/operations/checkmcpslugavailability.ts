@@ -4,10 +4,23 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+export type CheckMCPSlugAvailabilitySecurityOption1 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
+export type CheckMCPSlugAvailabilitySecurityOption2 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
 
 export type CheckMCPSlugAvailabilitySecurity = {
-  projectSlugHeaderGramProject?: string | undefined;
-  sessionHeaderGramSession?: string | undefined;
+  option1?: CheckMCPSlugAvailabilitySecurityOption1 | undefined;
+  option2?: CheckMCPSlugAvailabilitySecurityOption2 | undefined;
 };
 
 export type CheckMCPSlugAvailabilityRequest = {
@@ -20,15 +33,192 @@ export type CheckMCPSlugAvailabilityRequest = {
    */
   gramSession?: string | undefined;
   /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
+  /**
    * project header
    */
   gramProject?: string | undefined;
 };
 
 /** @internal */
+export const CheckMCPSlugAvailabilitySecurityOption1$inboundSchema: z.ZodType<
+  CheckMCPSlugAvailabilitySecurityOption1,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "project_slug_header_Gram-Project": z.string(),
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type CheckMCPSlugAvailabilitySecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const CheckMCPSlugAvailabilitySecurityOption1$outboundSchema: z.ZodType<
+  CheckMCPSlugAvailabilitySecurityOption1$Outbound,
+  z.ZodTypeDef,
+  CheckMCPSlugAvailabilitySecurityOption1
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace CheckMCPSlugAvailabilitySecurityOption1$ {
+  /** @deprecated use `CheckMCPSlugAvailabilitySecurityOption1$inboundSchema` instead. */
+  export const inboundSchema =
+    CheckMCPSlugAvailabilitySecurityOption1$inboundSchema;
+  /** @deprecated use `CheckMCPSlugAvailabilitySecurityOption1$outboundSchema` instead. */
+  export const outboundSchema =
+    CheckMCPSlugAvailabilitySecurityOption1$outboundSchema;
+  /** @deprecated use `CheckMCPSlugAvailabilitySecurityOption1$Outbound` instead. */
+  export type Outbound = CheckMCPSlugAvailabilitySecurityOption1$Outbound;
+}
+
+export function checkMCPSlugAvailabilitySecurityOption1ToJSON(
+  checkMCPSlugAvailabilitySecurityOption1:
+    CheckMCPSlugAvailabilitySecurityOption1,
+): string {
+  return JSON.stringify(
+    CheckMCPSlugAvailabilitySecurityOption1$outboundSchema.parse(
+      checkMCPSlugAvailabilitySecurityOption1,
+    ),
+  );
+}
+
+export function checkMCPSlugAvailabilitySecurityOption1FromJSON(
+  jsonString: string,
+): SafeParseResult<
+  CheckMCPSlugAvailabilitySecurityOption1,
+  SDKValidationError
+> {
+  return safeParse(
+    jsonString,
+    (x) =>
+      CheckMCPSlugAvailabilitySecurityOption1$inboundSchema.parse(
+        JSON.parse(x),
+      ),
+    `Failed to parse 'CheckMCPSlugAvailabilitySecurityOption1' from JSON`,
+  );
+}
+
+/** @internal */
+export const CheckMCPSlugAvailabilitySecurityOption2$inboundSchema: z.ZodType<
+  CheckMCPSlugAvailabilitySecurityOption2,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "apikey_header_Gram-Key": z.string(),
+  "project_slug_header_Gram-Project": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+  });
+});
+
+/** @internal */
+export type CheckMCPSlugAvailabilitySecurityOption2$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const CheckMCPSlugAvailabilitySecurityOption2$outboundSchema: z.ZodType<
+  CheckMCPSlugAvailabilitySecurityOption2$Outbound,
+  z.ZodTypeDef,
+  CheckMCPSlugAvailabilitySecurityOption2
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace CheckMCPSlugAvailabilitySecurityOption2$ {
+  /** @deprecated use `CheckMCPSlugAvailabilitySecurityOption2$inboundSchema` instead. */
+  export const inboundSchema =
+    CheckMCPSlugAvailabilitySecurityOption2$inboundSchema;
+  /** @deprecated use `CheckMCPSlugAvailabilitySecurityOption2$outboundSchema` instead. */
+  export const outboundSchema =
+    CheckMCPSlugAvailabilitySecurityOption2$outboundSchema;
+  /** @deprecated use `CheckMCPSlugAvailabilitySecurityOption2$Outbound` instead. */
+  export type Outbound = CheckMCPSlugAvailabilitySecurityOption2$Outbound;
+}
+
+export function checkMCPSlugAvailabilitySecurityOption2ToJSON(
+  checkMCPSlugAvailabilitySecurityOption2:
+    CheckMCPSlugAvailabilitySecurityOption2,
+): string {
+  return JSON.stringify(
+    CheckMCPSlugAvailabilitySecurityOption2$outboundSchema.parse(
+      checkMCPSlugAvailabilitySecurityOption2,
+    ),
+  );
+}
+
+export function checkMCPSlugAvailabilitySecurityOption2FromJSON(
+  jsonString: string,
+): SafeParseResult<
+  CheckMCPSlugAvailabilitySecurityOption2,
+  SDKValidationError
+> {
+  return safeParse(
+    jsonString,
+    (x) =>
+      CheckMCPSlugAvailabilitySecurityOption2$inboundSchema.parse(
+        JSON.parse(x),
+      ),
+    `Failed to parse 'CheckMCPSlugAvailabilitySecurityOption2' from JSON`,
+  );
+}
+
+/** @internal */
+export const CheckMCPSlugAvailabilitySecurity$inboundSchema: z.ZodType<
+  CheckMCPSlugAvailabilitySecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  Option1: z.lazy(() => CheckMCPSlugAvailabilitySecurityOption1$inboundSchema)
+    .optional(),
+  Option2: z.lazy(() => CheckMCPSlugAvailabilitySecurityOption2$inboundSchema)
+    .optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Option1": "option1",
+    "Option2": "option2",
+  });
+});
+
+/** @internal */
 export type CheckMCPSlugAvailabilitySecurity$Outbound = {
-  "project_slug_header_Gram-Project"?: string | undefined;
-  "session_header_Gram-Session"?: string | undefined;
+  Option1?: CheckMCPSlugAvailabilitySecurityOption1$Outbound | undefined;
+  Option2?: CheckMCPSlugAvailabilitySecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -37,14 +227,29 @@ export const CheckMCPSlugAvailabilitySecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   CheckMCPSlugAvailabilitySecurity
 > = z.object({
-  projectSlugHeaderGramProject: z.string().optional(),
-  sessionHeaderGramSession: z.string().optional(),
+  option1: z.lazy(() => CheckMCPSlugAvailabilitySecurityOption1$outboundSchema)
+    .optional(),
+  option2: z.lazy(() => CheckMCPSlugAvailabilitySecurityOption2$outboundSchema)
+    .optional(),
 }).transform((v) => {
   return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
+    option1: "Option1",
+    option2: "Option2",
   });
 });
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace CheckMCPSlugAvailabilitySecurity$ {
+  /** @deprecated use `CheckMCPSlugAvailabilitySecurity$inboundSchema` instead. */
+  export const inboundSchema = CheckMCPSlugAvailabilitySecurity$inboundSchema;
+  /** @deprecated use `CheckMCPSlugAvailabilitySecurity$outboundSchema` instead. */
+  export const outboundSchema = CheckMCPSlugAvailabilitySecurity$outboundSchema;
+  /** @deprecated use `CheckMCPSlugAvailabilitySecurity$Outbound` instead. */
+  export type Outbound = CheckMCPSlugAvailabilitySecurity$Outbound;
+}
 
 export function checkMCPSlugAvailabilitySecurityToJSON(
   checkMCPSlugAvailabilitySecurity: CheckMCPSlugAvailabilitySecurity,
@@ -56,10 +261,39 @@ export function checkMCPSlugAvailabilitySecurityToJSON(
   );
 }
 
+export function checkMCPSlugAvailabilitySecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<CheckMCPSlugAvailabilitySecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => CheckMCPSlugAvailabilitySecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CheckMCPSlugAvailabilitySecurity' from JSON`,
+  );
+}
+
+/** @internal */
+export const CheckMCPSlugAvailabilityRequest$inboundSchema: z.ZodType<
+  CheckMCPSlugAvailabilityRequest,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  slug: z.string(),
+  "Gram-Session": z.string().optional(),
+  "Gram-Key": z.string().optional(),
+  "Gram-Project": z.string().optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Gram-Session": "gramSession",
+    "Gram-Key": "gramKey",
+    "Gram-Project": "gramProject",
+  });
+});
+
 /** @internal */
 export type CheckMCPSlugAvailabilityRequest$Outbound = {
   slug: string;
   "Gram-Session"?: string | undefined;
+  "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
 
@@ -71,13 +305,28 @@ export const CheckMCPSlugAvailabilityRequest$outboundSchema: z.ZodType<
 > = z.object({
   slug: z.string(),
   gramSession: z.string().optional(),
+  gramKey: z.string().optional(),
   gramProject: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     gramSession: "Gram-Session",
+    gramKey: "Gram-Key",
     gramProject: "Gram-Project",
   });
 });
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace CheckMCPSlugAvailabilityRequest$ {
+  /** @deprecated use `CheckMCPSlugAvailabilityRequest$inboundSchema` instead. */
+  export const inboundSchema = CheckMCPSlugAvailabilityRequest$inboundSchema;
+  /** @deprecated use `CheckMCPSlugAvailabilityRequest$outboundSchema` instead. */
+  export const outboundSchema = CheckMCPSlugAvailabilityRequest$outboundSchema;
+  /** @deprecated use `CheckMCPSlugAvailabilityRequest$Outbound` instead. */
+  export type Outbound = CheckMCPSlugAvailabilityRequest$Outbound;
+}
 
 export function checkMCPSlugAvailabilityRequestToJSON(
   checkMCPSlugAvailabilityRequest: CheckMCPSlugAvailabilityRequest,
@@ -86,5 +335,15 @@ export function checkMCPSlugAvailabilityRequestToJSON(
     CheckMCPSlugAvailabilityRequest$outboundSchema.parse(
       checkMCPSlugAvailabilityRequest,
     ),
+  );
+}
+
+export function checkMCPSlugAvailabilityRequestFromJSON(
+  jsonString: string,
+): SafeParseResult<CheckMCPSlugAvailabilityRequest, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => CheckMCPSlugAvailabilityRequest$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CheckMCPSlugAvailabilityRequest' from JSON`,
   );
 }

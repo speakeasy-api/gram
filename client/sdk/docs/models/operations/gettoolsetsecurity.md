@@ -10,7 +10,7 @@ let value: GetToolsetSecurity = {};
 
 ## Fields
 
-| Field                          | Type                           | Required                       | Description                    |
-| ------------------------------ | ------------------------------ | ------------------------------ | ------------------------------ |
-| `projectSlugHeaderGramProject` | *string*                       | :heavy_minus_sign:             | N/A                            |
-| `sessionHeaderGramSession`     | *string*                       | :heavy_minus_sign:             | N/A                            |
+| Field                                                                                        | Type                                                                                         | Required                                                                                     | Description                                                                                  |
+| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `option1`                                                                                    | [operations.GetToolsetSecurityOption1](../../models/operations/gettoolsetsecurityoption1.md) | :heavy_minus_sign:                                                                           | N/A                                                                                          |
+| `option2`                                                                                    | [operations.GetToolsetSecurityOption2](../../models/operations/gettoolsetsecurityoption2.md) | :heavy_minus_sign:                                                                           | N/A                                                                                          |

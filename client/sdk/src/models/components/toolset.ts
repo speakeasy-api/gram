@@ -10,29 +10,51 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
   ExternalOAuthServer,
   ExternalOAuthServer$inboundSchema,
+  ExternalOAuthServer$Outbound,
+  ExternalOAuthServer$outboundSchema,
 } from "./externaloauthserver.js";
 import {
   FunctionEnvironmentVariable,
   FunctionEnvironmentVariable$inboundSchema,
+  FunctionEnvironmentVariable$Outbound,
+  FunctionEnvironmentVariable$outboundSchema,
 } from "./functionenvironmentvariable.js";
 import {
   OAuthProxyServer,
   OAuthProxyServer$inboundSchema,
+  OAuthProxyServer$Outbound,
+  OAuthProxyServer$outboundSchema,
 } from "./oauthproxyserver.js";
 import {
   PromptTemplate,
   PromptTemplate$inboundSchema,
+  PromptTemplate$Outbound,
+  PromptTemplate$outboundSchema,
 } from "./prompttemplate.js";
-import { Resource, Resource$inboundSchema } from "./resource.js";
+import {
+  Resource,
+  Resource$inboundSchema,
+  Resource$Outbound,
+  Resource$outboundSchema,
+} from "./resource.js";
 import {
   SecurityVariable,
   SecurityVariable$inboundSchema,
+  SecurityVariable$Outbound,
+  SecurityVariable$outboundSchema,
 } from "./securityvariable.js";
 import {
   ServerVariable,
   ServerVariable$inboundSchema,
+  ServerVariable$Outbound,
+  ServerVariable$outboundSchema,
 } from "./servervariable.js";
-import { Tool, Tool$inboundSchema } from "./tool.js";
+import {
+  Tool,
+  Tool$inboundSchema,
+  Tool$Outbound,
+  Tool$outboundSchema,
+} from "./tool.js";
 
 export type Toolset = {
   /**
@@ -114,6 +136,10 @@ export type Toolset = {
    */
   slug: string;
   /**
+   * The mode to use for tool selection
+   */
+  toolSelectionMode?: string | undefined;
+  /**
    * The tool URNs in this toolset
    */
   toolUrns: Array<string>;
@@ -121,6 +147,10 @@ export type Toolset = {
    * The tools in this toolset
    */
   tools: Array<Tool>;
+  /**
+   * The version of the toolset (will be 0 if none exists)
+   */
+  toolsetVersion: number;
   /**
    * When the toolset was last updated.
    */
@@ -155,8 +185,10 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
     security_variables: z.array(SecurityVariable$inboundSchema).optional(),
     server_variables: z.array(ServerVariable$inboundSchema).optional(),
     slug: z.string(),
+    tool_selection_mode: z.string().optional(),
     tool_urns: z.array(z.string()),
     tools: z.array(Tool$inboundSchema),
+    toolset_version: z.number().int(),
     updated_at: z.string().datetime({ offset: true }).transform(v =>
       new Date(v)
     ),
@@ -178,10 +210,120 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
       "resource_urns": "resourceUrns",
       "security_variables": "securityVariables",
       "server_variables": "serverVariables",
+      "tool_selection_mode": "toolSelectionMode",
       "tool_urns": "toolUrns",
+      "toolset_version": "toolsetVersion",
       "updated_at": "updatedAt",
     });
   });
+
+/** @internal */
+export type Toolset$Outbound = {
+  account_type: string;
+  created_at: string;
+  custom_domain_id?: string | undefined;
+  default_environment_slug?: string | undefined;
+  description?: string | undefined;
+  external_oauth_server?: ExternalOAuthServer$Outbound | undefined;
+  function_environment_variables?:
+    | Array<FunctionEnvironmentVariable$Outbound>
+    | undefined;
+  id: string;
+  mcp_enabled?: boolean | undefined;
+  mcp_is_public?: boolean | undefined;
+  mcp_slug?: string | undefined;
+  name: string;
+  oauth_proxy_server?: OAuthProxyServer$Outbound | undefined;
+  organization_id: string;
+  project_id: string;
+  prompt_templates: Array<PromptTemplate$Outbound>;
+  resource_urns: Array<string>;
+  resources: Array<Resource$Outbound>;
+  security_variables?: Array<SecurityVariable$Outbound> | undefined;
+  server_variables?: Array<ServerVariable$Outbound> | undefined;
+  slug: string;
+  tool_selection_mode?: string | undefined;
+  tool_urns: Array<string>;
+  tools: Array<Tool$Outbound>;
+  toolset_version: number;
+  updated_at: string;
+};
+
+/** @internal */
+export const Toolset$outboundSchema: z.ZodType<
+  Toolset$Outbound,
+  z.ZodTypeDef,
+  Toolset
+> = z.object({
+  accountType: z.string(),
+  createdAt: z.date().transform(v => v.toISOString()),
+  customDomainId: z.string().optional(),
+  defaultEnvironmentSlug: z.string().optional(),
+  description: z.string().optional(),
+  externalOauthServer: ExternalOAuthServer$outboundSchema.optional(),
+  functionEnvironmentVariables: z.array(
+    FunctionEnvironmentVariable$outboundSchema,
+  ).optional(),
+  id: z.string(),
+  mcpEnabled: z.boolean().optional(),
+  mcpIsPublic: z.boolean().optional(),
+  mcpSlug: z.string().optional(),
+  name: z.string(),
+  oauthProxyServer: OAuthProxyServer$outboundSchema.optional(),
+  organizationId: z.string(),
+  projectId: z.string(),
+  promptTemplates: z.array(PromptTemplate$outboundSchema),
+  resourceUrns: z.array(z.string()),
+  resources: z.array(Resource$outboundSchema),
+  securityVariables: z.array(SecurityVariable$outboundSchema).optional(),
+  serverVariables: z.array(ServerVariable$outboundSchema).optional(),
+  slug: z.string(),
+  toolSelectionMode: z.string().optional(),
+  toolUrns: z.array(z.string()),
+  tools: z.array(Tool$outboundSchema),
+  toolsetVersion: z.number().int(),
+  updatedAt: z.date().transform(v => v.toISOString()),
+}).transform((v) => {
+  return remap$(v, {
+    accountType: "account_type",
+    createdAt: "created_at",
+    customDomainId: "custom_domain_id",
+    defaultEnvironmentSlug: "default_environment_slug",
+    externalOauthServer: "external_oauth_server",
+    functionEnvironmentVariables: "function_environment_variables",
+    mcpEnabled: "mcp_enabled",
+    mcpIsPublic: "mcp_is_public",
+    mcpSlug: "mcp_slug",
+    oauthProxyServer: "oauth_proxy_server",
+    organizationId: "organization_id",
+    projectId: "project_id",
+    promptTemplates: "prompt_templates",
+    resourceUrns: "resource_urns",
+    securityVariables: "security_variables",
+    serverVariables: "server_variables",
+    toolSelectionMode: "tool_selection_mode",
+    toolUrns: "tool_urns",
+    toolsetVersion: "toolset_version",
+    updatedAt: "updated_at",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace Toolset$ {
+  /** @deprecated use `Toolset$inboundSchema` instead. */
+  export const inboundSchema = Toolset$inboundSchema;
+  /** @deprecated use `Toolset$outboundSchema` instead. */
+  export const outboundSchema = Toolset$outboundSchema;
+  /** @deprecated use `Toolset$Outbound` instead. */
+  export type Outbound = Toolset$Outbound;
+}
+
+export function toolsetToJSON(toolset: Toolset): string {
+  return JSON.stringify(Toolset$outboundSchema.parse(toolset));
+}
 
 export function toolsetFromJSON(
   jsonString: string,

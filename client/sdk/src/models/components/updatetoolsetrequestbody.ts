@@ -4,6 +4,9 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type UpdateToolsetRequestBody = {
   /**
@@ -43,10 +46,45 @@ export type UpdateToolsetRequestBody = {
    */
   resourceUrns?: Array<string> | undefined;
   /**
+   * The mode to use for tool selection
+   */
+  toolSelectionMode?: string | undefined;
+  /**
    * List of tool URNs to include in the toolset
    */
   toolUrns?: Array<string> | undefined;
 };
+
+/** @internal */
+export const UpdateToolsetRequestBody$inboundSchema: z.ZodType<
+  UpdateToolsetRequestBody,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  custom_domain_id: z.string().optional(),
+  default_environment_slug: z.string().optional(),
+  description: z.string().optional(),
+  mcp_enabled: z.boolean().optional(),
+  mcp_is_public: z.boolean().optional(),
+  mcp_slug: z.string().optional(),
+  name: z.string().optional(),
+  prompt_template_names: z.array(z.string()).optional(),
+  resource_urns: z.array(z.string()).optional(),
+  tool_selection_mode: z.string().optional(),
+  tool_urns: z.array(z.string()).optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "custom_domain_id": "customDomainId",
+    "default_environment_slug": "defaultEnvironmentSlug",
+    "mcp_enabled": "mcpEnabled",
+    "mcp_is_public": "mcpIsPublic",
+    "mcp_slug": "mcpSlug",
+    "prompt_template_names": "promptTemplateNames",
+    "resource_urns": "resourceUrns",
+    "tool_selection_mode": "toolSelectionMode",
+    "tool_urns": "toolUrns",
+  });
+});
 
 /** @internal */
 export type UpdateToolsetRequestBody$Outbound = {
@@ -59,6 +97,7 @@ export type UpdateToolsetRequestBody$Outbound = {
   name?: string | undefined;
   prompt_template_names?: Array<string> | undefined;
   resource_urns?: Array<string> | undefined;
+  tool_selection_mode?: string | undefined;
   tool_urns?: Array<string> | undefined;
 };
 
@@ -77,6 +116,7 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodType<
   name: z.string().optional(),
   promptTemplateNames: z.array(z.string()).optional(),
   resourceUrns: z.array(z.string()).optional(),
+  toolSelectionMode: z.string().optional(),
   toolUrns: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
@@ -87,14 +127,38 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodType<
     mcpSlug: "mcp_slug",
     promptTemplateNames: "prompt_template_names",
     resourceUrns: "resource_urns",
+    toolSelectionMode: "tool_selection_mode",
     toolUrns: "tool_urns",
   });
 });
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace UpdateToolsetRequestBody$ {
+  /** @deprecated use `UpdateToolsetRequestBody$inboundSchema` instead. */
+  export const inboundSchema = UpdateToolsetRequestBody$inboundSchema;
+  /** @deprecated use `UpdateToolsetRequestBody$outboundSchema` instead. */
+  export const outboundSchema = UpdateToolsetRequestBody$outboundSchema;
+  /** @deprecated use `UpdateToolsetRequestBody$Outbound` instead. */
+  export type Outbound = UpdateToolsetRequestBody$Outbound;
+}
 
 export function updateToolsetRequestBodyToJSON(
   updateToolsetRequestBody: UpdateToolsetRequestBody,
 ): string {
   return JSON.stringify(
     UpdateToolsetRequestBody$outboundSchema.parse(updateToolsetRequestBody),
+  );
+}
+
+export function updateToolsetRequestBodyFromJSON(
+  jsonString: string,
+): SafeParseResult<UpdateToolsetRequestBody, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => UpdateToolsetRequestBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UpdateToolsetRequestBody' from JSON`,
   );
 }

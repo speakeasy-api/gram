@@ -42,6 +42,7 @@ SET
   , mcp_is_public = COALESCE(@mcp_is_public, mcp_is_public)
   , custom_domain_id = COALESCE(@custom_domain_id, custom_domain_id)
   , mcp_enabled = COALESCE(@mcp_enabled, mcp_enabled)
+  , tool_selection_mode = COALESCE(@tool_selection_mode, tool_selection_mode)
   , updated_at = clock_timestamp()
 WHERE slug = @slug AND project_id = @project_id
 RETURNING *;

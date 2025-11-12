@@ -58,6 +58,7 @@ var Toolset = Type("Toolset", func() {
 	Attribute("mcp_slug", Slug, "The slug of the MCP to use for the toolset")
 	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")
 	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
+	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
 	Attribute("external_oauth_server", ExternalOAuthServer, "The external OAuth server details")
 	Attribute("oauth_proxy_server", OAuthProxyServer, "The OAuth proxy server details")
@@ -94,6 +95,7 @@ var ToolsetEntry = Type("ToolsetEntry", func() {
 	Attribute("mcp_slug", Slug, "The slug of the MCP to use for the toolset")
 	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")
 	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
+	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
 	Attribute("created_at", String, func() {
 		Description("When the toolset was created.")

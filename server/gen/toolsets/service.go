@@ -181,8 +181,10 @@ type UpdateToolsetPayload struct {
 	// Whether the toolset is public in MCP
 	McpIsPublic *bool
 	// The ID of the custom domain to use for the toolset
-	CustomDomainID   *string
-	ProjectSlugInput *string
+	CustomDomainID *string
+	// The mode to use for tool selection
+	ToolSelectionMode *string
+	ProjectSlugInput  *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

@@ -4,10 +4,23 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+export type DeleteToolsetSecurityOption1 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
+export type DeleteToolsetSecurityOption2 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
 
 export type DeleteToolsetSecurity = {
-  projectSlugHeaderGramProject?: string | undefined;
-  sessionHeaderGramSession?: string | undefined;
+  option1?: DeleteToolsetSecurityOption1 | undefined;
+  option2?: DeleteToolsetSecurityOption2 | undefined;
 };
 
 export type DeleteToolsetRequest = {
@@ -20,15 +33,172 @@ export type DeleteToolsetRequest = {
    */
   gramSession?: string | undefined;
   /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
+  /**
    * project header
    */
   gramProject?: string | undefined;
 };
 
 /** @internal */
+export const DeleteToolsetSecurityOption1$inboundSchema: z.ZodType<
+  DeleteToolsetSecurityOption1,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "project_slug_header_Gram-Project": z.string(),
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type DeleteToolsetSecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const DeleteToolsetSecurityOption1$outboundSchema: z.ZodType<
+  DeleteToolsetSecurityOption1$Outbound,
+  z.ZodTypeDef,
+  DeleteToolsetSecurityOption1
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace DeleteToolsetSecurityOption1$ {
+  /** @deprecated use `DeleteToolsetSecurityOption1$inboundSchema` instead. */
+  export const inboundSchema = DeleteToolsetSecurityOption1$inboundSchema;
+  /** @deprecated use `DeleteToolsetSecurityOption1$outboundSchema` instead. */
+  export const outboundSchema = DeleteToolsetSecurityOption1$outboundSchema;
+  /** @deprecated use `DeleteToolsetSecurityOption1$Outbound` instead. */
+  export type Outbound = DeleteToolsetSecurityOption1$Outbound;
+}
+
+export function deleteToolsetSecurityOption1ToJSON(
+  deleteToolsetSecurityOption1: DeleteToolsetSecurityOption1,
+): string {
+  return JSON.stringify(
+    DeleteToolsetSecurityOption1$outboundSchema.parse(
+      deleteToolsetSecurityOption1,
+    ),
+  );
+}
+
+export function deleteToolsetSecurityOption1FromJSON(
+  jsonString: string,
+): SafeParseResult<DeleteToolsetSecurityOption1, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => DeleteToolsetSecurityOption1$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'DeleteToolsetSecurityOption1' from JSON`,
+  );
+}
+
+/** @internal */
+export const DeleteToolsetSecurityOption2$inboundSchema: z.ZodType<
+  DeleteToolsetSecurityOption2,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "apikey_header_Gram-Key": z.string(),
+  "project_slug_header_Gram-Project": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+  });
+});
+
+/** @internal */
+export type DeleteToolsetSecurityOption2$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const DeleteToolsetSecurityOption2$outboundSchema: z.ZodType<
+  DeleteToolsetSecurityOption2$Outbound,
+  z.ZodTypeDef,
+  DeleteToolsetSecurityOption2
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace DeleteToolsetSecurityOption2$ {
+  /** @deprecated use `DeleteToolsetSecurityOption2$inboundSchema` instead. */
+  export const inboundSchema = DeleteToolsetSecurityOption2$inboundSchema;
+  /** @deprecated use `DeleteToolsetSecurityOption2$outboundSchema` instead. */
+  export const outboundSchema = DeleteToolsetSecurityOption2$outboundSchema;
+  /** @deprecated use `DeleteToolsetSecurityOption2$Outbound` instead. */
+  export type Outbound = DeleteToolsetSecurityOption2$Outbound;
+}
+
+export function deleteToolsetSecurityOption2ToJSON(
+  deleteToolsetSecurityOption2: DeleteToolsetSecurityOption2,
+): string {
+  return JSON.stringify(
+    DeleteToolsetSecurityOption2$outboundSchema.parse(
+      deleteToolsetSecurityOption2,
+    ),
+  );
+}
+
+export function deleteToolsetSecurityOption2FromJSON(
+  jsonString: string,
+): SafeParseResult<DeleteToolsetSecurityOption2, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => DeleteToolsetSecurityOption2$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'DeleteToolsetSecurityOption2' from JSON`,
+  );
+}
+
+/** @internal */
+export const DeleteToolsetSecurity$inboundSchema: z.ZodType<
+  DeleteToolsetSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  Option1: z.lazy(() => DeleteToolsetSecurityOption1$inboundSchema).optional(),
+  Option2: z.lazy(() => DeleteToolsetSecurityOption2$inboundSchema).optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Option1": "option1",
+    "Option2": "option2",
+  });
+});
+
+/** @internal */
 export type DeleteToolsetSecurity$Outbound = {
-  "project_slug_header_Gram-Project"?: string | undefined;
-  "session_header_Gram-Session"?: string | undefined;
+  Option1?: DeleteToolsetSecurityOption1$Outbound | undefined;
+  Option2?: DeleteToolsetSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -37,14 +207,27 @@ export const DeleteToolsetSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   DeleteToolsetSecurity
 > = z.object({
-  projectSlugHeaderGramProject: z.string().optional(),
-  sessionHeaderGramSession: z.string().optional(),
+  option1: z.lazy(() => DeleteToolsetSecurityOption1$outboundSchema).optional(),
+  option2: z.lazy(() => DeleteToolsetSecurityOption2$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
+    option1: "Option1",
+    option2: "Option2",
   });
 });
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace DeleteToolsetSecurity$ {
+  /** @deprecated use `DeleteToolsetSecurity$inboundSchema` instead. */
+  export const inboundSchema = DeleteToolsetSecurity$inboundSchema;
+  /** @deprecated use `DeleteToolsetSecurity$outboundSchema` instead. */
+  export const outboundSchema = DeleteToolsetSecurity$outboundSchema;
+  /** @deprecated use `DeleteToolsetSecurity$Outbound` instead. */
+  export type Outbound = DeleteToolsetSecurity$Outbound;
+}
 
 export function deleteToolsetSecurityToJSON(
   deleteToolsetSecurity: DeleteToolsetSecurity,
@@ -54,10 +237,39 @@ export function deleteToolsetSecurityToJSON(
   );
 }
 
+export function deleteToolsetSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<DeleteToolsetSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => DeleteToolsetSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'DeleteToolsetSecurity' from JSON`,
+  );
+}
+
+/** @internal */
+export const DeleteToolsetRequest$inboundSchema: z.ZodType<
+  DeleteToolsetRequest,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  slug: z.string(),
+  "Gram-Session": z.string().optional(),
+  "Gram-Key": z.string().optional(),
+  "Gram-Project": z.string().optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Gram-Session": "gramSession",
+    "Gram-Key": "gramKey",
+    "Gram-Project": "gramProject",
+  });
+});
+
 /** @internal */
 export type DeleteToolsetRequest$Outbound = {
   slug: string;
   "Gram-Session"?: string | undefined;
+  "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
 
@@ -69,18 +281,43 @@ export const DeleteToolsetRequest$outboundSchema: z.ZodType<
 > = z.object({
   slug: z.string(),
   gramSession: z.string().optional(),
+  gramKey: z.string().optional(),
   gramProject: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     gramSession: "Gram-Session",
+    gramKey: "Gram-Key",
     gramProject: "Gram-Project",
   });
 });
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace DeleteToolsetRequest$ {
+  /** @deprecated use `DeleteToolsetRequest$inboundSchema` instead. */
+  export const inboundSchema = DeleteToolsetRequest$inboundSchema;
+  /** @deprecated use `DeleteToolsetRequest$outboundSchema` instead. */
+  export const outboundSchema = DeleteToolsetRequest$outboundSchema;
+  /** @deprecated use `DeleteToolsetRequest$Outbound` instead. */
+  export type Outbound = DeleteToolsetRequest$Outbound;
+}
 
 export function deleteToolsetRequestToJSON(
   deleteToolsetRequest: DeleteToolsetRequest,
 ): string {
   return JSON.stringify(
     DeleteToolsetRequest$outboundSchema.parse(deleteToolsetRequest),
+  );
+}
+
+export function deleteToolsetRequestFromJSON(
+  jsonString: string,
+): SafeParseResult<DeleteToolsetRequest, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => DeleteToolsetRequest$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'DeleteToolsetRequest' from JSON`,
   );
 }

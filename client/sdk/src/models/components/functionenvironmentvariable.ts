@@ -28,6 +28,45 @@ export const FunctionEnvironmentVariable$inboundSchema: z.ZodType<
   name: z.string(),
 });
 
+/** @internal */
+export type FunctionEnvironmentVariable$Outbound = {
+  description?: string | undefined;
+  name: string;
+};
+
+/** @internal */
+export const FunctionEnvironmentVariable$outboundSchema: z.ZodType<
+  FunctionEnvironmentVariable$Outbound,
+  z.ZodTypeDef,
+  FunctionEnvironmentVariable
+> = z.object({
+  description: z.string().optional(),
+  name: z.string(),
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace FunctionEnvironmentVariable$ {
+  /** @deprecated use `FunctionEnvironmentVariable$inboundSchema` instead. */
+  export const inboundSchema = FunctionEnvironmentVariable$inboundSchema;
+  /** @deprecated use `FunctionEnvironmentVariable$outboundSchema` instead. */
+  export const outboundSchema = FunctionEnvironmentVariable$outboundSchema;
+  /** @deprecated use `FunctionEnvironmentVariable$Outbound` instead. */
+  export type Outbound = FunctionEnvironmentVariable$Outbound;
+}
+
+export function functionEnvironmentVariableToJSON(
+  functionEnvironmentVariable: FunctionEnvironmentVariable,
+): string {
+  return JSON.stringify(
+    FunctionEnvironmentVariable$outboundSchema.parse(
+      functionEnvironmentVariable,
+    ),
+  );
+}
+
 export function functionEnvironmentVariableFromJSON(
   jsonString: string,
 ): SafeParseResult<FunctionEnvironmentVariable, SDKValidationError> {

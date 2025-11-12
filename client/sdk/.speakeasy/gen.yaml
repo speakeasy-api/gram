@@ -23,13 +23,12 @@ generation:
   sdkHooksConfigAccess: true
   schemas:
     allOfMergeStrategy: shallowMerge
-  requestBodyFieldName: ""
   tests:
     generateTests: true
     generateNewTests: false
     skipResponseBodyAssertions: false
 typescript:
-  version: 0.17.2
+  version: 0.17.4
   acceptHeaderEnum: true
   additionalDependencies:
     dependencies: {}
