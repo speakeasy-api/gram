@@ -1371,7 +1371,7 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 		Runtime:           "nodejs",
 		URI:               "resource://test",
 		MimeType:          "text/plain",
-		Variables:         map[string]string{},
+		Variables:         []string{},
 	}
 
 	resourcePlan := NewResourceFunctionCallPlan(descriptor, plan)

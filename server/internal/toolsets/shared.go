@@ -304,6 +304,8 @@ func (t *Toolsets) extractFunctionResourceCallPlan(ctx context.Context, resource
 		}
 	}
 
+	envvars := slices.Collect(maps.Keys(envconfig))
+
 	mimeType := ""
 	if resource.MimeType.Valid {
 		mimeType = resource.MimeType.String
@@ -331,7 +333,7 @@ func (t *Toolsets) extractFunctionResourceCallPlan(ctx context.Context, resource
 		Runtime:           resource.Runtime,
 		URI:               resource.Uri,
 		MimeType:          mimeType,
-		Variables:         envconfig,
+		Variables:         envvars,
 	}
 
 	return gateway.NewResourceFunctionCallPlan(descriptor, plan), nil
