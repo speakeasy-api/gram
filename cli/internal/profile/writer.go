@@ -139,3 +139,32 @@ func loadConfig(path string) (*Config, error) {
 
 	return &config, nil
 }
+
+// UpdateProjectSlug updates the default project slug for the current profile.
+func UpdateProjectSlug(path string, projectSlug string) error {
+	config, err := loadConfig(path)
+	if err != nil {
+		return fmt.Errorf("failed to load profile: %w", err)
+	}
+
+	if config == nil {
+		return fmt.Errorf("no profile configuration found")
+	}
+
+	if config.Current == "" {
+		return fmt.Errorf("no current profile set")
+	}
+
+	profile, ok := config.Profiles[config.Current]
+	if !ok {
+		return fmt.Errorf("current profile '%s' not found", config.Current)
+	}
+
+	// Validate that the project slug exists in the profile's projects
+	if !validateProjectSlug(projectSlug, profile.Projects) {
+		return fmt.Errorf("project '%s' not found in available projects", projectSlug)
+	}
+
+	profile.DefaultProjectSlug = projectSlug
+	return Save(config, path)
+}

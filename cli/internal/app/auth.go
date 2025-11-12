@@ -25,8 +25,13 @@ func newAuthCommand() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "api-url",
-				Usage:   "URL of the Gram web application",
+				Usage:   "URL of the Gram API server",
 				EnvVars: []string{"GRAM_API_URL"},
+			},
+			&cli.StringFlag{
+				Name:    "dashboard-url",
+				Usage:   "URL of the Gram dashboard for authentication",
+				EnvVars: []string{"GRAM_DASHBOARD_URL"},
 			},
 		},
 		Action: doAuth,
@@ -158,10 +163,11 @@ func authenticateNewProfile(
 	logger *slog.Logger,
 	profileName string,
 	apiURL string,
+	dashboardURL string,
 	keysClient *api.KeysClient,
 	profilePath string,
 ) error {
-	callbackResult, err := mintKey(ctx, logger, apiURL)
+	callbackResult, err := mintKey(ctx, logger, dashboardURL)
 	if err != nil {
 		return err
 	}
@@ -182,6 +188,12 @@ func doAuth(c *cli.Context) error {
 	apiURL, err := workflow.ResolveURL(c, prof)
 	if err != nil {
 		return fmt.Errorf("invalid API URL: %w", err)
+	}
+
+	// Get dashboard URL for browser authentication
+	dashboardURL := apiURL.String()
+	if c.IsSet("dashboard-url") {
+		dashboardURL = c.String("dashboard-url")
 	}
 
 	profileName := c.String("profile")
@@ -215,6 +227,7 @@ func doAuth(c *cli.Context) error {
 		logger,
 		profileName,
 		apiURL.String(),
+		dashboardURL,
 		keysClient,
 		profilePath,
 	)
