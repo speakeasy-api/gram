@@ -9,8 +9,6 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
   PromptTemplate,
   PromptTemplate$inboundSchema,
-  PromptTemplate$Outbound,
-  PromptTemplate$outboundSchema,
 } from "./prompttemplate.js";
 
 export type UpdatePromptTemplateResult = {
@@ -28,41 +26,6 @@ export const UpdatePromptTemplateResult$inboundSchema: z.ZodType<
 > = z.object({
   template: PromptTemplate$inboundSchema,
 });
-
-/** @internal */
-export type UpdatePromptTemplateResult$Outbound = {
-  template: PromptTemplate$Outbound;
-};
-
-/** @internal */
-export const UpdatePromptTemplateResult$outboundSchema: z.ZodType<
-  UpdatePromptTemplateResult$Outbound,
-  z.ZodTypeDef,
-  UpdatePromptTemplateResult
-> = z.object({
-  template: PromptTemplate$outboundSchema,
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace UpdatePromptTemplateResult$ {
-  /** @deprecated use `UpdatePromptTemplateResult$inboundSchema` instead. */
-  export const inboundSchema = UpdatePromptTemplateResult$inboundSchema;
-  /** @deprecated use `UpdatePromptTemplateResult$outboundSchema` instead. */
-  export const outboundSchema = UpdatePromptTemplateResult$outboundSchema;
-  /** @deprecated use `UpdatePromptTemplateResult$Outbound` instead. */
-  export type Outbound = UpdatePromptTemplateResult$Outbound;
-}
-
-export function updatePromptTemplateResultToJSON(
-  updatePromptTemplateResult: UpdatePromptTemplateResult,
-): string {
-  return JSON.stringify(
-    UpdatePromptTemplateResult$outboundSchema.parse(updatePromptTemplateResult),
-  );
-}
 
 export function updatePromptTemplateResultFromJSON(
   jsonString: string,
