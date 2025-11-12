@@ -81,7 +81,6 @@ func (r *ReapFlyApps) Do(ctx context.Context, req ReapFlyAppsRequest) (*ReapFlyA
 	}
 
 	if len(appsToReap) == 0 {
-		logger.InfoContext(ctx, "no apps to reap")
 		return &ReapFlyAppsResult{
 			Reaped: 0,
 			Errors: 0,
@@ -103,8 +102,6 @@ func (r *ReapFlyApps) Do(ctx context.Context, req ReapFlyAppsRequest) (*ReapFlyA
 			attr.SlogDeploymentFunctionsID(app.FunctionID.String()),
 		)
 
-		appLogger.InfoContext(ctx, "reaping fly app")
-
 		if err := r.deployer.Reap(ctx, functions.ReapRequest{
 			ProjectID:    app.ProjectID,
 			DeploymentID: app.DeploymentID,
@@ -116,7 +113,7 @@ func (r *ReapFlyApps) Do(ctx context.Context, req ReapFlyAppsRequest) (*ReapFlyA
 		}
 
 		result.Reaped++
-		appLogger.InfoContext(ctx, "successfully reaped fly app")
+		appLogger.InfoContext(ctx, "successfully reaped fly app", attr.SlogVisibilityInternal())
 	}
 
 	r.metrics.RecordFlyAppReaperReapCount(ctx, int64(result.Reaped), int64(result.Errors))

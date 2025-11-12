@@ -57,6 +57,7 @@ type FlyRunnerOptions struct {
 
 type FlyRunner struct {
 	logger          *slog.Logger
+	tracer          trace.Tracer
 	db              *pgxpool.Pool
 	assetStorage    assets.BlobStore
 	client          *fly.Client
@@ -116,6 +117,7 @@ func NewFlyRunner(
 
 	return &FlyRunner{
 		logger:          logger.With(attr.SlogComponent("flyio-orchestrator")),
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/functions"),
 		db:              db,
 		assetStorage:    assetStorage,
 		client:          c,
@@ -507,7 +509,11 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 }
 
 func (f *FlyRunner) Reap(ctx context.Context, req ReapRequest) error {
+	ctx, span := f.tracer.Start(ctx, "FlyRunner.Reap")
+	defer span.End()
+
 	logger := f.logger.With(
+		attr.SlogVisibilityInternal(),
 		attr.SlogProjectID(req.ProjectID.String()),
 		attr.SlogDeploymentID(req.DeploymentID.String()),
 		attr.SlogDeploymentFunctionsID(req.FunctionID.String()),
@@ -530,7 +536,6 @@ func (f *FlyRunner) reap(ctx context.Context, logger *slog.Logger, appsRepo *rep
 	})
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		logger.InfoContext(ctx, "no existing app found")
 		return nil
 	case err != nil:
 		return fmt.Errorf("get existing app name: %w", err)
