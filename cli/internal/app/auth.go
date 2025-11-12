@@ -75,10 +75,10 @@ func mintKey(
 	ctx context.Context,
 	logger *slog.Logger,
 	apiURL string,
-) (auth.CallbackResult, error) {
+) (*auth.CallbackResult, error) {
 	listener, err := auth.NewListener()
 	if err != nil {
-		return auth.CallbackResult{}, fmt.Errorf("failed to create callback listener: %w", err)
+		return nil, fmt.Errorf("failed to create callback listener: %w", err)
 	}
 
 	defer func() {
@@ -94,12 +94,12 @@ func mintKey(
 
 	dispatcher := auth.NewDispatcher(logger)
 	if err := dispatcher.Dispatch(ctx, apiURL, callbackURL); err != nil {
-		return auth.CallbackResult{}, fmt.Errorf("failed to dispatch auth request: %w", err)
+		return nil, fmt.Errorf("failed to dispatch auth request: %w", err)
 	}
 
 	result, err := listener.Wait(ctx)
 	if err != nil {
-		return auth.CallbackResult{}, fmt.Errorf("authentication failed: %w", err)
+		return nil, fmt.Errorf("authentication failed: %w", err)
 	}
 
 	return result, nil

@@ -73,17 +73,17 @@ func (l *Listener) Start() {
 }
 
 // Wait blocks until an API key is received or timeout occurs.
-func (l *Listener) Wait(ctx context.Context) (CallbackResult, error) {
+func (l *Listener) Wait(ctx context.Context) (*CallbackResult, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, callbackTimeout)
 	defer cancel()
 
 	select {
 	case result := <-l.result:
-		return result, nil
+		return &result, nil
 	case err := <-l.errChan:
-		return CallbackResult{}, err
+		return nil, err
 	case <-timeoutCtx.Done():
-		return CallbackResult{}, fmt.Errorf("timeout waiting for authentication callback")
+		return nil, fmt.Errorf("timeout waiting for authentication callback")
 	}
 }
 
