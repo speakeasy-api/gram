@@ -15,8 +15,8 @@ import {
   useDeleteSourceEnvironmentLinkMutation,
 } from "@gram/client/react-query";
 import { useEffect, useState } from "react";
-import { useSession } from "@/contexts/Auth";
-import { TriangleAlertIcon } from "lucide-react";
+// import { useSession } from "@/contexts/Auth";
+import { FileCode, FunctionSquare, TriangleAlertIcon } from "lucide-react";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useRoutes } from "@/routes";
 
@@ -34,7 +34,7 @@ function EnvironmentCombobox({
   activeEnvironmentId,
   setActiveEnvironmentId,
 }: EnvironmentComboboxProps) {
-  const session = useSession();
+  // const session = useSession();
   const routes = useRoutes();
   const environments = useListEnvironments();
 
@@ -53,53 +53,78 @@ function EnvironmentCombobox({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex gap-2 items-center">
-        <Combobox
-          value={activeEnvironmentId ?? ""}
-          placeholder="select or create"
-          options={(environments.data?.environments ?? []).map((env) => ({
-            value: env.id,
-            label: env.name,
-          }))}
-          onValueChange={setActiveEnvironmentId}
-          createOptions={{
-            renderCreatePrompt: (query) => (
-              <div className="flex items-center gap-2">
-                <Icon name="plus" /> Create "{query}"
-              </div>
-            ),
-            handleCreate: (query) => {
-              mutation.mutate({
-                request: {
-                  createEnvironmentForm: {
-                    name: query,
-                    description: `environment for attaching to source`,
-                    entries: [],
-                    organizationId: session.activeOrganizationId,
-                  },
-                },
-              });
-            },
-          }}
-          loading={environments.isLoading || mutation.isPending}
-        />
-        {activeEnvironmentId && (
-          <Button
-            onClick={() => setActiveEnvironmentId(undefined)}
-            variant="tertiary"
-            size="sm"
-            aria-label="Clear environment"
-          >
-            <Icon name="x" /> clear
-          </Button>
-        )}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium">Environment</p>
+          {selectedEnvironment ? (
+            <routes.environments.environment.Link
+              params={[selectedEnvironment.slug]}
+            >
+              <Button
+                variant="tertiary"
+                size="sm"
+                aria-label="View environment"
+              >
+                <Icon name="eye" /> view
+              </Button>
+            </routes.environments.environment.Link>
+          ) : (
+            <Button
+              variant="tertiary"
+              size="sm"
+              aria-label="View environment"
+              disabled
+            >
+              <Icon name="eye" /> view
+            </Button>
+          )}
+        </div>
+        <div className="flex gap-2 items-center w-full [&>:first-child]:min-w-64 [&>button]:justify-start">
+          <Combobox
+            value={activeEnvironmentId ?? ""}
+            placeholder="select environment"
+            options={(environments.data?.environments ?? []).map((env) => ({
+              value: env.id,
+              label: env.name,
+            }))}
+            onValueChange={setActiveEnvironmentId}
+            /* add back after moonshine PR #319 ships */
+            // createOptions={{
+            //   renderCreatePrompt: (query) => (
+            //     <div className="flex items-center gap-2">
+            //       <Icon name="plus" /> Create "{query}"
+            //     </div>
+            //   ),
+            //   handleCreate: (query) => {
+            //     mutation.mutate({
+            //       request: {
+            //         createEnvironmentForm: {
+            //           name: query,
+            //           description: `environment for attaching to source`,
+            //           entries: [],
+            //           organizationId: session.activeOrganizationId,
+            //         },
+            //       },
+            //     });
+            //   },
+            // }}
+            loading={environments.isLoading || mutation.isPending}
+          />
+          {activeEnvironmentId && (
+            <Button
+              onClick={() => setActiveEnvironmentId(undefined)}
+              variant="tertiary"
+              size="sm"
+              aria-label="Clear environment"
+            >
+              <Icon name="x" /> clear
+            </Button>
+          )}
+        </div>
       </div>
 
-      {selectedEnvironment && (
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">
-            Variables in environment:
-          </p>
+      <div className="space-y-2 min-h-10">
+        {selectedEnvironment && (
           <div className="flex flex-wrap gap-2 items-center">
             {selectedEnvironment.entries.length > 0 ? (
               selectedEnvironment.entries.map((entry) => (
@@ -108,20 +133,9 @@ function EnvironmentCombobox({
             ) : (
               <div className="text-sm text-muted-foreground">Empty...</div>
             )}
-            <routes.environments.environment.Link
-              params={[selectedEnvironment.slug]}
-            >
-              <Button
-                variant="tertiary"
-                size="sm"
-                aria-label="Edit environment"
-              >
-                <Icon name="eye" /> view
-              </Button>
-            </routes.environments.environment.Link>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -215,11 +229,32 @@ export function AttachEnvironmentDialogContent({
       <Dialog.Header>
         <Dialog.Title>Attach Environment</Dialog.Title>
         <Dialog.Description>
-          <p className="text-warning">
-            <TriangleAlertIcon className="inline mr-2 w-4 h-4" />
-            Environments attached here will apply to all users of tools from
-            this source
-          </p>
+          <div className="space-y-2">
+            <p className="text-warning">
+              <TriangleAlertIcon className="inline mr-2 w-4 h-4" />
+              Environments attached here will apply to all users of tools from
+              this source in both public and private servers
+            </p>
+            {asset.type === "openapi" ? (
+              <p className="flex items-center gap-1.5">
+                Values set here will be forwarded to{" "}
+                <span className="inline-flex items-center gap-1 bg-secondary px-1.5 py-0.5 rounded">
+                  <FileCode className="w-3 h-3" /> {asset.name}
+                </span>
+              </p>
+            ) : asset.type === "function" ? (
+              <p className="flex items-center gap-1.5">
+                You will be able to access values set here on{" "}
+                <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                  process.env
+                </code>{" "}
+                in{" "}
+                <span className="inline-flex items-center gap-1 bg-secondary px-1.5 py-0.5 rounded">
+                  <FunctionSquare className="w-3 h-3" /> {asset.name}
+                </span>
+              </p>
+            ) : null}
+          </div>
         </Dialog.Description>
       </Dialog.Header>
 
