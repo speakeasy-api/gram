@@ -168,3 +168,9 @@ func UpdateProjectSlug(path string, projectSlug string) error {
 	profile.DefaultProjectSlug = projectSlug
 	return Save(config, path)
 }
+
+// Clear removes all profiles from the configuration file.
+func Clear(path string) error {
+	config := EmptyConfig()
+	return Save(config, path)
+}
