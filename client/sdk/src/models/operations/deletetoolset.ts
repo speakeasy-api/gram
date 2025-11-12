@@ -5,9 +5,19 @@
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
 
+export type DeleteToolsetSecurityOption1 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
+export type DeleteToolsetSecurityOption2 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
 export type DeleteToolsetSecurity = {
-  projectSlugHeaderGramProject?: string | undefined;
-  sessionHeaderGramSession?: string | undefined;
+  option1?: DeleteToolsetSecurityOption1 | undefined;
+  option2?: DeleteToolsetSecurityOption2 | undefined;
 };
 
 export type DeleteToolsetRequest = {
@@ -20,15 +30,81 @@ export type DeleteToolsetRequest = {
    */
   gramSession?: string | undefined;
   /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
+  /**
    * project header
    */
   gramProject?: string | undefined;
 };
 
 /** @internal */
+export type DeleteToolsetSecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const DeleteToolsetSecurityOption1$outboundSchema: z.ZodType<
+  DeleteToolsetSecurityOption1$Outbound,
+  z.ZodTypeDef,
+  DeleteToolsetSecurityOption1
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+export function deleteToolsetSecurityOption1ToJSON(
+  deleteToolsetSecurityOption1: DeleteToolsetSecurityOption1,
+): string {
+  return JSON.stringify(
+    DeleteToolsetSecurityOption1$outboundSchema.parse(
+      deleteToolsetSecurityOption1,
+    ),
+  );
+}
+
+/** @internal */
+export type DeleteToolsetSecurityOption2$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const DeleteToolsetSecurityOption2$outboundSchema: z.ZodType<
+  DeleteToolsetSecurityOption2$Outbound,
+  z.ZodTypeDef,
+  DeleteToolsetSecurityOption2
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+export function deleteToolsetSecurityOption2ToJSON(
+  deleteToolsetSecurityOption2: DeleteToolsetSecurityOption2,
+): string {
+  return JSON.stringify(
+    DeleteToolsetSecurityOption2$outboundSchema.parse(
+      deleteToolsetSecurityOption2,
+    ),
+  );
+}
+
+/** @internal */
 export type DeleteToolsetSecurity$Outbound = {
-  "project_slug_header_Gram-Project"?: string | undefined;
-  "session_header_Gram-Session"?: string | undefined;
+  Option1?: DeleteToolsetSecurityOption1$Outbound | undefined;
+  Option2?: DeleteToolsetSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -37,12 +113,12 @@ export const DeleteToolsetSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   DeleteToolsetSecurity
 > = z.object({
-  projectSlugHeaderGramProject: z.string().optional(),
-  sessionHeaderGramSession: z.string().optional(),
+  option1: z.lazy(() => DeleteToolsetSecurityOption1$outboundSchema).optional(),
+  option2: z.lazy(() => DeleteToolsetSecurityOption2$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
+    option1: "Option1",
+    option2: "Option2",
   });
 });
 
@@ -58,6 +134,7 @@ export function deleteToolsetSecurityToJSON(
 export type DeleteToolsetRequest$Outbound = {
   slug: string;
   "Gram-Session"?: string | undefined;
+  "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
 
@@ -69,10 +146,12 @@ export const DeleteToolsetRequest$outboundSchema: z.ZodType<
 > = z.object({
   slug: z.string(),
   gramSession: z.string().optional(),
+  gramKey: z.string().optional(),
   gramProject: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     gramSession: "Gram-Session",
+    gramKey: "Gram-Key",
     gramProject: "Gram-Project",
   });
 });

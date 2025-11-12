@@ -6,9 +6,19 @@ import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
+export type AddExternalOAuthServerSecurityOption1 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
+export type AddExternalOAuthServerSecurityOption2 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
 export type AddExternalOAuthServerSecurity = {
-  projectSlugHeaderGramProject?: string | undefined;
-  sessionHeaderGramSession?: string | undefined;
+  option1?: AddExternalOAuthServerSecurityOption1 | undefined;
+  option2?: AddExternalOAuthServerSecurityOption2 | undefined;
 };
 
 export type AddExternalOAuthServerRequest = {
@@ -21,6 +31,10 @@ export type AddExternalOAuthServerRequest = {
    */
   gramSession?: string | undefined;
   /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
+  /**
    * project header
    */
   gramProject?: string | undefined;
@@ -29,9 +43,71 @@ export type AddExternalOAuthServerRequest = {
 };
 
 /** @internal */
+export type AddExternalOAuthServerSecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const AddExternalOAuthServerSecurityOption1$outboundSchema: z.ZodType<
+  AddExternalOAuthServerSecurityOption1$Outbound,
+  z.ZodTypeDef,
+  AddExternalOAuthServerSecurityOption1
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+export function addExternalOAuthServerSecurityOption1ToJSON(
+  addExternalOAuthServerSecurityOption1: AddExternalOAuthServerSecurityOption1,
+): string {
+  return JSON.stringify(
+    AddExternalOAuthServerSecurityOption1$outboundSchema.parse(
+      addExternalOAuthServerSecurityOption1,
+    ),
+  );
+}
+
+/** @internal */
+export type AddExternalOAuthServerSecurityOption2$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const AddExternalOAuthServerSecurityOption2$outboundSchema: z.ZodType<
+  AddExternalOAuthServerSecurityOption2$Outbound,
+  z.ZodTypeDef,
+  AddExternalOAuthServerSecurityOption2
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+export function addExternalOAuthServerSecurityOption2ToJSON(
+  addExternalOAuthServerSecurityOption2: AddExternalOAuthServerSecurityOption2,
+): string {
+  return JSON.stringify(
+    AddExternalOAuthServerSecurityOption2$outboundSchema.parse(
+      addExternalOAuthServerSecurityOption2,
+    ),
+  );
+}
+
+/** @internal */
 export type AddExternalOAuthServerSecurity$Outbound = {
-  "project_slug_header_Gram-Project"?: string | undefined;
-  "session_header_Gram-Session"?: string | undefined;
+  Option1?: AddExternalOAuthServerSecurityOption1$Outbound | undefined;
+  Option2?: AddExternalOAuthServerSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -40,12 +116,14 @@ export const AddExternalOAuthServerSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   AddExternalOAuthServerSecurity
 > = z.object({
-  projectSlugHeaderGramProject: z.string().optional(),
-  sessionHeaderGramSession: z.string().optional(),
+  option1: z.lazy(() => AddExternalOAuthServerSecurityOption1$outboundSchema)
+    .optional(),
+  option2: z.lazy(() => AddExternalOAuthServerSecurityOption2$outboundSchema)
+    .optional(),
 }).transform((v) => {
   return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
+    option1: "Option1",
+    option2: "Option2",
   });
 });
 
@@ -63,6 +141,7 @@ export function addExternalOAuthServerSecurityToJSON(
 export type AddExternalOAuthServerRequest$Outbound = {
   slug: string;
   "Gram-Session"?: string | undefined;
+  "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
   AddExternalOAuthServerRequestBody:
     components.AddExternalOAuthServerRequestBody$Outbound;
@@ -76,12 +155,14 @@ export const AddExternalOAuthServerRequest$outboundSchema: z.ZodType<
 > = z.object({
   slug: z.string(),
   gramSession: z.string().optional(),
+  gramKey: z.string().optional(),
   gramProject: z.string().optional(),
   addExternalOAuthServerRequestBody:
     components.AddExternalOAuthServerRequestBody$outboundSchema,
 }).transform((v) => {
   return remap$(v, {
     gramSession: "Gram-Session",
+    gramKey: "Gram-Key",
     gramProject: "Gram-Project",
     addExternalOAuthServerRequestBody: "AddExternalOAuthServerRequestBody",
   });

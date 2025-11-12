@@ -122,6 +122,10 @@ export type Toolset = {
    */
   tools: Array<Tool>;
   /**
+   * The version of the toolset (will be 0 if none exists)
+   */
+  toolsetVersion: number;
+  /**
    * When the toolset was last updated.
    */
   updatedAt: Date;
@@ -157,6 +161,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
     slug: z.string(),
     tool_urns: z.array(z.string()),
     tools: z.array(Tool$inboundSchema),
+    toolset_version: z.number().int(),
     updated_at: z.string().datetime({ offset: true }).transform(v =>
       new Date(v)
     ),
@@ -179,6 +184,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
       "security_variables": "securityVariables",
       "server_variables": "serverVariables",
       "tool_urns": "toolUrns",
+      "toolset_version": "toolsetVersion",
       "updated_at": "updatedAt",
     });
   });

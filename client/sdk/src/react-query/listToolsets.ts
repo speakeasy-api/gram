@@ -94,6 +94,7 @@ export function setListToolsetsData(
   queryKeyBase: [
     parameters: {
       gramSession?: string | undefined;
+      gramKey?: string | undefined;
       gramProject?: string | undefined;
     },
   ],
@@ -109,6 +110,7 @@ export function invalidateListToolsets(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       gramSession?: string | undefined;
+      gramKey?: string | undefined;
       gramProject?: string | undefined;
     }]
   >,
@@ -142,6 +144,7 @@ export function buildListToolsetsQuery(
   return {
     queryKey: queryKeyListToolsets({
       gramSession: request?.gramSession,
+      gramKey: request?.gramKey,
       gramProject: request?.gramProject,
     }),
     queryFn: async function listToolsetsQueryFn(
@@ -166,6 +169,7 @@ export function buildListToolsetsQuery(
 export function queryKeyListToolsets(
   parameters: {
     gramSession?: string | undefined;
+    gramKey?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {

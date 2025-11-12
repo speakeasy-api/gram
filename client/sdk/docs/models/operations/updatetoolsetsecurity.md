@@ -10,7 +10,7 @@ let value: UpdateToolsetSecurity = {};
 
 ## Fields
 
-| Field                          | Type                           | Required                       | Description                    |
-| ------------------------------ | ------------------------------ | ------------------------------ | ------------------------------ |
-| `projectSlugHeaderGramProject` | *string*                       | :heavy_minus_sign:             | N/A                            |
-| `sessionHeaderGramSession`     | *string*                       | :heavy_minus_sign:             | N/A                            |
+| Field                                                                                              | Type                                                                                               | Required                                                                                           | Description                                                                                        |
+| -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `option1`                                                                                          | [operations.UpdateToolsetSecurityOption1](../../models/operations/updatetoolsetsecurityoption1.md) | :heavy_minus_sign:                                                                                 | N/A                                                                                                |
+| `option2`                                                                                          | [operations.UpdateToolsetSecurityOption2](../../models/operations/updatetoolsetsecurityoption2.md) | :heavy_minus_sign:                                                                                 | N/A                                                                                                |

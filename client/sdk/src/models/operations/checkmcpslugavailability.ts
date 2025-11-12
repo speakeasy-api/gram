@@ -5,9 +5,19 @@
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
 
+export type CheckMCPSlugAvailabilitySecurityOption1 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
+export type CheckMCPSlugAvailabilitySecurityOption2 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
 export type CheckMCPSlugAvailabilitySecurity = {
-  projectSlugHeaderGramProject?: string | undefined;
-  sessionHeaderGramSession?: string | undefined;
+  option1?: CheckMCPSlugAvailabilitySecurityOption1 | undefined;
+  option2?: CheckMCPSlugAvailabilitySecurityOption2 | undefined;
 };
 
 export type CheckMCPSlugAvailabilityRequest = {
@@ -20,15 +30,83 @@ export type CheckMCPSlugAvailabilityRequest = {
    */
   gramSession?: string | undefined;
   /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
+  /**
    * project header
    */
   gramProject?: string | undefined;
 };
 
 /** @internal */
+export type CheckMCPSlugAvailabilitySecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const CheckMCPSlugAvailabilitySecurityOption1$outboundSchema: z.ZodType<
+  CheckMCPSlugAvailabilitySecurityOption1$Outbound,
+  z.ZodTypeDef,
+  CheckMCPSlugAvailabilitySecurityOption1
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+export function checkMCPSlugAvailabilitySecurityOption1ToJSON(
+  checkMCPSlugAvailabilitySecurityOption1:
+    CheckMCPSlugAvailabilitySecurityOption1,
+): string {
+  return JSON.stringify(
+    CheckMCPSlugAvailabilitySecurityOption1$outboundSchema.parse(
+      checkMCPSlugAvailabilitySecurityOption1,
+    ),
+  );
+}
+
+/** @internal */
+export type CheckMCPSlugAvailabilitySecurityOption2$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const CheckMCPSlugAvailabilitySecurityOption2$outboundSchema: z.ZodType<
+  CheckMCPSlugAvailabilitySecurityOption2$Outbound,
+  z.ZodTypeDef,
+  CheckMCPSlugAvailabilitySecurityOption2
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+export function checkMCPSlugAvailabilitySecurityOption2ToJSON(
+  checkMCPSlugAvailabilitySecurityOption2:
+    CheckMCPSlugAvailabilitySecurityOption2,
+): string {
+  return JSON.stringify(
+    CheckMCPSlugAvailabilitySecurityOption2$outboundSchema.parse(
+      checkMCPSlugAvailabilitySecurityOption2,
+    ),
+  );
+}
+
+/** @internal */
 export type CheckMCPSlugAvailabilitySecurity$Outbound = {
-  "project_slug_header_Gram-Project"?: string | undefined;
-  "session_header_Gram-Session"?: string | undefined;
+  Option1?: CheckMCPSlugAvailabilitySecurityOption1$Outbound | undefined;
+  Option2?: CheckMCPSlugAvailabilitySecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -37,12 +115,14 @@ export const CheckMCPSlugAvailabilitySecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   CheckMCPSlugAvailabilitySecurity
 > = z.object({
-  projectSlugHeaderGramProject: z.string().optional(),
-  sessionHeaderGramSession: z.string().optional(),
+  option1: z.lazy(() => CheckMCPSlugAvailabilitySecurityOption1$outboundSchema)
+    .optional(),
+  option2: z.lazy(() => CheckMCPSlugAvailabilitySecurityOption2$outboundSchema)
+    .optional(),
 }).transform((v) => {
   return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
+    option1: "Option1",
+    option2: "Option2",
   });
 });
 
@@ -60,6 +140,7 @@ export function checkMCPSlugAvailabilitySecurityToJSON(
 export type CheckMCPSlugAvailabilityRequest$Outbound = {
   slug: string;
   "Gram-Session"?: string | undefined;
+  "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
 
@@ -71,10 +152,12 @@ export const CheckMCPSlugAvailabilityRequest$outboundSchema: z.ZodType<
 > = z.object({
   slug: z.string(),
   gramSession: z.string().optional(),
+  gramKey: z.string().optional(),
   gramProject: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     gramSession: "Gram-Session",
+    gramKey: "Gram-Key",
     gramProject: "Gram-Project",
   });
 });
