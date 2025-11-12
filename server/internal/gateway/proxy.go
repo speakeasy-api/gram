@@ -204,17 +204,17 @@ func (tp *ToolProxy) doFunction(
 		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, logger)
 	}
 
-	payloadEnv := make(map[string]string)
+	payloadEnv := NewCaseInsensitiveEnv()
 
 	// Start with system environment variables
 	for k, v := range env.SystemEnv.All() {
-		payloadEnv[k] = v
+		payloadEnv.Set(k, v)
 	}
 
 	// For each variable required by the function, allow user config to merge/override
 	for _, varName := range plan.Variables {
 		if val := env.UserConfig.Get(varName); val != "" {
-			payloadEnv[varName] = val
+			payloadEnv.Set(varName, val)
 		}
 	}
 
@@ -229,7 +229,7 @@ func (tp *ToolProxy) doFunction(
 			FunctionsID:       functionID,
 			FunctionsAccessID: accessID,
 			Input:             input,
-			Environment:       payloadEnv,
+			Environment:       payloadEnv.All(),
 		},
 		ToolURN:  descriptor.URN,
 		ToolName: descriptor.Name,
@@ -605,7 +605,6 @@ func retryWithBackoff(
 		if err != nil {
 			continue
 		}
-		// check if we should retry based on method and status code
 		if !slices.Contains(retryBackoff.methods, resp.Request.Method) || !slices.Contains(retryBackoff.statusCodes, resp.StatusCode) {
 			return resp, err
 		}

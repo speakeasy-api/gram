@@ -95,15 +95,15 @@ func (tp *ToolProxy) doFunctionResource(
 		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, logger)
 	}
 
-	payloadEnv := make(map[string]string)
+	payloadEnv := NewCaseInsensitiveEnv()
 
 	for k, v := range env.SystemEnv.All() {
-		payloadEnv[k] = v
+		payloadEnv.Set(k, v)
 	}
 
 	for _, varName := range plan.Variables {
 		if val := env.UserConfig.Get(varName); val != "" {
-			payloadEnv[varName] = val
+			payloadEnv.Set(varName, val)
 		}
 	}
 
@@ -118,7 +118,7 @@ func (tp *ToolProxy) doFunctionResource(
 			FunctionsID:       functionID,
 			FunctionsAccessID: accessID,
 			Input:             input,
-			Environment:       payloadEnv,
+			Environment:       payloadEnv.All(),
 		},
 		ResourceURN:  descriptor.URN,
 		ResourceURI:  descriptor.URI,
