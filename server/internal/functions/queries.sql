@@ -145,10 +145,3 @@ WHERE
   AND reaped_at IS NULL
 ORDER BY created_at DESC
 LIMIT 1;
-
--- name: IsReapingEnabledForProject :one
-SELECT true AS enabled
-FROM projects
-WHERE
-  id = @project_id
-  AND organization_id = ANY(@organization_ids);

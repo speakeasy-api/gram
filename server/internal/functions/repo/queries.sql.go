@@ -329,26 +329,6 @@ func (q *Queries) InitFlyApp(ctx context.Context, arg InitFlyAppParams) (uuid.UU
 	return id, err
 }
 
-const isReapingEnabledForProject = `-- name: IsReapingEnabledForProject :one
-SELECT true AS enabled
-FROM projects
-WHERE
-  id = $1
-  AND organization_id = ANY($2)
-`
-
-type IsReapingEnabledForProjectParams struct {
-	ProjectID       uuid.UUID
-	OrganizationIds []string
-}
-
-func (q *Queries) IsReapingEnabledForProject(ctx context.Context, arg IsReapingEnabledForProjectParams) (bool, error) {
-	row := q.db.QueryRow(ctx, isReapingEnabledForProject, arg.ProjectID, arg.OrganizationIds)
-	var enabled bool
-	err := row.Scan(&enabled)
-	return enabled, err
-}
-
 const markFlyAppReaped = `-- name: MarkFlyAppReaped :exec
 UPDATE fly_apps SET
   reap_error = $1,
