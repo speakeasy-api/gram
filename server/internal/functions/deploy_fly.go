@@ -541,18 +541,6 @@ func (f *FlyRunner) reap(ctx context.Context, logger *slog.Logger, appsRepo *rep
 		return fmt.Errorf("get existing app name: %w", err)
 	}
 
-	enabled, err := appsRepo.IsReapingEnabledForProject(ctx, repo.IsReapingEnabledForProjectParams{
-		ProjectID:       req.ProjectID,
-		OrganizationIds: []string{"5ad61845-b72e-4f0d-9dde-e0bdcf98e374", "5a25158b-24dc-4d49-b03d-e85acfbea59c"},
-	})
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("check reaping enabled for project: %w", err)
-	}
-	if !enabled {
-		logger.InfoContext(ctx, "reaping is not enabled for project")
-		return nil
-	}
-
 	logger = logger.With(
 		attr.SlogFlyAppName(app.AppName),
 		attr.SlogFlyOrgSlug(app.FlyOrgSlug),
