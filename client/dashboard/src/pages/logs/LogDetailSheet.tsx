@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HTTPToolLog } from "@gram/client/models/components";
 import { CheckIcon, Copy, XIcon } from "lucide-react";
@@ -45,9 +45,9 @@ export function LogDetailSheet({
                     <ToolIcon className="size-5 shrink-0" strokeWidth={1.5} />
                   );
                 })()}
-                <h2 className="text-2xl font-light tracking-tight">
+                <SheetTitle className="text-2xl font-light tracking-tight">
                   {getToolNameFromUrn(log.toolUrn)}
-                </h2>
+                </SheetTitle>
                 <div className="flex items-center justify-center rounded-full size-6">
                   <StatusIcon isSuccess={isSuccessfulCall(log)} />
                 </div>
