@@ -25,11 +25,79 @@ func newAuthCommand() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "api-url",
-				Usage:   "URL of the Gram web application",
+				Usage:   "URL of the Gram API server",
 				EnvVars: []string{"GRAM_API_URL"},
 			},
+			&cli.StringFlag{
+				Name:    "dashboard-url",
+				Usage:   "URL of the Gram dashboard for authentication",
+				EnvVars: []string{"GRAM_DASHBOARD_URL"},
+			},
+		},
+		Subcommands: []*cli.Command{
+			newAuthSwitchCommand(),
+			newAuthClearCommand(),
 		},
 		Action: doAuth,
+	}
+}
+
+func newAuthSwitchCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "switch",
+		Usage: "Switch the default project for the current profile",
+		Description: `
+Switch the default project for the current profile.
+
+The project slug must be one of the projects available in your current profile.
+Use 'gram status' to see your current project.`,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:     "project",
+				Usage:    "The project slug to switch to",
+				Required: true,
+			},
+		},
+		Action: func(c *cli.Context) error {
+			projectSlug := c.String("project")
+
+			profilePath, err := profile.DefaultProfilePath()
+			if err != nil {
+				return fmt.Errorf("failed to get profile path: %w", err)
+			}
+
+			if err := profile.UpdateProjectSlug(profilePath, projectSlug); err != nil {
+				return fmt.Errorf("failed to switch project: %w", err)
+			}
+
+			fmt.Printf("Successfully switched to project: %s\n", projectSlug)
+			return nil
+		},
+	}
+}
+
+func newAuthClearCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "clear",
+		Usage: "Clear all authentication profiles",
+		Description: `
+Clear all authentication profiles from the profile configuration file.
+
+This will remove all stored API keys and profile information.
+You will need to run 'gram auth' again to authenticate.`,
+		Action: func(c *cli.Context) error {
+			profilePath, err := profile.DefaultProfilePath()
+			if err != nil {
+				return fmt.Errorf("failed to get profile path: %w", err)
+			}
+
+			if err := profile.Clear(profilePath); err != nil {
+				return fmt.Errorf("failed to clear profiles: %w", err)
+			}
+
+			fmt.Println("Successfully cleared all profiles")
+			return nil
+		},
 	}
 }
 
@@ -70,10 +138,10 @@ func mintKey(
 	ctx context.Context,
 	logger *slog.Logger,
 	apiURL string,
-) (string, error) {
+) (*auth.CallbackResult, error) {
 	listener, err := auth.NewListener()
 	if err != nil {
-		return "", fmt.Errorf("failed to create callback listener: %w", err)
+		return nil, fmt.Errorf("failed to create callback listener: %w", err)
 	}
 
 	defer func() {
@@ -89,15 +157,15 @@ func mintKey(
 
 	dispatcher := auth.NewDispatcher(logger)
 	if err := dispatcher.Dispatch(ctx, apiURL, callbackURL); err != nil {
-		return "", fmt.Errorf("failed to dispatch auth request: %w", err)
+		return nil, fmt.Errorf("failed to dispatch auth request: %w", err)
 	}
 
-	apiKey, err := listener.Wait(ctx)
+	result, err := listener.Wait(ctx)
 	if err != nil {
-		return "", fmt.Errorf("authentication failed: %w", err)
+		return nil, fmt.Errorf("authentication failed: %w", err)
 	}
 
-	return apiKey, nil
+	return result, nil
 }
 
 func saveProfile(
@@ -108,6 +176,7 @@ func saveProfile(
 	result *keys.ValidateKeyResult,
 	profilePath string,
 	profileName string,
+	projectSlug string,
 ) error {
 	err := profile.UpdateOrCreate(
 		apiKey,
@@ -116,6 +185,7 @@ func saveProfile(
 		result.Projects,
 		profilePath,
 		profileName,
+		projectSlug,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to save profile: %w", err)
@@ -148,7 +218,7 @@ func refreshProfile(
 		return fmt.Errorf("failed to refresh profile: %w", err)
 	}
 
-	return saveProfile(ctx, logger, prof.Secret, apiURL, result, profilePath, profileName)
+	return saveProfile(ctx, logger, prof.Secret, apiURL, result, profilePath, profileName, prof.DefaultProjectSlug)
 }
 
 func authenticateNewProfile(
@@ -156,20 +226,21 @@ func authenticateNewProfile(
 	logger *slog.Logger,
 	profileName string,
 	apiURL string,
+	dashboardURL string,
 	keysClient *api.KeysClient,
 	profilePath string,
 ) error {
-	apiKey, err := mintKey(ctx, logger, apiURL)
+	callbackResult, err := mintKey(ctx, logger, dashboardURL)
 	if err != nil {
 		return err
 	}
 
-	result, err := keysClient.Verify(ctx, secret.Secret(apiKey))
+	result, err := keysClient.Verify(ctx, secret.Secret(callbackResult.APIKey))
 	if err != nil {
 		return fmt.Errorf("failed to authenticate profile: %w", err)
 	}
 
-	return saveProfile(ctx, logger, apiKey, apiURL, result, profilePath, profileName)
+	return saveProfile(ctx, logger, callbackResult.APIKey, apiURL, result, profilePath, profileName, callbackResult.Project)
 }
 
 func doAuth(c *cli.Context) error {
@@ -180,6 +251,12 @@ func doAuth(c *cli.Context) error {
 	apiURL, err := workflow.ResolveURL(c, prof)
 	if err != nil {
 		return fmt.Errorf("invalid API URL: %w", err)
+	}
+
+	// Get dashboard URL for browser authentication
+	dashboardURL := apiURL.String()
+	if c.IsSet("dashboard-url") {
+		dashboardURL = c.String("dashboard-url")
 	}
 
 	profileName := c.String("profile")
@@ -213,6 +290,7 @@ func doAuth(c *cli.Context) error {
 		logger,
 		profileName,
 		apiURL.String(),
+		dashboardURL,
 		keysClient,
 		profilePath,
 	)
