@@ -11,6 +11,7 @@ import (
 	"maps"
 	"mime"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -126,7 +127,7 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed get tool call plan").Log(ctx, logger)
 	}
 
-	userConfig, err := resolveUserConfiguration(ctx, logger, env, payload)
+	userConfig, err := resolveUserConfiguration(ctx, logger, env, payload, plan)
 	if err != nil {
 		return nil, err
 	}
@@ -279,6 +280,7 @@ func resolveUserConfiguration(
 	logger *slog.Logger,
 	env gateway.EnvironmentLoader,
 	payload *mcpInputs,
+	plan *gateway.ToolCallPlan,
 ) (map[string]string, error) {
 	userConfig := make(map[string]string)
 
@@ -297,6 +299,21 @@ func resolveUserConfiguration(
 	}
 
 	maps.Copy(userConfig, payload.mcpEnvVariables)
+
+	// Process OAuth tokens for HTTP tools
+	if plan != nil && plan.Kind == gateway.ToolKindHTTP {
+		for _, security := range plan.HTTP.Security {
+			for _, token := range payload.oauthTokenInputs {
+				if (slices.Contains(security.OAuthTypes, "authorization_code") || security.Type.Value == "openIdConnect") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
+					for _, envVar := range security.EnvVariables {
+						if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
+							userConfig[envVar] = token.Token
+						}
+					}
+				}
+			}
+		}
+	}
 
 	return userConfig, nil
 }

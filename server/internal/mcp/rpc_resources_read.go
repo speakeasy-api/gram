@@ -104,7 +104,7 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	}
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
-	userConfig, err := resolveUserConfiguration(ctx, logger, env, payload)
+	userConfig, err := resolveUserConfiguration(ctx, logger, env, payload, nil)
 	if err != nil {
 		return nil, err
 	}
