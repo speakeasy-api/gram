@@ -167,6 +167,7 @@ WITH ranked_deployments AS (
   INNER JOIN deployments d ON d.id = fa.deployment_id
   WHERE
     fa.status = 'ready'
+    AND ($3::uuid IS NULL OR fa.project_id = $3)
     AND fa.reaped_at IS NULL
 )
 SELECT
@@ -192,6 +193,7 @@ LIMIT $2
 type GetFlyAppsToReapParams struct {
 	KeepCount pgtype.Int8
 	BatchSize pgtype.Int8
+	ProjectID uuid.NullUUID
 }
 
 type GetFlyAppsToReapRow struct {
@@ -205,7 +207,7 @@ type GetFlyAppsToReapRow struct {
 }
 
 func (q *Queries) GetFlyAppsToReap(ctx context.Context, arg GetFlyAppsToReapParams) ([]GetFlyAppsToReapRow, error) {
-	rows, err := q.db.Query(ctx, getFlyAppsToReap, arg.KeepCount, arg.BatchSize)
+	rows, err := q.db.Query(ctx, getFlyAppsToReap, arg.KeepCount, arg.BatchSize, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
