@@ -1,5 +1,12 @@
 # server
 
+## 0.9.14
+
+### Patch Changes
+
+- d445fa1: Modified the function reaping process to reduce noise in user deployment logs by suppressing routine informational messages.
+- d445fa1: Updated the database query to list reapable fly apps so that it can be scoped to a specific project ID. This allows project-scoped reaping. Previously, the project-scoped reaper was not passing the project ID to the query and it was acting as a global reaper.
+
 ## 0.9.13
 
 ### Patch Changes

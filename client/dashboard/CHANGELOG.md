@@ -1,5 +1,12 @@
 # dashboard
 
+## 0.18.7
+
+### Patch Changes
+
+- 3552ff0: modifies gram auth so it respects current project context on the initial auth and sets that as defaultProjectSlug
+- d9f4980: Fix onboarding steps to use `npm run` prefix
+
 ## 0.18.6
 
 ### Patch Changes
