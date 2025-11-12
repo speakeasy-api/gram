@@ -2,8 +2,6 @@
 
 #MISE description="Run golangci-lint on the CLI codebase"
 #MISE dir="{{ config_root }}/cli"
-#MISE sources=["server/**/*.go", ".golangci.yml"]
-#MISE outputs=["server/**/*.go"]
 
 #USAGE flag "--long" help="Enable more detailed reporting"
 
