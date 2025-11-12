@@ -454,7 +454,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		authenticated:    authenticated,
 		oauthTokenInputs: tokenInputs,
 		sessionID:        sessionID,
-		mode:             readToolMode(r),
+		mode:             resolveToolMode(r, *toolset),
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
@@ -565,6 +565,14 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 	sessionID := parseMcpSessionID(r.Header)
 	w.Header().Set("Mcp-Session-Id", sessionID)
 
+	toolset, err := s.toolsetsRepo.GetToolset(ctx, toolsets_repo.GetToolsetParams{
+		Slug:      toolsetSlug,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+	}
+
 	mcpInputs := &mcpInputs{
 		projectID:        *authCtx.ProjectID,
 		toolset:          toolsetSlug,
@@ -573,7 +581,7 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		authenticated:    true,
 		oauthTokenInputs: []oauthTokenInputs{},
 		sessionID:        sessionID,
-		mode:             readToolMode(r),
+		mode:             resolveToolMode(r, toolset),
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
@@ -595,14 +603,18 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 
 // TODO: this is for demo. There probably needs to still be annotation per toolset on if it allows dynamic tool calling
 // Realistically you would need to embed and vectorize ahead of time
-func readToolMode(r *http.Request) ToolMode {
+func resolveToolMode(r *http.Request, toolset toolsets_repo.Toolset) ToolMode {
 	mode := r.Header.Get("Gram-Mode")
 	mode = strings.TrimSpace(mode)
 	mode = strings.ToLower(mode)
-	if mode == "" {
-		return ToolModeStatic
+
+	if mode != "" {
+		return ToolMode(mode)
+	} else if toolset.ToolSelectionMode.String != "" {
+		return ToolMode(toolset.ToolSelectionMode.String)
 	}
-	return ToolMode(mode)
+
+	return ToolModeStatic
 }
 
 func (s *Service) handleBatch(ctx context.Context, payload *mcpInputs, batch batchedRawRequest) (json.RawMessage, error) {

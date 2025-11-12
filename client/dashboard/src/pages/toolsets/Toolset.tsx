@@ -30,7 +30,7 @@ import {
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
-import { Outlet, useParams } from "react-router";
+import { Outlet, useParams, useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { MCPDetails, MCPEnableButton } from "../mcp/MCPDetails";
 import { AddToolsDialog } from "./AddToolsDialog";
@@ -266,10 +266,33 @@ export function ToolsetView({
   const { handleApiError } = useApiError();
   const { data: toolset, refetch } = useToolset(toolsetSlug);
   const { addActions, removeActions } = useCommandPalette();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const tools = toolset?.tools ?? [];
 
-  const [activeTab, setActiveTab] = useState<ToolsetTabs>("tools");
+  // Get initial tab from URL hash, default to "tools"
+  const getTabFromHash = (): ToolsetTabs => {
+    const hash = location.hash.slice(1); // Remove the # character
+    const validTabs: ToolsetTabs[] = ["tools", "prompts", "resources", "auth", "mcp"];
+    return validTabs.includes(hash as ToolsetTabs) ? (hash as ToolsetTabs) : "tools";
+  };
+
+  const [activeTab, setActiveTab] = useState<ToolsetTabs>(getTabFromHash());
+
+  // Update tab when hash changes (e.g., browser back/forward)
+  useEffect(() => {
+    const newTab = getTabFromHash();
+    if (newTab !== activeTab) {
+      setActiveTab(newTab);
+    }
+  }, [location.hash]);
+
+  // Update URL hash when tab changes
+  const handleTabChange = (tab: ToolsetTabs) => {
+    setActiveTab(tab);
+    navigate(`#${tab}`, { replace: true });
+  };
   const [addToolsDialogOpen, setAddToolsDialogOpen] = useState(false);
   const [createToolsetDialogOpen, setCreateToolsetDialogOpen] = useState(false);
   const [addToToolsetDialogOpen, setAddToToolsetDialogOpen] = useState(false);
@@ -558,7 +581,7 @@ export function ToolsetView({
         <ToolsetAuthAlert
           toolset={toolset}
           environmentSlug={environmentSlug}
-          onConfigureClick={() => setActiveTab("auth")}
+          onConfigureClick={() => handleTabChange("auth")}
           context={context}
         />
       )}
@@ -566,7 +589,7 @@ export function ToolsetView({
       {groupFilterItems.length > 1 && filterButton}
       <Tabs
         value={activeTab}
-        onValueChange={(value) => setActiveTab(value as ToolsetTabs)}
+        onValueChange={(value) => handleTabChange(value as ToolsetTabs)}
         className="h-full relative"
       >
         <TabsList className="mb-4">
