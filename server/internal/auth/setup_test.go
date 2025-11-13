@@ -3,6 +3,7 @@ package auth_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -16,9 +17,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
+	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 var (
@@ -373,4 +377,35 @@ func adminMockUserInfo() *MockUserInfo {
 			},
 		},
 	}
+}
+
+// createTestUser creates a user record in the database for testing
+func (ti *testInstance) createTestUser(ctx context.Context, userInfo *MockUserInfo) error {
+	usersQueries := usersRepo.New(ti.conn)
+	_, err := usersQueries.UpsertUser(ctx, usersRepo.UpsertUserParams{
+		ID:          userInfo.UserID,
+		Email:       userInfo.Email,
+		DisplayName: userInfo.Email,
+		PhotoUrl:    conv.PtrToPGText(nil),
+		Admin:       userInfo.Admin,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to upsert user: %w", err)
+	}
+	return nil
+}
+
+// createTestOrganization creates an organization record in the database for testing
+func (ti *testInstance) createTestOrganization(ctx context.Context, org MockOrganizationEntry) error {
+	orgQueries := orgRepo.New(ti.conn)
+	_, err := orgQueries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:              org.ID,
+		Name:            org.Name,
+		Slug:            org.Slug,
+		SsoConnectionID: conv.PtrToPGText(org.SsoConnectionID),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to upsert organization metadata: %w", err)
+	}
+	return nil
 }

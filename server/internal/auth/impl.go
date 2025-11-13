@@ -317,13 +317,14 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	}
 
 	// on auth info write through data for user/org relationship as a backfill mechanism
+	// user and org both will have been created by now
 	// admin is only exception where there is not a single user-org relationship written
 	if !userInfo.Admin {
 		if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			UserID:         authCtx.UserID,
 		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization user relationship").Log(ctx, s.logger)
+			s.logger.ErrorContext(ctx, "error upserting organization user relationship", attr.SlogError(err))
 		}
 	}
 
@@ -403,6 +404,11 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeInvalid, errors.New("organization name contains invalid characters"), "organization name contains invalid characters")
 	}
 
+	// invalid to insure we pull in the new org info on the next auth.info call
+	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error invalidating user").Log(ctx, s.logger)
+	}
+
 	info, err := s.sessions.CreateOrgFromSpeakeasy(ctx, *authCtx.SessionID, payload.OrgName)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error creating org").Log(ctx, s.logger)
@@ -410,11 +416,6 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 
 	if len(info.Organizations) == 0 {
 		return oops.E(oops.CodeUnexpected, errors.New("no organizations returned from speakeasy"), "no organizations returned from speakeasy")
-	}
-
-	// invalid to insure we pull in the new org info on the next auth.info call
-	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error invalidating user").Log(ctx, s.logger)
 	}
 
 	session := sessions.Session{
