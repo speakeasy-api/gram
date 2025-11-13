@@ -180,9 +180,7 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
 
   logger.info("Deploying function with Gram CLI");
 
-  // Start the loader animation
   const loader = new Loader("deploying function...");
-  loader.start();
 
   const pushcmd = $({
     stdio: ["pipe", "pipe", "pipe"],
@@ -190,9 +188,13 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
     .quiet()
     .nothrow();
 
-  await consumeStdio(pushcmd, getLogger(["gram", "cli"]));
+  // Consume stdio and show loader concurrently
+  const stdioTask = consumeStdio(pushcmd, getLogger(["gram", "cli"])).then(() => {
+    // Start loader after logs finish streaming
+    loader.start();
+  });
 
-  const result = await pushcmd;
+  const result = await Promise.all([stdioTask, pushcmd]).then(([, result]) => result);
 
   // Stop the loader animation
   loader.stop();
