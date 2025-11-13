@@ -109,7 +109,11 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	})
 
 	var temporalClient temporal_client.Client
-	temporalClient, _ = infra.NewTemporalClient(t)
+	temporalClient, devserver := infra.NewTemporalClient(t)
+	t.Cleanup(func() {
+		temporalClient.Close()
+		require.NoError(t, devserver.Stop(), "shutdown temporal")
+	})
 
 	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, toolMetrics, vectorToolStore, temporalClient)
 
