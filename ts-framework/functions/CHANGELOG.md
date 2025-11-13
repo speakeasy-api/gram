@@ -1,5 +1,12 @@
 # @gram-ai/functions
 
+## 0.9.0
+
+### Patch Changes
+
+- eeecc96: Deployment loader animation shown during `npm run push` while deployment asset is being uploaded.
+- 5d65184: Adds markdown() response helper to the functions ctx
+
 ## 0.8.1
 
 ## 0.8.0

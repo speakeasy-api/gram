@@ -1,5 +1,15 @@
 # @gram-ai/create-function
 
+## 0.9.0
+
+### Minor Changes
+
+- bc44bf0: Enables hot reloading in dev for function templates
+
+### Patch Changes
+
+- 5d65184: Adds markdown() response helper to the functions ctx
+
 ## 0.8.1
 
 ### Patch Changes
