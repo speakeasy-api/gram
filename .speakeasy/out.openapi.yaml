@@ -870,6 +870,112 @@ paths:
       x-speakeasy-name-override: uploadOpenAPIv3
       x-speakeasy-react-hook:
         name: UploadOpenAPIv3
+  /rpc/assets.viewFunctionSource:
+    get:
+      description: View the unzipped source code of a Gram Functions asset.
+      operationId: viewFunctionSource
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the asset to view
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the asset to view
+            type: string
+        - allowEmptyValue: true
+          description: The project ID that the asset belongs to
+          in: query
+          name: project_id
+          required: true
+          schema:
+            description: The project ID that the asset belongs to
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViewFunctionSourceResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: viewFunctionSource assets
+      tags:
+        - assets
+      x-speakeasy-name-override: viewFunctionSource
+      x-speakeasy-react-hook:
+        name: ViewFunctionSource
   /rpc/auth.callback:
     get:
       description: Handles the authentication callback.
@@ -9677,6 +9783,26 @@ components:
         - resource_urn
         - created_at
         - updated_at
+    FunctionSourceFile:
+      type: object
+      properties:
+        content:
+          type: string
+          description: The content of the file
+        is_binary:
+          type: boolean
+          description: Whether the file is binary (non-text)
+        path:
+          type: string
+          description: The relative path of the file within the archive
+        size:
+          type: integer
+          description: The size of the file in bytes
+          format: int64
+      required:
+        - path
+        - content
+        - size
     FunctionToolDefinition:
       type: object
       properties:
@@ -12265,6 +12391,32 @@ components:
         - organization
         - projects
         - scopes
+    ViewFunctionSourceForm:
+      type: object
+      properties:
+        apikey_token:
+          type: string
+        id:
+          type: string
+          description: The ID of the asset to view
+        project_id:
+          type: string
+          description: The project ID that the asset belongs to
+        session_token:
+          type: string
+      required:
+        - id
+        - project_id
+    ViewFunctionSourceResult:
+      type: object
+      properties:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FunctionSourceFile'
+          description: The list of files in the function source
+      required:
+        - files
   securitySchemes:
     apikey_header_Authorization:
       type: apiKey

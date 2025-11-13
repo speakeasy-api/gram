@@ -9,6 +9,7 @@ import { assetsServeOpenAPIv3 } from "../funcs/assetsServeOpenAPIv3.js";
 import { assetsUploadFunctions } from "../funcs/assetsUploadFunctions.js";
 import { assetsUploadImage } from "../funcs/assetsUploadImage.js";
 import { assetsUploadOpenAPIv3 } from "../funcs/assetsUploadOpenAPIv3.js";
+import { assetsViewFunctionSource } from "../funcs/assetsViewFunctionSource.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -139,6 +140,25 @@ export class Assets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.UploadOpenAPIv3Result> {
     return unwrapAsync(assetsUploadOpenAPIv3(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * viewFunctionSource assets
+   *
+   * @remarks
+   * View the unzipped source code of a Gram Functions asset.
+   */
+  async viewFunctionSource(
+    request: operations.ViewFunctionSourceRequest,
+    security?: operations.ViewFunctionSourceSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ViewFunctionSourceResult> {
+    return unwrapAsync(assetsViewFunctionSource(
       this,
       request,
       security,

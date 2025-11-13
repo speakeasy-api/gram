@@ -220,6 +220,38 @@ func BuildServeFunctionPayload(assetsServeFunctionID string, assetsServeFunction
 	return v, nil
 }
 
+// BuildViewFunctionSourcePayload builds the payload for the assets
+// viewFunctionSource endpoint from CLI flags.
+func BuildViewFunctionSourcePayload(assetsViewFunctionSourceID string, assetsViewFunctionSourceProjectID string, assetsViewFunctionSourceApikeyToken string, assetsViewFunctionSourceSessionToken string) (*assets.ViewFunctionSourceForm, error) {
+	var id string
+	{
+		id = assetsViewFunctionSourceID
+	}
+	var projectID string
+	{
+		projectID = assetsViewFunctionSourceProjectID
+	}
+	var apikeyToken *string
+	{
+		if assetsViewFunctionSourceApikeyToken != "" {
+			apikeyToken = &assetsViewFunctionSourceApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if assetsViewFunctionSourceSessionToken != "" {
+			sessionToken = &assetsViewFunctionSourceSessionToken
+		}
+	}
+	v := &assets.ViewFunctionSourceForm{}
+	v.ID = id
+	v.ProjectID = projectID
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListAssetsPayload builds the payload for the assets listAssets endpoint
 // from CLI flags.
 func BuildListAssetsPayload(assetsListAssetsSessionToken string, assetsListAssetsProjectSlugInput string, assetsListAssetsApikeyToken string) (*assets.ListAssetsPayload, error) {

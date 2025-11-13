@@ -1586,6 +1586,245 @@ func DecodeServeFunctionResponse(decoder func(*http.Response) goahttp.Decoder, r
 	}
 }
 
+// BuildViewFunctionSourceRequest instantiates a HTTP request object with
+// method and path set to call the "assets" service "viewFunctionSource"
+// endpoint
+func (c *Client) BuildViewFunctionSourceRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ViewFunctionSourceAssetsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("assets", "viewFunctionSource", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeViewFunctionSourceRequest returns an encoder for requests sent to the
+// assets viewFunctionSource server.
+func EncodeViewFunctionSourceRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*assets.ViewFunctionSourceForm)
+		if !ok {
+			return goahttp.ErrInvalidType("assets", "viewFunctionSource", "*assets.ViewFunctionSourceForm", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		values.Add("project_id", p.ProjectID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeViewFunctionSourceResponse returns a decoder for responses returned by
+// the assets viewFunctionSource endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeViewFunctionSourceResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeViewFunctionSourceResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ViewFunctionSourceResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "viewFunctionSource", err)
+			}
+			err = ValidateViewFunctionSourceResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "viewFunctionSource", err)
+			}
+			res := NewViewFunctionSourceResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ViewFunctionSourceUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "viewFunctionSource", err)
+			}
+			err = ValidateViewFunctionSourceUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "viewFunctionSource", err)
+			}
+			return nil, NewViewFunctionSourceUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ViewFunctionSourceForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "viewFunctionSource", err)
+			}
+			err = ValidateViewFunctionSourceForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "viewFunctionSource", err)
+			}
+			return nil, NewViewFunctionSourceForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ViewFunctionSourceBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "viewFunctionSource", err)
+			}
+			err = ValidateViewFunctionSourceBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "viewFunctionSource", err)
+			}
+			return nil, NewViewFunctionSourceBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ViewFunctionSourceNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "viewFunctionSource", err)
+			}
+			err = ValidateViewFunctionSourceNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "viewFunctionSource", err)
+			}
+			return nil, NewViewFunctionSourceNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ViewFunctionSourceConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "viewFunctionSource", err)
+			}
+			err = ValidateViewFunctionSourceConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "viewFunctionSource", err)
+			}
+			return nil, NewViewFunctionSourceConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ViewFunctionSourceUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "viewFunctionSource", err)
+			}
+			err = ValidateViewFunctionSourceUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "viewFunctionSource", err)
+			}
+			return nil, NewViewFunctionSourceUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ViewFunctionSourceInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "viewFunctionSource", err)
+			}
+			err = ValidateViewFunctionSourceInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "viewFunctionSource", err)
+			}
+			return nil, NewViewFunctionSourceInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ViewFunctionSourceInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "viewFunctionSource", err)
+				}
+				err = ValidateViewFunctionSourceInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "viewFunctionSource", err)
+				}
+				return nil, NewViewFunctionSourceInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ViewFunctionSourceUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "viewFunctionSource", err)
+				}
+				err = ValidateViewFunctionSourceUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "viewFunctionSource", err)
+				}
+				return nil, NewViewFunctionSourceUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "viewFunctionSource", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ViewFunctionSourceGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "viewFunctionSource", err)
+			}
+			err = ValidateViewFunctionSourceGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "viewFunctionSource", err)
+			}
+			return nil, NewViewFunctionSourceGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("assets", "viewFunctionSource", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListAssetsRequest instantiates a HTTP request object with method and
 // path set to call the "assets" service "listAssets" endpoint
 func (c *Client) BuildListAssetsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1835,6 +2074,20 @@ func unmarshalAssetResponseBodyToAssetsAsset(v *AssetResponseBody) *assets.Asset
 		ContentLength: *v.ContentLength,
 		CreatedAt:     *v.CreatedAt,
 		UpdatedAt:     *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalFunctionSourceFileResponseBodyToAssetsFunctionSourceFile builds a
+// value of type *assets.FunctionSourceFile from a value of type
+// *FunctionSourceFileResponseBody.
+func unmarshalFunctionSourceFileResponseBodyToAssetsFunctionSourceFile(v *FunctionSourceFileResponseBody) *assets.FunctionSourceFile {
+	res := &assets.FunctionSourceFile{
+		Path:     *v.Path,
+		Content:  *v.Content,
+		Size:     *v.Size,
+		IsBinary: v.IsBinary,
 	}
 
 	return res

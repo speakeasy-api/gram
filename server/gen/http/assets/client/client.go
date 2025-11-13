@@ -42,6 +42,10 @@ type Client struct {
 	// serveFunction endpoint.
 	ServeFunctionDoer goahttp.Doer
 
+	// ViewFunctionSource Doer is the HTTP client used to make requests to the
+	// viewFunctionSource endpoint.
+	ViewFunctionSourceDoer goahttp.Doer
+
 	// ListAssets Doer is the HTTP client used to make requests to the listAssets
 	// endpoint.
 	ListAssetsDoer goahttp.Doer
@@ -66,18 +70,19 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ServeImageDoer:      doer,
-		UploadImageDoer:     doer,
-		UploadFunctionsDoer: doer,
-		UploadOpenAPIv3Doer: doer,
-		ServeOpenAPIv3Doer:  doer,
-		ServeFunctionDoer:   doer,
-		ListAssetsDoer:      doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		ServeImageDoer:         doer,
+		UploadImageDoer:        doer,
+		UploadFunctionsDoer:    doer,
+		UploadOpenAPIv3Doer:    doer,
+		ServeOpenAPIv3Doer:     doer,
+		ServeFunctionDoer:      doer,
+		ViewFunctionSourceDoer: doer,
+		ListAssetsDoer:         doer,
+		RestoreResponseBody:    restoreBody,
+		scheme:                 scheme,
+		host:                   host,
+		decoder:                dec,
+		encoder:                enc,
 	}
 }
 
@@ -237,6 +242,30 @@ func (c *Client) ServeFunction() goa.Endpoint {
 			return nil, err
 		}
 		return &assets.ServeFunctionResponseData{Result: res.(*assets.ServeFunctionResult), Body: resp.Body}, nil
+	}
+}
+
+// ViewFunctionSource returns an endpoint that makes HTTP requests to the
+// assets service viewFunctionSource server.
+func (c *Client) ViewFunctionSource() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeViewFunctionSourceRequest(c.encoder)
+		decodeResponse = DecodeViewFunctionSourceResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildViewFunctionSourceRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ViewFunctionSourceDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assets", "viewFunctionSource", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 

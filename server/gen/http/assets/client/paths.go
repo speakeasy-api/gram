@@ -37,6 +37,11 @@ func ServeFunctionAssetsPath() string {
 	return "/rpc/assets.serveFunction"
 }
 
+// ViewFunctionSourceAssetsPath returns the URL path to the assets service viewFunctionSource HTTP endpoint.
+func ViewFunctionSourceAssetsPath() string {
+	return "/rpc/assets.viewFunctionSource"
+}
+
 // ListAssetsAssetsPath returns the URL path to the assets service listAssets HTTP endpoint.
 func ListAssetsAssetsPath() string {
 	return "/rpc/assets.list"

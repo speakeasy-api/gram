@@ -19,6 +19,7 @@ import { HoverCardPortal } from "@radix-ui/react-hover-card";
 import { CircleAlertIcon, FileCode, SquareFunction } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
+import { FunctionViewDialog } from "./FunctionViewDialog";
 
 export type NamedAsset = Asset & {
   deploymentAssetId: string;
@@ -41,6 +42,7 @@ export function SourceCard({
   setChangeDocumentTargetSlug: (slug: string) => void;
 }) {
   const [documentViewOpen, setDocumentViewOpen] = useState(false);
+  const [functionViewOpen, setFunctionViewOpen] = useState(false);
   const IconComponent = asset.type === "openapi" ? FileCode : SquareFunction;
 
   const actions = [
@@ -57,7 +59,13 @@ export function SourceCard({
             icon: "upload" as const,
           },
         ]
-      : []),
+      : [
+          {
+            label: "View",
+            onClick: () => setFunctionViewOpen(true),
+            icon: "eye" as const,
+          },
+        ]),
     {
       label: "Attach Environment",
       onClick: () => {
@@ -87,12 +95,11 @@ export function SourceCard({
 
       <div
         onClick={
-          asset.type === "openapi" ? () => setDocumentViewOpen(true) : undefined
+          asset.type === "openapi"
+            ? () => setDocumentViewOpen(true)
+            : () => setFunctionViewOpen(true)
         }
-        className={cn(
-          "leading-none mb-1.5",
-          asset.type === "openapi" && "cursor-pointer",
-        )}
+        className="leading-none mb-1.5 cursor-pointer"
       >
         <Type>{asset.name}</Type>
       </div>
@@ -102,11 +109,17 @@ export function SourceCard({
         <UpdatedAt date={asset.updatedAt} italic={false} className="text-xs" />
       </div>
 
-      {asset.type === "openapi" && (
+      {asset.type === "openapi" ? (
         <AssetViewDialog
           asset={asset}
           open={documentViewOpen}
           onOpenChange={setDocumentViewOpen}
+        />
+      ) : (
+        <FunctionViewDialog
+          asset={asset}
+          open={functionViewOpen}
+          onOpenChange={setFunctionViewOpen}
         />
       )}
     </div>

@@ -131,6 +131,7 @@ run();
 * [uploadFunctions](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 * [uploadImage](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 * [uploadOpenAPIv3](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
+* [viewFunctionSource](docs/sdks/assets/README.md#viewfunctionsource) - viewFunctionSource assets
 
 ### [auth](docs/sdks/auth/README.md)
 
@@ -293,6 +294,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`assetsUploadFunctions`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 - [`assetsUploadImage`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`assetsUploadOpenAPIv3`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
+- [`assetsViewFunctionSource`](docs/sdks/assets/README.md#viewfunctionsource) - viewFunctionSource assets
 - [`authCallback`](docs/sdks/auth/README.md#callback) - callback auth
 - [`authInfo`](docs/sdks/auth/README.md#info) - info auth
 - [`authLogin`](docs/sdks/auth/README.md#login) - login auth
@@ -474,6 +476,7 @@ To learn about this feature and how to get started, check
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 - [`useUpsertGlobalVariationMutation`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
 - [`useValidateAPIKey`](docs/sdks/keys/README.md#validate) - verifyKey keys
+- [`useViewFunctionSource`](docs/sdks/assets/README.md#viewfunctionsource) - viewFunctionSource assets
 
 </details>
 <!-- End React hooks with TanStack Query [react-query] -->

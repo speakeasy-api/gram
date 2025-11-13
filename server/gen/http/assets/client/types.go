@@ -33,6 +33,13 @@ type UploadOpenAPIv3ResponseBody struct {
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
 }
 
+// ViewFunctionSourceResponseBody is the type of the "assets" service
+// "viewFunctionSource" endpoint HTTP response body.
+type ViewFunctionSourceResponseBody struct {
+	// The list of files in the function source
+	Files []*FunctionSourceFileResponseBody `form:"files,omitempty" json:"files,omitempty" xml:"files,omitempty"`
+}
+
 // ListAssetsResponseBody is the type of the "assets" service "listAssets"
 // endpoint HTTP response body.
 type ListAssetsResponseBody struct {
@@ -1129,6 +1136,190 @@ type ServeFunctionGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ViewFunctionSourceUnauthorizedResponseBody is the type of the "assets"
+// service "viewFunctionSource" endpoint HTTP response body for the
+// "unauthorized" error.
+type ViewFunctionSourceUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ViewFunctionSourceForbiddenResponseBody is the type of the "assets" service
+// "viewFunctionSource" endpoint HTTP response body for the "forbidden" error.
+type ViewFunctionSourceForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ViewFunctionSourceBadRequestResponseBody is the type of the "assets" service
+// "viewFunctionSource" endpoint HTTP response body for the "bad_request" error.
+type ViewFunctionSourceBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ViewFunctionSourceNotFoundResponseBody is the type of the "assets" service
+// "viewFunctionSource" endpoint HTTP response body for the "not_found" error.
+type ViewFunctionSourceNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ViewFunctionSourceConflictResponseBody is the type of the "assets" service
+// "viewFunctionSource" endpoint HTTP response body for the "conflict" error.
+type ViewFunctionSourceConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ViewFunctionSourceUnsupportedMediaResponseBody is the type of the "assets"
+// service "viewFunctionSource" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ViewFunctionSourceUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ViewFunctionSourceInvalidResponseBody is the type of the "assets" service
+// "viewFunctionSource" endpoint HTTP response body for the "invalid" error.
+type ViewFunctionSourceInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ViewFunctionSourceInvariantViolationResponseBody is the type of the "assets"
+// service "viewFunctionSource" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ViewFunctionSourceInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ViewFunctionSourceUnexpectedResponseBody is the type of the "assets" service
+// "viewFunctionSource" endpoint HTTP response body for the "unexpected" error.
+type ViewFunctionSourceUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ViewFunctionSourceGatewayErrorResponseBody is the type of the "assets"
+// service "viewFunctionSource" endpoint HTTP response body for the
+// "gateway_error" error.
+type ViewFunctionSourceGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListAssetsUnauthorizedResponseBody is the type of the "assets" service
 // "listAssets" endpoint HTTP response body for the "unauthorized" error.
 type ListAssetsUnauthorizedResponseBody struct {
@@ -1324,6 +1515,19 @@ type AssetResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// The last update date of the asset.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// FunctionSourceFileResponseBody is used to define fields on response body
+// types.
+type FunctionSourceFileResponseBody struct {
+	// The relative path of the file within the archive
+	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// The content of the file
+	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+	// The size of the file in bytes
+	Size *int64 `form:"size,omitempty" json:"size,omitempty" xml:"size,omitempty"`
+	// Whether the file is binary (non-text)
+	IsBinary *bool `form:"is_binary,omitempty" json:"is_binary,omitempty" xml:"is_binary,omitempty"`
 }
 
 // NewServeImageResultOK builds a "assets" service "serveImage" endpoint result
@@ -2287,6 +2491,168 @@ func NewServeFunctionGatewayError(body *ServeFunctionGatewayErrorResponseBody) *
 	return v
 }
 
+// NewViewFunctionSourceResultOK builds a "assets" service "viewFunctionSource"
+// endpoint result from a HTTP "OK" response.
+func NewViewFunctionSourceResultOK(body *ViewFunctionSourceResponseBody) *assets.ViewFunctionSourceResult {
+	v := &assets.ViewFunctionSourceResult{}
+	v.Files = make([]*assets.FunctionSourceFile, len(body.Files))
+	for i, val := range body.Files {
+		v.Files[i] = unmarshalFunctionSourceFileResponseBodyToAssetsFunctionSourceFile(val)
+	}
+
+	return v
+}
+
+// NewViewFunctionSourceUnauthorized builds a assets service viewFunctionSource
+// endpoint unauthorized error.
+func NewViewFunctionSourceUnauthorized(body *ViewFunctionSourceUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewViewFunctionSourceForbidden builds a assets service viewFunctionSource
+// endpoint forbidden error.
+func NewViewFunctionSourceForbidden(body *ViewFunctionSourceForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewViewFunctionSourceBadRequest builds a assets service viewFunctionSource
+// endpoint bad_request error.
+func NewViewFunctionSourceBadRequest(body *ViewFunctionSourceBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewViewFunctionSourceNotFound builds a assets service viewFunctionSource
+// endpoint not_found error.
+func NewViewFunctionSourceNotFound(body *ViewFunctionSourceNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewViewFunctionSourceConflict builds a assets service viewFunctionSource
+// endpoint conflict error.
+func NewViewFunctionSourceConflict(body *ViewFunctionSourceConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewViewFunctionSourceUnsupportedMedia builds a assets service
+// viewFunctionSource endpoint unsupported_media error.
+func NewViewFunctionSourceUnsupportedMedia(body *ViewFunctionSourceUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewViewFunctionSourceInvalid builds a assets service viewFunctionSource
+// endpoint invalid error.
+func NewViewFunctionSourceInvalid(body *ViewFunctionSourceInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewViewFunctionSourceInvariantViolation builds a assets service
+// viewFunctionSource endpoint invariant_violation error.
+func NewViewFunctionSourceInvariantViolation(body *ViewFunctionSourceInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewViewFunctionSourceUnexpected builds a assets service viewFunctionSource
+// endpoint unexpected error.
+func NewViewFunctionSourceUnexpected(body *ViewFunctionSourceUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewViewFunctionSourceGatewayError builds a assets service viewFunctionSource
+// endpoint gateway_error error.
+func NewViewFunctionSourceGatewayError(body *ViewFunctionSourceGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListAssetsResultOK builds a "assets" service "listAssets" endpoint result
 // from a HTTP "OK" response.
 func NewListAssetsResultOK(body *ListAssetsResponseBody) *assets.ListAssetsResult {
@@ -2486,6 +2852,22 @@ func ValidateUploadOpenAPIv3ResponseBody(body *UploadOpenAPIv3ResponseBody) (err
 	if body.Asset != nil {
 		if err2 := ValidateAssetResponseBody(body.Asset); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateViewFunctionSourceResponseBody runs the validations defined on
+// ViewFunctionSourceResponseBody
+func ValidateViewFunctionSourceResponseBody(body *ViewFunctionSourceResponseBody) (err error) {
+	if body.Files == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("files", "body"))
+	}
+	for _, e := range body.Files {
+		if e != nil {
+			if err2 := ValidateFunctionSourceFileResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -3947,6 +4329,246 @@ func ValidateServeFunctionGatewayErrorResponseBody(body *ServeFunctionGatewayErr
 	return
 }
 
+// ValidateViewFunctionSourceUnauthorizedResponseBody runs the validations
+// defined on viewFunctionSource_unauthorized_response_body
+func ValidateViewFunctionSourceUnauthorizedResponseBody(body *ViewFunctionSourceUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateViewFunctionSourceForbiddenResponseBody runs the validations defined
+// on viewFunctionSource_forbidden_response_body
+func ValidateViewFunctionSourceForbiddenResponseBody(body *ViewFunctionSourceForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateViewFunctionSourceBadRequestResponseBody runs the validations
+// defined on viewFunctionSource_bad_request_response_body
+func ValidateViewFunctionSourceBadRequestResponseBody(body *ViewFunctionSourceBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateViewFunctionSourceNotFoundResponseBody runs the validations defined
+// on viewFunctionSource_not_found_response_body
+func ValidateViewFunctionSourceNotFoundResponseBody(body *ViewFunctionSourceNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateViewFunctionSourceConflictResponseBody runs the validations defined
+// on viewFunctionSource_conflict_response_body
+func ValidateViewFunctionSourceConflictResponseBody(body *ViewFunctionSourceConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateViewFunctionSourceUnsupportedMediaResponseBody runs the validations
+// defined on viewFunctionSource_unsupported_media_response_body
+func ValidateViewFunctionSourceUnsupportedMediaResponseBody(body *ViewFunctionSourceUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateViewFunctionSourceInvalidResponseBody runs the validations defined
+// on viewFunctionSource_invalid_response_body
+func ValidateViewFunctionSourceInvalidResponseBody(body *ViewFunctionSourceInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateViewFunctionSourceInvariantViolationResponseBody runs the
+// validations defined on viewFunctionSource_invariant_violation_response_body
+func ValidateViewFunctionSourceInvariantViolationResponseBody(body *ViewFunctionSourceInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateViewFunctionSourceUnexpectedResponseBody runs the validations
+// defined on viewFunctionSource_unexpected_response_body
+func ValidateViewFunctionSourceUnexpectedResponseBody(body *ViewFunctionSourceUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateViewFunctionSourceGatewayErrorResponseBody runs the validations
+// defined on viewFunctionSource_gateway_error_response_body
+func ValidateViewFunctionSourceGatewayErrorResponseBody(body *ViewFunctionSourceGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListAssetsUnauthorizedResponseBody runs the validations defined on
 // listAssets_unauthorized_response_body
 func ValidateListAssetsUnauthorizedResponseBody(body *ListAssetsUnauthorizedResponseBody) (err error) {
@@ -4220,6 +4842,21 @@ func ValidateAssetResponseBody(body *AssetResponseBody) (err error) {
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateFunctionSourceFileResponseBody runs the validations defined on
+// FunctionSourceFileResponseBody
+func ValidateFunctionSourceFileResponseBody(body *FunctionSourceFileResponseBody) (err error) {
+	if body.Path == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
+	}
+	if body.Content == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("content", "body"))
+	}
+	if body.Size == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("size", "body"))
 	}
 	return
 }

@@ -171,6 +171,29 @@ var _ = Service("assets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "serveFunction"}`)
 	})
 
+	Method("viewFunctionSource", func() {
+		Description("View the unzipped source code of a Gram Functions asset.")
+
+		Payload(ViewFunctionSourceForm)
+		Result(ViewFunctionSourceResult)
+
+		Security(security.ByKey)
+		Security(security.Session)
+
+		HTTP(func() {
+			GET("/rpc/assets.viewFunctionSource")
+			Param("id")
+			Param("project_id")
+
+			security.ByKeyHeader()
+			security.SessionHeader()
+		})
+
+		Meta("openapi:operationId", "viewFunctionSource")
+		Meta("openapi:extension:x-speakeasy-name-override", "viewFunctionSource")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ViewFunctionSource"}`)
+	})
+
 	Method("listAssets", func() {
 		Description("List all assets for a project.")
 
@@ -298,6 +321,31 @@ var ServeFunctionResult = Type("ServeFunctionResult", func() {
 	Attribute("content_type", String)
 	Attribute("content_length", Int64)
 	Attribute("last_modified", String)
+})
+
+var ViewFunctionSourceForm = Type("ViewFunctionSourceForm", func() {
+	Required("id", "project_id")
+
+	security.ByKeyPayload()
+	security.SessionPayload()
+
+	Attribute("id", String, "The ID of the asset to view")
+	Attribute("project_id", String, "The project ID that the asset belongs to")
+})
+
+var ViewFunctionSourceResult = Type("ViewFunctionSourceResult", func() {
+	Required("files")
+
+	Attribute("files", ArrayOf(FunctionSourceFile), "The list of files in the function source")
+})
+
+var FunctionSourceFile = Type("FunctionSourceFile", func() {
+	Required("path", "content", "size")
+
+	Attribute("path", String, "The relative path of the file within the archive")
+	Attribute("content", String, "The content of the file")
+	Attribute("size", Int64, "The size of the file in bytes")
+	Attribute("is_binary", Boolean, "Whether the file is binary (non-text)")
 })
 
 var Asset = Type("Asset", func() {

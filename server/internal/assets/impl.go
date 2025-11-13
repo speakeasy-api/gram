@@ -1,6 +1,7 @@
 package assets
 
 import (
+	"archive/zip"
 	"bufio"
 	"context"
 	"crypto/sha256"
@@ -17,6 +18,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -749,4 +751,166 @@ func (s *Service) ServeFunction(ctx context.Context, payload *gen.ServeFunctionF
 		ContentLength: row.ContentLength,
 		LastModified:  row.UpdatedAt.Time.Format(time.RFC1123),
 	}, body, nil
+}
+
+func (s *Service) ViewFunctionSource(ctx context.Context, payload *gen.ViewFunctionSourceForm) (*gen.ViewFunctionSourceResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	assetID, err := uuid.Parse(payload.ID)
+	switch {
+	case err != nil:
+		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("parse asset id: %w", err), "invalid asset id")
+	case assetID == uuid.Nil:
+		return nil, oops.E(oops.CodeBadRequest, nil, "asset id cannot be empty")
+	}
+
+	projectID, err := uuid.Parse(payload.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").Log(ctx, s.logger)
+	}
+	if projectID == uuid.Nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "project id cannot be empty")
+	}
+
+	// This check is important to ensure the client has access to the project they specified in the request.
+	if err := s.auth.CheckProjectAccess(ctx, s.logger, projectID); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(
+		attr.SlogAssetID(assetID.String()),
+		attr.SlogProjectID(projectID.String()),
+	)
+
+	row, err := s.repo.GetFunctionAssetURL(ctx, repo.GetFunctionAssetURLParams{
+		ID:        assetID,
+		ProjectID: projectID,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get function asset url: %w", err), "error loading asset").Log(ctx, logger)
+	}
+
+	assetURL, err := url.Parse(row.Url)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse asset url: %w", err), "error loading asset").Log(ctx, logger)
+	}
+
+	exists, err := s.storage.Exists(ctx, assetURL)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("check if asset exists: %w", err), "error loading asset").Log(ctx, logger)
+	}
+
+	if !exists {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+
+	body, err := s.storage.Read(ctx, assetURL)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read asset: %w", err), "error fetching asset").Log(ctx, logger)
+	}
+	defer o11y.LogDefer(ctx, logger, body.Close)
+
+	// Save the zip to a temporary file since zip.OpenReader requires a file path
+	tmpFile, err := os.CreateTemp("", "function-source-*.zip")
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create temp file: %w", err), "error processing asset").Log(ctx, logger)
+	}
+	defer func() {
+		if err := os.Remove(tmpFile.Name()); err != nil {
+			logger.ErrorContext(ctx, "failed to remove temp file", attr.SlogError(err), attr.SlogFilePath(tmpFile.Name()))
+		}
+	}()
+	defer o11y.LogDefer(ctx, logger, tmpFile.Close)
+
+	if _, err := io.Copy(tmpFile, body); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("copy to temp file: %w", err), "error processing asset").Log(ctx, logger)
+	}
+
+	// Close the file so zip.OpenReader can open it
+	if err := tmpFile.Close(); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("close temp file: %w", err), "error processing asset").Log(ctx, logger)
+	}
+
+	// Extract files from zip
+	files, err := extractZipContents(ctx, logger, tmpFile.Name())
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("extract zip: %w", err), "error extracting function source").Log(ctx, logger)
+	}
+
+	return &gen.ViewFunctionSourceResult{
+		Files: files,
+	}, nil
+}
+
+// extractZipContents extracts all files from a zip archive and returns them as FunctionSourceFile objects
+func extractZipContents(ctx context.Context, logger *slog.Logger, zipPath string) ([]*gen.FunctionSourceFile, error) {
+	reader, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return nil, fmt.Errorf("open zip: %w", err)
+	}
+	defer o11y.LogDefer(ctx, logger, func() error {
+		return reader.Close()
+	})
+
+	const maxFileSize = 1 * mib // Limit individual file size to 1MB for viewing
+	const maxTotalSize = 5 * mib // Limit total extracted size to 5MB
+
+	var files []*gen.FunctionSourceFile
+	var totalSize int64
+
+	for _, file := range reader.File {
+		// Skip directories
+		if file.FileInfo().IsDir() {
+			continue
+		}
+
+		// Check individual file size (safe conversion: we're checking the value before converting)
+		if file.UncompressedSize64 > maxFileSize {
+			// #nosec G115 - we're only logging the size, overflow is acceptable here
+			logger.WarnContext(ctx, "skipping large file", attr.SlogFilePath(file.Name), attr.SlogAssetFileSize(int64(file.UncompressedSize64)))
+			continue
+		}
+
+		// Check total size limit
+		// #nosec G115 - we've already verified the value is less than maxFileSize
+		if totalSize+int64(file.UncompressedSize64) > maxTotalSize {
+			logger.WarnContext(ctx, "reached total size limit, skipping remaining files", attr.SlogAssetTotalSize(totalSize))
+			break
+		}
+
+		fileReader, err := file.Open()
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to open file in zip", attr.SlogError(err), attr.SlogFilePath(file.Name))
+			continue
+		}
+
+		content, err := io.ReadAll(fileReader)
+		if closeErr := fileReader.Close(); closeErr != nil {
+			logger.ErrorContext(ctx, "failed to close file reader", attr.SlogError(closeErr), attr.SlogFilePath(file.Name))
+		}
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to read file from zip", attr.SlogError(err), attr.SlogFilePath(file.Name))
+			continue
+		}
+
+		totalSize += int64(len(content))
+
+		// Determine if file is binary by checking if it's valid UTF-8
+		isBinary := !utf8.Valid(content)
+
+		files = append(files, &gen.FunctionSourceFile{
+			Path:     file.Name,
+			Content:  string(content),
+			Size:     int64(len(content)),
+			IsBinary: &isBinary,
+		})
+	}
+
+	return files, nil
 }

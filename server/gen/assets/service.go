@@ -41,6 +41,8 @@ type Service interface {
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	ServeFunction(context.Context, *ServeFunctionForm) (res *ServeFunctionResult, body io.ReadCloser, err error)
+	// View the unzipped source code of a Gram Functions asset.
+	ViewFunctionSource(context.Context, *ViewFunctionSourceForm) (res *ViewFunctionSourceResult, err error)
 	// List all assets for a project.
 	ListAssets(context.Context, *ListAssetsPayload) (res *ListAssetsResult, err error)
 }
@@ -65,7 +67,7 @@ const ServiceName = "assets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"serveImage", "uploadImage", "uploadFunctions", "uploadOpenAPIv3", "serveOpenAPIv3", "serveFunction", "listAssets"}
+var MethodNames = [8]string{"serveImage", "uploadImage", "uploadFunctions", "uploadOpenAPIv3", "serveOpenAPIv3", "serveFunction", "viewFunctionSource", "listAssets"}
 
 type Asset struct {
 	// The ID of the asset
@@ -81,6 +83,17 @@ type Asset struct {
 	CreatedAt string
 	// The last update date of the asset.
 	UpdatedAt string
+}
+
+type FunctionSourceFile struct {
+	// The relative path of the file within the archive
+	Path string
+	// The content of the file
+	Content string
+	// The size of the file in bytes
+	Size int64
+	// Whether the file is binary (non-text)
+	IsBinary *bool
 }
 
 // ListAssetsPayload is the payload type of the assets service listAssets
@@ -197,6 +210,24 @@ type UploadOpenAPIv3Form struct {
 type UploadOpenAPIv3Result struct {
 	// The asset entry that was created in Gram
 	Asset *Asset
+}
+
+// ViewFunctionSourceForm is the payload type of the assets service
+// viewFunctionSource method.
+type ViewFunctionSourceForm struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// The ID of the asset to view
+	ID string
+	// The project ID that the asset belongs to
+	ProjectID string
+}
+
+// ViewFunctionSourceResult is the result type of the assets service
+// viewFunctionSource method.
+type ViewFunctionSourceResult struct {
+	// The list of files in the function source
+	Files []*FunctionSourceFile
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

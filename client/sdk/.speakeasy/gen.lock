@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 6195b8448750de8ea617958f9bfbeedc
+  docChecksum: fd18d73becec514c83e1a8702e572d8e
   docVersion: 0.0.1
   speakeasyVersion: 1.641.1
   generationVersion: 2.730.5
-  releaseVersion: 0.17.6
-  configChecksum: 3e8c5745085f1d52b04f3bab6a7b9afb
+  releaseVersion: 0.17.7
+  configChecksum: 7f17aa71fe486828e215237d17380d13
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -81,6 +81,7 @@ generatedFiles:
   - docs/models/components/featurename.md
   - docs/models/components/functionenvironmentvariable.md
   - docs/models/components/functionresourcedefinition.md
+  - docs/models/components/functionsourcefile.md
   - docs/models/components/functiontooldefinition.md
   - docs/models/components/getactivedeploymentresult.md
   - docs/models/components/getdeploymentlogsresult.md
@@ -179,6 +180,7 @@ generatedFiles:
   - docs/models/components/validatekeyorganization.md
   - docs/models/components/validatekeyproject.md
   - docs/models/components/validatekeyresult.md
+  - docs/models/components/viewfunctionsourceresult.md
   - docs/models/components/visibility.md
   - docs/models/errors/serviceerror.md
   - docs/models/operations/addexternaloauthserverrequest.md
@@ -439,6 +441,8 @@ generatedFiles:
   - docs/models/operations/upsertglobalvariationsecurityoption2.md
   - docs/models/operations/validateapikeyrequest.md
   - docs/models/operations/validateapikeysecurity.md
+  - docs/models/operations/viewfunctionsourcerequest.md
+  - docs/models/operations/viewfunctionsourcesecurity.md
   - docs/sdks/assets/README.md
   - docs/sdks/auth/README.md
   - docs/sdks/chat/README.md
@@ -475,6 +479,7 @@ generatedFiles:
   - src/funcs/assetsUploadFunctions.ts
   - src/funcs/assetsUploadImage.ts
   - src/funcs/assetsUploadOpenAPIv3.ts
+  - src/funcs/assetsViewFunctionSource.ts
   - src/funcs/authCallback.ts
   - src/funcs/authInfo.ts
   - src/funcs/authLogin.ts
@@ -610,6 +615,7 @@ generatedFiles:
   - src/models/components/externaloauthserverform.ts
   - src/models/components/functionenvironmentvariable.ts
   - src/models/components/functionresourcedefinition.ts
+  - src/models/components/functionsourcefile.ts
   - src/models/components/functiontooldefinition.ts
   - src/models/components/getactivedeploymentresult.ts
   - src/models/components/getdeploymentlogsresult.ts
@@ -698,6 +704,7 @@ generatedFiles:
   - src/models/components/validatekeyorganization.ts
   - src/models/components/validatekeyproject.ts
   - src/models/components/validatekeyresult.ts
+  - src/models/components/viewfunctionsourceresult.ts
   - src/models/errors/apierror.ts
   - src/models/errors/gramerror.ts
   - src/models/errors/httpclienterrors.ts
@@ -788,6 +795,7 @@ generatedFiles:
   - src/models/operations/uploadopenapiv3asset.ts
   - src/models/operations/upsertglobalvariation.ts
   - src/models/operations/validateapikey.ts
+  - src/models/operations/viewfunctionsource.ts
   - src/react-query/_context.tsx
   - src/react-query/_types.ts
   - src/react-query/activeDeployment.ts
@@ -870,6 +878,7 @@ generatedFiles:
   - src/react-query/uploadOpenAPIv3.ts
   - src/react-query/upsertGlobalVariation.ts
   - src/react-query/validateAPIKey.ts
+  - src/react-query/viewFunctionSource.ts
   - src/sdk/assets.ts
   - src/sdk/auth.ts
   - src/sdk/chat.ts
@@ -1816,5 +1825,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  viewFunctionSource:
+    speakeasy-default-view-function-source:
+      parameters:
+        query:
+          id: "<id>"
+          project_id: "<id>"
+      responses:
+        "200":
+          application/json: {"files": [{"content": "<value>", "path": "/var/spool", "size": 971149}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

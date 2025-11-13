@@ -73,6 +73,8 @@ const (
 
 	AssetIDKey                     = attribute.Key("gram.asset.id")
 	AssetURLKey                    = attribute.Key("gram.asset.url")
+	AssetFileSizeKey               = attribute.Key("gram.asset.file_size")
+	AssetTotalSizeKey              = attribute.Key("gram.asset.total_size")
 	CacheKeyKey                    = attribute.Key("gram.cache.key")
 	CacheNamespaceKey              = attribute.Key("gram.cache.namespace")
 	ComponentKey                   = attribute.Key("gram.component")
@@ -336,6 +338,12 @@ func SlogAssetID(v string) slog.Attr      { return slog.String(string(AssetIDKey
 
 func AssetURL(v string) attribute.KeyValue { return AssetURLKey.String(v) }
 func SlogAssetURL(v string) slog.Attr      { return slog.String(string(AssetURLKey), v) }
+
+func AssetFileSize(v int64) attribute.KeyValue { return AssetFileSizeKey.Int64(v) }
+func SlogAssetFileSize(v int64) slog.Attr      { return slog.Int64(string(AssetFileSizeKey), v) }
+
+func AssetTotalSize(v int64) attribute.KeyValue { return AssetTotalSizeKey.Int64(v) }
+func SlogAssetTotalSize(v int64) slog.Attr      { return slog.Int64(string(AssetTotalSizeKey), v) }
 
 func CacheKey(v string) attribute.KeyValue { return CacheKeyKey.String(v) }
 func SlogCacheKey(v string) slog.Attr      { return slog.String(string(CacheKeyKey), v) }
