@@ -36,10 +36,11 @@ func ExecuteIndexToolset(
 		params.ToolsetSlug,
 	)
 	return temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                    id,
-		TaskQueue:             string(TaskQueueMain),
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowRunTimeout:    1 * time.Minute,
+		ID:                       id,
+		TaskQueue:                string(TaskQueueMain),
+		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowRunTimeout:       1 * time.Minute,
 	}, IndexToolsetWorkflow, params)
 }
 
