@@ -139,6 +139,18 @@ class ToolContext<Env> {
   }
 
   /**
+   * Constructs a Markdown response
+   */
+  markdown<V extends string>(data: V): TextResponse<V> {
+    return new Response(data, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/markdown;charset=UTF-8",
+      },
+    }) as TextResponse<V>;
+  }
+
+  /**
    * Constructs a plain text response
    */
   text<V extends string>(data: V): TextResponse<V> {

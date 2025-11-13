@@ -158,6 +158,29 @@ test("supports text tools", async () => {
   expect(data).toBe("HELLO!!!");
 });
 
+test("supports markdown tools", async () => {
+  const g = new Gram().tool({
+    name: "shout",
+    description: "Shouts the input",
+    inputSchema: { message: z.string() },
+    async execute(ctx, input) {
+      return ctx.markdown(`# ${input.message.toUpperCase()}!!!`);
+    },
+  });
+
+  const response = await g.handleToolCall({
+    name: "shout",
+    input: { message: "hello" },
+  });
+  expect(response.status).toBe(200);
+  expect(response.headers.get("Content-Type")).toBe(
+    "text/markdown;charset=UTF-8",
+  );
+
+  const data = await response.text();
+  expect(data).toBe("# HELLO!!!");
+});
+
 test("supports html tools", async () => {
   const g = new Gram().tool({
     name: "shout",
