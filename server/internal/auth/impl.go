@@ -436,14 +436,6 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
 	}
 
-	// create a workspace user relationship for the creator of the org
-	if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
-		OrganizationID: info.Organizations[0].ID,
-		UserID:         authCtx.UserID,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error upserting organization user relationship").Log(ctx, s.logger)
-	}
-
 	return nil
 }
 
