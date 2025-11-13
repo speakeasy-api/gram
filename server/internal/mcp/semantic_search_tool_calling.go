@@ -30,7 +30,7 @@ var dynamicFindToolsSchema = json.RawMessage(`{
 			"num_results": {
 				"type": "integer",
 				"minimum": 1,
-				"maximum": 20,
+				"maximum": 10,
 				"description": "Maximum number of tools to return."
 			}
 		},
