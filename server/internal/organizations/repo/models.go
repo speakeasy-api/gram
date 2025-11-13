@@ -13,6 +13,7 @@ type OrganizationMetadatum struct {
 	Name            string
 	Slug            string
 	GramAccountType string
+	SsoConnectionID pgtype.Text
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	DisabledAt      pgtype.Timestamptz
