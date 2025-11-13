@@ -40,7 +40,7 @@ func ExecuteIndexToolset(
 		TaskQueue:                string(TaskQueueMain),
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowRunTimeout:       1 * time.Minute,
+		WorkflowRunTimeout:       2 * time.Minute,
 	}, IndexToolsetWorkflow, params)
 }
 
@@ -51,9 +51,9 @@ func IndexToolsetWorkflow(
 	var a *Activities
 
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 60 * time.Second,
+		StartToCloseTimeout: 45 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts: 3,
+			MaximumAttempts: 2,
 		},
 	})
 
