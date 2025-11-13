@@ -6,6 +6,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { $, ProcessPromise, chalk } from "zx";
 import { isCI, type ParsedUserConfig } from "./config.ts";
+import { Loader } from "./loader.ts";
 
 type Artifacts = {
   funcFilename: string;
@@ -178,6 +179,11 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
   }
 
   logger.info("Deploying function with Gram CLI");
+
+  // Start the loader animation
+  const loader = new Loader("deploying function...");
+  loader.start();
+
   const pushcmd = $({
     stdio: ["pipe", "pipe", "pipe"],
   })`gram ${pushArgs}`
@@ -187,6 +193,9 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
   await consumeStdio(pushcmd, getLogger(["gram", "cli"]));
 
   const result = await pushcmd;
+
+  // Stop the loader animation
+  loader.stop();
 
   if (result.exitCode !== 0) {
     throw new Error(
