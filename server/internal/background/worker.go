@@ -72,6 +72,7 @@ func ForDeploymentProcessing(
 		ExpectedTargetCNAME:  "",
 		BillingTracker:       nil,
 		BillingRepository:    nil,
+		RagService:           nil,
 		RedisClient:          nil,
 		PosthogClient:        nil,
 	}

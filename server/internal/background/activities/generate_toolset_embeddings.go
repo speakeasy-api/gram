@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"go.opentelemetry.io/otel/trace"
@@ -10,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -57,11 +59,12 @@ func (a *GenerateToolsetEmbeddings) Do(
 	)
 
 	if getToolsetErr != nil {
-		a.logger.Error(
+		a.logger.ErrorContext(
+			ctx,
 			"error fetching toolset",
-			slog.String("toolset_slug", string(input.ToolsetSlug)),
-			slog.String("project_id", input.ProjectID.String()),
-			slog.String("error", getToolsetErr.Error()),
+			attr.SlogToolsetSlug(string(input.ToolsetSlug)),
+			attr.SlogProjectID(input.ProjectID.String()),
+			attr.SlogError(getToolsetErr),
 		)
 		return getToolsetErr
 	}
@@ -71,7 +74,7 @@ func (a *GenerateToolsetEmbeddings) Do(
 		*toolset,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to index toolset: %w", err)
 	}
 
 	return nil

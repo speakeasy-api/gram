@@ -589,21 +589,23 @@ func newStartCommand() *cli.Command {
 				})
 				group.Go(func() {
 					temporalWorker := background.NewTemporalWorker(temporalClient, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-						DB:                  db,
-						EncryptionClient:    encryptionClient,
-						FeatureProvider:     featureFlags,
-						AssetStorage:        assetStorage,
-						SlackClient:         slackClient,
-						ChatClient:          chatClient,
-						OpenRouter:          openRouter,
-						K8sClient:           k8sClient,
-						ExpectedTargetCNAME: customdomains.GetCustomDomainCNAME(c.String("environment")),
-						BillingTracker:      billingTracker,
-						BillingRepository:   billingRepo,
-						RedisClient:         redisClient,
-						PosthogClient:       posthogClient,
-						FunctionsDeployer:   functionsOrchestrator,
-						FunctionsVersion:    runnerVersion,
+						DB:                   db,
+						EncryptionClient:     encryptionClient,
+						FeatureProvider:      featureFlags,
+						AssetStorage:         assetStorage,
+						SlackClient:          slackClient,
+						ChatClient:           chatClient,
+						OpenRouterChatClient: baseChatClient,
+						OpenRouter:           openRouter,
+						K8sClient:            k8sClient,
+						ExpectedTargetCNAME:  customdomains.GetCustomDomainCNAME(c.String("environment")),
+						BillingTracker:       billingTracker,
+						BillingRepository:    billingRepo,
+						RedisClient:          redisClient,
+						PosthogClient:        posthogClient,
+						FunctionsDeployer:    functionsOrchestrator,
+						FunctionsVersion:     runnerVersion,
+						RagService:           ragService,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))
