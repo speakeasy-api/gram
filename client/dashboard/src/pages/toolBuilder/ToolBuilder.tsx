@@ -901,8 +901,12 @@ const customToolSystemPrompt = [
   {
     id: "1",
     role: "system" as const,
-    content:
-      "Use this chat to test out the custom tool the user has built. You should faithfuly execute the plan it sets out to achieve the specified purpose.",
+    parts: [
+      {
+        type: "text" as const,
+        text: "Use this chat to test out the custom tool the user has built. You should faithfuly execute the plan it sets out to achieve the specified purpose.",
+      },
+    ],
   },
 ];
 
@@ -986,8 +990,6 @@ function ChatPanel(props: {
         const renderedPrompt = renderResult.prompt || "";
 
         chat.appendMessage({
-          id: uuidv7(),
-          role: "user",
           content: `\`\`\`xml\n${renderedPrompt}\n\`\`\``,
         });
       }}

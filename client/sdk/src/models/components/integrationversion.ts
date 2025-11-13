@@ -27,47 +27,6 @@ export const IntegrationVersion$inboundSchema: z.ZodType<
   });
 });
 
-/** @internal */
-export type IntegrationVersion$Outbound = {
-  created_at: string;
-  version: string;
-};
-
-/** @internal */
-export const IntegrationVersion$outboundSchema: z.ZodType<
-  IntegrationVersion$Outbound,
-  z.ZodTypeDef,
-  IntegrationVersion
-> = z.object({
-  createdAt: z.date().transform(v => v.toISOString()),
-  version: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    createdAt: "created_at",
-  });
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace IntegrationVersion$ {
-  /** @deprecated use `IntegrationVersion$inboundSchema` instead. */
-  export const inboundSchema = IntegrationVersion$inboundSchema;
-  /** @deprecated use `IntegrationVersion$outboundSchema` instead. */
-  export const outboundSchema = IntegrationVersion$outboundSchema;
-  /** @deprecated use `IntegrationVersion$Outbound` instead. */
-  export type Outbound = IntegrationVersion$Outbound;
-}
-
-export function integrationVersionToJSON(
-  integrationVersion: IntegrationVersion,
-): string {
-  return JSON.stringify(
-    IntegrationVersion$outboundSchema.parse(integrationVersion),
-  );
-}
-
 export function integrationVersionFromJSON(
   jsonString: string,
 ): SafeParseResult<IntegrationVersion, SDKValidationError> {

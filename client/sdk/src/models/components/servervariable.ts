@@ -33,43 +33,6 @@ export const ServerVariable$inboundSchema: z.ZodType<
   });
 });
 
-/** @internal */
-export type ServerVariable$Outbound = {
-  description: string;
-  env_variables: Array<string>;
-};
-
-/** @internal */
-export const ServerVariable$outboundSchema: z.ZodType<
-  ServerVariable$Outbound,
-  z.ZodTypeDef,
-  ServerVariable
-> = z.object({
-  description: z.string(),
-  envVariables: z.array(z.string()),
-}).transform((v) => {
-  return remap$(v, {
-    envVariables: "env_variables",
-  });
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace ServerVariable$ {
-  /** @deprecated use `ServerVariable$inboundSchema` instead. */
-  export const inboundSchema = ServerVariable$inboundSchema;
-  /** @deprecated use `ServerVariable$outboundSchema` instead. */
-  export const outboundSchema = ServerVariable$outboundSchema;
-  /** @deprecated use `ServerVariable$Outbound` instead. */
-  export type Outbound = ServerVariable$Outbound;
-}
-
-export function serverVariableToJSON(serverVariable: ServerVariable): string {
-  return JSON.stringify(ServerVariable$outboundSchema.parse(serverVariable));
-}
-
 export function serverVariableFromJSON(
   jsonString: string,
 ): SafeParseResult<ServerVariable, SDKValidationError> {

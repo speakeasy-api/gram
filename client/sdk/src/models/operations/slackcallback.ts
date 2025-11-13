@@ -24,16 +24,6 @@ export type SlackCallbackResponse = {
 };
 
 /** @internal */
-export const SlackCallbackRequest$inboundSchema: z.ZodType<
-  SlackCallbackRequest,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  state: z.string(),
-  code: z.string(),
-});
-
-/** @internal */
 export type SlackCallbackRequest$Outbound = {
   state: string;
   code: string;
@@ -49,34 +39,11 @@ export const SlackCallbackRequest$outboundSchema: z.ZodType<
   code: z.string(),
 });
 
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace SlackCallbackRequest$ {
-  /** @deprecated use `SlackCallbackRequest$inboundSchema` instead. */
-  export const inboundSchema = SlackCallbackRequest$inboundSchema;
-  /** @deprecated use `SlackCallbackRequest$outboundSchema` instead. */
-  export const outboundSchema = SlackCallbackRequest$outboundSchema;
-  /** @deprecated use `SlackCallbackRequest$Outbound` instead. */
-  export type Outbound = SlackCallbackRequest$Outbound;
-}
-
 export function slackCallbackRequestToJSON(
   slackCallbackRequest: SlackCallbackRequest,
 ): string {
   return JSON.stringify(
     SlackCallbackRequest$outboundSchema.parse(slackCallbackRequest),
-  );
-}
-
-export function slackCallbackRequestFromJSON(
-  jsonString: string,
-): SafeParseResult<SlackCallbackRequest, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => SlackCallbackRequest$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'SlackCallbackRequest' from JSON`,
   );
 }
 
@@ -92,45 +59,6 @@ export const SlackCallbackResponse$inboundSchema: z.ZodType<
     "Headers": "headers",
   });
 });
-
-/** @internal */
-export type SlackCallbackResponse$Outbound = {
-  Headers: { [k: string]: Array<string> };
-};
-
-/** @internal */
-export const SlackCallbackResponse$outboundSchema: z.ZodType<
-  SlackCallbackResponse$Outbound,
-  z.ZodTypeDef,
-  SlackCallbackResponse
-> = z.object({
-  headers: z.record(z.array(z.string())),
-}).transform((v) => {
-  return remap$(v, {
-    headers: "Headers",
-  });
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace SlackCallbackResponse$ {
-  /** @deprecated use `SlackCallbackResponse$inboundSchema` instead. */
-  export const inboundSchema = SlackCallbackResponse$inboundSchema;
-  /** @deprecated use `SlackCallbackResponse$outboundSchema` instead. */
-  export const outboundSchema = SlackCallbackResponse$outboundSchema;
-  /** @deprecated use `SlackCallbackResponse$Outbound` instead. */
-  export type Outbound = SlackCallbackResponse$Outbound;
-}
-
-export function slackCallbackResponseToJSON(
-  slackCallbackResponse: SlackCallbackResponse,
-): string {
-  return JSON.stringify(
-    SlackCallbackResponse$outboundSchema.parse(slackCallbackResponse),
-  );
-}
 
 export function slackCallbackResponseFromJSON(
   jsonString: string,

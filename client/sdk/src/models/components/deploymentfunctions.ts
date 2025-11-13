@@ -48,53 +48,6 @@ export const DeploymentFunctions$inboundSchema: z.ZodType<
   });
 });
 
-/** @internal */
-export type DeploymentFunctions$Outbound = {
-  asset_id: string;
-  id: string;
-  name: string;
-  runtime: string;
-  slug: string;
-};
-
-/** @internal */
-export const DeploymentFunctions$outboundSchema: z.ZodType<
-  DeploymentFunctions$Outbound,
-  z.ZodTypeDef,
-  DeploymentFunctions
-> = z.object({
-  assetId: z.string(),
-  id: z.string(),
-  name: z.string(),
-  runtime: z.string(),
-  slug: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    assetId: "asset_id",
-  });
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace DeploymentFunctions$ {
-  /** @deprecated use `DeploymentFunctions$inboundSchema` instead. */
-  export const inboundSchema = DeploymentFunctions$inboundSchema;
-  /** @deprecated use `DeploymentFunctions$outboundSchema` instead. */
-  export const outboundSchema = DeploymentFunctions$outboundSchema;
-  /** @deprecated use `DeploymentFunctions$Outbound` instead. */
-  export type Outbound = DeploymentFunctions$Outbound;
-}
-
-export function deploymentFunctionsToJSON(
-  deploymentFunctions: DeploymentFunctions,
-): string {
-  return JSON.stringify(
-    DeploymentFunctions$outboundSchema.parse(deploymentFunctions),
-  );
-}
-
 export function deploymentFunctionsFromJSON(
   jsonString: string,
 ): SafeParseResult<DeploymentFunctions, SDKValidationError> {
