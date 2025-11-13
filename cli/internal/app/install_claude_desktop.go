@@ -17,10 +17,10 @@ import (
 func newInstallClaudeDesktopCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "claude-desktop",
-		Usage: "Generate a .dxt file for installing a Gram toolset in Claude Desktop (standalone desktop app)",
+		Usage: "Generate a .mcpb file for installing a Gram toolset in Claude Desktop (standalone desktop app)",
 		Flags: append(baseInstallFlags, &cli.StringFlag{
 			Name:  "output-dir",
-			Usage: "Directory to save the .dxt file (defaults to Downloads folder)",
+			Usage: "Directory to save the .mcpb file (defaults to Downloads folder)",
 		}),
 		Action: doInstallClaudeDesktop,
 	}
@@ -77,10 +77,10 @@ func doInstallClaudeDesktop(c *cli.Context) error {
 			slog.String("header", info.HeaderName))
 	}
 
-	// Generate .dxt manifest
-	manifest, err := mcp.GenerateDXTManifest(info, useEnvVar)
+	// Generate .mcpb manifest
+	manifest, err := mcp.GenerateMCPBManifest(info, useEnvVar)
 	if err != nil {
-		return fmt.Errorf("failed to generate DXT manifest: %w", err)
+		return fmt.Errorf("failed to generate MCPB manifest: %w", err)
 	}
 
 	// Determine output directory
@@ -100,15 +100,15 @@ func doInstallClaudeDesktop(c *cli.Context) error {
 
 	// Create filename from server name (sanitize to ensure it's filesystem-safe)
 	safeName := sanitizeFilename(info.Name)
-	filename := fmt.Sprintf("%s.dxt", safeName)
+	filename := fmt.Sprintf("%s.mcpb", safeName)
 	outputPath := filepath.Join(outputDir, filename)
 
-	// Write the .dxt file
+	// Write the .mcpb file
 	if err := os.WriteFile(outputPath, manifest, 0600); err != nil {
-		return fmt.Errorf("failed to write DXT file: %w", err)
+		return fmt.Errorf("failed to write MCPB file: %w", err)
 	}
 
-	logger.InfoContext(ctx, "successfully created DXT file",
+	logger.InfoContext(ctx, "successfully created MCPB file",
 		slog.String("name", info.Name),
 		slog.String("url", info.URL),
 		slog.String("path", outputPath))
