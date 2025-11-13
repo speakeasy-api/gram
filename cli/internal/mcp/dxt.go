@@ -61,7 +61,7 @@ func GenerateDXTManifest(info *ToolsetInfo, useEnvVar bool) ([]byte, error) {
 		ManifestVersion: "0.1",
 		Name:            info.Name,
 		Version:         "1.0.0",
-		Description:     fmt.Sprintf("%s MCP server", info.Name),
+		Description:     fmt.Sprintf("Gram MCP server for %s", info.Name),
 		Author: DXTAuthor{
 			Name: "Gram",
 		},
@@ -76,7 +76,8 @@ func GenerateDXTManifest(info *ToolsetInfo, useEnvVar bool) ([]byte, error) {
 					"--header",
 					headerValue,
 				},
-				Env:     map[string]string{},
+				// Not used for command-based transport (will be omitted in JSON due to omitempty tags)
+				Env:     nil,
 				Type:    "",
 				URL:     "",
 				Headers: nil,

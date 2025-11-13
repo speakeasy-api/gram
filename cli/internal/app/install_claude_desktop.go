@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/speakeasy-api/gram/cli/internal/app/logging"
 	"github.com/speakeasy-api/gram/cli/internal/mcp"
@@ -15,13 +17,33 @@ import (
 func newInstallClaudeDesktopCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "claude-desktop",
-		Usage: "Install a Gram toolset as an MCP server in Claude Desktop",
-		Flags: append(installFlags, &cli.StringFlag{
+		Usage: "Generate a .dxt file for installing a Gram toolset in Claude Desktop (standalone desktop app)",
+		Flags: append(baseInstallFlags, &cli.StringFlag{
 			Name:  "output-dir",
 			Usage: "Directory to save the .dxt file (defaults to Downloads folder)",
 		}),
 		Action: doInstallClaudeDesktop,
 	}
+}
+
+// sanitizeFilename removes or replaces characters that are problematic in filenames
+func sanitizeFilename(name string) string {
+	// Replace spaces with dashes
+	name = strings.ReplaceAll(name, " ", "-")
+
+	// Remove or replace invalid filename characters: / \ : * ? " < > |
+	invalidChars := regexp.MustCompile(`[/\\:*?"<>|]`)
+	name = invalidChars.ReplaceAllString(name, "")
+
+	// Remove leading/trailing dots and spaces
+	name = strings.Trim(name, ". ")
+
+	// If name is empty after sanitization, use a default
+	if name == "" {
+		name = "gram-mcp-server"
+	}
+
+	return name
 }
 
 func getDownloadsDir() (string, error) {
@@ -76,8 +98,9 @@ func doInstallClaudeDesktop(c *cli.Context) error {
 		}
 	}
 
-	// Create filename from server name
-	filename := fmt.Sprintf("%s.dxt", info.Name)
+	// Create filename from server name (sanitize to ensure it's filesystem-safe)
+	safeName := sanitizeFilename(info.Name)
+	filename := fmt.Sprintf("%s.dxt", safeName)
 	outputPath := filepath.Join(outputDir, filename)
 
 	// Write the .dxt file
@@ -90,16 +113,24 @@ func doInstallClaudeDesktop(c *cli.Context) error {
 		slog.String("url", info.URL),
 		slog.String("path", outputPath))
 
-	fmt.Printf("\n✓ Successfully created MCP server manifest '%s.dxt'\n", info.Name)
-	fmt.Printf("  URL: %s\n", info.URL)
-	fmt.Printf("  File: %s\n", outputPath)
+	fmt.Printf("\n✓ Successfully created MCP server manifest: %s\n", filename)
+	fmt.Printf("  Server Name: %s\n", info.Name)
+	fmt.Printf("  MCP URL: %s\n", info.URL)
+	fmt.Printf("  File Location: %s\n", outputPath)
 
 	if useEnvVar {
-		fmt.Printf("\n⚠ You'll be prompted to set this value when installing:\n")
-		fmt.Printf("  %s\n", info.EnvVarName)
+		fmt.Printf("\n📋 Note: You'll be prompted to set this value when installing:\n")
+		fmt.Printf("  %s (your API key)\n", info.EnvVarName)
 	}
 
-	fmt.Printf("\nDouble-click the .dxt file to install in Claude Desktop.\n")
+	fmt.Printf("\n📦 Next Steps:\n")
+	fmt.Printf("  1. Open your Downloads folder (or the output directory)\n")
+	fmt.Printf("  2. Double-click the '%s' file\n", filename)
+	fmt.Printf("  3. Claude Desktop will open and prompt you to install the MCP server\n")
+	if useEnvVar {
+		fmt.Printf("  4. Enter your API key when prompted\n")
+	}
+	fmt.Printf("\n💡 Tip: After installation, restart Claude Desktop to load the new MCP server.\n")
 
 	return nil
 }
