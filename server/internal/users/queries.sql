@@ -6,6 +6,7 @@ ON CONFLICT (id) DO UPDATE SET
   display_name = EXCLUDED.display_name,
   photo_url = EXCLUDED.photo_url,
   admin = EXCLUDED.admin,
+  last_login = clock_timestamp(),
   updated_at = clock_timestamp()
 RETURNING *, (xmax = 0) AS was_created;
 

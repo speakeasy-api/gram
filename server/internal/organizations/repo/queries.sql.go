@@ -7,7 +7,26 @@ package repo
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const deleteOrganizationUserRelationship = `-- name: DeleteOrganizationUserRelationship :exec
+UPDATE organization_user_relationships
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1
+  AND user_id = $2
+`
+
+type DeleteOrganizationUserRelationshipParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) DeleteOrganizationUserRelationship(ctx context.Context, arg DeleteOrganizationUserRelationshipParams) error {
+	_, err := q.db.Exec(ctx, deleteOrganizationUserRelationship, arg.OrganizationID, arg.UserID)
+	return err
+}
 
 const getOrganizationMetadata = `-- name: GetOrganizationMetadata :one
 SELECT id, name, slug, gram_account_type, sso_connection_id, created_at, updated_at, disabled_at
@@ -31,6 +50,63 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 	return i, err
 }
 
+const hasOrganizationUserRelationship = `-- name: HasOrganizationUserRelationship :one
+SELECT EXISTS(
+  SELECT 1
+  FROM organization_user_relationships
+  WHERE organization_id = $1
+    AND user_id = $2
+    AND deleted_at IS NULL
+) AS exists
+`
+
+type HasOrganizationUserRelationshipParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) HasOrganizationUserRelationship(ctx context.Context, arg HasOrganizationUserRelationshipParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasOrganizationUserRelationship, arg.OrganizationID, arg.UserID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const listOrganizationUsers = `-- name: ListOrganizationUsers :many
+SELECT id, organization_id, user_id, created_at, updated_at, deleted_at, deleted
+FROM organization_user_relationships
+WHERE organization_id = $1
+  AND deleted_at IS NULL
+`
+
+func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID string) ([]OrganizationUserRelationship, error) {
+	rows, err := q.db.Query(ctx, listOrganizationUsers, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrganizationUserRelationship
+	for rows.Next() {
+		var i OrganizationUserRelationship
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.UserID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setAccountType = `-- name: SetAccountType :exec
 UPDATE organization_metadata
 SET gram_account_type = $1,
@@ -52,27 +128,36 @@ const upsertOrganizationMetadata = `-- name: UpsertOrganizationMetadata :one
 INSERT INTO organization_metadata (
     id,
     name,
-    slug
+    slug,
+    sso_connection_id
 ) VALUES (
     $1,
     $2,
-    $3
+    $3,
+    $4
 )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     slug = EXCLUDED.slug,
+    sso_connection_id = EXCLUDED.sso_connection_id,
     updated_at = clock_timestamp()
 RETURNING id, name, slug, gram_account_type, sso_connection_id, created_at, updated_at, disabled_at
 `
 
 type UpsertOrganizationMetadataParams struct {
-	ID   string
-	Name string
-	Slug string
+	ID              string
+	Name            string
+	Slug            string
+	SsoConnectionID pgtype.Text
 }
 
 func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrganizationMetadataParams) (OrganizationMetadatum, error) {
-	row := q.db.QueryRow(ctx, upsertOrganizationMetadata, arg.ID, arg.Name, arg.Slug)
+	row := q.db.QueryRow(ctx, upsertOrganizationMetadata,
+		arg.ID,
+		arg.Name,
+		arg.Slug,
+		arg.SsoConnectionID,
+	)
 	var i OrganizationMetadatum
 	err := row.Scan(
 		&i.ID,
@@ -83,6 +168,39 @@ func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrga
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
+	)
+	return i, err
+}
+
+const upsertOrganizationUserRelationship = `-- name: UpsertOrganizationUserRelationship :one
+INSERT INTO organization_user_relationships (
+    organization_id,
+    user_id
+) VALUES (
+    $1,
+    $2
+)
+ON CONFLICT (organization_id, user_id) DO UPDATE SET
+    updated_at = clock_timestamp()
+RETURNING id, organization_id, user_id, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertOrganizationUserRelationshipParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) UpsertOrganizationUserRelationship(ctx context.Context, arg UpsertOrganizationUserRelationshipParams) (OrganizationUserRelationship, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizationUserRelationship, arg.OrganizationID, arg.UserID)
+	var i OrganizationUserRelationship
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }

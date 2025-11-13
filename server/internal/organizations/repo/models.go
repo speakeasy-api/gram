@@ -18,3 +18,13 @@ type OrganizationMetadatum struct {
 	UpdatedAt       pgtype.Timestamptz
 	DisabledAt      pgtype.Timestamptz
 }
+
+type OrganizationUserRelationship struct {
+	ID             int64
+	OrganizationID string
+	UserID         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}

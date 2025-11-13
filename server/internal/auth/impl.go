@@ -167,9 +167,10 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	orgMetadata, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:   activeOrg.ID,
-		Name: activeOrg.Name,
-		Slug: activeOrg.Slug,
+		ID:              activeOrg.ID,
+		Name:            activeOrg.Name,
+		Slug:            activeOrg.Slug,
+		SsoConnectionID: conv.PtrToPGText(activeOrg.SsoConnectionID),
 	})
 	if err != nil {
 		return redirectWithError(authErrInit, err)
@@ -241,9 +242,10 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		if org.ID == selectedOrg {
 			orgFound = true
 			if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-				ID:   org.ID,
-				Name: org.Name,
-				Slug: org.Slug,
+				ID:              org.ID,
+				Name:            org.Name,
+				Slug:            org.Slug,
+				SsoConnectionID: conv.PtrToPGText(org.SsoConnectionID),
 			}); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
 			}
@@ -314,6 +316,17 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		}
 	}
 
+	// on auth info write through data for user/org relationship as a backfill mechanism
+	// admin is only exception where there is not a single user-org relationship written
+	if !userInfo.Admin {
+		if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			UserID:         authCtx.UserID,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization user relationship").Log(ctx, s.logger)
+		}
+	}
+
 	// Fully unpack the userInfo object
 	organizations := make([]*gen.OrganizationEntry, 0, len(userInfo.Organizations))
 	for _, org := range userInfo.Organizations {
@@ -336,9 +349,10 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		// TODO: there may be a better place to do this
 		if !fromCache {
 			if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-				ID:   org.ID,
-				Name: org.Name,
-				Slug: org.Slug,
+				ID:              org.ID,
+				Name:            org.Name,
+				Slug:            org.Slug,
+				SsoConnectionID: conv.PtrToPGText(org.SsoConnectionID),
 			}); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
 			}
@@ -414,11 +428,20 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	}
 
 	if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:   info.Organizations[0].ID,
-		Name: info.Organizations[0].Name,
-		Slug: info.Organizations[0].Slug,
+		ID:              info.Organizations[0].ID,
+		Name:            info.Organizations[0].Name,
+		Slug:            info.Organizations[0].Slug,
+		SsoConnectionID: conv.PtrToPGText(nil),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
+	}
+
+	// create a workspace user relationship for the creator of the org
+	if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: info.Organizations[0].ID,
+		UserID:         authCtx.UserID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error upserting organization user relationship").Log(ctx, s.logger)
 	}
 
 	return nil
