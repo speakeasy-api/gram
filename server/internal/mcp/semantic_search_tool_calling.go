@@ -39,7 +39,7 @@ var dynamicFindToolsSchema = json.RawMessage(`{
 	}`)
 
 func buildDynamicSessionTools(toolset *types.Toolset, vectorToolStore *rag.ToolsetVectorStore) []*toolListEntry {
-	findDescription := "Search the available tools in this MCP server using a search query. The result will be tools that could help you complete your task."
+	findDescription := "Search through the available tools in this MCP server using a search query. The result will be a list of tools that could help you complete your task."
 	executeDescription := "Execute a specific tool by name, passing through the correct arguments for that tool's schema."
 	tree, _ := buildToolTree(toolset.Tools)
 	if len(tree) > 0 {
@@ -55,7 +55,7 @@ func buildDynamicSessionTools(toolset *types.Toolset, vectorToolStore *rag.Tools
 				}
 			}
 		}
-		findDescription += fmt.Sprintf(" The available tools in this server related to these areas: %s.", strings.Join(toolAreas, ", "))
+		findDescription += fmt.Sprintf(" The available tools in this server relate to these areas: %s.", strings.Join(toolAreas, ", "))
 	}
 
 	return []*toolListEntry{
