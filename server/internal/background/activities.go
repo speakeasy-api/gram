@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -41,6 +42,7 @@ type Activities struct {
 	transitionDeployment          *activities.TransitionDeployment
 	validateDeployment            *activities.ValidateDeployment
 	verifyCustomDomain            *activities.VerifyCustomDomain
+	generateToolsetEmbeddings     *activities.GenerateToolsetEmbeddings
 }
 
 func NewActivities(
@@ -61,6 +63,7 @@ func NewActivities(
 	posthogClient *posthog.Posthog,
 	functionsDeployer functions.Deployer,
 	functionsVersion functions.RunnerVersion,
+	ragService *rag.ToolsetVectorStore,
 ) *Activities {
 	return &Activities{
 		collectPlatformUsageMetrics:   activities.NewCollectPlatformUsageMetrics(logger, db),
@@ -80,6 +83,7 @@ func NewActivities(
 		transitionDeployment:          activities.NewTransitionDeployment(logger, db),
 		validateDeployment:            activities.NewValidateDeployment(logger, db, billingRepo),
 		verifyCustomDomain:            activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
+		generateToolsetEmbeddings:     activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
 	}
 }
 
@@ -145,6 +149,10 @@ func (a *Activities) DeployFunctionRunners(ctx context.Context, req activities.D
 
 func (a *Activities) ValidateDeployment(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID) error {
 	return a.validateDeployment.Do(ctx, projectID, deploymentID)
+}
+
+func (a *Activities) GenerateToolsetEmbeddings(ctx context.Context, input activities.GenerateToolsetEmbeddingsInput) error {
+	return a.generateToolsetEmbeddings.Do(ctx, input)
 }
 
 func (a *Activities) ReapFlyApps(ctx context.Context, req activities.ReapFlyAppsRequest) (*activities.ReapFlyAppsResult, error) {

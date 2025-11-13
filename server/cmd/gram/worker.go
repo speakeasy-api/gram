@@ -7,6 +7,12 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2/altsrc"
+	"go.opentelemetry.io/otel"
+	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -21,15 +27,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
-	"github.com/urfave/cli/v2"
-	"github.com/urfave/cli/v2/altsrc"
-	"go.opentelemetry.io/otel"
-	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/worker"
 )
 
 func newWorkerCommand() *cli.Command {
@@ -356,6 +358,7 @@ func newWorkerCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
+			ragService := rag.NewToolsetVectorStore(tracerProvider, db, baseChatClient)
 			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator)
 
 			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, posthogClient, c)
@@ -364,21 +367,23 @@ func newWorkerCommand() *cli.Command {
 			}
 
 			temporalWorker := background.NewTemporalWorker(temporalClient, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-				DB:                  db,
-				EncryptionClient:    encryptionClient,
-				FeatureProvider:     featureFlags,
-				AssetStorage:        assetStorage,
-				SlackClient:         slackClient,
-				ChatClient:          chatClient,
-				OpenRouter:          openRouter,
-				K8sClient:           k8sClient,
-				ExpectedTargetCNAME: customdomains.GetCustomDomainCNAME(c.String("environment")),
-				BillingTracker:      billingTracker,
-				BillingRepository:   billingRepo,
-				RedisClient:         redisClient,
-				PosthogClient:       posthogClient,
-				FunctionsDeployer:   functionsOrchestrator,
-				FunctionsVersion:    runnerVersion,
+				DB:                   db,
+				EncryptionClient:     encryptionClient,
+				FeatureProvider:      featureFlags,
+				AssetStorage:         assetStorage,
+				SlackClient:          slackClient,
+				ChatClient:           chatClient,
+				OpenRouterChatClient: baseChatClient,
+				OpenRouter:           openRouter,
+				K8sClient:            k8sClient,
+				ExpectedTargetCNAME:  customdomains.GetCustomDomainCNAME(c.String("environment")),
+				BillingTracker:       billingTracker,
+				BillingRepository:    billingRepo,
+				RedisClient:          redisClient,
+				PosthogClient:        posthogClient,
+				FunctionsDeployer:    functionsOrchestrator,
+				FunctionsVersion:     runnerVersion,
+				RagService:           ragService,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

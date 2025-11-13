@@ -49,6 +49,7 @@ import (
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	temporal_client "go.temporal.io/sdk/client"
 )
 
 type Service struct {
@@ -72,6 +73,7 @@ type Service struct {
 	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
 	tcm               tm.ToolMetricsProvider
 	vectorToolStore   *rag.ToolsetVectorStore
+	temporal          temporal_client.Client
 }
 
 type oauthTokenInputs struct {
@@ -116,6 +118,7 @@ func NewService(
 	billingRepository billing.Repository,
 	tcm tm.ToolMetricsProvider,
 	vectorToolStore *rag.ToolsetVectorStore,
+	temporal temporal_client.Client,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -151,6 +154,7 @@ func NewService(
 		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		tcm:               tcm,
 		vectorToolStore:   vectorToolStore,
+		temporal:          temporal,
 	}
 }
 
@@ -684,7 +688,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.tcm, s.vectorToolStore)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.tcm, s.vectorToolStore, s.temporal)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "prompts/get":

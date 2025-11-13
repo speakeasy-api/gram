@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	temporal_client "go.temporal.io/sdk/client"
 )
 
 var (
@@ -107,7 +108,14 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		return true, nil
 	})
 
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, toolMetrics, vectorToolStore)
+	var temporalClient temporal_client.Client
+	temporalClient, devserver := infra.NewTemporalClient(t)
+	t.Cleanup(func() {
+		temporalClient.Close()
+		require.NoError(t, devserver.Stop(), "shutdown temporal")
+	})
+
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, toolMetrics, vectorToolStore, temporalClient)
 
 	return ctx, &testInstance{
 		service:        svc,

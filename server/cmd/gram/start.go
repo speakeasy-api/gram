@@ -552,7 +552,7 @@ func newStartCommand() *cli.Command {
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, billingTracker, tcm))
 			mcpMetadataService := mcpmetadata.NewService(logger, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient))
 			mcpmetadata.Attach(mux, mcpMetadataService)
-			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, oauthService, billingTracker, billingRepo, tcm, ragService), mcpMetadataService)
+			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, oauthService, billingTracker, billingRepo, tcm, ragService, temporalClient), mcpMetadataService)
 			chat.Attach(mux, chat.NewService(logger, db, sessionManager, openRouter))
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
@@ -589,21 +589,23 @@ func newStartCommand() *cli.Command {
 				})
 				group.Go(func() {
 					temporalWorker := background.NewTemporalWorker(temporalClient, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-						DB:                  db,
-						EncryptionClient:    encryptionClient,
-						FeatureProvider:     featureFlags,
-						AssetStorage:        assetStorage,
-						SlackClient:         slackClient,
-						ChatClient:          chatClient,
-						OpenRouter:          openRouter,
-						K8sClient:           k8sClient,
-						ExpectedTargetCNAME: customdomains.GetCustomDomainCNAME(c.String("environment")),
-						BillingTracker:      billingTracker,
-						BillingRepository:   billingRepo,
-						RedisClient:         redisClient,
-						PosthogClient:       posthogClient,
-						FunctionsDeployer:   functionsOrchestrator,
-						FunctionsVersion:    runnerVersion,
+						DB:                   db,
+						EncryptionClient:     encryptionClient,
+						FeatureProvider:      featureFlags,
+						AssetStorage:         assetStorage,
+						SlackClient:          slackClient,
+						ChatClient:           chatClient,
+						OpenRouterChatClient: baseChatClient,
+						OpenRouter:           openRouter,
+						K8sClient:            k8sClient,
+						ExpectedTargetCNAME:  customdomains.GetCustomDomainCNAME(c.String("environment")),
+						BillingTracker:       billingTracker,
+						BillingRepository:    billingRepo,
+						RedisClient:          redisClient,
+						PosthogClient:        posthogClient,
+						FunctionsDeployer:    functionsOrchestrator,
+						FunctionsVersion:     runnerVersion,
+						RagService:           ragService,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))
