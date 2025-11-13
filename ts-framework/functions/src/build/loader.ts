@@ -1,11 +1,11 @@
+import { spinner } from "@clack/prompts";
+
 /**
- * Simple ASCII rotating square loader animation for terminal output.
- * Displays a rotating square outline with a message like: ◰ deploying function...
+ * Loader wrapper using Clack's spinner, which gracefully handles non-interactive terminals.
+ * In CI/CD environments, it falls back to simple text output instead of animations.
  */
 export class Loader {
-  private interval: NodeJS.Timeout | null = null;
-  private frame = 0;
-  private readonly frames = ["◰", "◳", "◲", "◱"];
+  private spinnerInstance: ReturnType<typeof spinner> | null = null;
   private readonly message: string;
 
   constructor(message: string) {
@@ -16,39 +16,21 @@ export class Loader {
    * Start the loader animation.
    */
   start(): void {
-    if (this.interval) {
+    if (this.spinnerInstance) {
       return; // Already running
     }
 
-    // Hide cursor
-    process.stdout.write("\x1b[?25l");
-
-    // Render first frame immediately
-    this.render();
-
-    // Update every 100ms
-    this.interval = setInterval(() => {
-      this.frame = (this.frame + 1) % this.frames.length;
-      this.render();
-    }, 100);
+    this.spinnerInstance = spinner();
+    this.spinnerInstance.start(this.message);
   }
 
   /**
    * Stop the loader animation and clear the line.
    */
   stop(): void {
-    if (this.interval) {
-      clearInterval(this.interval);
-      this.interval = null;
+    if (this.spinnerInstance) {
+      this.spinnerInstance.stop();
+      this.spinnerInstance = null;
     }
-
-    // Clear the line and show cursor
-    process.stdout.write("\r\x1b[K");
-    process.stdout.write("\x1b[?25h");
-  }
-
-  private render(): void {
-    const spinner = this.frames[this.frame];
-    process.stdout.write(`\r${spinner} ${this.message}`);
   }
 }
