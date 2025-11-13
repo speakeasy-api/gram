@@ -19,7 +19,7 @@
     "node": ">=22.18.0"
   },
   "scripts": {
-    "dev": "mcp-inspector node ./src/server.ts",
+    "dev": "mcp-inspector nodemon -q --watch src --exec node ./src/server.ts",
     "_:build": "gf build",
     "push": "gf push",
     "prebuild": "tsc -p tsconfig.json",
@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/inspector": "^0.17.1",
+    "nodemon": "^3.1.9",
     "@types/node": "22.x",
     "typescript": "^5"
   }
