@@ -30,7 +30,7 @@ var dynamicFindToolsSchema = json.RawMessage(`{
 			"num_results": {
 				"type": "integer",
 				"minimum": 1,
-				"maximum": 20,
+				"maximum": 10,
 				"description": "Maximum number of tools to return."
 			}
 		},
@@ -39,25 +39,23 @@ var dynamicFindToolsSchema = json.RawMessage(`{
 	}`)
 
 func buildDynamicSessionTools(toolset *types.Toolset, vectorToolStore *rag.ToolsetVectorStore) []*toolListEntry {
-	toolsetName := ""
-	toolsetDescription := ""
-	if toolset != nil {
-		toolsetName = toolset.Name
-		toolsetDescription = conv.PtrValOrEmpty(toolset.Description, "")
-	}
-	contextDescription := toolsetName
-	if contextDescription != "" && toolsetDescription != "" {
-		contextDescription = fmt.Sprintf("%s (%s)", toolsetName, toolsetDescription)
-	}
-	if contextDescription == "" && toolsetDescription != "" {
-		contextDescription = toolsetDescription
-	}
-
-	findDescription := "Search the available tools in this MCP server using a search query. The result will be tools that could help you complete your task"
+	findDescription := "Search through the available tools in this MCP server using a search query. The result will be a list of tools that could help you complete your task."
 	executeDescription := "Execute a specific tool by name, passing through the correct arguments for that tool's schema."
-	if contextDescription != "" {
-		findDescription = fmt.Sprintf("Search the available tools in %s using a search query. The result will be tools to help you complete your task", contextDescription)
-		executeDescription = fmt.Sprintf("Execute a specific tool from %s by name, passing through the correct arguments for that tool's schema.", contextDescription)
+	tree, _ := buildToolTree(toolset.Tools)
+	if len(tree) > 0 {
+		var toolAreas []string
+		for source, group := range tree {
+			if group == nil {
+				for tag := range group.groups {
+					if tag == "default" {
+						toolAreas = append(toolAreas, source)
+					} else {
+						toolAreas = append(toolAreas, fmt.Sprintf("%s/%s", source, tag))
+					}
+				}
+			}
+		}
+		findDescription += fmt.Sprintf(" The available tools in this server relate to these areas: %s.", strings.Join(toolAreas, ", "))
 	}
 
 	return []*toolListEntry{

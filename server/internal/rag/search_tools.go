@@ -25,7 +25,7 @@ const (
 	// This is the only embedding model currently supported
 	// If you would like to add another embedding model you must modify the table to handle and index embeddings of that dimension
 	defaultEmbeddingModel         = "openai/text-embedding-3-small"
-	defaultFindToolsResultSize    = 5
+	defaultFindToolsResultSize    = 3
 	embeddingBatchSize            = 50
 	embeddingMaxConcurrentBatches = 5
 )
