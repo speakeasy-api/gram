@@ -396,9 +396,20 @@ type OrganizationMetadatum struct {
 	Name            string
 	Slug            string
 	GramAccountType string
+	SsoConnectionID pgtype.Text
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	DisabledAt      pgtype.Timestamptz
+}
+
+type OrganizationUserRelationship struct {
+	ID             int64
+	OrganizationID string
+	UserID         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
 }
 
 type Package struct {
@@ -588,6 +599,7 @@ type User struct {
 	DisplayName string
 	PhotoUrl    pgtype.Text
 	Admin       bool
+	LastLogin   pgtype.Timestamptz
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 }

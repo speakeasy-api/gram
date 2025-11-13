@@ -14,6 +14,7 @@ type User struct {
 	DisplayName string
 	PhotoUrl    pgtype.Text
 	Admin       bool
+	LastLogin   pgtype.Timestamptz
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 }

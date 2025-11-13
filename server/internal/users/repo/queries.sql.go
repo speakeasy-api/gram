@@ -12,7 +12,7 @@ import (
 )
 
 const getUser = `-- name: GetUser :one
-SELECT id, email, display_name, photo_url, admin, created_at, updated_at FROM users
+SELECT id, email, display_name, photo_url, admin, last_login, created_at, updated_at FROM users
 WHERE id = $1
 `
 
@@ -25,6 +25,7 @@ func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
 		&i.DisplayName,
 		&i.PhotoUrl,
 		&i.Admin,
+		&i.LastLogin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -32,7 +33,7 @@ func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, display_name, photo_url, admin, created_at, updated_at FROM users
+SELECT id, email, display_name, photo_url, admin, last_login, created_at, updated_at FROM users
 WHERE email = $1
 `
 
@@ -45,6 +46,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.DisplayName,
 		&i.PhotoUrl,
 		&i.Admin,
+		&i.LastLogin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -60,7 +62,7 @@ ON CONFLICT (id) DO UPDATE SET
   photo_url = EXCLUDED.photo_url,
   admin = EXCLUDED.admin,
   updated_at = clock_timestamp()
-RETURNING id, email, display_name, photo_url, admin, created_at, updated_at, (xmax = 0) AS was_created
+RETURNING id, email, display_name, photo_url, admin, last_login, created_at, updated_at, (xmax = 0) AS was_created
 `
 
 type UpsertUserParams struct {
@@ -77,6 +79,7 @@ type UpsertUserRow struct {
 	DisplayName string
 	PhotoUrl    pgtype.Text
 	Admin       bool
+	LastLogin   pgtype.Timestamptz
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 	WasCreated  bool
@@ -97,6 +100,7 @@ func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (UpsertU
 		&i.DisplayName,
 		&i.PhotoUrl,
 		&i.Admin,
+		&i.LastLogin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.WasCreated,
