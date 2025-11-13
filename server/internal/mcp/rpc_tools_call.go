@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	temporal_client "go.temporal.io/sdk/client"
 )
 
 type toolsCallParams struct {
@@ -58,6 +59,7 @@ func handleToolsCall(
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	tcm tm.ToolMetricsProvider,
 	vectorToolStore *rag.ToolsetVectorStore,
+	temporal temporal_client.Client,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -82,7 +84,7 @@ func handleToolsCall(
 		case params.Name == describeToolsToolName && payload.mode == ToolModeProgressiveSearch:
 			return handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
 		case params.Name == findToolsToolName && payload.mode == ToolModeSemanticSearch:
-			return handleFindToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore)
+			return handleFindToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore, temporal)
 		case params.Name == executeToolToolName:
 			proxyName, proxyArgs, err := processExecuteToolCall(ctx, logger, params.Arguments)
 			if err != nil {

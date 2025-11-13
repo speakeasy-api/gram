@@ -24,27 +24,30 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 )
 
 type WorkerOptions struct {
-	DB                  *pgxpool.Pool
-	EncryptionClient    *encryption.Client
-	FeatureProvider     feature.Provider
-	AssetStorage        assets.BlobStore
-	SlackClient         *slack_client.SlackClient
-	ChatClient          *chat.ChatClient
-	OpenRouter          openrouter.Provisioner
-	K8sClient           *k8s.KubernetesClients
-	ExpectedTargetCNAME string
-	BillingTracker      billing.Tracker
-	BillingRepository   billing.Repository
-	RedisClient         *redis.Client
-	PosthogClient       *posthog.Posthog
-	FunctionsDeployer   functions.Deployer
-	FunctionsVersion    functions.RunnerVersion
+	DB                   *pgxpool.Pool
+	EncryptionClient     *encryption.Client
+	FeatureProvider      feature.Provider
+	AssetStorage         assets.BlobStore
+	SlackClient          *slack_client.SlackClient
+	ChatClient           *chat.ChatClient
+	OpenRouterChatClient *openrouter.ChatClient
+	OpenRouter           openrouter.Provisioner
+	K8sClient            *k8s.KubernetesClients
+	ExpectedTargetCNAME  string
+	BillingTracker       billing.Tracker
+	BillingRepository    billing.Repository
+	RedisClient          *redis.Client
+	PosthogClient        *posthog.Posthog
+	FunctionsDeployer    functions.Deployer
+	FunctionsVersion     functions.RunnerVersion
+	RagService           *rag.ToolsetVectorStore
 }
 
 func ForDeploymentProcessing(
@@ -55,21 +58,22 @@ func ForDeploymentProcessing(
 	deployer functions.Deployer,
 ) *WorkerOptions {
 	return &WorkerOptions{
-		DB:                  db,
-		EncryptionClient:    enc,
-		FeatureProvider:     f,
-		AssetStorage:        assetStorage,
-		FunctionsDeployer:   deployer,
-		FunctionsVersion:    "local", // Test deployers don't use baked versions
-		SlackClient:         nil,
-		ChatClient:          nil,
-		OpenRouter:          nil,
-		K8sClient:           nil,
-		ExpectedTargetCNAME: "",
-		BillingTracker:      nil,
-		BillingRepository:   nil,
-		RedisClient:         nil,
-		PosthogClient:       nil,
+		DB:                   db,
+		EncryptionClient:     enc,
+		FeatureProvider:      f,
+		AssetStorage:         assetStorage,
+		FunctionsDeployer:    deployer,
+		FunctionsVersion:     "local", // Test deployers don't use baked versions
+		SlackClient:          nil,
+		ChatClient:           nil,
+		OpenRouterChatClient: nil,
+		OpenRouter:           nil,
+		K8sClient:            nil,
+		ExpectedTargetCNAME:  "",
+		BillingTracker:       nil,
+		BillingRepository:    nil,
+		RedisClient:          nil,
+		PosthogClient:        nil,
 	}
 }
 
@@ -81,40 +85,44 @@ func NewTemporalWorker(
 	options ...*WorkerOptions,
 ) worker.Worker {
 	opts := &WorkerOptions{
-		DB:                  nil,
-		EncryptionClient:    nil,
-		FeatureProvider:     nil,
-		AssetStorage:        nil,
-		SlackClient:         nil,
-		ChatClient:          nil,
-		OpenRouter:          nil,
-		K8sClient:           nil,
-		ExpectedTargetCNAME: "",
-		BillingTracker:      nil,
-		BillingRepository:   nil,
-		RedisClient:         nil,
-		PosthogClient:       nil,
-		FunctionsDeployer:   nil,
-		FunctionsVersion:    "",
+		DB:                   nil,
+		EncryptionClient:     nil,
+		FeatureProvider:      nil,
+		AssetStorage:         nil,
+		SlackClient:          nil,
+		ChatClient:           nil,
+		OpenRouterChatClient: nil,
+		OpenRouter:           nil,
+		K8sClient:            nil,
+		ExpectedTargetCNAME:  "",
+		BillingTracker:       nil,
+		BillingRepository:    nil,
+		RedisClient:          nil,
+		PosthogClient:        nil,
+		FunctionsDeployer:    nil,
+		FunctionsVersion:     "",
+		RagService:           nil,
 	}
 
 	for _, o := range options {
 		opts = &WorkerOptions{
-			DB:                  conv.Default(o.DB, opts.DB),
-			EncryptionClient:    conv.Default(o.EncryptionClient, opts.EncryptionClient),
-			FeatureProvider:     conv.Default(o.FeatureProvider, opts.FeatureProvider),
-			AssetStorage:        conv.Default(o.AssetStorage, opts.AssetStorage),
-			SlackClient:         conv.Default(o.SlackClient, opts.SlackClient),
-			ChatClient:          conv.Default(o.ChatClient, opts.ChatClient),
-			OpenRouter:          conv.Default(o.OpenRouter, opts.OpenRouter),
-			K8sClient:           conv.Default(o.K8sClient, opts.K8sClient),
-			ExpectedTargetCNAME: conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
-			BillingTracker:      conv.Default(o.BillingTracker, opts.BillingTracker),
-			BillingRepository:   conv.Default(o.BillingRepository, opts.BillingRepository),
-			RedisClient:         conv.Default(o.RedisClient, opts.RedisClient),
-			PosthogClient:       conv.Default(o.PosthogClient, opts.PosthogClient),
-			FunctionsDeployer:   conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
-			FunctionsVersion:    conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
+			DB:                   conv.Default(o.DB, opts.DB),
+			EncryptionClient:     conv.Default(o.EncryptionClient, opts.EncryptionClient),
+			FeatureProvider:      conv.Default(o.FeatureProvider, opts.FeatureProvider),
+			AssetStorage:         conv.Default(o.AssetStorage, opts.AssetStorage),
+			SlackClient:          conv.Default(o.SlackClient, opts.SlackClient),
+			ChatClient:           conv.Default(o.ChatClient, opts.ChatClient),
+			OpenRouter:           conv.Default(o.OpenRouter, opts.OpenRouter),
+			OpenRouterChatClient: conv.Default(o.OpenRouterChatClient, opts.OpenRouterChatClient),
+			K8sClient:            conv.Default(o.K8sClient, opts.K8sClient),
+			ExpectedTargetCNAME:  conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
+			BillingTracker:       conv.Default(o.BillingTracker, opts.BillingTracker),
+			BillingRepository:    conv.Default(o.BillingRepository, opts.BillingRepository),
+			RedisClient:          conv.Default(o.RedisClient, opts.RedisClient),
+			PosthogClient:        conv.Default(o.PosthogClient, opts.PosthogClient),
+			FunctionsDeployer:    conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
+			FunctionsVersion:     conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
+			RagService:           conv.Default(o.RagService, opts.RagService),
 		}
 	}
 
@@ -144,6 +152,7 @@ func NewTemporalWorker(
 		opts.PosthogClient,
 		opts.FunctionsDeployer,
 		opts.FunctionsVersion,
+		opts.RagService,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -162,6 +171,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
+	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(SlackEventWorkflow)
@@ -169,6 +179,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
+	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), client); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
