@@ -39,7 +39,7 @@ func ExecuteIndexToolset(
 		ID:                    id,
 		TaskQueue:             string(TaskQueueMain),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowRunTimeout:    30 * time.Minute,
+		WorkflowRunTimeout:    1 * time.Minute,
 	}, IndexToolsetWorkflow, params)
 }
 
