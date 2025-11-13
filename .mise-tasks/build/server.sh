@@ -2,8 +2,6 @@
 
 #MISE description="Build the gram server"
 #MISE dir="{{ config_root }}/server"
-#MISE sources=["go.mod", "go.sum", "**/*.go"]
-#MISE outputs={ auto = true }
 #MISE depends=["go:tidy"]
 
 #USAGE flag "--readonly" help="Build with -mod=readonly"

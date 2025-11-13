@@ -25,6 +25,12 @@ type Service interface {
 	UpdateEnvironment(context.Context, *UpdateEnvironmentPayload) (res *types.Environment, err error)
 	// Delete an environment
 	DeleteEnvironment(context.Context, *DeleteEnvironmentPayload) (err error)
+	// Set (upsert) a link between a source and an environment
+	SetSourceEnvironmentLink(context.Context, *SetSourceEnvironmentLinkPayload) (res *SourceEnvironmentLink, err error)
+	// Delete a link between a source and an environment
+	DeleteSourceEnvironmentLink(context.Context, *DeleteSourceEnvironmentLinkPayload) (err error)
+	// Get the environment linked to a source
+	GetSourceEnvironment(context.Context, *GetSourceEnvironmentPayload) (res *types.Environment, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -47,7 +53,7 @@ const ServiceName = "environments"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"createEnvironment", "listEnvironments", "updateEnvironment", "deleteEnvironment"}
+var MethodNames = [7]string{"createEnvironment", "listEnvironments", "updateEnvironment", "deleteEnvironment", "setSourceEnvironmentLink", "deleteSourceEnvironmentLink", "getSourceEnvironment"}
 
 // CreateEnvironmentPayload is the payload type of the environments service
 // createEnvironment method.
@@ -73,12 +79,34 @@ type DeleteEnvironmentPayload struct {
 	ProjectSlugInput *string
 }
 
+// DeleteSourceEnvironmentLinkPayload is the payload type of the environments
+// service deleteSourceEnvironmentLink method.
+type DeleteSourceEnvironmentLinkPayload struct {
+	// The kind of source (http or function)
+	SourceKind SourceKind
+	// The slug of the source
+	SourceSlug       string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
 // A single environment entry
 type EnvironmentEntryInput struct {
 	// The name of the environment variable
 	Name string
 	// The value of the environment variable
 	Value string
+}
+
+// GetSourceEnvironmentPayload is the payload type of the environments service
+// getSourceEnvironment method.
+type GetSourceEnvironmentPayload struct {
+	// The kind of source (http or function)
+	SourceKind SourceKind
+	// The slug of the source
+	SourceSlug       string
+	SessionToken     *string
+	ProjectSlugInput *string
 }
 
 // ListEnvironmentsPayload is the payload type of the environments service
@@ -93,6 +121,35 @@ type ListEnvironmentsPayload struct {
 type ListEnvironmentsResult struct {
 	Environments []*types.Environment
 }
+
+// SetSourceEnvironmentLinkPayload is the payload type of the environments
+// service setSourceEnvironmentLink method.
+type SetSourceEnvironmentLinkPayload struct {
+	// The kind of source (http or function)
+	SourceKind SourceKind
+	// The slug of the source
+	SourceSlug string
+	// The ID of the environment to link
+	EnvironmentID    string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// SourceEnvironmentLink is the result type of the environments service
+// setSourceEnvironmentLink method.
+type SourceEnvironmentLink struct {
+	// The ID of the source environment link
+	ID string
+	// The kind of source (http or function)
+	SourceKind SourceKind
+	// The slug of the source
+	SourceSlug string
+	// The ID of the environment
+	EnvironmentID string
+}
+
+// The kind of source that can be linked to an environment
+type SourceKind string
 
 // UpdateEnvironmentPayload is the payload type of the environments service
 // updateEnvironment method.

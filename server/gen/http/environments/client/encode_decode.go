@@ -956,6 +956,711 @@ func DecodeDeleteEnvironmentResponse(decoder func(*http.Response) goahttp.Decode
 	}
 }
 
+// BuildSetSourceEnvironmentLinkRequest instantiates a HTTP request object with
+// method and path set to call the "environments" service
+// "setSourceEnvironmentLink" endpoint
+func (c *Client) BuildSetSourceEnvironmentLinkRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetSourceEnvironmentLinkEnvironmentsPath()}
+	req, err := http.NewRequest("PUT", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("environments", "setSourceEnvironmentLink", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetSourceEnvironmentLinkRequest returns an encoder for requests sent
+// to the environments setSourceEnvironmentLink server.
+func EncodeSetSourceEnvironmentLinkRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*environments.SetSourceEnvironmentLinkPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("environments", "setSourceEnvironmentLink", "*environments.SetSourceEnvironmentLinkPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewSetSourceEnvironmentLinkRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("environments", "setSourceEnvironmentLink", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetSourceEnvironmentLinkResponse returns a decoder for responses
+// returned by the environments setSourceEnvironmentLink endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSetSourceEnvironmentLinkResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetSourceEnvironmentLinkResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetSourceEnvironmentLinkResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "setSourceEnvironmentLink", err)
+			}
+			err = ValidateSetSourceEnvironmentLinkResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "setSourceEnvironmentLink", err)
+			}
+			res := NewSetSourceEnvironmentLinkSourceEnvironmentLinkOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetSourceEnvironmentLinkUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "setSourceEnvironmentLink", err)
+			}
+			err = ValidateSetSourceEnvironmentLinkUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "setSourceEnvironmentLink", err)
+			}
+			return nil, NewSetSourceEnvironmentLinkUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetSourceEnvironmentLinkForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "setSourceEnvironmentLink", err)
+			}
+			err = ValidateSetSourceEnvironmentLinkForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "setSourceEnvironmentLink", err)
+			}
+			return nil, NewSetSourceEnvironmentLinkForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetSourceEnvironmentLinkBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "setSourceEnvironmentLink", err)
+			}
+			err = ValidateSetSourceEnvironmentLinkBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "setSourceEnvironmentLink", err)
+			}
+			return nil, NewSetSourceEnvironmentLinkBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetSourceEnvironmentLinkNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "setSourceEnvironmentLink", err)
+			}
+			err = ValidateSetSourceEnvironmentLinkNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "setSourceEnvironmentLink", err)
+			}
+			return nil, NewSetSourceEnvironmentLinkNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetSourceEnvironmentLinkConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "setSourceEnvironmentLink", err)
+			}
+			err = ValidateSetSourceEnvironmentLinkConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "setSourceEnvironmentLink", err)
+			}
+			return nil, NewSetSourceEnvironmentLinkConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetSourceEnvironmentLinkUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "setSourceEnvironmentLink", err)
+			}
+			err = ValidateSetSourceEnvironmentLinkUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "setSourceEnvironmentLink", err)
+			}
+			return nil, NewSetSourceEnvironmentLinkUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetSourceEnvironmentLinkInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "setSourceEnvironmentLink", err)
+			}
+			err = ValidateSetSourceEnvironmentLinkInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "setSourceEnvironmentLink", err)
+			}
+			return nil, NewSetSourceEnvironmentLinkInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetSourceEnvironmentLinkInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "setSourceEnvironmentLink", err)
+				}
+				err = ValidateSetSourceEnvironmentLinkInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "setSourceEnvironmentLink", err)
+				}
+				return nil, NewSetSourceEnvironmentLinkInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetSourceEnvironmentLinkUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "setSourceEnvironmentLink", err)
+				}
+				err = ValidateSetSourceEnvironmentLinkUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "setSourceEnvironmentLink", err)
+				}
+				return nil, NewSetSourceEnvironmentLinkUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "setSourceEnvironmentLink", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetSourceEnvironmentLinkGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "setSourceEnvironmentLink", err)
+			}
+			err = ValidateSetSourceEnvironmentLinkGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "setSourceEnvironmentLink", err)
+			}
+			return nil, NewSetSourceEnvironmentLinkGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("environments", "setSourceEnvironmentLink", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDeleteSourceEnvironmentLinkRequest instantiates a HTTP request object
+// with method and path set to call the "environments" service
+// "deleteSourceEnvironmentLink" endpoint
+func (c *Client) BuildDeleteSourceEnvironmentLinkRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteSourceEnvironmentLinkEnvironmentsPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("environments", "deleteSourceEnvironmentLink", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeleteSourceEnvironmentLinkRequest returns an encoder for requests
+// sent to the environments deleteSourceEnvironmentLink server.
+func EncodeDeleteSourceEnvironmentLinkRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*environments.DeleteSourceEnvironmentLinkPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("environments", "deleteSourceEnvironmentLink", "*environments.DeleteSourceEnvironmentLinkPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("source_kind", string(p.SourceKind))
+		values.Add("source_slug", p.SourceSlug)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDeleteSourceEnvironmentLinkResponse returns a decoder for responses
+// returned by the environments deleteSourceEnvironmentLink endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeDeleteSourceEnvironmentLinkResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDeleteSourceEnvironmentLinkResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeleteSourceEnvironmentLinkUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteSourceEnvironmentLink", err)
+			}
+			err = ValidateDeleteSourceEnvironmentLinkUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteSourceEnvironmentLink", err)
+			}
+			return nil, NewDeleteSourceEnvironmentLinkUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeleteSourceEnvironmentLinkForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteSourceEnvironmentLink", err)
+			}
+			err = ValidateDeleteSourceEnvironmentLinkForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteSourceEnvironmentLink", err)
+			}
+			return nil, NewDeleteSourceEnvironmentLinkForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeleteSourceEnvironmentLinkBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteSourceEnvironmentLink", err)
+			}
+			err = ValidateDeleteSourceEnvironmentLinkBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteSourceEnvironmentLink", err)
+			}
+			return nil, NewDeleteSourceEnvironmentLinkBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeleteSourceEnvironmentLinkNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteSourceEnvironmentLink", err)
+			}
+			err = ValidateDeleteSourceEnvironmentLinkNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteSourceEnvironmentLink", err)
+			}
+			return nil, NewDeleteSourceEnvironmentLinkNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeleteSourceEnvironmentLinkConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteSourceEnvironmentLink", err)
+			}
+			err = ValidateDeleteSourceEnvironmentLinkConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteSourceEnvironmentLink", err)
+			}
+			return nil, NewDeleteSourceEnvironmentLinkConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeleteSourceEnvironmentLinkUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteSourceEnvironmentLink", err)
+			}
+			err = ValidateDeleteSourceEnvironmentLinkUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteSourceEnvironmentLink", err)
+			}
+			return nil, NewDeleteSourceEnvironmentLinkUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeleteSourceEnvironmentLinkInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteSourceEnvironmentLink", err)
+			}
+			err = ValidateDeleteSourceEnvironmentLinkInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteSourceEnvironmentLink", err)
+			}
+			return nil, NewDeleteSourceEnvironmentLinkInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeleteSourceEnvironmentLinkInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "deleteSourceEnvironmentLink", err)
+				}
+				err = ValidateDeleteSourceEnvironmentLinkInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "deleteSourceEnvironmentLink", err)
+				}
+				return nil, NewDeleteSourceEnvironmentLinkInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeleteSourceEnvironmentLinkUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "deleteSourceEnvironmentLink", err)
+				}
+				err = ValidateDeleteSourceEnvironmentLinkUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "deleteSourceEnvironmentLink", err)
+				}
+				return nil, NewDeleteSourceEnvironmentLinkUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "deleteSourceEnvironmentLink", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DeleteSourceEnvironmentLinkGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteSourceEnvironmentLink", err)
+			}
+			err = ValidateDeleteSourceEnvironmentLinkGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteSourceEnvironmentLink", err)
+			}
+			return nil, NewDeleteSourceEnvironmentLinkGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("environments", "deleteSourceEnvironmentLink", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetSourceEnvironmentRequest instantiates a HTTP request object with
+// method and path set to call the "environments" service
+// "getSourceEnvironment" endpoint
+func (c *Client) BuildGetSourceEnvironmentRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetSourceEnvironmentEnvironmentsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("environments", "getSourceEnvironment", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetSourceEnvironmentRequest returns an encoder for requests sent to
+// the environments getSourceEnvironment server.
+func EncodeGetSourceEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*environments.GetSourceEnvironmentPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("environments", "getSourceEnvironment", "*environments.GetSourceEnvironmentPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("source_kind", string(p.SourceKind))
+		values.Add("source_slug", p.SourceSlug)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetSourceEnvironmentResponse returns a decoder for responses returned
+// by the environments getSourceEnvironment endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetSourceEnvironmentResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetSourceEnvironmentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetSourceEnvironmentResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "getSourceEnvironment", err)
+			}
+			err = ValidateGetSourceEnvironmentResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "getSourceEnvironment", err)
+			}
+			res := NewGetSourceEnvironmentEnvironmentOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetSourceEnvironmentUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "getSourceEnvironment", err)
+			}
+			err = ValidateGetSourceEnvironmentUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "getSourceEnvironment", err)
+			}
+			return nil, NewGetSourceEnvironmentUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetSourceEnvironmentForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "getSourceEnvironment", err)
+			}
+			err = ValidateGetSourceEnvironmentForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "getSourceEnvironment", err)
+			}
+			return nil, NewGetSourceEnvironmentForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetSourceEnvironmentBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "getSourceEnvironment", err)
+			}
+			err = ValidateGetSourceEnvironmentBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "getSourceEnvironment", err)
+			}
+			return nil, NewGetSourceEnvironmentBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetSourceEnvironmentNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "getSourceEnvironment", err)
+			}
+			err = ValidateGetSourceEnvironmentNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "getSourceEnvironment", err)
+			}
+			return nil, NewGetSourceEnvironmentNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetSourceEnvironmentConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "getSourceEnvironment", err)
+			}
+			err = ValidateGetSourceEnvironmentConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "getSourceEnvironment", err)
+			}
+			return nil, NewGetSourceEnvironmentConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetSourceEnvironmentUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "getSourceEnvironment", err)
+			}
+			err = ValidateGetSourceEnvironmentUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "getSourceEnvironment", err)
+			}
+			return nil, NewGetSourceEnvironmentUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetSourceEnvironmentInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "getSourceEnvironment", err)
+			}
+			err = ValidateGetSourceEnvironmentInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "getSourceEnvironment", err)
+			}
+			return nil, NewGetSourceEnvironmentInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetSourceEnvironmentInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "getSourceEnvironment", err)
+				}
+				err = ValidateGetSourceEnvironmentInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "getSourceEnvironment", err)
+				}
+				return nil, NewGetSourceEnvironmentInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetSourceEnvironmentUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "getSourceEnvironment", err)
+				}
+				err = ValidateGetSourceEnvironmentUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "getSourceEnvironment", err)
+				}
+				return nil, NewGetSourceEnvironmentUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "getSourceEnvironment", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetSourceEnvironmentGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "getSourceEnvironment", err)
+			}
+			err = ValidateGetSourceEnvironmentGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "getSourceEnvironment", err)
+			}
+			return nil, NewGetSourceEnvironmentGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("environments", "getSourceEnvironment", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // marshalEnvironmentsEnvironmentEntryInputToEnvironmentEntryInputRequestBody
 // builds a value of type *EnvironmentEntryInputRequestBody from a value of
 // type *environments.EnvironmentEntryInput.

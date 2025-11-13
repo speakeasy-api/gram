@@ -2546,17 +2546,18 @@ func marshalTypesOAuthProxyProviderToOAuthProxyProviderResponseBody(v *types.OAu
 // *ToolsetEntryResponseBody from a value of type *types.ToolsetEntry.
 func marshalTypesToolsetEntryToToolsetEntryResponseBody(v *types.ToolsetEntry) *ToolsetEntryResponseBody {
 	res := &ToolsetEntryResponseBody{
-		ID:             v.ID,
-		ProjectID:      v.ProjectID,
-		OrganizationID: v.OrganizationID,
-		Name:           v.Name,
-		Slug:           string(v.Slug),
-		Description:    v.Description,
-		McpIsPublic:    v.McpIsPublic,
-		McpEnabled:     v.McpEnabled,
-		CustomDomainID: v.CustomDomainID,
-		CreatedAt:      v.CreatedAt,
-		UpdatedAt:      v.UpdatedAt,
+		ID:                v.ID,
+		ProjectID:         v.ProjectID,
+		OrganizationID:    v.OrganizationID,
+		Name:              v.Name,
+		Slug:              string(v.Slug),
+		Description:       v.Description,
+		McpIsPublic:       v.McpIsPublic,
+		McpEnabled:        v.McpEnabled,
+		ToolSelectionMode: v.ToolSelectionMode,
+		CustomDomainID:    v.CustomDomainID,
+		CreatedAt:         v.CreatedAt,
+		UpdatedAt:         v.UpdatedAt,
 	}
 	if v.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*v.DefaultEnvironmentSlug)

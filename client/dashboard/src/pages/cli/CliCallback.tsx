@@ -46,8 +46,18 @@ export default function CliCallback(props: CliCallbackProps) {
 
     hasCreatedKey.current = true;
 
+    // Only get project from localStorage if it exists and is valid
+    let projectSlug: string | null = null;
+    const preferredProject = localStorage.getItem(PREFERRED_PROJECT_KEY);
+    if (
+      preferredProject &&
+      session.organization.projects.find((p) => p.slug === preferredProject)
+    ) {
+      projectSlug = preferredProject;
+    }
+
     createProducerKey(createKey, session.session)
-      .then((key) => transmitKey(localCallbackUrl, key))
+      .then((key) => transmitKey(localCallbackUrl, key, projectSlug))
       .catch((err) => {
         setError(
           err instanceof Error ? err.message : "Failed to create API key",
@@ -92,6 +102,7 @@ function generateKeyName(): string {
 }
 
 const errInvalidCallback = "Callback URL must be localhost or 127.0.0.1";
+const PREFERRED_PROJECT_KEY = "preferredProject";
 
 function isCallbackLocal(callbackUrl: string): boolean {
   try {
@@ -131,9 +142,16 @@ async function createProducerKey(
   return result.key;
 }
 
-async function transmitKey(callbackUrl: string, apiKey: string): Promise<void> {
+async function transmitKey(
+  callbackUrl: string,
+  apiKey: string,
+  projectSlug: string | null,
+): Promise<void> {
   const url = new URL(callbackUrl);
   url.searchParams.set("api_key", apiKey);
+  if (projectSlug) {
+    url.searchParams.set("project", projectSlug);
+  }
 
   window.location.replace(url.toString());
 }

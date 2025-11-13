@@ -18,11 +18,13 @@ let value: Toolset = {
   ],
   resources: [],
   slug: "<value>",
+  toolSelectionMode: "<value>",
   toolUrns: [
     "<value 1>",
   ],
   tools: [],
-  updatedAt: new Date("2024-08-18T21:15:47.669Z"),
+  toolsetVersion: 543692,
+  updatedAt: new Date("2024-10-26T12:09:43.842Z"),
 };
 ```
 
@@ -51,6 +53,8 @@ let value: Toolset = {
 | `securityVariables`                                                                                | [components.SecurityVariable](../../models/components/securityvariable.md)[]                       | :heavy_minus_sign:                                                                                 | The security variables that are relevant to the toolset                                            |
 | `serverVariables`                                                                                  | [components.ServerVariable](../../models/components/servervariable.md)[]                           | :heavy_minus_sign:                                                                                 | The server variables that are relevant to the toolset                                              |
 | `slug`                                                                                             | *string*                                                                                           | :heavy_check_mark:                                                                                 | A short url-friendly label that uniquely identifies a resource.                                    |
+| `toolSelectionMode`                                                                                | *string*                                                                                           | :heavy_check_mark:                                                                                 | The mode to use for tool selection                                                                 |
 | `toolUrns`                                                                                         | *string*[]                                                                                         | :heavy_check_mark:                                                                                 | The tool URNs in this toolset                                                                      |
 | `tools`                                                                                            | [components.Tool](../../models/components/tool.md)[]                                               | :heavy_check_mark:                                                                                 | The tools in this toolset                                                                          |
+| `toolsetVersion`                                                                                   | *number*                                                                                           | :heavy_check_mark:                                                                                 | The version of the toolset (will be 0 if none exists)                                              |
 | `updatedAt`                                                                                        | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date)      | :heavy_check_mark:                                                                                 | When the toolset was last updated.                                                                 |

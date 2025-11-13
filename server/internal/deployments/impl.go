@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/packages/semver"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 )
 
 type Service struct {
@@ -852,6 +853,17 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 }
 
 func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment) (string, error) {
+	defer func() {
+		logger.InfoContext(ctx, "starting project-scoped functions reaper")
+		_, err := background.ExecuteProjectFunctionsReaperWorkflow(ctx, s.temporal, projectID)
+		if err != nil && !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
+			logger.ErrorContext(
+				ctx, "failed to start project-scoped functions reaper workflow",
+				attr.SlogError(err),
+			)
+		}
+	}()
+
 	wr, err := background.ExecuteProcessDeploymentWorkflow(ctx, s.temporal, background.ProcessDeploymentWorkflowParams{
 		ProjectID:      projectID,
 		DeploymentID:   deploymentID,

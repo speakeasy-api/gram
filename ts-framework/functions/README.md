@@ -111,6 +111,16 @@ async execute(ctx, input) {
 }
 ```
 
+#### `ctx.markdown(data)`
+
+Returns a markdown response:
+
+```typescript
+async execute(ctx, input) {
+  return ctx.markdown("# Heading");
+}
+```
+
 #### `ctx.html(data)`
 
 Returns an HTML response:

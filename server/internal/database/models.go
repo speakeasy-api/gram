@@ -198,6 +198,7 @@ type FlyApp struct {
 	PrimaryRegion string
 	Status        string
 	ReapedAt      pgtype.Timestamptz
+	ReapError     pgtype.Text
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
 }
@@ -484,6 +485,16 @@ type SlackAppConnection struct {
 	UpdatedAt          pgtype.Timestamptz
 }
 
+type SourceEnvironment struct {
+	ID            uuid.UUID
+	SourceKind    string
+	SourceSlug    string
+	ProjectID     uuid.UUID
+	EnvironmentID uuid.UUID
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
 type ToolVariation struct {
 	ID            uuid.UUID
 	GroupID       uuid.UUID
@@ -524,6 +535,7 @@ type Toolset struct {
 	McpSlug                pgtype.Text
 	McpIsPublic            bool
 	McpEnabled             bool
+	ToolSelectionMode      string
 	CustomDomainID         uuid.NullUUID
 	ExternalOauthServerID  uuid.NullUUID
 	OauthProxyServerID     uuid.NullUUID

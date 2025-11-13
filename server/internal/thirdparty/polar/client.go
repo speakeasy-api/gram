@@ -736,6 +736,8 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 				"Custom tool creation",
 				"Hosted server deployments",
 				"14 day log retention",
+				"Built in MCP Playground",
+				"Connect to Claude, Cursor, Gemini and more",
 			},
 			IncludedBullets: []string{
 				fmt.Sprintf("%d MCP %s (public or private)", freeTierLimits.Servers, conv.Ternary(freeTierLimits.Servers == 1, "server", "servers")),
@@ -780,13 +782,15 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			PricePerAdditionalCredit:   0,
 			FeatureBullets: []string{
 				"Oauth 2.1 proxy support",
-				"Concierge onboarding",
 				"SSO",
 				"Audit logs",
-				"SLA-backed support",
+				"Self-hosting Gram dataplane",
 			},
 			IncludedBullets: []string{
 				"Dedicated slack channel",
+				"Concierge onboarding",
+				"Tool design support",
+				"SLA-backed support",
 			},
 			AddOnBullets: []string{},
 		},

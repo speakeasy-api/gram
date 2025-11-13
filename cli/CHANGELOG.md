@@ -1,5 +1,17 @@
 # cli
 
+## 0.13.2
+
+### Patch Changes
+
+- 3552ff0: modifies gram auth so it respects current project context on the initial auth and sets that as defaultProjectSlug
+
+## 0.13.1
+
+### Patch Changes
+
+- b8ed917: feat: add --scope flag to gram install command to determine whether the mcp config is added to the user, project or local config locations.
+
 ## 0.13.0
 
 ### Minor Changes

@@ -254,6 +254,11 @@ func (c *ChatClient) LoadToolsetTools(
 			descriptor := plan.Descriptor
 			ctx, _ = o11y.EnrichToolCallContext(ctx, c.logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
+			systemConfig, err := c.env.LoadSourceEnv(ctx, projID, string(toolURN.Kind), toolURN.Source)
+			if err != nil {
+				return "", fmt.Errorf("failed to load system environment: %w", err)
+			}
+
 			rw := &toolCallResponseWriter{
 				headers:    make(http.Header),
 				body:       new(bytes.Buffer),
@@ -270,7 +275,10 @@ func (c *ChatClient) LoadToolsetTools(
 				ciEnv.Set(key, value)
 			}
 
-			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), ciEnv, plan, tm.NewNoopToolCallLogger())
+			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), gateway.ToolCallEnv{
+				SystemEnv:  gateway.CIEnvFrom(systemConfig),
+				UserConfig: ciEnv,
+			}, plan, tm.NewNoopToolCallLogger())
 			if err != nil {
 				return "", fmt.Errorf("tool proxy error: %w", err)
 			}

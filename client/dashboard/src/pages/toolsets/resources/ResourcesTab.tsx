@@ -20,7 +20,7 @@ import { useUpdateToolsetMutation } from "@gram/client/react-query";
 import { Dialog, Stack } from "@speakeasy-api/moonshine";
 import { Newspaper } from "lucide-react";
 import { useMemo, useState } from "react";
-import { FunctionsInstructions } from "../sources/AddSourceDialog";
+import { GettingStartedInstructions } from "@/components/functions/GettingStartedInstructions";
 import { ResourcesEmptyState } from "./ResourcesEmptyState";
 
 export function ResourcesTabContent({
@@ -91,7 +91,7 @@ export function ResourcesTabContent({
                 Add Gram Functions to create resources
               </Dialog.Description>
             </Dialog.Header>
-            <FunctionsInstructions />
+            <GettingStartedInstructions />
           </Dialog.Content>
         </Dialog>
       </>

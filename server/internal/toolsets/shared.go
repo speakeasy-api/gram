@@ -297,12 +297,14 @@ func (t *Toolsets) extractFunctionResourceCallPlan(ctx context.Context, resource
 		return nil, fmt.Errorf("get project with organization metadata: %w", err)
 	}
 
-	var envconfig map[string]string
+	var envconfig map[string]any
 	if len(resource.Variables) > 0 {
 		if err := json.Unmarshal(resource.Variables, &envconfig); err != nil {
 			return nil, fmt.Errorf("unmarshal function resource env vars: %w", err)
 		}
 	}
+
+	envvars := slices.Collect(maps.Keys(envconfig))
 
 	mimeType := ""
 	if resource.MimeType.Valid {
@@ -331,7 +333,7 @@ func (t *Toolsets) extractFunctionResourceCallPlan(ctx context.Context, resource
 		Runtime:           resource.Runtime,
 		URI:               resource.Uri,
 		MimeType:          mimeType,
-		Variables:         envconfig,
+		Variables:         envvars,
 	}
 
 	return gateway.NewResourceFunctionCallPlan(descriptor, plan), nil

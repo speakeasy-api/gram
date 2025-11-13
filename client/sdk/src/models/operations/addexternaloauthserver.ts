@@ -4,11 +4,24 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
 import * as components from "../components/index.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+export type AddExternalOAuthServerSecurityOption1 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
+export type AddExternalOAuthServerSecurityOption2 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
 
 export type AddExternalOAuthServerSecurity = {
-  projectSlugHeaderGramProject?: string | undefined;
-  sessionHeaderGramSession?: string | undefined;
+  option1?: AddExternalOAuthServerSecurityOption1 | undefined;
+  option2?: AddExternalOAuthServerSecurityOption2 | undefined;
 };
 
 export type AddExternalOAuthServerRequest = {
@@ -21,6 +34,10 @@ export type AddExternalOAuthServerRequest = {
    */
   gramSession?: string | undefined;
   /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
+  /**
    * project header
    */
   gramProject?: string | undefined;
@@ -29,9 +46,170 @@ export type AddExternalOAuthServerRequest = {
 };
 
 /** @internal */
+export const AddExternalOAuthServerSecurityOption1$inboundSchema: z.ZodType<
+  AddExternalOAuthServerSecurityOption1,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "project_slug_header_Gram-Project": z.string(),
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type AddExternalOAuthServerSecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const AddExternalOAuthServerSecurityOption1$outboundSchema: z.ZodType<
+  AddExternalOAuthServerSecurityOption1$Outbound,
+  z.ZodTypeDef,
+  AddExternalOAuthServerSecurityOption1
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace AddExternalOAuthServerSecurityOption1$ {
+  /** @deprecated use `AddExternalOAuthServerSecurityOption1$inboundSchema` instead. */
+  export const inboundSchema =
+    AddExternalOAuthServerSecurityOption1$inboundSchema;
+  /** @deprecated use `AddExternalOAuthServerSecurityOption1$outboundSchema` instead. */
+  export const outboundSchema =
+    AddExternalOAuthServerSecurityOption1$outboundSchema;
+  /** @deprecated use `AddExternalOAuthServerSecurityOption1$Outbound` instead. */
+  export type Outbound = AddExternalOAuthServerSecurityOption1$Outbound;
+}
+
+export function addExternalOAuthServerSecurityOption1ToJSON(
+  addExternalOAuthServerSecurityOption1: AddExternalOAuthServerSecurityOption1,
+): string {
+  return JSON.stringify(
+    AddExternalOAuthServerSecurityOption1$outboundSchema.parse(
+      addExternalOAuthServerSecurityOption1,
+    ),
+  );
+}
+
+export function addExternalOAuthServerSecurityOption1FromJSON(
+  jsonString: string,
+): SafeParseResult<AddExternalOAuthServerSecurityOption1, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) =>
+      AddExternalOAuthServerSecurityOption1$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AddExternalOAuthServerSecurityOption1' from JSON`,
+  );
+}
+
+/** @internal */
+export const AddExternalOAuthServerSecurityOption2$inboundSchema: z.ZodType<
+  AddExternalOAuthServerSecurityOption2,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "apikey_header_Gram-Key": z.string(),
+  "project_slug_header_Gram-Project": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+  });
+});
+
+/** @internal */
+export type AddExternalOAuthServerSecurityOption2$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const AddExternalOAuthServerSecurityOption2$outboundSchema: z.ZodType<
+  AddExternalOAuthServerSecurityOption2$Outbound,
+  z.ZodTypeDef,
+  AddExternalOAuthServerSecurityOption2
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace AddExternalOAuthServerSecurityOption2$ {
+  /** @deprecated use `AddExternalOAuthServerSecurityOption2$inboundSchema` instead. */
+  export const inboundSchema =
+    AddExternalOAuthServerSecurityOption2$inboundSchema;
+  /** @deprecated use `AddExternalOAuthServerSecurityOption2$outboundSchema` instead. */
+  export const outboundSchema =
+    AddExternalOAuthServerSecurityOption2$outboundSchema;
+  /** @deprecated use `AddExternalOAuthServerSecurityOption2$Outbound` instead. */
+  export type Outbound = AddExternalOAuthServerSecurityOption2$Outbound;
+}
+
+export function addExternalOAuthServerSecurityOption2ToJSON(
+  addExternalOAuthServerSecurityOption2: AddExternalOAuthServerSecurityOption2,
+): string {
+  return JSON.stringify(
+    AddExternalOAuthServerSecurityOption2$outboundSchema.parse(
+      addExternalOAuthServerSecurityOption2,
+    ),
+  );
+}
+
+export function addExternalOAuthServerSecurityOption2FromJSON(
+  jsonString: string,
+): SafeParseResult<AddExternalOAuthServerSecurityOption2, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) =>
+      AddExternalOAuthServerSecurityOption2$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AddExternalOAuthServerSecurityOption2' from JSON`,
+  );
+}
+
+/** @internal */
+export const AddExternalOAuthServerSecurity$inboundSchema: z.ZodType<
+  AddExternalOAuthServerSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  Option1: z.lazy(() => AddExternalOAuthServerSecurityOption1$inboundSchema)
+    .optional(),
+  Option2: z.lazy(() => AddExternalOAuthServerSecurityOption2$inboundSchema)
+    .optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Option1": "option1",
+    "Option2": "option2",
+  });
+});
+
+/** @internal */
 export type AddExternalOAuthServerSecurity$Outbound = {
-  "project_slug_header_Gram-Project"?: string | undefined;
-  "session_header_Gram-Session"?: string | undefined;
+  Option1?: AddExternalOAuthServerSecurityOption1$Outbound | undefined;
+  Option2?: AddExternalOAuthServerSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -40,14 +218,29 @@ export const AddExternalOAuthServerSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   AddExternalOAuthServerSecurity
 > = z.object({
-  projectSlugHeaderGramProject: z.string().optional(),
-  sessionHeaderGramSession: z.string().optional(),
+  option1: z.lazy(() => AddExternalOAuthServerSecurityOption1$outboundSchema)
+    .optional(),
+  option2: z.lazy(() => AddExternalOAuthServerSecurityOption2$outboundSchema)
+    .optional(),
 }).transform((v) => {
   return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
+    option1: "Option1",
+    option2: "Option2",
   });
 });
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace AddExternalOAuthServerSecurity$ {
+  /** @deprecated use `AddExternalOAuthServerSecurity$inboundSchema` instead. */
+  export const inboundSchema = AddExternalOAuthServerSecurity$inboundSchema;
+  /** @deprecated use `AddExternalOAuthServerSecurity$outboundSchema` instead. */
+  export const outboundSchema = AddExternalOAuthServerSecurity$outboundSchema;
+  /** @deprecated use `AddExternalOAuthServerSecurity$Outbound` instead. */
+  export type Outbound = AddExternalOAuthServerSecurity$Outbound;
+}
 
 export function addExternalOAuthServerSecurityToJSON(
   addExternalOAuthServerSecurity: AddExternalOAuthServerSecurity,
@@ -59,10 +252,42 @@ export function addExternalOAuthServerSecurityToJSON(
   );
 }
 
+export function addExternalOAuthServerSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<AddExternalOAuthServerSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => AddExternalOAuthServerSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AddExternalOAuthServerSecurity' from JSON`,
+  );
+}
+
+/** @internal */
+export const AddExternalOAuthServerRequest$inboundSchema: z.ZodType<
+  AddExternalOAuthServerRequest,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  slug: z.string(),
+  "Gram-Session": z.string().optional(),
+  "Gram-Key": z.string().optional(),
+  "Gram-Project": z.string().optional(),
+  AddExternalOAuthServerRequestBody:
+    components.AddExternalOAuthServerRequestBody$inboundSchema,
+}).transform((v) => {
+  return remap$(v, {
+    "Gram-Session": "gramSession",
+    "Gram-Key": "gramKey",
+    "Gram-Project": "gramProject",
+    "AddExternalOAuthServerRequestBody": "addExternalOAuthServerRequestBody",
+  });
+});
+
 /** @internal */
 export type AddExternalOAuthServerRequest$Outbound = {
   slug: string;
   "Gram-Session"?: string | undefined;
+  "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
   AddExternalOAuthServerRequestBody:
     components.AddExternalOAuthServerRequestBody$Outbound;
@@ -76,16 +301,31 @@ export const AddExternalOAuthServerRequest$outboundSchema: z.ZodType<
 > = z.object({
   slug: z.string(),
   gramSession: z.string().optional(),
+  gramKey: z.string().optional(),
   gramProject: z.string().optional(),
   addExternalOAuthServerRequestBody:
     components.AddExternalOAuthServerRequestBody$outboundSchema,
 }).transform((v) => {
   return remap$(v, {
     gramSession: "Gram-Session",
+    gramKey: "Gram-Key",
     gramProject: "Gram-Project",
     addExternalOAuthServerRequestBody: "AddExternalOAuthServerRequestBody",
   });
 });
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace AddExternalOAuthServerRequest$ {
+  /** @deprecated use `AddExternalOAuthServerRequest$inboundSchema` instead. */
+  export const inboundSchema = AddExternalOAuthServerRequest$inboundSchema;
+  /** @deprecated use `AddExternalOAuthServerRequest$outboundSchema` instead. */
+  export const outboundSchema = AddExternalOAuthServerRequest$outboundSchema;
+  /** @deprecated use `AddExternalOAuthServerRequest$Outbound` instead. */
+  export type Outbound = AddExternalOAuthServerRequest$Outbound;
+}
 
 export function addExternalOAuthServerRequestToJSON(
   addExternalOAuthServerRequest: AddExternalOAuthServerRequest,
@@ -94,5 +334,15 @@ export function addExternalOAuthServerRequestToJSON(
     AddExternalOAuthServerRequest$outboundSchema.parse(
       addExternalOAuthServerRequest,
     ),
+  );
+}
+
+export function addExternalOAuthServerRequestFromJSON(
+  jsonString: string,
+): SafeParseResult<AddExternalOAuthServerRequest, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => AddExternalOAuthServerRequest$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AddExternalOAuthServerRequest' from JSON`,
   );
 }

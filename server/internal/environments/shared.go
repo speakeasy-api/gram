@@ -66,6 +66,31 @@ func (e *EnvironmentEntries) Load(ctx context.Context, projectID uuid.UUID, envI
 	return envMap, nil
 }
 
+func (e *EnvironmentEntries) LoadSourceEnv(ctx context.Context, projectID uuid.UUID, sourceKind string, sourceSlug string) (map[string]string, error) {
+	sourceEnv, err := e.repo.GetEnvironmentForSource(ctx, repo.GetEnvironmentForSourceParams{
+		SourceKind: sourceKind,
+		SourceSlug: sourceSlug,
+		ProjectID:  projectID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return map[string]string{}, nil
+		}
+		return nil, fmt.Errorf("get environment for source: %w", err)
+	}
+
+	entries, err := e.ListEnvironmentEntries(ctx, projectID, sourceEnv.ID, false)
+	if err != nil {
+		return nil, fmt.Errorf("list environment entries: %w", err)
+	}
+
+	envMap := make(map[string]string, len(entries))
+	for _, entry := range entries {
+		envMap[entry.Name] = entry.Value
+	}
+	return envMap, nil
+}
+
 func (e *EnvironmentEntries) ListEnvironmentEntries(ctx context.Context, projectID uuid.UUID, environmentID uuid.UUID, redacted bool) ([]repo.EnvironmentEntry, error) {
 	entries, err := e.repo.ListEnvironmentEntries(ctx, repo.ListEnvironmentEntriesParams{
 		ProjectID:     projectID,

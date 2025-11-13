@@ -153,6 +153,7 @@ const (
 	ResourceURIKey                 = attribute.Key("gram.resource.uri")
 	ToolsetIDKey                   = attribute.Key("gram.toolset.id")
 	ToolsetSlugKey                 = attribute.Key("gram.toolset.slug")
+	VisibilityKey                  = attribute.Key("gram.visibility")
 
 	PaginationTsStartKey     = attribute.Key("gram.pagination.ts_start")
 	PaginationTsEndKey       = attribute.Key("gram.pagination.ts_end")
@@ -162,6 +163,10 @@ const (
 	PaginationHasNextPageKey = attribute.Key("gram.pagination.has_next_page")
 
 	ClickhouseQueryDurationMsKey = attribute.Key("gram.clickhouse.query_duration_ms")
+)
+
+const (
+	VisibilityInternalValue = "internal"
 )
 
 func Error(v error) attribute.KeyValue { return ErrorMessageKey.String(v.Error()) }
@@ -625,6 +630,13 @@ func ToolCallDuration(v time.Duration) attribute.KeyValue {
 }
 func SlogToolCallDuration(v time.Duration) slog.Attr {
 	return slog.Float64(string(ToolCallDurationKey), v.Seconds())
+}
+
+func VisibilityInternal() attribute.KeyValue {
+	return VisibilityKey.String(VisibilityInternalValue)
+}
+func SlogVisibilityInternal() slog.Attr {
+	return slog.String(string(VisibilityKey), VisibilityInternalValue)
 }
 
 func PaginationTsStart(v time.Time) attribute.KeyValue {

@@ -3,6 +3,7 @@ import { CodeBlock } from "@/components/code";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { ConfigForm } from "@/components/mcp_install_page/config_form";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
+import { BigToggle } from "@/components/ui/big-toggle";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
@@ -32,7 +33,7 @@ import {
   useRemoveOAuthServerMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
-import { Button, Grid, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Button, Grid, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe, Trash2 } from "lucide-react";
 import React, { useEffect, useState } from "react";
@@ -380,87 +381,84 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   );
 
   const PublicToggle = ({ isPublic }: { isPublic: boolean }) => {
-    const classes = {
-      both: "px-2 py-1 rounded-sm border-1 w-full",
-      active: "border-border bg-card text-foreground",
-      inactive:
-        "border-transparent text-muted-foreground hover:bg-card hover:cursor-pointer hover:border-border hover:text-foreground",
-      activeText: "text-foreground!",
-      inactiveText: "text-muted-foreground! italic",
-    };
-
-    const onToggle = () => {
-      setMcpIsPublic(!isPublic);
+    const onToggle = (value: string) => {
+      const newIsPublic = value === "public";
+      setMcpIsPublic(newIsPublic);
       updateToolsetMutation.mutate({
         request: {
           slug: toolset.slug,
-          updateToolsetRequestBody: { mcpIsPublic: !isPublic },
+          updateToolsetRequestBody: { mcpIsPublic: newIsPublic },
         },
       });
-      toast.success(
-        !isPublic
-          ? "Your MCP server is now public"
-          : "Your MCP server is now private",
-      );
     };
 
-    const toggle = (
-      <Stack
-        align="center"
-        gap={1}
-        className="border rounded-md p-1 w-fit bg-background"
-      >
-        <Button
-          variant="tertiary"
-          size="sm"
-          className={cn(
-            classes.both,
-            isPublic ? classes.active : classes.inactive,
-          )}
-          {...(!isPublic ? { onClick: onToggle } : {})}
-        >
-          <Button.LeftIcon>
-            <Icon name="globe" className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>Public</Button.Text>
-        </Button>
-        <Button
-          variant="tertiary"
-          size="sm"
-          className={cn(
-            classes.both,
-            !isPublic ? classes.active : classes.inactive,
-          )}
-          {...(isPublic ? { onClick: onToggle } : {})}
-        >
-          <Button.LeftIcon>
-            <Icon name="lock" className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>Private</Button.Text>
-        </Button>
-      </Stack>
+    return (
+      <BigToggle
+        options={[
+          {
+            value: "public",
+            icon: "globe",
+            label: "Public",
+            description:
+              "Anyone with the URL can read the tools hosted by this server. Authentication is still required to use the tools.",
+          },
+          {
+            value: "private",
+            icon: "lock",
+            label: "Private",
+            description:
+              "Only users with a Gram API Key can read the tools hosted by this server.",
+          },
+        ]}
+        selectedValue={isPublic ? "public" : "private"}
+        onSelect={onToggle}
+      />
     );
+  };
+
+  const ToolSelectionModeToggle = ({
+    toolSelectionMode,
+  }: {
+    toolSelectionMode: string;
+  }) => {
+    const onToggle = (value: string) => {
+      updateToolsetMutation.mutate({
+        request: {
+          slug: toolset.slug,
+          updateToolsetRequestBody: { toolSelectionMode: value },
+        },
+      });
+    };
 
     return (
-      <Stack direction="horizontal" align="center" gap={3} className="mt-2">
-        {toggle}
-        <Stack className="gap-4.5">
-          <Type
-            small
-            className={cn(isPublic ? classes.activeText : classes.inactiveText)}
-          >
-            Anyone with the URL can read the tools hosted by this server.
-            Authentication is still required to use the tools.
-          </Type>
-          <Type
-            small
-            className={cn(isPublic ? classes.inactiveText : classes.activeText)}
-          >
-            Only users with a Gram API Key can read the tools hosted by this
-            server.
-          </Type>
-        </Stack>
-      </Stack>
+      <BigToggle
+        align="start"
+        options={[
+          {
+            value: "static",
+            icon: "list-ordered",
+            label: "Static",
+            description:
+              "Traditional MCP. Every tool is added into context up front.",
+          },
+          {
+            value: "progressive_search",
+            icon: "list-tree",
+            label: "Progressive",
+            description:
+              "Good for large toolsets. The LLM can discover tools as it needs them.",
+          },
+          {
+            value: "semantic_search",
+            icon: "search",
+            label: "Semantic",
+            description:
+              "Good for large toolsets. The LLM searches for tools using embeddings.",
+          },
+        ]}
+        selectedValue={toolSelectionMode}
+        onSelect={onToggle}
+      />
     );
   };
 
@@ -563,6 +561,16 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         </Stack>
       </PageSection>
 
+      <PageSection
+        heading="Tool Selection Mode"
+        featureType="experimental"
+        description="Change how this server's tools will be presented to the LLM. Can have drastic effects on context management, especially for larger toolsets. Use with care."
+      >
+        <ToolSelectionModeToggle
+          toolSelectionMode={toolset.toolSelectionMode ?? "static"}
+        />
+      </PageSection>
+
       <FeatureRequestModal
         isOpen={isCustomDomainModalOpen}
         onClose={() => setIsCustomDomainModalOpen(false)}
@@ -590,18 +598,27 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
 function PageSection({
   heading,
   description,
+  featureType,
   children,
   className,
 }: {
   heading: string;
   description: string;
   fullWidth?: boolean;
+  featureType?: "experimental" | "beta";
   children: React.ReactNode;
   className?: string;
 }) {
   return (
     <Stack gap={2} className={cn("mb-8", className)}>
-      <Heading variant="h3">{heading}</Heading>
+      <Heading variant="h3" className="flex items-center">
+        {heading}
+        {featureType && (
+          <Badge variant="warning" className="ml-2">
+            {featureType}
+          </Badge>
+        )}
+      </Heading>
       <Type muted small className="max-w-2xl">
         {description}
       </Type>

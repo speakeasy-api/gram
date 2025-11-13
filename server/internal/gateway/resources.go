@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -22,7 +23,7 @@ func (tp *ToolProxy) ReadResource(
 	ctx context.Context,
 	w http.ResponseWriter,
 	requestBody io.Reader,
-	env *CaseInsensitiveEnv,
+	env ToolCallEnv,
 	plan *ResourceCallPlan,
 	toolCallLogger tm.ToolCallLogger,
 ) (err error) {
@@ -48,10 +49,6 @@ func (tp *ToolProxy) ReadResource(
 		attr.SlogToolCallSource(string(tp.source)),
 	)
 
-	if env == nil {
-		env = NewCaseInsensitiveEnv()
-	}
-
 	switch plan.Kind {
 	case "":
 		return oops.E(oops.CodeInvariantViolation, nil, "resource kind is not set").Log(ctx, tp.logger)
@@ -67,7 +64,7 @@ func (tp *ToolProxy) doFunctionResource(
 	logger *slog.Logger,
 	w http.ResponseWriter,
 	requestBody io.Reader,
-	env *CaseInsensitiveEnv,
+	env ToolCallEnv,
 	descriptor *ResourceDescriptor,
 	plan *ResourceFunctionCallPlan,
 	toolCallLogger tm.ToolCallLogger,
@@ -99,10 +96,17 @@ func (tp *ToolProxy) doFunctionResource(
 		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, logger)
 	}
 
-	payloadEnv := make(map[string]string, len(plan.Variables))
-	for _, v := range plan.Variables {
-		if val := env.Get(v); val != "" {
-			payloadEnv[v] = val
+	payloadEnv := make(map[string]string)
+
+	// Start with system environment variables (uppercase keys)
+	for k, v := range env.SystemEnv.All() {
+		payloadEnv[strings.ToUpper(k)] = v
+	}
+
+	// For each variable required by the function, allow user config to merge/override
+	for _, varName := range plan.Variables {
+		if val := env.UserConfig.Get(varName); val != "" {
+			payloadEnv[varName] = val
 		}
 	}
 

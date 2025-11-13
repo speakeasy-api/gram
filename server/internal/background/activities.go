@@ -35,6 +35,7 @@ type Activities struct {
 	processDeployment             *activities.ProcessDeployment
 	provisionFunctionsAccess      *activities.ProvisionFunctionsAccess
 	deployFunctionRunners         *activities.DeployFunctionRunners
+	reapFlyApps                   *activities.ReapFlyApps
 	refreshBillingUsage           *activities.RefreshBillingUsage
 	refreshOpenRouterKey          *activities.RefreshOpenRouterKey
 	slackChatCompletion           *activities.SlackChatCompletion
@@ -75,6 +76,7 @@ func NewActivities(
 		processDeployment:             activities.NewProcessDeployment(logger, tracerProvider, meterProvider, db, features, assetStorage, billingRepo),
 		provisionFunctionsAccess:      activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:         activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
+		reapFlyApps:                   activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 3),
 		refreshBillingUsage:           activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		refreshOpenRouterKey:          activities.NewRefreshOpenRouterKey(logger, db, openrouter),
 		slackChatCompletion:           activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
@@ -151,4 +153,8 @@ func (a *Activities) ValidateDeployment(ctx context.Context, projectID uuid.UUID
 
 func (a *Activities) GenerateToolsetEmbeddings(ctx context.Context, input activities.GenerateToolsetEmbeddingsInput) error {
 	return a.generateToolsetEmbeddings.Do(ctx, input)
+}
+
+func (a *Activities) ReapFlyApps(ctx context.Context, req activities.ReapFlyAppsRequest) (*activities.ReapFlyAppsResult, error) {
+	return a.reapFlyApps.Do(ctx, req)
 }

@@ -13,6 +13,7 @@
 
 ## `package.json` scripts
 
+- `dev` - Runs the MCP Inspector playground with hot reloading enabled.
 - `build` - Bundles the Gram Functions code into a zip file for deployment and places it in the `dist/` directory.
 - `lint` - Runs the TypeScript compiler in `noEmit` mode to check for type errors.
 
@@ -91,6 +92,16 @@ Returns an HTML response:
 ```typescript
 async execute(ctx, input) {
   return ctx.html("<h1>Hello, World!</h1>");
+}
+```
+
+#### `ctx.markdown(data)`
+
+Returns a Markdown response:
+
+```typescript
+async execute(ctx, input) {
+  return ctx.markdown("# Heading");
 }
 ```
 

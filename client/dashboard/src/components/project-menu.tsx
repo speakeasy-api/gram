@@ -8,7 +8,7 @@ import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { cn } from "@/lib/utils.ts";
 import { ProjectEntry } from "@gram/client/models/components";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
-import { ChevronsUpDown, MessageCircle, PlusIcon } from "lucide-react";
+import { ChevronsUpDown, PlusIcon } from "lucide-react";
 import React from "react";
 import { InputDialog } from "./input-dialog.tsx";
 import { NavButton } from "./nav-menu.tsx";
@@ -206,19 +206,31 @@ export function ProjectMenu() {
             <NavButton
               title="Manage members"
               href={membershipURL}
-              Icon={() => <Icon name="users-round" />}
+              Icon={(props) => (
+                <Icon
+                  name="users-round"
+                  {...props}
+                  className={cn(props.className, "mr-1")} // Needed to match the styling of the log out button
+                />
+              )}
               onClick={() => setOpen(false)}
             />
           </SimpleTooltip>
           <NavButton
             title="Contact us"
             href="https://calendly.com/d/crtj-3tk-wpd/demo-with-speakeasy"
-            Icon={() => <MessageCircle className="h-4 w-4" />}
+            Icon={(props) => (
+              <Icon
+                name="message-circle"
+                {...props}
+                className={cn(props.className, "mr-1")} // Needed to match the styling of the log out button
+              />
+            )}
             onClick={() => setOpen(false)}
           />
           <NavButton
             title="Log out"
-            Icon={() => <Icon name="log-out" />}
+            Icon={(props) => <Icon name="log-out" {...props} />}
             onClick={async () => {
               await client.auth.logout();
               window.location.href = "/login";

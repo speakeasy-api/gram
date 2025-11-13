@@ -26,3 +26,18 @@ func UpdateEnvironmentEnvironmentsPath() string {
 func DeleteEnvironmentEnvironmentsPath() string {
 	return "/rpc/environments.delete"
 }
+
+// SetSourceEnvironmentLinkEnvironmentsPath returns the URL path to the environments service setSourceEnvironmentLink HTTP endpoint.
+func SetSourceEnvironmentLinkEnvironmentsPath() string {
+	return "/rpc/environments.setSourceLink"
+}
+
+// DeleteSourceEnvironmentLinkEnvironmentsPath returns the URL path to the environments service deleteSourceEnvironmentLink HTTP endpoint.
+func DeleteSourceEnvironmentLinkEnvironmentsPath() string {
+	return "/rpc/environments.deleteSourceLink"
+}
+
+// GetSourceEnvironmentEnvironmentsPath returns the URL path to the environments service getSourceEnvironment HTTP endpoint.
+func GetSourceEnvironmentEnvironmentsPath() string {
+	return "/rpc/environments.getSourceEnvironment"
+}

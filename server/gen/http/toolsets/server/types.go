@@ -54,6 +54,8 @@ type UpdateToolsetRequestBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 }
 
 // AddExternalOAuthServerRequestBody is the type of the "toolsets" service
@@ -107,6 +109,8 @@ type CreateToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The external OAuth server details
@@ -170,6 +174,8 @@ type UpdateToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The external OAuth server details
@@ -226,6 +232,8 @@ type GetToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The external OAuth server details
@@ -282,6 +290,8 @@ type CloneToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The external OAuth server details
@@ -338,6 +348,8 @@ type AddExternalOAuthServerResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The external OAuth server details
@@ -394,6 +406,8 @@ type RemoveOAuthServerResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The external OAuth server details
@@ -2456,6 +2470,8 @@ type ToolsetEntryResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// When the toolset was created.
@@ -2512,19 +2528,20 @@ type ExternalOAuthServerFormRequestBody struct {
 // of the "createToolset" endpoint of the "toolsets" service.
 func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody {
 	body := &CreateToolsetResponseBody{
-		ID:             res.ID,
-		ProjectID:      res.ProjectID,
-		OrganizationID: res.OrganizationID,
-		AccountType:    res.AccountType,
-		Name:           res.Name,
-		Slug:           string(res.Slug),
-		Description:    res.Description,
-		ToolsetVersion: res.ToolsetVersion,
-		McpIsPublic:    res.McpIsPublic,
-		McpEnabled:     res.McpEnabled,
-		CustomDomainID: res.CustomDomainID,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		OrganizationID:    res.OrganizationID,
+		AccountType:       res.AccountType,
+		Name:              res.Name,
+		Slug:              string(res.Slug),
+		Description:       res.Description,
+		ToolsetVersion:    res.ToolsetVersion,
+		McpIsPublic:       res.McpIsPublic,
+		McpEnabled:        res.McpEnabled,
+		ToolSelectionMode: res.ToolSelectionMode,
+		CustomDomainID:    res.CustomDomainID,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
 	}
 	if res.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
@@ -2620,19 +2637,20 @@ func NewListToolsetsResponseBody(res *toolsets.ListToolsetsResult) *ListToolsets
 // of the "updateToolset" endpoint of the "toolsets" service.
 func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody {
 	body := &UpdateToolsetResponseBody{
-		ID:             res.ID,
-		ProjectID:      res.ProjectID,
-		OrganizationID: res.OrganizationID,
-		AccountType:    res.AccountType,
-		Name:           res.Name,
-		Slug:           string(res.Slug),
-		Description:    res.Description,
-		ToolsetVersion: res.ToolsetVersion,
-		McpIsPublic:    res.McpIsPublic,
-		McpEnabled:     res.McpEnabled,
-		CustomDomainID: res.CustomDomainID,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		OrganizationID:    res.OrganizationID,
+		AccountType:       res.AccountType,
+		Name:              res.Name,
+		Slug:              string(res.Slug),
+		Description:       res.Description,
+		ToolsetVersion:    res.ToolsetVersion,
+		McpIsPublic:       res.McpIsPublic,
+		McpEnabled:        res.McpEnabled,
+		ToolSelectionMode: res.ToolSelectionMode,
+		CustomDomainID:    res.CustomDomainID,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
 	}
 	if res.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
@@ -2713,19 +2731,20 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 // the "getToolset" endpoint of the "toolsets" service.
 func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 	body := &GetToolsetResponseBody{
-		ID:             res.ID,
-		ProjectID:      res.ProjectID,
-		OrganizationID: res.OrganizationID,
-		AccountType:    res.AccountType,
-		Name:           res.Name,
-		Slug:           string(res.Slug),
-		Description:    res.Description,
-		ToolsetVersion: res.ToolsetVersion,
-		McpIsPublic:    res.McpIsPublic,
-		McpEnabled:     res.McpEnabled,
-		CustomDomainID: res.CustomDomainID,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		OrganizationID:    res.OrganizationID,
+		AccountType:       res.AccountType,
+		Name:              res.Name,
+		Slug:              string(res.Slug),
+		Description:       res.Description,
+		ToolsetVersion:    res.ToolsetVersion,
+		McpIsPublic:       res.McpIsPublic,
+		McpEnabled:        res.McpEnabled,
+		ToolSelectionMode: res.ToolSelectionMode,
+		CustomDomainID:    res.CustomDomainID,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
 	}
 	if res.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
@@ -2806,19 +2825,20 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 // the "cloneToolset" endpoint of the "toolsets" service.
 func NewCloneToolsetResponseBody(res *types.Toolset) *CloneToolsetResponseBody {
 	body := &CloneToolsetResponseBody{
-		ID:             res.ID,
-		ProjectID:      res.ProjectID,
-		OrganizationID: res.OrganizationID,
-		AccountType:    res.AccountType,
-		Name:           res.Name,
-		Slug:           string(res.Slug),
-		Description:    res.Description,
-		ToolsetVersion: res.ToolsetVersion,
-		McpIsPublic:    res.McpIsPublic,
-		McpEnabled:     res.McpEnabled,
-		CustomDomainID: res.CustomDomainID,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		OrganizationID:    res.OrganizationID,
+		AccountType:       res.AccountType,
+		Name:              res.Name,
+		Slug:              string(res.Slug),
+		Description:       res.Description,
+		ToolsetVersion:    res.ToolsetVersion,
+		McpIsPublic:       res.McpIsPublic,
+		McpEnabled:        res.McpEnabled,
+		ToolSelectionMode: res.ToolSelectionMode,
+		CustomDomainID:    res.CustomDomainID,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
 	}
 	if res.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
@@ -2899,19 +2919,20 @@ func NewCloneToolsetResponseBody(res *types.Toolset) *CloneToolsetResponseBody {
 // result of the "addExternalOAuthServer" endpoint of the "toolsets" service.
 func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuthServerResponseBody {
 	body := &AddExternalOAuthServerResponseBody{
-		ID:             res.ID,
-		ProjectID:      res.ProjectID,
-		OrganizationID: res.OrganizationID,
-		AccountType:    res.AccountType,
-		Name:           res.Name,
-		Slug:           string(res.Slug),
-		Description:    res.Description,
-		ToolsetVersion: res.ToolsetVersion,
-		McpIsPublic:    res.McpIsPublic,
-		McpEnabled:     res.McpEnabled,
-		CustomDomainID: res.CustomDomainID,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		OrganizationID:    res.OrganizationID,
+		AccountType:       res.AccountType,
+		Name:              res.Name,
+		Slug:              string(res.Slug),
+		Description:       res.Description,
+		ToolsetVersion:    res.ToolsetVersion,
+		McpIsPublic:       res.McpIsPublic,
+		McpEnabled:        res.McpEnabled,
+		ToolSelectionMode: res.ToolSelectionMode,
+		CustomDomainID:    res.CustomDomainID,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
 	}
 	if res.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
@@ -2992,19 +3013,20 @@ func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuth
 // result of the "removeOAuthServer" endpoint of the "toolsets" service.
 func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResponseBody {
 	body := &RemoveOAuthServerResponseBody{
-		ID:             res.ID,
-		ProjectID:      res.ProjectID,
-		OrganizationID: res.OrganizationID,
-		AccountType:    res.AccountType,
-		Name:           res.Name,
-		Slug:           string(res.Slug),
-		Description:    res.Description,
-		ToolsetVersion: res.ToolsetVersion,
-		McpIsPublic:    res.McpIsPublic,
-		McpEnabled:     res.McpEnabled,
-		CustomDomainID: res.CustomDomainID,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		OrganizationID:    res.OrganizationID,
+		AccountType:       res.AccountType,
+		Name:              res.Name,
+		Slug:              string(res.Slug),
+		Description:       res.Description,
+		ToolsetVersion:    res.ToolsetVersion,
+		McpIsPublic:       res.McpIsPublic,
+		McpEnabled:        res.McpEnabled,
+		ToolSelectionMode: res.ToolSelectionMode,
+		CustomDomainID:    res.CustomDomainID,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
 	}
 	if res.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
@@ -4412,11 +4434,12 @@ func NewListToolsetsPayload(sessionToken *string, apikeyToken *string, projectSl
 // payload.
 func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.UpdateToolsetPayload {
 	v := &toolsets.UpdateToolsetPayload{
-		Name:           body.Name,
-		Description:    body.Description,
-		McpEnabled:     body.McpEnabled,
-		McpIsPublic:    body.McpIsPublic,
-		CustomDomainID: body.CustomDomainID,
+		Name:              body.Name,
+		Description:       body.Description,
+		McpEnabled:        body.McpEnabled,
+		McpIsPublic:       body.McpIsPublic,
+		CustomDomainID:    body.CustomDomainID,
+		ToolSelectionMode: body.ToolSelectionMode,
 	}
 	if body.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)

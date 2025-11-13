@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ToolVariationBadge } from "../tool-variation-badge";
+import { SimpleTooltip } from "../ui/tooltip";
 import { Type } from "../ui/type";
 import { MethodBadge } from "./MethodBadge";
 import { SubtoolsBadge } from "./SubtoolsBadge";
@@ -442,37 +443,73 @@ function ToolGroupHeader({
   isExpanded,
   onToggle,
   isFirstGroup = false,
+  allSelected,
+  onSelectAll,
 }: {
   group: ToolGroup;
   isExpanded: boolean;
   onToggle: () => void;
   isFirstGroup?: boolean;
+  allSelected: boolean;
+  onSelectAll: () => void;
 }) {
   const Icon = getIcon(group.icon);
 
   return (
-    <button
-      onClick={onToggle}
-      aria-expanded={isExpanded}
-      aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.title} group`}
+    <div
       className={cn(
-        "bg-surface-secondary-default flex items-center justify-between pl-4 pr-3 py-4 w-full hover:bg-active transition-colors",
+        "group/header bg-surface-secondary-default flex items-center justify-between pl-4 pr-3 py-4 w-full",
         isExpanded && "border-b border-neutral-softest",
         !isFirstGroup && "border-t border-neutral-softest",
       )}
     >
-      <div className="flex gap-4 items-center">
-        <Icon className="size-4 shrink-0" strokeWidth={1.5} />
+      <button
+        onClick={onToggle}
+        aria-expanded={isExpanded}
+        aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.title} group`}
+        className="flex gap-4 items-center hover:opacity-70 transition-opacity"
+      >
+        <div className="relative size-4 shrink-0">
+          <Icon
+            className={cn(
+              "size-4 absolute inset-0 transition-opacity",
+              "group-hover/header:opacity-0",
+            )}
+            strokeWidth={1.5}
+          />
+          <SimpleTooltip
+            tooltip={`${allSelected ? "Deselect" : "Select"} ${group.tools.length} tools`}
+          >
+            <Checkbox
+              checked={allSelected}
+              onCheckedChange={onSelectAll}
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
+              className={cn(
+                "absolute inset-0 transition-opacity opacity-0",
+                "group-hover/header:opacity-100",
+              )}
+            />
+          </SimpleTooltip>
+        </div>
         <p className="text-sm leading-6 text-foreground">{group.title}</p>
-      </div>
-      <ChevronDown
-        className={cn(
-          "size-4 transition-transform",
-          isExpanded ? "rotate-180" : "rotate-0",
-        )}
-        strokeWidth={1.5}
-      />
-    </button>
+      </button>
+      <button
+        onClick={onToggle}
+        aria-expanded={isExpanded}
+        aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.title} group`}
+        className="hover:opacity-70 transition-opacity"
+      >
+        <ChevronDown
+          className={cn(
+            "size-4 transition-transform",
+            isExpanded ? "rotate-180" : "rotate-0",
+          )}
+          strokeWidth={1.5}
+        />
+      </button>
+    </div>
   );
 }
 
@@ -741,6 +778,39 @@ export function ToolList({
     setSelectedForRemoval(new Set());
   };
 
+  const handleSelectAllInGroup = (group: ToolGroup) => {
+    const groupToolIds = group.tools.map(getToolIdentifier);
+    const currentSelection =
+      selectionMode === "add" ? selectedSet : selectedForRemoval;
+    const allSelected = groupToolIds.every((id) => currentSelection.has(id));
+
+    if (selectionMode === "add" && onSelectionChange) {
+      // For selection mode, update parent state
+      const next = new Set(selectedUrns);
+      if (allSelected) {
+        // Deselect all in group
+        groupToolIds.forEach((id) => next.delete(id));
+      } else {
+        // Select all in group
+        groupToolIds.forEach((id) => next.add(id));
+      }
+      onSelectionChange(Array.from(next));
+    } else {
+      // For normal mode, update local state
+      setSelectedForRemoval((prev) => {
+        const next = new Set(prev);
+        if (allSelected) {
+          // Deselect all in group
+          groupToolIds.forEach((id) => next.delete(id));
+        } else {
+          // Select all in group
+          groupToolIds.forEach((id) => next.add(id));
+        }
+        return next;
+      });
+    }
+  };
+
   return (
     <div className="relative w-full">
       <div
@@ -749,52 +819,66 @@ export function ToolList({
           className,
         )}
       >
-        {groups.map((group, index) => (
-          <div key={`${group.type}-${group.title}-${index}`} className="w-full">
-            <ToolGroupHeader
-              group={group}
-              isExpanded={expandedGroups.has(index)}
-              onToggle={() => toggleGroup(index)}
-              isFirstGroup={index === 0}
-            />
-            {expandedGroups.has(index) && (
-              <div className="w-full">
-                {group.tools.map((tool) => {
-                  const toolId = getToolIdentifier(tool);
-                  const toolIndex = toolIndexMap.get(toolId) ?? -1;
+        {groups.map((group, index) => {
+          const groupToolIds = group.tools.map(getToolIdentifier);
+          const currentSelection =
+            selectionMode === "add" ? selectedSet : selectedForRemoval;
+          const allSelected = groupToolIds.every((id) =>
+            currentSelection.has(id),
+          );
 
-                  return (
-                    <ToolRow
-                      key={tool.canonicalName}
-                      groupName={group.title}
-                      availableToolUrns={toolset?.tools
-                        ?.map((t) => t.toolUrn)
-                        .concat(selectionMode === "add" ? selectedUrns : [])
-                        .filter((urn) => !selectedForRemoval.has(urn))}
-                      tool={tool}
-                      onUpdate={(updates) => onToolUpdate?.(tool, updates)}
-                      isSelected={
-                        selectionMode === "add"
-                          ? selectedSet.has(toolId)
-                          : selectedForRemoval.has(toolId)
-                      }
-                      isFocused={toolIndex === focusedToolIndex}
-                      onCheckboxChange={(checked) =>
-                        handleCheckboxChange(toolId, checked)
-                      }
-                      onTestInPlayground={onTestInPlayground}
-                      onRemove={
-                        selectionMode !== "add" && onToolsRemove
-                          ? () => onToolsRemove([toolId])
-                          : undefined
-                      }
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ))}
+          return (
+            <div
+              key={`${group.type}-${group.title}-${index}`}
+              className="w-full"
+            >
+              <ToolGroupHeader
+                group={group}
+                isExpanded={expandedGroups.has(index)}
+                onToggle={() => toggleGroup(index)}
+                isFirstGroup={index === 0}
+                allSelected={allSelected}
+                onSelectAll={() => handleSelectAllInGroup(group)}
+              />
+              {expandedGroups.has(index) && (
+                <div className="w-full">
+                  {group.tools.map((tool) => {
+                    const toolId = getToolIdentifier(tool);
+                    const toolIndex = toolIndexMap.get(toolId) ?? -1;
+
+                    return (
+                      <ToolRow
+                        key={tool.canonicalName}
+                        groupName={group.title}
+                        availableToolUrns={toolset?.tools
+                          ?.map((t) => t.toolUrn)
+                          .concat(selectionMode === "add" ? selectedUrns : [])
+                          .filter((urn) => !selectedForRemoval.has(urn))}
+                        tool={tool}
+                        onUpdate={(updates) => onToolUpdate?.(tool, updates)}
+                        isSelected={
+                          selectionMode === "add"
+                            ? selectedSet.has(toolId)
+                            : selectedForRemoval.has(toolId)
+                        }
+                        isFocused={toolIndex === focusedToolIndex}
+                        onCheckboxChange={(checked) =>
+                          handleCheckboxChange(toolId, checked)
+                        }
+                        onTestInPlayground={onTestInPlayground}
+                        onRemove={
+                          selectionMode !== "add" && onToolsRemove
+                            ? () => onToolsRemove([toolId])
+                            : undefined
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {hasChanges && !selectionMode && (

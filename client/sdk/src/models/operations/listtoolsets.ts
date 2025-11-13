@@ -4,10 +4,23 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+export type ListToolsetsSecurityOption1 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
+export type ListToolsetsSecurityOption2 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
 
 export type ListToolsetsSecurity = {
-  projectSlugHeaderGramProject?: string | undefined;
-  sessionHeaderGramSession?: string | undefined;
+  option1?: ListToolsetsSecurityOption1 | undefined;
+  option2?: ListToolsetsSecurityOption2 | undefined;
 };
 
 export type ListToolsetsRequest = {
@@ -16,15 +29,172 @@ export type ListToolsetsRequest = {
    */
   gramSession?: string | undefined;
   /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
+  /**
    * project header
    */
   gramProject?: string | undefined;
 };
 
 /** @internal */
+export const ListToolsetsSecurityOption1$inboundSchema: z.ZodType<
+  ListToolsetsSecurityOption1,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "project_slug_header_Gram-Project": z.string(),
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type ListToolsetsSecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const ListToolsetsSecurityOption1$outboundSchema: z.ZodType<
+  ListToolsetsSecurityOption1$Outbound,
+  z.ZodTypeDef,
+  ListToolsetsSecurityOption1
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace ListToolsetsSecurityOption1$ {
+  /** @deprecated use `ListToolsetsSecurityOption1$inboundSchema` instead. */
+  export const inboundSchema = ListToolsetsSecurityOption1$inboundSchema;
+  /** @deprecated use `ListToolsetsSecurityOption1$outboundSchema` instead. */
+  export const outboundSchema = ListToolsetsSecurityOption1$outboundSchema;
+  /** @deprecated use `ListToolsetsSecurityOption1$Outbound` instead. */
+  export type Outbound = ListToolsetsSecurityOption1$Outbound;
+}
+
+export function listToolsetsSecurityOption1ToJSON(
+  listToolsetsSecurityOption1: ListToolsetsSecurityOption1,
+): string {
+  return JSON.stringify(
+    ListToolsetsSecurityOption1$outboundSchema.parse(
+      listToolsetsSecurityOption1,
+    ),
+  );
+}
+
+export function listToolsetsSecurityOption1FromJSON(
+  jsonString: string,
+): SafeParseResult<ListToolsetsSecurityOption1, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => ListToolsetsSecurityOption1$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListToolsetsSecurityOption1' from JSON`,
+  );
+}
+
+/** @internal */
+export const ListToolsetsSecurityOption2$inboundSchema: z.ZodType<
+  ListToolsetsSecurityOption2,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "apikey_header_Gram-Key": z.string(),
+  "project_slug_header_Gram-Project": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+  });
+});
+
+/** @internal */
+export type ListToolsetsSecurityOption2$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const ListToolsetsSecurityOption2$outboundSchema: z.ZodType<
+  ListToolsetsSecurityOption2$Outbound,
+  z.ZodTypeDef,
+  ListToolsetsSecurityOption2
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace ListToolsetsSecurityOption2$ {
+  /** @deprecated use `ListToolsetsSecurityOption2$inboundSchema` instead. */
+  export const inboundSchema = ListToolsetsSecurityOption2$inboundSchema;
+  /** @deprecated use `ListToolsetsSecurityOption2$outboundSchema` instead. */
+  export const outboundSchema = ListToolsetsSecurityOption2$outboundSchema;
+  /** @deprecated use `ListToolsetsSecurityOption2$Outbound` instead. */
+  export type Outbound = ListToolsetsSecurityOption2$Outbound;
+}
+
+export function listToolsetsSecurityOption2ToJSON(
+  listToolsetsSecurityOption2: ListToolsetsSecurityOption2,
+): string {
+  return JSON.stringify(
+    ListToolsetsSecurityOption2$outboundSchema.parse(
+      listToolsetsSecurityOption2,
+    ),
+  );
+}
+
+export function listToolsetsSecurityOption2FromJSON(
+  jsonString: string,
+): SafeParseResult<ListToolsetsSecurityOption2, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => ListToolsetsSecurityOption2$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListToolsetsSecurityOption2' from JSON`,
+  );
+}
+
+/** @internal */
+export const ListToolsetsSecurity$inboundSchema: z.ZodType<
+  ListToolsetsSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  Option1: z.lazy(() => ListToolsetsSecurityOption1$inboundSchema).optional(),
+  Option2: z.lazy(() => ListToolsetsSecurityOption2$inboundSchema).optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Option1": "option1",
+    "Option2": "option2",
+  });
+});
+
+/** @internal */
 export type ListToolsetsSecurity$Outbound = {
-  "project_slug_header_Gram-Project"?: string | undefined;
-  "session_header_Gram-Session"?: string | undefined;
+  Option1?: ListToolsetsSecurityOption1$Outbound | undefined;
+  Option2?: ListToolsetsSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -33,14 +203,27 @@ export const ListToolsetsSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ListToolsetsSecurity
 > = z.object({
-  projectSlugHeaderGramProject: z.string().optional(),
-  sessionHeaderGramSession: z.string().optional(),
+  option1: z.lazy(() => ListToolsetsSecurityOption1$outboundSchema).optional(),
+  option2: z.lazy(() => ListToolsetsSecurityOption2$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
+    option1: "Option1",
+    option2: "Option2",
   });
 });
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace ListToolsetsSecurity$ {
+  /** @deprecated use `ListToolsetsSecurity$inboundSchema` instead. */
+  export const inboundSchema = ListToolsetsSecurity$inboundSchema;
+  /** @deprecated use `ListToolsetsSecurity$outboundSchema` instead. */
+  export const outboundSchema = ListToolsetsSecurity$outboundSchema;
+  /** @deprecated use `ListToolsetsSecurity$Outbound` instead. */
+  export type Outbound = ListToolsetsSecurity$Outbound;
+}
 
 export function listToolsetsSecurityToJSON(
   listToolsetsSecurity: ListToolsetsSecurity,
@@ -50,9 +233,37 @@ export function listToolsetsSecurityToJSON(
   );
 }
 
+export function listToolsetsSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<ListToolsetsSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => ListToolsetsSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListToolsetsSecurity' from JSON`,
+  );
+}
+
+/** @internal */
+export const ListToolsetsRequest$inboundSchema: z.ZodType<
+  ListToolsetsRequest,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "Gram-Session": z.string().optional(),
+  "Gram-Key": z.string().optional(),
+  "Gram-Project": z.string().optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Gram-Session": "gramSession",
+    "Gram-Key": "gramKey",
+    "Gram-Project": "gramProject",
+  });
+});
+
 /** @internal */
 export type ListToolsetsRequest$Outbound = {
   "Gram-Session"?: string | undefined;
+  "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
 
@@ -63,18 +274,43 @@ export const ListToolsetsRequest$outboundSchema: z.ZodType<
   ListToolsetsRequest
 > = z.object({
   gramSession: z.string().optional(),
+  gramKey: z.string().optional(),
   gramProject: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     gramSession: "Gram-Session",
+    gramKey: "Gram-Key",
     gramProject: "Gram-Project",
   });
 });
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace ListToolsetsRequest$ {
+  /** @deprecated use `ListToolsetsRequest$inboundSchema` instead. */
+  export const inboundSchema = ListToolsetsRequest$inboundSchema;
+  /** @deprecated use `ListToolsetsRequest$outboundSchema` instead. */
+  export const outboundSchema = ListToolsetsRequest$outboundSchema;
+  /** @deprecated use `ListToolsetsRequest$Outbound` instead. */
+  export type Outbound = ListToolsetsRequest$Outbound;
+}
 
 export function listToolsetsRequestToJSON(
   listToolsetsRequest: ListToolsetsRequest,
 ): string {
   return JSON.stringify(
     ListToolsetsRequest$outboundSchema.parse(listToolsetsRequest),
+  );
+}
+
+export function listToolsetsRequestFromJSON(
+  jsonString: string,
+): SafeParseResult<ListToolsetsRequest, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => ListToolsetsRequest$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListToolsetsRequest' from JSON`,
   );
 }

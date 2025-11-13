@@ -329,6 +329,8 @@ sql:
   - schema: schema.sql
     queries: ../internal/functions/queries.sql
     engine: postgresql
+    database:
+      managed: true
     gen:
       go:
         package: "repo"

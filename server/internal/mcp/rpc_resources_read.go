@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"mime"
@@ -105,19 +104,14 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	}
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
-	ciEnv := gateway.NewCaseInsensitiveEnv()
-	if payload.environment != "" && payload.authenticated {
-		storedEnvVars, err := env.Load(ctx, payload.projectID, gateway.Slug(payload.environment))
-		if err != nil && !errors.Is(err, gateway.ErrNotFound) {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, logger)
-		}
-		for k, v := range storedEnvVars {
-			ciEnv.Set(k, v)
-		}
+	userConfig, err := resolveUserConfiguration(ctx, logger, env, payload, nil)
+	if err != nil {
+		return nil, err
 	}
 
-	for k, v := range payload.mcpEnvVariables {
-		ciEnv.Set(k, v)
+	systemConfig, err := env.LoadSourceEnv(ctx, payload.projectID, string(resourceURN.Kind), resourceURN.Source)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
 	}
 
 	rw := &resourceResponseWriter{
@@ -168,7 +162,10 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		toolCallLogger.Emit(context.WithoutCancel(ctx), logger)
 	}()
 
-	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), ciEnv, plan, toolCallLogger)
+	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), gateway.ToolCallEnv{
+		UserConfig: gateway.CIEnvFrom(userConfig),
+		SystemEnv:  gateway.CIEnvFrom(systemConfig),
+	}, plan, toolCallLogger)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").Log(ctx, logger)
 	}

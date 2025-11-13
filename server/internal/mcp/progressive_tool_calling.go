@@ -71,7 +71,8 @@ func buildDescribeToolsTool(tools []*types.Tool, listToolRequired bool) (*toolLi
 	} else {
 		toolNames := []string{}
 		for _, tool := range tools {
-			toolNames = append(toolNames, tool.HTTPToolDefinition.Name)
+			baseTool := conv.ToBaseTool(tool)
+			toolNames = append(toolNames, baseTool.Name)
 		}
 		description += fmt.Sprintf(" The available tools are: %s.", strings.Join(toolNames, ", "))
 	}
@@ -100,36 +101,9 @@ func buildDescribeToolsTool(tools []*types.Tool, listToolRequired bool) (*toolLi
 }
 
 func buildListToolsTool(tools []*types.Tool) (*toolListEntry, error) {
-	type sourceGroup struct {
-		groups map[string][]string
-	}
-
-	tree := make(map[string]*sourceGroup)
-
-	for _, tool := range tools {
-		if tool.HTTPToolDefinition == nil { // TODO support other tool types
-			continue
-		}
-
-		toolURN, err := conv.GetToolURN(*tool)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn")
-		}
-
-		source := toolURN.Source
-		group := "no-group"
-		tags := tool.HTTPToolDefinition.Tags
-		if len(tags) > 0 {
-			group = tags[0]
-		}
-
-		if tree[source] == nil {
-			tree[source] = &sourceGroup{
-				groups: make(map[string][]string),
-			}
-		}
-
-		tree[source].groups[group] = append(tree[source].groups[group], tool.HTTPToolDefinition.Name)
+	tree, err := buildToolTree(tools)
+	if err != nil {
+		return nil, err
 	}
 
 	totalTools := len(tools)
@@ -139,15 +113,16 @@ func buildListToolsTool(tools []*types.Tool) (*toolListEntry, error) {
 	var examplePaths []string
 	for source, sg := range tree {
 		pathsDesc += fmt.Sprintf("\n/%s", source)
-		for group, toolNames := range sg.groups {
+		for group, tools := range sg.groups {
 			groupPath := fmt.Sprintf("/%s/%s", source, group)
 			if showIndividualTools {
 				pathsDesc += fmt.Sprintf("\n  /%s", group)
-				for _, toolName := range toolNames {
-					pathsDesc += fmt.Sprintf("\n    /%s", toolName)
+				for _, tool := range tools {
+					baseTool := conv.ToBaseTool(tool)
+					pathsDesc += fmt.Sprintf("\n    /%s", baseTool.Name)
 				}
 			} else {
-				pathsDesc += fmt.Sprintf("\n  /%s [%d tools]", group, len(toolNames))
+				pathsDesc += fmt.Sprintf("\n  /%s [%d tools]", group, len(tools))
 			}
 			if len(examplePaths) < 3 {
 				examplePaths = append(examplePaths, groupPath)
@@ -259,14 +234,14 @@ func handleListToolsCall(
 	return response, nil
 }
 
-// buildToolsByPath creates a map of hierarchical paths to tools for filtering/matching
-func buildToolsByPath(tools []*types.Tool) (map[string]*types.Tool, error) {
-	toolsByPath := make(map[string]*types.Tool)
-	for _, tool := range tools {
-		if tool.HTTPToolDefinition == nil {
-			continue
-		}
+type sourceGroup struct {
+	groups map[string][]*types.Tool
+}
 
+func buildToolTree(tools []*types.Tool) (map[string]*sourceGroup, error) {
+	tree := make(map[string]*sourceGroup)
+
+	for _, tool := range tools {
 		toolURN, err := conv.GetToolURN(*tool)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn")
@@ -274,16 +249,46 @@ func buildToolsByPath(tools []*types.Tool) (map[string]*types.Tool, error) {
 
 		source := toolURN.Source
 		group := "no-group"
-		tags := tool.HTTPToolDefinition.Tags
-		if len(tags) > 0 {
-			group = tags[0]
+
+		if tool.HTTPToolDefinition != nil {
+			tags := tool.HTTPToolDefinition.Tags
+			if len(tags) > 0 {
+				group = tags[0]
+			}
 		}
 
-		// Store tool at multiple path levels for matching
-		toolsByPath[fmt.Sprintf("/%s/%s/%s", source, group, tool.HTTPToolDefinition.Name)] = tool
-		toolsByPath[fmt.Sprintf("/%s/%s", source, group)] = tool
-		toolsByPath[fmt.Sprintf("/%s", source)] = tool
+		if tree[source] == nil {
+			tree[source] = &sourceGroup{
+				groups: make(map[string][]*types.Tool),
+			}
+		}
+
+		tree[source].groups[group] = append(tree[source].groups[group], tool)
 	}
+
+	return tree, nil
+}
+
+// buildToolsByPath creates a map of hierarchical paths to tools for filtering/matching
+func buildToolsByPath(tools []*types.Tool) (map[string]*types.Tool, error) {
+	toolsByPath := make(map[string]*types.Tool)
+
+	tree, err := buildToolTree(tools)
+	if err != nil {
+		return nil, err
+	}
+
+	for source, sg := range tree {
+		for group, tools := range sg.groups {
+			for _, tool := range tools {
+				baseTool := conv.ToBaseTool(tool)
+				toolsByPath[fmt.Sprintf("/%s/%s/%s", source, group, baseTool.Name)] = tool
+				toolsByPath[fmt.Sprintf("/%s/%s", source, group)] = tool
+				toolsByPath[fmt.Sprintf("/%s", source)] = tool
+			}
+		}
+	}
+
 	return toolsByPath, nil
 }
 
