@@ -185,11 +185,17 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
     .quiet()
     .nothrow();
 
-  // Consume stdio and show waiting message
-  const stdioTask = consumeStdio(pushcmd, getLogger(["gram", "cli"])).then(() => {
-    // Show static waiting message after logs finish streaming
-    process.stdout.write("⏳ Waiting for deployment to complete...\n");
-  });
+  // Track if we've shown the waiting message
+  let waitingMessageShown = false;
+  const showWaitingMessage = () => {
+    if (!waitingMessageShown) {
+      waitingMessageShown = true;
+      process.stdout.write("\n⏳ Waiting for deployment to complete...\n\n");
+    }
+  };
+
+  // Consume stdio with callback to show waiting message during polling
+  const stdioTask = consumeStdio(pushcmd, getLogger(["gram", "cli"]), showWaitingMessage);
 
   const [, result] = await Promise.all([stdioTask, pushcmd]);
 
@@ -245,7 +251,7 @@ async function tryLoadPackageJson(
   return { name };
 }
 
-async function consumeStdio(proc: ProcessPromise, logger: Logger) {
+async function consumeStdio(proc: ProcessPromise, logger: Logger, onPollingStart?: () => void) {
   const stdoutReader = createInterface({
     input: proc.stdout,
     crlfDelay: Infinity,
@@ -260,18 +266,18 @@ async function consumeStdio(proc: ProcessPromise, logger: Logger) {
   await Promise.all([
     (async () => {
       for await (const line of stdoutReader) {
-        logCLIOutput(logger, line);
+        logCLIOutput(logger, line, onPollingStart);
       }
     })(),
     (async () => {
       for await (const line of stderrReader) {
-        logCLIOutput(logger, line);
+        logCLIOutput(logger, line, onPollingStart);
       }
     })(),
   ]);
 }
 
-function logCLIOutput(logger: Logger, line: string) {
+function logCLIOutput(logger: Logger, line: string, onPollingStart?: () => void) {
   if (line.trim() === "") {
     return;
   }
@@ -315,6 +321,11 @@ function logCLIOutput(logger: Logger, line: string) {
     logger.error(msg, rest);
   } else {
     logger.info(msg, rest);
+  }
+
+  // Show waiting message when we detect polling has started
+  if (msg.includes("Polling deployment status") && onPollingStart) {
+    onPollingStart();
   }
 }
 
