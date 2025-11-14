@@ -6,7 +6,6 @@ import { dirname, join, relative, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { $, ProcessPromise, chalk } from "zx";
 import { isCI, type ParsedUserConfig } from "./config.ts";
-import { Loader } from "./loader.ts";
 
 type Artifacts = {
   funcFilename: string;
@@ -180,24 +179,19 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
 
   logger.info("Deploying function with Gram CLI");
 
-  const loader = new Loader("deploying function...");
-
   const pushcmd = $({
     stdio: ["pipe", "pipe", "pipe"],
   })`gram ${pushArgs}`
     .quiet()
     .nothrow();
 
-  // Consume stdio and show loader concurrently
+  // Consume stdio and show waiting message
   const stdioTask = consumeStdio(pushcmd, getLogger(["gram", "cli"])).then(() => {
-    // Start loader after logs finish streaming
-    loader.start();
+    // Show static waiting message after logs finish streaming
+    process.stdout.write("⏳ Waiting for deployment to complete...\n");
   });
 
   const [, result] = await Promise.all([stdioTask, pushcmd]);
-
-  // Stop the loader animation
-  loader.stop();
 
   if (result.exitCode !== 0) {
     throw new Error(
