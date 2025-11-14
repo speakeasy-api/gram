@@ -248,7 +248,7 @@ func buildToolTree(tools []*types.Tool) (map[string]*sourceGroup, error) {
 		}
 
 		source := toolURN.Source
-		group := "no-group"
+		group := "default"
 
 		if tool.HTTPToolDefinition != nil {
 			tags := tool.HTTPToolDefinition.Tags
