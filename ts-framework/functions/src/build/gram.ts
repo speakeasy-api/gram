@@ -185,17 +185,8 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
     .quiet()
     .nothrow();
 
-  // Track if we've shown the waiting message
-  let waitingMessageShown = false;
-  const showWaitingMessage = () => {
-    if (!waitingMessageShown) {
-      waitingMessageShown = true;
-      process.stdout.write("\n⏳ Waiting for deployment to complete...\n\n");
-    }
-  };
-
-  // Consume stdio with callback to show waiting message during polling
-  const stdioTask = consumeStdio(pushcmd, getLogger(["gram", "cli"]), showWaitingMessage);
+  // Consume stdio
+  const stdioTask = consumeStdio(pushcmd, getLogger(["gram", "cli"]));
 
   const [, result] = await Promise.all([stdioTask, pushcmd]);
 
@@ -251,7 +242,7 @@ async function tryLoadPackageJson(
   return { name };
 }
 
-async function consumeStdio(proc: ProcessPromise, logger: Logger, onPollingStart?: () => void) {
+async function consumeStdio(proc: ProcessPromise, logger: Logger) {
   const stdoutReader = createInterface({
     input: proc.stdout,
     crlfDelay: Infinity,
@@ -266,18 +257,18 @@ async function consumeStdio(proc: ProcessPromise, logger: Logger, onPollingStart
   await Promise.all([
     (async () => {
       for await (const line of stdoutReader) {
-        logCLIOutput(logger, line, onPollingStart);
+        logCLIOutput(logger, line);
       }
     })(),
     (async () => {
       for await (const line of stderrReader) {
-        logCLIOutput(logger, line, onPollingStart);
+        logCLIOutput(logger, line);
       }
     })(),
   ]);
 }
 
-function logCLIOutput(logger: Logger, line: string, onPollingStart?: () => void) {
+function logCLIOutput(logger: Logger, line: string) {
   if (line.trim() === "") {
     return;
   }
@@ -321,11 +312,6 @@ function logCLIOutput(logger: Logger, line: string, onPollingStart?: () => void)
     logger.error(msg, rest);
   } else {
     logger.info(msg, rest);
-  }
-
-  // Show waiting message when we detect polling has started
-  if (msg.includes("Polling deployment status") && onPollingStart) {
-    onPollingStart();
   }
 }
 

@@ -311,14 +311,8 @@ func (s *Workflow) Poll(ctx context.Context) *Workflow {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
-
-	s.Logger.InfoContext(
-		ctx,
-		"Polling deployment status...",
-		slog.String("deployment_id", s.Deployment.ID),
-	)
 
 	for {
 		select {
@@ -333,11 +327,12 @@ func (s *Workflow) Poll(ctx context.Context) *Workflow {
 			)
 
 		case <-ticker.C:
-			s.LoadDeploymentByID(ctx, s.Deployment.ID)
-			s.Logger.DebugContext(ctx, "Deployment status check",
+			s.Logger.InfoContext(
+				ctx,
+				"Polling deployment status...",
 				slog.String("deployment_id", s.Deployment.ID),
-				slog.String("status", s.Deployment.Status),
 			)
+			s.LoadDeploymentByID(ctx, s.Deployment.ID)
 
 			switch s.Deployment.Status {
 			case "completed", "failed":
