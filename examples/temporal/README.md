@@ -11,7 +11,7 @@ This Gram Function shows how to connect to a a gram function to a Temporal clien
   - `TEMPORAL_GRPC_ENDPOINT`
   - `TEMPORAL_NAMESPACE`
 - You're all set to build and push this Gram Function!
-  - Run `pnpm install && pnpm build && pnpm push`.
+  - Run `npm install && npm run build && npm run push`.
 
 ## Notes
 
