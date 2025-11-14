@@ -404,12 +404,12 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeInvalid, errors.New("organization name contains invalid characters"), "organization name contains invalid characters")
 	}
 
+	info, err := s.sessions.CreateOrgFromSpeakeasy(ctx, *authCtx.SessionID, payload.OrgName)
 	// invalid to insure we pull in the new org info on the next auth.info call
-	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error invalidating user").Log(ctx, s.logger)
+	if invalidationErr := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); invalidationErr != nil {
+		return oops.E(oops.CodeUnexpected, invalidationErr, "error invalidating user").Log(ctx, s.logger)
 	}
 
-	info, err := s.sessions.CreateOrgFromSpeakeasy(ctx, *authCtx.SessionID, payload.OrgName)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error creating org").Log(ctx, s.logger)
 	}
