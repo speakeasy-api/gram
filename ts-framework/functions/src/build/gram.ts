@@ -194,7 +194,7 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
     loader.start();
   });
 
-  const result = await Promise.all([stdioTask, pushcmd]).then(([, result]) => result);
+  const [, result] = await Promise.all([stdioTask, pushcmd]);
 
   // Stop the loader animation
   loader.stop();
