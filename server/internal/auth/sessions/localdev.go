@@ -152,13 +152,24 @@ func (s *Manager) PopulateLocalDevDefaultAuthSession(ctx context.Context) (strin
 		}
 
 		_, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-			ID:   userInfo.Organizations[0].OrganizationID,
-			Name: userInfo.Organizations[0].OrganizationName,
-			Slug: userInfo.Organizations[0].OrganizationSlug,
+			ID:              userInfo.Organizations[0].OrganizationID,
+			Name:            userInfo.Organizations[0].OrganizationName,
+			Slug:            userInfo.Organizations[0].OrganizationSlug,
+			SsoConnectionID: conv.PtrToPGText(nil),
 		})
 		if err != nil {
 			return "", fmt.Errorf("failed to upsert organization metadata: %w", err)
 		}
+
+		if !userInfo.Admin {
+			if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+				OrganizationID: userInfo.Organizations[0].OrganizationID,
+				UserID:         userID,
+			}); err != nil {
+				return "", fmt.Errorf("failed to upsert organization user relationship: %w", err)
+			}
+		}
+
 		accountType := userInfo.Organizations[0].AccountType
 		if !slices.Contains([]string{"free", "pro", "enterprise"}, accountType) {
 			accountType = "free"
