@@ -5,28 +5,28 @@ import (
 	"fmt"
 )
 
-// DXTManifest represents the Claude Desktop .dxt manifest structure
-type DXTManifest struct {
+// MCPBManifest represents the Claude Desktop .mcpb manifest structure
+type MCPBManifest struct {
 	ManifestVersion string            `json:"manifest_version"`
 	Name            string            `json:"name"`
 	Version         string            `json:"version"`
 	Description     string            `json:"description"`
-	Author          DXTAuthor         `json:"author"`
-	Server          DXTServer         `json:"server"`
-	UserConfig      map[string]DXTVar `json:"user_config,omitempty"`
+	Author          MCPBAuthor         `json:"author"`
+	Server          MCPBServer         `json:"server"`
+	UserConfig      map[string]MCPBVar `json:"user_config,omitempty"`
 }
 
-type DXTAuthor struct {
+type MCPBAuthor struct {
 	Name string `json:"name"`
 }
 
-type DXTServer struct {
+type MCPBServer struct {
 	Type       string         `json:"type"`
 	EntryPoint string         `json:"entry_point"`
 	MCPConfig  MCPServerConfig `json:"mcp_config"`
 }
 
-type DXTVar struct {
+type MCPBVar struct {
 	Type        string `json:"type"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
@@ -34,15 +34,15 @@ type DXTVar struct {
 	Required    bool   `json:"required"`
 }
 
-// GenerateDXTManifest creates a .dxt manifest for Claude Desktop
-func GenerateDXTManifest(info *ToolsetInfo, useEnvVar bool) ([]byte, error) {
+// GenerateMCPBManifest creates a .mcpb manifest for Claude Desktop
+func GenerateMCPBManifest(info *ToolsetInfo, useEnvVar bool) ([]byte, error) {
 	var headerValue string
-	var userConfig map[string]DXTVar
+	var userConfig map[string]MCPBVar
 
 	if useEnvVar {
 		// Use environment variable substitution with user_config
 		headerValue = fmt.Sprintf("%s:${user_config.%s}", info.HeaderName, info.EnvVarName)
-		userConfig = map[string]DXTVar{
+		userConfig = map[string]MCPBVar{
 			info.EnvVarName: {
 				Type:        "string",
 				Title:       info.EnvVarName,
@@ -57,15 +57,15 @@ func GenerateDXTManifest(info *ToolsetInfo, useEnvVar bool) ([]byte, error) {
 		userConfig = nil
 	}
 
-	manifest := DXTManifest{
+	manifest := MCPBManifest{
 		ManifestVersion: "0.1",
 		Name:            info.Name,
 		Version:         "1.0.0",
-		Description:     fmt.Sprintf("%s MCP server", info.Name),
-		Author: DXTAuthor{
+		Description:     fmt.Sprintf("Gram MCP server for %s", info.Name),
+		Author: MCPBAuthor{
 			Name: "Gram",
 		},
-		Server: DXTServer{
+		Server: MCPBServer{
 			Type:       "node",
 			EntryPoint: "npx",
 			MCPConfig: MCPServerConfig{
@@ -76,7 +76,8 @@ func GenerateDXTManifest(info *ToolsetInfo, useEnvVar bool) ([]byte, error) {
 					"--header",
 					headerValue,
 				},
-				Env:     map[string]string{},
+				// Not used for command-based transport (will be omitted in JSON due to omitempty tags)
+				Env:     nil,
 				Type:    "",
 				URL:     "",
 				Headers: nil,
@@ -87,7 +88,7 @@ func GenerateDXTManifest(info *ToolsetInfo, useEnvVar bool) ([]byte, error) {
 
 	data, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal DXT manifest: %w", err)
+		return nil, fmt.Errorf("failed to marshal MCPB manifest: %w", err)
 	}
 
 	return data, nil

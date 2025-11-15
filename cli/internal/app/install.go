@@ -12,7 +12,8 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-var installFlags = []cli.Flag{
+// baseInstallFlags are common flags shared by all install commands
+var baseInstallFlags = []cli.Flag{
 	flags.APIKey(),
 	flags.Project(),
 	&cli.StringFlag{
@@ -25,7 +26,7 @@ var installFlags = []cli.Flag{
 	},
 	&cli.StringFlag{
 		Name:  "name",
-		Usage: "The name to use for this MCP server in Cursor (defaults to toolset name or derived from URL)",
+		Usage: "The name to use for this MCP server (defaults to toolset name or derived from URL)",
 	},
 	&cli.StringFlag{
 		Name:  "header",
@@ -36,12 +37,14 @@ var installFlags = []cli.Flag{
 		Name:  "env-var",
 		Usage: "Environment variable name to use for API key substitution (e.g., MCP_API_KEY). If provided, uses ${VAR} syntax instead of hardcoding the key",
 	},
-	&cli.StringFlag{
-		Name:  "scope",
-		Usage: "Configuration scope: 'project' for .mcp.json in current directory, 'user' for ~/.claude/settings.local.json (defaults to user)",
-		Value: "user",
-	},
 }
+
+// installFlags are for commands that support configuration file scope (claude-code, gemini-cli)
+var installFlags = append(baseInstallFlags, &cli.StringFlag{
+	Name:  "scope",
+	Usage: "Configuration scope: 'project' for .mcp.json in current directory, 'user' for ~/.claude/settings.local.json (defaults to user)",
+	Value: "user",
+})
 
 func newInstallCommand() *cli.Command {
 	return &cli.Command{
