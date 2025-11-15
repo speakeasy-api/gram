@@ -418,7 +418,7 @@ func (s *Service) resolveDomainIDFromContext(ctx context.Context) *uuid.UUID {
 		return nil
 	}
 
-	domainRecord, err := s.domainsRepo.GetCustomDomainsByOrganization(ctx, authCtx.ActiveOrganizationID)
+	domainRecord, err := s.domainsRepo.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to get custom domains by organization ID", attr.SlogError(err))
 		return nil
