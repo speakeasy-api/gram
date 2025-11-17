@@ -1,5 +1,11 @@
 # server
 
+## 0.10.1
+
+### Patch Changes
+
+- 55616f6: Improves the initial description for the find_tools tool in the semantic search dynamic MCP mode. Provides an overview of what tool categories exist in the server.
+
 ## 0.10.0
 
 ### Minor Changes
