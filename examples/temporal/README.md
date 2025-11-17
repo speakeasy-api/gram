@@ -12,7 +12,3 @@ This Gram Function shows how to connect to a a gram function to a Temporal clien
   - `TEMPORAL_NAMESPACE`
 - You're all set to build and push this Gram Function!
   - Run `npm install && npm run build && npm run push`.
-
-## Notes
-
-Because Temporal's TypeScript SDK has certain dependencies that do not properly bundle to ESM, we have a small custom [postbuild.js](postbuild.js) script to help. This extends our default Gram Functions capabilities to handle these CommonJS imports.
