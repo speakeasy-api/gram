@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/rag/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
@@ -125,7 +126,16 @@ func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Too
 	// Insert new embeddings
 	for i, candidate := range candidates {
 		vector := pgvector_go.NewVector(vectors[i])
-		if err := s.insertToolEmbedding(ctx, uuid.MustParse(toolset.ProjectID), toolsetUUID, toolset.ToolsetVersion, candidate.entryKey, candidate.payload, vector); err != nil {
+		if err := s.insertToolEmbedding(
+			ctx,
+			uuid.MustParse(toolset.ProjectID),
+			toolsetUUID,
+			toolset.ToolsetVersion,
+			candidate.entryKey,
+			candidate.payload,
+			vector,
+			candidate.tags,
+		); err != nil {
 			return err
 		}
 	}
@@ -133,13 +143,40 @@ func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Too
 	return nil
 }
 
+func (s *ToolsetVectorStore) GetToolsetAvailableTags(ctx context.Context, toolset types.Toolset) ([]string, error) {
+	tags, err := s.queries.ToolsetAvailableTags(ctx, repo.ToolsetAvailableTagsParams{
+		ProjectID:      uuid.MustParse(toolset.ProjectID),
+		ToolsetID:      uuid.MustParse(toolset.ID),
+		ToolsetVersion: toolset.ToolsetVersion,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get toolset available tags: %w", err)
+	}
+	return tags, nil
+}
+
+type MatchMode string
+
+const (
+	MatchModeAny MatchMode = "any"
+	MatchModeAll MatchMode = "all"
+)
+
+type SearchToolsOptions struct {
+	Query     string
+	Tags      []string
+	MatchMode MatchMode
+	Limit     int
+}
+
 // ToolSearchResult represents a search result with tool name and similarity score.
 type ToolSearchResult struct {
 	ToolName        string
+	Tags            []string
 	SimilarityScore float64
 }
 
-func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset types.Toolset, query string, limit int) (matches []*ToolSearchResult, err error) {
+func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset types.Toolset, opts SearchToolsOptions) (matches []*ToolSearchResult, err error) {
 	ctx, span := s.tracer.Start(ctx, "rag.searchToolsetTools", trace.WithAttributes(
 		attr.ToolsetID(toolset.ID),
 		attr.ProjectID(toolset.ProjectID),
@@ -156,11 +193,12 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 		return nil, fmt.Errorf("parse toolset id: %w", err)
 	}
 
-	query = strings.TrimSpace(query)
+	query := strings.TrimSpace(opts.Query)
 	if query == "" {
 		return nil, errors.New("query is required")
 	}
 
+	limit := opts.Limit
 	if limit <= 0 {
 		limit = defaultFindToolsResultSize
 	}
@@ -173,16 +211,42 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 		return nil, fmt.Errorf("query embedding response contained %d vectors, expected 1", len(queryVectors))
 	}
 
-	rows, err := s.queries.SearchToolsetToolEmbeddings(ctx, repo.SearchToolsetToolEmbeddingsParams{
-		QueryEmbedding1536: pgvector_go.NewVector(queryVectors[0]),
-		ProjectID:          uuid.MustParse(toolset.ProjectID),
-		ToolsetID:          toolsetUUID,
-		ToolsetVersion:     toolset.ToolsetVersion,
-		ResultLimit:        int32(limit), //nolint:gosec // limit is validated to be positive
-	})
-	if err != nil {
-		return nil, fmt.Errorf("search toolset embeddings: %w", err)
+	var rows []repo.SearchToolsetToolEmbeddingsAnyTagsMatchRow
+	switch opts.MatchMode {
+	case MatchModeAny:
+		rows, err = s.queries.SearchToolsetToolEmbeddingsAnyTagsMatch(ctx, repo.SearchToolsetToolEmbeddingsAnyTagsMatchParams{
+			QueryEmbedding1536: pgvector_go.NewVector(queryVectors[0]),
+			ProjectID:          uuid.MustParse(toolset.ProjectID),
+			ToolsetID:          toolsetUUID,
+			ToolsetVersion:     toolset.ToolsetVersion,
+			Tags:               opts.Tags,
+			ResultLimit:        int32(limit), //nolint:gosec // limit is validated to be positive
+		})
+		if err != nil {
+			return nil, fmt.Errorf("search toolset embeddings: %w", err)
+		}
+	case MatchModeAll:
+		anyRows, err := s.queries.SearchToolsetToolEmbeddingsAllTagsMatch(ctx, repo.SearchToolsetToolEmbeddingsAllTagsMatchParams{
+			QueryEmbedding1536: pgvector_go.NewVector(queryVectors[0]),
+			ProjectID:          uuid.MustParse(toolset.ProjectID),
+			ToolsetID:          toolsetUUID,
+			ToolsetVersion:     toolset.ToolsetVersion,
+			Tags:               opts.Tags,
+			ResultLimit:        int32(limit), //nolint:gosec // limit is validated to be positive
+		})
+		if err != nil {
+			return nil, fmt.Errorf("search toolset embeddings: %w", err)
+		}
+
+		// Need to convert to make the types match
+		rows = make([]repo.SearchToolsetToolEmbeddingsAnyTagsMatchRow, len(anyRows))
+		for i, r := range anyRows {
+			rows[i] = repo.SearchToolsetToolEmbeddingsAnyTagsMatchRow(r)
+		}
+	default:
+		return nil, fmt.Errorf("invalid match mode: %s", opts.MatchMode)
 	}
+
 	if len(rows) == 0 {
 		return nil, nil
 	}
@@ -197,6 +261,7 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 		matches = append(matches, &ToolSearchResult{
 			ToolName:        entry.Name,
 			SimilarityScore: float64(row.Similarity),
+			Tags:            row.Tags,
 		})
 	}
 
@@ -207,6 +272,7 @@ type embeddingCandidate struct {
 	entryKey string
 	payload  []byte
 	content  string
+	tags     []string
 }
 
 func (s *ToolsetVectorStore) prepareEmbeddingCandidates(tools []*types.Tool) ([]embeddingCandidate, error) {
@@ -241,13 +307,53 @@ func (s *ToolsetVectorStore) prepareEmbeddingCandidates(tools []*types.Tool) ([]
 			entryKey: baseTool.ToolUrn,
 			payload:  payload,
 			content:  content,
+			tags:     extractTags(tool),
 		})
 	}
 
 	return candidates, nil
 }
 
-func (s *ToolsetVectorStore) insertToolEmbedding(ctx context.Context, projectID uuid.UUID, toolsetID uuid.UUID, toolsetVersion int64, entryKey string, payload []byte, vector pgvector_go.Vector) error {
+func extractTags(tool *types.Tool) []string {
+	var tags []string
+	if tool == nil {
+		return tags
+	}
+
+	toolURN, err := conv.GetToolURN(*tool)
+	if err != nil {
+		return nil
+	}
+
+	tags = append(tags, fmt.Sprintf("source:%s", toolURN.Source))
+
+	if tool.HTTPToolDefinition != nil {
+		for _, tag := range tool.HTTPToolDefinition.Tags {
+			tags = append(tags, fmt.Sprintf("%s/%s", toolURN.Source, tag))
+		}
+	} else if tool.PromptTemplate != nil {
+		for _, subtoolURNString := range tool.PromptTemplate.ToolUrnsHint {
+			subtoolURN, err := urn.ParseTool(subtoolURNString)
+			if err != nil {
+				continue
+			}
+			tags = append(tags, fmt.Sprintf("source:%s", subtoolURN.Source))
+		}
+	}
+
+	return tags
+}
+
+func (s *ToolsetVectorStore) insertToolEmbedding(
+	ctx context.Context,
+	projectID uuid.UUID,
+	toolsetID uuid.UUID,
+	toolsetVersion int64,
+	entryKey string,
+	payload []byte,
+	vector pgvector_go.Vector,
+	tags []string,
+) error {
 	if entryKey == "" {
 		return errors.New("entry key is required")
 	}
@@ -260,6 +366,7 @@ func (s *ToolsetVectorStore) insertToolEmbedding(ctx context.Context, projectID 
 		EmbeddingModel: s.embeddingModel,
 		Embedding1536:  vector,
 		Payload:        payload,
+		Tags:           tags,
 	})
 	if err != nil {
 		return fmt.Errorf("insert tool embedding %s: %w", entryKey, err)

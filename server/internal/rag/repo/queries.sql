@@ -14,7 +14,8 @@ INSERT INTO toolset_embeddings (
     entry_key,
     embedding_model,
     embedding_1536,
-    payload
+    payload,
+    tags
 ) VALUES (
     @project_id,
     @toolset_id,
@@ -22,7 +23,8 @@ INSERT INTO toolset_embeddings (
     @entry_key,
     @embedding_model,
     @embedding_1536,
-    @payload
+    @payload,
+    @tags
 )
 RETURNING *;
 
@@ -55,7 +57,7 @@ SELECT
     ELSE TRUE
   END as indexed;
 
--- name: SearchToolsetToolEmbeddings :many
+-- name: SearchToolsetToolEmbeddingsAnyTagsMatch :many
 SELECT
     id,
     project_id,
@@ -64,6 +66,7 @@ SELECT
     entry_key,
     embedding_model,
     payload,
+    tags,
     created_at,
     updated_at,
     (1 - (embedding_1536 <=> @query_embedding_1536))::float8 AS similarity
@@ -72,6 +75,40 @@ WHERE project_id = @project_id
   AND toolset_id = @toolset_id
   AND toolset_version = @toolset_version
   AND entry_key LIKE 'tools:%'
+  AND (cardinality(sqlc.arg('tags')::text[]) = 0 OR tags && sqlc.arg('tags')::text[])
   AND deleted IS FALSE
 ORDER BY embedding_1536 <=> @query_embedding_1536
 LIMIT @result_limit;
+
+-- name: SearchToolsetToolEmbeddingsAllTagsMatch :many
+SELECT
+    id,
+    project_id,
+    toolset_id,
+    toolset_version,
+    entry_key,
+    embedding_model,
+    payload,
+    tags,
+    created_at,
+    updated_at,
+    (1 - (embedding_1536 <=> @query_embedding_1536))::float8 AS similarity
+FROM toolset_embeddings
+WHERE project_id = @project_id
+  AND toolset_id = @toolset_id
+  AND toolset_version = @toolset_version
+  AND entry_key LIKE 'tools:%'
+  AND (cardinality(@tags::text[]) = 0 OR tags @> @tags)
+  AND deleted IS FALSE
+ORDER BY embedding_1536 <=> @query_embedding_1536
+LIMIT @result_limit;
+
+-- name: ToolsetAvailableTags :many
+SELECT DISTINCT unnest(tags)::text as tag
+FROM toolset_embeddings
+WHERE project_id = @project_id
+  AND toolset_id = @toolset_id
+  AND toolset_version = @toolset_version
+  AND entry_key LIKE 'tools:%'
+  AND deleted IS FALSE
+ORDER BY tag;

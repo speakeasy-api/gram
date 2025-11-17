@@ -24,12 +24,27 @@ const (
 	NEEDS_SEARCH_THRESHOLD = 30
 )
 
-var dynamicSearchToolsSchema = json.RawMessage(`{
+func buildDynamicSearchToolsSchema(availableTags []string) json.RawMessage {
+	return json.RawMessage(fmt.Sprintf(`{
 		"type": "object",
 		"properties": {
 			"query": {
 				"type": "string",
 				"description": "Natural language description of the capability or tool you need."
+			},
+			"tags": {
+				"type": "array",
+				"items": {
+					"type": "string",
+					"description": "Tag to filter the results by."
+				},
+				"description": "Tags to filter the results by. If not provided, all tools will be returned. Available tags: %s"
+			},
+			"match_mode": {
+				"type": "string",
+				"enum": ["any", "all"],
+				"default": "any",
+				"description": "How to match the tags, if provided. If 'any', the results will be tools that match any of the tags. If 'all', the results will be tools that match all of the tags."
 			},
 			"num_results": {
 				"type": "integer",
@@ -40,26 +55,26 @@ var dynamicSearchToolsSchema = json.RawMessage(`{
 		},
 		"required": ["query"],
 		"additionalProperties": false
-	}`)
+	}`, strings.Join(availableTags, ", ")))
+}
 
-func buildDynamicSessionTools(toolset *types.Toolset, vectorToolStore *rag.ToolsetVectorStore) []*toolListEntry {
+func buildDynamicSessionTools(
+	ctx context.Context,
+	logger *slog.Logger,
+	toolset *types.Toolset,
+	vectorToolStore *rag.ToolsetVectorStore,
+	temporal temporal_client.Client,
+) ([]*toolListEntry, error) {
+	if err := waitForIndexing(ctx, logger, toolset, vectorToolStore, temporal); err != nil {
+		return nil, fmt.Errorf("failed to index toolset: %w", err)
+	}
+
 	findDescription := "Search through the available tools in this MCP server using a search query. The result will be a list of tools that could help you complete your task."
 	executeDescription := "Execute a specific tool by name, passing through the correct arguments for that tool's schema. Do not call a tool without first describing it to get the input schema."
-	tree, _ := buildToolTree(toolset.Tools)
-	if len(tree) > 0 {
-		var toolAreas []string
-		for source, group := range tree {
-			if group == nil {
-				for tag := range group.groups {
-					if tag == "default" {
-						toolAreas = append(toolAreas, source)
-					} else {
-						toolAreas = append(toolAreas, fmt.Sprintf("%s/%s", source, tag))
-					}
-				}
-			}
-		}
-		findDescription += fmt.Sprintf(" The available tools in this server relate to these areas: %s.", strings.Join(toolAreas, ", "))
+
+	availableTags, _ := vectorToolStore.GetToolsetAvailableTags(ctx, *toolset)
+	if len(availableTags) > 0 {
+		findDescription += fmt.Sprintf(" The available tools fall under the following categories: %s.", strings.Join(availableTags, ", "))
 	}
 
 	searchToolRequired := len(toolset.Tools) > NEEDS_SEARCH_THRESHOLD
@@ -69,7 +84,7 @@ func buildDynamicSessionTools(toolset *types.Toolset, vectorToolStore *rag.Tools
 		tools = append(tools, &toolListEntry{
 			Name:        searchToolsToolName,
 			Description: findDescription,
-			InputSchema: dynamicSearchToolsSchema,
+			InputSchema: buildDynamicSearchToolsSchema(availableTags),
 		})
 	}
 	tools = append(tools, buildDescribeToolsTool(toolset.Tools, searchToolRequired))
@@ -79,39 +94,42 @@ func buildDynamicSessionTools(toolset *types.Toolset, vectorToolStore *rag.Tools
 		InputSchema: dynamicExecuteToolSchema,
 	})
 
-	return tools
+	return tools, nil
 }
 
 func buildDescribeToolsTool(tools []*types.Tool, searchToolRequired bool) *toolListEntry {
 	description := "Describe a set of tools by name. Use this to get more information about a tool, such as its description and input schema."
 
+	toolNames := []string{}
+	for _, tool := range tools {
+		baseTool := conv.ToBaseTool(tool)
+		toolNames = append(toolNames, baseTool.Name)
+	}
+
 	// For smaller toolsets, we just list the available tools in this tool's description and omit the search tool
 	if searchToolRequired {
 		description += fmt.Sprintf(" You can find what tools are available using the %s tool.", searchToolsToolName)
 	} else {
-		toolNames := []string{}
-		for _, tool := range tools {
-			baseTool := conv.ToBaseTool(tool)
-			toolNames = append(toolNames, baseTool.Name)
-		}
 		description += fmt.Sprintf(" The available tools are: %s.", strings.Join(toolNames, ", "))
 	}
 
-	schemaJSON := `{
+	exampleCount := min(len(toolNames), 3)
+	schemaJSON := fmt.Sprintf(`{
 		"type": "object",
 		"properties": {
 			"tool_names": {
 				"type": "array",
 				"items": {
 					"type": "string",
-					"description": "Exact name of the tool to describe. Example: 'get_github_repo'"
+					"description": "Exact name of the tool to describe. Examples: %s"
 				},
 				"description": "Names of the tools to describe."
 			}
 		},
 		"required": ["tool_names"],
 		"additionalProperties": false
-	}`
+	}`, strings.Join(toolNames[:exampleCount], ", "))
+
 	return &toolListEntry{
 		Name:        describeToolsToolName,
 		Description: description,
@@ -121,8 +139,10 @@ func buildDescribeToolsTool(tools []*types.Tool, searchToolRequired bool) *toolL
 }
 
 type searchToolsArguments struct {
-	Query      string `json:"query"`
-	NumResults int    `json:"num_results"`
+	Query      string        `json:"query"`
+	Tags       []string      `json:"tags"`
+	MatchMode  rag.MatchMode `json:"match_mode"`
+	NumResults int           `json:"num_results"`
 }
 
 func handleSearchToolsCall(
@@ -134,30 +154,8 @@ func handleSearchToolsCall(
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporal temporal_client.Client,
 ) (json.RawMessage, error) {
-	indexed, err := vectorToolStore.ToolsetToolsAreIndexed(ctx, *toolset)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to check toolset indexing status").Log(ctx, logger)
-	}
-
-	if !indexed {
-		wr, indexErr := background.ExecuteIndexToolset(
-			ctx,
-			temporal,
-			background.IndexToolsetParams{
-				ProjectID:   uuid.MustParse(toolset.ProjectID),
-				ToolsetSlug: toolset.Slug,
-			},
-		)
-
-		if indexErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, indexErr, "failed to prepare tool search index").Log(ctx, logger)
-		}
-
-		wrError := wr.Get(ctx, nil)
-		if wrError != nil {
-			return nil, oops.E(oops.CodeUnexpected, wrError, "failed to build tool search index").Log(ctx, logger)
-
-		}
+	if err := waitForIndexing(ctx, logger, toolset, vectorToolStore, temporal); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to index toolset").Log(ctx, logger)
 	}
 
 	var args searchToolsArguments
@@ -172,7 +170,14 @@ func handleSearchToolsCall(
 		return nil, oops.E(oops.CodeInvalid, errors.New("missing query"), "query is required").Log(ctx, logger)
 	}
 
-	searchResults, err := vectorToolStore.SearchToolsetTools(ctx, *toolset, query, args.NumResults)
+	searchOptions := rag.SearchToolsOptions{
+		Query:     query,
+		Tags:      args.Tags,
+		MatchMode: rag.MatchModeAny,
+		Limit:     args.NumResults,
+	}
+
+	searchResults, err := vectorToolStore.SearchToolsetTools(ctx, *toolset, searchOptions)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to search tools").Log(ctx, logger)
 	}
@@ -192,21 +197,21 @@ func handleSearchToolsCall(
 			continue
 		}
 
-		name, description, inputSchema, meta := conv.ToToolListEntry(tool)
+		name, description, _, meta := conv.ToToolListEntry(tool)
 		if name == "" {
 			continue
 		}
 
-		// Add similarity score to meta
+		// Add similarity score and tags to meta
 		if meta == nil {
 			meta = make(map[string]any)
 		}
 		meta["similarity_score"] = searchResult.SimilarityScore
+		meta["tags"] = searchResult.Tags
 
 		results = append(results, &toolListEntry{
 			Name:        name,
 			Description: description,
-			InputSchema: inputSchema,
 			Meta:        meta,
 		})
 	}
@@ -238,6 +243,36 @@ func handleSearchToolsCall(
 	}
 
 	return response, nil
+}
+
+func waitForIndexing(ctx context.Context, logger *slog.Logger, toolset *types.Toolset, vectorToolStore *rag.ToolsetVectorStore, temporal temporal_client.Client) error {
+	indexed, err := vectorToolStore.ToolsetToolsAreIndexed(ctx, *toolset)
+	if err != nil {
+		return fmt.Errorf("failed to check toolset indexing status: %w", err)
+	}
+
+	if !indexed {
+		wr, indexErr := background.ExecuteIndexToolset(
+			ctx,
+			temporal,
+			background.IndexToolsetParams{
+				ProjectID:   uuid.MustParse(toolset.ProjectID),
+				ToolsetSlug: toolset.Slug,
+			},
+		)
+
+		if indexErr != nil {
+			return fmt.Errorf("failed to prepare tool search index: %w", indexErr)
+		}
+
+		wrError := wr.Get(ctx, nil)
+		if wrError != nil {
+			return fmt.Errorf("failed to build tool search index: %w", wrError)
+
+		}
+	}
+
+	return nil
 }
 
 type describeToolsArguments struct {
