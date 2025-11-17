@@ -1,5 +1,11 @@
 # cli
 
+## 0.13.4
+
+### Patch Changes
+
+- 2cc9008: Update functions cli to better track long deployments.
+
 ## 0.13.3
 
 ### Patch Changes
