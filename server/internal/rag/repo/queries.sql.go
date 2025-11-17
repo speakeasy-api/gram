@@ -45,7 +45,7 @@ INSERT INTO toolset_embeddings (
     $6,
     $7
 )
-RETURNING id, project_id, toolset_id, toolset_version, entry_key, embedding_model, embedding_1536, payload, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, toolset_id, toolset_version, entry_key, embedding_model, embedding_1536, payload, tags, created_at, updated_at, deleted_at, deleted
 `
 
 type InsertToolsetEmbeddingParams struct {
@@ -78,6 +78,7 @@ func (q *Queries) InsertToolsetEmbedding(ctx context.Context, arg InsertToolsetE
 		&i.EmbeddingModel,
 		&i.Embedding1536,
 		&i.Payload,
+		&i.Tags,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
