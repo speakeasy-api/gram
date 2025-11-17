@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/speakeasy-api/gram/cli/internal/app/logging"
 	"github.com/speakeasy-api/gram/cli/internal/deploy"
@@ -111,11 +112,41 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 
 			result := workflow.New(ctx, logger, workflowParams).
 				UploadAssets(ctx, config.Sources)
+
+			// Start ticker to show deployment progress
+			deployTicker := time.NewTicker(time.Second)
+			done := make(chan struct{})
+			startTime := time.Now()
+
+			go func() {
+				defer close(done)
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-done:
+						return
+					case <-deployTicker.C:
+						elapsed := time.Since(startTime).Truncate(time.Second)
+						message := processingMessage(elapsed)
+
+						if message != "" {
+							logger.InfoContext(ctx, message)
+						}
+					}
+				}
+			}()
+
 			if c.String("method") == "replace" {
 				result = result.CreateDeployment(ctx, c.String("idempotency-key"))
 			} else {
 				result = result.EvolveDeployment(ctx)
 			}
+
+			// Stop the ticker
+			deployTicker.Stop()
+			done <- struct{}{}
+			<-done
 
 			if !c.Bool("skip-poll") {
 				result.Poll(ctx)
@@ -163,5 +194,18 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 
 			return nil
 		},
+	}
+}
+
+func processingMessage(elapsed time.Duration) string {
+	switch {
+	case elapsed > 10*time.Second:
+		// only output if multiple of 5
+		if int(elapsed.Seconds())%5 == 0 {
+			return fmt.Sprintf("still processing (%s)...", elapsed)
+		}
+		return ""
+	default:
+		return fmt.Sprintf("processing (%s)...", elapsed)
 	}
 }
