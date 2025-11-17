@@ -208,8 +208,6 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
 
   const pushArgs = [
     "--log-pretty=false",
-    // info level is critical as the polling logs are info level
-    "--log-level=verbose",
     "--api-url",
     "http://localhost:8080",
     "push",
