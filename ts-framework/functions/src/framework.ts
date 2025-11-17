@@ -236,6 +236,22 @@ export class Gram<
     return this.#envMemo;
   }
 
+  protected get tools() {
+    return this.#tools;
+  }
+
+  protected get envSchema() {
+    return this.#envSchema;
+  }
+
+  protected get lax() {
+    return this.#lax;
+  }
+
+  protected get inputEnv() {
+    return this.#inputEnv;
+  }
+
   /**
    * Registers a tool with the Gram instance.
    */
@@ -260,6 +276,52 @@ export class Gram<
   > {
     this.#tools.set(definition.name, definition as any);
     return this as any;
+  }
+
+  /**
+   * Appends another Gram instance's tools and environment schema to this one.
+   * Similar to Hono's route groups. Returns a new Gram instance with merged
+   * tools and environment schemas.
+   *
+   * Behavior:
+   * - Tools: If tool names collide, the appended instance's tools override the original's
+   * - Environment: If env vars collide, the appended instance's schema overrides the original's
+   * - Lax setting: The original instance's lax setting is preserved
+   * - Immutable: Returns a new Gram instance, leaving the original unchanged
+   */
+  append<
+    OtherTools extends {
+      [k: string]: ToolDefinition<any, any, any, Response>;
+    },
+    OtherEnvSchema extends z.core.$ZodShape,
+  >(
+    other: Gram<OtherTools, OtherEnvSchema>,
+  ): Gram<Prettify<TTools & OtherTools>, Prettify<EnvSchema & OtherEnvSchema>> {
+    // Create merged env schema (other overrides this)
+    const mergedEnvSchema: Prettify<EnvSchema & OtherEnvSchema> = {
+      ...this.envSchema,
+      ...other.envSchema,
+    };
+
+    // Create new Gram instance with original's settings
+    const newGram = new Gram<
+      Prettify<TTools & OtherTools>,
+      Prettify<EnvSchema & OtherEnvSchema>
+    >({
+      lax: this.lax,
+      env: this.inputEnv as Record<string, string> | undefined,
+      envSchema: mergedEnvSchema,
+    });
+
+    for (const [name, tool] of this.tools) {
+      newGram.tools.set(name, tool as any);
+    }
+
+    for (const [name, tool] of other.tools) {
+      newGram.tools.set(name, tool as any);
+    }
+
+    return newGram;
   }
 
   /**

@@ -318,6 +318,54 @@ test("assert throws response with default status 500", () => {
   }
 });
 
+test("appends one Gram to another", () => {
+  const g1 = new Gram().tool({
+    name: "tool1",
+    description: "First tool",
+    inputSchema: { someString: z.string() },
+    async execute(ctx, input) {
+      return ctx.json({ tool: `tool1 test: ${input.someString}` });
+    },
+  });
+
+  const g2 = new Gram().tool({
+    name: "tool2",
+    description: "Second tool",
+    inputSchema: { someNum: z.number() },
+    async execute(ctx, input) {
+      return ctx.json({ tool: `tool2 test: ${input.someNum}` });
+    },
+  });
+
+  const merged = g1.append(g2);
+
+  expect(merged.manifest()).toEqual({
+    version: "0.0.0",
+    tools: [
+      {
+        name: "tool1",
+        description: "First tool",
+        inputSchema: expect.objectContaining({
+          type: "object",
+          properties: { someString: { type: "string" } },
+          required: ["someString"],
+        }),
+        variables: {},
+      },
+      {
+        name: "tool2",
+        description: "Second tool",
+        inputSchema: expect.objectContaining({
+          type: "object",
+          properties: { someNum: { type: "number" } },
+          required: ["someNum"],
+        }),
+        variables: {},
+      },
+    ],
+  });
+});
+
 test("assert throws response with custom status", async () => {
   try {
     assert(false, { error: "Bad request" }, { status: 400 });
@@ -381,5 +429,237 @@ describe("with fake timers", () => {
 
     const data = await response.json();
     expect(data).toEqual({ done: true });
+  });
+});
+
+describe("append", () => {
+  test("appends tools from another Gram instance", async () => {
+    const g1 = new Gram().tool({
+      name: "echo",
+      description: "Echoes the input",
+      inputSchema: { message: z.string() },
+      async execute(ctx, input) {
+        return ctx.json({ echoed: input.message });
+      },
+    });
+
+    const g2 = new Gram().tool({
+      name: "add",
+      description: "Add two numbers",
+      inputSchema: { a: z.number(), b: z.number() },
+      async execute(ctx, input) {
+        return ctx.json({ sum: input.a + input.b });
+      },
+    });
+
+    const merged = g1.append(g2);
+
+    // Should be able to call tools from both instances
+    const res1 = await merged.handleToolCall({
+      name: "echo",
+      input: { message: "Hello!" },
+    });
+    expect(res1.status).toBe(200);
+    const data1 = await res1.json();
+    expect(data1).toEqual({ echoed: "Hello!" });
+
+    const res2 = await merged.handleToolCall({
+      name: "add",
+      input: { a: 1, b: 2 },
+    });
+    expect(res2.status).toBe(200);
+    const data2 = await res2.json();
+    expect(data2).toEqual({ sum: 3 });
+  });
+
+  test("overrides tools with same name (last wins)", async () => {
+    const g1 = new Gram().tool({
+      name: "greet",
+      description: "Greets the user",
+      inputSchema: {},
+      async execute(ctx) {
+        return ctx.json({ message: "Hello from g1" });
+      },
+    });
+
+    const g2 = new Gram().tool({
+      name: "greet",
+      description: "Greets the user differently",
+      inputSchema: {},
+      async execute(ctx) {
+        return ctx.json({ message: "Hello from g2" });
+      },
+    });
+
+    const merged = g1.append(g2);
+
+    const response = await merged.handleToolCall({
+      name: "greet",
+      input: {},
+    });
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    // g2's tool should override g1's tool
+    expect(data).toEqual({ message: "Hello from g2" });
+  });
+
+  test("merges environment schemas", async () => {
+    const g1 = new Gram({
+      env: { API_KEY: "key1", MESSAGE: "Hello" },
+      envSchema: {
+        API_KEY: z.string(),
+      },
+    }).tool({
+      name: "tool1",
+      inputSchema: {},
+      async execute(ctx) {
+        return ctx.json({ key: ctx.env.API_KEY });
+      },
+    });
+
+    const g2 = new Gram({
+      envSchema: {
+        MESSAGE: z.string(),
+      },
+    }).tool({
+      name: "tool2",
+      inputSchema: {},
+      async execute(ctx) {
+        return ctx.json({ message: ctx.env.MESSAGE });
+      },
+    });
+
+    const merged = g1.append(g2);
+
+    // Should have access to both env vars
+    const res1 = await merged.handleToolCall({
+      name: "tool1",
+      input: {},
+    });
+    expect(res1.status).toBe(200);
+    const data1 = await res1.json();
+    expect(data1).toEqual({ key: "key1" });
+
+    const res2 = await merged.handleToolCall({
+      name: "tool2",
+      input: {},
+    });
+    expect(res2.status).toBe(200);
+    const data2 = await res2.json();
+    expect(data2).toEqual({ message: "Hello" });
+  });
+
+  test("is immutable - does not modify original instances", async () => {
+    const g1 = new Gram().tool({
+      name: "echo",
+      inputSchema: { message: z.string() },
+      async execute(ctx, input) {
+        return ctx.json({ echoed: input.message });
+      },
+    });
+
+    const g2 = new Gram().tool({
+      name: "add",
+      inputSchema: { a: z.number(), b: z.number() },
+      async execute(ctx, input) {
+        return ctx.json({ sum: input.a + input.b });
+      },
+    });
+
+    const merged = g1.append(g2);
+
+    // g1 should still only have echo
+    await expect(
+      (g1 as any).handleToolCall({
+        name: "add",
+        input: { a: 1, b: 2 },
+      }),
+    ).rejects.toThrow("Tool not found: add");
+
+    // g2 should still only have add
+    await expect(
+      (g2 as any).handleToolCall({
+        name: "echo",
+        input: { message: "hello" },
+      }),
+    ).rejects.toThrow("Tool not found: echo");
+
+    // merged should have both
+    const res1 = await merged.handleToolCall({
+      name: "echo",
+      input: { message: "hello" },
+    });
+    expect(res1.status).toBe(200);
+
+    const res2 = await merged.handleToolCall({
+      name: "add",
+      input: { a: 1, b: 2 },
+    });
+    expect(res2.status).toBe(200);
+  });
+
+  test("preserves lax setting from original instance", async () => {
+    const g1 = new Gram({ lax: true }).tool({
+      name: "echo",
+      inputSchema: { message: z.string() },
+      async execute(ctx, input) {
+        return ctx.json({ echoed: input.message });
+      },
+    });
+
+    const g2 = new Gram({ lax: false }).tool({
+      name: "add",
+      inputSchema: { a: z.number(), b: z.number() },
+      async execute(ctx, input) {
+        return ctx.json({ sum: input.a + input.b });
+      },
+    });
+
+    const merged = g1.append(g2);
+
+    // Should use g1's lax setting (true), so invalid input should pass
+    const response = await merged.handleToolCall({
+      name: "echo",
+      input: { message: 123 } as any, // Invalid type but lax mode
+    });
+    expect(response.status).toBe(200);
+  });
+
+  test("chains multiple appends", async () => {
+    const g1 = new Gram().tool({
+      name: "tool1",
+      inputSchema: {},
+      async execute(ctx) {
+        return ctx.json({ from: "g1" });
+      },
+    });
+
+    const g2 = new Gram().tool({
+      name: "tool2",
+      inputSchema: {},
+      async execute(ctx) {
+        return ctx.json({ from: "g2" });
+      },
+    });
+
+    const g3 = new Gram().tool({
+      name: "tool3",
+      inputSchema: {},
+      async execute(ctx) {
+        return ctx.json({ from: "g3" });
+      },
+    });
+
+    const merged = g1.append(g2).append(g3);
+
+    // Should have all three tools
+    const res1 = await merged.handleToolCall({ name: "tool1", input: {} });
+    expect((await res1.json()).from).toBe("g1");
+
+    const res2 = await merged.handleToolCall({ name: "tool2", input: {} });
+    expect((await res2.json()).from).toBe("g2");
+
+    const res3 = await merged.handleToolCall({ name: "tool3", input: {} });
+    expect((await res3.json()).from).toBe("g3");
   });
 });

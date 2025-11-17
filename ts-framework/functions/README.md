@@ -78,6 +78,61 @@ const gram = new Gram()
 export default gram;
 ```
 
+### Composing Gram Instances
+
+You can compose multiple Gram instances together using the `append()` method,
+similar to Hono's route groups pattern. This is useful for organizing tools by
+domain or functionality:
+
+```typescript
+import { Gram } from "@gram-ai/functions";
+import * as z from "zod/mini";
+
+// Math tools
+const mathTools = new Gram()
+  .tool({
+    name: "add",
+    description: "Add two numbers",
+    inputSchema: { a: z.number(), b: z.number() },
+    async execute(ctx, input) {
+      return ctx.json({ sum: input.a + input.b });
+    },
+  })
+  .tool({
+    name: "multiply",
+    description: "Multiply two numbers",
+    inputSchema: { a: z.number(), b: z.number() },
+    async execute(ctx, input) {
+      return ctx.json({ product: input.a * input.b });
+    },
+  });
+
+// String tools
+const stringTools = new Gram()
+  .tool({
+    name: "uppercase",
+    description: "Convert string to uppercase",
+    inputSchema: { text: z.string() },
+    async execute(ctx, input) {
+      return ctx.text(input.text.toUpperCase());
+    },
+  });
+
+// Combine both
+const gram = mathTools.append(stringTools);
+
+export default gram;
+```
+
+The `append()` method:
+
+- **Merges tools**: All tools from both instances are combined
+- **Override behavior**: If tool names collide, the appended instance's tools
+  override the original's
+- **Merges environment schemas**: Environment variables from both instances are
+  available
+- **Immutable**: Returns a new Gram instance without modifying the originals
+
 ### Tool Definition
 
 Each tool requires:
