@@ -103,7 +103,7 @@ async function init(argv: string[]): Promise<void> {
   const rootDir = name.split("/").pop()?.trim() || "gram-func";
   const dirArg = args.dir?.trim();
   let dir = await textOrClack({
-    message: "What directory should we create the project in?",
+    message: "What local directory should we place this project in?",
     initialValue: rootDir,
     defaultValue: rootDir,
     validate: (value) => {
