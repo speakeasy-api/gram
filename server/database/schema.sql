@@ -991,6 +991,8 @@ CREATE TABLE IF NOT EXISTS toolset_embeddings (
   -- 1536 dimensions for text-embedding-3-small
   embedding_1536 vector(1536) NOT NULL,
   payload JSONB NOT NULL,
+  tags TEXT[] DEFAULT ARRAY[]::TEXT[],
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,

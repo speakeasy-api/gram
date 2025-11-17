@@ -565,6 +565,7 @@ type ToolsetEmbedding struct {
 	EmbeddingModel string
 	Embedding1536  pgvector_go.Vector
 	Payload        []byte
+	Tags           []string
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
