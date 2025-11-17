@@ -1,4 +1,4 @@
-h1:vFYFtNmqYx5EaaIClcLzO49XHzSD/NbE/+TK60uUqFo=
+h1:5a2uQI/Q4/mneUm7YpprB4bNePZh/KBKi/8wHAY6djw=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -71,3 +71,4 @@ h1:vFYFtNmqYx5EaaIClcLzO49XHzSD/NbE/+TK60uUqFo=
 20251112014731_add-source-environments-table.sql h1:+4SVvZtDxr+Ssk+b0YQ/IHxjDRBRzZdlQYl/1lYDPx0=
 20251112201118_tool_selection_mode_default.sql h1:vYYg/tlR8afpKWSf4lSEjO8wL5OY2FWTyz5JPlnb80Q=
 20251113201101_adds-self-managed-org-user-data-models.sql h1:WFbvByae9OPwyJ0TNW4P5814TBtYpQir8jageviR5jQ=
+20251117202139_embedding_tags.sql h1:tzm5VOzYl47LhDgW4SQjA6fOJUrUep3mJX7IkCK16uw=
