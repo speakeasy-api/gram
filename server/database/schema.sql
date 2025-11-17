@@ -1012,3 +1012,8 @@ CREATE INDEX IF NOT EXISTS toolset_embeddings_embedding_1536_idx
 ON toolset_embeddings
 USING hnsw (embedding_1536 vector_cosine_ops)
 WHERE deleted IS FALSE;
+
+-- Index for fast filtering on tags
+CREATE INDEX IF NOT EXISTS toolset_embeddings_tags_idx
+ON toolset_embeddings
+USING GIN (tags);
