@@ -72,7 +72,7 @@ func (s *Service) GetDomain(ctx context.Context, payload *gen.GetDomainPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	domain, err := s.repo.GetCustomDomainsByOrganization(ctx, authCtx.ActiveOrganizationID)
+	domain, err := s.repo.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").Log(ctx, s.logger)
 	}

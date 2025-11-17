@@ -1,12 +1,12 @@
 import { getLogger, type Logger } from "@logtape/logtape";
 import archiver from "archiver";
 import esbuild from "esbuild";
+import { existsSync } from "node:fs";
 import { mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { $, ProcessPromise, chalk } from "zx";
 import { isCI, type ParsedUserConfig } from "./config.ts";
-import { Loader } from "./loader.ts";
 
 type Artifacts = {
   funcFilename: string;
@@ -20,6 +20,30 @@ async function resolveArtifacts(cfg: ParsedUserConfig): Promise<Artifacts> {
     manifestFilename: join(cfg.outDir, "manifest.json"),
     zipFilename: join(cfg.outDir, "gram.zip"),
   };
+}
+
+function resolveGramCLI(): string {
+  // Check for local development mode using GRAM_DEV env var
+  const isLocalDev =
+    process.env["GRAM_DEV"]?.toLowerCase() === "true" ||
+    process.env["GRAM_DEV"] === "1";
+
+  if (isLocalDev) {
+    // In local dev, use the CLI from cli/bin/gram relative to workspace root
+    // From ts-framework/functions/src/build -> ../../../../cli/bin/gram
+    const localCliPath = resolve(
+      dirname(new URL(import.meta.url).pathname),
+      "../../../../cli/bin/gram",
+    );
+
+    // Check if the local CLI exists
+    if (existsSync(localCliPath)) {
+      return localCliPath;
+    }
+  }
+
+  // Use system-installed gram
+  return "gram";
 }
 
 export async function buildFunctions(logger: Logger, cfg: ParsedUserConfig) {
@@ -54,6 +78,7 @@ export async function buildFunctions(logger: Logger, cfg: ParsedUserConfig) {
   await bundleFunction(logger, {
     entrypoint,
     outFile: artifacts.funcFilename,
+    requireInterop: cfg.requireInterop,
   });
 
   await createZipArchive(logger, artifacts);
@@ -91,11 +116,22 @@ async function bundleFunction(
   options: {
     entrypoint: string;
     outFile: string;
+    requireInterop: boolean;
   },
 ): Promise<Array<{ path: string; hash: string }>> {
   logger.info(
     `Bundling function from ${options.entrypoint} into ${options.outFile}`,
   );
+
+  let banner: Record<string, string> | undefined = undefined;
+  if (options.requireInterop) {
+    banner = {
+      js: [
+        `import { createRequire as topLevelCreateRequire } from 'node:module';`,
+        `if (typeof require === 'undefined') { globalThis.require = topLevelCreateRequire(import.meta.url); }`,
+      ].join("\n"),
+    };
+  }
 
   const res = await esbuild.build({
     entryPoints: [options.entrypoint],
@@ -106,6 +142,7 @@ async function bundleFunction(
     platform: "node",
     target: ["node22"],
     format: "esm",
+    banner,
   });
 
   return (
@@ -141,14 +178,17 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
   const cwd = config.cwd ?? process.cwd();
   const slug = config.slug || (await inferSlug(cwd));
 
-  const cmd = process.platform === "win32" ? ["where"] : ["command", "-v"];
-  const program = "gram";
-  const gramPath = await $`${cmd} ${program}`.nothrow();
+  const gramCLI = resolveGramCLI();
+  // Only check if CLI exists when using system gram
+  if (gramCLI === "gram") {
+    const cmd = process.platform === "win32" ? ["where"] : ["command", "-v"];
+    const gramPath = await $`${cmd} ${gramCLI}`.nothrow();
 
-  if (gramPath.exitCode !== 0) {
-    throw new Error(
-      `Gram CLI not found. Please install it from https://www.speakeasy.com/docs/gram/command-line/installation.`,
-    );
+    if (gramPath.exitCode !== 0) {
+      throw new Error(
+        `Gram CLI not found. Please install it from https://www.speakeasy.com/docs/gram/command-line/installation.`,
+      );
+    }
   }
 
   const artifacts = await resolveArtifacts(config);
@@ -164,7 +204,7 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
     relative(dirname(config.deployStagingFile), zipFilename),
   ];
   logger.info(`Staging ${zipFilename} with slug: ${slug}`);
-  await $`gram stage ${stageArgs}`;
+  await $`${gramCLI} stage ${stageArgs}`;
 
   const pushArgs = [
     "--log-pretty=false",
@@ -180,24 +220,18 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
 
   logger.info("Deploying function with Gram CLI");
 
-  const loader = new Loader("deploying function...");
-
   const pushcmd = $({
     stdio: ["pipe", "pipe", "pipe"],
-  })`gram ${pushArgs}`
+  })`${gramCLI} ${pushArgs}`
     .quiet()
     .nothrow();
 
   // Consume stdio and show loader concurrently
-  const stdioTask = consumeStdio(pushcmd, getLogger(["gram", "cli"])).then(() => {
-    // Start loader after logs finish streaming
-    loader.start();
-  });
+  const stdioTask = consumeStdio(pushcmd, getLogger(["gram", "cli"]));
 
-  const result = await Promise.all([stdioTask, pushcmd]).then(([, result]) => result);
-
-  // Stop the loader animation
-  loader.stop();
+  const result = await Promise.all([stdioTask, pushcmd]).then(
+    ([, result]) => result,
+  );
 
   if (result.exitCode !== 0) {
     throw new Error(

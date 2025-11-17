@@ -12,7 +12,7 @@ INSERT INTO custom_domains (
 )
 RETURNING *;
 
--- name: GetCustomDomainsByOrganization :one
+-- name: GetCustomDomainByOrganization :one
 SELECT *
 FROM custom_domains
 WHERE organization_id = @organization_id

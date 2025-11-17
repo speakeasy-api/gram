@@ -1,5 +1,12 @@
 # @gram-ai/create-function
 
+## 0.9.1
+
+### Patch Changes
+
+- 0e27fff: Fix various aspects of the copy in create-function
+- 5b778e8: Updated esbuild config for Gram Functions to default to emitting a CommonJS require shim, allowing dynamic require() calls to work in bundled code. This is necessary for compatibility with certain dependencies that use dynamic requires.
+
 ## 0.9.0
 
 ### Minor Changes

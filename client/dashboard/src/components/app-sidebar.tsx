@@ -74,17 +74,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenu>
               <SidebarMenuItem>
                 <NavButton
-                  title="Metrics"
-                  Icon={ChartNoAxesCombinedIcon}
-                  onClick={() => setMetricsModalOpen(true)}
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <NavButton
                   title="Logs"
                   Icon={routes.logs.Icon}
                   href={routes.logs.href()}
                   active={routes.logs.active}
+                />
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <NavButton
+                  title="Metrics"
+                  Icon={ChartNoAxesCombinedIcon}
+                  onClick={() => setMetricsModalOpen(true)}
                 />
               </SidebarMenuItem>
             </SidebarMenu>

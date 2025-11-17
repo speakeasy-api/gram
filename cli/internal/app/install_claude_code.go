@@ -13,7 +13,7 @@ import (
 func newInstallClaudeCodeCommand() *cli.Command {
 	return &cli.Command{
 		Name:   "claude-code",
-		Usage:  "Install a Gram toolset as an MCP server in Claude Code",
+		Usage:  "Install a Gram toolset as an MCP server in Claude Code (CLI editor with native HTTP support)",
 		Flags:  installFlags,
 		Action: doInstallClaudeCode,
 	}

@@ -64,13 +64,13 @@ async function init(argv: string[]): Promise<void> {
     options: [
       {
         value: "gram",
-        label: "Gram",
-        hint: "Default. Simplest path to start building your own tools",
+        label: "Gram Functions",
+        hint: "Simplest path to start building your own tools - comes with batteries included",
       },
       {
         value: "mcp",
-        label: "MCP",
-        hint: "For usages where you need advanced control over MCP responses",
+        label: "Model Context Protocol SDK",
+        hint: "For advanced use cases where you need more control over MCP responses",
       },
     ],
   })(args.template);
@@ -103,7 +103,7 @@ async function init(argv: string[]): Promise<void> {
   const rootDir = name.split("/").pop()?.trim() || "gram-func";
   const dirArg = args.dir?.trim();
   let dir = await textOrClack({
-    message: "Where do you want to create it?",
+    message: "What directory should we create the project in?",
     initialValue: rootDir,
     defaultValue: rootDir,
     validate: (value) => {

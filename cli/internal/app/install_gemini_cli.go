@@ -12,7 +12,7 @@ import (
 func newInstallGeminiCLICommand() *cli.Command {
 	return &cli.Command{
 		Name:   "gemini-cli",
-		Usage:  "Install a Gram toolset as an MCP server in Gemini CLI",
+		Usage:  "Install a Gram toolset as an MCP server in Gemini CLI (requires gemini command)",
 		Flags:  installFlags,
 		Action: doInstallGeminiCLI,
 	}
