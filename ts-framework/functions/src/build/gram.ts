@@ -103,8 +103,8 @@ async function bundleFunction(
   if (options.requireInterop) {
     banner = {
       js: [
-        `import { createRequire as topLevelCreateRequire } from 'node:module'`,
-        `const require = topLevelCreateRequire(import.meta.url)`,
+        `import { createRequire as topLevelCreateRequire } from 'node:module';`,
+        `if (typeof require === 'undefined') { globalThis.require = topLevelCreateRequire(import.meta.url); }`,
       ].join("\n"),
     };
   }
