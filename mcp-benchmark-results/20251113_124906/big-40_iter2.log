@@ -1,0 +1,19 @@
+================================================================================
+MCP Server: big-40
+Iteration: 2
+Timestamp: 2025-11-13T12:49:26.343144
+Success: True
+Error/Approval: False
+================================================================================
+
+QUERY OUTPUT
+--------------------------------------------------------------------------------
+The HubSpot MCP tool doesn't appear to be available. This could mean:
+
+1. The MCP server is not currently running
+2. The tool name or configuration has changed
+3. The connection to the HubSpot MCP server needs to be established
+
+To use HubSpot functionality, you'll need to ensure the MCP server is properly configured and running. You can check your MCP server configuration or restart it if needed.
+
+

@@ -1,0 +1,21 @@
+================================================================================
+Configuration: big100
+Iteration: 1
+Timestamp: 2025-11-13T12:42:13.183290
+Success: True
+Error/Approval: False
+================================================================================
+
+QUERY OUTPUT
+--------------------------------------------------------------------------------
+It appears the HubSpot MCP tool isn't currently available or properly configured. The tool `mcp__big-40__hubspot_search_deals` that was mentioned in the environment isn't accessible.
+
+To list HubSpot deals, you would typically need to:
+
+1. Ensure the HubSpot MCP server is properly configured and running
+2. Verify the MCP server connection in your Claude Code settings
+3. Check that the HubSpot API credentials are properly set up
+
+Would you like me to help you troubleshoot the MCP server configuration, or would you prefer to access HubSpot deals through another method (like using the HubSpot API directly)?
+
+

@@ -1,0 +1,19 @@
+================================================================================
+MCP Server: big-100
+Iteration: 2
+Timestamp: 2025-11-13T12:49:46.821874
+Success: True
+Error/Approval: False
+================================================================================
+
+QUERY OUTPUT
+--------------------------------------------------------------------------------
+The HubSpot MCP tool doesn't appear to be available or properly configured. To list HubSpot deals, you would need to:
+
+1. Ensure the HubSpot MCP server is installed and configured
+2. Check that your HubSpot API credentials are properly set up
+3. Restart Claude Code if you just added the MCP server
+
+Would you like help setting up the HubSpot MCP integration, or were you looking to interact with HubSpot data in a different way?
+
+

@@ -84,9 +84,8 @@ type oauthTokenInputs struct {
 type ToolMode string
 
 const (
-	ToolModeStatic            ToolMode = "static"
-	ToolModeSemanticSearch    ToolMode = "semantic_search"
-	ToolModeProgressiveSearch ToolMode = "progressive_search"
+	ToolModeStatic  ToolMode = "static"
+	ToolModeDynamic ToolMode = "dynamic"
 )
 
 type mcpInputs struct {

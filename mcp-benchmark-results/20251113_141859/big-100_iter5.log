@@ -1,0 +1,31 @@
+================================================================================
+MCP Server: big-100
+Iteration: 5
+Timestamp: 2025-11-13T14:21:59.938295
+================================================================================
+
+Here are 3 HubSpot deals (from a total of 906 deals):
+
+1. **Intuit**
+   - Amount: $50,000
+   - Stage: Closed Lost
+   - Close Date: September 10, 2024
+   - Pipeline: Default
+   - [View in HubSpot](https://app.hubspot.com/contacts/21944879/record/0-3/15329921593)
+
+2. **Moov**
+   - Amount: $30,000
+   - Stage: Closed Won
+   - Close Date: October 31, 2024
+   - Pipeline: Default
+   - [View in HubSpot](https://app.hubspot.com/contacts/21944879/record/0-3/15329922333)
+
+3. **LexisNexis**
+   - Amount: $40,000
+   - Stage: Closed Lost
+   - Close Date: September 17, 2024
+   - Pipeline: Default
+   - [View in HubSpot](https://app.hubspot.com/contacts/21944879/record/0-3/15332105780)
+
+
+=== STDERR ===

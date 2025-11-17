@@ -1,0 +1,21 @@
+================================================================================
+MCP Server: big-200
+Iteration: 2
+Timestamp: 2025-11-13T12:50:07.951070
+Success: True
+Error/Approval: False
+================================================================================
+
+QUERY OUTPUT
+--------------------------------------------------------------------------------
+It looks like the HubSpot MCP tool is not currently available in this session. The tool `mcp__big-40__hubspot_search_deals` that was listed in the environment appears to not be accessible.
+
+To list HubSpot deals, you would need to:
+
+1. Ensure the HubSpot MCP server is properly installed and configured
+2. Verify the MCP server is running and connected
+3. Check your HubSpot API credentials are set up correctly
+
+Would you like help setting up the HubSpot MCP integration, or is there something else I can help you with?
+
+

@@ -1,0 +1,63 @@
+MCP Server Benchmark Summary
+Generated: 2025-11-13T12:50:07.951591
+Iterations per server: 2
+Test query: List 3 hubspot deals
+================================================================================
+
+MCP Server: big-40
+--------------------------------------------------------------------------------
+Total runs: 2
+Successful: 2
+With errors/approval requests: 0
+
+  Iteration 1:
+    Success: True
+    Error/Approval: False
+    Output length: 506 chars
+    Log: mcp-benchmark-results/20251113_124906/big-40_iter1.log
+
+  Iteration 2:
+    Success: True
+    Error/Approval: False
+    Output length: 401 chars
+    Log: mcp-benchmark-results/20251113_124906/big-40_iter2.log
+
+
+MCP Server: big-100
+--------------------------------------------------------------------------------
+Total runs: 2
+Successful: 2
+With errors/approval requests: 0
+
+  Iteration 1:
+    Success: True
+    Error/Approval: False
+    Output length: 465 chars
+    Log: mcp-benchmark-results/20251113_124906/big-100_iter1.log
+
+  Iteration 2:
+    Success: True
+    Error/Approval: False
+    Output length: 430 chars
+    Log: mcp-benchmark-results/20251113_124906/big-100_iter2.log
+
+
+MCP Server: big-200
+--------------------------------------------------------------------------------
+Total runs: 2
+Successful: 2
+With errors/approval requests: 0
+
+  Iteration 1:
+    Success: True
+    Error/Approval: False
+    Output length: 511 chars
+    Log: mcp-benchmark-results/20251113_124906/big-200_iter1.log
+
+  Iteration 2:
+    Success: True
+    Error/Approval: False
+    Output length: 521 chars
+    Log: mcp-benchmark-results/20251113_124906/big-200_iter2.log
+
+

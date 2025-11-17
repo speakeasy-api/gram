@@ -1,0 +1,274 @@
+MCP Server Benchmark Summary
+Generated: 2025-11-13T14:15:03.185711
+Iterations per server: 10
+Test query: List 3 hubspot deals
+================================================================================
+
+MCP Server: big-40
+--------------------------------------------------------------------------------
+Total runs: 10
+Successful: 10
+With errors: 0
+
+  Iteration 1:
+    Success: True
+    Has error: False
+    Output length: 436 chars
+    Log: mcp-benchmark-results/20251113_140410/big-40_iter1.log
+
+  Iteration 2:
+    Success: True
+    Has error: False
+    Output length: 413 chars
+    Log: mcp-benchmark-results/20251113_140410/big-40_iter2.log
+
+  Iteration 3:
+    Success: True
+    Has error: False
+    Output length: 649 chars
+    Log: mcp-benchmark-results/20251113_140410/big-40_iter3.log
+
+  Iteration 4:
+    Success: True
+    Has error: False
+    Output length: 442 chars
+    Log: mcp-benchmark-results/20251113_140410/big-40_iter4.log
+
+  Iteration 5:
+    Success: True
+    Has error: False
+    Output length: 698 chars
+    Log: mcp-benchmark-results/20251113_140410/big-40_iter5.log
+
+  Iteration 6:
+    Success: True
+    Has error: False
+    Output length: 419 chars
+    Log: mcp-benchmark-results/20251113_140410/big-40_iter6.log
+
+  Iteration 7:
+    Success: True
+    Has error: False
+    Output length: 638 chars
+    Log: mcp-benchmark-results/20251113_140410/big-40_iter7.log
+
+  Iteration 8:
+    Success: True
+    Has error: False
+    Output length: 632 chars
+    Log: mcp-benchmark-results/20251113_140410/big-40_iter8.log
+
+  Iteration 9:
+    Success: True
+    Has error: False
+    Output length: 817 chars
+    Log: mcp-benchmark-results/20251113_140410/big-40_iter9.log
+
+  Iteration 10:
+    Success: True
+    Has error: False
+    Output length: 436 chars
+    Log: mcp-benchmark-results/20251113_140410/big-40_iter10.log
+
+
+MCP Server: big-100
+--------------------------------------------------------------------------------
+Total runs: 10
+Successful: 10
+With errors: 0
+
+  Iteration 1:
+    Success: True
+    Has error: False
+    Output length: 575 chars
+    Log: mcp-benchmark-results/20251113_140410/big-100_iter1.log
+
+  Iteration 2:
+    Success: True
+    Has error: False
+    Output length: 627 chars
+    Log: mcp-benchmark-results/20251113_140410/big-100_iter2.log
+
+  Iteration 3:
+    Success: True
+    Has error: False
+    Output length: 727 chars
+    Log: mcp-benchmark-results/20251113_140410/big-100_iter3.log
+
+  Iteration 4:
+    Success: True
+    Has error: False
+    Output length: 455 chars
+    Log: mcp-benchmark-results/20251113_140410/big-100_iter4.log
+
+  Iteration 5:
+    Success: True
+    Has error: False
+    Output length: 442 chars
+    Log: mcp-benchmark-results/20251113_140410/big-100_iter5.log
+
+  Iteration 6:
+    Success: True
+    Has error: False
+    Output length: 658 chars
+    Log: mcp-benchmark-results/20251113_140410/big-100_iter6.log
+
+  Iteration 7:
+    Success: True
+    Has error: False
+    Output length: 412 chars
+    Log: mcp-benchmark-results/20251113_140410/big-100_iter7.log
+
+  Iteration 8:
+    Success: True
+    Has error: False
+    Output length: 650 chars
+    Log: mcp-benchmark-results/20251113_140410/big-100_iter8.log
+
+  Iteration 9:
+    Success: True
+    Has error: False
+    Output length: 349 chars
+    Log: mcp-benchmark-results/20251113_140410/big-100_iter9.log
+
+  Iteration 10:
+    Success: True
+    Has error: False
+    Output length: 696 chars
+    Log: mcp-benchmark-results/20251113_140410/big-100_iter10.log
+
+
+MCP Server: big-200
+--------------------------------------------------------------------------------
+Total runs: 10
+Successful: 10
+With errors: 0
+
+  Iteration 1:
+    Success: True
+    Has error: False
+    Output length: 627 chars
+    Log: mcp-benchmark-results/20251113_140410/big-200_iter1.log
+
+  Iteration 2:
+    Success: True
+    Has error: False
+    Output length: 655 chars
+    Log: mcp-benchmark-results/20251113_140410/big-200_iter2.log
+
+  Iteration 3:
+    Success: True
+    Has error: False
+    Output length: 717 chars
+    Log: mcp-benchmark-results/20251113_140410/big-200_iter3.log
+
+  Iteration 4:
+    Success: True
+    Has error: False
+    Output length: 635 chars
+    Log: mcp-benchmark-results/20251113_140410/big-200_iter4.log
+
+  Iteration 5:
+    Success: True
+    Has error: False
+    Output length: 368 chars
+    Log: mcp-benchmark-results/20251113_140410/big-200_iter5.log
+
+  Iteration 6:
+    Success: True
+    Has error: False
+    Output length: 349 chars
+    Log: mcp-benchmark-results/20251113_140410/big-200_iter6.log
+
+  Iteration 7:
+    Success: True
+    Has error: False
+    Output length: 450 chars
+    Log: mcp-benchmark-results/20251113_140410/big-200_iter7.log
+
+  Iteration 8:
+    Success: True
+    Has error: False
+    Output length: 638 chars
+    Log: mcp-benchmark-results/20251113_140410/big-200_iter8.log
+
+  Iteration 9:
+    Success: True
+    Has error: False
+    Output length: 375 chars
+    Log: mcp-benchmark-results/20251113_140410/big-200_iter9.log
+
+  Iteration 10:
+    Success: True
+    Has error: False
+    Output length: 471 chars
+    Log: mcp-benchmark-results/20251113_140410/big-200_iter10.log
+
+
+MCP Server: big-400
+--------------------------------------------------------------------------------
+Total runs: 10
+Successful: 10
+With errors: 0
+
+  Iteration 1:
+    Success: True
+    Has error: False
+    Output length: 658 chars
+    Log: mcp-benchmark-results/20251113_140410/big-400_iter1.log
+
+  Iteration 2:
+    Success: True
+    Has error: False
+    Output length: 630 chars
+    Log: mcp-benchmark-results/20251113_140410/big-400_iter2.log
+
+  Iteration 3:
+    Success: True
+    Has error: False
+    Output length: 697 chars
+    Log: mcp-benchmark-results/20251113_140410/big-400_iter3.log
+
+  Iteration 4:
+    Success: True
+    Has error: False
+    Output length: 465 chars
+    Log: mcp-benchmark-results/20251113_140410/big-400_iter4.log
+
+  Iteration 5:
+    Success: True
+    Has error: False
+    Output length: 464 chars
+    Log: mcp-benchmark-results/20251113_140410/big-400_iter5.log
+
+  Iteration 6:
+    Success: True
+    Has error: False
+    Output length: 672 chars
+    Log: mcp-benchmark-results/20251113_140410/big-400_iter6.log
+
+  Iteration 7:
+    Success: True
+    Has error: False
+    Output length: 382 chars
+    Log: mcp-benchmark-results/20251113_140410/big-400_iter7.log
+
+  Iteration 8:
+    Success: True
+    Has error: False
+    Output length: 635 chars
+    Log: mcp-benchmark-results/20251113_140410/big-400_iter8.log
+
+  Iteration 9:
+    Success: True
+    Has error: False
+    Output length: 382 chars
+    Log: mcp-benchmark-results/20251113_140410/big-400_iter9.log
+
+  Iteration 10:
+    Success: True
+    Has error: False
+    Output length: 663 chars
+    Log: mcp-benchmark-results/20251113_140410/big-400_iter10.log
+
+

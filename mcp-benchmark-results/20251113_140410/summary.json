@@ -1,0 +1,290 @@
+{
+  "big-40": [
+    {
+      "iteration": 1,
+      "success": true,
+      "has_error": false,
+      "output_length": 436,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-40_iter1.log"
+    },
+    {
+      "iteration": 2,
+      "success": true,
+      "has_error": false,
+      "output_length": 413,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-40_iter2.log"
+    },
+    {
+      "iteration": 3,
+      "success": true,
+      "has_error": false,
+      "output_length": 649,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-40_iter3.log"
+    },
+    {
+      "iteration": 4,
+      "success": true,
+      "has_error": false,
+      "output_length": 442,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-40_iter4.log"
+    },
+    {
+      "iteration": 5,
+      "success": true,
+      "has_error": false,
+      "output_length": 698,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-40_iter5.log"
+    },
+    {
+      "iteration": 6,
+      "success": true,
+      "has_error": false,
+      "output_length": 419,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-40_iter6.log"
+    },
+    {
+      "iteration": 7,
+      "success": true,
+      "has_error": false,
+      "output_length": 638,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-40_iter7.log"
+    },
+    {
+      "iteration": 8,
+      "success": true,
+      "has_error": false,
+      "output_length": 632,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-40_iter8.log"
+    },
+    {
+      "iteration": 9,
+      "success": true,
+      "has_error": false,
+      "output_length": 817,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-40_iter9.log"
+    },
+    {
+      "iteration": 10,
+      "success": true,
+      "has_error": false,
+      "output_length": 436,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-40_iter10.log"
+    }
+  ],
+  "big-100": [
+    {
+      "iteration": 1,
+      "success": true,
+      "has_error": false,
+      "output_length": 575,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-100_iter1.log"
+    },
+    {
+      "iteration": 2,
+      "success": true,
+      "has_error": false,
+      "output_length": 627,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-100_iter2.log"
+    },
+    {
+      "iteration": 3,
+      "success": true,
+      "has_error": false,
+      "output_length": 727,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-100_iter3.log"
+    },
+    {
+      "iteration": 4,
+      "success": true,
+      "has_error": false,
+      "output_length": 455,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-100_iter4.log"
+    },
+    {
+      "iteration": 5,
+      "success": true,
+      "has_error": false,
+      "output_length": 442,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-100_iter5.log"
+    },
+    {
+      "iteration": 6,
+      "success": true,
+      "has_error": false,
+      "output_length": 658,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-100_iter6.log"
+    },
+    {
+      "iteration": 7,
+      "success": true,
+      "has_error": false,
+      "output_length": 412,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-100_iter7.log"
+    },
+    {
+      "iteration": 8,
+      "success": true,
+      "has_error": false,
+      "output_length": 650,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-100_iter8.log"
+    },
+    {
+      "iteration": 9,
+      "success": true,
+      "has_error": false,
+      "output_length": 349,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-100_iter9.log"
+    },
+    {
+      "iteration": 10,
+      "success": true,
+      "has_error": false,
+      "output_length": 696,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-100_iter10.log"
+    }
+  ],
+  "big-200": [
+    {
+      "iteration": 1,
+      "success": true,
+      "has_error": false,
+      "output_length": 627,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-200_iter1.log"
+    },
+    {
+      "iteration": 2,
+      "success": true,
+      "has_error": false,
+      "output_length": 655,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-200_iter2.log"
+    },
+    {
+      "iteration": 3,
+      "success": true,
+      "has_error": false,
+      "output_length": 717,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-200_iter3.log"
+    },
+    {
+      "iteration": 4,
+      "success": true,
+      "has_error": false,
+      "output_length": 635,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-200_iter4.log"
+    },
+    {
+      "iteration": 5,
+      "success": true,
+      "has_error": false,
+      "output_length": 368,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-200_iter5.log"
+    },
+    {
+      "iteration": 6,
+      "success": true,
+      "has_error": false,
+      "output_length": 349,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-200_iter6.log"
+    },
+    {
+      "iteration": 7,
+      "success": true,
+      "has_error": false,
+      "output_length": 450,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-200_iter7.log"
+    },
+    {
+      "iteration": 8,
+      "success": true,
+      "has_error": false,
+      "output_length": 638,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-200_iter8.log"
+    },
+    {
+      "iteration": 9,
+      "success": true,
+      "has_error": false,
+      "output_length": 375,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-200_iter9.log"
+    },
+    {
+      "iteration": 10,
+      "success": true,
+      "has_error": false,
+      "output_length": 471,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-200_iter10.log"
+    }
+  ],
+  "big-400": [
+    {
+      "iteration": 1,
+      "success": true,
+      "has_error": false,
+      "output_length": 658,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-400_iter1.log"
+    },
+    {
+      "iteration": 2,
+      "success": true,
+      "has_error": false,
+      "output_length": 630,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-400_iter2.log"
+    },
+    {
+      "iteration": 3,
+      "success": true,
+      "has_error": false,
+      "output_length": 697,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-400_iter3.log"
+    },
+    {
+      "iteration": 4,
+      "success": true,
+      "has_error": false,
+      "output_length": 465,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-400_iter4.log"
+    },
+    {
+      "iteration": 5,
+      "success": true,
+      "has_error": false,
+      "output_length": 464,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-400_iter5.log"
+    },
+    {
+      "iteration": 6,
+      "success": true,
+      "has_error": false,
+      "output_length": 672,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-400_iter6.log"
+    },
+    {
+      "iteration": 7,
+      "success": true,
+      "has_error": false,
+      "output_length": 382,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-400_iter7.log"
+    },
+    {
+      "iteration": 8,
+      "success": true,
+      "has_error": false,
+      "output_length": 635,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-400_iter8.log"
+    },
+    {
+      "iteration": 9,
+      "success": true,
+      "has_error": false,
+      "output_length": 382,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-400_iter9.log"
+    },
+    {
+      "iteration": 10,
+      "success": true,
+      "has_error": false,
+      "output_length": 663,
+      "log_file": "mcp-benchmark-results/20251113_140410/big-400_iter10.log"
+    }
+  ]
+}

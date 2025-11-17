@@ -1,0 +1,10 @@
+================================================================================
+MCP Server: big-40
+Iteration: 5
+Timestamp: 2025-11-13T14:19:51.634658
+================================================================================
+
+I need permission to access the HubSpot API to search for deals. Once you grant access to the `mcp__big-40__hubspot_search_deals` tool, I'll be able to retrieve the 3 most recent deals with their details including name, amount, stage, close date, and pipeline.
+
+
+=== STDERR ===
