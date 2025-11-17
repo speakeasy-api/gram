@@ -8858,6 +8858,10 @@ components:
           type: string
           description: A unique identifier that will mitigate against duplicate deployments.
           example: 01jqq0ajmb4qh9eppz48dejr2m
+        non_blocking:
+          type: boolean
+          description: If true, the deployment will be created in non-blocking mode where the request will return immediately and the deployment will proceed asynchronously.
+          example: false
         openapiv3_assets:
           type: array
           items:
@@ -8894,6 +8898,10 @@ components:
           type: string
           description: The commit hash that triggered the deployment.
           example: f33e693e9e12552043bc0ec5c37f1b8a9e076161
+        non_blocking:
+          type: boolean
+          description: If true, the deployment will be created in non-blocking mode where the request will return immediately and the deployment will proceed asynchronously.
+          example: false
         openapiv3_assets:
           type: array
           items:
@@ -9539,6 +9547,10 @@ components:
           items:
             type: string
           description: The packages to exclude from the new deployment when cloning a previous deployment.
+        non_blocking:
+          type: boolean
+          description: If true, the deployment will be created in non-blocking mode where the request will return immediately and the deployment will proceed asynchronously.
+          example: false
         upsert_functions:
           type: array
           items:

@@ -105,6 +105,53 @@ func TestDeploymentsService_CreateDeployment(t *testing.T) {
 	})
 }
 
+func TestDeploymentsService_CreateDeployment_NonBlocking(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+
+	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs.Len()),
+	}, io.NopCloser(bs))
+	require.NoError(t, err, "upload openapi v3 asset")
+
+	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey: "test-non-blocking-deployment",
+		NonBlocking:    conv.Ptr(true),
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: ares.Asset.ID,
+				Name:    "test-doc",
+				Slug:    "test-doc",
+			},
+		},
+		Functions:        []*gen.AddFunctionsForm{},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment in non-blocking mode")
+
+	require.NotEqual(t, uuid.Nil.String(), dep.Deployment.ID, "deployment ID is nil")
+	require.Equal(t, "created", dep.Deployment.Status, "deployment status should be 'created' when non_blocking is true")
+	require.Len(t, dep.Deployment.Openapiv3Assets, 1, "expected 1 openapi asset")
+	require.Equal(t, "test-doc", dep.Deployment.Openapiv3Assets[0].Name, "unexpected asset name")
+}
+
 func TestDeploymentsService_CreateDeployment_Idempotency(t *testing.T) {
 	t.Parallel()
 

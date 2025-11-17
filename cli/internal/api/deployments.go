@@ -46,6 +46,7 @@ func NewDeploymentsClient(options *DeploymentsClientOptions) *DeploymentsClient 
 
 type CreateDeploymentRequest struct {
 	APIKey          secret.Secret
+	NonBlocking     bool
 	ProjectSlug     string
 	IdempotencyKey  string
 	OpenAPIv3Assets []*deployments.AddOpenAPIv3DeploymentAssetForm
@@ -63,6 +64,7 @@ func (c *DeploymentsClient) CreateDeployment(
 	}
 	payload := &deployments.CreateDeploymentPayload{
 		ApikeyToken:      &key,
+		NonBlocking:      &req.NonBlocking,
 		ProjectSlugInput: &req.ProjectSlug,
 		IdempotencyKey:   req.IdempotencyKey,
 		Openapiv3Assets:  req.OpenAPIv3Assets,
@@ -170,6 +172,7 @@ func (c *DeploymentsClient) GetActiveDeployment(
 // EvolveRequest lists the assets to add to a deployment.
 type EvolveRequest struct {
 	OpenAPIv3Assets []*deployments.AddOpenAPIv3DeploymentAssetForm
+	NonBlocking     bool
 	Functions       []*deployments.AddFunctionsForm
 	APIKey          secret.Secret
 	DeploymentID    *string
@@ -184,6 +187,7 @@ func (c *DeploymentsClient) Evolve(
 	key := req.APIKey.Reveal()
 	result, err := c.client.Evolve(ctx, &deployments.EvolvePayload{
 		ApikeyToken:            &key,
+		NonBlocking:            &req.NonBlocking,
 		ProjectSlugInput:       &req.ProjectSlug,
 		DeploymentID:           req.DeploymentID,
 		UpsertOpenapiv3Assets:  req.OpenAPIv3Assets,

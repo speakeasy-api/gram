@@ -12,6 +12,7 @@ let value: CreateDeploymentRequest = {
     githubPr: "1234",
     githubRepo: "speakeasyapi/gram",
     githubSha: "f33e693e9e12552043bc0ec5c37f1b8a9e076161",
+    nonBlocking: false,
   },
 };
 ```

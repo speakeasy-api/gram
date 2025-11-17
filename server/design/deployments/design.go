@@ -259,6 +259,10 @@ var CreateDeploymentForm = Type("CreateDeploymentForm", func() {
 		Description("A unique identifier that will mitigate against duplicate deployments.")
 		Example("01jqq0ajmb4qh9eppz48dejr2m")
 	})
+	Attribute("non_blocking", Boolean, func() {
+		Description("If true, the deployment will be created in non-blocking mode where the request will return immediately and the deployment will proceed asynchronously.")
+		Example(false)
+	})
 	Attribute("github_repo", String, func() {
 		Description("The github repository in the form of \"owner/repo\".")
 		Example("speakeasyapi/gram")
@@ -393,6 +397,10 @@ var AddOpenAPIv3SourceResult = Type("AddOpenAPIv3SourceResult", func() {
 
 var EvolveForm = Type("EvolveForm", func() {
 	Attribute("deployment_id", String, "The ID of the deployment to evolve. If omitted, the latest deployment will be used.")
+	Attribute("non_blocking", Boolean, func() {
+		Description("If true, the deployment will be created in non-blocking mode where the request will return immediately and the deployment will proceed asynchronously.")
+		Example(false)
+	})
 	Attribute("upsert_openapiv3_assets", ArrayOf(AddOpenAPIv3DeploymentAssetForm), "The OpenAPI 3.x documents to upsert in the new deployment.")
 	Attribute("upsert_packages", ArrayOf(AddPackageForm), "The packages to upsert in the new deployment.")
 	Attribute("upsert_functions", ArrayOf(AddFunctionsForm), "The tool functions to upsert in the new deployment.")
