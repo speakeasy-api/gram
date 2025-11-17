@@ -101,7 +101,8 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
         <div className="flex flex-col items-center gap-4">
           <GramLogo className="w-25 mb-2 dark:!invert-0" variant="vertical" />
           <p className="text-body-lg text-center dark:text-black">
-            The fastest path to production MCP. Create, curate and host high quality agent tools as MCP servers.
+            The fastest path to production MCP. Create, curate and host high
+            quality agent tools as MCP servers.
           </p>
         </div>
 
