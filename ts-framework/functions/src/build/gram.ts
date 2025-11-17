@@ -54,6 +54,7 @@ export async function buildFunctions(logger: Logger, cfg: ParsedUserConfig) {
   await bundleFunction(logger, {
     entrypoint,
     outFile: artifacts.funcFilename,
+    requireInterop: cfg.requireInterop,
   });
 
   await createZipArchive(logger, artifacts);
@@ -91,11 +92,22 @@ async function bundleFunction(
   options: {
     entrypoint: string;
     outFile: string;
+    requireInterop: boolean;
   },
 ): Promise<Array<{ path: string; hash: string }>> {
   logger.info(
     `Bundling function from ${options.entrypoint} into ${options.outFile}`,
   );
+
+  let banner: Record<string, string> | undefined = undefined;
+  if (options.requireInterop) {
+    banner = {
+      js: [
+        `import { createRequire as topLevelCreateRequire } from 'node:module';`,
+        `if (typeof require === 'undefined') { globalThis.require = topLevelCreateRequire(import.meta.url); }`,
+      ].join("\n"),
+    };
+  }
 
   const res = await esbuild.build({
     entryPoints: [options.entrypoint],
@@ -106,6 +118,7 @@ async function bundleFunction(
     platform: "node",
     target: ["node22"],
     format: "esm",
+    banner,
   });
 
   return (
@@ -189,12 +202,16 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
     .nothrow();
 
   // Consume stdio and show loader concurrently
-  const stdioTask = consumeStdio(pushcmd, getLogger(["gram", "cli"])).then(() => {
-    // Start loader after logs finish streaming
-    loader.start();
-  });
+  const stdioTask = consumeStdio(pushcmd, getLogger(["gram", "cli"])).then(
+    () => {
+      // Start loader after logs finish streaming
+      loader.start();
+    },
+  );
 
-  const result = await Promise.all([stdioTask, pushcmd]).then(([, result]) => result);
+  const result = await Promise.all([stdioTask, pushcmd]).then(
+    ([, result]) => result,
+  );
 
   // Stop the loader animation
   loader.stop();
