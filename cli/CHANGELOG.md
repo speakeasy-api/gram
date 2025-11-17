@@ -1,5 +1,11 @@
 # cli
 
+## 0.13.3
+
+### Patch Changes
+
+- a52cc7d: fix: improve `gram install` for claude-desktop UX
+
 ## 0.13.2
 
 ### Patch Changes
