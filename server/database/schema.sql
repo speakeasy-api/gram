@@ -1010,10 +1010,5 @@ WHERE deleted IS FALSE;
 -- HNSW index for fast similarity search within a toolset
 CREATE INDEX IF NOT EXISTS toolset_embeddings_embedding_1536_idx
 ON toolset_embeddings
-USING hnsw (embedding_1536 vector_cosine_ops) 
+USING hnsw (embedding_1536 vector_cosine_ops)
 WHERE deleted IS FALSE;
-
--- Index for fast filtering by tags
-CREATE INDEX IF NOT EXISTS toolset_embeddings_tags_idx
-ON toolset_embeddings
-USING GIN (tags);
