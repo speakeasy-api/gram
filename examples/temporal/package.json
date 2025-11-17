@@ -24,10 +24,10 @@
     "push": "gf push",
     "prebuild": "tsc -p tsconfig.json",
     "prepublishOnly": "npm run build",
-    "build": "gf build && node postbuild.js"
+    "build": "gf build"
   },
   "dependencies": {
-    "@gram-ai/functions": "^0.9.0",
+    "@gram-ai/functions": "^0.9.1",
     "@modelcontextprotocol/sdk": "^1.20.1",
     "@temporalio/client": "^1.13.2",
     "zod": "^4"
