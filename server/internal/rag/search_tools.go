@@ -211,6 +211,11 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 		return nil, fmt.Errorf("query embedding response contained %d vectors, expected 1", len(queryVectors))
 	}
 
+	tags := opts.Tags
+	if len(tags) == 0 {
+		tags = make([]string, 0)
+	}
+
 	var rows []repo.SearchToolsetToolEmbeddingsAnyTagsMatchRow
 	switch opts.MatchMode {
 	case MatchModeAny:
@@ -219,7 +224,7 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 			ProjectID:          uuid.MustParse(toolset.ProjectID),
 			ToolsetID:          toolsetUUID,
 			ToolsetVersion:     toolset.ToolsetVersion,
-			Tags:               opts.Tags,
+			Tags:               tags,
 			ResultLimit:        int32(limit), //nolint:gosec // limit is validated to be positive
 		})
 		if err != nil {
@@ -231,7 +236,7 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 			ProjectID:          uuid.MustParse(toolset.ProjectID),
 			ToolsetID:          toolsetUUID,
 			ToolsetVersion:     toolset.ToolsetVersion,
-			Tags:               opts.Tags,
+			Tags:               tags,
 			ResultLimit:        int32(limit), //nolint:gosec // limit is validated to be positive
 		})
 		if err != nil {
