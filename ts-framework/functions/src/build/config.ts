@@ -40,6 +40,13 @@ export type UserConfig = {
    * prompted once and their choice will be remembered.
    */
   openBrowserAfterDeploy?: boolean | undefined;
+
+  /**
+   * Emit code to enable the use of dynamic `require()` calls in bundled code.
+   *
+   * @default true
+   */
+  requireInterop?: boolean | undefined;
 };
 
 const userConfigSchema = z.object({
@@ -50,6 +57,7 @@ const userConfigSchema = z.object({
   deployStagingFile: z.string().default("gram.deploy.json"),
   slug: z.string().optional(),
   openBrowserAfterDeploy: z.boolean().optional(),
+  requireInterop: z.boolean().default(true),
 }) satisfies z.ZodType<UserConfig>;
 
 export type ParsedUserConfig = z.output<typeof userConfigSchema>;
