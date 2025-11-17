@@ -4,24 +4,18 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { safeParse } from "../../lib/schemas.js";
-import { Result as SafeParseResult } from "../../types/fp.js";
-import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
   AddFunctionsForm,
-  AddFunctionsForm$inboundSchema,
   AddFunctionsForm$Outbound,
   AddFunctionsForm$outboundSchema,
 } from "./addfunctionsform.js";
 import {
   AddOpenAPIv3DeploymentAssetForm,
-  AddOpenAPIv3DeploymentAssetForm$inboundSchema,
   AddOpenAPIv3DeploymentAssetForm$Outbound,
   AddOpenAPIv3DeploymentAssetForm$outboundSchema,
 } from "./addopenapiv3deploymentassetform.js";
 import {
   AddPackageForm,
-  AddPackageForm$inboundSchema,
   AddPackageForm$Outbound,
   AddPackageForm$outboundSchema,
 } from "./addpackageform.js";
@@ -44,6 +38,10 @@ export type EvolveForm = {
    */
   excludePackages?: Array<string> | undefined;
   /**
+   * If true, the deployment will be created in non-blocking mode where the request will return immediately and the deployment will proceed asynchronously.
+   */
+  nonBlocking?: boolean | undefined;
+  /**
    * The tool functions to upsert in the new deployment.
    */
   upsertFunctions?: Array<AddFunctionsForm> | undefined;
@@ -58,38 +56,12 @@ export type EvolveForm = {
 };
 
 /** @internal */
-export const EvolveForm$inboundSchema: z.ZodType<
-  EvolveForm,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  deployment_id: z.string().optional(),
-  exclude_functions: z.array(z.string()).optional(),
-  exclude_openapiv3_assets: z.array(z.string()).optional(),
-  exclude_packages: z.array(z.string()).optional(),
-  upsert_functions: z.array(AddFunctionsForm$inboundSchema).optional(),
-  upsert_openapiv3_assets: z.array(
-    AddOpenAPIv3DeploymentAssetForm$inboundSchema,
-  ).optional(),
-  upsert_packages: z.array(AddPackageForm$inboundSchema).optional(),
-}).transform((v) => {
-  return remap$(v, {
-    "deployment_id": "deploymentId",
-    "exclude_functions": "excludeFunctions",
-    "exclude_openapiv3_assets": "excludeOpenapiv3Assets",
-    "exclude_packages": "excludePackages",
-    "upsert_functions": "upsertFunctions",
-    "upsert_openapiv3_assets": "upsertOpenapiv3Assets",
-    "upsert_packages": "upsertPackages",
-  });
-});
-
-/** @internal */
 export type EvolveForm$Outbound = {
   deployment_id?: string | undefined;
   exclude_functions?: Array<string> | undefined;
   exclude_openapiv3_assets?: Array<string> | undefined;
   exclude_packages?: Array<string> | undefined;
+  non_blocking?: boolean | undefined;
   upsert_functions?: Array<AddFunctionsForm$Outbound> | undefined;
   upsert_openapiv3_assets?:
     | Array<AddOpenAPIv3DeploymentAssetForm$Outbound>
@@ -107,6 +79,7 @@ export const EvolveForm$outboundSchema: z.ZodType<
   excludeFunctions: z.array(z.string()).optional(),
   excludeOpenapiv3Assets: z.array(z.string()).optional(),
   excludePackages: z.array(z.string()).optional(),
+  nonBlocking: z.boolean().optional(),
   upsertFunctions: z.array(AddFunctionsForm$outboundSchema).optional(),
   upsertOpenapiv3Assets: z.array(AddOpenAPIv3DeploymentAssetForm$outboundSchema)
     .optional(),
@@ -117,35 +90,13 @@ export const EvolveForm$outboundSchema: z.ZodType<
     excludeFunctions: "exclude_functions",
     excludeOpenapiv3Assets: "exclude_openapiv3_assets",
     excludePackages: "exclude_packages",
+    nonBlocking: "non_blocking",
     upsertFunctions: "upsert_functions",
     upsertOpenapiv3Assets: "upsert_openapiv3_assets",
     upsertPackages: "upsert_packages",
   });
 });
 
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace EvolveForm$ {
-  /** @deprecated use `EvolveForm$inboundSchema` instead. */
-  export const inboundSchema = EvolveForm$inboundSchema;
-  /** @deprecated use `EvolveForm$outboundSchema` instead. */
-  export const outboundSchema = EvolveForm$outboundSchema;
-  /** @deprecated use `EvolveForm$Outbound` instead. */
-  export type Outbound = EvolveForm$Outbound;
-}
-
 export function evolveFormToJSON(evolveForm: EvolveForm): string {
   return JSON.stringify(EvolveForm$outboundSchema.parse(evolveForm));
-}
-
-export function evolveFormFromJSON(
-  jsonString: string,
-): SafeParseResult<EvolveForm, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => EvolveForm$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'EvolveForm' from JSON`,
-  );
 }

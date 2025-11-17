@@ -18,6 +18,10 @@ import (
 // CreateDeploymentRequestBody is the type of the "deployments" service
 // "createDeployment" endpoint HTTP request body.
 type CreateDeploymentRequestBody struct {
+	// If true, the deployment will be created in non-blocking mode where the
+	// request will return immediately and the deployment will proceed
+	// asynchronously.
+	NonBlocking *bool `form:"non_blocking,omitempty" json:"non_blocking,omitempty" xml:"non_blocking,omitempty"`
 	// The github repository in the form of "owner/repo".
 	GithubRepo *string `form:"github_repo,omitempty" json:"github_repo,omitempty" xml:"github_repo,omitempty"`
 	// The github pull request that resulted in the deployment.
@@ -41,6 +45,10 @@ type EvolveRequestBody struct {
 	// The ID of the deployment to evolve. If omitted, the latest deployment will
 	// be used.
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// If true, the deployment will be created in non-blocking mode where the
+	// request will return immediately and the deployment will proceed
+	// asynchronously.
+	NonBlocking *bool `form:"non_blocking,omitempty" json:"non_blocking,omitempty" xml:"non_blocking,omitempty"`
 	// The OpenAPI 3.x documents to upsert in the new deployment.
 	UpsertOpenapiv3Assets []*AddOpenAPIv3DeploymentAssetFormRequestBody `form:"upsert_openapiv3_assets,omitempty" json:"upsert_openapiv3_assets,omitempty" xml:"upsert_openapiv3_assets,omitempty"`
 	// The packages to upsert in the new deployment.
@@ -1826,6 +1834,7 @@ type DeploymentLogEventResponseBody struct {
 // of the "createDeployment" endpoint of the "deployments" service.
 func NewCreateDeploymentRequestBody(p *deployments.CreateDeploymentPayload) *CreateDeploymentRequestBody {
 	body := &CreateDeploymentRequestBody{
+		NonBlocking: p.NonBlocking,
 		GithubRepo:  p.GithubRepo,
 		GithubPr:    p.GithubPr,
 		GithubSha:   p.GithubSha,
@@ -1858,6 +1867,7 @@ func NewCreateDeploymentRequestBody(p *deployments.CreateDeploymentPayload) *Cre
 func NewEvolveRequestBody(p *deployments.EvolvePayload) *EvolveRequestBody {
 	body := &EvolveRequestBody{
 		DeploymentID: p.DeploymentID,
+		NonBlocking:  p.NonBlocking,
 	}
 	if p.UpsertOpenapiv3Assets != nil {
 		body.UpsertOpenapiv3Assets = make([]*AddOpenAPIv3DeploymentAssetFormRequestBody, len(p.UpsertOpenapiv3Assets))

@@ -33,45 +33,6 @@ export const ValidateKeyOrganization$inboundSchema: z.ZodType<
   slug: z.string(),
 });
 
-/** @internal */
-export type ValidateKeyOrganization$Outbound = {
-  id: string;
-  name: string;
-  slug: string;
-};
-
-/** @internal */
-export const ValidateKeyOrganization$outboundSchema: z.ZodType<
-  ValidateKeyOrganization$Outbound,
-  z.ZodTypeDef,
-  ValidateKeyOrganization
-> = z.object({
-  id: z.string(),
-  name: z.string(),
-  slug: z.string(),
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace ValidateKeyOrganization$ {
-  /** @deprecated use `ValidateKeyOrganization$inboundSchema` instead. */
-  export const inboundSchema = ValidateKeyOrganization$inboundSchema;
-  /** @deprecated use `ValidateKeyOrganization$outboundSchema` instead. */
-  export const outboundSchema = ValidateKeyOrganization$outboundSchema;
-  /** @deprecated use `ValidateKeyOrganization$Outbound` instead. */
-  export type Outbound = ValidateKeyOrganization$Outbound;
-}
-
-export function validateKeyOrganizationToJSON(
-  validateKeyOrganization: ValidateKeyOrganization,
-): string {
-  return JSON.stringify(
-    ValidateKeyOrganization$outboundSchema.parse(validateKeyOrganization),
-  );
-}
-
 export function validateKeyOrganizationFromJSON(
   jsonString: string,
 ): SafeParseResult<ValidateKeyOrganization, SDKValidationError> {

@@ -1,24 +1,24 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 6195b8448750de8ea617958f9bfbeedc
+  docChecksum: 2d4593208b33047b0902ebc839b288f6
   docVersion: 0.0.1
-  speakeasyVersion: 1.641.1
-  generationVersion: 2.730.5
-  releaseVersion: 0.17.6
-  configChecksum: 3e8c5745085f1d52b04f3bab6a7b9afb
+  speakeasyVersion: 1.658.2
+  generationVersion: 2.755.9
+  releaseVersion: 0.18.0
+  configChecksum: 4196bf51af73418dea763bfe7786b6e2
 features:
   typescript:
     additionalDependencies: 0.1.0
     constsAndDefaults: 0.1.12
-    core: 3.24.1
+    core: 3.26.7
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
     downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
     globalSecurityCallbacks: 0.1.0
-    globalServerURLs: 2.82.5
+    globalServerURLs: 2.83.0
     methodArguments: 0.1.2
     methodSecurity: 2.82.6
     nameOverrides: 2.81.2
@@ -1069,7 +1069,7 @@ examples:
         header:
           Idempotency-Key: "01jqq0ajmb4qh9eppz48dejr2m"
       requestBody:
-        application/json: {"external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161"}
+        application/json: {"external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "non_blocking": false}
       responses:
         "200":
           application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2023-01-07T04:35:31.471Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "functions_tool_count": 5649, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "openapiv3_tool_count": 5649, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
@@ -1080,7 +1080,7 @@ examples:
   evolveDeployment:
     speakeasy-default-evolve-deployment:
       requestBody:
-        application/json: {}
+        application/json: {"non_blocking": false}
       responses:
         "200":
           application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2025-12-06T08:41:21.182Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "functions_tool_count": 976608, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "openapiv3_tool_count": 976608, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}

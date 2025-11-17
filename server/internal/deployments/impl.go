@@ -454,7 +454,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 
 	status := dep.Status
 	if status == "created" {
-		s, err := s.startDeployment(ctx, logger, projectID, newID, dep)
+		s, err := s.startDeployment(ctx, logger, projectID, newID, dep, form.NonBlocking != nil && *form.NonBlocking)
 		if err != nil {
 			return nil, err
 		}
@@ -673,7 +673,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 
 	status := dep.Status
 	if status == "created" {
-		s, err := s.startDeployment(ctx, logger, projectID, cloneID, dep)
+		s, err := s.startDeployment(ctx, logger, projectID, cloneID, dep, form.NonBlocking != nil && *form.NonBlocking)
 		if err != nil {
 			return nil, err
 		}
@@ -762,7 +762,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 
 	status := dep.Status
 	if status == "created" {
-		s, err := s.startDeployment(ctx, logger, projectID, newID, dep)
+		s, err := s.startDeployment(ctx, logger, projectID, newID, dep, false)
 		if err != nil {
 			return nil, err
 		}
@@ -852,7 +852,7 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 	return res, nil
 }
 
-func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment) (string, error) {
+func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment, nonBlocking bool) (string, error) {
 	defer func() {
 		logger.InfoContext(ctx, "starting project-scoped functions reaper")
 		_, err := background.ExecuteProjectFunctionsReaperWorkflow(ctx, s.temporal, projectID)
@@ -871,6 +871,10 @@ func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, proj
 	})
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "error starting deployment").Log(ctx, logger)
+	}
+
+	if nonBlocking {
+		return dep.Status, nil
 	}
 
 	var res background.ProcessDeploymentWorkflowResult

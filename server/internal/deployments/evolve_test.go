@@ -70,6 +70,52 @@ func TestDeploymentsService_Evolve_InitialDeployment(t *testing.T) {
 	require.Len(t, tools, 5, "expected 5 tools")
 }
 
+func TestDeploymentsService_Evolve_NonBlocking(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Upload OpenAPI asset
+	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs.Len()),
+	}, io.NopCloser(bs))
+	require.NoError(t, err, "upload openapi v3 asset")
+
+	// Test evolving with non_blocking=true
+	result, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		DeploymentID:     nil,
+		NonBlocking:      conv.Ptr(true),
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: ares.Asset.ID,
+				Name:    "initial-doc",
+				Slug:    "initial-doc",
+			},
+		},
+		UpsertFunctions:        []*gen.AddFunctionsForm{},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "evolve deployment in non-blocking mode")
+
+	require.NotEqual(t, uuid.Nil.String(), result.Deployment.ID, "deployment ID is nil")
+	require.Equal(t, "created", result.Deployment.Status, "deployment status should be 'created' when non_blocking is true")
+	require.Len(t, result.Deployment.Openapiv3Assets, 1, "expected 1 openapi asset")
+	require.Equal(t, "initial-doc", result.Deployment.Openapiv3Assets[0].Name, "unexpected asset name")
+	require.Equal(t, "initial-doc", string(result.Deployment.Openapiv3Assets[0].Slug), "unexpected asset slug")
+}
+
 func TestDeploymentsService_Evolve_UpsertOpenAPIv3(t *testing.T) {
 	t.Parallel()
 
