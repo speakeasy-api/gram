@@ -85,6 +85,7 @@ func buildDynamicSessionTools(
 			Name:        searchToolsToolName,
 			Description: findDescription,
 			InputSchema: buildDynamicSearchToolsSchema(availableTags),
+			Meta:        nil,
 		})
 	}
 	tools = append(tools, buildDescribeToolsTool(toolset.Tools, searchToolRequired))
@@ -92,6 +93,7 @@ func buildDynamicSessionTools(
 		Name:        executeToolToolName,
 		Description: executeDescription,
 		InputSchema: dynamicExecuteToolSchema,
+		Meta:        nil,
 	})
 
 	return tools, nil
@@ -213,6 +215,7 @@ func handleSearchToolsCall(
 			Name:        name,
 			Description: description,
 			Meta:        meta,
+			InputSchema: nil, // Intentional don't return to keep token usage down
 		})
 	}
 
@@ -349,39 +352,4 @@ func handleDescribeToolsCall(
 	}
 
 	return response, nil
-}
-
-type sourceGroup struct {
-	groups map[string][]*types.Tool
-}
-
-func buildToolTree(tools []*types.Tool) (map[string]*sourceGroup, error) {
-	tree := make(map[string]*sourceGroup)
-
-	for _, tool := range tools {
-		toolURN, err := conv.GetToolURN(*tool)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn")
-		}
-
-		source := toolURN.Source
-		group := "default"
-
-		if tool.HTTPToolDefinition != nil {
-			tags := tool.HTTPToolDefinition.Tags
-			if len(tags) > 0 {
-				group = tags[0]
-			}
-		}
-
-		if tree[source] == nil {
-			tree[source] = &sourceGroup{
-				groups: make(map[string][]*types.Tool),
-			}
-		}
-
-		tree[source].groups[group] = append(tree[source].groups[group], tool)
-	}
-
-	return tree, nil
 }

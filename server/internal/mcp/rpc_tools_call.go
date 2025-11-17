@@ -79,12 +79,12 @@ func handleToolsCall(
 	}
 
 	if payload.mode != ToolModeStatic {
-		switch {
-		case params.Name == searchToolsToolName:
+		switch params.Name {
+		case searchToolsToolName:
 			return handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore, temporal)
-		case params.Name == describeToolsToolName:
+		case describeToolsToolName:
 			return handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
-		case params.Name == executeToolToolName:
+		case executeToolToolName:
 			proxyName, proxyArgs, err := processExecuteToolCall(ctx, logger, params.Arguments)
 			if err != nil {
 				return nil, err
