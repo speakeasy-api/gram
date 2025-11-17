@@ -1,6 +1,8 @@
 import { Gram } from "@gram-ai/functions";
 import * as z from "zod/mini";
 
+// To learn more about Gram Functions, check out our documentation at:
+// https://www.speakeasy.com/docs/gram/gram-functions/functions-framework
 const gram = new Gram().tool({
   name: "greet",
   description: "Greet someone special",
