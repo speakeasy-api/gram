@@ -1,5 +1,11 @@
 # server
 
+## 0.10.2
+
+### Patch Changes
+
+- cf3e81b: non blocking deployment creation
+
 ## 0.10.1
 
 ### Patch Changes

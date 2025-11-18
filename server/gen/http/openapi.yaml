@@ -15259,6 +15259,10 @@ definitions:
                 type: string
                 description: The commit hash that triggered the deployment.
                 example: f33e693e9e12552043bc0ec5c37f1b8a9e076161
+            non_blocking:
+                type: boolean
+                description: If true, the deployment will be created in non-blocking mode where the request will return immediately and the deployment will proceed asynchronously.
+                example: false
             openapiv3_assets:
                 type: array
                 items:
@@ -15304,6 +15308,7 @@ definitions:
             github_pr: "1234"
             github_repo: speakeasyapi/gram
             github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
+            non_blocking: false
             openapiv3_assets:
                 - asset_id: Reprehenderit voluptatem mollitia tempore aut repellat expedita.
                   name: Nulla dolorem ab rerum modi.
@@ -15786,6 +15791,10 @@ definitions:
                 example:
                     - Facilis voluptatem quibusdam unde minus velit et.
                     - Dolor neque rerum perferendis.
+            non_blocking:
+                type: boolean
+                description: If true, the deployment will be created in non-blocking mode where the request will return immediately and the deployment will proceed asynchronously.
+                example: false
             upsert_functions:
                 type: array
                 items:
@@ -15844,6 +15853,7 @@ definitions:
                 - Dolores enim.
                 - Repellendus et ipsa esse quasi.
                 - Neque ea est.
+            non_blocking: false
             upsert_functions:
                 - asset_id: Molestiae dicta dolor eum rerum tempore et.
                   name: Eaque iusto et facere qui dignissimos voluptate.

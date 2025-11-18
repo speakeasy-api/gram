@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.18.1
+
+### Patch Changes
+
+- cf3e81b: non blocking deployment creation
+
 ## 0.17.3
 
 ### Patch Changes

@@ -227,7 +227,9 @@ const gram = new Gram();
 
 async function run() {
   const result = await gram.deployments.evolveDeployment({
-    evolveForm: {},
+    evolveForm: {
+      nonBlocking: false,
+    },
   });
 
   console.log(result);
@@ -250,7 +252,9 @@ const gram = new GramCore();
 
 async function run() {
   const res = await deploymentsEvolveDeployment(gram, {
-    evolveForm: {},
+    evolveForm: {
+      nonBlocking: false,
+    },
   });
   if (res.ok) {
     const { value: result } = res;

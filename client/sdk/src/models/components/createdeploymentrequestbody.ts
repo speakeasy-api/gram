@@ -4,24 +4,18 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { safeParse } from "../../lib/schemas.js";
-import { Result as SafeParseResult } from "../../types/fp.js";
-import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
   AddDeploymentPackageForm,
-  AddDeploymentPackageForm$inboundSchema,
   AddDeploymentPackageForm$Outbound,
   AddDeploymentPackageForm$outboundSchema,
 } from "./adddeploymentpackageform.js";
 import {
   AddFunctionsForm,
-  AddFunctionsForm$inboundSchema,
   AddFunctionsForm$Outbound,
   AddFunctionsForm$outboundSchema,
 } from "./addfunctionsform.js";
 import {
   AddOpenAPIv3DeploymentAssetForm,
-  AddOpenAPIv3DeploymentAssetForm$inboundSchema,
   AddOpenAPIv3DeploymentAssetForm$Outbound,
   AddOpenAPIv3DeploymentAssetForm$outboundSchema,
 } from "./addopenapiv3deploymentassetform.js";
@@ -48,35 +42,13 @@ export type CreateDeploymentRequestBody = {
    * The commit hash that triggered the deployment.
    */
   githubSha?: string | undefined;
+  /**
+   * If true, the deployment will be created in non-blocking mode where the request will return immediately and the deployment will proceed asynchronously.
+   */
+  nonBlocking?: boolean | undefined;
   openapiv3Assets?: Array<AddOpenAPIv3DeploymentAssetForm> | undefined;
   packages?: Array<AddDeploymentPackageForm> | undefined;
 };
-
-/** @internal */
-export const CreateDeploymentRequestBody$inboundSchema: z.ZodType<
-  CreateDeploymentRequestBody,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  external_id: z.string().optional(),
-  external_url: z.string().optional(),
-  functions: z.array(AddFunctionsForm$inboundSchema).optional(),
-  github_pr: z.string().optional(),
-  github_repo: z.string().optional(),
-  github_sha: z.string().optional(),
-  openapiv3_assets: z.array(AddOpenAPIv3DeploymentAssetForm$inboundSchema)
-    .optional(),
-  packages: z.array(AddDeploymentPackageForm$inboundSchema).optional(),
-}).transform((v) => {
-  return remap$(v, {
-    "external_id": "externalId",
-    "external_url": "externalUrl",
-    "github_pr": "githubPr",
-    "github_repo": "githubRepo",
-    "github_sha": "githubSha",
-    "openapiv3_assets": "openapiv3Assets",
-  });
-});
 
 /** @internal */
 export type CreateDeploymentRequestBody$Outbound = {
@@ -86,6 +58,7 @@ export type CreateDeploymentRequestBody$Outbound = {
   github_pr?: string | undefined;
   github_repo?: string | undefined;
   github_sha?: string | undefined;
+  non_blocking?: boolean | undefined;
   openapiv3_assets?:
     | Array<AddOpenAPIv3DeploymentAssetForm$Outbound>
     | undefined;
@@ -104,6 +77,7 @@ export const CreateDeploymentRequestBody$outboundSchema: z.ZodType<
   githubPr: z.string().optional(),
   githubRepo: z.string().optional(),
   githubSha: z.string().optional(),
+  nonBlocking: z.boolean().optional(),
   openapiv3Assets: z.array(AddOpenAPIv3DeploymentAssetForm$outboundSchema)
     .optional(),
   packages: z.array(AddDeploymentPackageForm$outboundSchema).optional(),
@@ -114,22 +88,10 @@ export const CreateDeploymentRequestBody$outboundSchema: z.ZodType<
     githubPr: "github_pr",
     githubRepo: "github_repo",
     githubSha: "github_sha",
+    nonBlocking: "non_blocking",
     openapiv3Assets: "openapiv3_assets",
   });
 });
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace CreateDeploymentRequestBody$ {
-  /** @deprecated use `CreateDeploymentRequestBody$inboundSchema` instead. */
-  export const inboundSchema = CreateDeploymentRequestBody$inboundSchema;
-  /** @deprecated use `CreateDeploymentRequestBody$outboundSchema` instead. */
-  export const outboundSchema = CreateDeploymentRequestBody$outboundSchema;
-  /** @deprecated use `CreateDeploymentRequestBody$Outbound` instead. */
-  export type Outbound = CreateDeploymentRequestBody$Outbound;
-}
 
 export function createDeploymentRequestBodyToJSON(
   createDeploymentRequestBody: CreateDeploymentRequestBody,
@@ -138,15 +100,5 @@ export function createDeploymentRequestBodyToJSON(
     CreateDeploymentRequestBody$outboundSchema.parse(
       createDeploymentRequestBody,
     ),
-  );
-}
-
-export function createDeploymentRequestBodyFromJSON(
-  jsonString: string,
-): SafeParseResult<CreateDeploymentRequestBody, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => CreateDeploymentRequestBody$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'CreateDeploymentRequestBody' from JSON`,
   );
 }

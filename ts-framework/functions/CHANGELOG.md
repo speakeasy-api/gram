@@ -1,5 +1,11 @@
 # @gram-ai/functions
 
+## 0.9.2
+
+### Patch Changes
+
+- 2cc9008: Update functions cli to better track long deployments.
+
 ## 0.9.1
 
 ### Patch Changes

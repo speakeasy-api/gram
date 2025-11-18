@@ -102,6 +102,10 @@ type CreateDeploymentPayload struct {
 	ProjectSlugInput *string
 	// A unique identifier that will mitigate against duplicate deployments.
 	IdempotencyKey string
+	// If true, the deployment will be created in non-blocking mode where the
+	// request will return immediately and the deployment will proceed
+	// asynchronously.
+	NonBlocking *bool
 	// The github repository in the form of "owner/repo".
 	GithubRepo *string
 	// The github pull request that resulted in the deployment.
@@ -168,6 +172,10 @@ type EvolvePayload struct {
 	// The ID of the deployment to evolve. If omitted, the latest deployment will
 	// be used.
 	DeploymentID *string
+	// If true, the deployment will be created in non-blocking mode where the
+	// request will return immediately and the deployment will proceed
+	// asynchronously.
+	NonBlocking *bool
 	// The OpenAPI 3.x documents to upsert in the new deployment.
 	UpsertOpenapiv3Assets []*AddOpenAPIv3DeploymentAssetForm
 	// The packages to upsert in the new deployment.
