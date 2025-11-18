@@ -74,7 +74,7 @@ func (r *ReapFlyApps) Do(ctx context.Context, req ReapFlyAppsRequest) (*ReapFlyA
 		KeepCount: pgtype.Int8{Int64: r.keepCount, Valid: true},
 		// Starting with a small batch size for now and we'll increase later on
 		// after some observation.
-		BatchSize: pgtype.Int8{Int64: 50, Valid: true},
+		BatchSize: pgtype.Int8{Int64: 200, Valid: true},
 
 		ProjectID: req.ProjectID,
 	})
