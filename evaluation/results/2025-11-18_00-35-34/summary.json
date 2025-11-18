@@ -1,0 +1,44 @@
+{
+  "totalTests": 2,
+  "successfulTests": 2,
+  "failedTests": 0,
+  "totalInputTokens": 130211,
+  "totalOutputTokens": 797,
+  "totalTokens": 131008,
+  "totalToolCalls": 2,
+  "totalDurationMs": 21083,
+  "results": [
+    {
+      "promptId": "list-deals",
+      "promptDescription": "List deals",
+      "mcpServerName": "gram-local",
+      "iteration": 1,
+      "success": true,
+      "inputTokens": 65118,
+      "outputTokens": 377,
+      "totalTokens": 65495,
+      "toolsUsedCount": 1,
+      "toolsCalled": [
+        "hubspot_search_deals2"
+      ],
+      "durationMs": 10779,
+      "model": "anthropic/claude-sonnet-4.5"
+    },
+    {
+      "promptId": "list-deals",
+      "promptDescription": "List deals",
+      "mcpServerName": "gram-local",
+      "iteration": 2,
+      "success": true,
+      "inputTokens": 65093,
+      "outputTokens": 420,
+      "totalTokens": 65513,
+      "toolsUsedCount": 1,
+      "toolsCalled": [
+        "hubspot_search_deals2"
+      ],
+      "durationMs": 10304,
+      "model": "anthropic/claude-sonnet-4.5"
+    }
+  ]
+}

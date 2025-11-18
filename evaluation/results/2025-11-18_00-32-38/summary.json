@@ -1,0 +1,30 @@
+{
+  "totalTests": 1,
+  "successfulTests": 1,
+  "failedTests": 0,
+  "totalInputTokens": 8406,
+  "totalOutputTokens": 621,
+  "totalTokens": 9027,
+  "totalToolCalls": 3,
+  "totalDurationMs": 16441,
+  "results": [
+    {
+      "promptId": "list-deals",
+      "promptDescription": "List deals",
+      "mcpServerName": "gram-local",
+      "iteration": 1,
+      "success": true,
+      "inputTokens": 8406,
+      "outputTokens": 621,
+      "totalTokens": 9027,
+      "toolsUsedCount": 3,
+      "toolsCalled": [
+        "search_tools",
+        "describe_tools",
+        "execute_tool"
+      ],
+      "durationMs": 16441,
+      "model": "anthropic/claude-sonnet-4.5"
+    }
+  ]
+}

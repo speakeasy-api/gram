@@ -1,0 +1,70 @@
+[
+  {
+    "test": {
+      "promptId": "list-deals",
+      "promptDescription": "List deals",
+      "mcpServerName": "gram-local",
+      "iteration": 1
+    },
+    "success": true,
+    "metrics": {
+      "inputTokens": 65093,
+      "outputTokens": 430,
+      "totalTokens": 65523,
+      "toolsUsedCount": 1,
+      "toolsCalled": [
+        "hubspot_search_deals2"
+      ],
+      "durationMs": 11042
+    },
+    "toolCallLogs": [
+      {
+        "turnNumber": 1,
+        "toolName": "hubspot_search_deals2",
+        "toolInput": {
+          "body": {
+            "limit": 3,
+            "filterGroups": []
+          }
+        },
+        "toolOutput": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"total\":913,\"results\":[{\"id\":\"15329921593\",\"properties\":{\"amount\":\"50000\",\"closedate\":\"2024-09-10T22:54:37.525Z\",\"createdate\":\"2023-09-26T19:38:40.343Z\",\"dealname\":\"Intuit \",\"dealstage\":\"closedlost\",\"hs_lastmodifieddate\":\"2025-10-08T22:46:49.739Z\",\"hs_object_id\":\"15329921593\",\"pipeline\":\"default\"},\"createdAt\":\"2023-09-26T19:38:40.343Z\",\"updatedAt\":\"2025-10-08T22:46:49.739Z\",\"archived\":false,\"url\":\"https://app.hubspot.com/contacts/21944879/record/0-3/15329921593\"},{\"id\":\"15329922333\",\"properties\":{\"amount\":\"30000\",\"closedate\":\"2024-10-31T23:33:43.002Z\",\"createdate\":\"2023-09-26T19:43:21.094Z\",\"dealname\":\"Moov\",\"dealstage\":\"closedwon\",\"hs_lastmodifieddate\":\"2025-11-17T16:20:59.054Z\",\"hs_object_id\":\"15329922333\",\"pipeline\":\"default\"},\"createdAt\":\"2023-09-26T19:43:21.094Z\",\"updatedAt\":\"2025-11-17T16:20:59.054Z\",\"archived\":false,\"url\":\"https://app.hubspot.com/contacts/21944879/record/0-3/15329922333\"},{\"id\":\"15332105780\",\"properties\":{\"amount\":\"40000\",\"closedate\":\"2024-09-17T20:20:57.323Z\",\"createdate\":\"2023-09-26T19:45:09.347Z\",\"dealname\":\"LexisNexis\",\"dealstage\":\"closedlost\",\"hs_lastmodifieddate\":\"2025-09-23T15:29:16.277Z\",\"hs_object_id\":\"15332105780\",\"pipeline\":\"default\"},\"createdAt\":\"2023-09-26T19:45:09.347Z\",\"updatedAt\":\"2025-09-23T15:29:16.277Z\",\"archived\":false,\"url\":\"https://app.hubspot.com/contacts/21944879/record/0-3/15332105780\"}],\"paging\":{\"next\":{\"after\":\"3\"}}}"
+            }
+          ]
+        },
+        "isError": false
+      }
+    ],
+    "conversationLog": [
+      {
+        "role": "user",
+        "content": "List 3 hubspot deals"
+      },
+      {
+        "role": "assistant",
+        "content": "I'll search for HubSpot deals and return 3 results.",
+        "refusal": null,
+        "reasoning": null,
+        "tool_calls": [
+          {
+            "id": "toolu_vrtx_01Sm8s2iohuWWFpcRCjJskL3",
+            "index": 0,
+            "type": "function",
+            "function": {
+              "name": "hubspot_search_deals2",
+              "arguments": "{\"body\": {\"limit\":3,\"filterGroups\":[]}}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "toolu_vrtx_01Sm8s2iohuWWFpcRCjJskL3",
+        "content": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"total\\\":913,\\\"results\\\":[{\\\"id\\\":\\\"15329921593\\\",\\\"properties\\\":{\\\"amount\\\":\\\"50000\\\",\\\"closedate\\\":\\\"2024-09-10T22:54:37.525Z\\\",\\\"createdate\\\":\\\"2023-09-26T19:38:40.343Z\\\",\\\"dealname\\\":\\\"Intuit \\\",\\\"dealstage\\\":\\\"closedlost\\\",\\\"hs_lastmodifieddate\\\":\\\"2025-10-08T22:46:49.739Z\\\",\\\"hs_object_id\\\":\\\"15329921593\\\",\\\"pipeline\\\":\\\"default\\\"},\\\"createdAt\\\":\\\"2023-09-26T19:38:40.343Z\\\",\\\"updatedAt\\\":\\\"2025-10-08T22:46:49.739Z\\\",\\\"archived\\\":false,\\\"url\\\":\\\"https://app.hubspot.com/contacts/21944879/record/0-3/15329921593\\\"},{\\\"id\\\":\\\"15329922333\\\",\\\"properties\\\":{\\\"amount\\\":\\\"30000\\\",\\\"closedate\\\":\\\"2024-10-31T23:33:43.002Z\\\",\\\"createdate\\\":\\\"2023-09-26T19:43:21.094Z\\\",\\\"dealname\\\":\\\"Moov\\\",\\\"dealstage\\\":\\\"closedwon\\\",\\\"hs_lastmodifieddate\\\":\\\"2025-11-17T16:20:59.054Z\\\",\\\"hs_object_id\\\":\\\"15329922333\\\",\\\"pipeline\\\":\\\"default\\\"},\\\"createdAt\\\":\\\"2023-09-26T19:43:21.094Z\\\",\\\"updatedAt\\\":\\\"2025-11-17T16:20:59.054Z\\\",\\\"archived\\\":false,\\\"url\\\":\\\"https://app.hubspot.com/contacts/21944879/record/0-3/15329922333\\\"},{\\\"id\\\":\\\"15332105780\\\",\\\"properties\\\":{\\\"amount\\\":\\\"40000\\\",\\\"closedate\\\":\\\"2024-09-17T20:20:57.323Z\\\",\\\"createdate\\\":\\\"2023-09-26T19:45:09.347Z\\\",\\\"dealname\\\":\\\"LexisNexis\\\",\\\"dealstage\\\":\\\"closedlost\\\",\\\"hs_lastmodifieddate\\\":\\\"2025-09-23T15:29:16.277Z\\\",\\\"hs_object_id\\\":\\\"15332105780\\\",\\\"pipeline\\\":\\\"default\\\"},\\\"createdAt\\\":\\\"2023-09-26T19:45:09.347Z\\\",\\\"updatedAt\\\":\\\"2025-09-23T15:29:16.277Z\\\",\\\"archived\\\":false,\\\"url\\\":\\\"https://app.hubspot.com/contacts/21944879/record/0-3/15332105780\\\"}],\\\"paging\\\":{\\\"next\\\":{\\\"after\\\":\\\"3\\\"}}}\"}]}"
+      }
+    ]
+  }
+]

@@ -20,8 +20,7 @@ import (
 )
 
 const (
-	searchToolsToolName    = "search_tools"
-	NEEDS_SEARCH_THRESHOLD = 30
+	searchToolsToolName = "search_tools"
 )
 
 func buildDynamicSearchToolsSchema(availableTags []string) json.RawMessage {
@@ -77,43 +76,32 @@ func buildDynamicSessionTools(
 		findDescription += fmt.Sprintf(" The available tools fall under the following categories: %s.", strings.Join(availableTags, ", "))
 	}
 
-	searchToolRequired := len(toolset.Tools) > NEEDS_SEARCH_THRESHOLD
-
-	tools := []*toolListEntry{}
-	if searchToolRequired {
-		tools = append(tools, &toolListEntry{
+	return []*toolListEntry{
+		&toolListEntry{
 			Name:        searchToolsToolName,
 			Description: findDescription,
 			InputSchema: buildDynamicSearchToolsSchema(availableTags),
 			Meta:        nil,
-		})
-	}
-	tools = append(tools, buildDescribeToolsTool(toolset.Tools, searchToolRequired))
-	tools = append(tools, &toolListEntry{
-		Name:        executeToolToolName,
-		Description: executeDescription,
-		InputSchema: dynamicExecuteToolSchema,
-		Meta:        nil,
-	})
-
-	return tools, nil
+		},
+		buildDescribeToolsTool(toolset.Tools),
+		&toolListEntry{
+			Name:        executeToolToolName,
+			Description: executeDescription,
+			InputSchema: dynamicExecuteToolSchema,
+			Meta:        nil,
+		},
+	}, nil
 }
 
-func buildDescribeToolsTool(tools []*types.Tool, searchToolRequired bool) *toolListEntry {
-	description := "Describe a set of tools by name. Use this to get more information about a tool, such as its description and input schema."
-
+func buildDescribeToolsTool(tools []*types.Tool) *toolListEntry {
 	toolNames := []string{}
 	for _, tool := range tools {
 		baseTool := conv.ToBaseTool(tool)
 		toolNames = append(toolNames, baseTool.Name)
 	}
 
-	// For smaller toolsets, we just list the available tools in this tool's description and omit the search tool
-	if searchToolRequired {
-		description += fmt.Sprintf(" You can find what tools are available using the %s tool.", searchToolsToolName)
-	} else {
-		description += fmt.Sprintf(" The available tools are: %s.", strings.Join(toolNames, ", "))
-	}
+	description := "Describe a set of tools by name. Use this to get more information about a tool, such as its description and input schema."
+	description += fmt.Sprintf(" You can find what tools are available using the %s tool.", searchToolsToolName)
 
 	exampleCount := min(len(toolNames), 3)
 	schemaJSON := fmt.Sprintf(`{

@@ -1,0 +1,162 @@
+[
+  {
+    "test": {
+      "promptId": "list-deals",
+      "promptDescription": "List deals",
+      "mcpServerName": "gram-local",
+      "iteration": 1
+    },
+    "success": true,
+    "metrics": {
+      "inputTokens": 8406,
+      "outputTokens": 621,
+      "totalTokens": 9027,
+      "toolsUsedCount": 3,
+      "toolsCalled": [
+        "search_tools",
+        "describe_tools",
+        "execute_tool"
+      ],
+      "durationMs": 16441
+    },
+    "toolCallLogs": [
+      {
+        "turnNumber": 1,
+        "toolName": "search_tools",
+        "toolInput": {
+          "query": "list hubspot deals",
+          "tags": [
+            "source:hubspot"
+          ]
+        },
+        "toolOutput": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"tools\":[{\"name\":\"hubspot_search_deals2\",\"description\":\"Edited: Search for deals by filtering on properties, searching through associations, and sorting results. Learn more about [CRM search](https://developers.hubspot.com/docs/guides/api/crm/search#make-a-search-request).\",\"_meta\":{\"similarity_score\":0.6212989421634315,\"tags\":[\"source:hubspot\",\"hubspot/Search\"]}},{\"name\":\"hubspot_create_deal\",\"description\":\"Create a deal with the given properties and return a copy of the object, including the ID. Documentation and examples for creating standard deals is provided.\",\"_meta\":{\"similarity_score\":0.5532613333152488,\"tags\":[\"source:hubspot\",\"hubspot/Basic\"]}},{\"name\":\"hubspot_get_deal\",\"description\":\"Read a Deal Object identified by `{dealId}`. `{dealId}` refers to the internal object ID by default, or optionally any unique property value as specified by the `idProperty` query param.  Control what is returned via the `properties` query param.\",\"_meta\":{\"similarity_score\":0.5087721358266075,\"tags\":[\"source:hubspot\",\"hubspot/Basic\"]}}]}"
+            }
+          ]
+        },
+        "isError": false
+      },
+      {
+        "turnNumber": 2,
+        "toolName": "describe_tools",
+        "toolInput": {
+          "tool_names": [
+            "hubspot_search_deals2"
+          ]
+        },
+        "toolOutput": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"tools\":[{\"name\":\"hubspot_search_deals2\",\"description\":\"Edited: Search for deals by filtering on properties, searching through associations, and sorting results. Learn more about [CRM search](https://developers.hubspot.com/docs/guides/api/crm/search#make-a-search-request).\",\"inputSchema\":{\"type\":\"object\",\"required\":[\"body\"],\"properties\":{\"body\":{\"type\":\"object\",\"properties\":{\"after\":{\"type\":\"string\"},\"limit\":{\"type\":\"integer\",\"format\":\"int32\"},\"query\":{\"type\":\"string\"},\"sorts\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"properties\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"filterGroups\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"required\":[\"filters\"],\"properties\":{\"filters\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"required\":[\"operator\",\"propertyName\"],\"properties\":{\"value\":{\"type\":\"string\"},\"values\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"operator\":{\"enum\":[\"EQ\",\"NEQ\",\"LT\",\"LTE\",\"GT\",\"GTE\",\"BETWEEN\",\"IN\",\"NOT_IN\",\"HAS_PROPERTY\",\"NOT_HAS_PROPERTY\",\"CONTAINS_TOKEN\",\"NOT_CONTAINS_TOKEN\"],\"type\":\"string\",\"description\":\"null\"},\"highValue\":{\"type\":\"string\"},\"propertyName\":{\"type\":\"string\"}}}}}}}}}},\"additionalProperties\":false}}]}"
+            }
+          ]
+        },
+        "isError": false
+      },
+      {
+        "turnNumber": 3,
+        "toolName": "execute_tool",
+        "toolInput": {
+          "name": "hubspot_search_deals2",
+          "arguments": {
+            "body": {
+              "limit": 3,
+              "properties": [
+                "dealname",
+                "amount",
+                "dealstage",
+                "closedate",
+                "pipeline"
+              ]
+            }
+          }
+        },
+        "toolOutput": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"total\":913,\"results\":[{\"id\":\"15329921593\",\"properties\":{\"amount\":\"50000\",\"closedate\":\"2024-09-10T22:54:37.525Z\",\"createdate\":\"2023-09-26T19:38:40.343Z\",\"dealname\":\"Intuit \",\"dealstage\":\"closedlost\",\"hs_lastmodifieddate\":\"2025-10-08T22:46:49.739Z\",\"hs_object_id\":\"15329921593\",\"pipeline\":\"default\"},\"createdAt\":\"2023-09-26T19:38:40.343Z\",\"updatedAt\":\"2025-10-08T22:46:49.739Z\",\"archived\":false,\"url\":\"https://app.hubspot.com/contacts/21944879/record/0-3/15329921593\"},{\"id\":\"15329922333\",\"properties\":{\"amount\":\"30000\",\"closedate\":\"2024-10-31T23:33:43.002Z\",\"createdate\":\"2023-09-26T19:43:21.094Z\",\"dealname\":\"Moov\",\"dealstage\":\"closedwon\",\"hs_lastmodifieddate\":\"2025-11-17T16:20:59.054Z\",\"hs_object_id\":\"15329922333\",\"pipeline\":\"default\"},\"createdAt\":\"2023-09-26T19:43:21.094Z\",\"updatedAt\":\"2025-11-17T16:20:59.054Z\",\"archived\":false,\"url\":\"https://app.hubspot.com/contacts/21944879/record/0-3/15329922333\"},{\"id\":\"15332105780\",\"properties\":{\"amount\":\"40000\",\"closedate\":\"2024-09-17T20:20:57.323Z\",\"createdate\":\"2023-09-26T19:45:09.347Z\",\"dealname\":\"LexisNexis\",\"dealstage\":\"closedlost\",\"hs_lastmodifieddate\":\"2025-09-23T15:29:16.277Z\",\"hs_object_id\":\"15332105780\",\"pipeline\":\"default\"},\"createdAt\":\"2023-09-26T19:45:09.347Z\",\"updatedAt\":\"2025-09-23T15:29:16.277Z\",\"archived\":false,\"url\":\"https://app.hubspot.com/contacts/21944879/record/0-3/15332105780\"}],\"paging\":{\"next\":{\"after\":\"3\"}}}"
+            }
+          ]
+        },
+        "isError": false
+      }
+    ],
+    "conversationLog": [
+      {
+        "role": "user",
+        "content": "List 3 hubspot deals"
+      },
+      {
+        "role": "assistant",
+        "content": "I'll help you list HubSpot deals. Let me first search for the appropriate tool to retrieve deals.",
+        "refusal": null,
+        "reasoning": null,
+        "tool_calls": [
+          {
+            "id": "toolu_vrtx_01PMMTtkACH9U8PTd1ZjaQgv",
+            "index": 0,
+            "type": "function",
+            "function": {
+              "name": "search_tools",
+              "arguments": "{\"query\": \"list hubspot deals\", \"tags\": [\"source:hubspot\"]}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "toolu_vrtx_01PMMTtkACH9U8PTd1ZjaQgv",
+        "content": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"tools\\\":[{\\\"name\\\":\\\"hubspot_search_deals2\\\",\\\"description\\\":\\\"Edited: Search for deals by filtering on properties, searching through associations, and sorting results. Learn more about [CRM search](https://developers.hubspot.com/docs/guides/api/crm/search#make-a-search-request).\\\",\\\"_meta\\\":{\\\"similarity_score\\\":0.6212989421634315,\\\"tags\\\":[\\\"source:hubspot\\\",\\\"hubspot/Search\\\"]}},{\\\"name\\\":\\\"hubspot_create_deal\\\",\\\"description\\\":\\\"Create a deal with the given properties and return a copy of the object, including the ID. Documentation and examples for creating standard deals is provided.\\\",\\\"_meta\\\":{\\\"similarity_score\\\":0.5532613333152488,\\\"tags\\\":[\\\"source:hubspot\\\",\\\"hubspot/Basic\\\"]}},{\\\"name\\\":\\\"hubspot_get_deal\\\",\\\"description\\\":\\\"Read a Deal Object identified by `{dealId}`. `{dealId}` refers to the internal object ID by default, or optionally any unique property value as specified by the `idProperty` query param.  Control what is returned via the `properties` query param.\\\",\\\"_meta\\\":{\\\"similarity_score\\\":0.5087721358266075,\\\"tags\\\":[\\\"source:hubspot\\\",\\\"hubspot/Basic\\\"]}}]}\"}]}"
+      },
+      {
+        "role": "assistant",
+        "content": "Now let me get more details about the search deals tool:",
+        "refusal": null,
+        "reasoning": null,
+        "tool_calls": [
+          {
+            "id": "toolu_vrtx_01VXaVhBYRUw66112w6YZjhg",
+            "index": 0,
+            "type": "function",
+            "function": {
+              "name": "describe_tools",
+              "arguments": "{\"tool_names\": [\"hubspot_search_deals2\"]}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "toolu_vrtx_01VXaVhBYRUw66112w6YZjhg",
+        "content": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"tools\\\":[{\\\"name\\\":\\\"hubspot_search_deals2\\\",\\\"description\\\":\\\"Edited: Search for deals by filtering on properties, searching through associations, and sorting results. Learn more about [CRM search](https://developers.hubspot.com/docs/guides/api/crm/search#make-a-search-request).\\\",\\\"inputSchema\\\":{\\\"type\\\":\\\"object\\\",\\\"required\\\":[\\\"body\\\"],\\\"properties\\\":{\\\"body\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"after\\\":{\\\"type\\\":\\\"string\\\"},\\\"limit\\\":{\\\"type\\\":\\\"integer\\\",\\\"format\\\":\\\"int32\\\"},\\\"query\\\":{\\\"type\\\":\\\"string\\\"},\\\"sorts\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"type\\\":\\\"string\\\"}},\\\"properties\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"type\\\":\\\"string\\\"}},\\\"filterGroups\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"type\\\":\\\"object\\\",\\\"required\\\":[\\\"filters\\\"],\\\"properties\\\":{\\\"filters\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"type\\\":\\\"object\\\",\\\"required\\\":[\\\"operator\\\",\\\"propertyName\\\"],\\\"properties\\\":{\\\"value\\\":{\\\"type\\\":\\\"string\\\"},\\\"values\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"type\\\":\\\"string\\\"}},\\\"operator\\\":{\\\"enum\\\":[\\\"EQ\\\",\\\"NEQ\\\",\\\"LT\\\",\\\"LTE\\\",\\\"GT\\\",\\\"GTE\\\",\\\"BETWEEN\\\",\\\"IN\\\",\\\"NOT_IN\\\",\\\"HAS_PROPERTY\\\",\\\"NOT_HAS_PROPERTY\\\",\\\"CONTAINS_TOKEN\\\",\\\"NOT_CONTAINS_TOKEN\\\"],\\\"type\\\":\\\"string\\\",\\\"description\\\":\\\"null\\\"},\\\"highValue\\\":{\\\"type\\\":\\\"string\\\"},\\\"propertyName\\\":{\\\"type\\\":\\\"string\\\"}}}}}}}}}},\\\"additionalProperties\\\":false}}]}\"}]}"
+      },
+      {
+        "role": "assistant",
+        "content": "Now I'll execute the search to get 3 deals:",
+        "refusal": null,
+        "reasoning": null,
+        "tool_calls": [
+          {
+            "id": "toolu_vrtx_01P8uJHxzuXwLKDcJahPGK1H",
+            "index": 0,
+            "type": "function",
+            "function": {
+              "name": "execute_tool",
+              "arguments": "{\"name\": \"hubspot_search_deals2\", \"arguments\": {\"body\":{\"limit\":3,\"properties\":[\"dealname\",\"amount\",\"dealstage\",\"closedate\",\"pipeline\"]}}}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "toolu_vrtx_01P8uJHxzuXwLKDcJahPGK1H",
+        "content": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"total\\\":913,\\\"results\\\":[{\\\"id\\\":\\\"15329921593\\\",\\\"properties\\\":{\\\"amount\\\":\\\"50000\\\",\\\"closedate\\\":\\\"2024-09-10T22:54:37.525Z\\\",\\\"createdate\\\":\\\"2023-09-26T19:38:40.343Z\\\",\\\"dealname\\\":\\\"Intuit \\\",\\\"dealstage\\\":\\\"closedlost\\\",\\\"hs_lastmodifieddate\\\":\\\"2025-10-08T22:46:49.739Z\\\",\\\"hs_object_id\\\":\\\"15329921593\\\",\\\"pipeline\\\":\\\"default\\\"},\\\"createdAt\\\":\\\"2023-09-26T19:38:40.343Z\\\",\\\"updatedAt\\\":\\\"2025-10-08T22:46:49.739Z\\\",\\\"archived\\\":false,\\\"url\\\":\\\"https://app.hubspot.com/contacts/21944879/record/0-3/15329921593\\\"},{\\\"id\\\":\\\"15329922333\\\",\\\"properties\\\":{\\\"amount\\\":\\\"30000\\\",\\\"closedate\\\":\\\"2024-10-31T23:33:43.002Z\\\",\\\"createdate\\\":\\\"2023-09-26T19:43:21.094Z\\\",\\\"dealname\\\":\\\"Moov\\\",\\\"dealstage\\\":\\\"closedwon\\\",\\\"hs_lastmodifieddate\\\":\\\"2025-11-17T16:20:59.054Z\\\",\\\"hs_object_id\\\":\\\"15329922333\\\",\\\"pipeline\\\":\\\"default\\\"},\\\"createdAt\\\":\\\"2023-09-26T19:43:21.094Z\\\",\\\"updatedAt\\\":\\\"2025-11-17T16:20:59.054Z\\\",\\\"archived\\\":false,\\\"url\\\":\\\"https://app.hubspot.com/contacts/21944879/record/0-3/15329922333\\\"},{\\\"id\\\":\\\"15332105780\\\",\\\"properties\\\":{\\\"amount\\\":\\\"40000\\\",\\\"closedate\\\":\\\"2024-09-17T20:20:57.323Z\\\",\\\"createdate\\\":\\\"2023-09-26T19:45:09.347Z\\\",\\\"dealname\\\":\\\"LexisNexis\\\",\\\"dealstage\\\":\\\"closedlost\\\",\\\"hs_lastmodifieddate\\\":\\\"2025-09-23T15:29:16.277Z\\\",\\\"hs_object_id\\\":\\\"15332105780\\\",\\\"pipeline\\\":\\\"default\\\"},\\\"createdAt\\\":\\\"2023-09-26T19:45:09.347Z\\\",\\\"updatedAt\\\":\\\"2025-09-23T15:29:16.277Z\\\",\\\"archived\\\":false,\\\"url\\\":\\\"https://app.hubspot.com/contacts/21944879/record/0-3/15332105780\\\"}],\\\"paging\\\":{\\\"next\\\":{\\\"after\\\":\\\"3\\\"}}}\"}]}"
+      }
+    ]
+  }
+]
