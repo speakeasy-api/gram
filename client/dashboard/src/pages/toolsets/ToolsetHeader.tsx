@@ -52,7 +52,9 @@ export const ToolsetHeader = ({
             label={"Toolset Name"}
             description={`Update the name of toolset '${toolset?.name}'`}
           >
-            <Heading variant="h2">{toolset?.name}</Heading>
+            <Heading variant="h2" className="normal-case">
+              {toolset?.name}
+            </Heading>
           </EditableText>
         </CopyableSlug>
         {actions}
