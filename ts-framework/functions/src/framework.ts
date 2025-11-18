@@ -39,6 +39,14 @@ export type ToolDefinition<
   ) => Promise<Result>;
 };
 
+type GramTool<
+  TTool extends ToolDefinition<any, any, string, Response>,
+  Env extends z.core.$ZodShape,
+> = {
+  gram: Gram<{ [T in TTool["name"]]: TTool }, Env>;
+  definition: ToolDefinition<string, z.core.$ZodShape, any, Response>;
+};
+
 export type ToolSignature<T> =
   T extends ToolDefinition<
     infer Name,
@@ -196,7 +204,7 @@ export class Gram<
     readonly [x: string]: z.core.$ZodOptional<z.core.$ZodString>;
   },
 > {
-  #tools: Map<string, ToolDefinition<any, any, InferEnv<EnvSchema>, Response>>;
+  #tools: Map<string, GramTool<any, any>>;
   #lax: boolean;
   #inputEnv?: Record<string, string | undefined> | undefined;
   #envSchema: EnvSchema;
@@ -274,20 +282,17 @@ export class Gram<
     >,
     EnvSchema
   > {
-    this.#tools.set(definition.name, definition as any);
-    return this as any;
+    this.#tools.set(definition.name, {
+      definition: definition as any,
+      gram: this,
+    });
+    return this;
   }
 
   /**
    * Appends another Gram instance's tools and environment schema to this one.
    * Similar to Hono's route groups. Returns a new Gram instance with merged
    * tools and environment schemas.
-   *
-   * Behavior:
-   * - Tools: If tool names collide, the appended instance's tools override the original's
-   * - Environment: If env vars collide, the appended instance's schema overrides the original's
-   * - Lax setting: The original instance's lax setting is preserved
-   * - Immutable: Returns a new Gram instance, leaving the original unchanged
    */
   append<
     OtherTools extends {
@@ -297,31 +302,15 @@ export class Gram<
   >(
     other: Gram<OtherTools, OtherEnvSchema>,
   ): Gram<Prettify<TTools & OtherTools>, Prettify<EnvSchema & OtherEnvSchema>> {
-    // Create merged env schema (other overrides this)
-    const mergedEnvSchema: Prettify<EnvSchema & OtherEnvSchema> = {
-      ...this.envSchema,
-      ...other.envSchema,
-    };
-
-    // Create new Gram instance with original's settings
-    const newGram = new Gram<
-      Prettify<TTools & OtherTools>,
-      Prettify<EnvSchema & OtherEnvSchema>
-    >({
-      lax: this.lax,
-      env: this.inputEnv as Record<string, string> | undefined,
-      envSchema: mergedEnvSchema,
-    });
-
     for (const [name, tool] of this.tools) {
-      newGram.tools.set(name, tool as any);
+      this.tools.set(name, tool);
     }
 
     for (const [name, tool] of other.tools) {
-      newGram.tools.set(name, tool as any);
+      this.tools.set(name, tool);
     }
 
-    return newGram;
+    return this as any;
   }
 
   /**
@@ -338,19 +327,20 @@ export class Gram<
     if (!tool) {
       throw new Error(`Tool not found: ${request.name}`);
     }
+    const { gram, definition } = tool;
 
     const ctx = new ToolContext(
       options?.signal || new AbortController().signal,
-      this.#env,
+      gram.#env,
     );
 
-    const schema = zm.object(tool.inputSchema);
+    const schema = zm.object(definition.inputSchema);
     const vres = schema.safeParse(request.input);
     let validatedInput: Record<string, unknown> = {};
     if (vres.success) {
       validatedInput = vres.data;
     } else if (
-      this.#lax &&
+      gram.#lax &&
       typeof request.input === "object" &&
       request.input !== null
     ) {
@@ -362,34 +352,37 @@ export class Gram<
       );
     }
 
-    return (await tool.execute(ctx, validatedInput)) as InferResult<
+    return (await definition.execute(ctx, validatedInput)) as InferResult<
       TTools[TName]
     >;
   }
 
   manifest(): Manifest {
-    const tools = Array.from(this.#tools.values()).map((tool) => {
-      const schema = zm.object(tool.inputSchema);
-      const inputSchema = zm.toJSONSchema(schema);
-      const result: {
-        name: string;
-        description?: string;
-        inputSchema: unknown;
-        variables?: ManifestVariables;
-      } = {
-        name: tool.name,
-        inputSchema: inputSchema,
-      };
-      if (tool.description != null) {
-        result.description = tool.description;
-      }
-      if (this.#envSchema != null) {
-        const obj = zm.object(this.#envSchema);
-        result.variables = envMapFromJSONSchema(zm.toJSONSchema(obj));
-      }
+    const tools = Array.from(this.#tools.values()).map(
+      ({ gram, definition }) => {
+        const schema = zm.object(definition.inputSchema);
 
-      return result;
-    });
+        const inputSchema = zm.toJSONSchema(schema);
+        const result: {
+          name: string;
+          description?: string;
+          inputSchema: unknown;
+          variables?: ManifestVariables;
+        } = {
+          name: definition.name,
+          inputSchema: inputSchema,
+        };
+        if (definition.description != null) {
+          result.description = definition.description;
+        }
+        if (gram.#envSchema != null) {
+          const obj = zm.object(gram.#envSchema);
+          result.variables = envMapFromJSONSchema(zm.toJSONSchema(obj));
+        }
+
+        return result;
+      },
+    );
 
     return {
       version: "0.0.0",
