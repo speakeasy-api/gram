@@ -3,7 +3,6 @@ import {
   Heading,
   Text,
   useModal,
-  Link,
   useMoonshineConfig,
 } from "@speakeasy-api/moonshine";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
