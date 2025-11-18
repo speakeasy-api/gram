@@ -4,6 +4,9 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type GetInstanceSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -44,6 +47,21 @@ export type GetInstanceRequest = {
 };
 
 /** @internal */
+export const GetInstanceSecurityOption1$inboundSchema: z.ZodType<
+  GetInstanceSecurityOption1,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "project_slug_header_Gram-Project": z.string(),
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
 export type GetInstanceSecurityOption1$Outbound = {
   "project_slug_header_Gram-Project": string;
   "session_header_Gram-Session": string;
@@ -64,6 +82,19 @@ export const GetInstanceSecurityOption1$outboundSchema: z.ZodType<
   });
 });
 
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace GetInstanceSecurityOption1$ {
+  /** @deprecated use `GetInstanceSecurityOption1$inboundSchema` instead. */
+  export const inboundSchema = GetInstanceSecurityOption1$inboundSchema;
+  /** @deprecated use `GetInstanceSecurityOption1$outboundSchema` instead. */
+  export const outboundSchema = GetInstanceSecurityOption1$outboundSchema;
+  /** @deprecated use `GetInstanceSecurityOption1$Outbound` instead. */
+  export type Outbound = GetInstanceSecurityOption1$Outbound;
+}
+
 export function getInstanceSecurityOption1ToJSON(
   getInstanceSecurityOption1: GetInstanceSecurityOption1,
 ): string {
@@ -71,6 +102,31 @@ export function getInstanceSecurityOption1ToJSON(
     GetInstanceSecurityOption1$outboundSchema.parse(getInstanceSecurityOption1),
   );
 }
+
+export function getInstanceSecurityOption1FromJSON(
+  jsonString: string,
+): SafeParseResult<GetInstanceSecurityOption1, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => GetInstanceSecurityOption1$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetInstanceSecurityOption1' from JSON`,
+  );
+}
+
+/** @internal */
+export const GetInstanceSecurityOption2$inboundSchema: z.ZodType<
+  GetInstanceSecurityOption2,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "apikey_header_Gram-Key": z.string(),
+  "project_slug_header_Gram-Project": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+  });
+});
 
 /** @internal */
 export type GetInstanceSecurityOption2$Outbound = {
@@ -93,6 +149,19 @@ export const GetInstanceSecurityOption2$outboundSchema: z.ZodType<
   });
 });
 
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace GetInstanceSecurityOption2$ {
+  /** @deprecated use `GetInstanceSecurityOption2$inboundSchema` instead. */
+  export const inboundSchema = GetInstanceSecurityOption2$inboundSchema;
+  /** @deprecated use `GetInstanceSecurityOption2$outboundSchema` instead. */
+  export const outboundSchema = GetInstanceSecurityOption2$outboundSchema;
+  /** @deprecated use `GetInstanceSecurityOption2$Outbound` instead. */
+  export type Outbound = GetInstanceSecurityOption2$Outbound;
+}
+
 export function getInstanceSecurityOption2ToJSON(
   getInstanceSecurityOption2: GetInstanceSecurityOption2,
 ): string {
@@ -100,6 +169,31 @@ export function getInstanceSecurityOption2ToJSON(
     GetInstanceSecurityOption2$outboundSchema.parse(getInstanceSecurityOption2),
   );
 }
+
+export function getInstanceSecurityOption2FromJSON(
+  jsonString: string,
+): SafeParseResult<GetInstanceSecurityOption2, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => GetInstanceSecurityOption2$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetInstanceSecurityOption2' from JSON`,
+  );
+}
+
+/** @internal */
+export const GetInstanceSecurity$inboundSchema: z.ZodType<
+  GetInstanceSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  Option1: z.lazy(() => GetInstanceSecurityOption1$inboundSchema).optional(),
+  Option2: z.lazy(() => GetInstanceSecurityOption2$inboundSchema).optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Option1": "option1",
+    "Option2": "option2",
+  });
+});
 
 /** @internal */
 export type GetInstanceSecurity$Outbound = {
@@ -122,6 +216,19 @@ export const GetInstanceSecurity$outboundSchema: z.ZodType<
   });
 });
 
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace GetInstanceSecurity$ {
+  /** @deprecated use `GetInstanceSecurity$inboundSchema` instead. */
+  export const inboundSchema = GetInstanceSecurity$inboundSchema;
+  /** @deprecated use `GetInstanceSecurity$outboundSchema` instead. */
+  export const outboundSchema = GetInstanceSecurity$outboundSchema;
+  /** @deprecated use `GetInstanceSecurity$Outbound` instead. */
+  export type Outbound = GetInstanceSecurity$Outbound;
+}
+
 export function getInstanceSecurityToJSON(
   getInstanceSecurity: GetInstanceSecurity,
 ): string {
@@ -129,6 +236,37 @@ export function getInstanceSecurityToJSON(
     GetInstanceSecurity$outboundSchema.parse(getInstanceSecurity),
   );
 }
+
+export function getInstanceSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<GetInstanceSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => GetInstanceSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetInstanceSecurity' from JSON`,
+  );
+}
+
+/** @internal */
+export const GetInstanceRequest$inboundSchema: z.ZodType<
+  GetInstanceRequest,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  toolset_slug: z.string(),
+  environment_slug: z.string().optional(),
+  "Gram-Session": z.string().optional(),
+  "Gram-Project": z.string().optional(),
+  "Gram-Key": z.string().optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "toolset_slug": "toolsetSlug",
+    "environment_slug": "environmentSlug",
+    "Gram-Session": "gramSession",
+    "Gram-Project": "gramProject",
+    "Gram-Key": "gramKey",
+  });
+});
 
 /** @internal */
 export type GetInstanceRequest$Outbound = {
@@ -160,10 +298,33 @@ export const GetInstanceRequest$outboundSchema: z.ZodType<
   });
 });
 
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace GetInstanceRequest$ {
+  /** @deprecated use `GetInstanceRequest$inboundSchema` instead. */
+  export const inboundSchema = GetInstanceRequest$inboundSchema;
+  /** @deprecated use `GetInstanceRequest$outboundSchema` instead. */
+  export const outboundSchema = GetInstanceRequest$outboundSchema;
+  /** @deprecated use `GetInstanceRequest$Outbound` instead. */
+  export type Outbound = GetInstanceRequest$Outbound;
+}
+
 export function getInstanceRequestToJSON(
   getInstanceRequest: GetInstanceRequest,
 ): string {
   return JSON.stringify(
     GetInstanceRequest$outboundSchema.parse(getInstanceRequest),
+  );
+}
+
+export function getInstanceRequestFromJSON(
+  jsonString: string,
+): SafeParseResult<GetInstanceRequest, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => GetInstanceRequest$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetInstanceRequest' from JSON`,
   );
 }
