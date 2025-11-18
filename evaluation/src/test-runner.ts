@@ -20,10 +20,6 @@ export class TestRunner {
     this.openai = new OpenAI({
       apiKey: config.openrouterApiKey,
       baseURL: "https://openrouter.ai/api/v1",
-      defaultHeaders: {
-        "HTTP-Referer": "https://github.com/anthropics/gram",
-        "X-Title": "Gram MCP Evaluation",
-      },
     });
   }
 
