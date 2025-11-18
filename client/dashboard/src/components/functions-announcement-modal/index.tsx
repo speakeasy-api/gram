@@ -45,7 +45,7 @@ export function FunctionsAnnouncementModal({
 
   return (
     <div className="flex flex-row p-6 w-full h-full">
-      <div className="w/2/3 h-full p-10">
+      <div className="h-full p-6">
         <div className="flex flex-col gap-3">
           <Heading className="whitespace-nowrap">
             Introducing Gram Functions
@@ -56,24 +56,20 @@ export function FunctionsAnnouncementModal({
               New
             </Badge>
           </Heading>
-          <Text>
-            We are really excited to launch <em>Gram Functions</em>, a new way
-            to author and deploy custom MCP tools.
+          <Text className="leading-6">
+            Gram Functions enable you to compose agent tools in TypeScript and
+            deploy them as MCP servers on Gram's serverless infrastructure.
           </Text>
 
-          <Text>
-            In this release, we have shipped a batteries included TypeScript
-            framework for building custom MCP tools. Read more about it{" "}
-            <Link href="https://www.speakeasy.com/docs/gram/gram-functions/introduction">
-              here
-            </Link>
-            .
+          <Text className="leading-6">
+            Now you can extend your agents tools beyond OpenAPI: take advantage
+            of the NPM ecosystem, wrap multiple APIs, or query a database.
           </Text>
           <div className="flex flex-row gap-3 mt-4">
             <Button variant="brand" onClick={goToFunctions}>
               Try Gram Functions
             </Button>
-            <Button onClick={handleClose} variant="secondary">
+            <Button onClick={handleClose} variant="tertiary">
               Don't show again
             </Button>
           </div>
