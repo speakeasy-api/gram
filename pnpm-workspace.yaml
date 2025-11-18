@@ -8,6 +8,7 @@ packages:
   - cli
   - functions
   - docs
+  - evaluation
 
 catalog:
   "@ai-sdk/openai": ^1.3.4
