@@ -19,6 +19,7 @@ import { useEffect, useState } from "react";
 import { FileCode, FunctionSquare, TriangleAlertIcon } from "lucide-react";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useRoutes } from "@/routes";
+import { toast } from "sonner";
 
 interface AttachEnvironmentDialogContentProps {
   asset: NamedAsset;
@@ -188,6 +189,14 @@ export function AttachEnvironmentDialogContent({
   const isDirty = activeEnvironmentId !== initialEnvironmentId;
 
   const setSourceEnvironmentMutation = useSetSourceEnvironmentLinkMutation({
+    onSuccess: () => {
+      toast.success("Environment attached successfully");
+      onClose();
+    },
+    onError: (error) => {
+      toast.error("Failed to attach environment. Please try again.");
+      console.error("Failed to attach environment:", error);
+    },
     onSettled: () => {
       sourceEnvironment.refetch();
     },
@@ -195,6 +204,14 @@ export function AttachEnvironmentDialogContent({
 
   const deleteSourceEnvironmentMutation =
     useDeleteSourceEnvironmentLinkMutation({
+      onSuccess: () => {
+        toast.success("Environment detached successfully");
+        onClose();
+      },
+      onError: (error) => {
+        toast.error("Failed to detach environment. Please try again.");
+        console.error("Failed to detach environment:", error);
+      },
       onSettled: () => {
         sourceEnvironment.refetch();
       },
