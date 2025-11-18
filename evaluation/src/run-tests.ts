@@ -5,14 +5,25 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 
 /**
+ * Generate timestamp for filenames (YYYY-MM-DD_HH-MM-SS)
+ */
+function getTimestamp(): string {
+  const now = new Date();
+  return now.toISOString()
+    .replace(/T/, '_')
+    .replace(/\..+/, '')
+    .replace(/:/g, '-');
+}
+
+/**
  * Main entry point for running MCP evaluation tests
  */
 async function main() {
   // Check for API key
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     console.error(
-      'Error: ANTHROPIC_API_KEY environment variable is required'
+      'Error: OPENROUTER_API_KEY environment variable is required'
     );
     process.exit(1);
   }
@@ -27,7 +38,7 @@ async function main() {
     const parsedConfig = JSON.parse(configFile);
     config = {
       ...parsedConfig,
-      anthropicApiKey: apiKey,
+      openrouterApiKey: apiKey,
     };
   } catch (error) {
     console.error(`Error loading config file: ${configPath}`);
@@ -47,15 +58,21 @@ async function main() {
   // Print summary
   runner.printSummary(summary);
 
-  // Save results if configured
-  if (config.outputFile) {
-    await runner.saveResults(summary, config.outputFile);
-  }
+  // Create timestamped results directory
+  const timestamp = getTimestamp();
+  const resultsDir = path.join(process.cwd(), 'results', timestamp);
+  await fs.mkdir(resultsDir, { recursive: true });
 
-  // Save detailed logs if configured
-  if (config.detailedLogsFile) {
-    await runner.saveDetailedLogs(summary, config.detailedLogsFile);
-  }
+  const summaryFile = path.join(resultsDir, 'summary.json');
+  const detailedFile = path.join(resultsDir, 'logs.json');
+
+  // Save results
+  await runner.saveResults(summary, summaryFile);
+  await runner.saveDetailedLogs(summary, detailedFile);
+
+  console.log(`\nResults saved to: results/${timestamp}/`);
+  console.log(`  - summary.json`);
+  console.log(`  - logs.json`);
 
   // Exit with error code if any tests failed
   if (summary.failedTests > 0) {

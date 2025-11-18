@@ -5,9 +5,8 @@ node_modules/
 dist/
 
 # Test results
-test-results.json
 test-config.json
-test-results-detailed.json
+results/
 
 # Environment files
 .env

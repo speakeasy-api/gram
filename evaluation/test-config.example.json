@@ -1,5 +1,5 @@
 {
-  "model": "claude-3-5-haiku-latest",
+  "model": "anthropic/claude-sonnet-4.5",
   "numIterations": 1,
   "mcpServers": [
     {
@@ -23,7 +23,5 @@
       "prompt": "List 3 hubspot deals",
       "expectedTools": ["list_deals"]
     }
-  ],
-  "outputFile": "test-results.json",
-  "detailedLogsFile": "test-results-detailed.json"
+  ]
 }

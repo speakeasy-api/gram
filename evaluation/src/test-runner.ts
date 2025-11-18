@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { MCPClient } from "./mcp-client.js";
 import type {
   MCPServerConfig,
@@ -12,13 +12,18 @@ import type {
  * Main test runner for MCP server evaluation
  */
 export class TestRunner {
-  private anthropic: Anthropic;
+  private openai: OpenAI;
   private config: TestConfig;
 
   constructor(config: TestConfig) {
     this.config = config;
-    this.anthropic = new Anthropic({
-      apiKey: config.anthropicApiKey,
+    this.openai = new OpenAI({
+      apiKey: config.openrouterApiKey,
+      baseURL: "https://openrouter.ai/api/v1",
+      defaultHeaders: {
+        "HTTP-Referer": "https://github.com/anthropics/gram",
+        "X-Title": "Gram MCP Evaluation",
+      },
     });
   }
 
@@ -81,15 +86,18 @@ export class TestRunner {
       // Get available tools
       const tools = await mcpClient.listTools();
 
-      // Format tools for Anthropic API
-      const anthropicTools = tools.map((tool: any) => ({
-        name: tool.name,
-        description: tool.description || "",
-        input_schema: tool.inputSchema || { type: "object", properties: {} },
+      // Format tools for OpenAI API (compatible with OpenRouter)
+      const openaiTools = tools.map((tool: any) => ({
+        type: "function" as const,
+        function: {
+          name: tool.name,
+          description: tool.description || "",
+          parameters: tool.inputSchema || { type: "object", properties: {} },
+        },
       }));
 
       // Initialize conversation messages
-      const messages: Anthropic.MessageParam[] = [
+      const messages: OpenAI.ChatCompletionMessageParam[] = [
         {
           role: "user",
           content: prompt.prompt,
@@ -109,58 +117,63 @@ export class TestRunner {
       while (turnCount < maxTurns) {
         turnCount++;
 
-        // Make request to Claude with tools
-        const response = await this.anthropic.messages.create({
-          model: this.config.model || "claude-3-5-sonnet-20241022",
+        // Make request to Claude via OpenRouter with tools
+        const response = await this.openai.chat.completions.create({
+          model: this.config.model || "anthropic/claude-3.5-sonnet",
           max_tokens: 4096,
-          tools: anthropicTools,
+          tools: openaiTools,
           messages,
         });
 
         // Accumulate token usage
-        totalInputTokens += response.usage.input_tokens;
-        totalOutputTokens += response.usage.output_tokens;
+        if (response.usage) {
+          totalInputTokens += response.usage.prompt_tokens || 0;
+          totalOutputTokens += response.usage.completion_tokens || 0;
+        }
 
-        // Check if there are any tool uses in the response
-        const toolUses = response.content.filter(
-          (block: any) => block.type === "tool_use",
-        );
+        const choice = response.choices[0];
+        if (!choice || !choice.message) {
+          break;
+        }
 
-        // If no tool uses, we're done
-        if (toolUses.length === 0) {
+        const assistantMessage = choice.message;
+
+        // Check if there are any tool calls in the response
+        const toolCalls = assistantMessage.tool_calls || [];
+
+        // If no tool calls, we're done
+        if (toolCalls.length === 0) {
           break;
         }
 
         // Track which tools were called
-        toolUses.forEach((block: any) => allToolsCalled.push(block.name));
+        toolCalls.forEach((toolCall) => allToolsCalled.push(toolCall.function.name));
 
         // Add assistant's response to messages
-        messages.push({
-          role: "assistant",
-          content: response.content,
-        });
+        messages.push(assistantMessage);
 
         // Execute tool calls and collect results
         const toolResults = await Promise.all(
-          toolUses.map(async (toolUse: any) => {
+          toolCalls.map(async (toolCall) => {
             try {
+              const functionArgs = JSON.parse(toolCall.function.arguments);
               const result = await mcpClient!.callTool(
-                toolUse.name,
-                toolUse.input,
+                toolCall.function.name,
+                functionArgs,
               );
 
               // Log the tool call details
               toolCallLogs.push({
                 turnNumber: turnCount,
-                toolName: toolUse.name,
-                toolInput: toolUse.input,
+                toolName: toolCall.function.name,
+                toolInput: functionArgs,
                 toolOutput: result,
                 isError: false,
               });
 
               return {
-                type: "tool_result" as const,
-                tool_use_id: toolUse.id,
+                role: "tool" as const,
+                tool_call_id: toolCall.id,
                 content: JSON.stringify(result),
               };
             } catch (error) {
@@ -170,29 +183,25 @@ export class TestRunner {
               // Log the tool call error
               toolCallLogs.push({
                 turnNumber: turnCount,
-                toolName: toolUse.name,
-                toolInput: toolUse.input,
+                toolName: toolCall.function.name,
+                toolInput: JSON.parse(toolCall.function.arguments),
                 toolOutput: { error: errorMessage },
                 isError: true,
               });
 
               return {
-                type: "tool_result" as const,
-                tool_use_id: toolUse.id,
+                role: "tool" as const,
+                tool_call_id: toolCall.id,
                 content: JSON.stringify({
                   error: errorMessage,
                 }),
-                is_error: true,
               };
             }
           }),
         );
 
         // Add tool results to messages
-        messages.push({
-          role: "user",
-          content: toolResults,
-        });
+        messages.push(...toolResults);
       }
 
       const durationMs = Date.now() - startTime;

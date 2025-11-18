@@ -69,12 +69,10 @@ export interface TestSummary {
  * Configuration for the entire test suite
  */
 export interface TestConfig {
-  anthropicApiKey: string;
+  openrouterApiKey: string;
   model?: string; // Default: claude-3-5-sonnet-20241022
   numIterations?: number; // Default: 1 - number of times to run each prompt
   maxTurns?: number; // Default: 20 - maximum number of agentic turns per test
   mcpServers: MCPServerConfig[];
   prompts: TestPrompt[];
-  outputFile?: string; // Optional: path to save results JSON
-  detailedLogsFile?: string; // Optional: path to save detailed tool call logs
 }
