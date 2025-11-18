@@ -284,11 +284,11 @@ export class Gram<
   }
 
   /**
-   * Appends another Gram instance's tools and environment schema to this one.
+   * Extends this Gram instance with another Gram instance's tools and environment schema.
    * Similar to Hono's route groups. Returns a new Gram instance with merged
    * tools and environment schemas.
    */
-  append<
+  extend<
     OtherTools extends {
       [k: string]: ToolDefinition<any, any, any, Response>;
     },

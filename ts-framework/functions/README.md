@@ -80,7 +80,7 @@ export default gram;
 
 ### Composing Gram Instances
 
-You can compose multiple Gram instances together using the `append()` method,
+You can compose multiple Gram instances together using the `extend()` method,
 similar to Hono's route groups pattern. This is useful for organizing tools by
 domain or functionality:
 
@@ -119,15 +119,15 @@ const stringTools = new Gram()
   });
 
 // Combine both
-const gram = mathTools.append(stringTools);
+const gram = mathTools.extend(stringTools);
 
 export default gram;
 ```
 
-The `append()` method:
+The `extend()` method:
 
 - **Merges tools**: All tools from both instances are combined
-- **Override behavior**: If tool names collide, the appended instance's tools
+- **Override behavior**: If tool names collide, the extended instance's tools
   override the original's
 - **Preserves context**: Each tool maintains its original Gram instance's
   execution context (environment variables and lax validation settings)

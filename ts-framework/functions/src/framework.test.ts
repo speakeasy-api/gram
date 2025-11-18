@@ -337,7 +337,7 @@ test("appends one Gram to another", () => {
     },
   });
 
-  const merged = g1.append(g2);
+  const merged = g1.extend(g2);
 
   expect(merged.manifest()).toEqual({
     version: "0.0.0",
@@ -432,8 +432,8 @@ describe("with fake timers", () => {
   });
 });
 
-describe("append", () => {
-  test("appends tools from another Gram instance", async () => {
+describe("extend", () => {
+  test("extends tools from another Gram instance", async () => {
     const original = new Gram().tool({
       name: "echo",
       description: "Echoes the input",
@@ -452,13 +452,13 @@ describe("append", () => {
       },
     });
 
-    const appended = original.append(other);
+    const extended =original.extend(other);
 
     // Verify that g1 is mutated (not copied)
-    expect(appended).toBe(original);
+    expect(extended).toBe(original);
 
     // Should be able to call tools from both instances
-    const res1 = await appended.handleToolCall({
+    const res1 = await extended.handleToolCall({
       name: "echo",
       input: { message: "Hello!" },
     });
@@ -466,7 +466,7 @@ describe("append", () => {
     const data1 = await res1.json();
     expect(data1).toEqual({ echoed: "Hello!" });
 
-    const res2 = await appended.handleToolCall({
+    const res2 = await extended.handleToolCall({
       name: "add",
       input: { a: 1, b: 2 },
     });
@@ -494,9 +494,9 @@ describe("append", () => {
       },
     });
 
-    const appended = g1.append(g2);
+    const extended =g1.extend(g2);
 
-    const response = await appended.handleToolCall({
+    const response = await extended.handleToolCall({
       name: "greet",
       input: {},
     });
@@ -523,10 +523,10 @@ describe("append", () => {
       },
     });
 
-    const appended = original.append(other);
+    const extended =original.extend(other);
 
     // Should use g1's lax setting (true), so invalid input should pass
-    const response = await appended.handleToolCall({
+    const response = await extended.handleToolCall({
       name: "echo",
       input: { message: 123 } as any, // Invalid type but lax mode
     });
@@ -534,7 +534,7 @@ describe("append", () => {
 
     // Should use g2's lax setting (false), so invalid input should fail
     try {
-      await appended.handleToolCall({
+      await extended.handleToolCall({
         name: "add",
         input: { a: "not a number", b: 2 } as any, // Invalid type, strict mode
       });
@@ -572,16 +572,16 @@ describe("append", () => {
       },
     });
 
-    const appended = original.append(other);
+    const extended =original.extend(other);
 
     // g1's tool should still access G1_VAR
-    const res1 = await appended.handleToolCall({ name: "getG1Var", input: {} });
+    const res1 = await extended.handleToolCall({ name: "getG1Var", input: {} });
     expect(res1.status).toBe(200);
     const data1 = await res1.json();
     expect(data1).toEqual({ value: "value from g1" });
 
     // g2's tool should still access G2_VAR (not G1_VAR) even when called through merged
-    const res2 = await appended.handleToolCall({ name: "getG2Var", input: {} });
+    const res2 = await extended.handleToolCall({ name: "getG2Var", input: {} });
     expect(res2.status).toBe(200);
     const data2 = await res2.json();
     expect(data2).toEqual({ value: "value from g2" });
@@ -612,16 +612,16 @@ describe("append", () => {
       },
     });
 
-    const appended = original.append(firstOther).append(secondOther);
+    const extended =original.extend(firstOther).extend(secondOther);
 
     // Should have all three tools
-    const res1 = await appended.handleToolCall({ name: "tool1", input: {} });
+    const res1 = await extended.handleToolCall({ name: "tool1", input: {} });
     expect((await res1.json()).from).toBe("g1");
 
-    const res2 = await appended.handleToolCall({ name: "tool2", input: {} });
+    const res2 = await extended.handleToolCall({ name: "tool2", input: {} });
     expect((await res2.json()).from).toBe("g2");
 
-    const res3 = await appended.handleToolCall({ name: "tool3", input: {} });
+    const res3 = await extended.handleToolCall({ name: "tool3", input: {} });
     expect((await res3.json()).from).toBe("g3");
   });
 });

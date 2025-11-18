@@ -68,7 +68,7 @@ import { trainGram } from './train'
 import { flightGram } from './flight'
 
 const travelGram = new Gram()
-  .append(trainGram)
-  .append(flightGram);
+  .extend(trainGram)
+  .extend(flightGram);
 
 ```
