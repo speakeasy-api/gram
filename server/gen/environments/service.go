@@ -31,6 +31,12 @@ type Service interface {
 	DeleteSourceEnvironmentLink(context.Context, *DeleteSourceEnvironmentLinkPayload) (err error)
 	// Get the environment linked to a source
 	GetSourceEnvironment(context.Context, *GetSourceEnvironmentPayload) (res *types.Environment, err error)
+	// Set (upsert) a link between a toolset and an environment
+	SetToolsetEnvironmentLink(context.Context, *SetToolsetEnvironmentLinkPayload) (res *ToolsetEnvironmentLink, err error)
+	// Delete a link between a toolset and an environment
+	DeleteToolsetEnvironmentLink(context.Context, *DeleteToolsetEnvironmentLinkPayload) (err error)
+	// Get the environment linked to a toolset
+	GetToolsetEnvironment(context.Context, *GetToolsetEnvironmentPayload) (res *types.Environment, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -53,7 +59,7 @@ const ServiceName = "environments"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"createEnvironment", "listEnvironments", "updateEnvironment", "deleteEnvironment", "setSourceEnvironmentLink", "deleteSourceEnvironmentLink", "getSourceEnvironment"}
+var MethodNames = [10]string{"createEnvironment", "listEnvironments", "updateEnvironment", "deleteEnvironment", "setSourceEnvironmentLink", "deleteSourceEnvironmentLink", "getSourceEnvironment", "setToolsetEnvironmentLink", "deleteToolsetEnvironmentLink", "getToolsetEnvironment"}
 
 // CreateEnvironmentPayload is the payload type of the environments service
 // createEnvironment method.
@@ -90,6 +96,15 @@ type DeleteSourceEnvironmentLinkPayload struct {
 	ProjectSlugInput *string
 }
 
+// DeleteToolsetEnvironmentLinkPayload is the payload type of the environments
+// service deleteToolsetEnvironmentLink method.
+type DeleteToolsetEnvironmentLinkPayload struct {
+	// The ID of the toolset
+	ToolsetID        string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
 // A single environment entry
 type EnvironmentEntryInput struct {
 	// The name of the environment variable
@@ -105,6 +120,15 @@ type GetSourceEnvironmentPayload struct {
 	SourceKind SourceKind
 	// The slug of the source
 	SourceSlug       string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// GetToolsetEnvironmentPayload is the payload type of the environments service
+// getToolsetEnvironment method.
+type GetToolsetEnvironmentPayload struct {
+	// The ID of the toolset
+	ToolsetID        string
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -135,6 +159,17 @@ type SetSourceEnvironmentLinkPayload struct {
 	ProjectSlugInput *string
 }
 
+// SetToolsetEnvironmentLinkPayload is the payload type of the environments
+// service setToolsetEnvironmentLink method.
+type SetToolsetEnvironmentLinkPayload struct {
+	// The ID of the toolset
+	ToolsetID string
+	// The ID of the environment to link
+	EnvironmentID    string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
 // SourceEnvironmentLink is the result type of the environments service
 // setSourceEnvironmentLink method.
 type SourceEnvironmentLink struct {
@@ -150,6 +185,17 @@ type SourceEnvironmentLink struct {
 
 // The kind of source that can be linked to an environment
 type SourceKind string
+
+// ToolsetEnvironmentLink is the result type of the environments service
+// setToolsetEnvironmentLink method.
+type ToolsetEnvironmentLink struct {
+	// The ID of the toolset environment link
+	ID string
+	// The ID of the toolset
+	ToolsetID string
+	// The ID of the environment
+	EnvironmentID string
+}
 
 // UpdateEnvironmentPayload is the payload type of the environments service
 // updateEnvironment method.
