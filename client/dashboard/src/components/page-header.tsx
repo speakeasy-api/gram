@@ -1,9 +1,9 @@
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useSlugs } from "@/contexts/Sdk.tsx";
-import { cn } from "@/lib/utils.ts";
+import { capitalize, cn } from "@/lib/utils.ts";
 import React from "react";
-import { Link, useLocation } from "react-router";
+import { Link, useLocation, useParams } from "react-router";
 import { Heading } from "./ui/heading.tsx";
 
 function PageHeaderComponent({
@@ -50,15 +50,30 @@ function PageHeaderTitle({
   );
 }
 
+const breadcrumbSubstitutions = {
+  mcp: "MCP",
+  sdks: "SDKs",
+  "custom-tools": "Custom Tools",
+};
+
 function PageHeaderBreadcrumbs({
   fullWidth,
   className,
+  substitutions = {}, // Any segment and how it should be displayed, for example toolset slug -> toolset name
 }: {
   fullWidth?: boolean;
   className?: string;
+  substitutions?: Record<string, string | undefined>;
 }) {
+  const params = useParams();
   const { orgSlug, projectSlug } = useSlugs();
   const location = useLocation();
+
+  const toPreserve = Object.values(params).filter(Boolean);
+  const allSubstitutions: Record<string, string | undefined> = {
+    ...breadcrumbSubstitutions,
+    ...substitutions,
+  };
 
   // Build breadcrumb elements from URL segments
   const visibleElements = location.pathname
@@ -68,40 +83,40 @@ function PageHeaderBreadcrumbs({
     .map((segment, index, segments) => {
       const url = "/" + segments.slice(0, index + 1).join("/");
       const isCurrentPage = location.pathname.endsWith(url);
-      let title = segment.replace("-", " ");
-      if (title.toLowerCase() === "sdks") {
-        title = "SDKs";
-      }
-      if (title.toLowerCase() === "mcp") {
-        title = "MCP";
+
+      let display = segment;
+      if (allSubstitutions[segment]) {
+        display = allSubstitutions[segment];
+      } else if (!toPreserve.includes(segment)) {
+        display = capitalize(segment);
       }
 
       return {
         url,
-        title,
+        display,
         isCurrentPage,
       };
     });
 
   visibleElements.unshift({
     url: "/",
-    title: "Home",
+    display: "Home",
     isCurrentPage: visibleElements.length === 0,
   });
 
   return (
     <PageHeader.Title className={cn(fullWidth ? "max-w-full" : "", className)}>
-      <div className="ml-auto flex items-center gap-2 capitalize">
+      <div className="ml-auto flex items-center gap-2 normal-case">
         {visibleElements.map((elem, index) => (
           <React.Fragment key={elem.url}>
             {elem.isCurrentPage ? (
-              <span>{elem.title}</span>
+              <span>{elem.display}</span>
             ) : (
               <Link
                 to={`/${orgSlug}/${projectSlug}${elem.url}`}
                 className="text-muted-foreground hover:text-foreground trans"
               >
-                {elem.title}
+                {elem.display}
               </Link>
             )}
             {index < visibleElements.length - 1 && (

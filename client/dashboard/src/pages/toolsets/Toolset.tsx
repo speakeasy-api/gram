@@ -30,7 +30,7 @@ import {
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
-import { Outlet, useParams, useLocation, useNavigate } from "react-router";
+import { Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { MCPDetails, MCPEnableButton } from "../mcp/MCPDetails";
 import { AddToolsDialog } from "./AddToolsDialog";
@@ -200,6 +200,7 @@ function AddToToolsetDialog({
 
 export function ToolsetRoot() {
   const { toolsetSlug } = useParams();
+  const { data: toolset } = useToolset(toolsetSlug ?? "");
 
   useRegisterToolsetTelemetry({
     toolsetSlug: toolsetSlug ?? "",
@@ -212,7 +213,9 @@ export function ToolsetRoot() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs />
+        <Page.Header.Breadcrumbs
+          substitutions={{ [toolsetSlug]: toolset?.name }}
+        />
       </Page.Header>
       <Page.Body>
         <Outlet />

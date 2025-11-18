@@ -283,6 +283,9 @@ function ChatInner({
         Prefer to use one of those tools wherever possible to resolve the prompt.
 
         When using tools, ensure that the arguments match the provided schema. Note that the schema may update as the conversation progresses.
+
+        If a tool fails due to authentication, ask the user to ensure they have provided the correct credentials in the Auth tab.
+
         The current date is ${new Date().toISOString()}`;
 
     if (hasMentions) {

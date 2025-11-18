@@ -15,16 +15,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatDuration } from "@/lib/dates";
+import { FeatureName, HTTPToolLog } from "@gram/client/models/components";
 import {
   invalidateAllListToolLogs,
   useFeaturesSetMutation,
   useListToolLogs,
   useListToolsets,
 } from "@gram/client/react-query";
-import { FeatureName, HTTPToolLog } from "@gram/client/models/components";
 import { Button, Icon } from "@speakeasy-api/moonshine";
-import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { CheckIcon, XIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LogDetailSheet } from "./LogDetailSheet";
 import {
   formatTimestamp,
@@ -33,8 +35,6 @@ import {
   getToolNameFromUrn,
   isSuccessfulCall,
 } from "./utils";
-import { formatDuration } from "@/lib/dates";
-import { CheckIcon, XIcon } from "lucide-react";
 
 function StatusIcon({ isSuccess }: { isSuccess: boolean }) {
   if (isSuccess) {
@@ -258,7 +258,7 @@ export default function LogsPage() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Title>Logs</Page.Header.Title>
+        <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
         <Page.Section>

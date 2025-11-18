@@ -49,7 +49,7 @@ function CardTitle({
       variant="h4"
       data-slot="card-title"
       className={cn(
-        "leading-none [a:has([data-slot=card]):hover_&]:underline", // Underline the title when the card is hovered, if the card is a link
+        "leading-none [a:has([data-slot=card]):hover_&]:underline normal-case", // Underline the title when the card is hovered, if the card is a link
         className,
       )}
       {...props}

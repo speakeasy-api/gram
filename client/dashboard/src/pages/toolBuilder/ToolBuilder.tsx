@@ -145,7 +145,10 @@ export function ToolBuilderPage() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs fullWidth />
+        <Page.Header.Breadcrumbs
+          fullWidth
+          substitutions={{ [toolName ?? ""]: template.template.name }}
+        />
       </Page.Header>
       <Page.Body fullWidth fullHeight>
         <ChatProvider>
