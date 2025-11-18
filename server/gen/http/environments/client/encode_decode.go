@@ -1661,6 +1661,709 @@ func DecodeGetSourceEnvironmentResponse(decoder func(*http.Response) goahttp.Dec
 	}
 }
 
+// BuildSetToolsetEnvironmentLinkRequest instantiates a HTTP request object
+// with method and path set to call the "environments" service
+// "setToolsetEnvironmentLink" endpoint
+func (c *Client) BuildSetToolsetEnvironmentLinkRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetToolsetEnvironmentLinkEnvironmentsPath()}
+	req, err := http.NewRequest("PUT", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("environments", "setToolsetEnvironmentLink", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetToolsetEnvironmentLinkRequest returns an encoder for requests sent
+// to the environments setToolsetEnvironmentLink server.
+func EncodeSetToolsetEnvironmentLinkRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*environments.SetToolsetEnvironmentLinkPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("environments", "setToolsetEnvironmentLink", "*environments.SetToolsetEnvironmentLinkPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewSetToolsetEnvironmentLinkRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("environments", "setToolsetEnvironmentLink", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetToolsetEnvironmentLinkResponse returns a decoder for responses
+// returned by the environments setToolsetEnvironmentLink endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSetToolsetEnvironmentLinkResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetToolsetEnvironmentLinkResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetToolsetEnvironmentLinkResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "setToolsetEnvironmentLink", err)
+			}
+			err = ValidateSetToolsetEnvironmentLinkResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "setToolsetEnvironmentLink", err)
+			}
+			res := NewSetToolsetEnvironmentLinkToolsetEnvironmentLinkOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetToolsetEnvironmentLinkUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "setToolsetEnvironmentLink", err)
+			}
+			err = ValidateSetToolsetEnvironmentLinkUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "setToolsetEnvironmentLink", err)
+			}
+			return nil, NewSetToolsetEnvironmentLinkUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetToolsetEnvironmentLinkForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "setToolsetEnvironmentLink", err)
+			}
+			err = ValidateSetToolsetEnvironmentLinkForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "setToolsetEnvironmentLink", err)
+			}
+			return nil, NewSetToolsetEnvironmentLinkForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetToolsetEnvironmentLinkBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "setToolsetEnvironmentLink", err)
+			}
+			err = ValidateSetToolsetEnvironmentLinkBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "setToolsetEnvironmentLink", err)
+			}
+			return nil, NewSetToolsetEnvironmentLinkBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetToolsetEnvironmentLinkNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "setToolsetEnvironmentLink", err)
+			}
+			err = ValidateSetToolsetEnvironmentLinkNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "setToolsetEnvironmentLink", err)
+			}
+			return nil, NewSetToolsetEnvironmentLinkNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetToolsetEnvironmentLinkConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "setToolsetEnvironmentLink", err)
+			}
+			err = ValidateSetToolsetEnvironmentLinkConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "setToolsetEnvironmentLink", err)
+			}
+			return nil, NewSetToolsetEnvironmentLinkConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetToolsetEnvironmentLinkUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "setToolsetEnvironmentLink", err)
+			}
+			err = ValidateSetToolsetEnvironmentLinkUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "setToolsetEnvironmentLink", err)
+			}
+			return nil, NewSetToolsetEnvironmentLinkUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetToolsetEnvironmentLinkInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "setToolsetEnvironmentLink", err)
+			}
+			err = ValidateSetToolsetEnvironmentLinkInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "setToolsetEnvironmentLink", err)
+			}
+			return nil, NewSetToolsetEnvironmentLinkInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetToolsetEnvironmentLinkInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "setToolsetEnvironmentLink", err)
+				}
+				err = ValidateSetToolsetEnvironmentLinkInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "setToolsetEnvironmentLink", err)
+				}
+				return nil, NewSetToolsetEnvironmentLinkInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetToolsetEnvironmentLinkUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "setToolsetEnvironmentLink", err)
+				}
+				err = ValidateSetToolsetEnvironmentLinkUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "setToolsetEnvironmentLink", err)
+				}
+				return nil, NewSetToolsetEnvironmentLinkUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "setToolsetEnvironmentLink", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetToolsetEnvironmentLinkGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "setToolsetEnvironmentLink", err)
+			}
+			err = ValidateSetToolsetEnvironmentLinkGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "setToolsetEnvironmentLink", err)
+			}
+			return nil, NewSetToolsetEnvironmentLinkGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("environments", "setToolsetEnvironmentLink", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDeleteToolsetEnvironmentLinkRequest instantiates a HTTP request object
+// with method and path set to call the "environments" service
+// "deleteToolsetEnvironmentLink" endpoint
+func (c *Client) BuildDeleteToolsetEnvironmentLinkRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteToolsetEnvironmentLinkEnvironmentsPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("environments", "deleteToolsetEnvironmentLink", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeleteToolsetEnvironmentLinkRequest returns an encoder for requests
+// sent to the environments deleteToolsetEnvironmentLink server.
+func EncodeDeleteToolsetEnvironmentLinkRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*environments.DeleteToolsetEnvironmentLinkPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("environments", "deleteToolsetEnvironmentLink", "*environments.DeleteToolsetEnvironmentLinkPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("toolset_id", p.ToolsetID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDeleteToolsetEnvironmentLinkResponse returns a decoder for responses
+// returned by the environments deleteToolsetEnvironmentLink endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeDeleteToolsetEnvironmentLinkResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDeleteToolsetEnvironmentLinkResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeleteToolsetEnvironmentLinkUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteToolsetEnvironmentLink", err)
+			}
+			err = ValidateDeleteToolsetEnvironmentLinkUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteToolsetEnvironmentLink", err)
+			}
+			return nil, NewDeleteToolsetEnvironmentLinkUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeleteToolsetEnvironmentLinkForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteToolsetEnvironmentLink", err)
+			}
+			err = ValidateDeleteToolsetEnvironmentLinkForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteToolsetEnvironmentLink", err)
+			}
+			return nil, NewDeleteToolsetEnvironmentLinkForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeleteToolsetEnvironmentLinkBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteToolsetEnvironmentLink", err)
+			}
+			err = ValidateDeleteToolsetEnvironmentLinkBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteToolsetEnvironmentLink", err)
+			}
+			return nil, NewDeleteToolsetEnvironmentLinkBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeleteToolsetEnvironmentLinkNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteToolsetEnvironmentLink", err)
+			}
+			err = ValidateDeleteToolsetEnvironmentLinkNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteToolsetEnvironmentLink", err)
+			}
+			return nil, NewDeleteToolsetEnvironmentLinkNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeleteToolsetEnvironmentLinkConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteToolsetEnvironmentLink", err)
+			}
+			err = ValidateDeleteToolsetEnvironmentLinkConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteToolsetEnvironmentLink", err)
+			}
+			return nil, NewDeleteToolsetEnvironmentLinkConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeleteToolsetEnvironmentLinkUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteToolsetEnvironmentLink", err)
+			}
+			err = ValidateDeleteToolsetEnvironmentLinkUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteToolsetEnvironmentLink", err)
+			}
+			return nil, NewDeleteToolsetEnvironmentLinkUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeleteToolsetEnvironmentLinkInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteToolsetEnvironmentLink", err)
+			}
+			err = ValidateDeleteToolsetEnvironmentLinkInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteToolsetEnvironmentLink", err)
+			}
+			return nil, NewDeleteToolsetEnvironmentLinkInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeleteToolsetEnvironmentLinkInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "deleteToolsetEnvironmentLink", err)
+				}
+				err = ValidateDeleteToolsetEnvironmentLinkInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "deleteToolsetEnvironmentLink", err)
+				}
+				return nil, NewDeleteToolsetEnvironmentLinkInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeleteToolsetEnvironmentLinkUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "deleteToolsetEnvironmentLink", err)
+				}
+				err = ValidateDeleteToolsetEnvironmentLinkUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "deleteToolsetEnvironmentLink", err)
+				}
+				return nil, NewDeleteToolsetEnvironmentLinkUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "deleteToolsetEnvironmentLink", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DeleteToolsetEnvironmentLinkGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteToolsetEnvironmentLink", err)
+			}
+			err = ValidateDeleteToolsetEnvironmentLinkGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteToolsetEnvironmentLink", err)
+			}
+			return nil, NewDeleteToolsetEnvironmentLinkGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("environments", "deleteToolsetEnvironmentLink", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetToolsetEnvironmentRequest instantiates a HTTP request object with
+// method and path set to call the "environments" service
+// "getToolsetEnvironment" endpoint
+func (c *Client) BuildGetToolsetEnvironmentRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetToolsetEnvironmentEnvironmentsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("environments", "getToolsetEnvironment", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetToolsetEnvironmentRequest returns an encoder for requests sent to
+// the environments getToolsetEnvironment server.
+func EncodeGetToolsetEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*environments.GetToolsetEnvironmentPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("environments", "getToolsetEnvironment", "*environments.GetToolsetEnvironmentPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("toolset_id", p.ToolsetID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetToolsetEnvironmentResponse returns a decoder for responses returned
+// by the environments getToolsetEnvironment endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetToolsetEnvironmentResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetToolsetEnvironmentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetToolsetEnvironmentResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "getToolsetEnvironment", err)
+			}
+			err = ValidateGetToolsetEnvironmentResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "getToolsetEnvironment", err)
+			}
+			res := NewGetToolsetEnvironmentEnvironmentOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetToolsetEnvironmentUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "getToolsetEnvironment", err)
+			}
+			err = ValidateGetToolsetEnvironmentUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "getToolsetEnvironment", err)
+			}
+			return nil, NewGetToolsetEnvironmentUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetToolsetEnvironmentForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "getToolsetEnvironment", err)
+			}
+			err = ValidateGetToolsetEnvironmentForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "getToolsetEnvironment", err)
+			}
+			return nil, NewGetToolsetEnvironmentForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetToolsetEnvironmentBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "getToolsetEnvironment", err)
+			}
+			err = ValidateGetToolsetEnvironmentBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "getToolsetEnvironment", err)
+			}
+			return nil, NewGetToolsetEnvironmentBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetToolsetEnvironmentNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "getToolsetEnvironment", err)
+			}
+			err = ValidateGetToolsetEnvironmentNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "getToolsetEnvironment", err)
+			}
+			return nil, NewGetToolsetEnvironmentNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetToolsetEnvironmentConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "getToolsetEnvironment", err)
+			}
+			err = ValidateGetToolsetEnvironmentConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "getToolsetEnvironment", err)
+			}
+			return nil, NewGetToolsetEnvironmentConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetToolsetEnvironmentUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "getToolsetEnvironment", err)
+			}
+			err = ValidateGetToolsetEnvironmentUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "getToolsetEnvironment", err)
+			}
+			return nil, NewGetToolsetEnvironmentUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetToolsetEnvironmentInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "getToolsetEnvironment", err)
+			}
+			err = ValidateGetToolsetEnvironmentInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "getToolsetEnvironment", err)
+			}
+			return nil, NewGetToolsetEnvironmentInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetToolsetEnvironmentInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "getToolsetEnvironment", err)
+				}
+				err = ValidateGetToolsetEnvironmentInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "getToolsetEnvironment", err)
+				}
+				return nil, NewGetToolsetEnvironmentInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetToolsetEnvironmentUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "getToolsetEnvironment", err)
+				}
+				err = ValidateGetToolsetEnvironmentUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "getToolsetEnvironment", err)
+				}
+				return nil, NewGetToolsetEnvironmentUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "getToolsetEnvironment", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetToolsetEnvironmentGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "getToolsetEnvironment", err)
+			}
+			err = ValidateGetToolsetEnvironmentGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "getToolsetEnvironment", err)
+			}
+			return nil, NewGetToolsetEnvironmentGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("environments", "getToolsetEnvironment", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // marshalEnvironmentsEnvironmentEntryInputToEnvironmentEntryInputRequestBody
 // builds a value of type *EnvironmentEntryInputRequestBody from a value of
 // type *environments.EnvironmentEntryInput.
