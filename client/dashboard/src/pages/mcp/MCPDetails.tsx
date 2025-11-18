@@ -442,18 +442,11 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
               "Traditional MCP. Every tool is added into context up front.",
           },
           {
-            value: "progressive_search",
-            icon: "list-tree",
-            label: "Progressive",
-            description:
-              "Good for large toolsets. The LLM can discover tools as it needs them.",
-          },
-          {
-            value: "semantic_search",
+            value: "dynamic",
             icon: "search",
-            label: "Semantic",
+            label: "Dynamic",
             description:
-              "Good for large toolsets. The LLM searches for tools using embeddings.",
+              "Highly token efficient and effective for large toolsets. The LLM can discover tools as it needs them.",
           },
         ]}
         selectedValue={toolSelectionMode}

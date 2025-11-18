@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	temporal_client "go.temporal.io/sdk/client"
 )
 
 type toolsListResult struct {
@@ -28,7 +29,17 @@ type toolListEntry struct {
 	Meta        map[string]any  `json:"_meta,omitempty"`
 }
 
-func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, productMetrics *posthog.Posthog, toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents], vectorToolStore *rag.ToolsetVectorStore) (json.RawMessage, error) {
+func handleToolsList(
+	ctx context.Context,
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	payload *mcpInputs,
+	req *rawRequest,
+	productMetrics *posthog.Posthog,
+	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
+	vectorToolStore *rag.ToolsetVectorStore,
+	temporal temporal_client.Client,
+) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
 	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache)
@@ -56,10 +67,11 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 
 	var tools []*toolListEntry
 	switch payload.mode {
-	case ToolModeProgressiveSearch:
-		tools = buildProgressiveSessionTools(toolset)
-	case ToolModeSemanticSearch:
-		tools = buildDynamicSessionTools(toolset, vectorToolStore)
+	case ToolModeDynamic:
+		tools, err = buildDynamicSessionTools(ctx, logger, toolset, vectorToolStore, temporal)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to build dynamic session tools").Log(ctx, logger)
+		}
 	case ToolModeStatic:
 		fallthrough
 	default:

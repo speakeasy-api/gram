@@ -84,9 +84,8 @@ type oauthTokenInputs struct {
 type ToolMode string
 
 const (
-	ToolModeStatic            ToolMode = "static"
-	ToolModeSemanticSearch    ToolMode = "semantic_search"
-	ToolModeProgressiveSearch ToolMode = "progressive_search"
+	ToolModeStatic  ToolMode = "static"
+	ToolModeDynamic ToolMode = "dynamic"
 )
 
 type mcpInputs struct {
@@ -686,7 +685,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore)
+		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal)
 	case "tools/call":
 		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.tcm, s.vectorToolStore, s.temporal)
 	case "prompts/list":

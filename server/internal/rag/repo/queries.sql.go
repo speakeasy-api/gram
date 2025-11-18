@@ -35,7 +35,8 @@ INSERT INTO toolset_embeddings (
     entry_key,
     embedding_model,
     embedding_1536,
-    payload
+    payload,
+    tags
 ) VALUES (
     $1,
     $2,
@@ -43,7 +44,8 @@ INSERT INTO toolset_embeddings (
     $4,
     $5,
     $6,
-    $7
+    $7,
+    $8
 )
 RETURNING id, project_id, toolset_id, toolset_version, entry_key, embedding_model, embedding_1536, payload, tags, created_at, updated_at, deleted_at, deleted
 `
@@ -56,6 +58,7 @@ type InsertToolsetEmbeddingParams struct {
 	EmbeddingModel string
 	Embedding1536  pgvector_go.Vector
 	Payload        []byte
+	Tags           []string
 }
 
 func (q *Queries) InsertToolsetEmbedding(ctx context.Context, arg InsertToolsetEmbeddingParams) (ToolsetEmbedding, error) {
@@ -67,6 +70,7 @@ func (q *Queries) InsertToolsetEmbedding(ctx context.Context, arg InsertToolsetE
 		arg.EmbeddingModel,
 		arg.Embedding1536,
 		arg.Payload,
+		arg.Tags,
 	)
 	var i ToolsetEmbedding
 	err := row.Scan(
@@ -87,7 +91,7 @@ func (q *Queries) InsertToolsetEmbedding(ctx context.Context, arg InsertToolsetE
 	return i, err
 }
 
-const searchToolsetToolEmbeddings = `-- name: SearchToolsetToolEmbeddings :many
+const searchToolsetToolEmbeddingsAllTagsMatch = `-- name: SearchToolsetToolEmbeddingsAllTagsMatch :many
 SELECT
     id,
     project_id,
@@ -96,6 +100,7 @@ SELECT
     entry_key,
     embedding_model,
     payload,
+    tags,
     created_at,
     updated_at,
     (1 - (embedding_1536 <=> $1))::float8 AS similarity
@@ -104,20 +109,22 @@ WHERE project_id = $2
   AND toolset_id = $3
   AND toolset_version = $4
   AND entry_key LIKE 'tools:%'
+  AND (cardinality($5::text[]) = 0 OR tags @> $5)
   AND deleted IS FALSE
 ORDER BY embedding_1536 <=> $1
-LIMIT $5
+LIMIT $6
 `
 
-type SearchToolsetToolEmbeddingsParams struct {
+type SearchToolsetToolEmbeddingsAllTagsMatchParams struct {
 	QueryEmbedding1536 pgvector_go.Vector
 	ProjectID          uuid.UUID
 	ToolsetID          uuid.UUID
 	ToolsetVersion     int64
+	Tags               []string
 	ResultLimit        int32
 }
 
-type SearchToolsetToolEmbeddingsRow struct {
+type SearchToolsetToolEmbeddingsAllTagsMatchRow struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID
 	ToolsetID      uuid.UUID
@@ -125,26 +132,28 @@ type SearchToolsetToolEmbeddingsRow struct {
 	EntryKey       string
 	EmbeddingModel string
 	Payload        []byte
+	Tags           []string
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	Similarity     float64
 }
 
-func (q *Queries) SearchToolsetToolEmbeddings(ctx context.Context, arg SearchToolsetToolEmbeddingsParams) ([]SearchToolsetToolEmbeddingsRow, error) {
-	rows, err := q.db.Query(ctx, searchToolsetToolEmbeddings,
+func (q *Queries) SearchToolsetToolEmbeddingsAllTagsMatch(ctx context.Context, arg SearchToolsetToolEmbeddingsAllTagsMatchParams) ([]SearchToolsetToolEmbeddingsAllTagsMatchRow, error) {
+	rows, err := q.db.Query(ctx, searchToolsetToolEmbeddingsAllTagsMatch,
 		arg.QueryEmbedding1536,
 		arg.ProjectID,
 		arg.ToolsetID,
 		arg.ToolsetVersion,
+		arg.Tags,
 		arg.ResultLimit,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []SearchToolsetToolEmbeddingsRow
+	var items []SearchToolsetToolEmbeddingsAllTagsMatchRow
 	for rows.Next() {
-		var i SearchToolsetToolEmbeddingsRow
+		var i SearchToolsetToolEmbeddingsAllTagsMatchRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
@@ -153,6 +162,7 @@ func (q *Queries) SearchToolsetToolEmbeddings(ctx context.Context, arg SearchToo
 			&i.EntryKey,
 			&i.EmbeddingModel,
 			&i.Payload,
+			&i.Tags,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Similarity,
@@ -160,6 +170,129 @@ func (q *Queries) SearchToolsetToolEmbeddings(ctx context.Context, arg SearchToo
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchToolsetToolEmbeddingsAnyTagsMatch = `-- name: SearchToolsetToolEmbeddingsAnyTagsMatch :many
+SELECT
+    id,
+    project_id,
+    toolset_id,
+    toolset_version,
+    entry_key,
+    embedding_model,
+    payload,
+    tags,
+    created_at,
+    updated_at,
+    (1 - (embedding_1536 <=> $1))::float8 AS similarity
+FROM toolset_embeddings
+WHERE project_id = $2
+  AND toolset_id = $3
+  AND toolset_version = $4
+  AND entry_key LIKE 'tools:%'
+  AND (cardinality($5::text[]) = 0 OR tags && $5::text[])
+  AND deleted IS FALSE
+ORDER BY embedding_1536 <=> $1
+LIMIT $6
+`
+
+type SearchToolsetToolEmbeddingsAnyTagsMatchParams struct {
+	QueryEmbedding1536 pgvector_go.Vector
+	ProjectID          uuid.UUID
+	ToolsetID          uuid.UUID
+	ToolsetVersion     int64
+	Tags               []string
+	ResultLimit        int32
+}
+
+type SearchToolsetToolEmbeddingsAnyTagsMatchRow struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	ToolsetID      uuid.UUID
+	ToolsetVersion int64
+	EntryKey       string
+	EmbeddingModel string
+	Payload        []byte
+	Tags           []string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	Similarity     float64
+}
+
+func (q *Queries) SearchToolsetToolEmbeddingsAnyTagsMatch(ctx context.Context, arg SearchToolsetToolEmbeddingsAnyTagsMatchParams) ([]SearchToolsetToolEmbeddingsAnyTagsMatchRow, error) {
+	rows, err := q.db.Query(ctx, searchToolsetToolEmbeddingsAnyTagsMatch,
+		arg.QueryEmbedding1536,
+		arg.ProjectID,
+		arg.ToolsetID,
+		arg.ToolsetVersion,
+		arg.Tags,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchToolsetToolEmbeddingsAnyTagsMatchRow
+	for rows.Next() {
+		var i SearchToolsetToolEmbeddingsAnyTagsMatchRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ToolsetID,
+			&i.ToolsetVersion,
+			&i.EntryKey,
+			&i.EmbeddingModel,
+			&i.Payload,
+			&i.Tags,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Similarity,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const toolsetAvailableTags = `-- name: ToolsetAvailableTags :many
+SELECT DISTINCT unnest(tags)::text as tag
+FROM toolset_embeddings
+WHERE project_id = $1
+  AND toolset_id = $2
+  AND toolset_version = $3
+  AND entry_key LIKE 'tools:%'
+  AND deleted IS FALSE
+ORDER BY tag
+`
+
+type ToolsetAvailableTagsParams struct {
+	ProjectID      uuid.UUID
+	ToolsetID      uuid.UUID
+	ToolsetVersion int64
+}
+
+func (q *Queries) ToolsetAvailableTags(ctx context.Context, arg ToolsetAvailableTagsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, toolsetAvailableTags, arg.ProjectID, arg.ToolsetID, arg.ToolsetVersion)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var tag string
+		if err := rows.Scan(&tag); err != nil {
+			return nil, err
+		}
+		items = append(items, tag)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
