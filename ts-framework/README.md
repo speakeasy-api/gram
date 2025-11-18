@@ -4,7 +4,10 @@ This directory contains the TypeScript packages for Gram.
 
 ## Packages
 
-- `create-function` - CLI tool for scaffolding new Gram functions (`pnpm create @gram-ai/function`)
+- `create-function` - CLI tool for scaffolding new Gram functions (e.g `pnpm create @gram-ai/function`)
+  This package also includes scaffold templates for the following:
+  - `gram-template-gram` - template using Speakeasy's Gram Functions framework.
+  - `gram-template-mcp` - template using the official `@modelcontextprotocol/sdk`
 - `functions` - Core framework for building Gram functions
 
 ## Local Development
@@ -14,22 +17,26 @@ This directory contains the TypeScript packages for Gram.
 The `create-function` package is designed to be run via `pnpm create @gram-ai/function`. To test it locally:
 
 1. **Build the package:**
+
    ```bash
    cd create-function
    pnpm build
    ```
 
 2. **Link it globally:**
+
    ```bash
    pnpm link --global
    ```
 
 3. **Test it:**
+
    ```bash
    create-function
    ```
 
 4. **After making changes:**
+
    ```bash
    pnpm build  # Rebuild
    create-function  # Test again

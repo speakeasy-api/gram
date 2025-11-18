@@ -24,8 +24,5 @@
     "prettier": "^3.6.2",
     "typescript": "catalog:",
     "zx": "^8.8.1"
-  },
-  "pnpm": {
-    "overrides": {}
   }
 }
