@@ -39,6 +39,17 @@ export type ToolDefinition<
   ) => Promise<Result>;
 };
 
+type ToolConfig<
+  TName extends string,
+  TInputSchema extends z.core.$ZodShape,
+  Env,
+  Result extends Response,
+> = ToolDefinition<TName, TInputSchema, Env, Result> & {
+  lax: boolean;
+  inputEnv?: Record<string, string | undefined>;
+  envSchema: z.core.$ZodShape;
+};
+
 export type ToolSignature<T> =
   T extends ToolDefinition<
     infer Name,
@@ -196,11 +207,10 @@ export class Gram<
     readonly [x: string]: z.core.$ZodOptional<z.core.$ZodString>;
   },
 > {
-  #tools: Map<string, ToolDefinition<any, any, InferEnv<EnvSchema>, Response>>;
+  #tools: Map<string, ToolConfig<string, z.core.$ZodShape, any, Response>>;
   #lax: boolean;
   #inputEnv?: Record<string, string | undefined> | undefined;
   #envSchema: EnvSchema;
-  #envMemo!: InferEnv<EnvSchema>;
 
   constructor(opts?: {
     /**
@@ -226,14 +236,20 @@ export class Gram<
     this.#envSchema = opts?.envSchema as EnvSchema;
   }
 
-  get #env() {
-    if (this.#envMemo == null) {
-      const schema = this.#envSchema ? z.object(this.#envSchema) : z.unknown();
-      this.#envMemo = schema.parse(
-        this.#inputEnv ?? process.env,
-      ) as InferEnv<EnvSchema>;
-    }
-    return this.#envMemo;
+  protected get tools() {
+    return this.#tools;
+  }
+
+  protected get envSchema() {
+    return this.#envSchema;
+  }
+
+  protected get lax() {
+    return this.#lax;
+  }
+
+  protected get inputEnv() {
+    return this.#inputEnv;
   }
 
   /**
@@ -258,7 +274,32 @@ export class Gram<
     >,
     EnvSchema
   > {
-    this.#tools.set(definition.name, definition as any);
+    this.#tools.set(definition.name, {
+      ...definition,
+      lax: this.#lax,
+      inputEnv: this.#inputEnv,
+      envSchema: this.#envSchema,
+    } as any);
+    return this;
+  }
+
+  /**
+   * Extends this Gram instance with another Gram instance's tools and environment schema.
+   * Similar to Hono's route groups. Returns a new Gram instance with merged
+   * tools and environment schemas.
+   */
+  extend<
+    OtherTools extends {
+      [k: string]: ToolDefinition<any, any, any, Response>;
+    },
+    OtherEnvSchema extends z.core.$ZodShape,
+  >(
+    other: Gram<OtherTools, OtherEnvSchema>,
+  ): Gram<Prettify<TTools & OtherTools>, Prettify<EnvSchema & OtherEnvSchema>> {
+    for (const [name, tool] of other.tools) {
+      this.tools.set(name, tool);
+    }
+
     return this as any;
   }
 
@@ -279,7 +320,7 @@ export class Gram<
 
     const ctx = new ToolContext(
       options?.signal || new AbortController().signal,
-      this.#env,
+      tool.inputEnv,
     );
 
     const schema = zm.object(tool.inputSchema);
@@ -288,7 +329,7 @@ export class Gram<
     if (vres.success) {
       validatedInput = vres.data;
     } else if (
-      this.#lax &&
+      tool.lax &&
       typeof request.input === "object" &&
       request.input !== null
     ) {
@@ -308,6 +349,7 @@ export class Gram<
   manifest(): Manifest {
     const tools = Array.from(this.#tools.values()).map((tool) => {
       const schema = zm.object(tool.inputSchema);
+
       const inputSchema = zm.toJSONSchema(schema);
       const result: {
         name: string;
@@ -321,8 +363,8 @@ export class Gram<
       if (tool.description != null) {
         result.description = tool.description;
       }
-      if (this.#envSchema != null) {
-        const obj = zm.object(this.#envSchema);
+      if (tool.envSchema != null) {
+        const obj = zm.object(tool.envSchema);
         result.variables = envMapFromJSONSchema(zm.toJSONSchema(obj));
       }
 
