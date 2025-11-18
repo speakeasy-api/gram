@@ -1,0 +1,26 @@
+{
+  "model": "anthropic/claude-sonnet-4.5",
+  "numIterations": 1,
+  "mcpServers": [
+    {
+      "name": "gram-local",
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "http://localhost:8080/mcp/organization-123-um1c2",
+        "--header",
+        "Authorization:Bearer ${GRAM_KEY}"
+      ],
+      "env": {
+        "GRAM_KEY": "<my-gram-key>"
+      }
+    }
+  ],
+  "prompts": [
+    {
+      "id": "list-deals",
+      "description": "List deals",
+      "prompt": "List 3 hubspot deals"
+    }
+  ]
+}
