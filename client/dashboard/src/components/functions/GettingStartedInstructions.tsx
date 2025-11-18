@@ -23,11 +23,11 @@ export function GettingStartedInstructions() {
     },
     {
       label: "Build your functions",
-      command: "npm build",
+      command: "npm run build",
     },
     {
       label: "Deploy your functions",
-      command: "npm push",
+      command: "npm run push",
     },
   ];
 
