@@ -42,7 +42,7 @@
     "@react-three/drei": "^10.0.7",
     "@react-three/fiber": "^9.4.0",
     "@react-three/postprocessing": "^3.0.4",
-    "@speakeasy-api/moonshine": "1.32.5",
+    "@speakeasy-api/moonshine": "1.33.3",
     "@tailwindcss/typography": "^0.5.16",
     "@tailwindcss/vite": "^4.1.13",
     "@tanstack/react-query": "catalog:",

@@ -57,30 +57,33 @@ The fastest way to get started is with the `npm create @gram-ai/function@latest`
 npm create @gram-ai/function@latest
 
 # Build and Deploy
-npm build
-npm push
+npm run build
+npm run push
 
 # Check out your first function
 cd my_function/src/gram.ts
 ```
-A default function is created for you. 
+
+A default function is created for you.
 
 ```typescript
 import { Gram } from "@gram-ai/functions";
 import * as z from "zod/mini";
- 
+
 const gram = new Gram().tool({
   name: "add",
   description: "Add two numbers together",
   inputSchema: { a: z.number(), b: z.number() },
   async execute(ctx, input) {
-    return ctx.json({sum: input.a + input.b});
+    return ctx.json({ sum: input.a + input.b });
   },
 });
- 
+
 export default gram;
 ```
-In addition you get a: 
+
+In addition you get a:
+
 - A `server.ts` is created so you can run the tool locally as a MCP server with MCP inspector with `pnpm run dev`
 - A `README` and `CONTRIBUTING` guide for next steps on building out your custom tool.
 
@@ -122,6 +125,7 @@ Version bumps are determined by the git commit's prefix:
 | `fix:`   | Patch        | `patch: update help docs`               |
 
 ## Support
+
 - Slack: [Join our slack](https://join.slack.com/t/speakeasy-dev/shared_invite/zt-3hudfoj4y-9EPqMmHIFhNiTtannqiV3Q) for support and discussions
 - In-App: When using the [application](https://app.getgram.ai/) you can engage with the core maintainers of the product.
 - GitHub: Contribute or report issues [on this repository](https://github.com/speakeasy-api/gram/issues/new).
