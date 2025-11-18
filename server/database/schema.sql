@@ -665,6 +665,23 @@ CREATE TABLE IF NOT EXISTS toolset_versions (
 
 CREATE INDEX IF NOT EXISTS toolset_versions_toolset_id_version_idx ON toolset_versions (toolset_id, version DESC);
 
+CREATE TABLE IF NOT EXISTS toolset_environments (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  toolset_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  environment_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT toolset_environments_pkey PRIMARY KEY (id),
+  CONSTRAINT toolset_environments_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
+  CONSTRAINT toolset_environments_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE CASCADE,
+  CONSTRAINT toolset_environments_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS toolset_environments_toolset_id_idx ON toolset_environments (toolset_id);
+
 CREATE TABLE IF NOT EXISTS http_security (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 

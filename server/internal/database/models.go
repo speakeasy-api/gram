@@ -572,6 +572,15 @@ type ToolsetEmbedding struct {
 	Deleted        bool
 }
 
+type ToolsetEnvironment struct {
+	ID            uuid.UUID
+	ToolsetID     uuid.UUID
+	ProjectID     uuid.UUID
+	EnvironmentID uuid.UUID
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
 type ToolsetPrompt struct {
 	ID               uuid.UUID
 	ProjectID        uuid.UUID
