@@ -15,7 +15,6 @@ export interface TestPrompt {
   id: string;
   description: string;
   prompt: string;
-  expectedTools?: string[]; // Optional: tools we expect to be called
 }
 
 /**

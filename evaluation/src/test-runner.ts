@@ -147,7 +147,9 @@ export class TestRunner {
         }
 
         // Track which tools were called
-        toolCalls.forEach((toolCall) => allToolsCalled.push(toolCall.function.name));
+        toolCalls.forEach((toolCall) =>
+          allToolsCalled.push(toolCall.function.name),
+        );
 
         // Add assistant's response to messages
         messages.push(assistantMessage);
