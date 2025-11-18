@@ -39,12 +39,15 @@ export type ToolDefinition<
   ) => Promise<Result>;
 };
 
-type GramTool<
-  TTool extends ToolDefinition<any, any, string, Response>,
-  Env extends z.core.$ZodShape,
-> = {
-  gram: Gram<{ [T in TTool["name"]]: TTool }, Env>;
-  definition: ToolDefinition<string, z.core.$ZodShape, any, Response>;
+type ToolConfig<
+  TName extends string,
+  TInputSchema extends z.core.$ZodShape,
+  Env,
+  Result extends Response,
+> = ToolDefinition<TName, TInputSchema, Env, Result> & {
+  lax: boolean;
+  inputEnv?: Record<string, string | undefined>;
+  envSchema: z.core.$ZodShape;
 };
 
 export type ToolSignature<T> =
@@ -204,7 +207,7 @@ export class Gram<
     readonly [x: string]: z.core.$ZodOptional<z.core.$ZodString>;
   },
 > {
-  #tools: Map<string, GramTool<any, any>>;
+  #tools: Map<string, ToolConfig<string, z.core.$ZodShape, any, Response>>;
   #lax: boolean;
   #inputEnv?: Record<string, string | undefined> | undefined;
   #envSchema: EnvSchema;
@@ -232,16 +235,6 @@ export class Gram<
     this.#lax = Boolean(opts?.lax);
     this.#inputEnv = opts?.env;
     this.#envSchema = opts?.envSchema as EnvSchema;
-  }
-
-  get #env() {
-    if (this.#envMemo == null) {
-      const schema = this.#envSchema ? z.object(this.#envSchema) : z.unknown();
-      this.#envMemo = schema.parse(
-        this.#inputEnv ?? process.env,
-      ) as InferEnv<EnvSchema>;
-    }
-    return this.#envMemo;
   }
 
   protected get tools() {
@@ -283,9 +276,11 @@ export class Gram<
     EnvSchema
   > {
     this.#tools.set(definition.name, {
-      definition: definition as any,
-      gram: this,
-    });
+      ...definition,
+      lax: this.#lax,
+      inputEnv: this.#inputEnv,
+      envSchema: this.#envSchema,
+    } as any);
     return this;
   }
 
@@ -302,10 +297,6 @@ export class Gram<
   >(
     other: Gram<OtherTools, OtherEnvSchema>,
   ): Gram<Prettify<TTools & OtherTools>, Prettify<EnvSchema & OtherEnvSchema>> {
-    for (const [name, tool] of this.tools) {
-      this.tools.set(name, tool);
-    }
-
     for (const [name, tool] of other.tools) {
       this.tools.set(name, tool);
     }
@@ -327,20 +318,19 @@ export class Gram<
     if (!tool) {
       throw new Error(`Tool not found: ${request.name}`);
     }
-    const { gram, definition } = tool;
 
     const ctx = new ToolContext(
       options?.signal || new AbortController().signal,
-      gram.#env,
+      tool.inputEnv,
     );
 
-    const schema = zm.object(definition.inputSchema);
+    const schema = zm.object(tool.inputSchema);
     const vres = schema.safeParse(request.input);
     let validatedInput: Record<string, unknown> = {};
     if (vres.success) {
       validatedInput = vres.data;
     } else if (
-      gram.#lax &&
+      tool.lax &&
       typeof request.input === "object" &&
       request.input !== null
     ) {
@@ -352,37 +342,35 @@ export class Gram<
       );
     }
 
-    return (await definition.execute(ctx, validatedInput)) as InferResult<
+    return (await tool.execute(ctx, validatedInput)) as InferResult<
       TTools[TName]
     >;
   }
 
   manifest(): Manifest {
-    const tools = Array.from(this.#tools.values()).map(
-      ({ gram, definition }) => {
-        const schema = zm.object(definition.inputSchema);
+    const tools = Array.from(this.#tools.values()).map((tool) => {
+      const schema = zm.object(tool.inputSchema);
 
-        const inputSchema = zm.toJSONSchema(schema);
-        const result: {
-          name: string;
-          description?: string;
-          inputSchema: unknown;
-          variables?: ManifestVariables;
-        } = {
-          name: definition.name,
-          inputSchema: inputSchema,
-        };
-        if (definition.description != null) {
-          result.description = definition.description;
-        }
-        if (gram.#envSchema != null) {
-          const obj = zm.object(gram.#envSchema);
-          result.variables = envMapFromJSONSchema(zm.toJSONSchema(obj));
-        }
+      const inputSchema = zm.toJSONSchema(schema);
+      const result: {
+        name: string;
+        description?: string;
+        inputSchema: unknown;
+        variables?: ManifestVariables;
+      } = {
+        name: tool.name,
+        inputSchema: inputSchema,
+      };
+      if (tool.description != null) {
+        result.description = tool.description;
+      }
+      if (tool.envSchema != null) {
+        const obj = zm.object(tool.envSchema);
+        result.variables = envMapFromJSONSchema(zm.toJSONSchema(obj));
+      }
 
-        return result;
-      },
-    );
+      return result;
+    });
 
     return {
       version: "0.0.0",

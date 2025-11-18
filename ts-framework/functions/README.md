@@ -129,9 +129,9 @@ The `append()` method:
 - **Merges tools**: All tools from both instances are combined
 - **Override behavior**: If tool names collide, the appended instance's tools
   override the original's
-- **Merges environment schemas**: Environment variables from both instances are
-  available
-- **Immutable**: Returns a new Gram instance without modifying the originals
+- **Preserves context**: Each tool maintains its original Gram instance's
+  execution context (environment variables and lax validation settings)
+- **Mutates original**: Modifies and returns the original instance (not a copy)
 
 ### Tool Definition
 
