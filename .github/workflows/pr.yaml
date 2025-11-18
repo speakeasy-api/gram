@@ -164,6 +164,7 @@ jobs:
         if: ${{ needs.changes.outputs.server == 'true' }}
         uses: jdx/mise-action@9dc7d5dd454262207dea3ab5a06a3df6afc8ff26 # v3.4.1
         with:
+          version: '2025.11.6'
           install: true
           cache: true
           env: false
@@ -253,6 +254,7 @@ jobs:
         if: ${{ needs.changes.outputs.cli == 'true' }}
         uses: jdx/mise-action@9dc7d5dd454262207dea3ab5a06a3df6afc8ff26 # v3.4.1
         with:
+          version: '2025.11.6'
           install: true
           cache: true
           env: false
@@ -320,6 +322,7 @@ jobs:
         if: ${{ needs.changes.outputs.server == 'true' }}
         uses: jdx/mise-action@9dc7d5dd454262207dea3ab5a06a3df6afc8ff26 # v3.4.1
         with:
+          version: '2025.11.6'
           install: true
           cache: true
           env: false
@@ -366,6 +369,7 @@ jobs:
         if: ${{ needs.changes.outputs.client == 'true' }}
         uses: jdx/mise-action@9dc7d5dd454262207dea3ab5a06a3df6afc8ff26 # v3.4.1
         with:
+          version: '2025.11.6'
           install: true
           cache: true
           env: false
@@ -449,6 +453,7 @@ jobs:
         if: ${{ needs.changes.outputs.client == 'true' }}
         uses: jdx/mise-action@9dc7d5dd454262207dea3ab5a06a3df6afc8ff26 # v3.4.1
         with:
+          version: '2025.11.6'
           install: true
           cache: true
           env: false
@@ -510,6 +515,7 @@ jobs:
         if: ${{ needs.changes.outputs.client == 'true' }}
         uses: jdx/mise-action@9dc7d5dd454262207dea3ab5a06a3df6afc8ff26 # v3.4.1
         with:
+          version: '2025.11.6'
           install: true
           cache: true
           env: false
@@ -567,6 +573,7 @@ jobs:
         if: ${{ needs.changes.outputs.functions == 'true' }}
         uses: jdx/mise-action@9dc7d5dd454262207dea3ab5a06a3df6afc8ff26 # v3.4.1
         with:
+          version: '2025.11.6'
           install: true
           cache: true
           env: false
@@ -682,6 +689,7 @@ jobs:
         if: ${{ needs.changes.outputs.functions == 'true' }}
         uses: jdx/mise-action@9dc7d5dd454262207dea3ab5a06a3df6afc8ff26 # v3.4.1
         with:
+          version: '2025.11.6'
           install: true
           cache: true
           env: false
@@ -833,6 +841,7 @@ jobs:
         if: ${{ needs.changes.outputs.tsframework == 'true' }}
         uses: jdx/mise-action@9dc7d5dd454262207dea3ab5a06a3df6afc8ff26 # v3.4.1
         with:
+          version: '2025.11.6'
           install: true
           cache: true
           env: false
