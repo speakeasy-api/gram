@@ -132,7 +132,12 @@ func handleToolsCall(
 		return nil, err
 	}
 
-	systemConfig, err := env.LoadSourceEnv(ctx, payload.projectID, string(toolURN.Kind), toolURN.Source)
+	toolsetID, err := uuid.Parse(toolset.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").Log(ctx, logger)
+	}
+
+	systemConfig, err := env.LoadSystemEnv(ctx, payload.projectID, toolsetID, string(toolURN.Kind), toolURN.Source)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
 	}
