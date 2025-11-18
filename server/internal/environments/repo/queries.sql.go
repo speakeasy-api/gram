@@ -166,6 +166,21 @@ func (q *Queries) DeleteSourceEnvironment(ctx context.Context, arg DeleteSourceE
 	return err
 }
 
+const deleteToolsetEnvironment = `-- name: DeleteToolsetEnvironment :exec
+DELETE FROM toolset_environments
+WHERE toolset_id = $1 AND project_id = $2
+`
+
+type DeleteToolsetEnvironmentParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) DeleteToolsetEnvironment(ctx context.Context, arg DeleteToolsetEnvironmentParams) error {
+	_, err := q.db.Exec(ctx, deleteToolsetEnvironment, arg.ToolsetID, arg.ProjectID)
+	return err
+}
+
 const getEnvironmentByID = `-- name: GetEnvironmentByID :one
 SELECT id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted_at, deleted
 FROM environments e
@@ -243,6 +258,38 @@ type GetEnvironmentForSourceParams struct {
 
 func (q *Queries) GetEnvironmentForSource(ctx context.Context, arg GetEnvironmentForSourceParams) (Environment, error) {
 	row := q.db.QueryRow(ctx, getEnvironmentForSource, arg.SourceKind, arg.SourceSlug, arg.ProjectID)
+	var i Environment
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getEnvironmentForToolset = `-- name: GetEnvironmentForToolset :one
+SELECT e.id, e.organization_id, e.project_id, e.name, e.slug, e.description, e.created_at, e.updated_at, e.deleted_at, e.deleted
+FROM environments e
+INNER JOIN toolset_environments te ON te.environment_id = e.id
+WHERE te.toolset_id = $1
+    AND te.project_id = $2
+    AND e.deleted IS FALSE
+`
+
+type GetEnvironmentForToolsetParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetEnvironmentForToolset(ctx context.Context, arg GetEnvironmentForToolsetParams) (Environment, error) {
+	row := q.db.QueryRow(ctx, getEnvironmentForToolset, arg.ToolsetID, arg.ProjectID)
 	var i Environment
 	err := row.Scan(
 		&i.ID,
@@ -376,6 +423,42 @@ func (q *Queries) SetSourceEnvironment(ctx context.Context, arg SetSourceEnviron
 		&i.ID,
 		&i.SourceKind,
 		&i.SourceSlug,
+		&i.ProjectID,
+		&i.EnvironmentID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const setToolsetEnvironment = `-- name: SetToolsetEnvironment :one
+INSERT INTO toolset_environments (
+    toolset_id,
+    project_id,
+    environment_id
+) VALUES (
+    $1,
+    $2,
+    $3
+)
+ON CONFLICT (toolset_id)
+DO UPDATE SET
+    updated_at = now()
+RETURNING id, toolset_id, project_id, environment_id, created_at, updated_at
+`
+
+type SetToolsetEnvironmentParams struct {
+	ToolsetID     uuid.UUID
+	ProjectID     uuid.UUID
+	EnvironmentID uuid.UUID
+}
+
+func (q *Queries) SetToolsetEnvironment(ctx context.Context, arg SetToolsetEnvironmentParams) (ToolsetEnvironment, error) {
+	row := q.db.QueryRow(ctx, setToolsetEnvironment, arg.ToolsetID, arg.ProjectID, arg.EnvironmentID)
+	var i ToolsetEnvironment
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
 		&i.ProjectID,
 		&i.EnvironmentID,
 		&i.CreatedAt,
