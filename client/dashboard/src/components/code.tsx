@@ -1,10 +1,13 @@
 import React, { useEffect } from "react";
 import { codeToHtml, BuiltinTheme } from "shiki";
 import { Check, Copy } from "lucide-react";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button, useMoonshineConfig, Theme } from "@speakeasy-api/moonshine";
 import { cn } from "@/lib/utils";
 
-const DEFAULT_THEME: BuiltinTheme = "github-light-default";
+const DEFAULT_THEME_PER_MODE: Record<Theme, BuiltinTheme> = {
+  light: "github-light-default",
+  dark: "github-dark-default",
+};
 
 export function CodeBlock({
   children: code,
@@ -21,6 +24,7 @@ export function CodeBlock({
   onCopy?: () => void;
   preClassName?: string;
 }) {
+  const { theme } = useMoonshineConfig();
   const [highlightedCode, setHighlightedCode] = React.useState<string | null>(
     null,
   );
@@ -38,11 +42,16 @@ export function CodeBlock({
 
     codeToHtml(code, {
       lang: language,
-      theme: DEFAULT_THEME,
+      theme: DEFAULT_THEME_PER_MODE[theme],
       transformers: [
         {
           pre(node) {
-            node.properties.class = preClassName;
+            // the github shiki themes come with a pre-defined background color, we don't want that
+            node.properties.class = cn(
+              "!bg-transparent",
+              preClassName,
+              theme === "dark" ? "dark" : "light",
+            );
           },
         },
       ],
