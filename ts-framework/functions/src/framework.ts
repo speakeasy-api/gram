@@ -211,7 +211,6 @@ export class Gram<
   #lax: boolean;
   #inputEnv?: Record<string, string | undefined> | undefined;
   #envSchema: EnvSchema;
-  #envMemo!: InferEnv<EnvSchema>;
 
   constructor(opts?: {
     /**
