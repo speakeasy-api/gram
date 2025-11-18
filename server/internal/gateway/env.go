@@ -16,12 +16,13 @@ type EnvironmentLoader interface {
 	//   * `error`: when an unrecognized error occurs.
 	Load(ctx context.Context, projectID uuid.UUID, environmentID SlugOrID) (map[string]string, error)
 
-	// LoadSourceEnv retrieves the environment variables associated with a tool's source.
-	// Returns an empty map if no source environment exists.
+	// LoadSystemEnv loads and merges source and toolset environments.
+	// Merges in order: source env (base) -> toolset env (override).
+	// Returns empty map if neither environment exists.
 	//
 	// # Errors
 	//   * `error`: when an unrecognized error occurs.
-	LoadSourceEnv(ctx context.Context, projectID uuid.UUID, sourceKind string, sourceSlug string) (map[string]string, error)
+	LoadSystemEnv(ctx context.Context, projectID uuid.UUID, toolsetID uuid.UUID, sourceKind string, sourceSlug string) (map[string]string, error)
 }
 
 type SlugOrID struct {
