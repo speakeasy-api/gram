@@ -45,7 +45,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion, useMotionValue } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import { useParams, useSearchParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
 import { DeploymentLogs, useUploadOpenAPISteps } from "./UploadOpenAPI";
@@ -221,7 +221,9 @@ const LHS = ({
           justify={"space-between"}
           className="w-full border-b h-16 px-6 mb-8"
         >
-          <GramLogo className="w-25" />
+          <Link className="hover:bg-accent p-2 rounded-md" to="/">
+            <GramLogo className="w-25" />
+          </Link>
           <a href="https://docs.getgram.ai/" target="_blank">
             <Type mono className="text-[15px] font-normal">
               VIEW DOCS

@@ -153,7 +153,7 @@ export function GenerateStep() {
             transition={{ delay: 0.2, duration: 0.4 }}
           >
             <div className="border border-zinc-700 rounded-md p-4 bg-zinc-900 text-white font-mono text-sm">
-              getPets(): GET /pets
+              getPets(): <span className="text-blue-400">GET</span> /pets
             </div>
           </motion.div>
           <motion.div
@@ -162,7 +162,7 @@ export function GenerateStep() {
             transition={{ delay: 0.4, duration: 0.4 }}
           >
             <div className="border border-zinc-700 rounded-md p-4 bg-zinc-900 text-white font-mono text-sm">
-              createPet(): POST /pets
+              createPet(): <span className="text-emerald-400">POST</span> /pets
             </div>
           </motion.div>
         </div>

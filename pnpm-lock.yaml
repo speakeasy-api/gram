@@ -146,8 +146,8 @@ importers:
         specifier: ^3.0.4
         version: 3.0.4(@react-three/fiber@9.4.0(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(three@0.176.0))(@types/three@0.180.0)(react@19.1.1)(three@0.176.0)
       '@speakeasy-api/moonshine':
-        specifier: 1.33.3
-        version: 1.33.3(@dnd-kit/core@6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(@dnd-kit/modifiers@9.0.0(@dnd-kit/core@6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1))(@dnd-kit/utilities@3.2.2(react@19.1.1))(@rive-app/react-canvas-lite@4.23.4(react@19.1.1))(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(ai@4.3.19(react@19.1.1)(zod@3.25.76))(lucide-react@0.544.0(react@19.1.1))(motion@12.23.14(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react-markdown@10.1.0(@types/react@19.1.13)(react@19.1.1))(react-resizable-panels@2.1.9(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-virtuoso@4.14.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)(remark-gfm@4.0.1)(shiki@3.13.0)
+        specifier: 1.33.4
+        version: 1.33.4(@dnd-kit/core@6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(@dnd-kit/modifiers@9.0.0(@dnd-kit/core@6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1))(@dnd-kit/utilities@3.2.2(react@19.1.1))(@rive-app/react-canvas-lite@4.23.4(react@19.1.1))(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(ai@4.3.19(react@19.1.1)(zod@3.25.76))(lucide-react@0.544.0(react@19.1.1))(motion@12.23.14(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react-markdown@10.1.0(@types/react@19.1.13)(react@19.1.1))(react-resizable-panels@2.1.9(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-virtuoso@4.14.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)(remark-gfm@4.0.1)(shiki@3.13.0)
       '@tailwindcss/typography':
         specifier: ^0.5.16
         version: 0.5.16(tailwindcss@4.1.13)
@@ -2317,8 +2317,8 @@ packages:
     resolution: {integrity: sha512-IUuj2zpGdeKaY5OdGnU83BUJsv7OA9uw3rNVSOuvzLMXMpBTU+W6V0SsQh6iI32lKUJArlnEU4BIzp83hghR/g==}
     engines: {node: '>=18.0.0'}
 
-  '@speakeasy-api/moonshine@1.33.3':
-    resolution: {integrity: sha512-E3S3T6eDQgSVejqw6gokmjxiW6393W+EULluZVb4Gz4yHDpvLI7B1kYOoA4oZyJOVXd7C9zQyRnrcWAoKlrm5A==}
+  '@speakeasy-api/moonshine@1.33.4':
+    resolution: {integrity: sha512-JipMJ5LMkqMlpJ/dkwB0EiAlA7VHXmPaCP7e8jIxk2xSLBStSu91wv8/nDapbBQwXRzAUfRO9fuw4tL5D+vwHw==}
     peerDependencies:
       '@dnd-kit/core': ^6.1.0
       '@dnd-kit/modifiers': ^7.0.0
@@ -8726,7 +8726,7 @@ snapshots:
       '@smithy/types': 4.4.0
       tslib: 2.8.1
 
-  '@speakeasy-api/moonshine@1.33.3(@dnd-kit/core@6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(@dnd-kit/modifiers@9.0.0(@dnd-kit/core@6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1))(@dnd-kit/utilities@3.2.2(react@19.1.1))(@rive-app/react-canvas-lite@4.23.4(react@19.1.1))(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(ai@4.3.19(react@19.1.1)(zod@3.25.76))(lucide-react@0.544.0(react@19.1.1))(motion@12.23.14(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react-markdown@10.1.0(@types/react@19.1.13)(react@19.1.1))(react-resizable-panels@2.1.9(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-virtuoso@4.14.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)(remark-gfm@4.0.1)(shiki@3.13.0)':
+  '@speakeasy-api/moonshine@1.33.4(@dnd-kit/core@6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(@dnd-kit/modifiers@9.0.0(@dnd-kit/core@6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1))(@dnd-kit/utilities@3.2.2(react@19.1.1))(@rive-app/react-canvas-lite@4.23.4(react@19.1.1))(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(ai@4.3.19(react@19.1.1)(zod@3.25.76))(lucide-react@0.544.0(react@19.1.1))(motion@12.23.14(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react-markdown@10.1.0(@types/react@19.1.13)(react@19.1.1))(react-resizable-panels@2.1.9(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-virtuoso@4.14.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)(remark-gfm@4.0.1)(shiki@3.13.0)':
     dependencies:
       '@dnd-kit/core': 6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@dnd-kit/modifiers': 9.0.0(@dnd-kit/core@6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)

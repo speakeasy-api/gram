@@ -1,4 +1,5 @@
 import {
+  Badge,
   Button,
   Heading,
   Text,
@@ -8,7 +9,6 @@ import {
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import Image from "./gram-functions.webp";
 import ImageDark from "./gram-functions-dark.webp";
-import { Badge } from "../ui/badge";
 import { useNavigate } from "react-router";
 import { useSlugs } from "@/contexts/Sdk";
 
@@ -49,8 +49,8 @@ export function FunctionsAnnouncementModal({
           <Heading className="whitespace-nowrap">
             Introducing Gram Functions
             <Badge
-              variant="outline"
-              className="relative -right-2 -top-2 text-xs py-1 px-2"
+              variant="information"
+              className="relative -right-2 -top-2 text-xs"
             >
               New
             </Badge>
@@ -74,7 +74,7 @@ export function FunctionsAnnouncementModal({
           </div>
         </div>
       </div>
-      <div className="hidden [@media(min-width:1200px)]:block h-full p-5">
+      <div className="hidden [@media(min-width:1200px)]:block h-full p-6">
         <img
           src={theme === "dark" ? ImageDark : Image}
           alt="Gram Functions"
