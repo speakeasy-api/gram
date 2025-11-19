@@ -4,4 +4,6 @@ export interface ElementsProviderProps {
   children: ReactNode;
 }
 
-export interface ElementsContextType {}
+export interface ElementsContextType {
+  /* TODO: Add context values */
+}
