@@ -23,13 +23,15 @@ import { NamedAsset, SourceCard } from "./SourceCard";
 import { SourcesEmptyState } from "./SourcesEmptyState";
 import { UploadOpenApiDialogContent } from "./UploadOpenApiDialogContent";
 import { AttachEnvironmentDialogContent } from "./AttachEnvironmentDialogContent";
+import { ViewAssetDialogContent } from "./ViewAssetDialogContent";
 
 type DialogState =
   | { type: "closed" }
   | { type: "add-source" }
   | { type: "remove-source"; asset: NamedAsset }
   | { type: "upload-openapi"; documentSlug: string }
-  | { type: "attach-environment"; asset: NamedAsset };
+  | { type: "attach-environment"; asset: NamedAsset }
+  | { type: "view-asset"; asset: NamedAsset };
 
 interface DialogStore {
   dialogState: DialogState;
@@ -37,6 +39,7 @@ interface DialogStore {
   openRemoveSource: (asset: NamedAsset) => void;
   openUploadOpenApi: (documentSlug: string) => void;
   openAttachEnvironment: (asset: NamedAsset) => void;
+  openViewAsset: (asset: NamedAsset) => void;
   closeDialog: () => void;
 }
 
@@ -49,6 +52,7 @@ const useDialogStore = create<DialogStore>((set) => ({
     set({ dialogState: { type: "upload-openapi", documentSlug } }),
   openAttachEnvironment: (asset) =>
     set({ dialogState: { type: "attach-environment", asset } }),
+  openViewAsset: (asset) => set({ dialogState: { type: "view-asset", asset } }),
   closeDialog: () => set({ dialogState: { type: "closed" } }),
 }));
 
@@ -85,6 +89,7 @@ export default function Sources() {
     openRemoveSource,
     openUploadOpenApi,
     openAttachEnvironment,
+    openViewAsset,
     closeDialog,
   } = useDialogStore();
   const deploymentIsEmpty = useDeploymentIsEmpty();
@@ -207,6 +212,7 @@ export default function Sources() {
                 )}
                 handleRemove={() => openRemoveSource(asset)}
                 handleAttachEnvironment={() => openAttachEnvironment(asset)}
+                handleViewAsset={() => openViewAsset(asset)}
                 setChangeDocumentTargetSlug={openUploadOpenApi}
               />
             ))}
@@ -215,12 +221,21 @@ export default function Sources() {
             open={dialogState.type !== "closed"}
             onOpenChange={(open) => !open && closeDialog()}
           >
-            <Dialog.Content className="max-w-2xl!">
+            <Dialog.Content
+              className={
+                dialogState.type === "view-asset"
+                  ? "min-w-[80vw] h-[90vh]"
+                  : "max-w-2xl!"
+              }
+            >
               {dialogState.type === "add-source" && <AddSourceDialogContent />}
               {dialogState.type === "remove-source" && (
                 <RemoveSourceDialogContent
                   asset={dialogState.asset}
-                  onConfirmRemoval={removeSource}
+                  onConfirmRemoval={async (...args) => {
+                    await removeSource(...args);
+                    closeDialog();
+                  }}
                 />
               )}
               {dialogState.type === "upload-openapi" && (
@@ -235,6 +250,9 @@ export default function Sources() {
                   asset={dialogState.asset}
                   onClose={closeDialog}
                 />
+              )}
+              {dialogState.type === "view-asset" && (
+                <ViewAssetDialogContent asset={dialogState.asset} />
               )}
             </Dialog.Content>
           </Dialog>

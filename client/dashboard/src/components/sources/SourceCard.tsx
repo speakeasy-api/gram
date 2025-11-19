@@ -1,24 +1,17 @@
-import { CodeBlock } from "@/components/code";
-// import { Dialog } from "@/components/ui/dialog";
-import { Dialog } from "@speakeasy-api/moonshine";
 import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { MoreActions } from "@/components/ui/more-actions";
-import { SkeletonCode } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
-import { useProject } from "@/contexts/Auth";
-import { cn, getServerURL } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query/index.js";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
 import { CircleAlertIcon, FileCode, SquareFunction } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useParams } from "react-router";
 
 export type NamedAsset = Asset & {
   deploymentAssetId: string;
@@ -32,15 +25,16 @@ export function SourceCard({
   causingFailure,
   handleRemove,
   handleAttachEnvironment,
+  handleViewAsset,
   setChangeDocumentTargetSlug,
 }: {
   asset: NamedAsset;
   causingFailure?: boolean | undefined;
   handleRemove: (assetId: string) => void;
   handleAttachEnvironment: (assetId: string) => void;
+  handleViewAsset: (assetId: string) => void;
   setChangeDocumentTargetSlug: (slug: string) => void;
 }) {
-  const [documentViewOpen, setDocumentViewOpen] = useState(false);
   const IconComponent = asset.type === "openapi" ? FileCode : SquareFunction;
 
   const actions = [
@@ -48,7 +42,7 @@ export function SourceCard({
       ? [
           {
             label: "View",
-            onClick: () => setDocumentViewOpen(true),
+            onClick: () => handleViewAsset(asset.id),
             icon: "eye" as const,
           },
           {
@@ -60,16 +54,12 @@ export function SourceCard({
       : []),
     {
       label: "Attach Environment",
-      onClick: () => {
-        requestAnimationFrame(() => handleAttachEnvironment(asset.id));
-      },
+      onClick: () => handleAttachEnvironment(asset.id),
       icon: "globe" as const,
     },
     {
       label: "Delete",
-      onClick: () => {
-        requestAnimationFrame(() => handleRemove(asset.id));
-      },
+      onClick: () => handleRemove(asset.id),
       icon: "trash" as const,
       destructive: true,
     },
@@ -87,7 +77,7 @@ export function SourceCard({
 
       <div
         onClick={
-          asset.type === "openapi" ? () => setDocumentViewOpen(true) : undefined
+          asset.type === "openapi" ? () => handleViewAsset(asset.id) : undefined
         }
         className={cn(
           "leading-none mb-1.5",
@@ -101,14 +91,6 @@ export function SourceCard({
         {causingFailure && <AssetIsCausingFailureNotice />}
         <UpdatedAt date={asset.updatedAt} italic={false} className="text-xs" />
       </div>
-
-      {asset.type === "openapi" && (
-        <AssetViewDialog
-          asset={asset}
-          open={documentViewOpen}
-          onOpenChange={setDocumentViewOpen}
-        />
-      )}
     </div>
   );
 }
@@ -146,62 +128,3 @@ const AssetIsCausingFailureNotice = () => {
     </HoverCard>
   );
 };
-
-function AssetViewDialog({
-  asset,
-  open,
-  onOpenChange,
-}: {
-  asset: NamedAsset;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const { projectSlug } = useParams();
-  const project = useProject();
-  const [content, setContent] = useState<string>("");
-  const [isLoading, setIsLoading] = useState(false);
-
-  const downloadURL = new URL("/rpc/assets.serveOpenAPIv3", getServerURL());
-  downloadURL.searchParams.set("id", asset.id);
-  downloadURL.searchParams.set("project_id", project.id);
-
-  useEffect(() => {
-    if (!open || !projectSlug) {
-      setContent("");
-      return;
-    }
-
-    fetch(downloadURL, {
-      credentials: "same-origin",
-    }).then((assetData) => {
-      if (!assetData.ok) {
-        setContent("");
-        return;
-      }
-      setIsLoading(true);
-      assetData.text().then((content) => {
-        setContent(content);
-        setIsLoading(false);
-      });
-    });
-  }, [open, projectSlug]);
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="min-w-[80vw] h-[90vh]">
-        <Dialog.Header>
-          <Dialog.Title>{asset.name}</Dialog.Title>
-        </Dialog.Header>
-        <div className="flex-1 overflow-auto">
-          {isLoading ? (
-            <SkeletonCode lines={50} />
-          ) : (
-            <CodeBlock language="yaml" copyable>
-              {content}
-            </CodeBlock>
-          )}
-        </div>
-      </Dialog.Content>
-    </Dialog>
-  );
-}
