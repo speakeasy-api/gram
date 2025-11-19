@@ -1,5 +1,14 @@
 # dashboard
 
+## 0.19.2
+
+### Patch Changes
+
+- 44d4dca: Update dashboard to fix a few ui issues
+- 0d4c7c8: Fix shiki theme in dark mode
+- 3210d73: Add annoucement modal for Gram Functions
+- 8bf8710: Introduces v2 of Dynamic Toolsets, combining learnings from Progressive and Semantic searches into one unified feature. Extremely token efficient, especially for medium and large toolsets.
+
 ## 0.19.1
 
 ### Patch Changes
