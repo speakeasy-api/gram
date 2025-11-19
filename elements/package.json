@@ -2,6 +2,7 @@
   "name": "@gram-ai/elements",
   "description": "",
   "type": "module",
+  "version": "0.1.0",
   "main": "dist/index.js",
   "exports": {
     ".": {
