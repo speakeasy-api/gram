@@ -86,7 +86,7 @@ const ThreadScrollToBottom: FC = () => {
 
 const ThreadWelcome: FC = () => {
   return (
-    <div className="aui-thread-welcome-root mx-auto my-auto flex w-full max-w-[var(--thread-max-width)] flex-grow flex-col">
+    <div className="aui-thread-welcome-root gap-10 mx-auto my-auto flex w-full max-w-[var(--thread-max-width)] flex-grow flex-col">
       <div className="aui-thread-welcome-center flex w-full flex-grow flex-col items-center justify-center">
         <div className="aui-thread-welcome-message flex size-full flex-col justify-center px-8">
           <m.div
@@ -115,7 +115,7 @@ const ThreadWelcome: FC = () => {
 
 const ThreadSuggestions: FC = () => {
   return (
-    <div className="aui-thread-welcome-suggestions grid w-full gap-2 pb-4 @md:grid-cols-2">
+    <div className="aui-thread-welcome-suggestions grid w-full gap-2 pb-10 @md:grid-cols-2">
       {[
         {
           title: "What's the weather",

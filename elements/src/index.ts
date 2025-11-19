@@ -5,4 +5,4 @@ export { ElementsProvider as GramElementsProvider } from "@/contexts/ElementsPro
 export { useElements as useGramElements } from "@/contexts/ElementsProvider";
 
 // Core Components
-export { Thread as GramThread } from "@/components/assistant-ui/thread";
+export { Chat as GramChat } from "@/components/Chat";

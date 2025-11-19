@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "esModuleInterop": true,
     "target": "es2019",
     "declaration": true,
@@ -10,7 +10,6 @@
     "strict": true,
     "jsx": "react-jsx",
     "forceConsistentCasingInFileNames": true,
-    "rootDir": "./src",
     "incremental": true,
     "tsBuildInfoFile": "./dist/.tsbuildinfo",
     "paths": {
@@ -25,12 +24,10 @@
     ]
   },
   "include": [
-    "src"
+    "src",
   ],
   "exclude": [
     "node_modules",
     "dist",
-    "src/**/*.stories.@(mdx|tsx)",
-    "src/**/*.test.@(ts|tsx)"
   ]
 }

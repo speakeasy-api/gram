@@ -24,6 +24,8 @@ minimumReleaseAge: 10080
 
 minimumReleaseAgeExclude:
   - '@speakeasy-api/moonshine'
+  - '@storybook/*'
+  - storybook
 
 onlyBuiltDependencies:
   - bun
