@@ -1,5 +1,12 @@
 # server
 
+## 0.10.3
+
+### Patch Changes
+
+- 67c2a5e: Increased the batch size for the fly app reaper from 50 to 200 to more aggressively recover fly machines.
+- 8bf8710: Introduces v2 of Dynamic Toolsets, combining learnings from Progressive and Semantic searches into one unified feature. Extremely token efficient, especially for medium and large toolsets.
+
 ## 0.10.2
 
 ### Patch Changes
