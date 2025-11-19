@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.19.3
+
+### Patch Changes
+
+- 8a92350: Fixes automatic closing behavior for Source Dialogs
+
 ## 0.19.2
 
 ### Patch Changes
