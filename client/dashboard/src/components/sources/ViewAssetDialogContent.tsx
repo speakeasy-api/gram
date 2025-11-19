@@ -4,52 +4,50 @@ import { useProject } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
 import { Dialog } from "@speakeasy-api/moonshine";
 import { useEffect, useState } from "react";
-import { useParams } from "react-router";
 import { NamedAsset } from "./SourceCard";
 
 interface ViewAssetDialogContentProps {
   asset: NamedAsset;
 }
 
+function buildDownloadUrl(assetId: string, projectId: string): URL {
+  const params = new URLSearchParams({
+    id: assetId,
+    project_id: projectId,
+  });
+  return new URL(`/rpc/assets.serveOpenAPIv3?${params}`, getServerURL());
+}
+
 export function ViewAssetDialogContent({ asset }: ViewAssetDialogContentProps) {
-  const { projectSlug } = useParams();
   const project = useProject();
   const [content, setContent] = useState<string>("");
   const [isPending, setIsPending] = useState(true);
 
-  const downloadURL = new URL("/rpc/assets.serveOpenAPIv3", getServerURL());
-  downloadURL.searchParams.set("id", asset.id);
-  downloadURL.searchParams.set("project_id", project.id);
-
   useEffect(() => {
-    if (!projectSlug) {
-      setContent("");
-      return;
-    }
+    const fetchAssetContent = async () => {
+      setIsPending(true);
+      try {
+        const downloadURL = buildDownloadUrl(asset.id, project.id);
+        const response = await fetch(downloadURL, {
+          credentials: "same-origin",
+        });
 
-    setIsPending(true);
-    fetch(downloadURL, {
-      credentials: "same-origin",
-    })
-      .then((assetData) => {
-        if (!assetData.ok) {
+        if (!response.ok) {
           setContent("");
-          setIsPending(false);
           return;
         }
-        return assetData.text();
-      })
-      .then((content) => {
-        if (content) {
-          setContent(content);
-        }
-        setIsPending(false);
-      })
-      .catch(() => {
+
+        const text = await response.text();
+        setContent(text);
+      } catch {
         setContent("");
+      } finally {
         setIsPending(false);
-      });
-  }, [projectSlug, asset.id]);
+      }
+    };
+
+    fetchAssetContent();
+  }, [asset.id, project.id]);
 
   return (
     <>
