@@ -278,11 +278,11 @@ export function ToolsetAuth({
               ({ varName, isSecret, displayValue, hasExistingValue }) => (
                 <div
                   key={varName}
-                  className="grid grid-cols-2 gap-4 items-center"
+                  className="grid grid-cols-2 gap-4 items-start"
                 >
                   <label
                     htmlFor={`env-${varName}`}
-                    className="text-sm font-medium text-foreground"
+                    className="text-sm font-medium text-foreground break-words pt-2"
                   >
                     {varName}
                   </label>
