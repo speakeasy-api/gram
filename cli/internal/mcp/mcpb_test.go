@@ -18,6 +18,7 @@ func TestGenerateMCPBManifest_CreatesValidZIP(t *testing.T) {
 		URL:        "https://mcp.example.com/test",
 		APIKey:     "test-api-key",
 		HeaderName: "Authorization",
+		EnvVarName: "",
 	}
 
 	result, err := GenerateMCPBManifest(info, false)
@@ -41,6 +42,7 @@ func TestGenerateMCPBManifest_ManifestStructure(t *testing.T) {
 		URL:        "https://mcp.example.com/test",
 		APIKey:     "test-api-key",
 		HeaderName: "Authorization",
+		EnvVarName: "",
 	}
 
 	result, err := GenerateMCPBManifest(info, false)
@@ -52,7 +54,7 @@ func TestGenerateMCPBManifest_ManifestStructure(t *testing.T) {
 
 	manifestFile, err := zipReader.File[0].Open()
 	require.NoError(t, err)
-	defer manifestFile.Close()
+	defer func() { _ = manifestFile.Close() }()
 
 	manifestJSON, err := io.ReadAll(manifestFile)
 	require.NoError(t, err)
@@ -109,7 +111,7 @@ func TestGenerateMCPBManifest_WithEnvVar(t *testing.T) {
 
 	manifestFile, err := zipReader.File[0].Open()
 	require.NoError(t, err)
-	defer manifestFile.Close()
+	defer func() { _ = manifestFile.Close() }()
 
 	manifestJSON, err := io.ReadAll(manifestFile)
 	require.NoError(t, err)
@@ -146,6 +148,7 @@ func TestGenerateMCPBManifest_SpecialCharactersInName(t *testing.T) {
 		URL:        "https://mcp.example.com/test",
 		APIKey:     "test-api-key",
 		HeaderName: "Authorization",
+		EnvVarName: "",
 	}
 
 	result, err := GenerateMCPBManifest(info, false)
@@ -157,7 +160,7 @@ func TestGenerateMCPBManifest_SpecialCharactersInName(t *testing.T) {
 
 	manifestFile, err := zipReader.File[0].Open()
 	require.NoError(t, err)
-	defer manifestFile.Close()
+	defer func() { _ = manifestFile.Close() }()
 
 	manifestJSON, err := io.ReadAll(manifestFile)
 	require.NoError(t, err)
@@ -178,6 +181,7 @@ func TestGenerateMCPBManifest_DifferentHeaderName(t *testing.T) {
 		URL:        "https://mcp.example.com/test",
 		APIKey:     "secret-key-123",
 		HeaderName: "X-Custom-Auth",
+		EnvVarName: "",
 	}
 
 	result, err := GenerateMCPBManifest(info, false)
@@ -189,7 +193,7 @@ func TestGenerateMCPBManifest_DifferentHeaderName(t *testing.T) {
 
 	manifestFile, err := zipReader.File[0].Open()
 	require.NoError(t, err)
-	defer manifestFile.Close()
+	defer func() { _ = manifestFile.Close() }()
 
 	manifestJSON, err := io.ReadAll(manifestFile)
 	require.NoError(t, err)
@@ -215,6 +219,7 @@ func TestGenerateMCPBManifest_ZIPIsExtractable(t *testing.T) {
 		URL:        "https://mcp.example.com/test",
 		APIKey:     "test-api-key",
 		HeaderName: "Authorization",
+		EnvVarName: "",
 	}
 
 	result, err := GenerateMCPBManifest(info, false)
@@ -232,6 +237,7 @@ func TestGenerateMCPBManifest_ZIPIsExtractable(t *testing.T) {
 		require.NoError(t, err, "should be able to read file content")
 		require.NotEmpty(t, content, "file should have content")
 
-		rc.Close()
+		err = rc.Close()
+		require.NoError(t, err, "should be able to close file")
 	}
 }

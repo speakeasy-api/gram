@@ -16,6 +16,7 @@ func TestBuildMCPConfig_HTTPTransport(t *testing.T) {
 		URL:        "https://mcp.example.com/test",
 		APIKey:     "test-api-key",
 		HeaderName: "Authorization",
+		EnvVarName: "",
 	}
 
 	config := BuildMCPConfig(info, false)
@@ -60,6 +61,7 @@ func TestBuildMCPConfig_CustomHeader(t *testing.T) {
 		URL:        "https://mcp.example.com/test",
 		APIKey:     "secret-123",
 		HeaderName: "X-Custom-Auth",
+		EnvVarName: "",
 	}
 
 	config := BuildMCPConfig(info, false)
@@ -77,6 +79,9 @@ func TestMarshalConfigJSON_Structure(t *testing.T) {
 		Headers: map[string]string{
 			"Authorization": "test-key",
 		},
+		Command: "",
+		Args:    nil,
+		Env:     nil,
 	}
 
 	jsonStr, err := MarshalConfigJSON("test-server", config)
@@ -123,8 +128,10 @@ func TestMarshalConfigJSON_OmitsEmptyFields(t *testing.T) {
 	require.NoError(t, err)
 
 	// Navigate to server config
-	mcpServers := result["mcpServers"].(map[string]interface{})
-	serverConfig := mcpServers["test-server"].(map[string]interface{})
+	mcpServers, ok := result["mcpServers"].(map[string]interface{})
+	require.True(t, ok, "mcpServers should be a map")
+	serverConfig, ok := mcpServers["test-server"].(map[string]interface{})
+	require.True(t, ok, "test-server config should be a map")
 
 	// Verify command-based fields are omitted
 	require.NotContains(t, serverConfig, "command")
@@ -147,6 +154,7 @@ func TestCursorDeepLinkEncoding(t *testing.T) {
 		URL:        "https://mcp.example.com/test",
 		APIKey:     "test-api-key",
 		HeaderName: "Authorization",
+		EnvVarName: "",
 	}
 
 	// Build config (same as in doInstallCursor)
@@ -216,6 +224,7 @@ func TestCursorDeepLinkEncoding_NoWrapping(t *testing.T) {
 		URL:        "https://mcp.example.com/test",
 		APIKey:     "test-api-key",
 		HeaderName: "Authorization",
+		EnvVarName: "",
 	}
 
 	// Build config
