@@ -174,7 +174,6 @@ export function ToolsetPanel({
   const toolsets = toolsetsData?.toolsets;
 
   const selectedToolset = configRef.current.toolsetSlug;
-  const selectedEnvironment = configRef.current.environmentSlug;
 
   const toolset = toolsets?.find((toolset) => toolset.slug === selectedToolset);
 
@@ -200,11 +199,9 @@ export function ToolsetPanel({
     <ToolsetView
       toolsetSlug={selectedToolset ?? ""}
       className="p-8 2xl:p-12"
-      environmentSlug={selectedEnvironment ?? undefined}
       addToolsStyle={"modal"}
       showEnvironmentBadge
       noGrid
-      onEnvironmentChange={setSelectedEnvironment}
       context="playground"
     />
   );

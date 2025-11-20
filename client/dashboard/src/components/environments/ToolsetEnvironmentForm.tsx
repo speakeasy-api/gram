@@ -11,14 +11,13 @@ import {
 } from "@gram/client/models/components";
 import {
   invalidateAllListEnvironments,
-  invalidateGetToolsetEnvironment,
   useGetToolsetEnvironment,
 } from "@gram/client/react-query";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Plus, TriangleAlert, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useEnvironments } from "@/pages/environments/Environments";
 import { EnvironmentSelector } from "@/pages/toolsets/EnvironmentSelector";
 import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
@@ -73,6 +72,10 @@ function useAttachedEnvironmentForm({
   );
 
   useEffect(() => {
+    setIsDirty(environment?.id !== attachedEnvironmentQuery.data?.id);
+  }, [environment?.id, attachedEnvironmentQuery.data?.id]);
+
+  useEffect(() => {
     if (!isDirty) {
       setEnvironment(attachedEnvironmentQuery.data ?? null);
     }
@@ -81,33 +84,43 @@ function useAttachedEnvironmentForm({
   const persist = useCallback(async () => {
     if (!isDirty) return;
 
-    if (environment?.id) {
-      await sdkClient.environments.setToolsetLink({
-        setToolsetEnvironmentLinkRequestBody: {
+    try {
+      if (environment?.id) {
+        await sdkClient.environments.setToolsetLink({
+          setToolsetEnvironmentLinkRequestBody: {
+            toolsetId: toolset.id,
+            environmentId: environment.id,
+          },
+        });
+      } else {
+        await sdkClient.environments.deleteToolsetLink({
           toolsetId: toolset.id,
-          environmentId: environment.id,
-        },
+        });
+      }
+
+      telemetry.capture("toolset_event", {
+        action: environment?.id
+          ? "toolset_environment_attached"
+          : "toolset_environment_detached",
       });
-    } else {
-      await sdkClient.environments.deleteToolsetLink({
-        toolsetId: toolset.id,
-      });
+
+      setIsDirty(false);
+    } finally {
+      await attachedEnvironmentQuery.refetch();
     }
-
-    telemetry.capture("toolset_event", {
-      action: environment?.id
-        ? "toolset_environment_attached"
-        : "toolset_environment_detached",
-    });
-
-    setIsDirty(false);
-  }, [isDirty, environment, sdkClient, toolset.id, telemetry]);
+  }, [
+    isDirty,
+    environment,
+    sdkClient,
+    toolset.id,
+    telemetry,
+    attachedEnvironmentQuery,
+  ]);
 
   const handleEnvironmentSelectorChange = useCallback(
     (slug: string) => {
       const selectedEnv = environments.find((env) => env.slug === slug);
       setEnvironment(selectedEnv ?? null);
-      setIsDirty(true);
       if (onEnvironmentChange) {
         onEnvironmentChange(slug);
       }
@@ -117,7 +130,6 @@ function useAttachedEnvironmentForm({
 
   const handleCancel = useCallback(() => {
     setEnvironment(attachedEnvironmentQuery.data ?? null);
-    setIsDirty(false);
   }, [attachedEnvironmentQuery.data]);
 
   return {
@@ -153,6 +165,7 @@ function useEnvironmentEntriesForm({
   environment,
   relevantEnvVars,
 }: UseEnvironmentEntriesFormParams): UseEnvironmentEntriesFormReturn {
+  const queryClient = useQueryClient();
   const sdkClient = useSdkClient();
   const telemetry = useTelemetry();
 
@@ -161,7 +174,6 @@ function useEnvironmentEntriesForm({
   >([]);
   const [isDirty, setIsDirty] = useState(false);
 
-  // Initialize environmentEntries when environment or relevantEnvVars changes
   useEffect(() => {
     const initialValues: EnvironmentEntryFormInput[] = relevantEnvVars.map(
       (varName) => {
@@ -190,8 +202,11 @@ function useEnvironmentEntriesForm({
     );
 
     setEnvironmentEntries(initialValues);
-    setIsDirty(false);
   }, [environment?.slug, environment?.entries, relevantEnvVars]);
+
+  useEffect(() => {
+    setIsDirty(environmentEntries.some((entry) => entry.inputValue !== ""));
+  }, [environmentEntries]);
 
   // Persist function
   const persist = useCallback(async () => {
@@ -203,20 +218,31 @@ function useEnvironmentEntriesForm({
       .filter((entry) => entry.inputValue.trim() !== "")
       .map((entry) => ({ name: entry.varName, value: entry.inputValue }));
 
-    await sdkClient.environments.updateBySlug({
-      slug: environmentSlug,
-      updateEnvironmentRequestBody: {
-        entriesToUpdate,
-        entriesToRemove: [],
-      },
-    });
+    try {
+      await sdkClient.environments.updateBySlug({
+        slug: environmentSlug,
+        updateEnvironmentRequestBody: {
+          entriesToUpdate,
+          entriesToRemove: [],
+        },
+      });
 
-    telemetry.capture("environment_event", {
-      action: "environment_updated_from_toolset_auth",
-    });
+      telemetry.capture("environment_event", {
+        action: "environment_updated_from_toolset_auth",
+      });
 
-    setIsDirty(false);
-  }, [isDirty, environment, environmentEntries, sdkClient, telemetry]);
+      setIsDirty(false);
+    } finally {
+      invalidateAllListEnvironments(queryClient);
+    }
+  }, [
+    isDirty,
+    environment,
+    environmentEntries,
+    sdkClient,
+    telemetry,
+    queryClient,
+  ]);
 
   const handleValueChange = useCallback((varName: string, value: string) => {
     setEnvironmentEntries((prev) =>
@@ -224,7 +250,6 @@ function useEnvironmentEntriesForm({
         entry.varName === varName ? { ...entry, inputValue: value } : entry,
       ),
     );
-    setIsDirty(true);
   }, []);
 
   const handleKeyDown = useCallback(
@@ -233,7 +258,6 @@ function useEnvironmentEntriesForm({
         setEnvironmentEntries((prev) =>
           prev.map((entry) => ({ ...entry, inputValue: "" })),
         );
-        setIsDirty(false);
         e.currentTarget.blur();
       }
     },
@@ -261,7 +285,6 @@ function useEnvironmentEntriesForm({
     setEnvironmentEntries((prev) =>
       prev.map((entry) => ({ ...entry, inputValue: "" })),
     );
-    setIsDirty(false);
   }, []);
 
   return {
@@ -319,7 +342,6 @@ function useToolsetEnvironmentForm({
   toolset,
   onEnvironmentChange,
 }: UseToolsetEnvironmentFormParams): UseToolsetEnvironmentFormReturn {
-  const queryClient = useQueryClient();
   const requiresServerURL =
     toolset.tools?.some((tool) => isHttpTool(tool) && !tool.defaultServerUrl) ??
     false;
@@ -349,10 +371,6 @@ function useToolsetEnvironmentForm({
   const mutation = useMutation({
     mutationFn: async () => {
       await Promise.all([attachedEnvForm.persist(), entriesForm.persist()]);
-    },
-    onSettled: () => {
-      invalidateGetToolsetEnvironment(queryClient, [{ toolsetId: toolset.id }]);
-      invalidateAllListEnvironments(queryClient);
     },
   });
 
