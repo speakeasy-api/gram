@@ -6,6 +6,15 @@ const openai = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+/**
+ * Storybook relies on vite's own dev server to run the storybook application.
+ * We need to add a middleware to the storybook dev server to handle the chat API requests
+ * so that we can use the chat API in the stories to test real LLM interactions.
+ * @param req - The incoming request.
+ * @param res - The outgoing response.
+ * @param next - The next middleware function.
+ * @returns
+ */
 export async function chatMiddleware(
   req: IncomingMessage,
   res: ServerResponse,

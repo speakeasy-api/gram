@@ -17,6 +17,7 @@
   "scripts": {
     "type-check": "tsc --noEmit",
     "build": "vite build",
+    "lint": "prettier --check . && eslint . && tsc -b --noEmit",
     "analyze": "pnpm dlx vite-bundle-visualizer",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
