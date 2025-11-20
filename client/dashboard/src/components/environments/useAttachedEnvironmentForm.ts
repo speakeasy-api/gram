@@ -69,7 +69,8 @@ function useFormState(): UseFormStateReturn {
         environment,
         stateInitialized: true,
         serverEnvironmentId: environment?.id,
-        dirty: prev.stateInitialized && prev.environment?.id !== environment?.id,
+        dirty:
+          prev.stateInitialized && prev.environment?.id !== environment?.id,
       };
     });
   }, []);
@@ -108,10 +109,10 @@ export function useAttachedEnvironmentForm({
   const sdkClient = useSdkClient();
   const telemetry = useTelemetry();
 
-  const { formState, environmentChanged, reset, serverDataReceived } = useFormState();
+  const { formState, environmentChanged, reset, serverDataReceived } =
+    useFormState();
   const attachedEnvironmentQuery = useAttachedEnvironmentQuery(toolsetId);
 
-  // Sync from server data
   useEffect(() => {
     serverDataReceived(attachedEnvironmentQuery.data ?? null);
   }, [attachedEnvironmentQuery.data, serverDataReceived]);
