@@ -21,10 +21,10 @@ interface UseAttachedEnvironmentFormReturn {
 }
 
 interface FormState {
-  dirty: boolean;
   environment: Environment | null;
+  serverEnvironment: Environment | null;
+  dirty: boolean;
   stateInitialized: boolean;
-  serverEnvironmentId: string | undefined;
 }
 
 interface UseFormStateReturn {
@@ -36,10 +36,10 @@ interface UseFormStateReturn {
 
 function useFormState(): UseFormStateReturn {
   const [formState, setFormState] = useState<FormState>({
-    dirty: false,
     environment: null,
+    serverEnvironment: null,
+    dirty: false,
     stateInitialized: false,
-    serverEnvironmentId: undefined,
   });
 
   const environmentChanged = useCallback((environment: Environment | null) => {
@@ -54,7 +54,7 @@ function useFormState(): UseFormStateReturn {
     setFormState((prev) => ({
       ...prev,
       environment,
-      serverEnvironmentId: environment?.id,
+      serverEnvironment: environment,
       dirty: false,
     }));
   }, []);
@@ -69,8 +69,8 @@ function useFormState(): UseFormStateReturn {
       return {
         ...prev,
         environment,
+        serverEnvironment: environment,
         stateInitialized: true,
-        serverEnvironmentId: environment?.id,
       };
     });
   }, []);
@@ -115,7 +115,7 @@ export function useAttachedEnvironmentForm({
 
   useEffect(() => {
     serverDataReceived(attachedEnvironmentQuery.data ?? null);
-  }, [attachedEnvironmentQuery.data, serverDataReceived]);
+  }, [attachedEnvironmentQuery.data]);
 
   const persist = useCallback(async () => {
     if (!formState.dirty) return;
