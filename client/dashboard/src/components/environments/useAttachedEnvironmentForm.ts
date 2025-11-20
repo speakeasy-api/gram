@@ -30,7 +30,7 @@ interface FormState {
 interface UseFormStateReturn {
   formState: FormState;
   environmentChanged: (environment: Environment | null) => void;
-  reset: () => void;
+  reset: (environment: Environment | null) => void;
   serverDataReceived: (environment: Environment | null) => void;
 }
 
@@ -50,9 +50,11 @@ function useFormState(): UseFormStateReturn {
     }));
   }, []);
 
-  const reset = useCallback(() => {
+  const reset = useCallback((environment: Environment | null) => {
     setFormState((prev) => ({
       ...prev,
+      environment,
+      serverEnvironmentId: environment?.id,
       dirty: false,
     }));
   }, []);
@@ -138,7 +140,7 @@ export function useAttachedEnvironmentForm({
           : "toolset_environment_detached",
       });
 
-      reset();
+      reset(formState.environment);
     } finally {
       await attachedEnvironmentQuery.refetch();
     }
@@ -164,8 +166,8 @@ export function useAttachedEnvironmentForm({
   );
 
   const handleCancel = useCallback(() => {
-    serverDataReceived(attachedEnvironmentQuery.data ?? null);
-  }, [attachedEnvironmentQuery.data, serverDataReceived]);
+    reset(attachedEnvironmentQuery.data ?? null);
+  }, [attachedEnvironmentQuery.data, reset]);
 
   return {
     selectedEnvironment: formState.environment,
