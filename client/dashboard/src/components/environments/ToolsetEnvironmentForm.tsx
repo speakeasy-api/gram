@@ -16,7 +16,7 @@ import {
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Plus, TriangleAlert } from "lucide-react";
+import { AlertCircle, Plus, TriangleAlert, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useEnvironments } from "@/pages/environments/Environments";
@@ -37,8 +37,6 @@ function useEnvironmentFormSubmitMutation({
   attachedEnvironmentChanged,
   toolset,
   invalidate,
-  onSuccess,
-  onError,
 }: {
   environment: Environment | null;
   environmentEntries: EnvironmentEntryFormInput[];
@@ -46,8 +44,6 @@ function useEnvironmentFormSubmitMutation({
   attachedEnvironmentChanged: boolean;
   toolset: Toolset;
   invalidate: () => void;
-  onSuccess: () => void;
-  onError: () => void;
 }) {
   const sdkClient = useSdkClient();
   const telemetry = useTelemetry();
@@ -115,12 +111,9 @@ function useEnvironmentFormSubmitMutation({
       invalidateAllListEnvironments(queryClient);
 
       toast.success("Changes saved successfully");
-
-      onSuccess();
     },
     onError: () => {
       toast.error("Failed to save changes. Please try again.");
-      onError();
     },
     onSettled: () => {
       invalidate();
@@ -133,7 +126,7 @@ interface PersistedEnvironmentEntry {
   kind: "persisted";
   varName: string;
   isSensitive: boolean;
-  entryValue: string;
+  initialValue: string;
   inputValue: string;
 }
 
@@ -178,8 +171,6 @@ function useToolsetEnvironmentForm({
     EnvironmentEntryFormInput[]
   >([]);
   const [environment, setEnvironment] = useState<Environment | null>(null);
-  const [serverEnvironment, setServerEnvironment] =
-    useState<Environment | null>(null);
 
   useRegisterEnvironmentTelemetry({
     environmentSlug: environment?.slug ?? "",
@@ -207,24 +198,39 @@ function useToolsetEnvironmentForm({
     return environmentEntries.some((entry) => entry.inputValue !== "");
   }, [environmentEntries]);
 
-  // Derive attachedEnvironmentChanged from environment vs serverEnvironment
+  // Derive attachedEnvironmentChanged from environment vs query data
   const attachedEnvironmentChanged = useMemo(() => {
-    return environment?.id !== serverEnvironment?.id;
-  }, [environment?.id, serverEnvironment?.id]);
+    return environment?.id !== attachedEnvironmentQuery.data?.id;
+  }, [environment?.id, attachedEnvironmentQuery.data?.id]);
 
   const isDirty = environmentDirty || attachedEnvironmentChanged;
 
-  // Sync server environment from query result
-  useEffect(() => {
-    setServerEnvironment(attachedEnvironmentQuery.data ?? null);
-  }, [attachedEnvironmentQuery.data]);
-
-  // Sync environment to server environment when not dirty
+  // Sync environment from query result when not dirty
   useEffect(() => {
     if (!isDirty) {
-      setEnvironment(serverEnvironment);
+      setEnvironment(attachedEnvironmentQuery.data ?? null);
     }
-  }, [serverEnvironment, isDirty]);
+  }, [attachedEnvironmentQuery.data, isDirty]);
+
+  // Debug logging
+  useEffect(() => {
+    console.log("[ToolsetEnvironmentForm] environment changed:", environment);
+  }, [environment]);
+
+  useEffect(() => {
+    console.log(
+      "[ToolsetEnvironmentForm] attachedEnvironmentQuery.data changed:",
+      attachedEnvironmentQuery.data,
+    );
+  }, [attachedEnvironmentQuery.data]);
+
+  useEffect(() => {
+    console.log("[ToolsetEnvironmentForm] dirty state:", {
+      isDirty,
+      environmentDirty,
+      attachedEnvironmentChanged,
+    });
+  }, [isDirty, environmentDirty, attachedEnvironmentChanged]);
 
   // Single mutation that handles both environment updates and toolset link changes
   const saveMutation = useEnvironmentFormSubmitMutation({
@@ -234,16 +240,10 @@ function useToolsetEnvironmentForm({
     attachedEnvironmentChanged,
     toolset,
     invalidate: attachedEnvironmentQuery.refetch,
-    onSuccess: () => {
-      // Reset all inputValues to empty
-      setEnvironmentEntries((prev) =>
-        prev.map((entry) => ({ ...entry, inputValue: "" })),
-      );
-    },
-    onError: () => {},
   });
 
   const { mutate: handleSave, isPending: isSaving } = saveMutation;
+
   const isLoading = attachedEnvironmentQuery.isLoading || isSaving;
 
   const handleValueChange = useCallback((varName: string, value: string) => {
@@ -270,9 +270,9 @@ function useToolsetEnvironmentForm({
     setEnvironmentEntries((prev) =>
       prev.map((entry) => ({ ...entry, inputValue: "" })),
     );
-    // Reset environment to server environment
-    setEnvironment(serverEnvironment);
-  }, [serverEnvironment]);
+    // Reset environment to server data
+    setEnvironment(attachedEnvironmentQuery.data ?? null);
+  }, [attachedEnvironmentQuery.data]);
 
   const requiresServerURL =
     toolset.tools?.some((tool) => isHttpTool(tool) && !tool.defaultServerUrl) ??
@@ -300,7 +300,7 @@ function useToolsetEnvironmentForm({
         varName: entry.varName,
         isSensitive: entry.isSensitive,
         inputValue: entry.inputValue,
-        entryValue: entry.kind === "persisted" ? entry.entryValue : null,
+        entryValue: entry.kind === "persisted" ? entry.initialValue : null,
         hasExistingValue: entry.kind === "persisted",
         isDirty: entry.inputValue !== "",
         isSaving: isLoading,
@@ -317,6 +317,13 @@ function useToolsetEnvironmentForm({
 
   // Initialize environmentEntries when environment or relevantEnvVars changes
   useEffect(() => {
+    console.log("[ToolsetEnvironmentForm] Initializing environmentEntries for:", {
+      environmentSlug: environment?.slug,
+      environmentId: environment?.id,
+      entriesCount: environment?.entries?.length,
+      relevantEnvVars,
+    });
+
     const initialValues: EnvironmentEntryFormInput[] = relevantEnvVars.map(
       (varName) => {
         const entry = environment?.entries?.find((e) => e.name === varName);
@@ -329,7 +336,7 @@ function useToolsetEnvironmentForm({
             kind: "persisted" as const,
             varName,
             isSensitive,
-            entryValue: entry.value,
+            initialValue: entry.value,
             inputValue: "",
           };
         } else {
@@ -343,6 +350,7 @@ function useToolsetEnvironmentForm({
       },
     );
 
+    console.log("[ToolsetEnvironmentForm] Setting environmentEntries to:", initialValues);
     setEnvironmentEntries(initialValues);
   }, [environment?.slug, environment?.entries, relevantEnvVars]);
 
@@ -448,16 +456,18 @@ export function ToolsetEnvironmentForm({
             setSelectedEnvironment={form.onEnvironmentSelectorChange}
             className="h-8"
           />
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => routes.environments.goTo()}
-            aria-label="Add new environment"
-          >
-            <Plus className="h-4 w-4 mr-1" aria-hidden="true" />
-            Add New
-          </Button>
+          {form.selectedEnvironment && (
+            <Button
+              type="button"
+              variant="tertiary"
+              size="sm"
+              onClick={() => form.onEnvironmentSelectorChange("")}
+              aria-label="Clear environment"
+            >
+              <X className="h-4 w-4 mr-1" aria-hidden="true" />
+              Clear
+            </Button>
+          )}
         </div>
       </div>
 
