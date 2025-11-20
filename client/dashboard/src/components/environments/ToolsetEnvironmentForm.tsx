@@ -11,13 +11,14 @@ import {
 } from "@gram/client/models/components";
 import {
   invalidateAllListEnvironments,
+  invalidateGetToolsetEnvironment,
   useGetToolsetEnvironment,
 } from "@gram/client/react-query";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Plus, TriangleAlert, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEnvironments } from "@/pages/environments/Environments";
 import { EnvironmentSelector } from "@/pages/toolsets/EnvironmentSelector";
 import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
@@ -51,12 +52,10 @@ function useAttachedEnvironmentForm({
   const environments = useEnvironments();
   const sdkClient = useSdkClient();
   const telemetry = useTelemetry();
-  const queryClient = useQueryClient();
 
   const [environment, setEnvironment] = useState<Environment | null>(null);
   const [isDirty, setIsDirty] = useState(false);
 
-  // Load the attached environment for this toolset
   const attachedEnvironmentQuery = useGetToolsetEnvironment(
     {
       toolsetId: toolset.id,
@@ -73,50 +72,36 @@ function useAttachedEnvironmentForm({
     },
   );
 
-  // Sync environment from query result when not dirty
   useEffect(() => {
     if (!isDirty) {
       setEnvironment(attachedEnvironmentQuery.data ?? null);
     }
   }, [attachedEnvironmentQuery.data, isDirty]);
 
-  // Persist function
   const persist = useCallback(async () => {
     if (!isDirty) return;
 
-    try {
-      if (environment?.id) {
-        await sdkClient.environments.setToolsetLink({
-          setToolsetEnvironmentLinkRequestBody: {
-            toolsetId: toolset.id,
-            environmentId: environment.id,
-          },
-        });
-      } else {
-        await sdkClient.environments.deleteToolsetLink({
+    if (environment?.id) {
+      await sdkClient.environments.setToolsetLink({
+        setToolsetEnvironmentLinkRequestBody: {
           toolsetId: toolset.id,
-        });
-      }
-
-      telemetry.capture("toolset_event", {
-        action: environment?.id
-          ? "toolset_environment_attached"
-          : "toolset_environment_detached",
+          environmentId: environment.id,
+        },
       });
-      invalidateAllListEnvironments(queryClient);
-      await attachedEnvironmentQuery.refetch();
-    } finally {
-      setIsDirty(false);
+    } else {
+      await sdkClient.environments.deleteToolsetLink({
+        toolsetId: toolset.id,
+      });
     }
-  }, [
-    isDirty,
-    environment,
-    sdkClient,
-    toolset.id,
-    telemetry,
-    queryClient,
-    attachedEnvironmentQuery,
-  ]);
+
+    telemetry.capture("toolset_event", {
+      action: environment?.id
+        ? "toolset_environment_attached"
+        : "toolset_environment_detached",
+    });
+
+    setIsDirty(false);
+  }, [isDirty, environment, sdkClient, toolset.id, telemetry]);
 
   const handleEnvironmentSelectorChange = useCallback(
     (slug: string) => {
@@ -170,7 +155,6 @@ function useEnvironmentEntriesForm({
 }: UseEnvironmentEntriesFormParams): UseEnvironmentEntriesFormReturn {
   const sdkClient = useSdkClient();
   const telemetry = useTelemetry();
-  const queryClient = useQueryClient();
 
   const [environmentEntries, setEnvironmentEntries] = useState<
     EnvironmentEntryFormInput[]
@@ -179,16 +163,6 @@ function useEnvironmentEntriesForm({
 
   // Initialize environmentEntries when environment or relevantEnvVars changes
   useEffect(() => {
-    console.log(
-      "[useEnvironmentEntriesForm] Initializing environmentEntries for:",
-      {
-        environmentSlug: environment?.slug,
-        environmentId: environment?.id,
-        entriesCount: environment?.entries?.length,
-        relevantEnvVars,
-      },
-    );
-
     const initialValues: EnvironmentEntryFormInput[] = relevantEnvVars.map(
       (varName) => {
         const entry = environment?.entries?.find((e) => e.name === varName);
@@ -215,10 +189,6 @@ function useEnvironmentEntriesForm({
       },
     );
 
-    console.log(
-      "[useEnvironmentEntriesForm] Setting environmentEntries to:",
-      initialValues,
-    );
     setEnvironmentEntries(initialValues);
     setIsDirty(false);
   }, [environment?.slug, environment?.entries, relevantEnvVars]);
@@ -227,36 +197,26 @@ function useEnvironmentEntriesForm({
   const persist = useCallback(async () => {
     if (!isDirty || !environment) return;
 
-    try {
-      const { slug: environmentSlug } = environment;
+    const { slug: environmentSlug } = environment;
 
-      const entriesToUpdate: EnvironmentEntryInputType[] = environmentEntries
-        .filter((entry) => entry.inputValue.trim() !== "")
-        .map((entry) => ({ name: entry.varName, value: entry.inputValue }));
+    const entriesToUpdate: EnvironmentEntryInputType[] = environmentEntries
+      .filter((entry) => entry.inputValue.trim() !== "")
+      .map((entry) => ({ name: entry.varName, value: entry.inputValue }));
 
-      await sdkClient.environments.updateBySlug({
-        slug: environmentSlug,
-        updateEnvironmentRequestBody: {
-          entriesToUpdate,
-          entriesToRemove: [],
-        },
-      });
+    await sdkClient.environments.updateBySlug({
+      slug: environmentSlug,
+      updateEnvironmentRequestBody: {
+        entriesToUpdate,
+        entriesToRemove: [],
+      },
+    });
 
-      telemetry.capture("environment_event", {
-        action: "environment_updated_from_toolset_auth",
-      });
-      invalidateAllListEnvironments(queryClient);
-    } finally {
-      setIsDirty(false);
-    }
-  }, [
-    isDirty,
-    environment,
-    environmentEntries,
-    sdkClient,
-    telemetry,
-    queryClient,
-  ]);
+    telemetry.capture("environment_event", {
+      action: "environment_updated_from_toolset_auth",
+    });
+
+    setIsDirty(false);
+  }, [isDirty, environment, environmentEntries, sdkClient, telemetry]);
 
   const handleValueChange = useCallback((varName: string, value: string) => {
     setEnvironmentEntries((prev) =>
@@ -359,6 +319,7 @@ function useToolsetEnvironmentForm({
   toolset,
   onEnvironmentChange,
 }: UseToolsetEnvironmentFormParams): UseToolsetEnvironmentFormReturn {
+  const queryClient = useQueryClient();
   const requiresServerURL =
     toolset.tools?.some((tool) => isHttpTool(tool) && !tool.defaultServerUrl) ??
     false;
@@ -388,6 +349,10 @@ function useToolsetEnvironmentForm({
   const mutation = useMutation({
     mutationFn: async () => {
       await Promise.all([attachedEnvForm.persist(), entriesForm.persist()]);
+    },
+    onSettled: () => {
+      invalidateGetToolsetEnvironment(queryClient, [{ toolsetId: toolset.id }]);
+      invalidateAllListEnvironments(queryClient);
     },
   });
 
@@ -561,24 +526,13 @@ export function ToolsetEnvironmentForm({
       {form.selectedEnvironment && (
         <>
           {form.relevantEnvVars.length > 0 && (
-            <div className="space-y-6">
-              <div className="space-y-4">
-                {form.environmentVariableInputs.map((input) => (
-                  <EnvironmentEntryInput
-                    key={input.varName}
-                    {...form.getInputPropsForEntry(input)}
-                  />
-                ))}
-              </div>
-
-              {form.isDirty && (
-                <SaveActionBar
-                  saveError={form.saveError}
-                  isSaving={form.isSaving}
-                  onSave={form.onSubmit}
-                  onCancel={form.onCancel}
+            <div className="space-y-4">
+              {form.environmentVariableInputs.map((input) => (
+                <EnvironmentEntryInput
+                  key={input.varName}
+                  {...form.getInputPropsForEntry(input)}
                 />
-              )}
+              ))}
             </div>
           )}
 
@@ -590,6 +544,15 @@ export function ToolsetEnvironmentForm({
             </div>
           )}
         </>
+      )}
+
+      {form.isDirty && (
+        <SaveActionBar
+          saveError={form.saveError}
+          isSaving={form.isSaving}
+          onSave={form.onSubmit}
+          onCancel={form.onCancel}
+        />
       )}
     </div>
   );
