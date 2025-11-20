@@ -75,7 +75,12 @@ export function useEnvironmentEntriesForm({
     );
 
     setEnvironmentEntries(initialValues);
-  }, [environment?.slug, environment?.entries, relevantEnvVars, handleValueChange]);
+  }, [
+    environment?.slug,
+    environment?.entries,
+    relevantEnvVars,
+    handleValueChange,
+  ]);
 
   useEffect(() => {
     setIsDirty(environmentEntries.some((entry) => entry.inputValue !== ""));
