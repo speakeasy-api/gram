@@ -227,5 +227,36 @@ func ToToolListEntry(tool *types.Tool) (name, description string, inputSchema js
 
 	baseTool := ToBaseTool(tool)
 
-	return baseTool.Name, baseTool.Description, json.RawMessage(baseTool.Schema), meta
+	// Strip $schema field from the schema for MCP compatibility
+	// Some MCP clients (like Gemini CLI) don't recognize certain JSON Schema draft versions
+	cleanedSchema := stripSchemaField(baseTool.Schema)
+
+	return baseTool.Name, baseTool.Description, json.RawMessage(cleanedSchema), meta
+}
+
+// stripSchemaField removes the $schema field from a JSON schema string.
+// This improves compatibility with MCP clients that don't recognize
+// specific JSON Schema draft version URIs.
+func stripSchemaField(schema string) string {
+	if schema == "" {
+		return schema
+	}
+
+	var schemaMap map[string]interface{}
+	if err := json.Unmarshal([]byte(schema), &schemaMap); err != nil {
+		// If we can't parse it, return as-is
+		return schema
+	}
+
+	// Remove the $schema field if it exists
+	delete(schemaMap, "$schema")
+
+	// Re-serialize
+	cleanedBytes, err := json.Marshal(schemaMap)
+	if err != nil {
+		// If we can't marshal it, return original
+		return schema
+	}
+
+	return string(cleanedBytes)
 }
