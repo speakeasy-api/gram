@@ -4,23 +4,13 @@ import {
   Environment,
   EnvironmentEntryInput as EnvironmentEntryInputType,
 } from "@gram/client/models/components";
-import {
-  invalidateAllListEnvironments,
-} from "@gram/client/react-query";
+import { invalidateAllListEnvironments } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
-
-export interface EnvironmentEntryInputProps {
-  varName: string;
-  isSensitive: boolean;
-  inputValue: string;
-  entryValue: string | null;
-  hasExistingValue: boolean;
-  isDirty: boolean;
-  isSaving: boolean;
-  onValueChange: (varName: string, value: string) => void;
-  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
-}
+import {
+  EnvironmentEntryInput,
+  EnvironmentEntryInputProps,
+} from "./EnvironmentEntryInput";
 
 const SECRET_FIELD_INDICATORS = ["SECRET", "KEY"] as const;
 
@@ -39,26 +29,14 @@ interface UseEnvironmentEntriesFormReturn {
   cancel: () => void;
 }
 
-interface PersistedEnvironmentEntry {
-  kind: "persisted";
+interface EnvironmentEntryFormInput {
   varName: string;
   isSensitive: boolean;
-  initialValue: string;
+  initialValue: string | null;
   inputValue: string;
 }
 
-interface NewEnvironmentEntry {
-  kind: "new";
-  varName: string;
-  isSensitive: boolean;
-  inputValue: string;
-}
-
-type EnvironmentEntryFormInput =
-  | PersistedEnvironmentEntry
-  | NewEnvironmentEntry;
-
-export function useEnvironmentEntriesForm({
+function useEnvironmentEntriesForm({
   environment,
   relevantEnvVars,
 }: UseEnvironmentEntriesFormParams): UseEnvironmentEntriesFormReturn {
@@ -79,22 +57,15 @@ export function useEnvironmentEntriesForm({
           varName.includes(indicator),
         );
 
-        if (entry?.value != null && entry.value.trim() !== "") {
-          return {
-            kind: "persisted" as const,
-            varName,
-            isSensitive,
-            initialValue: entry.value,
-            inputValue: "",
-          };
-        } else {
-          return {
-            kind: "new" as const,
-            varName,
-            isSensitive,
-            inputValue: "",
-          };
-        }
+        return {
+          varName,
+          isSensitive,
+          initialValue:
+            entry?.value != null && entry.value.trim() !== ""
+              ? entry.value
+              : null,
+          inputValue: "",
+        };
       },
     );
 
@@ -166,8 +137,8 @@ export function useEnvironmentEntriesForm({
         varName: entry.varName,
         isSensitive: entry.isSensitive,
         inputValue: entry.inputValue,
-        entryValue: entry.kind === "persisted" ? entry.initialValue : null,
-        hasExistingValue: entry.kind === "persisted",
+        entryValue: entry.initialValue,
+        hasExistingValue: entry.initialValue !== null,
         isDirty: entry.inputValue !== "",
         isSaving: false,
         onValueChange: handleValueChange,
@@ -192,4 +163,54 @@ export function useEnvironmentEntriesForm({
   };
 }
 
-export type { EnvironmentEntryFormInput };
+interface EnvironmentEntriesFormFieldsProps {
+  environment: Environment | null;
+  relevantEnvVars: string[];
+}
+
+export function EnvironmentEntriesFormFields({
+  environment,
+  relevantEnvVars,
+}: EnvironmentEntriesFormFieldsProps) {
+  const form = useEnvironmentEntriesForm({
+    environment,
+    relevantEnvVars,
+  });
+
+  if (relevantEnvVars.length === 0) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-sm text-muted-foreground">
+          No authentication required for this toolset
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {form.entries.map((input) => (
+        <EnvironmentEntryInput
+          key={input.varName}
+          {...form.getInputPropsForEntry(input)}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function useEnvironmentEntriesFormActions(
+  environment: Environment | null,
+  relevantEnvVars: string[],
+) {
+  const form = useEnvironmentEntriesForm({
+    environment,
+    relevantEnvVars,
+  });
+
+  return {
+    isDirty: form.isDirty,
+    persist: form.persist,
+    cancel: form.cancel,
+  };
+}
