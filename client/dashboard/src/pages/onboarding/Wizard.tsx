@@ -177,6 +177,7 @@ const LHS = ({
 }) => {
   const [createdToolset, setCreatedToolset] = useState<Toolset>();
   const { organization } = useSession();
+  const routes = useRoutes();
   const [showTopBlur, setShowTopBlur] = useState(false);
   const [showBottomBlur, setShowBottomBlur] = useState(false);
   const contentScrollRef = useRef<HTMLDivElement>(null);
@@ -221,7 +222,10 @@ const LHS = ({
           justify={"space-between"}
           className="w-full border-b h-16 px-6 mb-8"
         >
-          <Link className="hover:bg-accent p-2 rounded-md" to="/">
+          <Link
+            className="hover:bg-accent p-2 rounded-md"
+            to={routes.home.href()}
+          >
             <GramLogo className="w-25" />
           </Link>
           <a href="https://docs.getgram.ai/" target="_blank">
