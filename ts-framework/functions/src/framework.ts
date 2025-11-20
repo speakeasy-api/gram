@@ -204,7 +204,7 @@ export class Gram<
     [k: string]: ToolDefinition<any, any, string, Response>;
   } = {},
   EnvSchema extends z.core.$ZodShape = {
-    readonly [x: string]: z.core.$ZodOptional<z.core.$ZodString>;
+    readonly [x: string]: z.core.$ZodType<unknown, string | undefined>;
   },
 > {
   #tools: Map<string, ToolConfig<string, z.core.$ZodShape, any, Response>>;
