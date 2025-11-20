@@ -1,5 +1,11 @@
 # @gram-ai/functions
 
+## 0.11.0
+
+### Minor Changes
+
+- d5f4e35: Fix type EnvSchema type mismatch between fromGram and the Gram class
+
 ## 0.10.0
 
 ### Minor Changes
