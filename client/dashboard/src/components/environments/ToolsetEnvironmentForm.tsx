@@ -1,26 +1,18 @@
-import {
-  useRegisterEnvironmentTelemetry,
-} from "@/contexts/Telemetry";
+import { useRegisterEnvironmentTelemetry } from "@/contexts/Telemetry";
 import { isHttpTool, Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
-import {
-  Environment,
-} from "@gram/client/models/components";
+import { Environment } from "@gram/client/models/components";
 import { Button } from "@speakeasy-api/moonshine";
 import { useMutation } from "@tanstack/react-query";
 import { AlertCircle, Plus, TriangleAlert, X } from "lucide-react";
 import { useCallback } from "react";
 import { EnvironmentSelector } from "@/pages/toolsets/EnvironmentSelector";
 import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
-import {
-  EnvironmentEntryInput,
-} from "./EnvironmentEntryInput";
 import { useAttachedEnvironmentForm } from "./useAttachedEnvironmentForm";
 import {
-  useEnvironmentEntriesForm,
-  EnvironmentEntryFormInput,
-  EnvironmentEntryInputProps,
-} from "./useEnvironmentEntriesForm";
+  EnvironmentEntriesFormFields,
+  useEnvironmentEntriesFormActions,
+} from "./EnvironmentEntriesForm";
 
 interface UseToolsetEnvironmentFormParams {
   toolset: Toolset;
@@ -30,10 +22,6 @@ interface UseToolsetEnvironmentFormParams {
 interface UseToolsetEnvironmentFormReturn {
   selectedEnvironment: Environment | null;
   onEnvironmentSelectorChange: (slug: string) => void;
-  environmentVariableInputs: EnvironmentEntryFormInput[];
-  getInputPropsForEntry: (
-    entry: EnvironmentEntryFormInput,
-  ) => EnvironmentEntryInputProps;
   isDirty: boolean;
   saveError: string | null;
   isSaving: boolean;
@@ -57,10 +45,10 @@ function useToolsetEnvironmentForm({
     onEnvironmentChange,
   });
 
-  const entriesForm = useEnvironmentEntriesForm({
-    environment: attachedEnvForm.selectedEnvironment,
+  const entriesForm = useEnvironmentEntriesFormActions(
+    attachedEnvForm.selectedEnvironment,
     relevantEnvVars,
-  });
+  );
 
   useRegisterEnvironmentTelemetry({
     environmentSlug: attachedEnvForm.selectedEnvironment?.slug ?? "",
@@ -86,8 +74,6 @@ function useToolsetEnvironmentForm({
   return {
     selectedEnvironment: attachedEnvForm.selectedEnvironment,
     onEnvironmentSelectorChange: attachedEnvForm.onEnvironmentSelectorChange,
-    environmentVariableInputs: entriesForm.entries,
-    getInputPropsForEntry: entriesForm.getInputPropsForEntry,
     isDirty,
     saveError,
     isSaving,
@@ -235,26 +221,10 @@ export function ToolsetEnvironmentForm({
       )}
 
       {form.selectedEnvironment && (
-        <>
-          {form.relevantEnvVars.length > 0 && (
-            <div className="space-y-4">
-              {form.environmentVariableInputs.map((input) => (
-                <EnvironmentEntryInput
-                  key={input.varName}
-                  {...form.getInputPropsForEntry(input)}
-                />
-              ))}
-            </div>
-          )}
-
-          {form.relevantEnvVars.length === 0 && (
-            <div className="text-center py-8">
-              <p className="text-sm text-muted-foreground">
-                No authentication required for this toolset
-              </p>
-            </div>
-          )}
-        </>
+        <EnvironmentEntriesFormFields
+          environment={form.selectedEnvironment}
+          relevantEnvVars={form.relevantEnvVars}
+        />
       )}
 
       {form.isDirty && (
