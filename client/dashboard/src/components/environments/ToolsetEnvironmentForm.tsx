@@ -18,7 +18,6 @@ import { Button } from "@speakeasy-api/moonshine";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Plus, TriangleAlert, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { useEnvironments } from "@/pages/environments/Environments";
 import { EnvironmentSelector } from "@/pages/toolsets/EnvironmentSelector";
 import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
@@ -29,96 +28,291 @@ import {
 
 const SECRET_FIELD_INDICATORS = ["SECRET", "KEY"] as const;
 
-// Hook for the submit mutation
-function useEnvironmentFormSubmitMutation({
-  environment,
-  environmentEntries,
-  environmentDirty,
-  attachedEnvironmentChanged,
-  toolset,
-  invalidate,
-}: {
-  environment: Environment | null;
-  environmentEntries: EnvironmentEntryFormInput[];
-  environmentDirty: boolean;
-  attachedEnvironmentChanged: boolean;
+// Hook for managing which environment is attached to a toolset
+interface UseAttachedEnvironmentFormParams {
   toolset: Toolset;
-  invalidate: () => void;
-}) {
+  onEnvironmentChange?: (slug: string) => void;
+}
+
+interface UseAttachedEnvironmentFormReturn {
+  selectedEnvironment: Environment | null;
+  onEnvironmentSelectorChange: (slug: string) => void;
+  isDirty: boolean;
+  persist: () => Promise<void>;
+  cancel: () => void;
+  isLoading: boolean;
+  error: string | null;
+}
+
+function useAttachedEnvironmentForm({
+  toolset,
+  onEnvironmentChange,
+}: UseAttachedEnvironmentFormParams): UseAttachedEnvironmentFormReturn {
+  const environments = useEnvironments();
   const sdkClient = useSdkClient();
   const telemetry = useTelemetry();
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: async () => {
-      if (!environment) {
-        throw new Error("No environment selected");
-      }
+  const [environment, setEnvironment] = useState<Environment | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
 
-      const persistEnvironment = async () => {
-        if (!environmentDirty) return;
+  // Load the attached environment for this toolset
+  const attachedEnvironmentQuery = useGetToolsetEnvironment(
+    {
+      toolsetId: toolset.id,
+    },
+    undefined,
+    {
+      retry: (_, err) => {
+        if (err instanceof GramError && err.statusCode === 404) {
+          return false;
+        }
+        return true;
+      },
+      throwOnError: false,
+    },
+  );
 
-        const { slug: environmentSlug } = environment;
+  // Sync environment from query result when not dirty
+  useEffect(() => {
+    if (!isDirty) {
+      setEnvironment(attachedEnvironmentQuery.data ?? null);
+    }
+  }, [attachedEnvironmentQuery.data, isDirty]);
 
-        const entriesToUpdate: EnvironmentEntryInputType[] = environmentEntries
-          .filter((entry) => entry.inputValue.trim() !== "")
-          .map((entry) => ({ name: entry.varName, value: entry.inputValue }));
+  // Persist function
+  const persist = useCallback(async () => {
+    if (!isDirty) return;
 
-        await sdkClient.environments.updateBySlug({
-          slug: environmentSlug,
-          updateEnvironmentRequestBody: {
-            entriesToUpdate,
-            entriesToRemove: [],
+    try {
+      if (environment?.id) {
+        await sdkClient.environments.setToolsetLink({
+          setToolsetEnvironmentLinkRequestBody: {
+            toolsetId: toolset.id,
+            environmentId: environment.id,
           },
         });
-      };
-
-      const persistAttachedEnvironment = async () => {
-        if (!attachedEnvironmentChanged) return;
-
-        if (environment.id) {
-          await sdkClient.environments.setToolsetLink({
-            setToolsetEnvironmentLinkRequestBody: {
-              toolsetId: toolset.id,
-              environmentId: environment.id,
-            },
-          });
-        } else {
-          await sdkClient.environments.deleteToolsetLink({
-            toolsetId: toolset.id,
-          });
-        }
-      };
-
-      return await Promise.all([
-        persistEnvironment(),
-        persistAttachedEnvironment(),
-      ]);
-    },
-    onSuccess: () => {
-      if (environmentDirty) {
-        telemetry.capture("environment_event", {
-          action: "environment_updated_from_toolset_auth",
+      } else {
+        await sdkClient.environments.deleteToolsetLink({
+          toolsetId: toolset.id,
         });
       }
-      if (attachedEnvironmentChanged) {
-        telemetry.capture("toolset_event", {
-          action: environment?.id
-            ? "toolset_environment_attached"
-            : "toolset_environment_detached",
-        });
-      }
+
+      telemetry.capture("toolset_event", {
+        action: environment?.id
+          ? "toolset_environment_attached"
+          : "toolset_environment_detached",
+      });
       invalidateAllListEnvironments(queryClient);
+      await attachedEnvironmentQuery.refetch();
+    } finally {
+      setIsDirty(false);
+    }
+  }, [
+    isDirty,
+    environment,
+    sdkClient,
+    toolset.id,
+    telemetry,
+    queryClient,
+    attachedEnvironmentQuery,
+  ]);
 
-      toast.success("Changes saved successfully");
+  const handleEnvironmentSelectorChange = useCallback(
+    (slug: string) => {
+      const selectedEnv = environments.find((env) => env.slug === slug);
+      setEnvironment(selectedEnv ?? null);
+      setIsDirty(true);
+      if (onEnvironmentChange) {
+        onEnvironmentChange(slug);
+      }
     },
-    onError: () => {
-      toast.error("Failed to save changes. Please try again.");
+    [environments, onEnvironmentChange],
+  );
+
+  const handleCancel = useCallback(() => {
+    setEnvironment(attachedEnvironmentQuery.data ?? null);
+    setIsDirty(false);
+  }, [attachedEnvironmentQuery.data]);
+
+  return {
+    selectedEnvironment: environment,
+    onEnvironmentSelectorChange: handleEnvironmentSelectorChange,
+    isDirty,
+    persist,
+    cancel: handleCancel,
+    isLoading: attachedEnvironmentQuery.isLoading,
+    error: null, // Errors handled by parent mutation
+  };
+}
+
+// Hook for managing environment variable entries
+interface UseEnvironmentEntriesFormParams {
+  environment: Environment | null;
+  relevantEnvVars: string[];
+}
+
+interface UseEnvironmentEntriesFormReturn {
+  entries: EnvironmentEntryFormInput[];
+  getInputPropsForEntry: (
+    entry: EnvironmentEntryFormInput,
+  ) => EnvironmentEntryInputProps;
+  isDirty: boolean;
+  persist: () => Promise<void>;
+  cancel: () => void;
+  isLoading: boolean;
+  error: string | null;
+}
+
+function useEnvironmentEntriesForm({
+  environment,
+  relevantEnvVars,
+}: UseEnvironmentEntriesFormParams): UseEnvironmentEntriesFormReturn {
+  const sdkClient = useSdkClient();
+  const telemetry = useTelemetry();
+  const queryClient = useQueryClient();
+
+  const [environmentEntries, setEnvironmentEntries] = useState<
+    EnvironmentEntryFormInput[]
+  >([]);
+  const [isDirty, setIsDirty] = useState(false);
+
+  // Initialize environmentEntries when environment or relevantEnvVars changes
+  useEffect(() => {
+    console.log(
+      "[useEnvironmentEntriesForm] Initializing environmentEntries for:",
+      {
+        environmentSlug: environment?.slug,
+        environmentId: environment?.id,
+        entriesCount: environment?.entries?.length,
+        relevantEnvVars,
+      },
+    );
+
+    const initialValues: EnvironmentEntryFormInput[] = relevantEnvVars.map(
+      (varName) => {
+        const entry = environment?.entries?.find((e) => e.name === varName);
+        const isSensitive = SECRET_FIELD_INDICATORS.some((indicator) =>
+          varName.includes(indicator),
+        );
+
+        if (entry?.value != null && entry.value.trim() !== "") {
+          return {
+            kind: "persisted" as const,
+            varName,
+            isSensitive,
+            initialValue: entry.value,
+            inputValue: "",
+          };
+        } else {
+          return {
+            kind: "new" as const,
+            varName,
+            isSensitive,
+            inputValue: "",
+          };
+        }
+      },
+    );
+
+    console.log(
+      "[useEnvironmentEntriesForm] Setting environmentEntries to:",
+      initialValues,
+    );
+    setEnvironmentEntries(initialValues);
+    setIsDirty(false);
+  }, [environment?.slug, environment?.entries, relevantEnvVars]);
+
+  // Persist function
+  const persist = useCallback(async () => {
+    if (!isDirty || !environment) return;
+
+    try {
+      const { slug: environmentSlug } = environment;
+
+      const entriesToUpdate: EnvironmentEntryInputType[] = environmentEntries
+        .filter((entry) => entry.inputValue.trim() !== "")
+        .map((entry) => ({ name: entry.varName, value: entry.inputValue }));
+
+      await sdkClient.environments.updateBySlug({
+        slug: environmentSlug,
+        updateEnvironmentRequestBody: {
+          entriesToUpdate,
+          entriesToRemove: [],
+        },
+      });
+
+      telemetry.capture("environment_event", {
+        action: "environment_updated_from_toolset_auth",
+      });
+      invalidateAllListEnvironments(queryClient);
+    } finally {
+      setIsDirty(false);
+    }
+  }, [
+    isDirty,
+    environment,
+    environmentEntries,
+    sdkClient,
+    telemetry,
+    queryClient,
+  ]);
+
+  const handleValueChange = useCallback((varName: string, value: string) => {
+    setEnvironmentEntries((prev) =>
+      prev.map((entry) =>
+        entry.varName === varName ? { ...entry, inputValue: value } : entry,
+      ),
+    );
+    setIsDirty(true);
+  }, []);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Escape" && isDirty) {
+        setEnvironmentEntries((prev) =>
+          prev.map((entry) => ({ ...entry, inputValue: "" })),
+        );
+        setIsDirty(false);
+        e.currentTarget.blur();
+      }
     },
-    onSettled: () => {
-      invalidate();
+    [isDirty],
+  );
+
+  const getInputPropsForEntry = useCallback(
+    (entry: EnvironmentEntryFormInput): EnvironmentEntryInputProps => {
+      return {
+        varName: entry.varName,
+        isSensitive: entry.isSensitive,
+        inputValue: entry.inputValue,
+        entryValue: entry.kind === "persisted" ? entry.initialValue : null,
+        hasExistingValue: entry.kind === "persisted",
+        isDirty: entry.inputValue !== "",
+        isSaving: false, // Will be controlled by parent
+        onValueChange: handleValueChange,
+        onKeyDown: handleKeyDown,
+      };
     },
-  });
+    [handleValueChange, handleKeyDown],
+  );
+
+  const handleCancel = useCallback(() => {
+    setEnvironmentEntries((prev) =>
+      prev.map((entry) => ({ ...entry, inputValue: "" })),
+    );
+    setIsDirty(false);
+  }, []);
+
+  return {
+    entries: environmentEntries,
+    getInputPropsForEntry,
+    isDirty,
+    persist,
+    cancel: handleCancel,
+    isLoading: false, // No loading state needed
+    error: null, // Errors handled by parent mutation
+  };
 }
 
 // Types for the hook
@@ -165,206 +359,63 @@ function useToolsetEnvironmentForm({
   toolset,
   onEnvironmentChange,
 }: UseToolsetEnvironmentFormParams): UseToolsetEnvironmentFormReturn {
-  const environments = useEnvironments();
-
-  const [environmentEntries, setEnvironmentEntries] = useState<
-    EnvironmentEntryFormInput[]
-  >([]);
-  const [environment, setEnvironment] = useState<Environment | null>(null);
-
-  useRegisterEnvironmentTelemetry({
-    environmentSlug: environment?.slug ?? "",
-  });
-
-  // Load the attached environment for this toolset
-  const attachedEnvironmentQuery = useGetToolsetEnvironment(
-    {
-      toolsetId: toolset.id,
-    },
-    undefined,
-    {
-      retry: (_, err) => {
-        if (err instanceof GramError && err.statusCode === 404) {
-          return false;
-        }
-        return true;
-      },
-      throwOnError: false,
-    },
-  );
-
-  // Derive environmentDirty from environmentEntries
-  const environmentDirty = useMemo(() => {
-    return environmentEntries.some((entry) => entry.inputValue !== "");
-  }, [environmentEntries]);
-
-  // Derive attachedEnvironmentChanged from environment vs query data
-  const attachedEnvironmentChanged = useMemo(() => {
-    return environment?.id !== attachedEnvironmentQuery.data?.id;
-  }, [environment?.id, attachedEnvironmentQuery.data?.id]);
-
-  const isDirty = environmentDirty || attachedEnvironmentChanged;
-
-  // Sync environment from query result when not dirty
-  useEffect(() => {
-    if (!isDirty) {
-      setEnvironment(attachedEnvironmentQuery.data ?? null);
-    }
-  }, [attachedEnvironmentQuery.data, isDirty]);
-
-  // Debug logging
-  useEffect(() => {
-    console.log("[ToolsetEnvironmentForm] environment changed:", environment);
-  }, [environment]);
-
-  useEffect(() => {
-    console.log(
-      "[ToolsetEnvironmentForm] attachedEnvironmentQuery.data changed:",
-      attachedEnvironmentQuery.data,
-    );
-  }, [attachedEnvironmentQuery.data]);
-
-  useEffect(() => {
-    console.log("[ToolsetEnvironmentForm] dirty state:", {
-      isDirty,
-      environmentDirty,
-      attachedEnvironmentChanged,
-    });
-  }, [isDirty, environmentDirty, attachedEnvironmentChanged]);
-
-  // Single mutation that handles both environment updates and toolset link changes
-  const saveMutation = useEnvironmentFormSubmitMutation({
-    environment,
-    environmentEntries,
-    environmentDirty,
-    attachedEnvironmentChanged,
-    toolset,
-    invalidate: attachedEnvironmentQuery.refetch,
-  });
-
-  const { mutate: handleSave, isPending: isSaving } = saveMutation;
-
-  const isLoading = attachedEnvironmentQuery.isLoading || isSaving;
-
-  const handleValueChange = useCallback((varName: string, value: string) => {
-    setEnvironmentEntries((prev) =>
-      prev.map((entry) =>
-        entry.varName === varName ? { ...entry, inputValue: value } : entry,
-      ),
-    );
-  }, []);
-
-  const handleEnvironmentSelectorChange = useCallback(
-    (slug: string) => {
-      const selectedEnv = environments.find((env) => env.slug === slug);
-      setEnvironment(selectedEnv ?? null);
-      if (onEnvironmentChange) {
-        onEnvironmentChange(slug);
-      }
-    },
-    [environments, onEnvironmentChange],
-  );
-
-  const handleCancel = useCallback(() => {
-    // Reset all inputValues to empty
-    setEnvironmentEntries((prev) =>
-      prev.map((entry) => ({ ...entry, inputValue: "" })),
-    );
-    // Reset environment to server data
-    setEnvironment(attachedEnvironmentQuery.data ?? null);
-  }, [attachedEnvironmentQuery.data]);
-
   const requiresServerURL =
     toolset.tools?.some((tool) => isHttpTool(tool) && !tool.defaultServerUrl) ??
     false;
 
   const relevantEnvVars = useToolsetEnvVars(toolset, requiresServerURL);
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      const isDirty = environmentDirty || attachedEnvironmentChanged;
-      if (e.key === "Enter" && isDirty) {
-        handleSave();
-      } else if (e.key === "Escape" && isDirty) {
-        handleCancel();
-        e.currentTarget.blur();
-      }
+  // Use the attached environment form hook
+  const attachedEnvForm = useAttachedEnvironmentForm({
+    toolset,
+    onEnvironmentChange,
+  });
+
+  // Use the environment entries form hook
+  const entriesForm = useEnvironmentEntriesForm({
+    environment: attachedEnvForm.selectedEnvironment,
+    relevantEnvVars,
+  });
+
+  useRegisterEnvironmentTelemetry({
+    environmentSlug: attachedEnvForm.selectedEnvironment?.slug ?? "",
+  });
+
+  // Combined dirty state
+  const isDirty = attachedEnvForm.isDirty || entriesForm.isDirty;
+
+  // Combined mutation
+  const mutation = useMutation({
+    mutationFn: async () => {
+      await Promise.all([attachedEnvForm.persist(), entriesForm.persist()]);
     },
-    [environmentDirty, attachedEnvironmentChanged, handleSave, handleCancel],
-  );
+  });
 
-  // Helper function to generate input props from an entry
-  const getInputPropsForEntry = useCallback(
-    (entry: EnvironmentEntryFormInput): EnvironmentEntryInputProps => {
-      return {
-        varName: entry.varName,
-        isSensitive: entry.isSensitive,
-        inputValue: entry.inputValue,
-        entryValue: entry.kind === "persisted" ? entry.initialValue : null,
-        hasExistingValue: entry.kind === "persisted",
-        isDirty: entry.inputValue !== "",
-        isSaving: isLoading,
-        onValueChange: handleValueChange,
-        onKeyDown: handleKeyDown,
-      };
-    },
-    [isLoading, handleValueChange, handleKeyDown],
-  );
+  // Combined save error
+  const saveError =
+    attachedEnvForm.error || entriesForm.error || mutation.error
+      ? "Failed to save changes"
+      : null;
 
-  const environmentVariableInputs = useMemo<EnvironmentEntryFormInput[]>(() => {
-    return environmentEntries;
-  }, [environmentEntries]);
+  // Combined loading state
+  const isSaving =
+    attachedEnvForm.isLoading || entriesForm.isLoading || mutation.isPending;
 
-  // Initialize environmentEntries when environment or relevantEnvVars changes
-  useEffect(() => {
-    console.log("[ToolsetEnvironmentForm] Initializing environmentEntries for:", {
-      environmentSlug: environment?.slug,
-      environmentId: environment?.id,
-      entriesCount: environment?.entries?.length,
-      relevantEnvVars,
-    });
-
-    const initialValues: EnvironmentEntryFormInput[] = relevantEnvVars.map(
-      (varName) => {
-        const entry = environment?.entries?.find((e) => e.name === varName);
-        const isSensitive = SECRET_FIELD_INDICATORS.some((indicator) =>
-          varName.includes(indicator),
-        );
-
-        if (entry?.value != null && entry.value.trim() !== "") {
-          return {
-            kind: "persisted" as const,
-            varName,
-            isSensitive,
-            initialValue: entry.value,
-            inputValue: "",
-          };
-        } else {
-          return {
-            kind: "new" as const,
-            varName,
-            isSensitive,
-            inputValue: "",
-          };
-        }
-      },
-    );
-
-    console.log("[ToolsetEnvironmentForm] Setting environmentEntries to:", initialValues);
-    setEnvironmentEntries(initialValues);
-  }, [environment?.slug, environment?.entries, relevantEnvVars]);
+  // Combined cancel handler
+  const handleCancel = useCallback(() => {
+    attachedEnvForm.cancel();
+    entriesForm.cancel();
+  }, [attachedEnvForm, entriesForm]);
 
   return {
-    selectedEnvironment: environment,
-    onEnvironmentSelectorChange: handleEnvironmentSelectorChange,
-    environmentVariableInputs,
-    getInputPropsForEntry,
+    selectedEnvironment: attachedEnvForm.selectedEnvironment,
+    onEnvironmentSelectorChange: attachedEnvForm.onEnvironmentSelectorChange,
+    environmentVariableInputs: entriesForm.entries,
+    getInputPropsForEntry: entriesForm.getInputPropsForEntry,
     isDirty,
-    saveError: saveMutation.error
-      ? "Failed to save changes. Please try again."
-      : null,
-    isSaving: isLoading,
-    onSubmit: handleSave,
+    saveError,
+    isSaving,
+    onSubmit: mutation.mutate,
     onCancel: handleCancel,
     relevantEnvVars,
   };

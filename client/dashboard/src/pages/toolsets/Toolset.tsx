@@ -9,7 +9,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useSdkClient } from "@/contexts/Sdk";
 import {
-  useRegisterEnvironmentTelemetry,
   useRegisterToolsetTelemetry,
   useTelemetry,
 } from "@/contexts/Telemetry";
