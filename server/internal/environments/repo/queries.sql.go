@@ -443,6 +443,7 @@ INSERT INTO toolset_environments (
 )
 ON CONFLICT (toolset_id)
 DO UPDATE SET
+    environment_id = EXCLUDED.environment_id,
     updated_at = now()
 RETURNING id, toolset_id, project_id, environment_id, created_at, updated_at
 `

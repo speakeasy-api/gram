@@ -144,6 +144,7 @@ INSERT INTO toolset_environments (
 )
 ON CONFLICT (toolset_id)
 DO UPDATE SET
+    environment_id = EXCLUDED.environment_id,
     updated_at = now()
 RETURNING *;
 
