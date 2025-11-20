@@ -69,8 +69,6 @@ function useFormState(): UseFormStateReturn {
         environment,
         stateInitialized: true,
         serverEnvironmentId: environment?.id,
-        dirty:
-          prev.stateInitialized && prev.environment?.id !== environment?.id,
       };
     });
   }, []);
