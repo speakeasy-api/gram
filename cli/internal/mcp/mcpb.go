@@ -1,6 +1,8 @@
 package mcp
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/json"
 	"fmt"
 )
@@ -58,7 +60,7 @@ func GenerateMCPBManifest(info *ToolsetInfo, useEnvVar bool) ([]byte, error) {
 	}
 
 	manifest := MCPBManifest{
-		ManifestVersion: "0.1",
+		ManifestVersion: "0.3",
 		Name:            info.Name,
 		Version:         "1.0.0",
 		Description:     fmt.Sprintf("Gram MCP server for %s", info.Name),
@@ -86,10 +88,29 @@ func GenerateMCPBManifest(info *ToolsetInfo, useEnvVar bool) ([]byte, error) {
 		UserConfig: userConfig,
 	}
 
-	data, err := json.MarshalIndent(manifest, "", "  ")
+	manifestJSON, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal MCPB manifest: %w", err)
 	}
 
-	return data, nil
+	// Create a ZIP archive containing the manifest.json
+	// Claude Desktop expects .mcpb files to be ZIP archives, not plain JSON
+	var buf bytes.Buffer
+	zipWriter := zip.NewWriter(&buf)
+
+	// Add manifest.json to the ZIP archive
+	manifestFile, err := zipWriter.Create("manifest.json")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create manifest.json in ZIP: %w", err)
+	}
+
+	if _, err := manifestFile.Write(manifestJSON); err != nil {
+		return nil, fmt.Errorf("failed to write manifest.json to ZIP: %w", err)
+	}
+
+	if err := zipWriter.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close ZIP writer: %w", err)
+	}
+
+	return buf.Bytes(), nil
 }

@@ -1,6 +1,8 @@
 package app
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -37,14 +39,15 @@ func doInstallCursor(c *cli.Context) error {
 
 	mcpConfig := mcp.BuildMCPConfig(info, useEnvVar)
 
-	// Marshal config to JSON for URI encoding
-	configJSON, err := mcp.MarshalConfigJSON(info.Name, mcpConfig)
+	// Marshal config to JSON
+	// Cursor expects the raw server config, not wrapped in mcpServers
+	configJSON, err := json.Marshal(mcpConfig)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	// URL encode the config
-	configEncoded := url.QueryEscape(configJSON)
+	// Base64 encode the config (Cursor expects base64, not URL encoding)
+	configEncoded := base64.StdEncoding.EncodeToString(configJSON)
 
 	// Construct Cursor deep link
 	deepLink := fmt.Sprintf(
