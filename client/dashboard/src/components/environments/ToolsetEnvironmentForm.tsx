@@ -28,7 +28,6 @@ import {
 
 const SECRET_FIELD_INDICATORS = ["SECRET", "KEY"] as const;
 
-// Hook for managing which environment is attached to a toolset
 interface UseAttachedEnvironmentFormParams {
   toolset: Toolset;
   onEnvironmentChange?: (slug: string) => void;
@@ -41,7 +40,6 @@ interface UseAttachedEnvironmentFormReturn {
   persist: () => Promise<void>;
   cancel: () => void;
   isLoading: boolean;
-  error: string | null;
 }
 
 function useAttachedEnvironmentForm({
@@ -139,7 +137,6 @@ function useAttachedEnvironmentForm({
     persist,
     cancel: handleCancel,
     isLoading: attachedEnvironmentQuery.isLoading,
-    error: null, // Errors handled by parent mutation
   };
 }
 
@@ -157,8 +154,6 @@ interface UseEnvironmentEntriesFormReturn {
   isDirty: boolean;
   persist: () => Promise<void>;
   cancel: () => void;
-  isLoading: boolean;
-  error: string | null;
 }
 
 function useEnvironmentEntriesForm({
@@ -208,7 +203,6 @@ function useEnvironmentEntriesForm({
     setIsDirty(environmentEntries.some((entry) => entry.inputValue !== ""));
   }, [environmentEntries]);
 
-  // Persist function
   const persist = useCallback(async () => {
     if (!isDirty || !environment) return;
 
@@ -293,12 +287,9 @@ function useEnvironmentEntriesForm({
     isDirty,
     persist,
     cancel: handleCancel,
-    isLoading: false, // No loading state needed
-    error: null, // Errors handled by parent mutation
   };
 }
 
-// Types for the hook
 interface PersistedEnvironmentEntry {
   kind: "persisted";
   varName: string;
@@ -348,13 +339,11 @@ function useToolsetEnvironmentForm({
 
   const relevantEnvVars = useToolsetEnvVars(toolset, requiresServerURL);
 
-  // Use the attached environment form hook
   const attachedEnvForm = useAttachedEnvironmentForm({
     toolset,
     onEnvironmentChange,
   });
 
-  // Use the environment entries form hook
   const entriesForm = useEnvironmentEntriesForm({
     environment: attachedEnvForm.selectedEnvironment,
     relevantEnvVars,
@@ -364,27 +353,22 @@ function useToolsetEnvironmentForm({
     environmentSlug: attachedEnvForm.selectedEnvironment?.slug ?? "",
   });
 
-  // Combined dirty state
   const isDirty = attachedEnvForm.isDirty || entriesForm.isDirty;
 
-  // Combined mutation
   const mutation = useMutation({
     mutationFn: async () => {
       await Promise.all([attachedEnvForm.persist(), entriesForm.persist()]);
     },
   });
 
-  // Combined save error
   const saveError =
     attachedEnvForm.error || entriesForm.error || mutation.error
       ? "Failed to save changes"
       : null;
 
-  // Combined loading state
   const isSaving =
     attachedEnvForm.isLoading || entriesForm.isLoading || mutation.isPending;
 
-  // Combined cancel handler
   const handleCancel = useCallback(() => {
     attachedEnvForm.cancel();
     entriesForm.cancel();
