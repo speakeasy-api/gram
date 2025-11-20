@@ -1,5 +1,11 @@
 # cli
 
+## 0.13.5
+
+### Patch Changes
+
+- a5a73fb: fix: correct `.mcpb` zip format for Claude Desktop and Cursor deep link encoding
+
 ## 0.13.4
 
 ### Patch Changes
