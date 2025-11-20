@@ -11,8 +11,9 @@ import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
 import { useAttachedEnvironmentForm } from "./useAttachedEnvironmentForm";
 import {
   EnvironmentEntriesFormFields,
-  useEnvironmentEntriesFormActions,
-} from "./EnvironmentEntriesForm";
+  useEnvironmentEntriesForm,
+  EnvironmentEntryFormInput,
+} from "./EnvironmentEntriesFormFields";
 
 interface UseToolsetEnvironmentFormParams {
   toolset: Toolset;
@@ -27,7 +28,9 @@ interface UseToolsetEnvironmentFormReturn {
   isSaving: boolean;
   onSubmit: () => void;
   onCancel: () => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   relevantEnvVars: string[];
+  entries: EnvironmentEntryFormInput[];
 }
 
 function useToolsetEnvironmentForm({
@@ -45,10 +48,10 @@ function useToolsetEnvironmentForm({
     onEnvironmentChange,
   });
 
-  const entriesForm = useEnvironmentEntriesFormActions(
-    attachedEnvForm.selectedEnvironment,
+  const entriesForm = useEnvironmentEntriesForm({
+    environment: attachedEnvForm.selectedEnvironment,
     relevantEnvVars,
-  );
+  });
 
   useRegisterEnvironmentTelemetry({
     environmentSlug: attachedEnvForm.selectedEnvironment?.slug ?? "",
@@ -71,6 +74,18 @@ function useToolsetEnvironmentForm({
     entriesForm.cancel();
   }, [attachedEnvForm, entriesForm]);
 
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Escape" && isDirty) {
+        handleCancel();
+        e.currentTarget.blur();
+      } else if (e.key === "Enter" && isDirty) {
+        mutation.mutate();
+      }
+    },
+    [isDirty, handleCancel, mutation],
+  );
+
   return {
     selectedEnvironment: attachedEnvForm.selectedEnvironment,
     onEnvironmentSelectorChange: attachedEnvForm.onEnvironmentSelectorChange,
@@ -79,7 +94,9 @@ function useToolsetEnvironmentForm({
     isSaving,
     onSubmit: mutation.mutate,
     onCancel: handleCancel,
+    onKeyDown: handleKeyDown,
     relevantEnvVars,
+    entries: entriesForm.entries,
   };
 }
 
@@ -222,8 +239,10 @@ export function ToolsetEnvironmentForm({
 
       {form.selectedEnvironment && (
         <EnvironmentEntriesFormFields
-          environment={form.selectedEnvironment}
+          entries={form.entries}
           relevantEnvVars={form.relevantEnvVars}
+          disabled={form.isSaving}
+          onKeyDown={form.onKeyDown}
         />
       )}
 
