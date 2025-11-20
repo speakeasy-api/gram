@@ -255,6 +255,33 @@ func (s *StubClient) TrackPromptCallUsage(ctx context.Context, event PromptCallU
 	s.logger.ErrorContext(ctx, "failed to track prompt call usage: not implemented")
 }
 
+func (s *StubClient) TrackModelUsage(ctx context.Context, event ModelUsageEvent) {
+	var err error
+	ctx, span := s.tracer.Start(ctx, "stub_client.track_model_usage")
+	defer span.End()
+
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	usage, err := s.readModelUsage(event.OrganizationID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to read model usage file", attr.SlogError(err))
+		return
+	}
+
+	// Track the usage event
+	usage.TotalTokens += event.TotalTokens
+	usage.InputTokens += event.InputTokens
+	usage.OutputTokens += event.OutputTokens
+	usage.CallCount += 1
+
+	if err := s.writeModelUsage(ctx, event.OrganizationID, usage); err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		s.logger.ErrorContext(ctx, "failed to write model usage file", attr.SlogError(err))
+		return
+	}
+}
+
 func (s *StubClient) TrackToolCallUsage(ctx context.Context, event ToolCallUsageEvent) {
 	var err error
 	ctx, span := s.tracer.Start(ctx, "stub_client.track_tool_call_usage")
@@ -347,6 +374,71 @@ func (s *StubClient) writePeriodUsage(ctx context.Context, orgID string, pu *gen
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(pu); err != nil {
 		return fmt.Errorf("serialize local billing data: %w", err)
+	}
+
+	return nil
+}
+
+type modelUsage struct {
+	InputTokens  int64 `json:"input_tokens"`
+	OutputTokens int64 `json:"output_tokens"`
+	TotalTokens  int64 `json:"total_tokens"`
+	CallCount    int64 `json:"call_count"`
+}
+
+func (s *StubClient) readModelUsage(orgID string) (*modelUsage, error) {
+	datadir, err := s.ensureDataDir()
+	if err != nil {
+		return nil, fmt.Errorf("get or create local billing data dir: %w", err)
+	}
+
+	zero := &modelUsage{
+		InputTokens:  0,
+		OutputTokens: 0,
+		TotalTokens:  0,
+		CallCount:    0,
+	}
+
+	usagefile := filepath.Join(datadir, fmt.Sprintf("modelusage-%s.local.json", orgID))
+	content, err := os.ReadFile(filepath.Clean(usagefile))
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return zero, nil
+	case err != nil:
+		return nil, fmt.Errorf("read local model usage file: %w", err)
+	}
+
+	if len(content) == 0 {
+		return zero, nil
+	}
+
+	var usage modelUsage
+	if err := json.Unmarshal(content, &usage); err != nil {
+		return nil, fmt.Errorf("unmarshal local model usage file: %w", err)
+	}
+
+	return &usage, nil
+}
+
+func (s *StubClient) writeModelUsage(ctx context.Context, orgID string, usage *modelUsage) error {
+	datadir, err := s.ensureDataDir()
+	if err != nil {
+		return fmt.Errorf("get or create local billing data dir: %w", err)
+	}
+
+	usagefile := filepath.Join(datadir, fmt.Sprintf("modelusage-%s.local.json", orgID))
+	f, err := os.Create(filepath.Clean(usagefile))
+	if err != nil {
+		return fmt.Errorf("open local model usage file: %w", err)
+	}
+	defer o11y.LogDefer(ctx, s.logger, func() error {
+		return f.Close()
+	})
+
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(usage); err != nil {
+		return fmt.Errorf("serialize local model usage data: %w", err)
 	}
 
 	return nil

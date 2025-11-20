@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -49,9 +50,10 @@ type Service struct {
 	logger         *slog.Logger
 	sessions       *sessions.Manager
 	proxyTransport http.RoundTripper
+	tracker        billing.Tracker
 }
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, openRouter openrouter.Provisioner) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, openRouter openrouter.Provisioner, tracking billing.Tracker) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
@@ -62,6 +64,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		tracer:         otel.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
 		openRouter:     openRouter,
 		proxyTransport: cleanhttp.DefaultPooledTransport(),
+		tracker:        tracking,
 	}
 }
 
@@ -287,9 +290,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		// Create a custom response writer to capture the response
 		respCaptor = &responseCaptor{
 			ResponseWriter:       w,
+			Tracker:              s.tracker,
 			logger:               s.logger,
 			ctx:                  ctx,
 			isStreaming:          isStreaming,
+			orgID:                orgID,
 			chatID:               chatID,
 			projectID:            *authCtx.ProjectID,
 			repo:                 s.repo,
@@ -429,10 +434,12 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 // responseCaptor captures and logs response data
 type responseCaptor struct {
 	http.ResponseWriter
+	billing.Tracker
 	//nolint:containedctx // responseCaptor needs to implement io.Writer so its methods cannot accept a context
 	ctx                  context.Context
 	logger               *slog.Logger
 	isStreaming          bool
+	orgID                string
 	chatID               uuid.UUID
 	projectID            uuid.UUID
 	messageContent       *strings.Builder
@@ -472,6 +479,17 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 				r.logger.ErrorContext(r.ctx, "failed to marshal tool calls", attr.SlogError(err))
 			}
 		}
+
+		go r.TrackModelUsage(r.ctx, billing.ModelUsageEvent{
+			OrganizationID: r.orgID,
+			ProjectID:      r.projectID.String(),
+			Model:          r.model,
+			Source:         billing.ModelUsageSourceChat, // currently the only source
+			InputTokens:    int64(r.usage.PromptTokens),
+			OutputTokens:   int64(r.usage.CompletionTokens),
+			TotalTokens:    int64(r.usage.TotalTokens),
+			ChatID:         r.chatID.String(),
+		})
 
 		// TODO batch insert the messages
 		_, err := r.repo.CreateChatMessage(r.ctx, []repo.CreateChatMessageParams{{
