@@ -1,19 +1,8 @@
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
+import { EnvironmentEntryInputProps } from "./useEnvironmentEntriesForm";
 
 const PASSWORD_MASK = "••••••••";
-
-export interface EnvironmentEntryInputProps {
-  varName: string;
-  isSensitive: boolean;
-  inputValue: string;
-  entryValue: string | null;
-  hasExistingValue: boolean;
-  isDirty: boolean;
-  isSaving: boolean;
-  onValueChange: (varName: string, value: string) => void;
-  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
-}
 
 export function EnvironmentEntryInput({
   varName,
