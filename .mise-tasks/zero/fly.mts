@@ -2,9 +2,12 @@
 
 //MISE description="Setup Gram Functions to use Fly.io during development."
 //MISE dir="{{ config_root }}"
+//USAGE flag "--restart" default="false" help="Force the onboarding even if configuration already exists."
 
 import process from "node:process";
 import { $ } from "zx";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   intro,
   note,
@@ -14,10 +17,35 @@ import {
   cancel,
   text,
   password,
+  log,
 } from "@clack/prompts";
 
+function checkExistingConfig(): { exists: boolean; hasProvider: boolean } {
+  const configPath = join(process.cwd(), "mise.local.toml");
+
+  if (!existsSync(configPath)) {
+    return { exists: false, hasProvider: false };
+  }
+
+  const content = readFileSync(configPath, "utf-8");
+  const hasProvider = /^\s*GRAM_FUNCTIONS_PROVIDER\s*=/gm.test(content);
+
+  return { exists: true, hasProvider };
+}
+
 async function run() {
+  if (
+    checkExistingConfig().hasProvider &&
+    process.env["usage_restart"] !== "true"
+  ) {
+    console.log(
+      "GRAM_FUNCTIONS_PROVIDER already configured in mise.local.toml. To start fly.io onboarding again, run `mise run zero:fly --restart`",
+    );
+    process.exit(0);
+  }
+
   intro(`Gram Functions Fly.io Setup 🛫`);
+
   note(
     `
 👀 To deploy Gram Functions to Fly.io, you'll need:
@@ -28,8 +56,17 @@ async function run() {
     "Pre-requisites",
   );
   const proceed = await confirm({ message: "Are you ready to proceed?" });
-  if (isCancel(proceed) || !proceed) {
+  if (isCancel(proceed)) {
     cancel("Operation cancelled.");
+    process.exit(0);
+  }
+  if (!proceed) {
+    const args = ["GRAM_FUNCTIONS_PROVIDER=local"];
+    await $`mise set --file mise.local.toml ${args}`;
+
+    outro(
+      "Defaulted to stubbed local provider. To start this onboarding again, run `mise run zero:fly --restart`.",
+    );
     process.exit(0);
   }
 
