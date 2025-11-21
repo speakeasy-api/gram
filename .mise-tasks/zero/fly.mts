@@ -17,7 +17,6 @@ import {
   cancel,
   text,
   password,
-  log,
 } from "@clack/prompts";
 
 function checkExistingConfig(): { exists: boolean; hasProvider: boolean } {
