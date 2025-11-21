@@ -324,7 +324,7 @@ export class Gram<
 
     const ctx = new ToolContext(
       options?.signal || new AbortController().signal,
-      envSchema.parse(tool.inputEnv),
+      envSchema.parse(tool.inputEnv ?? process.env),
     );
 
     const schema = zm.object(tool.inputSchema);
