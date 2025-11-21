@@ -11,9 +11,6 @@ const gram = new Gram({
       .string()
       .describe("The Snowflake account identifier."),
     SNOWFLAKE_USER: z.string().describe("The Snowflake username."),
-    // SNOWFLAKE_PUBLIC_KEY_FINGERPRINT: z
-    //   .string()
-    //   .describe("The Snowflake public key fingerprint."),
     SNOWFLAKE_WAREHOUSE: z.string().describe("The Snowflake warehouse to use."),
     SNOWFLAKE_DATABASE: z
       .string()
