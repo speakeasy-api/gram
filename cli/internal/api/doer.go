@@ -40,3 +40,8 @@ var goaSharedHTTPClient = &http.Client{
 		},
 	},
 }
+
+// SharedHTTPClient returns the shared HTTP client used across the CLI.
+func SharedHTTPClient() *http.Client {
+	return goaSharedHTTPClient
+}
