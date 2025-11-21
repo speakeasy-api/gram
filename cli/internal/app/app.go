@@ -89,14 +89,14 @@ func newApp() *cli.App {
 			if err != nil {
 				logger.WarnContext(
 					ctx,
-					"failed to load profile, continuing without it",
+					"failed to load profile, continuing without it (you may need to run 'gram auth')",
 					slog.String("profile path", profilePath),
 					slog.String("error", err.Error()),
 				)
 			} else if userSpecifiedPath && prof == nil {
 				logger.WarnContext(
 					ctx,
-					"profile file not found at specified path",
+					"profile file not found at specified path (you may need to run 'gram auth')",
 					slog.String("profile path", profilePath),
 				)
 			}
