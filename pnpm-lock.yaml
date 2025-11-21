@@ -35,6 +35,9 @@ importers:
       '@changesets/cli':
         specifier: ^2.29.7
         version: 2.29.7(@types/node@24.5.2)
+      '@clack/prompts':
+        specifier: 1.0.0-alpha.6
+        version: 1.0.0-alpha.6
       '@datadog/datadog-ci':
         specifier: ^3.20.0
         version: 3.20.0(@types/node@24.5.2)

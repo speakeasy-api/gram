@@ -65,6 +65,7 @@ mise run zero:openrouter
 mise run zero:encryption
 mise run zero:tls
 mise run zero:melange
+mise run zero:fly
 
 echo -e "\n⏳ Building internal SDK"
 mise run build:internal-sdk
