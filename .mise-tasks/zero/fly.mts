@@ -39,7 +39,7 @@ async function run() {
     process.env["usage_restart"] !== "true"
   ) {
     console.log(
-      "GRAM_FUNCTIONS_PROVIDER already configured in mise.local.toml. To start fly.io onboarding again, run `mise run zero:fly --restart`",
+      "GRAM_FUNCTIONS_PROVIDER already configured in mise.local.toml. To start fly.io onboarding again, run `mise run zero:fly --restart`.",
     );
     process.exit(0);
   }
