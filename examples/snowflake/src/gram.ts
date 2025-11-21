@@ -5,7 +5,6 @@ import * as snowflake from "./snowflake.ts";
 // To learn more about Gram Functions, check out our documentation at:
 // https://www.speakeasy.com/docs/gram/gram-functions/functions-framework
 const gram = new Gram({
-  env: process.env as any,
   envSchema: {
     SNOWFLAKE_ACCOUNT_IDENTIFIER: z
       .string()

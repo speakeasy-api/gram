@@ -27,7 +27,7 @@
     "build": "gf build"
   },
   "dependencies": {
-    "@gram-ai/functions": "^0.11.0",
+    "@gram-ai/functions": "^0.11.1",
     "@modelcontextprotocol/sdk": "^1.20.1",
     "jsonwebtoken": "^9.0.2",
     "zod": "^4"
