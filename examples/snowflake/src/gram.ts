@@ -55,37 +55,23 @@ const gram = new Gram({
     ),
   },
   async execute(ctx, input) {
-    const requestBody = {
-      statement: input.statement,
-      bindings: input.bindings,
-      timeout: 60,
-      database: ctx.env.SNOWFLAKE_DATABASE.toUpperCase(),
-      schema: ctx.env.SNOWFLAKE_SCHEMA.toUpperCase(),
-      warehouse: ctx.env.SNOWFLAKE_WAREHOUSE.toUpperCase(),
-      role: ctx.env.SNOWFLAKE_ROLE.toUpperCase(),
-    };
-
-    const bearerToken = snowflake.buildJwt({
-      accountIdentifier: ctx.env.SNOWFLAKE_ACCOUNT_IDENTIFIER.toUpperCase(),
-      username: ctx.env.SNOWFLAKE_USER.toUpperCase(),
-      privateKey: ctx.env.SNOWFLAKE_PRIVATE_KEY,
-    });
-
-    const result = await fetch(
-      `https://${ctx.env.SNOWFLAKE_ACCOUNT_IDENTIFIER}.snowflakecomputing.com/api/v2/statements`,
+    const result = await snowflake.executeQuery(
       {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${bearerToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
+        accountIdentifier: ctx.env.SNOWFLAKE_ACCOUNT_IDENTIFIER,
+        username: ctx.env.SNOWFLAKE_USER,
+        privateKey: ctx.env.SNOWFLAKE_PRIVATE_KEY,
+      },
+      {
+        database: ctx.env.SNOWFLAKE_DATABASE,
+        schema: ctx.env.SNOWFLAKE_SCHEMA,
+        warehouse: ctx.env.SNOWFLAKE_WAREHOUSE,
+        role: ctx.env.SNOWFLAKE_ROLE,
+        statement: input.statement,
+        bindings: input.bindings,
       },
     );
 
-    const resultJson = await result.json();
-
-    return ctx.json(resultJson);
+    return ctx.json(result);
   },
 });
 
