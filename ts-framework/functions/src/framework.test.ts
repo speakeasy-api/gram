@@ -94,7 +94,32 @@ test("throws on unrecognized tool", async () => {
   ).rejects.toThrow("Tool not found: fail");
 });
 
-test("supports environment variables", async () => {
+test("supports system environment variables", async () => {
+  vi.stubEnv("GREETING", "Hello!");
+
+  const g = new Gram({
+    envSchema: { GREETING: z.string() },
+  }).tool({
+    name: "echo",
+    description: "Echoes the input",
+    inputSchema: {},
+    async execute(ctx) {
+      return ctx.json({ echoed: ctx.env?.["GREETING"] || "fail" });
+    },
+  });
+
+  const response = await g.handleToolCall({
+    name: "echo",
+    input: {},
+  });
+  expect(response.status).toBe(200);
+  expect(response.headers.get("Content-Type")).toBe("application/json");
+
+  const data = await response.json();
+  expect(data).toEqual({ echoed: "Hello!" });
+});
+
+test("supports user-defined environment variables", async () => {
   const g = new Gram({
     env: { GREETING: "Hello!" },
     envSchema: { GREETING: z.string() },
@@ -452,7 +477,7 @@ describe("extend", () => {
       },
     });
 
-    const extended =original.extend(other);
+    const extended = original.extend(other);
 
     // Verify that g1 is mutated (not copied)
     expect(extended).toBe(original);
@@ -494,7 +519,7 @@ describe("extend", () => {
       },
     });
 
-    const extended =g1.extend(g2);
+    const extended = g1.extend(g2);
 
     const response = await extended.handleToolCall({
       name: "greet",
@@ -523,7 +548,7 @@ describe("extend", () => {
       },
     });
 
-    const extended =original.extend(other);
+    const extended = original.extend(other);
 
     // Should use g1's lax setting (true), so invalid input should pass
     const response = await extended.handleToolCall({
@@ -572,7 +597,7 @@ describe("extend", () => {
       },
     });
 
-    const extended =original.extend(other);
+    const extended = original.extend(other);
 
     // g1's tool should still access G1_VAR
     const res1 = await extended.handleToolCall({ name: "getG1Var", input: {} });
@@ -612,7 +637,7 @@ describe("extend", () => {
       },
     });
 
-    const extended =original.extend(firstOther).extend(secondOther);
+    const extended = original.extend(firstOther).extend(secondOther);
 
     // Should have all three tools
     const res1 = await extended.handleToolCall({ name: "tool1", input: {} });
