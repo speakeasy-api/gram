@@ -153,6 +153,9 @@ func LoadByName(path string, profileName string) (*Profile, error) {
 	}
 
 	if profileName == "" {
+		if config.Current == "" {
+			return nil, fmt.Errorf("profile file missing 'current' field")
+		}
 		return findProfileByName(config.Profiles, config.Current), nil
 	}
 
