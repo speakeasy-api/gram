@@ -624,8 +624,8 @@ export default function Settings() {
                   {registerDomainMutation.isPending
                     ? "Registering..."
                     : domain?.domain
-                    ? "Verify"
-                    : "Register"}
+                      ? "Verify"
+                      : "Register"}
                 </Button>
               </div>
             </div>
