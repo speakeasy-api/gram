@@ -56689,6 +56689,7 @@ securityDefinitions:
             **Security Scopes**:
               * `consumer`: consumer based tool access
               * `producer`: producer based tool access
+              * `chat`: chat based model usage access
         name: Authorization
         in: header
     apikey_header_Gram-Key:
@@ -56699,6 +56700,7 @@ securityDefinitions:
             **Security Scopes**:
               * `consumer`: consumer based tool access
               * `producer`: producer based tool access
+              * `chat`: chat based model usage access
         name: Gram-Key
         in: header
     project_slug_header_Gram-Project:
