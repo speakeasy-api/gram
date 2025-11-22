@@ -27,6 +27,7 @@ type ModelUsageEvent struct {
 	InputTokens    int64
 	OutputTokens   int64
 	TotalTokens    int64
+	Cost           *float64 // Cost in dollars, nil if pricing unavailable
 }
 
 type ToolCallUsageEvent struct {
