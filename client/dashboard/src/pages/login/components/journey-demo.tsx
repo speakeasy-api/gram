@@ -4,47 +4,53 @@ import { GridOverlay } from "./grid-overlay";
 import { cn } from "@/lib/utils";
 import { RefreshCcw } from "lucide-react";
 
-// Sample OpenAPI spec content
-const OPENAPI_SPEC = `openapi: 3.0.0
-info:
-  title: Pet Store API
-  version: 1.0.0
-  description: A sample API
+// Gram TypeScript function example
+const GRAM_FUNCTION = `import { Gram } from "@gram-ai/functions";
+import { createClient } from "@supabase/supabase-js";
+import * as z from "zod/mini";
 
-paths:
-  /pets:
-    get:
-      operationId: getPets
-      summary: List all pets
-      responses:
-        '200':
-          description: Success
-    post:
-      operationId: createPet
-      summary: Create a pet
-      responses:
-        '201':
-          description: Created
+const gram = new Gram({
+  envSchema: {
+    SUPABASE_URL: z.string(),
+    SUPABASE_ANON_KEY: z.string()
+  },
+}).tool({
+  name: "top_cities_by_property_sales",
+  description: "Get top N UK cities by sales",
+  inputSchema: {
+    count: z._default(z.number(), 10)
+  },
+  async execute(ctx, input) {
+    const supabase = createClient(
+      ctx.env.SUPABASE_URL,
+      ctx.env.SUPABASE_ANON_KEY
+    );
 
-  /pets/{petId}:
-    get:
-      operationId: getPet
-      summary: Get a pet
-      responses:
-        '200':
-          description: Success
-    put:
-      operationId: updatePet
-      summary: Update a pet
-      responses:
-        '200':
-          description: Updated
-    delete:
-      operationId: deletePet
-      summary: Delete a pet
-      responses:
-        '204':
-          description: Deleted`;
+    const { data, error } = await supabase
+      .from("land_registry_price_paid_uk")
+      .select(\`
+        city::text,
+        count(),
+        price.avg(),
+        price.max()
+      \`)
+      .eq("record_status", "A")
+      .not("city", "is", null)
+      .neq("city", "")
+      .order("count", { ascending: false })
+      .limit(input.count);
+
+    if (error != null) {
+      throw new Error(
+        \`Query failed: \${error.message}\`
+      );
+    }
+
+    return ctx.json(data);
+  },
+});
+
+export default gram;`;
 
 type Tool = {
   id: string;
@@ -54,11 +60,11 @@ type Tool = {
 };
 
 const GENERATED_TOOLS: Tool[] = [
-  { id: "1", name: "getPets", method: "GET", path: "/pets" },
-  { id: "2", name: "createPet", method: "POST", path: "/pets" },
-  { id: "3", name: "getPet", method: "GET", path: "/pets/{petId}" },
-  { id: "4", name: "updatePet", method: "PUT", path: "/pets/{petId}" },
-  { id: "5", name: "deletePet", method: "DELETE", path: "/pets/{petId}" },
+  { id: "1", name: "getCitiesByPropertySales", method: "GET", path: "/cities/by-sales" },
+  { id: "2", name: "getPropertyPrices", method: "GET", path: "/properties/prices" },
+  { id: "3", name: "searchProperties", method: "GET", path: "/properties/search" },
+  { id: "4", name: "getPropertyById", method: "GET", path: "/properties/{id}" },
+  { id: "5", name: "getCityStats", method: "GET", path: "/cities/{city}/stats" },
 ];
 
 const getMethodColor = (method: string) => {
@@ -91,8 +97,6 @@ export function JourneyDemo() {
 
   // Animate tools appearing one by one
   useEffect(() => {
-    if (hasMoved) return;
-
     const timers: NodeJS.Timeout[] = [];
 
     // Initial delay before tools start appearing
@@ -115,7 +119,7 @@ export function JourneyDemo() {
     });
 
     return () => timers.forEach(clearTimeout);
-  }, [animationKey, hasMoved]);
+  }, [animationKey]);
 
   // Track if windows have been moved
   useEffect(() => {
@@ -214,15 +218,15 @@ export function JourneyDemo() {
               />
             </div>
             <span className="text-sm text-zinc-400 absolute left-1/2 -translate-x-1/2 font-mono">
-              petstore.yaml
+              gram.ts
             </span>
             <div className="w-[42px]" />
           </div>
 
-          {/* OpenAPI content */}
+          {/* Gram function content */}
           <div className="p-4 h-[350px] overflow-y-auto">
             <pre className="font-mono text-xs text-zinc-300 whitespace-pre">
-              {OPENAPI_SPEC}
+              {GRAM_FUNCTION}
             </pre>
           </div>
         </motion.div>
@@ -271,7 +275,7 @@ export function JourneyDemo() {
               />
             </div>
             <span className="text-sm text-zinc-400 absolute left-1/2 -translate-x-1/2 font-mono">
-              Generated Tools
+              Deployed Tools
             </span>
             <div className="w-[42px]" />
           </div>
