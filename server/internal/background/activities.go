@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -22,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	slacktypes "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
+	"github.com/speakeasy-api/gram/server/internal/agents"
 )
 
 type Activities struct {
@@ -43,6 +45,7 @@ type Activities struct {
 	validateDeployment            *activities.ValidateDeployment
 	verifyCustomDomain            *activities.VerifyCustomDomain
 	generateToolsetEmbeddings     *activities.GenerateToolsetEmbeddings
+	agentsResponse                *activities.AgentsResponse
 }
 
 func NewActivities(
@@ -64,6 +67,7 @@ func NewActivities(
 	functionsDeployer functions.Deployer,
 	functionsVersion functions.RunnerVersion,
 	ragService *rag.ToolsetVectorStore,
+	agentsService *agents.Service,
 ) *Activities {
 	return &Activities{
 		collectPlatformUsageMetrics:   activities.NewCollectPlatformUsageMetrics(logger, db),
@@ -84,6 +88,7 @@ func NewActivities(
 		validateDeployment:            activities.NewValidateDeployment(logger, db, billingRepo),
 		verifyCustomDomain:            activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
 		generateToolsetEmbeddings:     activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
+		agentsResponse:                activities.NewAgentsResponse(logger, agentsService),
 	}
 }
 
@@ -157,4 +162,12 @@ func (a *Activities) GenerateToolsetEmbeddings(ctx context.Context, input activi
 
 func (a *Activities) ReapFlyApps(ctx context.Context, req activities.ReapFlyAppsRequest) (*activities.ReapFlyAppsResult, error) {
 	return a.reapFlyApps.Do(ctx, req)
+}
+
+func (a *Activities) AgentsResponse(ctx context.Context, input activities.AgentsResponseInput) (*agents.ResponseOutput, error) {
+	output, err := a.agentsResponse.Execute(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("agents response activity failed: %w", err)
+	}
+	return output, nil
 }

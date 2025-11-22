@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/agents"
 )
 
 type WorkerOptions struct {
@@ -48,6 +49,7 @@ type WorkerOptions struct {
 	FunctionsDeployer    functions.Deployer
 	FunctionsVersion     functions.RunnerVersion
 	RagService           *rag.ToolsetVectorStore
+	AgentsService        *agents.Service
 }
 
 func ForDeploymentProcessing(
@@ -75,6 +77,7 @@ func ForDeploymentProcessing(
 		RagService:           nil,
 		RedisClient:          nil,
 		PosthogClient:        nil,
+		AgentsService:        nil,
 	}
 }
 
@@ -103,6 +106,7 @@ func NewTemporalWorker(
 		FunctionsDeployer:    nil,
 		FunctionsVersion:     "",
 		RagService:           nil,
+		AgentsService:        nil,
 	}
 
 	for _, o := range options {
@@ -124,6 +128,7 @@ func NewTemporalWorker(
 			FunctionsDeployer:    conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
 			FunctionsVersion:     conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
 			RagService:           conv.Default(o.RagService, opts.RagService),
+			AgentsService:        conv.Default(o.AgentsService, opts.AgentsService),
 		}
 	}
 
@@ -154,6 +159,7 @@ func NewTemporalWorker(
 		opts.FunctionsDeployer,
 		opts.FunctionsVersion,
 		opts.RagService,
+		opts.AgentsService,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -174,6 +180,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
+	temporalWorker.RegisterActivity(activities.AgentsResponse)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
@@ -183,6 +190,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
+	temporalWorker.RegisterWorkflow(AgentsResponseWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), client); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {

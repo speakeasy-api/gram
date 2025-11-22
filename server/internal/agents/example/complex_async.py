@@ -1,0 +1,59 @@
+import os
+import sys
+import json
+import time
+import requests
+
+# Check for -v flag
+verbose = "-v" in sys.argv
+
+url = "http://localhost:8080/rpc/agents.response"
+headers = {
+    "Content-Type": "application/json",
+    "Gram-Key": os.getenv("GRAM_API_KEY"),
+}
+
+context = """Please help me with the following tasks in order:
+
+1. First, get the details of the organization with slug 'dub'
+2. Then, find the user associated with the workspaces of the 'dub' organization
+3. Please use the email address to search for a stripe customer
+4. Then get the stripe charges associated with that customer
+
+Please provide me details on those charges."""
+
+payload = {
+    "project_slug": "default",
+    "model": "openai/gpt-4o",
+    "async": True,
+    "instructions": "You are a helpful assistant that can help with Speakeasy operations.",
+    "input": context,
+    "toolsets": [
+        {"toolset_slug": "speakeasy", "environment_slug": "default", "headers": {}},
+        {"toolset_slug": "stripe", "environment_slug": "stripe", "headers": {}},
+    ],
+}
+print("=== Turn 1 ===")
+resp = requests.post(url, headers=headers, json=payload)
+data = resp.json()
+response_id = data["id"]
+print(f"Response ID: {response_id}")
+
+# Poll for completion
+poll_url = f"http://localhost:8080/rpc/agents.response?response_id={response_id}"
+while True:
+    time.sleep(5)
+    poll_resp = requests.get(poll_url, headers=headers)
+    poll_data = poll_resp.json()
+    status = poll_data.get("status")
+    print(f"Status: {status}")
+    
+    if status != "in_progress":
+        print("\n=== Final Response ===")
+        if "output" in poll_data and poll_data["output"]:
+            print(poll_data["output"][-1]["content"][-1]["text"])
+        
+        if verbose:
+            print("\nFull response:")
+            print(json.dumps(poll_data, indent=2))
+        break

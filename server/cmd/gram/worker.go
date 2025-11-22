@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -366,6 +367,21 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
 
+			// Create agents service for the worker
+			agentsService := agents.NewService(
+				logger,
+				tracerProvider,
+				meterProvider,
+				db,
+				env,
+				encryptionClient,
+				cache.NewRedisCacheAdapter(redisClient),
+				guardianPolicy,
+				functionsOrchestrator,
+				openRouter,
+				baseChatClient,
+			)
+
 			temporalWorker := background.NewTemporalWorker(temporalClient, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				DB:                   db,
 				EncryptionClient:     encryptionClient,
@@ -384,6 +400,7 @@ func newWorkerCommand() *cli.Command {
 				FunctionsDeployer:    functionsOrchestrator,
 				FunctionsVersion:     runnerVersion,
 				RagService:           ragService,
+				AgentsService:        agentsService,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())
