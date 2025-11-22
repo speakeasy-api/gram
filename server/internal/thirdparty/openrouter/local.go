@@ -31,3 +31,7 @@ func (o *Development) GetModelPricing(ctx context.Context, canonicalSlug string)
 	// Development mode doesn't have access to cached pricing
 	return nil, errors.New("model pricing not available in development mode")
 }
+
+func (o *Development) FetchAndCacheModelPricing(ctx context.Context) error {
+	return nil
+}

@@ -64,6 +64,7 @@ type Provisioner interface {
 	RefreshAPIKeyLimit(ctx context.Context, orgID string) (int, error)
 	GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error)
 	GetModelPricing(ctx context.Context, canonicalSlug string) (*mv.ModelPricing, error)
+	FetchAndCacheModelPricing(ctx context.Context) error
 }
 
 type KeyRefresher interface {

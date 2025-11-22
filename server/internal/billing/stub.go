@@ -273,6 +273,7 @@ func (s *StubClient) TrackModelUsage(ctx context.Context, event ModelUsageEvent)
 	usage.TotalTokens += event.TotalTokens
 	usage.InputTokens += event.InputTokens
 	usage.OutputTokens += event.OutputTokens
+	usage.Cost = event.Cost
 	usage.CallCount += 1
 
 	if err := s.writeModelUsage(ctx, event.OrganizationID, usage); err != nil {
@@ -380,10 +381,11 @@ func (s *StubClient) writePeriodUsage(ctx context.Context, orgID string, pu *gen
 }
 
 type modelUsage struct {
-	InputTokens  int64 `json:"input_tokens"`
-	OutputTokens int64 `json:"output_tokens"`
-	TotalTokens  int64 `json:"total_tokens"`
-	CallCount    int64 `json:"call_count"`
+	InputTokens  int64    `json:"input_tokens"`
+	OutputTokens int64    `json:"output_tokens"`
+	TotalTokens  int64    `json:"total_tokens"`
+	CallCount    int64    `json:"call_count"`
+	Cost         *float64 `json:"cost"`
 }
 
 func (s *StubClient) readModelUsage(orgID string) (*modelUsage, error) {
@@ -397,6 +399,7 @@ func (s *StubClient) readModelUsage(orgID string) (*modelUsage, error) {
 		OutputTokens: 0,
 		TotalTokens:  0,
 		CallCount:    0,
+		Cost:         nil,
 	}
 
 	usagefile := filepath.Join(datadir, fmt.Sprintf("modelusage-%s.local.json", orgID))

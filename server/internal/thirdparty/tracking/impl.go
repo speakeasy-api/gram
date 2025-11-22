@@ -40,6 +40,9 @@ func (c *Composite) TrackModelUsage(ctx context.Context, event billing.ModelUsag
 		"chat_id":              event.ChatID,
 		"disable_notification": true,
 	}
+	if event.Cost != nil {
+		properties["cost"] = *event.Cost
+	}
 
 	if err := c.posthog.CaptureEvent(ctx, "model_usage", event.OrganizationID, properties); err != nil {
 		c.logger.ErrorContext(ctx, "failed to capture model usage event", attr.SlogError(err))

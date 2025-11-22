@@ -203,6 +203,12 @@ func (p *Client) TrackModelUsage(ctx context.Context, event billing.ModelUsageEv
 		},
 	}
 
+	if event.Cost != nil {
+		metadata["cost"] = polarComponents.EventCreateExternalCustomerMetadata{
+			Number: event.Cost,
+		}
+	}
+
 	_, err := p.polar.Events.Ingest(ctx, polarComponents.EventsIngest{
 		Events: []polarComponents.Events{
 			{

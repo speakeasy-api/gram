@@ -66,11 +66,6 @@ func NewActivities(
 	functionsVersion functions.RunnerVersion,
 	ragService *rag.ToolsetVectorStore,
 ) *Activities {
-	var refreshModelPricing *activities.RefreshModelPricing
-	if or, ok := openrouterProvisioner.(*openrouter.OpenRouter); ok {
-		refreshModelPricing = activities.NewRefreshModelPricing(logger, or)
-	}
-
 	return &Activities{
 		collectPlatformUsageMetrics:   activities.NewCollectPlatformUsageMetrics(logger, db),
 		customDomainIngress:           activities.NewCustomDomainIngress(logger, db, k8sClient),
@@ -85,7 +80,7 @@ func NewActivities(
 		reapFlyApps:                   activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 3),
 		refreshBillingUsage:           activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		refreshOpenRouterKey:          activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
-		refreshModelPricing:           refreshModelPricing,
+		refreshModelPricing:           activities.NewRefreshModelPricing(logger, openrouterProvisioner),
 		slackChatCompletion:           activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
 		transitionDeployment:          activities.NewTransitionDeployment(logger, db),
 		validateDeployment:            activities.NewValidateDeployment(logger, db, billingRepo),

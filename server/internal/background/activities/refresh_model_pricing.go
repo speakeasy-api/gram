@@ -9,13 +9,13 @@ import (
 )
 
 type RefreshModelPricing struct {
-	openRouter *openrouter.OpenRouter
+	openrouter openrouter.Provisioner
 	logger     *slog.Logger
 }
 
-func NewRefreshModelPricing(logger *slog.Logger, openRouter *openrouter.OpenRouter) *RefreshModelPricing {
+func NewRefreshModelPricing(logger *slog.Logger, openrouter openrouter.Provisioner) *RefreshModelPricing {
 	return &RefreshModelPricing{
-		openRouter: openRouter,
+		openrouter: openrouter,
 		logger:     logger,
 	}
 }
@@ -23,15 +23,10 @@ func NewRefreshModelPricing(logger *slog.Logger, openRouter *openrouter.OpenRout
 type RefreshModelPricingArgs struct{}
 
 func (r *RefreshModelPricing) Do(ctx context.Context, args RefreshModelPricingArgs) error {
-	if r.openRouter == nil {
-		return oops.E(oops.CodeUnexpected, nil, "openrouter client is not configured").Log(ctx, r.logger)
-	}
-
-	if err := r.openRouter.FetchAndCacheModelPricing(ctx); err != nil {
+	if err := r.openrouter.FetchAndCacheModelPricing(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to fetch and cache model pricing").Log(ctx, r.logger)
 	}
 
 	r.logger.InfoContext(ctx, "successfully refreshed model pricing")
 	return nil
 }
-
