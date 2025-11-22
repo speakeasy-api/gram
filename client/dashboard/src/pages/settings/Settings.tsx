@@ -360,8 +360,7 @@ export default function Settings() {
                         <div className="flex items-center gap-3">
                           <RadioGroupItem value="chat" id="r3" />
                           <Label className="leading-normal" htmlFor="r3">
-                            Chat: can use the chat API to interact with
-                            models.
+                            Chat: can use the chat API to interact with models.
                           </Label>
                         </div>
                       </RadioGroup>
@@ -625,8 +624,8 @@ export default function Settings() {
                   {registerDomainMutation.isPending
                     ? "Registering..."
                     : domain?.domain
-                      ? "Verify"
-                      : "Register"}
+                    ? "Verify"
+                    : "Register"}
                 </Button>
               </div>
             </div>
