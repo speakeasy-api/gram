@@ -127,7 +127,7 @@ func NewUploadImageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer"},
+			Scopes:         []string{"consumer", "producer", "chat"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -186,7 +186,7 @@ func NewUploadFunctionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer"},
+			Scopes:         []string{"consumer", "producer", "chat"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -245,7 +245,7 @@ func NewUploadOpenAPIv3Endpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer"},
+			Scopes:         []string{"consumer", "producer", "chat"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -304,7 +304,7 @@ func NewServeOpenAPIv3Endpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer"},
+			Scopes:         []string{"consumer", "producer", "chat"},
 			RequiredScopes: []string{},
 		}
 		var key string
@@ -343,7 +343,7 @@ func NewServeFunctionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer"},
+			Scopes:         []string{"consumer", "producer", "chat"},
 			RequiredScopes: []string{},
 		}
 		var key string
@@ -382,7 +382,7 @@ func NewListAssetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer"},
+			Scopes:         []string{"consumer", "producer", "chat"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string

@@ -13,6 +13,9 @@ var _ = Service("instances", func() {
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("consumer")
 	})
+	Security(security.ByKey, security.ProjectSlug, func() {
+		Scope("chat")
+	})
 	shared.DeclareErrorResponses()
 
 	Method("getInstance", func() {

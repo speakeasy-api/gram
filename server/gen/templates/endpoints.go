@@ -82,7 +82,7 @@ func NewCreateTemplateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -141,7 +141,7 @@ func NewUpdateTemplateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -200,7 +200,7 @@ func NewGetTemplateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -224,7 +224,7 @@ func NewGetTemplateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"consumer"},
 			}
 			var key string
@@ -283,7 +283,7 @@ func NewListTemplatesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -342,7 +342,7 @@ func NewDeleteTemplateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -401,7 +401,7 @@ func NewRenderTemplateByIDEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -425,7 +425,7 @@ func NewRenderTemplateByIDEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"consumer"},
 			}
 			var key string
@@ -484,7 +484,7 @@ func NewRenderTemplateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -508,7 +508,7 @@ func NewRenderTemplateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"consumer"},
 			}
 			var key string

@@ -11,6 +11,7 @@ var ByKey = APIKeySecurity(auth.KeySecurityScheme, func() {
 	Description("key based auth.")
 	Scope("consumer", "consumer based tool access")
 	Scope("producer", "producer based tool access")
+	Scope("chat", "chat based model usage access")
 })
 
 var ByKeyPayload = func() {

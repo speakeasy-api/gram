@@ -88,7 +88,7 @@ func NewCreateToolsetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -147,7 +147,7 @@ func NewListToolsetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -206,7 +206,7 @@ func NewUpdateToolsetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -265,7 +265,7 @@ func NewDeleteToolsetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -324,7 +324,7 @@ func NewGetToolsetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -383,7 +383,7 @@ func NewCheckMCPSlugAvailabilityEndpoint(s Service, authAPIKeyFn security.AuthAP
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -442,7 +442,7 @@ func NewCloneToolsetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -501,7 +501,7 @@ func NewAddExternalOAuthServerEndpoint(s Service, authAPIKeyFn security.AuthAPIK
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -560,7 +560,7 @@ func NewRemoveOAuthServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string

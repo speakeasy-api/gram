@@ -357,6 +357,12 @@ export default function Settings() {
                             access MCP servers.
                           </Label>
                         </div>
+                        <div className="flex items-center gap-3">
+                          <RadioGroupItem value="chat" id="r3" />
+                          <Label className="leading-normal" htmlFor="r3">
+                            Chat: can use the chat API to interact with models.
+                          </Label>
+                        </div>
                       </RadioGroup>
                     );
                   }}

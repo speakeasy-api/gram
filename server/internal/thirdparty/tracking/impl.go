@@ -26,6 +26,29 @@ func New(polar *polar.Client, posthog *posthog.Posthog, logger *slog.Logger) *Co
 	}
 }
 
+func (c *Composite) TrackModelUsage(ctx context.Context, event billing.ModelUsageEvent) {
+	c.polar.TrackModelUsage(ctx, event)
+
+	properties := map[string]any{
+		"organization_id":      event.OrganizationID,
+		"model":                event.Model,
+		"source":               string(event.Source),
+		"input_tokens":         event.InputTokens,
+		"output_tokens":        event.OutputTokens,
+		"total_tokens":         event.TotalTokens,
+		"project_id":           event.ProjectID,
+		"chat_id":              event.ChatID,
+		"disable_notification": true,
+	}
+	if event.Cost != nil {
+		properties["cost"] = *event.Cost
+	}
+
+	if err := c.posthog.CaptureEvent(ctx, "model_usage", event.OrganizationID, properties); err != nil {
+		c.logger.ErrorContext(ctx, "failed to capture model usage event", attr.SlogError(err))
+	}
+}
+
 func (c *Composite) TrackToolCallUsage(ctx context.Context, event billing.ToolCallUsageEvent) {
 	c.polar.TrackToolCallUsage(ctx, event)
 

@@ -47,7 +47,7 @@ func NewCreateProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer"},
+			Scopes:         []string{"consumer", "producer", "chat"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -82,7 +82,7 @@ func NewListProjectsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer"},
+			Scopes:         []string{"consumer", "producer", "chat"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -117,7 +117,7 @@ func NewSetLogoEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.End
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer"},
+			Scopes:         []string{"consumer", "producer", "chat"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
