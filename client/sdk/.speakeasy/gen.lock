@@ -1,24 +1,24 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 2d4593208b33047b0902ebc839b288f6
+  docChecksum: 90568ae9eeeb69be1d568608418c418f
   docVersion: 0.0.1
-  speakeasyVersion: 1.658.2
-  generationVersion: 2.755.9
-  releaseVersion: 0.18.0
-  configChecksum: 4196bf51af73418dea763bfe7786b6e2
+  speakeasyVersion: 1.641.1
+  generationVersion: 2.730.5
+  releaseVersion: 0.18.1
+  configChecksum: c36684f886420c38fb40d9cae1f700c7
 features:
   typescript:
     additionalDependencies: 0.1.0
     constsAndDefaults: 0.1.12
-    core: 3.26.7
+    core: 3.24.1
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
     downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
     globalSecurityCallbacks: 0.1.0
-    globalServerURLs: 2.83.0
+    globalServerURLs: 2.82.5
     methodArguments: 0.1.2
     methodSecurity: 2.82.6
     nameOverrides: 2.81.2
@@ -149,6 +149,7 @@ generatedFiles:
   - docs/models/components/setprojectlogoform.md
   - docs/models/components/setprojectlogoresult.md
   - docs/models/components/setsourceenvironmentlinkrequestbody.md
+  - docs/models/components/settoolsetenvironmentlinkrequestbody.md
   - docs/models/components/sourceenvironmentlink.md
   - docs/models/components/sourceenvironmentlinksourcekind.md
   - docs/models/components/sourcekind.md
@@ -158,6 +159,7 @@ generatedFiles:
   - docs/models/components/toolentrytype.md
   - docs/models/components/toolset.md
   - docs/models/components/toolsetentry.md
+  - docs/models/components/toolsetenvironmentlink.md
   - docs/models/components/tooltype.md
   - docs/models/components/toolvariation.md
   - docs/models/components/type.md
@@ -241,6 +243,8 @@ generatedFiles:
   - docs/models/operations/deletetemplatesecurity.md
   - docs/models/operations/deletetemplatesecurityoption1.md
   - docs/models/operations/deletetemplatesecurityoption2.md
+  - docs/models/operations/deletetoolsetenvironmentlinkrequest.md
+  - docs/models/operations/deletetoolsetenvironmentlinksecurity.md
   - docs/models/operations/deletetoolsetrequest.md
   - docs/models/operations/deletetoolsetsecurity.md
   - docs/models/operations/deletetoolsetsecurityoption1.md
@@ -285,6 +289,8 @@ generatedFiles:
   - docs/models/operations/gettemplatesecurityoption1.md
   - docs/models/operations/gettemplatesecurityoption2.md
   - docs/models/operations/gettemplatesecurityoption3.md
+  - docs/models/operations/gettoolsetenvironmentrequest.md
+  - docs/models/operations/gettoolsetenvironmentsecurity.md
   - docs/models/operations/gettoolsetrequest.md
   - docs/models/operations/gettoolsetsecurity.md
   - docs/models/operations/gettoolsetsecurityoption1.md
@@ -392,6 +398,8 @@ generatedFiles:
   - docs/models/operations/setprojectlogosecurityoption2.md
   - docs/models/operations/setsourceenvironmentlinkrequest.md
   - docs/models/operations/setsourceenvironmentlinksecurity.md
+  - docs/models/operations/settoolsetenvironmentlinkrequest.md
+  - docs/models/operations/settoolsetenvironmentlinksecurity.md
   - docs/models/operations/slackcallbackrequest.md
   - docs/models/operations/slackcallbackresponse.md
   - docs/models/operations/slackloginrequest.md
@@ -498,9 +506,12 @@ generatedFiles:
   - src/funcs/environmentsCreate.ts
   - src/funcs/environmentsDeleteBySlug.ts
   - src/funcs/environmentsDeleteSourceLink.ts
+  - src/funcs/environmentsDeleteToolsetLink.ts
   - src/funcs/environmentsGetBySource.ts
+  - src/funcs/environmentsGetByToolset.ts
   - src/funcs/environmentsList.ts
   - src/funcs/environmentsSetSourceLink.ts
+  - src/funcs/environmentsSetToolsetLink.ts
   - src/funcs/environmentsUpdateBySlug.ts
   - src/funcs/featuresSet.ts
   - src/funcs/instancesGetBySlug.ts
@@ -675,12 +686,14 @@ generatedFiles:
   - src/models/components/setprojectlogoform.ts
   - src/models/components/setprojectlogoresult.ts
   - src/models/components/setsourceenvironmentlinkrequestbody.ts
+  - src/models/components/settoolsetenvironmentlinkrequestbody.ts
   - src/models/components/sourceenvironmentlink.ts
   - src/models/components/tierlimits.ts
   - src/models/components/tool.ts
   - src/models/components/toolentry.ts
   - src/models/components/toolset.ts
   - src/models/components/toolsetentry.ts
+  - src/models/components/toolsetenvironmentlink.ts
   - src/models/components/toolvariation.ts
   - src/models/components/updateenvironmentrequestbody.ts
   - src/models/components/updatepackageform.ts
@@ -727,6 +740,7 @@ generatedFiles:
   - src/models/operations/deletesourceenvironmentlink.ts
   - src/models/operations/deletetemplate.ts
   - src/models/operations/deletetoolset.ts
+  - src/models/operations/deletetoolsetenvironmentlink.ts
   - src/models/operations/evolvedeployment.ts
   - src/models/operations/getactivedeployment.ts
   - src/models/operations/getdeployment.ts
@@ -740,6 +754,7 @@ generatedFiles:
   - src/models/operations/getsourceenvironment.ts
   - src/models/operations/gettemplate.ts
   - src/models/operations/gettoolset.ts
+  - src/models/operations/gettoolsetenvironment.ts
   - src/models/operations/index.ts
   - src/models/operations/integrationsnumberget.ts
   - src/models/operations/listapikeys.ts
@@ -775,6 +790,7 @@ generatedFiles:
   - src/models/operations/setproductfeature.ts
   - src/models/operations/setprojectlogo.ts
   - src/models/operations/setsourceenvironmentlink.ts
+  - src/models/operations/settoolsetenvironmentlink.ts
   - src/models/operations/slackcallback.ts
   - src/models/operations/slacklogin.ts
   - src/models/operations/switchauthscopes.ts
@@ -810,6 +826,7 @@ generatedFiles:
   - src/react-query/deleteSourceEnvironmentLink.ts
   - src/react-query/deleteTemplate.ts
   - src/react-query/deleteToolset.ts
+  - src/react-query/deleteToolsetEnvironmentLink.ts
   - src/react-query/deployment.ts
   - src/react-query/deploymentLogs.ts
   - src/react-query/evolveDeployment.ts
@@ -820,6 +837,7 @@ generatedFiles:
   - src/react-query/getPeriodUsage.ts
   - src/react-query/getSlackConnection.ts
   - src/react-query/getSourceEnvironment.ts
+  - src/react-query/getToolsetEnvironment.ts
   - src/react-query/getUsageTiers.ts
   - src/react-query/globalVariations.ts
   - src/react-query/index.ts
@@ -856,6 +874,7 @@ generatedFiles:
   - src/react-query/sessionInfo.ts
   - src/react-query/setProjectLogo.ts
   - src/react-query/setSourceEnvironmentLink.ts
+  - src/react-query/setToolsetEnvironmentLink.ts
   - src/react-query/switchScopes.ts
   - src/react-query/template.ts
   - src/react-query/templates.ts
@@ -1816,5 +1835,38 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  deleteToolsetEnvironmentLink:
+    speakeasy-default-delete-toolset-environment-link:
+      parameters:
+        query:
+          toolset_id: "e0d13c54-d0e5-4076-bd5b-f060e2a43865"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getToolsetEnvironment:
+    speakeasy-default-get-toolset-environment:
+      parameters:
+        query:
+          toolset_id: "7003cb87-ab79-4484-b08e-a7afac2dc2b5"
+      responses:
+        "200":
+          application/json: {"created_at": "2023-10-12T00:52:32.537Z", "entries": [{"created_at": "2024-10-05T02:06:46.478Z", "name": "<value>", "updated_at": "2025-02-11T02:25:29.751Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-03-15T08:23:10.020Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  setToolsetEnvironmentLink:
+    speakeasy-default-set-toolset-environment-link:
+      requestBody:
+        application/json: {"environment_id": "238dbe60-ed3e-40b7-8dd6-e9474155338a", "toolset_id": "2482d12d-b5f4-45b8-97aa-c04ab833ce93"}
+      responses:
+        "200":
+          application/json: {"environment_id": "8db98aaa-2ec9-4d97-92f3-728ff9a28c07", "id": "ab0e75d9-6cd8-4548-9567-def312891e42", "toolset_id": "30dcb19f-9730-465d-beff-f62863576ba6"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}

@@ -3107,6 +3107,101 @@ paths:
       x-speakeasy-name-override: deleteSourceLink
       x-speakeasy-react-hook:
         name: DeleteSourceEnvironmentLink
+  /rpc/environments.deleteToolsetLink:
+    delete:
+      description: Delete a link between a toolset and an environment
+      operationId: deleteToolsetEnvironmentLink
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the toolset
+          in: query
+          name: toolset_id
+          required: true
+          schema:
+            description: The ID of the toolset
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: deleteToolsetEnvironmentLink environments
+      tags:
+        - environments
+      x-speakeasy-name-override: deleteToolsetLink
+      x-speakeasy-react-hook:
+        name: DeleteToolsetEnvironmentLink
   /rpc/environments.getSourceEnvironment:
     get:
       description: Get the environment linked to a source
@@ -3216,6 +3311,105 @@ paths:
       x-speakeasy-name-override: getBySource
       x-speakeasy-react-hook:
         name: GetSourceEnvironment
+  /rpc/environments.getToolsetEnvironment:
+    get:
+      description: Get the environment linked to a toolset
+      operationId: getToolsetEnvironment
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the toolset
+          in: query
+          name: toolset_id
+          required: true
+          schema:
+            description: The ID of the toolset
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Environment'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getToolsetEnvironment environments
+      tags:
+        - environments
+      x-speakeasy-name-override: getByToolset
+      x-speakeasy-react-hook:
+        name: GetToolsetEnvironment
   /rpc/environments.list:
     get:
       description: List all environments for an organization
@@ -3402,6 +3596,102 @@ paths:
       x-speakeasy-name-override: setSourceLink
       x-speakeasy-react-hook:
         name: SetSourceEnvironmentLink
+  /rpc/environments.setToolsetLink:
+    put:
+      description: Set (upsert) a link between a toolset and an environment
+      operationId: setToolsetEnvironmentLink
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetToolsetEnvironmentLinkRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolsetEnvironmentLink'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: setToolsetEnvironmentLink environments
+      tags:
+        - environments
+      x-speakeasy-name-override: setToolsetLink
+      x-speakeasy-react-hook:
+        name: SetToolsetEnvironmentLink
   /rpc/environments.update:
     post:
       description: Update an environment
@@ -11457,6 +11747,20 @@ components:
         - source_kind
         - source_slug
         - environment_id
+    SetToolsetEnvironmentLinkRequestBody:
+      type: object
+      properties:
+        environment_id:
+          type: string
+          description: The ID of the environment to link
+          format: uuid
+        toolset_id:
+          type: string
+          description: The ID of the toolset
+          format: uuid
+      required:
+        - toolset_id
+        - environment_id
     SourceEnvironmentLink:
       type: object
       properties:
@@ -11842,6 +12146,26 @@ components:
         - resource_urns
         - created_at
         - updated_at
+    ToolsetEnvironmentLink:
+      type: object
+      properties:
+        environment_id:
+          type: string
+          description: The ID of the environment
+          format: uuid
+        id:
+          type: string
+          description: The ID of the toolset environment link
+          format: uuid
+        toolset_id:
+          type: string
+          description: The ID of the toolset
+          format: uuid
+      description: A link between a toolset and an environment
+      required:
+        - id
+        - toolset_id
+        - environment_id
     UpdateEnvironmentForm:
       type: object
       properties:

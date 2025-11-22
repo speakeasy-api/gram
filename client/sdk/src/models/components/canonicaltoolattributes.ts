@@ -57,6 +57,56 @@ export const CanonicalToolAttributes$inboundSchema: z.ZodType<
   });
 });
 
+/** @internal */
+export type CanonicalToolAttributes$Outbound = {
+  confirm?: string | undefined;
+  confirm_prompt?: string | undefined;
+  description: string;
+  name: string;
+  summarizer?: string | undefined;
+  variation_id: string;
+};
+
+/** @internal */
+export const CanonicalToolAttributes$outboundSchema: z.ZodType<
+  CanonicalToolAttributes$Outbound,
+  z.ZodTypeDef,
+  CanonicalToolAttributes
+> = z.object({
+  confirm: z.string().optional(),
+  confirmPrompt: z.string().optional(),
+  description: z.string(),
+  name: z.string(),
+  summarizer: z.string().optional(),
+  variationId: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    confirmPrompt: "confirm_prompt",
+    variationId: "variation_id",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace CanonicalToolAttributes$ {
+  /** @deprecated use `CanonicalToolAttributes$inboundSchema` instead. */
+  export const inboundSchema = CanonicalToolAttributes$inboundSchema;
+  /** @deprecated use `CanonicalToolAttributes$outboundSchema` instead. */
+  export const outboundSchema = CanonicalToolAttributes$outboundSchema;
+  /** @deprecated use `CanonicalToolAttributes$Outbound` instead. */
+  export type Outbound = CanonicalToolAttributes$Outbound;
+}
+
+export function canonicalToolAttributesToJSON(
+  canonicalToolAttributes: CanonicalToolAttributes,
+): string {
+  return JSON.stringify(
+    CanonicalToolAttributes$outboundSchema.parse(canonicalToolAttributes),
+  );
+}
+
 export function canonicalToolAttributesFromJSON(
   jsonString: string,
 ): SafeParseResult<CanonicalToolAttributes, SDKValidationError> {

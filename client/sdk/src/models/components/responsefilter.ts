@@ -42,6 +42,46 @@ export const ResponseFilter$inboundSchema: z.ZodType<
   });
 });
 
+/** @internal */
+export type ResponseFilter$Outbound = {
+  content_types: Array<string>;
+  status_codes: Array<string>;
+  type: string;
+};
+
+/** @internal */
+export const ResponseFilter$outboundSchema: z.ZodType<
+  ResponseFilter$Outbound,
+  z.ZodTypeDef,
+  ResponseFilter
+> = z.object({
+  contentTypes: z.array(z.string()),
+  statusCodes: z.array(z.string()),
+  type: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    contentTypes: "content_types",
+    statusCodes: "status_codes",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace ResponseFilter$ {
+  /** @deprecated use `ResponseFilter$inboundSchema` instead. */
+  export const inboundSchema = ResponseFilter$inboundSchema;
+  /** @deprecated use `ResponseFilter$outboundSchema` instead. */
+  export const outboundSchema = ResponseFilter$outboundSchema;
+  /** @deprecated use `ResponseFilter$Outbound` instead. */
+  export type Outbound = ResponseFilter$Outbound;
+}
+
+export function responseFilterToJSON(responseFilter: ResponseFilter): string {
+  return JSON.stringify(ResponseFilter$outboundSchema.parse(responseFilter));
+}
+
 export function responseFilterFromJSON(
   jsonString: string,
 ): SafeParseResult<ResponseFilter, SDKValidationError> {

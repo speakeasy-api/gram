@@ -39,3 +39,12 @@ type SourceEnvironment struct {
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
 }
+
+type ToolsetEnvironment struct {
+	ID            uuid.UUID
+	ToolsetID     uuid.UUID
+	ProjectID     uuid.UUID
+	EnvironmentID uuid.UUID
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}

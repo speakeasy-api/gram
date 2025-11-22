@@ -4,6 +4,9 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ListChatsSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -20,6 +23,21 @@ export type ListChatsRequest = {
    */
   gramProject?: string | undefined;
 };
+
+/** @internal */
+export const ListChatsSecurity$inboundSchema: z.ZodType<
+  ListChatsSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "project_slug_header_Gram-Project": z.string().optional(),
+  "session_header_Gram-Session": z.string().optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
 
 /** @internal */
 export type ListChatsSecurity$Outbound = {
@@ -42,6 +60,19 @@ export const ListChatsSecurity$outboundSchema: z.ZodType<
   });
 });
 
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace ListChatsSecurity$ {
+  /** @deprecated use `ListChatsSecurity$inboundSchema` instead. */
+  export const inboundSchema = ListChatsSecurity$inboundSchema;
+  /** @deprecated use `ListChatsSecurity$outboundSchema` instead. */
+  export const outboundSchema = ListChatsSecurity$outboundSchema;
+  /** @deprecated use `ListChatsSecurity$Outbound` instead. */
+  export type Outbound = ListChatsSecurity$Outbound;
+}
+
 export function listChatsSecurityToJSON(
   listChatsSecurity: ListChatsSecurity,
 ): string {
@@ -49,6 +80,31 @@ export function listChatsSecurityToJSON(
     ListChatsSecurity$outboundSchema.parse(listChatsSecurity),
   );
 }
+
+export function listChatsSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<ListChatsSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => ListChatsSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListChatsSecurity' from JSON`,
+  );
+}
+
+/** @internal */
+export const ListChatsRequest$inboundSchema: z.ZodType<
+  ListChatsRequest,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "Gram-Session": z.string().optional(),
+  "Gram-Project": z.string().optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Gram-Session": "gramSession",
+    "Gram-Project": "gramProject",
+  });
+});
 
 /** @internal */
 export type ListChatsRequest$Outbound = {
@@ -71,10 +127,33 @@ export const ListChatsRequest$outboundSchema: z.ZodType<
   });
 });
 
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace ListChatsRequest$ {
+  /** @deprecated use `ListChatsRequest$inboundSchema` instead. */
+  export const inboundSchema = ListChatsRequest$inboundSchema;
+  /** @deprecated use `ListChatsRequest$outboundSchema` instead. */
+  export const outboundSchema = ListChatsRequest$outboundSchema;
+  /** @deprecated use `ListChatsRequest$Outbound` instead. */
+  export type Outbound = ListChatsRequest$Outbound;
+}
+
 export function listChatsRequestToJSON(
   listChatsRequest: ListChatsRequest,
 ): string {
   return JSON.stringify(
     ListChatsRequest$outboundSchema.parse(listChatsRequest),
+  );
+}
+
+export function listChatsRequestFromJSON(
+  jsonString: string,
+): SafeParseResult<ListChatsRequest, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => ListChatsRequest$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListChatsRequest' from JSON`,
   );
 }

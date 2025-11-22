@@ -33,6 +33,45 @@ export const DeploymentPackage$inboundSchema: z.ZodType<
   version: z.string(),
 });
 
+/** @internal */
+export type DeploymentPackage$Outbound = {
+  id: string;
+  name: string;
+  version: string;
+};
+
+/** @internal */
+export const DeploymentPackage$outboundSchema: z.ZodType<
+  DeploymentPackage$Outbound,
+  z.ZodTypeDef,
+  DeploymentPackage
+> = z.object({
+  id: z.string(),
+  name: z.string(),
+  version: z.string(),
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace DeploymentPackage$ {
+  /** @deprecated use `DeploymentPackage$inboundSchema` instead. */
+  export const inboundSchema = DeploymentPackage$inboundSchema;
+  /** @deprecated use `DeploymentPackage$outboundSchema` instead. */
+  export const outboundSchema = DeploymentPackage$outboundSchema;
+  /** @deprecated use `DeploymentPackage$Outbound` instead. */
+  export type Outbound = DeploymentPackage$Outbound;
+}
+
+export function deploymentPackageToJSON(
+  deploymentPackage: DeploymentPackage,
+): string {
+  return JSON.stringify(
+    DeploymentPackage$outboundSchema.parse(deploymentPackage),
+  );
+}
+
 export function deploymentPackageFromJSON(
   jsonString: string,
 ): SafeParseResult<DeploymentPackage, SDKValidationError> {

@@ -34,6 +34,48 @@ export const CreditUsageResponseBody$inboundSchema: z.ZodType<
   });
 });
 
+/** @internal */
+export type CreditUsageResponseBody$Outbound = {
+  credits_used: number;
+  monthly_credits: number;
+};
+
+/** @internal */
+export const CreditUsageResponseBody$outboundSchema: z.ZodType<
+  CreditUsageResponseBody$Outbound,
+  z.ZodTypeDef,
+  CreditUsageResponseBody
+> = z.object({
+  creditsUsed: z.number(),
+  monthlyCredits: z.number().int(),
+}).transform((v) => {
+  return remap$(v, {
+    creditsUsed: "credits_used",
+    monthlyCredits: "monthly_credits",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace CreditUsageResponseBody$ {
+  /** @deprecated use `CreditUsageResponseBody$inboundSchema` instead. */
+  export const inboundSchema = CreditUsageResponseBody$inboundSchema;
+  /** @deprecated use `CreditUsageResponseBody$outboundSchema` instead. */
+  export const outboundSchema = CreditUsageResponseBody$outboundSchema;
+  /** @deprecated use `CreditUsageResponseBody$Outbound` instead. */
+  export type Outbound = CreditUsageResponseBody$Outbound;
+}
+
+export function creditUsageResponseBodyToJSON(
+  creditUsageResponseBody: CreditUsageResponseBody,
+): string {
+  return JSON.stringify(
+    CreditUsageResponseBody$outboundSchema.parse(creditUsageResponseBody),
+  );
+}
+
 export function creditUsageResponseBodyFromJSON(
   jsonString: string,
 ): SafeParseResult<CreditUsageResponseBody, SDKValidationError> {

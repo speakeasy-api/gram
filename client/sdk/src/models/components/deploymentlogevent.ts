@@ -55,6 +55,57 @@ export const DeploymentLogEvent$inboundSchema: z.ZodType<
   });
 });
 
+/** @internal */
+export type DeploymentLogEvent$Outbound = {
+  attachment_id?: string | undefined;
+  attachment_type?: string | undefined;
+  created_at: string;
+  event: string;
+  id: string;
+  message: string;
+};
+
+/** @internal */
+export const DeploymentLogEvent$outboundSchema: z.ZodType<
+  DeploymentLogEvent$Outbound,
+  z.ZodTypeDef,
+  DeploymentLogEvent
+> = z.object({
+  attachmentId: z.string().optional(),
+  attachmentType: z.string().optional(),
+  createdAt: z.string(),
+  event: z.string(),
+  id: z.string(),
+  message: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    attachmentId: "attachment_id",
+    attachmentType: "attachment_type",
+    createdAt: "created_at",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace DeploymentLogEvent$ {
+  /** @deprecated use `DeploymentLogEvent$inboundSchema` instead. */
+  export const inboundSchema = DeploymentLogEvent$inboundSchema;
+  /** @deprecated use `DeploymentLogEvent$outboundSchema` instead. */
+  export const outboundSchema = DeploymentLogEvent$outboundSchema;
+  /** @deprecated use `DeploymentLogEvent$Outbound` instead. */
+  export type Outbound = DeploymentLogEvent$Outbound;
+}
+
+export function deploymentLogEventToJSON(
+  deploymentLogEvent: DeploymentLogEvent,
+): string {
+  return JSON.stringify(
+    DeploymentLogEvent$outboundSchema.parse(deploymentLogEvent),
+  );
+}
+
 export function deploymentLogEventFromJSON(
   jsonString: string,
 ): SafeParseResult<DeploymentLogEvent, SDKValidationError> {

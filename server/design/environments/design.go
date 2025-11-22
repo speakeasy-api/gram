@@ -183,6 +183,87 @@ var _ = Service("environments", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "getBySource")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetSourceEnvironment"}`)
 	})
+
+	Method("setToolsetEnvironmentLink", func() {
+		Description("Set (upsert) a link between a toolset and an environment")
+
+		Payload(func() {
+			Attribute("toolset_id", String, "The ID of the toolset", func() {
+				Format(FormatUUID)
+			})
+			Attribute("environment_id", String, "The ID of the environment to link", func() {
+				Format(FormatUUID)
+			})
+			Required("toolset_id", "environment_id")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ToolsetEnvironmentLink)
+
+		HTTP(func() {
+			PUT("/rpc/environments.setToolsetLink")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setToolsetEnvironmentLink")
+		Meta("openapi:extension:x-speakeasy-name-override", "setToolsetLink")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetToolsetEnvironmentLink"}`)
+	})
+
+	Method("deleteToolsetEnvironmentLink", func() {
+		Description("Delete a link between a toolset and an environment")
+
+		Payload(func() {
+			Attribute("toolset_id", String, "The ID of the toolset", func() {
+				Format(FormatUUID)
+			})
+			Required("toolset_id")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/environments.deleteToolsetLink")
+			Param("toolset_id")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "deleteToolsetEnvironmentLink")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteToolsetLink")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteToolsetEnvironmentLink"}`)
+	})
+
+	Method("getToolsetEnvironment", func() {
+		Description("Get the environment linked to a toolset")
+
+		Payload(func() {
+			Attribute("toolset_id", String, "The ID of the toolset", func() {
+				Format(FormatUUID)
+			})
+			Required("toolset_id")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(shared.Environment)
+
+		HTTP(func() {
+			GET("/rpc/environments.getToolsetEnvironment")
+			Param("toolset_id")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolsetEnvironment")
+		Meta("openapi:extension:x-speakeasy-name-override", "getByToolset")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolsetEnvironment"}`)
+	})
 })
 
 var EnvironmentEntryInput = Type("EnvironmentEntryInput", func() {
@@ -242,4 +323,20 @@ var SourceEnvironmentLink = Type("SourceEnvironmentLink", func() {
 	})
 
 	Required("id", "source_kind", "source_slug", "environment_id")
+})
+
+var ToolsetEnvironmentLink = Type("ToolsetEnvironmentLink", func() {
+	Description("A link between a toolset and an environment")
+
+	Attribute("id", String, "The ID of the toolset environment link", func() {
+		Format(FormatUUID)
+	})
+	Attribute("toolset_id", String, "The ID of the toolset", func() {
+		Format(FormatUUID)
+	})
+	Attribute("environment_id", String, "The ID of the environment", func() {
+		Format(FormatUUID)
+	})
+
+	Required("id", "toolset_id", "environment_id")
 })

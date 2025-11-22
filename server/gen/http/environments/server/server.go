@@ -19,14 +19,17 @@ import (
 
 // Server lists the environments service endpoint HTTP handlers.
 type Server struct {
-	Mounts                      []*MountPoint
-	CreateEnvironment           http.Handler
-	ListEnvironments            http.Handler
-	UpdateEnvironment           http.Handler
-	DeleteEnvironment           http.Handler
-	SetSourceEnvironmentLink    http.Handler
-	DeleteSourceEnvironmentLink http.Handler
-	GetSourceEnvironment        http.Handler
+	Mounts                       []*MountPoint
+	CreateEnvironment            http.Handler
+	ListEnvironments             http.Handler
+	UpdateEnvironment            http.Handler
+	DeleteEnvironment            http.Handler
+	SetSourceEnvironmentLink     http.Handler
+	DeleteSourceEnvironmentLink  http.Handler
+	GetSourceEnvironment         http.Handler
+	SetToolsetEnvironmentLink    http.Handler
+	DeleteToolsetEnvironmentLink http.Handler
+	GetToolsetEnvironment        http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -63,14 +66,20 @@ func New(
 			{"SetSourceEnvironmentLink", "PUT", "/rpc/environments.setSourceLink"},
 			{"DeleteSourceEnvironmentLink", "DELETE", "/rpc/environments.deleteSourceLink"},
 			{"GetSourceEnvironment", "GET", "/rpc/environments.getSourceEnvironment"},
+			{"SetToolsetEnvironmentLink", "PUT", "/rpc/environments.setToolsetLink"},
+			{"DeleteToolsetEnvironmentLink", "DELETE", "/rpc/environments.deleteToolsetLink"},
+			{"GetToolsetEnvironment", "GET", "/rpc/environments.getToolsetEnvironment"},
 		},
-		CreateEnvironment:           NewCreateEnvironmentHandler(e.CreateEnvironment, mux, decoder, encoder, errhandler, formatter),
-		ListEnvironments:            NewListEnvironmentsHandler(e.ListEnvironments, mux, decoder, encoder, errhandler, formatter),
-		UpdateEnvironment:           NewUpdateEnvironmentHandler(e.UpdateEnvironment, mux, decoder, encoder, errhandler, formatter),
-		DeleteEnvironment:           NewDeleteEnvironmentHandler(e.DeleteEnvironment, mux, decoder, encoder, errhandler, formatter),
-		SetSourceEnvironmentLink:    NewSetSourceEnvironmentLinkHandler(e.SetSourceEnvironmentLink, mux, decoder, encoder, errhandler, formatter),
-		DeleteSourceEnvironmentLink: NewDeleteSourceEnvironmentLinkHandler(e.DeleteSourceEnvironmentLink, mux, decoder, encoder, errhandler, formatter),
-		GetSourceEnvironment:        NewGetSourceEnvironmentHandler(e.GetSourceEnvironment, mux, decoder, encoder, errhandler, formatter),
+		CreateEnvironment:            NewCreateEnvironmentHandler(e.CreateEnvironment, mux, decoder, encoder, errhandler, formatter),
+		ListEnvironments:             NewListEnvironmentsHandler(e.ListEnvironments, mux, decoder, encoder, errhandler, formatter),
+		UpdateEnvironment:            NewUpdateEnvironmentHandler(e.UpdateEnvironment, mux, decoder, encoder, errhandler, formatter),
+		DeleteEnvironment:            NewDeleteEnvironmentHandler(e.DeleteEnvironment, mux, decoder, encoder, errhandler, formatter),
+		SetSourceEnvironmentLink:     NewSetSourceEnvironmentLinkHandler(e.SetSourceEnvironmentLink, mux, decoder, encoder, errhandler, formatter),
+		DeleteSourceEnvironmentLink:  NewDeleteSourceEnvironmentLinkHandler(e.DeleteSourceEnvironmentLink, mux, decoder, encoder, errhandler, formatter),
+		GetSourceEnvironment:         NewGetSourceEnvironmentHandler(e.GetSourceEnvironment, mux, decoder, encoder, errhandler, formatter),
+		SetToolsetEnvironmentLink:    NewSetToolsetEnvironmentLinkHandler(e.SetToolsetEnvironmentLink, mux, decoder, encoder, errhandler, formatter),
+		DeleteToolsetEnvironmentLink: NewDeleteToolsetEnvironmentLinkHandler(e.DeleteToolsetEnvironmentLink, mux, decoder, encoder, errhandler, formatter),
+		GetToolsetEnvironment:        NewGetToolsetEnvironmentHandler(e.GetToolsetEnvironment, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -86,6 +95,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.SetSourceEnvironmentLink = m(s.SetSourceEnvironmentLink)
 	s.DeleteSourceEnvironmentLink = m(s.DeleteSourceEnvironmentLink)
 	s.GetSourceEnvironment = m(s.GetSourceEnvironment)
+	s.SetToolsetEnvironmentLink = m(s.SetToolsetEnvironmentLink)
+	s.DeleteToolsetEnvironmentLink = m(s.DeleteToolsetEnvironmentLink)
+	s.GetToolsetEnvironment = m(s.GetToolsetEnvironment)
 }
 
 // MethodNames returns the methods served.
@@ -100,6 +112,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountSetSourceEnvironmentLinkHandler(mux, h.SetSourceEnvironmentLink)
 	MountDeleteSourceEnvironmentLinkHandler(mux, h.DeleteSourceEnvironmentLink)
 	MountGetSourceEnvironmentHandler(mux, h.GetSourceEnvironment)
+	MountSetToolsetEnvironmentLinkHandler(mux, h.SetToolsetEnvironmentLink)
+	MountDeleteToolsetEnvironmentLinkHandler(mux, h.DeleteToolsetEnvironmentLink)
+	MountGetToolsetEnvironmentHandler(mux, h.GetToolsetEnvironment)
 }
 
 // Mount configures the mux to serve the environments endpoints.
@@ -457,6 +472,168 @@ func NewGetSourceEnvironmentHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getSourceEnvironment")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "environments")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetToolsetEnvironmentLinkHandler configures the mux to serve the
+// "environments" service "setToolsetEnvironmentLink" endpoint.
+func MountSetToolsetEnvironmentLinkHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("PUT", "/rpc/environments.setToolsetLink", otelhttp.WithRouteTag("/rpc/environments.setToolsetLink", f).ServeHTTP)
+}
+
+// NewSetToolsetEnvironmentLinkHandler creates a HTTP handler which loads the
+// HTTP request and calls the "environments" service
+// "setToolsetEnvironmentLink" endpoint.
+func NewSetToolsetEnvironmentLinkHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetToolsetEnvironmentLinkRequest(mux, decoder)
+		encodeResponse = EncodeSetToolsetEnvironmentLinkResponse(encoder)
+		encodeError    = EncodeSetToolsetEnvironmentLinkError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setToolsetEnvironmentLink")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "environments")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteToolsetEnvironmentLinkHandler configures the mux to serve the
+// "environments" service "deleteToolsetEnvironmentLink" endpoint.
+func MountDeleteToolsetEnvironmentLinkHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/environments.deleteToolsetLink", otelhttp.WithRouteTag("/rpc/environments.deleteToolsetLink", f).ServeHTTP)
+}
+
+// NewDeleteToolsetEnvironmentLinkHandler creates a HTTP handler which loads
+// the HTTP request and calls the "environments" service
+// "deleteToolsetEnvironmentLink" endpoint.
+func NewDeleteToolsetEnvironmentLinkHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteToolsetEnvironmentLinkRequest(mux, decoder)
+		encodeResponse = EncodeDeleteToolsetEnvironmentLinkResponse(encoder)
+		encodeError    = EncodeDeleteToolsetEnvironmentLinkError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteToolsetEnvironmentLink")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "environments")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetToolsetEnvironmentHandler configures the mux to serve the
+// "environments" service "getToolsetEnvironment" endpoint.
+func MountGetToolsetEnvironmentHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/environments.getToolsetEnvironment", otelhttp.WithRouteTag("/rpc/environments.getToolsetEnvironment", f).ServeHTTP)
+}
+
+// NewGetToolsetEnvironmentHandler creates a HTTP handler which loads the HTTP
+// request and calls the "environments" service "getToolsetEnvironment"
+// endpoint.
+func NewGetToolsetEnvironmentHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetToolsetEnvironmentRequest(mux, decoder)
+		encodeResponse = EncodeGetToolsetEnvironmentResponse(encoder)
+		encodeError    = EncodeGetToolsetEnvironmentError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getToolsetEnvironment")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "environments")
 		payload, err := decodeRequest(r)
 		if err != nil {

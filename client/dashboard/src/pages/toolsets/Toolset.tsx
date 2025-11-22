@@ -9,7 +9,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useSdkClient } from "@/contexts/Sdk";
 import {
-  useRegisterEnvironmentTelemetry,
   useRegisterToolsetTelemetry,
   useTelemetry,
 } from "@/contexts/Telemetry";
@@ -36,7 +35,7 @@ import { MCPDetails, MCPEnableButton } from "../mcp/MCPDetails";
 import { AddToolsDialog } from "./AddToolsDialog";
 import { PromptsTabContent } from "./PromptsTab";
 import { ResourcesTabContent } from "./resources/ResourcesTab";
-import { ToolsetAuth } from "./ToolsetAuth";
+import { ToolsetEnvironmentForm } from "@/components/environments/ToolsetEnvironmentForm";
 import { ToolsetAuthAlert } from "./ToolsetAuthAlert";
 import { ToolsetEmptyState } from "./ToolsetEmptyState";
 import { ToolsetHeader } from "./ToolsetHeader";
@@ -226,21 +225,11 @@ export function ToolsetRoot() {
 
 export default function ToolsetPage() {
   const { toolsetSlug } = useParams();
-  const [selectedEnvironment, setSelectedEnvironment] = useState<
-    string | undefined
-  >(undefined);
-
   if (!toolsetSlug) {
     return <div>Toolset not found</div>;
   }
 
-  return (
-    <ToolsetView
-      toolsetSlug={toolsetSlug}
-      environmentSlug={selectedEnvironment}
-      onEnvironmentChange={setSelectedEnvironment}
-    />
-  );
+  return <ToolsetView toolsetSlug={toolsetSlug} />;
 }
 
 type ToolsetTabs = "tools" | "prompts" | "resources" | "auth" | "mcp";
@@ -248,18 +237,14 @@ type ToolsetTabs = "tools" | "prompts" | "resources" | "auth" | "mcp";
 export function ToolsetView({
   toolsetSlug,
   className,
-  environmentSlug,
   noGrid: _noGrid,
-  onEnvironmentChange,
   context = "toolset",
 }: {
   toolsetSlug: string;
   className?: string;
-  environmentSlug?: string;
   addToolsStyle?: "link" | "modal";
   showEnvironmentBadge?: boolean;
   noGrid?: boolean;
-  onEnvironmentChange?: (environmentSlug: string) => void;
   context?: "playground" | "toolset";
 }) {
   const queryClient = useQueryClient();
@@ -314,10 +299,6 @@ export function ToolsetView({
     toolsetSlug: toolsetSlug ?? "",
   });
 
-  useRegisterEnvironmentTelemetry({
-    environmentSlug: environmentSlug ?? "",
-  });
-
   const cloneToolset = useCloneToolset();
 
   // Register page-specific command palette actions
@@ -362,7 +343,6 @@ export function ToolsetView({
   const refetchInstance = () => {
     const queryKey = queryKeyInstance({
       toolsetSlug,
-      environmentSlug,
     });
 
     queryClient.invalidateQueries({ queryKey });
@@ -591,7 +571,6 @@ export function ToolsetView({
       {toolset && (
         <ToolsetAuthAlert
           toolset={toolset}
-          environmentSlug={environmentSlug}
           onConfigureClick={() => handleTabChange("auth")}
           context={context}
         />
@@ -645,13 +624,7 @@ export function ToolsetView({
           )}
         </TabsContent>
         <TabsContent value="auth">
-          {toolset && (
-            <ToolsetAuth
-              toolset={toolset}
-              environmentSlug={environmentSlug}
-              onEnvironmentChange={onEnvironmentChange}
-            />
-          )}
+          {toolset && <ToolsetEnvironmentForm toolset={toolset} />}
         </TabsContent>
         <TabsContent value="mcp">
           {toolset && (

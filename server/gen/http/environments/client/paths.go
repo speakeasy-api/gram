@@ -41,3 +41,18 @@ func DeleteSourceEnvironmentLinkEnvironmentsPath() string {
 func GetSourceEnvironmentEnvironmentsPath() string {
 	return "/rpc/environments.getSourceEnvironment"
 }
+
+// SetToolsetEnvironmentLinkEnvironmentsPath returns the URL path to the environments service setToolsetEnvironmentLink HTTP endpoint.
+func SetToolsetEnvironmentLinkEnvironmentsPath() string {
+	return "/rpc/environments.setToolsetLink"
+}
+
+// DeleteToolsetEnvironmentLinkEnvironmentsPath returns the URL path to the environments service deleteToolsetEnvironmentLink HTTP endpoint.
+func DeleteToolsetEnvironmentLinkEnvironmentsPath() string {
+	return "/rpc/environments.deleteToolsetLink"
+}
+
+// GetToolsetEnvironmentEnvironmentsPath returns the URL path to the environments service getToolsetEnvironment HTTP endpoint.
+func GetToolsetEnvironmentEnvironmentsPath() string {
+	return "/rpc/environments.getToolsetEnvironment"
+}

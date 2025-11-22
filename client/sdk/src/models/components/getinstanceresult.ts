@@ -7,24 +7,42 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
-import { Environment, Environment$inboundSchema } from "./environment.js";
+import {
+  Environment,
+  Environment$inboundSchema,
+  Environment$Outbound,
+  Environment$outboundSchema,
+} from "./environment.js";
 import {
   FunctionEnvironmentVariable,
   FunctionEnvironmentVariable$inboundSchema,
+  FunctionEnvironmentVariable$Outbound,
+  FunctionEnvironmentVariable$outboundSchema,
 } from "./functionenvironmentvariable.js";
 import {
   PromptTemplate,
   PromptTemplate$inboundSchema,
+  PromptTemplate$Outbound,
+  PromptTemplate$outboundSchema,
 } from "./prompttemplate.js";
 import {
   SecurityVariable,
   SecurityVariable$inboundSchema,
+  SecurityVariable$Outbound,
+  SecurityVariable$outboundSchema,
 } from "./securityvariable.js";
 import {
   ServerVariable,
   ServerVariable$inboundSchema,
+  ServerVariable$Outbound,
+  ServerVariable$outboundSchema,
 } from "./servervariable.js";
-import { Tool, Tool$inboundSchema } from "./tool.js";
+import {
+  Tool,
+  Tool$inboundSchema,
+  Tool$Outbound,
+  Tool$outboundSchema,
+} from "./tool.js";
 
 export type GetInstanceResult = {
   /**
@@ -85,6 +103,66 @@ export const GetInstanceResult$inboundSchema: z.ZodType<
     "server_variables": "serverVariables",
   });
 });
+
+/** @internal */
+export type GetInstanceResult$Outbound = {
+  description?: string | undefined;
+  environment: Environment$Outbound;
+  function_environment_variables?:
+    | Array<FunctionEnvironmentVariable$Outbound>
+    | undefined;
+  name: string;
+  prompt_templates?: Array<PromptTemplate$Outbound> | undefined;
+  security_variables?: Array<SecurityVariable$Outbound> | undefined;
+  server_variables?: Array<ServerVariable$Outbound> | undefined;
+  tools: Array<Tool$Outbound>;
+};
+
+/** @internal */
+export const GetInstanceResult$outboundSchema: z.ZodType<
+  GetInstanceResult$Outbound,
+  z.ZodTypeDef,
+  GetInstanceResult
+> = z.object({
+  description: z.string().optional(),
+  environment: Environment$outboundSchema,
+  functionEnvironmentVariables: z.array(
+    FunctionEnvironmentVariable$outboundSchema,
+  ).optional(),
+  name: z.string(),
+  promptTemplates: z.array(PromptTemplate$outboundSchema).optional(),
+  securityVariables: z.array(SecurityVariable$outboundSchema).optional(),
+  serverVariables: z.array(ServerVariable$outboundSchema).optional(),
+  tools: z.array(Tool$outboundSchema),
+}).transform((v) => {
+  return remap$(v, {
+    functionEnvironmentVariables: "function_environment_variables",
+    promptTemplates: "prompt_templates",
+    securityVariables: "security_variables",
+    serverVariables: "server_variables",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace GetInstanceResult$ {
+  /** @deprecated use `GetInstanceResult$inboundSchema` instead. */
+  export const inboundSchema = GetInstanceResult$inboundSchema;
+  /** @deprecated use `GetInstanceResult$outboundSchema` instead. */
+  export const outboundSchema = GetInstanceResult$outboundSchema;
+  /** @deprecated use `GetInstanceResult$Outbound` instead. */
+  export type Outbound = GetInstanceResult$Outbound;
+}
+
+export function getInstanceResultToJSON(
+  getInstanceResult: GetInstanceResult,
+): string {
+  return JSON.stringify(
+    GetInstanceResult$outboundSchema.parse(getInstanceResult),
+  );
+}
 
 export function getInstanceResultFromJSON(
   jsonString: string,

@@ -373,6 +373,120 @@ func (s *Service) GetSourceEnvironment(ctx context.Context, payload *gen.GetSour
 	}, nil
 }
 
+func (s *Service) SetToolsetEnvironmentLink(ctx context.Context, payload *gen.SetToolsetEnvironmentLinkPayload) (*gen.ToolsetEnvironmentLink, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	toolsetID, err := uuid.Parse(payload.ToolsetID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, s.logger)
+	}
+
+	environmentID, err := uuid.Parse(payload.EnvironmentID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid environment_id").Log(ctx, s.logger)
+	}
+
+	// Verify the environment exists and belongs to the project
+	_, err = s.repo.GetEnvironmentByID(ctx, repo.GetEnvironmentByIDParams{
+		ID:        environmentID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "environment not found").Log(ctx, s.logger)
+	}
+
+	link, err := s.repo.SetToolsetEnvironment(ctx, repo.SetToolsetEnvironmentParams{
+		ToolsetID:     toolsetID,
+		ProjectID:     *authCtx.ProjectID,
+		EnvironmentID: environmentID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to set toolset environment link").Log(ctx, s.logger)
+	}
+
+	return &gen.ToolsetEnvironmentLink{
+		ID:            link.ID.String(),
+		ToolsetID:     link.ToolsetID.String(),
+		EnvironmentID: link.EnvironmentID.String(),
+	}, nil
+}
+
+func (s *Service) DeleteToolsetEnvironmentLink(ctx context.Context, payload *gen.DeleteToolsetEnvironmentLinkPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	toolsetID, err := uuid.Parse(payload.ToolsetID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, s.logger)
+	}
+
+	err = s.repo.DeleteToolsetEnvironment(ctx, repo.DeleteToolsetEnvironmentParams{
+		ToolsetID: toolsetID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return oops.E(oops.CodeUnexpected, err, "failed to delete toolset environment link").Log(ctx, s.logger)
+	}
+
+	return nil
+}
+
+func (s *Service) GetToolsetEnvironment(ctx context.Context, payload *gen.GetToolsetEnvironmentPayload) (*types.Environment, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	toolsetID, err := uuid.Parse(payload.ToolsetID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, s.logger)
+	}
+
+	environment, err := s.repo.GetEnvironmentForToolset(ctx, repo.GetEnvironmentForToolsetParams{
+		ToolsetID: toolsetID,
+		ProjectID: *authCtx.ProjectID,
+	})
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "environment not found for toolset").Log(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment for toolset").Log(ctx, s.logger)
+	}
+
+	entries, err := s.entries.ListEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID, true)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").Log(ctx, s.logger)
+	}
+
+	genEntries := make([]*types.EnvironmentEntry, len(entries))
+	for i, entry := range entries {
+		genEntries[i] = &types.EnvironmentEntry{
+			Name:      entry.Name,
+			Value:     entry.Value,
+			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
+		}
+	}
+
+	return &types.Environment{
+		ID:             environment.ID.String(),
+		OrganizationID: environment.OrganizationID,
+		ProjectID:      environment.ProjectID.String(),
+		Name:           environment.Name,
+		Slug:           types.Slug(environment.Slug),
+		Description:    conv.FromPGText[string](environment.Description),
+		Entries:        genEntries,
+		CreatedAt:      environment.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:      environment.UpdatedAt.Time.Format(time.RFC3339),
+	}, nil
+}
+
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
 }
