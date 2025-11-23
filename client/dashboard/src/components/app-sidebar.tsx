@@ -14,12 +14,13 @@ import {
 import { useSession } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
-import { cn, Stack } from "@speakeasy-api/moonshine";
+import { cn, Stack, useModal } from "@speakeasy-api/moonshine";
 import {
   AlertTriangleIcon,
   ChartNoAxesCombinedIcon,
   MinusIcon,
   TestTube2Icon,
+  Sparkles,
 } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
@@ -28,9 +29,11 @@ import { GramLogo } from "./gram-logo";
 import { ProjectMenu } from "./project-menu";
 import { Button } from "./ui/button";
 import { Type } from "./ui/type";
+import { ChangelogModal } from "./changelog-modal";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
+  const { openScreen } = useModal();
   const [metricsModalOpen, setMetricsModalOpen] = React.useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
@@ -43,7 +46,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     routes.deployments,
     routes.billing,
     routes.settings,
-    routes.docs,
   ];
 
   return (
@@ -93,6 +95,29 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarGroup className="mt-auto">
           <SidebarGroupContent>
             <NavMenu items={bottomNav} />
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <NavButton
+                  title="What's new"
+                  Icon={Sparkles}
+                  onClick={() => {
+                    openScreen({
+                      title: "What's new in Gram",
+                      component: <ChangelogModal />,
+                      id: "changelog",
+                    });
+                  }}
+                />
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <NavButton
+                  title="Docs"
+                  Icon={routes.docs.Icon}
+                  href={routes.docs.href()}
+                  active={routes.docs.active}
+                />
+              </SidebarMenuItem>
+            </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
