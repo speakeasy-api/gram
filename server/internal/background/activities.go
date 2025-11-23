@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -23,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	slacktypes "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
-	"github.com/speakeasy-api/gram/server/internal/agents"
 )
 
 type Activities struct {
@@ -45,7 +45,9 @@ type Activities struct {
 	validateDeployment            *activities.ValidateDeployment
 	verifyCustomDomain            *activities.VerifyCustomDomain
 	generateToolsetEmbeddings     *activities.GenerateToolsetEmbeddings
-	agentsResponse                *activities.AgentsResponse
+	preprocessAgentsInput         *activities.PreprocessAgentsInput
+	executeToolCall               *activities.ExecuteToolCall
+	executeModelCall              *activities.ExecuteModelCall
 }
 
 func NewActivities(
@@ -88,7 +90,9 @@ func NewActivities(
 		validateDeployment:            activities.NewValidateDeployment(logger, db, billingRepo),
 		verifyCustomDomain:            activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
 		generateToolsetEmbeddings:     activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
-		agentsResponse:                activities.NewAgentsResponse(logger, agentsService),
+		preprocessAgentsInput:         activities.NewPreprocessAgentsInput(logger, agentsService),
+		executeToolCall:               activities.NewExecuteToolCall(logger, agentsService),
+		executeModelCall:              activities.NewExecuteModelCall(logger, agentsService),
 	}
 }
 
@@ -164,10 +168,18 @@ func (a *Activities) ReapFlyApps(ctx context.Context, req activities.ReapFlyApps
 	return a.reapFlyApps.Do(ctx, req)
 }
 
-func (a *Activities) AgentsResponse(ctx context.Context, input activities.AgentsResponseInput) (*agents.ResponseOutput, error) {
-	output, err := a.agentsResponse.Execute(ctx, input)
+func (a *Activities) PreprocessAgentsInput(ctx context.Context, input activities.PreprocessAgentsInputInput) (*activities.PreprocessAgentsInputOutput, error) {
+	return a.preprocessAgentsInput.Do(ctx, input)
+}
+
+func (a *Activities) ExecuteToolCall(ctx context.Context, input activities.ExecuteToolCallInput) (*activities.ExecuteToolCallOutput, error) {
+	return a.executeToolCall.Do(ctx, input)
+}
+
+func (a *Activities) ExecuteModelCall(ctx context.Context, input activities.ExecuteModelCallInput) (*activities.ExecuteModelCallOutput, error) {
+	output, err := a.executeModelCall.Execute(ctx, input)
 	if err != nil {
-		return nil, fmt.Errorf("agents response activity failed: %w", err)
+		return nil, fmt.Errorf("execute model call activity failed: %w", err)
 	}
 	return output, nil
 }

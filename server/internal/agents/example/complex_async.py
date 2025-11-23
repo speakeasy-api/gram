@@ -13,14 +13,16 @@ headers = {
     "Gram-Key": os.getenv("GRAM_API_KEY"),
 }
 
-context = """Please help me with the following tasks in order:
-
-1. First, get the details of the organization with slug 'dub'
+context = """Please help me with the following things
+1. Please get the details of the organization with slug 'dub' and get all the workspaces for it (use a sub-agent)
 2. Then, find the user associated with the workspaces of the 'dub' organization
-3. Please use the email address to search for a stripe customer
-4. Then get the stripe charges associated with that customer
+3. Please use the email address to search for a stripe customer and get the stripe charges and refunds associated with that customer
 
-Please provide me details on those charges."""
+Structure your final result like:
+PLAN
+- please summarize the origin plan you created
+SUMMARY
+- please return all the data to me organized and summarized well with key insights."""
 
 payload = {
     "project_slug": "default",
@@ -49,8 +51,8 @@ while True:
     print(f"Status: {status}")
     
     if status != "in_progress":
-        print("\n=== Final Response ===")
         if "output" in poll_data and poll_data["output"]:
+            print("\n=== Final Response ===")
             print(poll_data["output"][-1]["content"][-1]["text"])
         
         if verbose:

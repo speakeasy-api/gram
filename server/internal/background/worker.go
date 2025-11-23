@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
@@ -28,7 +29,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
-	"github.com/speakeasy-api/gram/server/internal/agents"
 )
 
 type WorkerOptions struct {
@@ -180,7 +180,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
-	temporalWorker.RegisterActivity(activities.AgentsResponse)
+	temporalWorker.RegisterActivity(activities.PreprocessAgentsInput)
+	temporalWorker.RegisterActivity(activities.ExecuteToolCall)
+	temporalWorker.RegisterActivity(activities.ExecuteModelCall)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
@@ -191,6 +193,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(AgentsResponseWorkflow)
+	temporalWorker.RegisterWorkflow(SubAgentWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), client); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {

@@ -368,140 +368,16 @@ func (s *Service) LoadToolsetTools(
 	return agentTools, nil
 }
 
-// ResponseAgent runs the agent loop and returns the complete output
-func (s *Service) ResponseAgent(
+// GetCompletionFromMessages calls the chat client to get a completion from messages
+func (s *Service) GetCompletionFromMessages(
 	ctx context.Context,
 	orgID string,
-	projectID uuid.UUID,
 	messages []openrouter.OpenAIChatMessage,
-	opts AgentChatOptions,
-) ([]OutputItem, *ResponseUsage, error) {
-	chatClient := s.chatClient
-	if opts.AgentTimeout != nil {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, *opts.AgentTimeout)
-		defer cancel()
+	toolDefs []openrouter.Tool,
+) (*openrouter.OpenAIChatMessage, error) {
+	msg, err := s.chatClient.GetCompletionFromMessages(ctx, orgID, messages, toolDefs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get completion from messages: %w", err)
 	}
-
-	// Optional system prompt at the beginning
-	if opts.SystemPrompt != nil {
-		messages = append([]openrouter.OpenAIChatMessage{
-			{
-				Role:       "system",
-				Content:    *opts.SystemPrompt,
-				ToolCalls:  nil,
-				ToolCallID: "",
-				Name:       "",
-			},
-		}, messages...)
-	}
-
-	// Register tool definitions and their executors
-	agentTools := opts.AdditionalTools
-	for _, toolset := range opts.Toolsets {
-		toolsetTools, err := s.LoadToolsetTools(ctx, projectID, toolset.ToolsetSlug, toolset.EnvironmentSlug, toolset.Headers)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to load toolset %q: %w", toolset.ToolsetSlug, err)
-		}
-		agentTools = append(agentTools, toolsetTools...)
-	}
-
-	toolDefs := make([]openrouter.Tool, 0, len(agentTools))
-	executors := make(map[string]func(context.Context, string) (string, error))
-	toolMetadata := make(map[string]AgentTool) // Track tool metadata (is MCP, server label)
-	for _, t := range agentTools {
-		if t.Definition.Function != nil {
-			toolDefs = append(toolDefs, t.Definition)
-			executors[t.Definition.Function.Name] = t.Executor
-			toolMetadata[t.Definition.Function.Name] = t
-		}
-	}
-
-	var output []OutputItem
-	messageID := "msg_" + time.Now().Format("20060102150405")
-
-	for {
-		msg, err := chatClient.GetCompletionFromMessages(ctx, orgID, messages, toolDefs)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get completion: %w", err)
-		}
-
-		messages = append(messages, *msg)
-
-		// No tool calls = final assistant message
-		if len(msg.ToolCalls) == 0 {
-			// Convert final message to OutputMessage
-			output = append(output, OutputMessage{
-				Type:   "message",
-				ID:     messageID,
-				Status: "completed",
-				Role:   "assistant",
-				Content: []OutputTextContent{
-					{
-						Type: "output_text",
-						Text: msg.Content,
-					},
-				},
-			})
-			// Return output with placeholder usage (will be implemented later)
-			return output, &ResponseUsage{
-				InputTokens:  0,
-				OutputTokens: 0,
-				TotalTokens:  0,
-			}, nil
-		}
-
-		// Tool call loop
-		for _, tc := range msg.ToolCalls {
-			s.logger.InfoContext(ctx, "Tool called", attr.SlogToolName(tc.Function.Name))
-
-			// Check if this is an MCP tool
-			toolMeta, exists := toolMetadata[tc.Function.Name]
-			isMCPTool := exists && toolMeta.IsMCPTool
-
-			exec, ok := executors[tc.Function.Name]
-			var toolOutput string
-			var toolError *string
-
-			if !ok {
-				errMsg := fmt.Sprintf("No executor found for %q", tc.Function.Name)
-				toolOutput = errMsg
-				toolError = &errMsg
-				s.logger.ErrorContext(ctx, "Missing executor", attr.SlogToolName(tc.Function.Name))
-			} else {
-				result, err := exec(ctx, tc.Function.Arguments)
-				if err != nil {
-					errMsg := fmt.Sprintf("Error calling tool %q: %v", tc.Function.Name, err)
-					toolOutput = errMsg
-					toolError = &errMsg
-					s.logger.ErrorContext(ctx, "Tool error", attr.SlogToolName(tc.Function.Name), attr.SlogError(err))
-				} else {
-					toolOutput = result
-				}
-			}
-
-			// Add appropriate output type based on tool source
-			if isMCPTool {
-				// MCP tool call in OpenAI Responses API format
-				output = append(output, MCPToolCall{
-					Type:        "mcp_call",
-					ID:          tc.ID,
-					ServerLabel: toolMeta.ServerLabel,
-					Name:        tc.Function.Name,
-					Arguments:   tc.Function.Arguments,
-					Output:      toolOutput,
-					Error:       toolError,
-					Status:      "completed",
-				})
-			}
-
-			messages = append(messages, openrouter.OpenAIChatMessage{
-				Role:       "tool",
-				Content:    toolOutput,
-				Name:       tc.Function.Name,
-				ToolCallID: tc.ID,
-				ToolCalls:  nil,
-			})
-		}
-	}
+	return msg, nil
 }
