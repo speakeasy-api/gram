@@ -2,7 +2,7 @@
 
 This document tracks research, design decisions, and implementation progress for adding external MCP server registry support to Gram.
 
-**Last Updated:** 2025-11-24
+**Last Updated:** 2025-11-24 (post-RFC section 1 & 2 decisions)
 
 ---
 
@@ -77,15 +77,36 @@ When spawning subagents for research tasks, provide:
 #### API Design
 
 **New RPC method:**
-- `externalRegistriesList(organization_id) → []ExternalServer`
-  - Proxies to external registry API (e.g., PulseMCP)
+- `ListExternalMCPCatalog(organization_id) → ListExternalMCPCatalogResponse`
+  - Proxies to external registry API (MCP Registry at https://registry.modelcontextprotocol.io/v0.1/servers)
   - Returns list of available MCP servers
   - Runtime call (not cached for v0)
+  - **Decision:** No caching for v0. Linear ticket to be created for future caching implementation.
+  - **Decision:** Only servers with `remotes[]` are supported (packages filtered out)
+
+**Response structure:**
+```go
+type ListExternalMCPCatalogResponse struct {
+    Servers    []ExternalMCPServer
+    NextCursor *string
+}
+
+type ExternalMCPServer struct {
+    Name        string    // "ai.exa/exa"
+    Version     string    // "1.0.0"
+    Description string
+    RegistryID  string    // Internal UUID
+    Status      string    // "active", "deprecated", "deleted"
+    UpdatedAt   time.Time
+    Title       *string
+    IconURL     *string
+}
+```
+
   - Open questions:
-    - Pagination?
-    - Filtering/search?
-    - Error handling when registry is down?
-    - Response structure from registry?
+    - Pagination implementation details?
+    - Client-side search or server-side filtering?
+    - Partial results when registry is down?
 
 #### Admin Management (v0)
 
@@ -113,43 +134,50 @@ When spawning subagents for research tasks, provide:
 
 #### Source Representation
 
-**New source type:** `external_mcp` (or similar)
+**Decision made:** Store minimal reference data, fetch connection details at runtime
 
-**Source record stores:**
-- Reference to external server (how? see open questions)
-- Server URL/endpoint
-- Auth configuration (TBD - see OAuth section)
-- PulseMCP metadata (quality score, last tested time, etc.)
+**Table:** `deployments_external_mcps`
+- `id` (UUID)
+- `deployment_id` (FK to deployments)
+- `registry_id` (FK to registries)
+- `name` (TEXT) - Reverse-DNS name (e.g., "ai.exa/exa")
+- `version` (TEXT) - Version from registry
+- `slug` (TEXT) - User-facing identifier
 
-**Critical open questions:**
-- How do we reference the external server?
-  - Option A: Store full server spec/metadata (denormalized)
-  - Option B: Store registry_id + server_id (fetch on demand)
-  - Option C: Store registry URL + server identifier
+**Rationale:**
+- `registry_id` + `name` + `version` provide enough to fetch server details at runtime
+- Connection details (URL, transport) resolved by querying registry during processing
+- Transport type always remote (no need to store)
+- Follows pattern of `deployments_openapiv3_assets`, `deployments_packages`, `deployments_functions`
+
+**Open questions:**
 - How do we handle registry changes?
   - What if server is removed from registry?
-  - What if server URL changes?
-  - What if server metadata is updated?
-- Version tracking?
-  - Do we snapshot the server config at import time?
-  - Do we sync with registry updates?
+  - What if server URL changes in registry?
+- Error handling when registry is unavailable during tool calls?
 
 #### Integration with Deployment Create/Evolve
 
-**Current system:**
-- API spec sources: parse OpenAPI, generate tools
-- Function sources: analyze code, generate tools
+**Decision made:** Accept `name` + `registryID` in forms, validate asynchronously
 
-**External sources:**
-- Don't know tools at source creation time
-- Need to proxy `list_tools` at runtime
-- Need to pass "some reference" to deployment system
+**Goa Design Changes:**
+- `CreateDeploymentForm.ExternalMCPs` - array of `AddExternalMCPForm`
+- `EvolveDeploymentForm.ExternalMCPs` - array of `UpsertExternalMCPForm`
+- `AddExternalMCPForm`: `name` (string), `registryId` (string)
+- `UpsertExternalMCPForm`: `id?` (string), `name` (string), `registryId` (string)
 
-**Research needed:**
+**Async validation workflow:**
+1. HTTP handler accepts forms and creates deployment record
+2. Background workflow validates server exists in registry
+3. If invalid, mark source as failed with error details
+4. If valid, proceed with source processing
+
+**Rationale:** Prevents external dependencies from blocking deployment operations
+
+**Research still needed:**
 - [ ] How does `create deployment` currently handle different source types?
 - [ ] Where does source → tool mapping happen?
-- [ ] What's the minimum info deployment needs about a source?
-- [ ] Can we defer tool enumeration until runtime?
+- [ ] How do we integrate external MCP processing into existing workflow?
 
 #### User Experience Flow
 
@@ -379,9 +407,10 @@ This concept gets its own sections in:
 ## Open Questions & Blockers
 
 ### Critical Path Questions
-1. **Source reference strategy:** How do we reference external servers? (denormalize vs. fetch on demand)
+1. ~~**Source reference strategy:** How do we reference external servers?~~ **RESOLVED:** Store `registry_id` + `name` + `version`, fetch connection details at runtime
 2. **Registry sync:** How do we handle changes to external server definitions in registry?
 3. **OAuth provider extraction:** How do we get OAuth info from external servers?
+4. **Source processing:** How do we integrate external MCP processing into the existing deployment workflow?
 
 ### Research Dependencies
 - PulseMCP API documentation and capabilities
@@ -398,16 +427,22 @@ This concept gets its own sections in:
 ## Progress Tracking
 
 ### Completed Research
-- [ ] PulseMCP API review
+- [x] MCP Registry API structure (via subagent)
 - [ ] OAuth provider current implementation
 - [ ] Tool URN → Source mapping
 - [ ] Deployment create/evolve flow
+- [x] Schema pattern for deployment sources (deployments_openapiv3_assets, etc.)
 
 ### Completed Design Artifacts
-- [ ] Schema diagram: Registry tables
-- [ ] Wireframes: Import flow
-- [ ] Sequence diagrams: List/call flow
-- [ ] Sequence diagrams: Registry proxy
+- [x] Schema: `registries` and `registry_organizations` tables
+- [x] Schema: `deployments_external_mcps` table
+- [x] Go types: `ListExternalMCPCatalogResponse` and `ExternalMCPServer`
+- [x] Go types: `AddExternalMCPForm` and `UpsertExternalMCPForm`
+- [x] Sequence diagram: Registry listing flow
+- [ ] Wireframes: Import flow (placeholders added)
+- [ ] Sequence diagram: Source creation flow
+- [ ] Sequence diagram: `list_tools` with external source flattening
+- [ ] Sequence diagram: `call_tool` routing to external server
 
 ### Implementation Status
 _To be filled in as work progresses_
