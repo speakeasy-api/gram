@@ -62,7 +62,7 @@ func NewGetDeploymentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer"},
+			Scopes:         []string{"consumer", "producer", "chat"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -121,7 +121,7 @@ func NewGetLatestDeploymentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer"},
+			Scopes:         []string{"consumer", "producer", "chat"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -180,7 +180,7 @@ func NewGetActiveDeploymentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer"},
+			Scopes:         []string{"consumer", "producer", "chat"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -239,7 +239,7 @@ func NewCreateDeploymentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer"},
+			Scopes:         []string{"consumer", "producer", "chat"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -298,7 +298,7 @@ func NewEvolveEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer"},
+			Scopes:         []string{"consumer", "producer", "chat"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -357,7 +357,7 @@ func NewRedeployEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.En
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer"},
+			Scopes:         []string{"consumer", "producer", "chat"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -416,7 +416,7 @@ func NewListDeploymentsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer"},
+			Scopes:         []string{"consumer", "producer", "chat"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -475,7 +475,7 @@ func NewGetDeploymentLogsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer"},
+			Scopes:         []string{"consumer", "producer", "chat"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string

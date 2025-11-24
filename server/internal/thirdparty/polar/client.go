@@ -174,6 +174,60 @@ func (p *Client) InvalidateBillingCustomerCaches(ctx context.Context, orgID stri
 	return nil
 }
 
+func (p *Client) TrackModelUsage(ctx context.Context, event billing.ModelUsageEvent) {
+	ctx, span := p.tracer.Start(ctx, "polar_client.track_model_usage")
+	defer span.End()
+
+	source := string(event.Source)
+	metadata := map[string]polarComponents.EventCreateExternalCustomerMetadata{
+		"input_tokens": {
+			Integer: &event.InputTokens,
+		},
+		"output_tokens": {
+			Integer: &event.OutputTokens,
+		},
+		"total_tokens": {
+			Integer: &event.TotalTokens,
+		},
+		"model": {
+			Str: &event.Model,
+		},
+		"project_id": {
+			Str: &event.ProjectID,
+		},
+		"source": {
+			Str: &source,
+		},
+		"chat_id": {
+			Str: &event.ChatID,
+		},
+	}
+
+	if event.Cost != nil {
+		metadata["cost"] = polarComponents.EventCreateExternalCustomerMetadata{
+			Number: event.Cost,
+		}
+	}
+
+	_, err := p.polar.Events.Ingest(ctx, polarComponents.EventsIngest{
+		Events: []polarComponents.Events{
+			{
+				Type: polarComponents.EventsTypeEventCreateExternalCustomer,
+				EventCreateExternalCustomer: &polarComponents.EventCreateExternalCustomer{
+					ExternalCustomerID: event.OrganizationID,
+					Name:               "model-usage",
+					Metadata:           metadata,
+				},
+			},
+		},
+	})
+
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		p.logger.ErrorContext(ctx, "failed to ingest model usage event to Polar", attr.SlogError(err))
+	}
+}
+
 func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallUsageEvent) {
 	ctx, span := p.tracer.Start(ctx, "polar_client.track_tool_call_usage")
 	defer span.End()
