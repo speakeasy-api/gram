@@ -1,5 +1,17 @@
 # @gram-ai/functions
 
+## 0.11.1
+
+### Patch Changes
+
+- 13b76b8: Fixes a regression where process.env was being ignored
+
+## 0.11.0
+
+### Minor Changes
+
+- d5f4e35: Fix type EnvSchema type mismatch between fromGram and the Gram class
+
 ## 0.10.0
 
 ### Minor Changes

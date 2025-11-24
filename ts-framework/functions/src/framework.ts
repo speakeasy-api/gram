@@ -47,7 +47,7 @@ type ToolConfig<
 > = ToolDefinition<TName, TInputSchema, Env, Result> & {
   lax: boolean;
   inputEnv?: Record<string, string | undefined>;
-  envSchema: z.core.$ZodShape;
+  envSchema?: z.core.$ZodShape;
 };
 
 export type ToolSignature<T> =
@@ -204,13 +204,15 @@ export class Gram<
     [k: string]: ToolDefinition<any, any, string, Response>;
   } = {},
   EnvSchema extends z.core.$ZodShape = {
-    readonly [x: string]: z.core.$ZodOptional<z.core.$ZodString>;
+    readonly [x: string]:
+      | z.core.$ZodString
+      | z.core.$ZodOptional<z.core.$ZodString>;
   },
 > {
   #tools: Map<string, ToolConfig<string, z.core.$ZodShape, any, Response>>;
   #lax: boolean;
   #inputEnv?: Record<string, string | undefined> | undefined;
-  #envSchema: EnvSchema;
+  #envSchema?: EnvSchema;
 
   constructor(opts?: {
     /**
@@ -233,7 +235,7 @@ export class Gram<
     this.#tools = new Map();
     this.#lax = Boolean(opts?.lax);
     this.#inputEnv = opts?.env;
-    this.#envSchema = opts?.envSchema as EnvSchema;
+    this.#envSchema = opts?.envSchema;
   }
 
   protected get tools() {
@@ -278,7 +280,7 @@ export class Gram<
       ...definition,
       lax: this.#lax,
       inputEnv: this.#inputEnv,
-      envSchema: this.#envSchema,
+      envSchema: this.envSchema,
     } as any);
     return this;
   }
@@ -318,9 +320,11 @@ export class Gram<
       throw new Error(`Tool not found: ${request.name}`);
     }
 
+    const envSchema = tool.envSchema ? z.object(tool.envSchema) : z.unknown();
+
     const ctx = new ToolContext(
       options?.signal || new AbortController().signal,
-      tool.inputEnv,
+      envSchema.parse(tool.inputEnv ?? process.env),
     );
 
     const schema = zm.object(tool.inputSchema);
