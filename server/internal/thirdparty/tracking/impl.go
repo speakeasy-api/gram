@@ -62,6 +62,7 @@ func (c *Composite) TrackToolCallUsage(ctx context.Context, event billing.ToolCa
 		"project_id":           event.ProjectID,
 		"type":                 string(event.Type),
 		"disable_notification": true,
+		"status_code":          event.ResponseStatusCode,
 		"success":              toolCallSuccessHeuristic(event.ResponseStatusCode),
 	}
 
