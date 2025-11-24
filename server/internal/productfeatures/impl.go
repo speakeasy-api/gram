@@ -23,28 +23,36 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 )
 
+// OpenRouterKeyRefresher defines the interface for managing openrouter key refresh workflows
+type OpenRouterKeyRefresher interface {
+	ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string) error
+	CancelOpenRouterKeyRefreshWorkflow(ctx context.Context, orgID string) error
+}
+
 // Service implements organization feature management operations.
 type Service struct {
-	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	repo         *repo.Queries
-	auth         *auth.Auth
-	featureCache cache.TypedCacheObject[FeatureCache]
+	tracer              trace.Tracer
+	logger              *slog.Logger
+	db                  *pgxpool.Pool
+	repo                *repo.Queries
+	auth                *auth.Auth
+	featureCache        cache.TypedCacheObject[FeatureCache]
+	openRouterRefresher OpenRouterKeyRefresher
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, redisClient *redis.Client) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, redisClient *redis.Client, openRouterRefresher OpenRouterKeyRefresher) *Service {
 	logger = logger.With(attr.SlogComponent("productfeatures"))
 
 	return &Service{
-		tracer:       otel.Tracer("github.com/speakeasy-api/gram/server/internal/productfeatures"),
-		logger:       logger,
-		db:           db,
-		repo:         repo.New(db),
-		auth:         auth.New(logger, db, sessions),
-		featureCache: cache.NewTypedObjectCache[FeatureCache](logger.With(attr.SlogCacheNamespace("productfeature")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		tracer:              otel.Tracer("github.com/speakeasy-api/gram/server/internal/productfeatures"),
+		logger:              logger,
+		db:                  db,
+		repo:                repo.New(db),
+		auth:                auth.New(logger, db, sessions),
+		featureCache:        cache.NewTypedObjectCache[FeatureCache](logger.With(attr.SlogCacheNamespace("productfeature")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		openRouterRefresher: openRouterRefresher,
 	}
 }
 
@@ -100,7 +108,28 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 		)
 	}
 
+	s.handleProductFeatureSideEffects(ctx, payload.FeatureName, authCtx.ActiveOrganizationID)
+
 	return nil
+}
+
+func (s *Service) handleProductFeatureSideEffects(ctx context.Context, featureName string, organizationID string) {
+	if featureName == string(FeatureChat) {
+		// when we provide billable chat/agent usage we need to make sure the openrouter key being has enough credits to cover the usage
+		// we cancel the workflow because the previous re-use polcy was allow duplicate failed only
+		if err := s.openRouterRefresher.CancelOpenRouterKeyRefreshWorkflow(ctx, organizationID); err != nil {
+			s.logger.WarnContext(ctx, "failed to cancel openrouter key refresh workflow",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(organizationID),
+			)
+		}
+		if err := s.openRouterRefresher.ScheduleOpenRouterKeyRefresh(ctx, organizationID); err != nil {
+			s.logger.WarnContext(ctx, "failed to schedule openrouter key refresh workflow",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(organizationID),
+			)
+		}
+	}
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
