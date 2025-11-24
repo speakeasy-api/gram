@@ -62,6 +62,7 @@ func (c *Composite) TrackToolCallUsage(ctx context.Context, event billing.ToolCa
 		"project_id":           event.ProjectID,
 		"type":                 string(event.Type),
 		"disable_notification": true,
+		"success":              toolCallSuccessHeuristic(event.ResponseStatusCode),
 	}
 
 	if event.ResourceURI != "" {
@@ -151,4 +152,11 @@ func (c *Composite) TrackPromptCallUsage(ctx context.Context, event billing.Prom
 
 func (c *Composite) TrackPlatformUsage(ctx context.Context, events []billing.PlatformUsageEvent) {
 	c.polar.TrackPlatformUsage(ctx, events)
+}
+
+// for product metrics we create our own heuristic to estimate tool call success
+// this is for cases of unauthenticated requests, timeouts, our server errors that we are fairly certain are indicative of a failed tool call
+// it's important to note that a non 200 alone does not indicate that the actual tool did not suceed in its job
+func toolCallSuccessHeuristic(statusCode int) bool {
+	return statusCode == 0 || statusCode == 401 || statusCode != 403 || statusCode >= 500
 }

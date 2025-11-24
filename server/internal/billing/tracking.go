@@ -44,6 +44,7 @@ type ToolCallUsageEvent struct {
 	ChatID                *string
 	MCPURL                *string
 	Type                  ToolCallType
+	ResponseStatusCode    int
 	ToolsetID             *string
 	MCPSessionID          *string
 	FunctionCPUUsage      *float64

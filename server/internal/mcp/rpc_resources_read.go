@@ -151,6 +151,7 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 			MCPSessionID:          &payload.sessionID,
 			ChatID:                nil,
 			Type:                  plan.BillingType,
+			ResponseStatusCode:    rw.statusCode,
 			FunctionCPUUsage:      functionCPU,
 			FunctionMemUsage:      functionMem,
 			FunctionExecutionTime: functionsExecutionTime,
