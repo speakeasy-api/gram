@@ -1,0 +1,10 @@
+services:
+  pinecone:
+    image: ghcr.io/pinecone-io/pinecone-index:latest
+    container_name: pinecone-example
+    environment:
+      - INDEX_NAME=movies
+      - DIMENSION=384
+      - METRIC=cosine
+    ports:
+      - "5081:5081"
