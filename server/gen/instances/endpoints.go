@@ -64,7 +64,7 @@ func NewGetInstanceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer"},
+				Scopes:         []string{"consumer", "producer", "chat"},
 				RequiredScopes: []string{"consumer"},
 			}
 			var key string
@@ -77,6 +77,30 @@ func NewGetInstanceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 					Name:           "project_slug",
 					Scopes:         []string{},
 					RequiredScopes: []string{"consumer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat"},
+				RequiredScopes: []string{"chat"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"chat"},
 				}
 				var key string
 				if p.ProjectSlugInput != nil {

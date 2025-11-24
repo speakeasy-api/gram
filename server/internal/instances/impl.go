@@ -233,7 +233,15 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		}
 		ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(auth.APIKeyHeader), &sc)
 		if err != nil {
-			return oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, logger)
+			sc := security.APIKeyScheme{
+				Name:           auth.KeySecurityScheme,
+				RequiredScopes: []string{"chat"},
+				Scopes:         []string{},
+			}
+			ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(auth.APIKeyHeader), &sc)
+			if err != nil {
+				return oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, logger)
+			}
 		}
 	}
 
