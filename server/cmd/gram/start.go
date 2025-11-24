@@ -451,9 +451,11 @@ func newStartCommand() *cli.Command {
 			productFeatures := productfeatures.NewClient(logger, db, redisClient)
 
 			var openRouter openrouter.Provisioner
+			var openRouterKeyRefresher productfeatures.OpenRouterKeyRefresher
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
+				openRouterKeyRefresher = &background.OpenRouterKeyRefresher{Temporal: temporalClient}
 				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{Temporal: temporalClient}, productFeatures, cache.NewRedisCacheAdapter(redisClient))
 			}
 
