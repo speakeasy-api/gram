@@ -796,7 +796,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			IncludedBullets: []string{
 				fmt.Sprintf("%d MCP %s (public or private)", freeTierLimits.Servers, conv.Ternary(freeTierLimits.Servers == 1, "server", "servers")),
 				fmt.Sprintf("%d tool calls / month", freeTierLimits.ToolCalls),
-				fmt.Sprintf("$%d in playground credits", freeIncludedCredits),
+				fmt.Sprintf("$%d in chat based credits", freeIncludedCredits),
 				"Slack community support",
 			},
 			AddOnBullets: []string{},
@@ -817,7 +817,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			IncludedBullets: []string{
 				fmt.Sprintf("%d MCP %s (public or private)", proTierLimits.Servers, conv.Ternary(proTierLimits.Servers == 1, "server", "servers")),
 				fmt.Sprintf("%d tool calls / month", proTierLimits.ToolCalls),
-				fmt.Sprintf("$%d in playground credits", proIncludedCredits),
+				fmt.Sprintf("$%d in chat based credits", proIncludedCredits),
 				"Email support",
 			},
 			AddOnBullets: []string{

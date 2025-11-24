@@ -122,8 +122,8 @@ const UsageSection = () => {
           )}
           {creditUsage ? (
             <UsageItem
-              label="Playground Credits"
-              tooltip="The number of credits used this month for AI-powered dashboard experiences."
+              label="Chat Based Credits"
+              tooltip="The number of credits used this month for chat based products and other AI-powered dashboard experiences."
               value={creditUsage.creditsUsed}
               included={creditUsage.monthlyCredits}
               overageIncrement={creditUsage.monthlyCredits}
