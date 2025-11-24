@@ -1,5 +1,11 @@
 # server
 
+## 0.10.5
+
+### Patch Changes
+
+- bddc501: start tracking chat usage in polar
+
 ## 0.10.4
 
 ### Patch Changes
