@@ -52,6 +52,12 @@ while True:
     
     if status != "in_progress":
         if "output" in poll_data and poll_data["output"]:
+            for item in poll_data["output"]:
+                if item.get("role") == "assistant":
+                    print("\n=== Plan ===")
+                    print(item["content"][-1]["text"])
+                    break
+
             print("\n=== Final Response ===")
             print(poll_data["output"][-1]["content"][-1]["text"])
         
