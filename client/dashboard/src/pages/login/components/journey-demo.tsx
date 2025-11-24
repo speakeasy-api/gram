@@ -60,11 +60,31 @@ type Tool = {
 };
 
 const GENERATED_TOOLS: Tool[] = [
-  { id: "1", name: "getCitiesByPropertySales", method: "GET", path: "/cities/by-sales" },
-  { id: "2", name: "getPropertyPrices", method: "GET", path: "/properties/prices" },
-  { id: "3", name: "searchProperties", method: "GET", path: "/properties/search" },
+  {
+    id: "1",
+    name: "getCitiesByPropertySales",
+    method: "GET",
+    path: "/cities/by-sales",
+  },
+  {
+    id: "2",
+    name: "getPropertyPrices",
+    method: "GET",
+    path: "/properties/prices",
+  },
+  {
+    id: "3",
+    name: "searchProperties",
+    method: "GET",
+    path: "/properties/search",
+  },
   { id: "4", name: "getPropertyById", method: "GET", path: "/properties/{id}" },
-  { id: "5", name: "getCityStats", method: "GET", path: "/cities/{city}/stats" },
+  {
+    id: "5",
+    name: "getCityStats",
+    method: "GET",
+    path: "/cities/{city}/stats",
+  },
 ];
 
 const getMethodColor = (method: string) => {
@@ -103,17 +123,20 @@ export function JourneyDemo() {
     const initialDelay = 1000;
 
     GENERATED_TOOLS.forEach((tool, index) => {
-      const timer = setTimeout(() => {
-        setVisibleTools((prev) => [...prev, tool]);
+      const timer = setTimeout(
+        () => {
+          setVisibleTools((prev) => [...prev, tool]);
 
-        // Mark complete after last tool appears
-        if (index === GENERATED_TOOLS.length - 1) {
-          const completeTimer = setTimeout(() => {
-            setAnimationComplete(true);
-          }, 500);
-          timers.push(completeTimer);
-        }
-      }, initialDelay + index * 600);
+          // Mark complete after last tool appears
+          if (index === GENERATED_TOOLS.length - 1) {
+            const completeTimer = setTimeout(() => {
+              setAnimationComplete(true);
+            }, 500);
+            timers.push(completeTimer);
+          }
+        },
+        initialDelay + index * 600,
+      );
 
       timers.push(timer);
     });
@@ -187,7 +210,7 @@ export function JourneyDemo() {
           }}
           className={cn(
             "absolute w-[450px] bg-zinc-900 border border-zinc-700 rounded-lg overflow-hidden cursor-pointer",
-            focusedWindow === "spec" ? "z-20 shadow-xl" : "z-10 shadow-sm"
+            focusedWindow === "spec" ? "z-20 shadow-xl" : "z-10 shadow-sm",
           )}
           style={{ x: specX, y: specY }}
           onClick={() => handleWindowClick("spec")}
@@ -201,19 +224,23 @@ export function JourneyDemo() {
               <div
                 className={cn(
                   "w-3 h-3 rounded-full",
-                  focusedWindow === "spec" ? "bg-red-500/80" : "bg-zinc-600/50"
+                  focusedWindow === "spec" ? "bg-red-500/80" : "bg-zinc-600/50",
                 )}
               />
               <div
                 className={cn(
                   "w-3 h-3 rounded-full",
-                  focusedWindow === "spec" ? "bg-yellow-500/80" : "bg-zinc-600/50"
+                  focusedWindow === "spec"
+                    ? "bg-yellow-500/80"
+                    : "bg-zinc-600/50",
                 )}
               />
               <div
                 className={cn(
                   "w-3 h-3 rounded-full",
-                  focusedWindow === "spec" ? "bg-green-500/80" : "bg-zinc-600/50"
+                  focusedWindow === "spec"
+                    ? "bg-green-500/80"
+                    : "bg-zinc-600/50",
                 )}
               />
             </div>
@@ -244,7 +271,7 @@ export function JourneyDemo() {
           }}
           className={cn(
             "absolute w-[450px] bg-zinc-900 border border-zinc-700 rounded-lg overflow-hidden cursor-pointer",
-            focusedWindow === "tools" ? "z-20 shadow-xl" : "z-10 shadow-sm"
+            focusedWindow === "tools" ? "z-20 shadow-xl" : "z-10 shadow-sm",
           )}
           style={{ x: toolsX, y: toolsY }}
           onClick={() => handleWindowClick("tools")}
@@ -258,19 +285,25 @@ export function JourneyDemo() {
               <div
                 className={cn(
                   "w-3 h-3 rounded-full",
-                  focusedWindow === "tools" ? "bg-red-500/80" : "bg-zinc-600/50"
+                  focusedWindow === "tools"
+                    ? "bg-red-500/80"
+                    : "bg-zinc-600/50",
                 )}
               />
               <div
                 className={cn(
                   "w-3 h-3 rounded-full",
-                  focusedWindow === "tools" ? "bg-yellow-500/80" : "bg-zinc-600/50"
+                  focusedWindow === "tools"
+                    ? "bg-yellow-500/80"
+                    : "bg-zinc-600/50",
                 )}
               />
               <div
                 className={cn(
                   "w-3 h-3 rounded-full",
-                  focusedWindow === "tools" ? "bg-green-500/80" : "bg-zinc-600/50"
+                  focusedWindow === "tools"
+                    ? "bg-green-500/80"
+                    : "bg-zinc-600/50",
                 )}
               />
             </div>
@@ -284,12 +317,14 @@ export function JourneyDemo() {
           <div className="p-4 h-[350px] overflow-y-auto space-y-2">
             {visibleTools.length === 0 && (
               <div className="h-full flex items-center justify-center">
-                <span className="text-zinc-500 text-sm">Generating tools...</span>
+                <span className="text-zinc-500 text-sm">
+                  Generating tools...
+                </span>
               </div>
             )}
 
             <AnimatePresence>
-              {visibleTools.map((tool, index) => (
+              {visibleTools.map((tool) => (
                 <motion.div
                   key={tool.id}
                   initial={{ opacity: 0, x: -20, scale: 0.9 }}
@@ -298,13 +333,18 @@ export function JourneyDemo() {
                     type: "spring",
                     stiffness: 200,
                     damping: 20,
-                    delay: 0
+                    delay: 0,
                   }}
                   className="border border-zinc-700 rounded-md p-3 bg-zinc-800/50 font-mono text-sm"
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-white">{tool.name}()</span>
-                    <span className={cn("text-xs font-semibold", getMethodColor(tool.method))}>
+                    <span
+                      className={cn(
+                        "text-xs font-semibold",
+                        getMethodColor(tool.method),
+                      )}
+                    >
                       {tool.method}
                     </span>
                   </div>
