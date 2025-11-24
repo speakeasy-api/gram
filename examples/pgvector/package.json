@@ -1,0 +1,53 @@
+{
+  "type": "module",
+  "name": "pgvector",
+  "version": "0.0.0",
+  "author": "",
+  "description": "",
+  "private": true,
+  "keywords": [
+    "mcp",
+    "getgram.ai"
+  ],
+  "license": "ISC",
+  "main": "dist/functions.js",
+  "files": [
+    "src",
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "dev": "npm run db:start && mcp-inspector nodemon -q --watch src --exec node ./src/server.ts",
+    "lint": "tsc --noEmit",
+    "push": "gf push",
+    "prebuild": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build",
+    "build": "gf build",
+    "db:start": "docker compose up -d && npm run db:wait && npm run db:seed",
+    "db:stop": "docker compose down",
+    "db:reset": "docker compose down -v && npm run db:start",
+    "db:wait": "until docker exec pgvector-example pg_isready -U postgres; do sleep 1; done",
+    "db:seed": "node --import tsx scripts/seed.ts"
+  },
+  "dependencies": {
+    "@gram-ai/functions": "^0.11.1",
+    "@modelcontextprotocol/sdk": "^1.20.1",
+    "@openrouter/sdk": "^0.1.27",
+    "csv-parser": "^3.2.0",
+    "csvtojson": "^2.0.14",
+    "papaparse": "^5.5.3",
+    "pg": "^8.13.1",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/inspector": "^0.17.1",
+    "@types/node": "22.x",
+    "@types/papaparse": "^5.5.0",
+    "@types/pg": "^8.11.10",
+    "nodemon": "^3.1.9",
+    "tsx": "^4.19.2",
+    "typescript": "^5"
+  }
+}
