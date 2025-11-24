@@ -115,19 +115,21 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 
 func (s *Service) handleProductFeatureSideEffects(ctx context.Context, featureName string, organizationID string) {
 	if featureName == string(FeatureChat) {
-		// when we provide billable chat/agent usage we need to make sure the openrouter key being has enough credits to cover the usage
-		// we cancel the workflow because the previous re-use polcy was allow duplicate failed only
-		if err := s.openRouterRefresher.CancelOpenRouterKeyRefreshWorkflow(ctx, organizationID); err != nil {
-			s.logger.WarnContext(ctx, "failed to cancel openrouter key refresh workflow",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(organizationID),
-			)
-		}
-		if err := s.openRouterRefresher.ScheduleOpenRouterKeyRefresh(ctx, organizationID); err != nil {
-			s.logger.WarnContext(ctx, "failed to schedule openrouter key refresh workflow",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(organizationID),
-			)
+		if s.openRouterRefresher != nil {
+			// when we provide billable chat/agent usage we need to make sure the openrouter key being has enough credits to cover the usage
+			// we cancel the workflow because the previous re-use polcy was allow duplicate failed only
+			if err := s.openRouterRefresher.CancelOpenRouterKeyRefreshWorkflow(ctx, organizationID); err != nil {
+				s.logger.WarnContext(ctx, "failed to cancel openrouter key refresh workflow",
+					attr.SlogError(err),
+					attr.SlogOrganizationID(organizationID),
+				)
+			}
+			if err := s.openRouterRefresher.ScheduleOpenRouterKeyRefresh(ctx, organizationID); err != nil {
+				s.logger.WarnContext(ctx, "failed to schedule openrouter key refresh workflow",
+					attr.SlogError(err),
+					attr.SlogOrganizationID(organizationID),
+				)
+			}
 		}
 	}
 }
