@@ -19,7 +19,7 @@
     "node": ">=22.18.0"
   },
   "scripts": {
-    "dev": "mcp-inspector nodemon -q --watch src --exec node ./src/server.ts",
+    "dev": "mcp-inspector --transport stdio nodemon -q --watch src --exec node --experimental-strip-types ./src/server.ts",
     "lint": "tsc --noEmit",
     "_:build": "gf build",
     "push": "gf push",
