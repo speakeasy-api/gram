@@ -2,4 +2,4 @@
 
 ---
 
-gram functions example for pgvector  
+gram functions example for pgvector database
