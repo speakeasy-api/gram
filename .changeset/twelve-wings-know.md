@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-product metrics attribute estimating tool call success
+Apply simple HTTP status code heuristic for estimating successful tool calls
