@@ -20,6 +20,8 @@
 
 *Fill this in last after you have finished the "Proposal".  This should be a consolidated summary of the pitch.*
 
+- We are forced into a position where the gram application representation of tools diverges from the true set of tools available in the server. This creates the problem that we need to proxy the available tools in an external MCP into the Gram User Experience (this problem we are deferring) and a problem that we need to incorporate these tools into the MCP proxy. This problem we must solve now. We choose to solve this problem by adding a special tool to external MCP sources. This allows our toolset abstractions to remain intact while supporting the immediate use case
+- This will cause servers with OAuth configurations to proliferate within Gram. Right now, we have a 1 OAuth configuration per toolset constraint in our system. We will continue to maintain this constraint and enforce it as truly as possible (as in we will allow mixing external MCP sources with other Gram sources, but not mixing sources with multiple OAuth configurations)
 - Registry results will not be cached for v0 (Linear ticket to be created for future caching implementation)
 - System designed to support multiple registries per organization despite v0 expecting only one (prepares for future "Gram Catalogs" feature)
 - External server validation happens asynchronously to prevent blocking deployment operations on external dependencies
@@ -27,13 +29,7 @@
 
 # Proposal
 
-*The proposal section should go into detail on how the problem will be solved. It should try to balance brevity with enough detail to get the point across. This is a living document and it could start with just high level bullet points that get broken down further and further as feedback and questions come in. Diagrams, charts, code examples all speak louder than words so use them where possible.*
-
-## 1. Listing Available Servers from Registries
-
-This section covers how users discover and browse external MCP servers from configured registries.
-
-### System Diagram
+## System Diagram
 
 ```mermaid
 sequenceDiagram
@@ -53,6 +49,8 @@ sequenceDiagram
 
     Server-->>Client: Aggregated list of external servers<br/>(name, description, metadata)
 ```
+
+## 1. Listing Available Servers from Registries
 
 **Database Schema:**
 
@@ -82,130 +80,73 @@ CREATE TABLE IF NOT EXISTS registry_organizations (
 
 ### Implementation
 
-**New Package:** `server/internal/external_mcp/`
+**New Package:** `server/internal/externalmcp/`
 
 This package will handle all external MCP registry interactions.
 
 **New RPC Endpoint:** `ListExternalMCPCatalog`
 
-Located in Goa design files, this endpoint:
-- Takes organization ID as required parameter
-- Takes optional registry ID parameter for pagination
-- Returns list of available external MCP servers from all accessible registries
-- Proxies requests to external registries in real-time (no caching for v0)
-
-**Pagination Strategy:**
-- Without `registryId`: Returns first 100 results across all registries, rejects pagination parameters
-- With `registryId`: Enables pagination for that specific registry
-- V0 assumes small collections; pagination primarily for future-proofing
-
-**Package Structure:**
-
-```
-server/internal/external_mcp/
-├── service.go          # Service interface and implementation
-├── registry_client.go  # HTTP client for external registry APIs
-├── queries.sql         # SQLc queries for registries tables
-└── impl.go            # RPC endpoint implementations
-```
-
-**Flow:**
-1. Client calls `ListExternalMCPCatalog(org_id, registry_id?, cursor?)`
-2. Server queries `registry_organizations` to find accessible registries
-3. If `registry_id` provided:
-   - Validate pagination parameters allowed
-   - Proxy to that specific registry with cursor
-4. If no `registry_id`:
-   - Reject if cursor/pagination parameters provided
-   - Query all accessible registries (first 100 results total)
-5. Aggregate results and return to client
-6. Client displays in "Import External MCP" dialog
-
-**Error Handling:**
-- If registry is unavailable, log error but continue with other registries
-- Return partial results if some registries fail
-- Include registry source in response so UI can indicate which servers are from which registry
-
-**Response Type Design:**
-
 ```go
-// ListExternalMCPCatalogResponse is returned by the ListExternalMCPCatalog RPC
-type ListExternalMCPCatalogResponse struct {
-    Servers    []ExternalMCPServer `json:"servers"`
-    NextCursor *string             `json:"nextCursor,omitempty"` // For pagination
-}
-
 // ExternalMCPServer represents an external MCP server from a registry
-type ExternalMCPServer struct {
-    Name        string    `json:"name"`        // Reverse-DNS identifier (e.g., "ai.exa/exa")
-    Version     string    `json:"version"`     // Semantic version
-    Description string    `json:"description"` // Human-readable description
-    RegistryID  string    `json:"registryId"`  // Which registry this came from
-    Status      string    `json:"status"`      // "active", "deprecated", "deleted"
-    UpdatedAt   time.Time `json:"updatedAt"`   // When server was last updated
-    Title       *string   `json:"title,omitempty"` // Friendly display name
-    IconURL     *string   `json:"iconUrl,omitempty"` // First icon src (if available)
-}
+var ExternalMCPServer = Type("ExternalMCPServer", func() {
+    Description("An external MCP server available from a registry")
+
+    Attribute("name", String, "Reverse-DNS identifier (e.g., 'ai.exa/exa')", func() {
+        Example("ai.exa/exa")
+    })
+    Attribute("version", String, "Semantic version", func() {
+        Example("1.0.0")
+    })
+    Attribute("description", String, "Human-readable description")
+    Attribute("registryId", String, "Which registry this came from", func() {
+        Format(FormatUUID)
+    })
+    Attribute("title", String, "Friendly display name")
+    Attribute("iconUrl", String, "First icon src (if available)", func() {
+        Format(FormatURI)
+    })
+
+    Required("name", "version", "description", "registryId")
+})
+
+// ListExternalMCPCatalog lists available external MCP servers from configured registries.
+// Proxies requests to external registries in real-time (no caching for v0).
+//
+// Pagination strategy:
+// - Without registryId: Returns first 100 results across all registries, rejects pagination parameters
+// - With registryId: Enables pagination for that specific registry
+// - V0 assumes small collections; pagination primarily for future-proofing
+Method("listExternalMCPCatalog", func() {
+    Description("List available external MCP servers from configured registries")
+
+    Payload(func() {
+        Attribute("organizationId", String, "Organization ID", func() {
+            Format(FormatUUID)
+        })
+        Attribute("registryId", String, "Optional registry ID for pagination", func() {
+            Format(FormatUUID)
+        })
+        Attribute("cursor", String, "Pagination cursor")
+        Required("organizationId")
+    })
+
+    Result(func() {
+        Attribute("servers", ArrayOf(ExternalMCPServer), "List of available external MCP servers")
+        Attribute("nextCursor", String, "Pagination cursor for next page")
+        Required("servers")
+    })
+
+    HTTP(func() {
+        GET("/organizations/{organizationId}/external-mcp-catalog")
+        Param("registryId")
+        Param("cursor")
+        Response(StatusOK)
+    })
+})
 ```
 
-**Mapping from MCP Registry Response:**
-- `Name` ← `server.name`
-- `Version` ← `server.version`
-- `Description` ← `server.description`
-- `Status` ← `_meta.io.modelcontextprotocol.registry/official.status`
-- `UpdatedAt` ← `_meta.io.modelcontextprotocol.registry/official.updatedAt`
-- `Title` ← `server.title`
-- `IconURL` ← `server.icons[0].src` (first icon if present)
-
-**Note:** Only servers with `remotes[]` are supported; servers with `packages[]` are filtered during source creation.
 
 ## 2. Creating Sources from External Servers
-
-This section covers how external MCP servers are added to deployments and how those sources are processed.
-
-### Goa Design Changes
-
-**Extend `CreateDeploymentForm` and `EvolveDeploymentForm`:**
-
-```go
-// In CreateDeploymentForm
-type CreateDeploymentForm struct {
-    // ... existing fields ...
-    ExternalMCPs []AddExternalMCPForm `json:"externalMcps,omitempty"`
-}
-
-// In EvolveDeploymentForm
-type EvolveDeploymentForm struct {
-    // ... existing fields ...
-    ExternalMCPs []UpsertExternalMCPForm `json:"externalMcps,omitempty"`
-}
-
-// AddExternalMCPForm specifies a new external MCP source
-type AddExternalMCPForm struct {
-    Name       string `json:"name"`       // Server name from registry (e.g., "ai.exa/exa")
-    RegistryID string `json:"registryId"` // Internal registry UUID
-}
-
-// UpsertExternalMCPForm updates or creates an external MCP source
-type UpsertExternalMCPForm struct {
-    ID         *string `json:"id,omitempty"` // Existing source ID (for updates)
-    Name       string  `json:"name"`         // Server name from registry
-    RegistryID string  `json:"registryId"`   // Internal registry UUID
-}
-```
-
-**Update `ListExternalMCPCatalogResponse`:**
-
-```go
-// ExternalMCPServer now includes internal RegistryID
-type ExternalMCPServer struct {
-    Name        string    `json:"name"`
-    Version     string    `json:"version"`
-    Description string    `json:"description"`
-    RegistryID  string    `json:"registryId"`  // Internal UUID (not registry name)
-    // ... rest of fields ...
-}
-```
 
 ### Schema Changes
 
@@ -221,6 +162,10 @@ CREATE TABLE IF NOT EXISTS deployments_external_mcps (
   name TEXT NOT NULL,    -- Reverse-DNS name (e.g., "ai.exa/exa")
   version TEXT NOT NULL, -- Version from registry
 
+  -- Resolved connection details (populated during deployment processing)
+  remote_url TEXT NOT NULL, -- Resolved URL from registry
+  oauth_detected BOOLEAN NOT NULL DEFAULT FALSE, -- Whether OAuth was detected in server metadata
+
   -- Metadata
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
 
@@ -232,13 +177,113 @@ CREATE TABLE IF NOT EXISTS deployments_external_mcps (
   CONSTRAINT deployments_external_mcps_deployment_id_slug_key
     UNIQUE (deployment_id, slug)
 );
+
+CREATE TABLE IF NOT EXISTS external_mcp_tool_definitions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  tool_urn TEXT NOT NULL,
+
+  project_id uuid NOT NULL,
+  deployment_id uuid NOT NULL,
+  deployments_external_mcp_id uuid NOT NULL, -- References deployments_external_mcps
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT external_mcp_tool_definitions_pkey PRIMARY KEY (id),
+  CONSTRAINT external_mcp_tool_definitions_deployment_id_fkey
+    FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
+  CONSTRAINT external_mcp_tool_definitions_deployments_external_mcp_id_fkey
+    FOREIGN KEY (deployments_external_mcp_id) REFERENCES deployments_external_mcps (id) ON DELETE CASCADE,
+  CONSTRAINT external_mcp_tool_definitions_project_id_fkey
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS external_mcp_tool_definitions_deployment_id_tool_urn_key
+  ON external_mcp_tool_definitions (deployment_id, tool_urn) WHERE deleted IS FALSE;
+CREATE INDEX IF NOT EXISTS external_mcp_tool_definitions_deployments_external_mcp_id_idx
+  ON external_mcp_tool_definitions (deployments_external_mcp_id) WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS external_mcp_variable_definitions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  deployments_external_mcp_id uuid NOT NULL,
+
+  -- Variable identification
+  name TEXT NOT NULL, -- Name of the header or environment variable
+
+  -- Variable configuration
+  description TEXT, -- Description of the input
+  format TEXT, -- Input format (e.g., 'filepath', 'string', 'number', 'boolean')
+  choices TEXT[], -- List of possible values for the input
+  default_value TEXT, -- Default value for the input
+  placeholder TEXT, -- Placeholder for UI display
+  value TEXT, -- The value for the input (identifiers in {curly_braces} replaced at runtime)
+
+  -- Variable constraints
+  is_required BOOLEAN NOT NULL DEFAULT FALSE,
+  is_secret BOOLEAN NOT NULL DEFAULT FALSE, -- Whether the input is a secret (password, token, etc.)
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT external_mcp_variable_definitions_pkey PRIMARY KEY (id),
+  CONSTRAINT external_mcp_variable_definitions_deployments_external_mcp_id_fkey
+    FOREIGN KEY (deployments_external_mcp_id) REFERENCES deployments_external_mcps (id) ON DELETE CASCADE,
+  CONSTRAINT external_mcp_variable_definitions_name_key
+    UNIQUE (deployments_external_mcp_id, name)
+);
+
+CREATE INDEX IF NOT EXISTS external_mcp_variable_definitions_deployments_external_mcp_id_idx
+  ON external_mcp_variable_definitions (deployments_external_mcp_id) WHERE deleted IS FALSE;
 ```
 
-**Rationale:**
-- `registry_id` + `name` + `version` provide enough information to fetch server details from registry at runtime
-- Connection details (URL, transport type) are resolved by querying the registry during source processing
-- Transport type will always be remote (no need to store)
-- `slug` follows existing pattern for user-facing identification
+### Design Changes
+
+**Extend `CreateDeploymentForm` and `EvolveDeploymentForm`:**
+
+```go
+// AddExternalMCPForm specifies a new external MCP source
+var AddExternalMCPForm = Type("AddExternalMCPForm", func() {
+    Description("Form for adding a new external MCP source to a deployment")
+
+    Attribute("name", String, "Server name from registry (e.g., 'ai.exa/exa')", func() {
+        Example("ai.exa/exa")
+    })
+    Attribute("registryId", String, "Internal registry UUID", func() {
+        Format(FormatUUID)
+    })
+
+    Required("name", "registryId")
+})
+
+// UpsertExternalMCPForm updates or creates an external MCP source
+var UpsertExternalMCPForm = Type("UpsertExternalMCPForm", func() {
+    Description("Form for updating or creating an external MCP source")
+
+    Attribute("id", String, "Existing source ID (for updates)", func() {
+        Format(FormatUUID)
+    })
+    Attribute("name", String, "Server name from registry", func() {
+        Example("ai.exa/exa")
+    })
+    Attribute("registryId", String, "Internal registry UUID", func() {
+        Format(FormatUUID)
+    })
+
+    Required("name", "registryId")
+})
+
+// Extend CreateDeploymentForm
+// Add to existing CreateDeploymentForm definition:
+// Attribute("externalMcps", ArrayOf(AddExternalMCPForm), "External MCP sources to add")
+
+// Extend EvolveDeploymentForm
+// Add to existing EvolveDeploymentForm definition:
+// Attribute("externalMcps", ArrayOf(UpsertExternalMCPForm), "External MCP sources to upsert")
+```
 
 ### Source Processing
 
@@ -246,56 +291,29 @@ CREATE TABLE IF NOT EXISTS deployments_external_mcps (
 
 The existing `ProcessDeploymentWorkflow` in `server/internal/background/deployments.go` will be extended to handle external MCP sources alongside OpenAPI and Functions sources.
 
-**Current workflow steps:**
-1. TransitionDeployment → "pending"
-2. ValidateDeployment (tier limits)
-3. **ProcessDeployment** ← Extension point
-4. ProvisionFunctionsAccess
-5. DeployFunctionRunners
-6. TransitionDeployment → "completed" or "failed"
-
 **Extension to ProcessDeployment activity:**
 
-In `server/internal/background/activities/process_deployment.go`, add `doExternalMCP()` method following the pattern of `doOpenAPIv3()` and `doFunctions()`:
+In `server/internal/background/activities/process_deployment.go`, add `doExternalMCP()` method:
 
-```go
-func (p *ProcessDeployment) doExternalMCP(
-    ctx context.Context,
-    pool *pool.ErrorPool,
-    projectID uuid.UUID,
-    deploymentID uuid.UUID,
-    orgSlug string,
-    projectSlug string,
-    deployment *types.Deployment,
-) error {
-    for _, externalMCP := range deployment.ExternalMCPs {
-        // Spawn goroutine in pool
-        pool.Go(func() error {
-            // Create extractor
-            extractor := externalmcp.NewToolExtractor(p.logger, p.db, p.registryClient)
+```
+TODO: revisit - this snippet is very uninformative
 
-            // Validate server exists in registry
-            // Fetch server connection details from registry
-            // Create proxy tool definition
-            // Record metrics
-
-            return extractor.Do(ctx, externalmcp.ToolExtractorTask{
-                ProjectID:    projectID,
-                DeploymentID: deploymentID,
-                ExternalMCP:  externalMCP,
-                // ...
-            })
-        })
-    }
-    return nil
-}
+For each external MCP in deployment:
+  - Spawn goroutine in pool
+  - Create extractor
+  - Validate server exists in registry
+  - Fetch server connection details from registry
+  - Create proxy tool definition
+  - Record metrics
 ```
 
 **Key behaviors:**
-- Validation (server exists in registry) happens in `externalmcp.ToolExtractor`, not in `ValidateDeployment` activity
-- Failure to validate marks source as failed (logged to deployment_events)
-- Successful validation creates proxy tool definition(s)
-- Errors are non-retryable (invalid server name is permanent failure)
+- Failure modes:
+  * Fail to find specified exeternal server in registry
+  * Mismatch between server version and specified version
+  * Server specifieds any `packages`
+  * Server _doesn't_ specify any remotes
+- Result is going to be a single tool definition with the name `proxy`
 
 ### Tool Definition Tables
 
@@ -309,37 +327,6 @@ Following the pattern of OpenAPI (`http_tool_definitions`) and Functions (`funct
   - Stores runtime, input schema, variables
   - References `function_id` from `deployments_functions`
 
-**Proposed for External MCP:**
-
-```sql
-CREATE TABLE IF NOT EXISTS external_mcp_tool_definitions (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  tool_urn TEXT NOT NULL,
-
-  project_id uuid NOT NULL,
-  deployment_id uuid NOT NULL,
-  external_mcp_id uuid NOT NULL, -- References deployments_external_mcps
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT external_mcp_tool_definitions_pkey PRIMARY KEY (id),
-  CONSTRAINT external_mcp_tool_definitions_deployment_id_fkey
-    FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
-  CONSTRAINT external_mcp_tool_definitions_external_mcp_id_fkey
-    FOREIGN KEY (external_mcp_id) REFERENCES deployments_external_mcps (id) ON DELETE CASCADE,
-  CONSTRAINT external_mcp_tool_definitions_project_id_fkey
-    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS external_mcp_tool_definitions_deployment_id_tool_urn_key
-  ON external_mcp_tool_definitions (deployment_id, tool_urn) WHERE deleted IS FALSE;
-CREATE INDEX IF NOT EXISTS external_mcp_tool_definitions_external_mcp_id_idx
-  ON external_mcp_tool_definitions (external_mcp_id) WHERE deleted IS FALSE;
-```
-
 **Note:** This table only stores the proxy tool registration. Tool metadata (name, description, input_schema) is resolved at runtime from the external MCP server.
 
 **Note on MCP Resources:**
@@ -350,8 +337,7 @@ MCP resources are **out of scope for v0**. Resources seem confusing in an era be
 
 **Extractor workflow:**
 1. Resolve registry from database using `registry_id`
-2. Query resolved registry URL to fetch server details using `name` field
-3. Validate that specified `version` exists in registry response
+2. Query resolved registry URL to fetch server details using `name` and `version`
 4. Create single proxy tool with:
    - Tool name: `proxy`
    - Tool URN pattern: `tools:externalmcp:<slug>:proxy`
@@ -360,44 +346,9 @@ MCP resources are **out of scope for v0**. Resources seem confusing in an era be
      - Tool name: `proxy`
 5. Store in `external_mcp_tool_definitions` with minimal metadata
 
-**Proxy tool behavior:**
-The proxy tool acts as a gateway. When Gram's MCP proxy receives a call to this tool, it will:
-- Fetch actual tool list from external server at runtime
-- Route tool calls to the appropriate external MCP server
-- Handle tool discovery transparently (implementation details in separate MCP proxy work)
-
-### Key Decision: Async Validation
-
-External server validity is validated asynchronously in the background workflow rather than during the HTTP handler. This prevents external dependencies from blocking deployment creation.
-
 ## 3. Tool Calling & Proxy Architecture
 
 This section covers how tool calls are routed through Gram to external MCP servers, with transparent proxying of `list_tools` and `call_tool`.
-
-### Current MCP Architecture
-
-**RPC Endpoints** (server/internal/mcp/):
-- `rpc_tools_list.go:32` - Handles `tools/list` RPC
-- `rpc_tools_call.go:49` - Handles `tools/call` RPC
-
-**Tool Discovery Flow:**
-1. Client calls `tools/list` on Gram toolset
-2. `mv.DescribeToolset()` queries database for all tools in deployment
-3. Returns tools with name, description, input schema
-
-**Tool Calling Flow:**
-1. Client calls `tools/call` with tool name + arguments
-2. Find tool by name, extract URN (format: `tools:kind:source:name`)
-3. `toolsets.GetToolCallPlanByURN()` switches on URN kind:
-   - `http` → Query http_tool_definitions, build HTTP reverse proxy plan
-   - `function` → Query function_tool_definitions, build serverless invocation plan
-   - `prompt` → Query prompt templates, build template execution plan
-4. `gateway.ToolProxy.Do()` executes the plan based on kind
-
-**URN Structure:**
-- Format: `tools:{kind}:{source}:{name}`
-- Existing kinds: `http`, `function`, `prompt`
-- New kind for external MCP: `externalmcp`
 
 ### External MCP Integration
 
