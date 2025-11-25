@@ -317,6 +317,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 				CompletionTokens: 0,
 				TotalTokens:      0,
 			},
+			usageSet:   false,
 			openRouter: s.openRouter,
 		}
 	}
@@ -509,6 +510,7 @@ type responseCaptor struct {
 	messageID            string
 	model                string
 	isDone               bool
+	usageSet             bool
 	messageWritten       bool
 	finishReason         *string
 	repo                 *repo.Queries
@@ -526,13 +528,21 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 	// If this is a streaming response, parse and collect the chunks
 	if r.isStreaming {
 		chunkData := string(b)
+		isDoneBeforeLineProcess := r.isDone
 		for _, line := range strings.Split(chunkData, "\n") {
 			r.processLine(line)
+		}
+
+		// Log if we are unexpectedly not receiving usage data on the next message after
+		// Could be a sign of a parsing issue
+		if isDoneBeforeLineProcess && !r.usageSet && r.usage.TotalTokens == 0 {
+			r.logger.ErrorContext(r.ctx, fmt.Sprintf("streaming response finished without usage data for chat message: %s", r.chatID.String()))
 		}
 	}
 
 	// If we're done, log the message
-	if r.isDone && !r.messageWritten {
+	// openrouter streams the usage data after the finish_reason, it's important we wait for that
+	if r.isDone && r.usageSet && !r.messageWritten {
 		// Convert accumulated tool calls to JSON for storage if needed
 		var toolCallsJSON []byte
 		if len(r.accumulatedToolCalls) > 0 {
@@ -595,6 +605,7 @@ func (r *responseCaptor) processLine(line string) {
 		// Check if this is the [DONE] marker
 		if strings.TrimSpace(data) == "[DONE]" {
 			r.isDone = true
+			r.usageSet = true
 			return
 		}
 
@@ -606,6 +617,7 @@ func (r *responseCaptor) processLine(line string) {
 
 			if chunk.Usage != nil {
 				r.usage = *chunk.Usage
+				r.usageSet = true
 			}
 
 			// Process each choice in the chunk

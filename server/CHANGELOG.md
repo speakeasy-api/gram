@@ -1,5 +1,17 @@
 # server
 
+## 0.10.6
+
+### Patch Changes
+
+- 6b04cc2: Updates playground chat models to a more modern list. Add Claude 4.5 Opus and ChatGPT 5.1
+
+## 0.10.5
+
+### Patch Changes
+
+- bddc501: start tracking chat usage in polar
+
 ## 0.10.4
 
 ### Patch Changes

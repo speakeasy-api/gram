@@ -22,24 +22,32 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 )
 
 const OpenRouterBaseURL = "https://openrouter.ai/api"
 
+// Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
+// This list can stay sufficiently robust, we should just need to allow list a model before it goes through us
 var allowList = map[string]bool{
 	"anthropic/claude-sonnet-4.5":   true,
 	"anthropic/claude-haiku-4.5":    true,
 	"anthropic/claude-sonnet-4":     true,
+	"anthropic/claude-opus-4.5":     true,
 	"openai/gpt-4o":                 true,
 	"openai/gpt-4o-mini":            true,
+	"openai/gpt-5.1-codex":          true,
 	"openai/gpt-5":                  true,
+	"openai/gpt-5.1":                true,
 	"openai/gpt-4.1":                true,
 	"anthropic/claude-3.7-sonnet":   true,
 	"anthropic/claude-opus-4":       true,
 	"google/gemini-2.5-pro-preview": true,
+	"google/gemini-3-pro-preview":   true,
 	"moonshotai/kimi-k2":            true,
 	"mistralai/mistral-medium-3":    true,
+	"mistralai/mistral-medium-3.1":  true,
 	"mistralai/codestral-2501":      true,
 }
 
@@ -79,10 +87,11 @@ type OpenRouter struct {
 	orgRepo           *orgRepo.Queries
 	orClient          *http.Client
 	refresher         KeyRefresher
+	featureClient     *productfeatures.Client
 	modelPricingCache cache.TypedCacheObject[mv.ModelPricing]
 }
 
-func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, cacheImpl cache.Cache) *OpenRouter {
+func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, cacheImpl cache.Cache) *OpenRouter {
 	return &OpenRouter{
 		provisioningKey:   provisioningKey,
 		env:               env,
@@ -91,6 +100,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey stri
 		orgRepo:           orgRepo.New(db),
 		orClient:          retryablehttp.NewClient().StandardClient(),
 		refresher:         refresher,
+		featureClient:     featureClient,
 		modelPricingCache: cache.NewTypedObjectCache[mv.ModelPricing](logger.With(attr.SlogCacheNamespace("model_pricing")), cacheImpl, cache.SuffixNone),
 	}
 }
@@ -106,7 +116,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 			return "", oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
 		}
 
-		creditAmount := getLimitForOrg(org)
+		creditAmount := o.getLimitForOrg(ctx, org)
 
 		keyResponse, err := o.createOpenRouterAPIKey(ctx, orgID, org.Slug, creditAmount)
 		if err != nil {
@@ -162,7 +172,7 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string) (int,
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
 	}
 
-	limit := getLimitForOrg(org)
+	limit := o.getLimitForOrg(ctx, org)
 
 	keyResponse, err := o.createOpenRouterAPIKey(ctx, orgID, org.Slug, limit)
 	if err != nil {
@@ -198,7 +208,7 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64,
 	if err != nil {
 		return 0, 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
 	}
-	limit := getLimitForOrg(org)
+	limit := o.getLimitForOrg(ctx, org)
 
 	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
 	if err != nil {
@@ -242,10 +252,24 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64,
 	return creditsUsed, limit, nil
 }
 
-func getLimitForOrg(org orgRepo.OrganizationMetadatum) int {
+func (o *OpenRouter) getLimitForOrg(ctx context.Context, org orgRepo.OrganizationMetadatum) int {
 	if slices.Contains(specialLimitOrgs, org.ID) {
 		return 500
 	}
+
+	chatEnabled, err := o.featureClient.IsFeatureEnabled(ctx, org.ID, productfeatures.FeatureChat)
+	if err != nil {
+		o.logger.WarnContext(ctx, "failed to check chat feature status, using default limit",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(org.ID),
+		)
+	}
+
+	// when we provide billable chat/agent usage we need to make sure the openrouter key being has enough credits to cover the usage
+	if chatEnabled && slices.Contains([]string{"pro", "enterprise"}, org.GramAccountType) {
+		return 500 // this upper bound max will likely eventually be user configurable
+	}
+
 	return creditsAccountTypeMap[org.GramAccountType]
 }
 

@@ -1,5 +1,0 @@
----
-
----
-
-gram functions snowflake example 

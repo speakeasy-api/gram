@@ -32,10 +32,10 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/pgvector/pgvector-go v0.3.0
 	github.com/pgx-contrib/pgxotel v0.0.0-20250908221444-24ae56d05ec0
-	github.com/polarsource/polar-go v0.10.0
+	github.com/polarsource/polar-go v0.12.0
 	github.com/posthog/posthog-go v1.6.12
-	github.com/redis/go-redis/extra/redisotel/v9 v9.16.0
-	github.com/redis/go-redis/v9 v9.16.0
+	github.com/redis/go-redis/extra/redisotel/v9 v9.17.0
+	github.com/redis/go-redis/v9 v9.17.0
 	github.com/samber/lo v1.52.0
 	github.com/samber/slog-multi v1.5.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
@@ -59,18 +59,18 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.38.0
 	go.opentelemetry.io/otel/trace v1.38.0
 	go.temporal.io/api v1.58.0
-	go.temporal.io/sdk v1.37.0
+	go.temporal.io/sdk v1.38.0
 	go.temporal.io/sdk/contrib/opentelemetry v0.6.0
-	go.yaml.in/yaml/v4 v4.0.0-rc.2
+	go.yaml.in/yaml/v4 v4.0.0-rc.3
 	goa.design/clue v1.2.3
 	goa.design/goa/v3 v3.22.6
 	goa.design/plugins/v3 v3.22.6
 	golang.org/x/sync v0.18.0
 	golang.org/x/sys v0.38.0
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.34.1
-	k8s.io/apimachinery v0.34.1
-	k8s.io/client-go v0.34.1
+	k8s.io/api v0.34.2
+	k8s.io/apimachinery v0.34.2
+	k8s.io/client-go v0.34.2
 )
 
 require (
@@ -191,7 +191,7 @@ require (
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
-	github.com/nexus-rpc/sdk-go v0.3.0 // indirect
+	github.com/nexus-rpc/sdk-go v0.5.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/paulmach/orb v0.11.1 // indirect
@@ -206,7 +206,7 @@ require (
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
-	github.com/redis/go-redis/extra/rediscmd/v9 v9.16.0 // indirect
+	github.com/redis/go-redis/extra/rediscmd/v9 v9.17.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/riza-io/grpc-go v0.2.0 // indirect

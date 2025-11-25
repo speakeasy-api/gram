@@ -1,12 +1,11 @@
 import { createReadStream, unlinkSync, existsSync } from "node:fs";
 import { execSync } from "node:child_process";
 import Papa from "papaparse";
-import pg from "pg";
-
-const { Pool } = pg;
+import { Pinecone } from "@pinecone-database/pinecone";
 
 const ZIP_FILE = "../../assets/movies_dataset_with_embeddings.csv.zip";
-const CSV_FILE = "dataset_with_embeddings.csv";
+const CSV_FILE = "dataset_with_embedtadings.csv";
+const INDEX_NAME = "movies";
 
 interface MovieRow {
   Release_Date: string;
@@ -22,12 +21,6 @@ interface MovieRow {
 }
 
 async function seedDatabase() {
-  const pool = new Pool({
-    connectionString:
-      process.env.DATABASE_URL ||
-      "postgresql://postgres:postgres@localhost:5432/movies",
-  });
-
   try {
     // Clean up any existing extracted files
     if (existsSync(CSV_FILE)) {
@@ -42,19 +35,31 @@ async function seedDatabase() {
     execSync(`unzip -o ${ZIP_FILE}`, { stdio: "inherit" });
     console.log("Dataset extracted successfully");
 
-    // Test connection
-    await pool.query("SELECT 1");
-    console.log("Connected to database successfully");
+    // Initialize Pinecone client (pointing to local index instance)
+    const pc = new Pinecone({
+      apiKey: process.env.PINECONE_API_KEY || "dummy-key",
+    });
+
+    console.log("Connected to Pinecone Local successfully");
+
+    // Get index reference (pinecone-index provides a pre-configured index)
+    // For local development, specify the host URL directly
+    const index = pc.index(INDEX_NAME, "http://localhost:5081");
 
     // Check if data already exists
-    const { rows } = await pool.query("SELECT COUNT(*) FROM movies");
-    const count = parseInt(rows[0].count);
+    try {
+      const stats = await index.describeIndexStats();
+      const recordCount = stats.totalRecordCount || 0;
 
-    if (count > 0) {
-      console.log(`Database already contains ${count} movies. Skipping seed.`);
-      console.log("To re-seed, run: npm run db:reset");
-      await pool.end();
-      return;
+      if (recordCount > 0) {
+        console.log(
+          `Index already contains ${recordCount} records. Skipping seed.`,
+        );
+        console.log("To re-seed, run: npm run db:reset");
+        return;
+      }
+    } catch (error) {
+      console.log("Could not check index stats, proceeding with seeding...");
     }
 
     console.log("Starting database seed...");
@@ -62,8 +67,22 @@ async function seedDatabase() {
     let processed = 0;
     let inserted = 0;
     let skipped = 0;
-    const batchSize = 100;
+    const batchSize = 200;
     let batch: any[] = [];
+
+    // Helper function to upsert batch with retries
+    const upsertBatch = async (records: any[]) => {
+      if (records.length === 0) return;
+
+      try {
+        await index.upsert(records);
+        inserted += records.length;
+        console.log(`Inserted ${inserted} movies...`);
+      } catch (error) {
+        console.error("Error upserting batch:", error);
+        throw error;
+      }
+    };
 
     await new Promise<void>((resolve, reject) => {
       const stream = createReadStream(CSV_FILE);
@@ -78,7 +97,6 @@ async function seedDatabase() {
             if (result.errors.length > 0) {
               skipped++;
               if (skipped <= 5) {
-                // Only log the first 5 errors to avoid spam
                 console.warn(`Skipping malformed row ${processed + skipped}`);
               }
               return;
@@ -94,10 +112,8 @@ async function seedDatabase() {
             let releaseDate: string | null = null;
             if (row.Release_Date) {
               const dateStr = row.Release_Date.trim();
-              // Check if it's a valid date format (YYYY-MM-DD)
               if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
                 const parsed = new Date(dateStr);
-                // Verify it's a valid date
                 if (!isNaN(parsed.getTime())) {
                   releaseDate = dateStr;
                 }
@@ -108,58 +124,42 @@ async function seedDatabase() {
             let originalLanguage: string | null = null;
             if (row.Original_Language) {
               const lang = row.Original_Language.trim();
-              // Only accept if it looks like a language code (short alphanumeric string)
               if (lang.length <= 10 && /^[a-z]{2}(-[A-Z]{2})?$/i.test(lang)) {
                 originalLanguage = lang;
               }
             }
 
-            batch.push({
-              releaseDate,
+            // Build metadata object without null values
+            const metadata: Record<string, string | number> = {
               title: row.Title,
-              overview: row.Overview || null,
-              popularity: parseFloat(row.Popularity) || null,
-              voteCount: parseInt(row.Vote_Count) || null,
-              voteAverage: parseFloat(row.Vote_Average) || null,
-              originalLanguage,
-              genre: row.Genre || null,
-              posterUrl: row.Poster_Url || null,
-              embedding: `[${embeddingArray.join(",")}]`,
+            };
+            if (row.Overview) metadata.overview = row.Overview;
+            if (releaseDate) metadata.release_date = releaseDate;
+            if (row.Genre) metadata.genre = row.Genre;
+            if (row.Popularity && !isNaN(parseFloat(row.Popularity))) {
+              metadata.popularity = parseFloat(row.Popularity);
+            }
+            if (row.Vote_Count && !isNaN(parseInt(row.Vote_Count))) {
+              metadata.vote_count = parseInt(row.Vote_Count);
+            }
+            if (row.Vote_Average && !isNaN(parseFloat(row.Vote_Average))) {
+              metadata.vote_average = parseFloat(row.Vote_Average);
+            }
+            if (originalLanguage) metadata.original_language = originalLanguage;
+            if (row.Poster_Url) metadata.poster_url = row.Poster_Url;
+
+            // Add to batch
+            batch.push({
+              id: `movie_${processed}`,
+              values: embeddingArray,
+              metadata,
             });
 
             // Insert batch when it reaches the batch size
             if (batch.length >= batchSize) {
               parser.pause();
-
-              const values = batch
-                .map(
-                  (_, i) =>
-                    `($${i * 10 + 1}, $${i * 10 + 2}, $${i * 10 + 3}, $${i * 10 + 4}, $${i * 10 + 5}, $${i * 10 + 6}, $${i * 10 + 7}, $${i * 10 + 8}, $${i * 10 + 9}, $${i * 10 + 10})`,
-                )
-                .join(", ");
-
-              const params = batch.flatMap((item) => [
-                item.releaseDate,
-                item.title,
-                item.overview,
-                item.popularity,
-                item.voteCount,
-                item.voteAverage,
-                item.originalLanguage,
-                item.genre,
-                item.posterUrl,
-                item.embedding,
-              ]);
-
-              await pool.query(
-                `INSERT INTO movies (release_date, title, overview, popularity, vote_count, vote_average, original_language, genre, poster_url, embedding) VALUES ${values}`,
-                params,
-              );
-
-              inserted += batch.length;
-              console.log(`Inserted ${inserted} movies...`);
+              await upsertBatch(batch);
               batch = [];
-
               parser.resume();
             }
           } catch (err) {
@@ -172,32 +172,7 @@ async function seedDatabase() {
           try {
             // Insert remaining batch
             if (batch.length > 0) {
-              const values = batch
-                .map(
-                  (_, i) =>
-                    `($${i * 10 + 1}, $${i * 10 + 2}, $${i * 10 + 3}, $${i * 10 + 4}, $${i * 10 + 5}, $${i * 10 + 6}, $${i * 10 + 7}, $${i * 10 + 8}, $${i * 10 + 9}, $${i * 10 + 10})`,
-                )
-                .join(", ");
-
-              const params = batch.flatMap((item) => [
-                item.releaseDate,
-                item.title,
-                item.overview,
-                item.popularity,
-                item.voteCount,
-                item.voteAverage,
-                item.originalLanguage,
-                item.genre,
-                item.posterUrl,
-                item.embedding,
-              ]);
-
-              await pool.query(
-                `INSERT INTO movies (release_date, title, overview, popularity, vote_count, vote_average, original_language, genre, poster_url, embedding) VALUES ${values}`,
-                params,
-              );
-
-              inserted += batch.length;
+              await upsertBatch(batch);
             }
 
             const totalRows = processed + skipped;
@@ -217,11 +192,8 @@ async function seedDatabase() {
         },
       });
     });
-
-    await pool.end();
   } catch (err) {
     console.error("Error seeding database:", err);
-    await pool.end();
     process.exit(1);
   } finally {
     // Clean up the extracted files
