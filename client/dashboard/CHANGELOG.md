@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.19.5
+
+### Patch Changes
+
+- 6b04cc2: Updates playground chat models to a more modern list. Add Claude 4.5 Opus and ChatGPT 5.1
+
 ## 0.19.4
 
 ### Patch Changes
