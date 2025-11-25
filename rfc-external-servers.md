@@ -37,17 +37,51 @@ sequenceDiagram
     participant Server as Gram Server
     participant DB as PostgreSQL
     participant Registry as External Registry<br/>(e.g., MCP Registry)
+    participant Temporal as Temporal Worker
+    participant ExtMCP as External MCP Server
 
+    Note over Client,ExtMCP: 1. List Available Servers
     Client->>Server: ListExternalMCPCatalog(org_id)
     Server->>DB: SELECT registries<br/>WHERE org IN registry_organizations
     DB-->>Server: Available registries
 
     loop For each registry
-        Server->>Registry: GET /v1/servers (or equivalent)
+        Server->>Registry: GET /v1/servers
         Registry-->>Server: List of external MCP servers
     end
 
-    Server-->>Client: Aggregated list of external servers<br/>(name, description, metadata)
+    Server-->>Client: Aggregated list of servers
+
+    Note over Client,ExtMCP: 2. Create Deployment with External MCP
+    Client->>Server: CreateDeployment(externalMcps: [...])<br/>or EvolveDeployment
+    Server->>DB: INSERT deployments<br/>INSERT deployments_external_mcps
+    DB-->>Server: Deployment created
+    Server->>Temporal: ExecuteProcessDeploymentWorkflow
+    Server-->>Client: Deployment initiated
+
+    Note over Client,ExtMCP: 3. Process Deployment (Background)
+    Temporal->>DB: Query deployments_external_mcps
+    DB-->>Temporal: External MCP sources
+    Temporal->>Registry: Fetch server artifact
+    Registry-->>Temporal: Server details (remotes, variables)
+    Temporal->>DB: INSERT external_mcp_tool_definitions<br/>INSERT external_mcp_variable_definitions
+    Temporal->>DB: UPDATE deployment status to 'completed'
+
+    Note over Client,ExtMCP: 4. List Tools (Runtime)
+    Client->>Server: MCP tools/list
+    Server->>DB: Query external_mcp_tool_definitions
+    DB-->>Server: Proxy tools
+    Server->>ExtMCP: Initialize MCP Client<br/>MCP list_tools
+    ExtMCP-->>Server: External server tools
+    Server-->>Client: Flattened tool list<br/>(with prefixed names)
+
+    Note over Client,ExtMCP: 5. Call Tool (Runtime)
+    Client->>Server: MCP tools/call(name: "github:create_issue")
+    Server->>DB: Query external_mcp_tool_definitions<br/>by URN
+    DB-->>Server: External MCP connection details
+    Server->>ExtMCP: Initialize MCP Client<br/>MCP call_tool("create_issue", args)
+    ExtMCP-->>Server: Tool result
+    Server-->>Client: Tool result (passthrough)
 ```
 
 ## 1. Listing Available Servers from Registries
@@ -296,70 +330,43 @@ The existing `ProcessDeploymentWorkflow` in `server/internal/background/deployme
 In `server/internal/background/activities/process_deployment.go`, add `doExternalMCP()` method:
 
 ```
-TODO: revisit - this snippet is very uninformative
-
 For each external MCP in deployment:
-  - Spawn goroutine in pool
-  - Create extractor
-  - Validate server exists in registry
-  - Fetch server connection details from registry
-  - Create proxy tool definition
-  - Record metrics
+  1. Validate server name at specified version exists in registry
+  2. Fetch server artifact from registry
+  3. Validate server artifact meets requirements (especially that the server has only
+     remotes and no local packages)
+  4. Out of scope: Instantiate an MCP Client and detect server capabilities are as expected
+     (for now that the server supports tool calls, but we imagine expanding this in the future)
+  5. Out of scope: Use instantiated client to list resources and create a proxy resource for
+     the server in a new table if it has resources available
+  6. Create proxy tool definition
+  7. Record metrics
 ```
 
-**Key behaviors:**
-- Failure modes:
-  * Fail to find specified exeternal server in registry
-  * Mismatch between server version and specified version
-  * Server specifieds any `packages`
-  * Server _doesn't_ specify any remotes
-- Result is going to be a single tool definition with the name `proxy`
-
-### Tool Definition Tables
-
-Following the pattern of OpenAPI (`http_tool_definitions`) and Functions (`function_tool_definitions`), external MCP sources will create tool definitions.
-
-**Existing patterns:**
-- **OpenAPI**: Creates `http_tool_definitions` via `CreateOpenAPIv3ToolDefinition` query (server/internal/deployments/queries.sql:408)
-  - Stores HTTP method, path, schema, security, server URL
-  - References `openapiv3_document_id` from `deployments_openapiv3_assets`
-- **Functions**: Creates `function_tool_definitions` and `function_resource_definitions` via `CreateFunctionsTool` and `CreateFunctionsResource` queries
-  - Stores runtime, input schema, variables
-  - References `function_id` from `deployments_functions`
-
-**Note:** This table only stores the proxy tool registration. Tool metadata (name, description, input_schema) is resolved at runtime from the external MCP server.
-
-**Note on MCP Resources:**
-
-MCP resources are **out of scope for v0**. Resources seem confusing in an era before Gram apps exist - they expose server-specific data (like file contents, database records) without clear use cases in the current toolset model.
-
-**Future work:** Create Linear ticket to attempt calling external MCP's `list_resources` endpoint. If resources are returned, add them to the server for future use.
-
-**Extractor workflow:**
-1. Resolve registry from database using `registry_id`
-2. Query resolved registry URL to fetch server details using `name` and `version`
-4. Create single proxy tool with:
-   - Tool name: `proxy`
-   - Tool URN pattern: `tools:externalmcp:<slug>:proxy`
-     - Type: `externalmcp`
-     - Source slug: The `slug` field from `deployments_external_mcps`
-     - Tool name: `proxy`
-5. Store in `external_mcp_tool_definitions` with minimal metadata
 
 ## 3. Tool Calling & Proxy Architecture
 
 This section covers how tool calls are routed through Gram to external MCP servers, with transparent proxying of `list_tools` and `call_tool`.
 
+### External Server URNs
+
+**Significant Departure from Previous System Behavior:**
+
+External MCP sources break a previous property of Gram's system: to this point tools in Gram have always had a 1:1 mapping with tools in the resulting MCP server. The special tools in this new source type have only a single tool entry but are **unfolded** into multiple tools in the final MCP server.
+
+**URN Structure:**
+
+While the URN maintains the same structure as other tool types (`tools:{kind}:{source}:{name}`), the `name` field now maps to a **behavior in Gram's system** rather than a concrete tool:
+
+```
+tools:externalmcp:<slug>:proxy
+```
+
+Right now, we only define one special name, but one option for expanding the behavior of external MCPs would be to add more possible names to this urn scheme. We also should keep in mind that if we abandon this approach and decide to denormalize and synchronize tools to Gram application tools, the existence of these proxy tools is probably going to be gross enough that we should throw away the whole source type and introduce a new one.
+
 ### External MCP Integration
 
-#### Tool URN Format
-
-External MCP tools use URN: `tools:externalmcp:<slug>:proxy`
-- Kind: `externalmcp`
-- Source: The `slug` from `deployments_external_mcps`
-- Name: `proxy` (single proxy tool per external server)
-
-#### list_tools Extension
+#### list_tools Changes
 
 **Location:** `server/internal/mcp/rpc_tools_list.go`
 
@@ -382,123 +389,23 @@ External MCP tools use URN: `tools:externalmcp:<slug>:proxy`
 - Example: If external MCP has slug `github`, tools become `github:create_issue`, `github:list_repos`
 - Ensures uniqueness across multiple external servers in same toolset
 
-#### call_tool Extension
+#### call_tool Changes
 
-**Location:** `server/internal/toolsets/shared.go:42` (GetToolCallPlanByURN)
+The two major concerns for extending call_tool are:
+1. Resolving the tool from the name in the call. Right now we just match the name of the tool against the name of the tools in the set. We may take the opportunity to account for unpredictable behavior for toolsets with multiple tools at this time.
+2. Proxying to the external MCP server. This is tricky because it requires us to align on a conceptual model of whether we are proxying the request or we are terminating and making a new request. This author is partial to the latter approach, as it more closely mirrors the behavior of other source types and it gives Gram control over server capabilities and behaviors.
 
-**Add new case:**
-```go
-case urn.ToolKindExternalMCP:
-    // Query external_mcp_tool_definitions by URN
-    tool, err := t.toolsRepo.GetExternalMCPToolByURN(ctx, ...)
-    return t.extractExternalMCPToolCallPlan(ctx, tool)
-```
+#### initialize and ping
 
-**extractExternalMCPToolCallPlan workflow:**
-1. Query `external_mcp_tool_definitions` by URN
-2. Follow `external_mcp_id` to `deployments_external_mcps`
-3. Query registry for server connection details
-4. Return `gateway.NewExternalMCPToolCallPlan()` containing:
-   - External server URL + transport
-   - Original tool name (strip prefix)
-   - Authentication details (if any)
-
-**Location:** `server/internal/gateway/proxy.go:125` (ToolProxy.Do)
-
-**Add new case:**
-```go
-case ToolKindExternalMCP:
-    return tp.doExternalMCP(ctx, logger, w, requestBody, env, plan.Descriptor, plan.ExternalMCP, toolCallLogger)
-```
-
-**doExternalMCP implementation:**
-1. Parse tool name from request (strip prefix to get original name)
-2. **Instantiate MCP client** pointing to external server URL
-3. Initialize MCP session (handshake, capabilities negotiation)
-4. Call `client.CallTool(originalToolName, arguments)` through MCP protocol
-5. Receive MCP response from external server
-6. Check `isMCPPassthrough` (likely true for external MCP tools)
-7. Return raw MCP response to client
-
-### MCP Client Implementation
-
-**New Package:** `server/internal/external_mcp/client.go`
-
-**Responsibilities:**
-- Implement MCP client protocol (JSON-RPC over HTTP/stdio/SSE)
-- Handle MCP initialization handshake
-- Support `list_tools`, `call_tool`, `list_resources`, `read_resource` methods
-- Connection pooling/caching for repeated calls
-- Timeout and retry logic
-
-**Key Methods:**
-```go
-type MCPClient interface {
-    Initialize(ctx context.Context) error
-    ListTools(ctx context.Context) ([]MCPTool, error)
-    CallTool(ctx context.Context, name string, args map[string]any) (*MCPToolResult, error)
-    Close() error
-}
-```
-
-### Response Passthrough
-
-**Existing Infrastructure:**
-- `mcp/passthrough.go:5` - `isMCPPassthrough(meta)` function
-- Checks for `gram.ai/kind: "mcp-passthrough"` in tool meta
-- Returns raw MCP response without content chunk formatting
-
-**For External MCP:**
-- External MCP tools will have `Meta: {"gram.ai/kind": "mcp-passthrough"}`
-- This ensures raw MCP responses are returned transparently
-- No additional formatting/wrapping by Gram
-
-### Caching Strategy
-
-**V0 Approach:**
-- No caching of external `list_tools` responses
-- Each `list_tools` call queries external server in real-time
-- Connection pooling only (reuse MCP client connections)
-
-**Future Considerations:**
-- Cache `list_tools` responses with TTL
-- Invalidate cache on deployment changes
-- Background refresh of tool schemas
-
-### Error Handling
-
-**Registry Unavailable:**
-- Log error, mark external MCP source as degraded
-- Continue serving other tools in toolset
-- Return partial tool list with warning
-
-**External Server Unavailable:**
-- During `list_tools`: Exclude external tools from response
-- During `call_tool`: Return MCP error response to client
-- Log to deployment events for debugging
-
-**Version Mismatch:**
-- If specified version doesn't exist in registry: Fail deployment processing
-- Mark source as failed in deployment status
+For now, our server takes ownership over registering capabilities with the client. It will accept requests, but not proxy to external MCP backends for initialization requests. We can revisit this if there is drift between the capabilities of our server and the various possible backends
 
 ## 4. OAuth & Authentication
 
-**Status:** Out of scope for v0
+The simplest version of the problem at hand with adding external MCPs as a source is that we are entering a world where sources have lots of OAuth providers. Today, Gram servers and MCP as a protocol more broadly have the limitation that we are constrained to a single OAuth provider per toolset (or resulting server). There are many ways to work with this limitation, but to enable moving forward we will introduce an application constraint that limits the number of sources with distinct OAuth providers that can exist in a single toolset.
 
-**Rationale:**
-External MCP servers with OAuth do not represent a regression from the current system. The existing constraint ("no mixing multiple OAuth2 providers in a toolset") applies to current sources and will be designed/implemented separately from this work.
+When adding sources this will require us to detect which sources (for now only API sources and External MCPs) have an OAuth provider. Then ensure there is at most one of these sources per toolset.
 
-**Trivial Fallback Option:**
-If OAuth becomes a blocker, we can implement a simple restriction: "Only one source allowed in any toolset containing an external MCP source." This ensures no OAuth conflicts but is overly restrictive.
-
-**Preferred Approach:**
-Design and implement homogeneous OAuth provider representation across all source types (OpenAPI, Functions, External MCP), then enforce the constraint uniformly. This work should happen in parallel or shortly after external MCP v0.
-
-**Future Work:**
-- Extract OAuth provider info from external MCP server metadata (from registry or server capabilities)
-- Store OAuth provider per source
-- Validate OAuth provider consistency when adding sources to toolsets
-- Surface OAuth provider in UI when configuring external MCP sources
+In the future we can explore workarounds, but any workarounds that would move us past this limitation are deemed too complex for this increment.
 
 ## User Experience
 
@@ -537,6 +444,8 @@ When users click "Add Source" in the Gram dashboard, they see a menu with option
 - V0 shows "Enterprise feature - Contact sales" banner for orgs without flag
 - Future: General availability
 
+@claude we're gonna need to flesh something out here about how we're going to branch to handle our new tool type in the various dashboard places where we represent tools
+
 ### Documentation Changes
 
 *To be added: Links to setup guides, example integrations, troubleshooting*
@@ -552,3 +461,7 @@ When users click "Add Source" in the Gram dashboard, they see a menu with option
 - **Version pinning vs. latest:** Should we specify the exact version at source creation time and pin to it, or always fetch the latest version from the registry when deploying? Pinning provides stability; latest provides automatic updates. Consider: breaking changes in external servers, user expectations, rollback scenarios.
 
 - **Slug generation from reverse-DNS names:** The MCP registry uses reverse-DNS naming (e.g., "ai.exa/exa", "com.github/github"). Can we use these directly as source slugs with minimal sanitization (replace `/` with `-`)? Or do we need user-provided slugs? Consider: uniqueness within deployment, URL safety, user clarity.
+
+# The Author's Opinion on where we should go
+
+In this implementation,
