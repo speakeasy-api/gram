@@ -26,7 +26,7 @@ func ExecuteRefreshModelPricingWorkflow(ctx context.Context, temporalClient clie
 	}, RefreshModelPricingWorkflow, RefreshModelPricingParams{})
 }
 
-func RefreshModelPricingWorkflow(ctx workflow.Context, params RefreshModelPricingParams) error {
+func RefreshModelPricingWorkflow(ctx workflow.Context) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting model pricing refresh")
 
