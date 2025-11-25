@@ -2,4 +2,4 @@
 
 ---
 
-feat: Turbopuffer example
+Turbopuffer database example with gram functions
