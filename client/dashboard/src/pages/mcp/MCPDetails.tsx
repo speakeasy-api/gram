@@ -60,7 +60,7 @@ export function MCPDetailPage() {
 
   const activeFunctionsOAuthAuthCode =
     toolset?.functionEnvironmentVariables?.some(
-      (envVar) => envVar.oauthTarget,
+      (envVar) => envVar.isOauthTarget,
     ) ?? false;
 
   const activeOAuthAuthCode =
@@ -887,7 +887,7 @@ function OAuthTabModal({
     ).length ?? 0;
 
   const functionsOAuth2AuthCodeCount =
-    toolset.functionEnvironmentVariables?.filter((envVar) => envVar.oauthTarget)
+    toolset.functionEnvironmentVariables?.filter((envVar) => envVar.isOauthTarget)
       .length ?? 0;
 
   const oauthAuthCodeCount =

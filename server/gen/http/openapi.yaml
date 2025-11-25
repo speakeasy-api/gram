@@ -25162,18 +25162,18 @@ definitions:
                 type: string
                 description: Description of the function environment variable
                 example: Autem in ut nulla minus.
+            is_oauth_target:
+                type: boolean
+                description: Whether the function environment variable is an OAuth target
+                example: false
             name:
                 type: string
                 description: The environment variables
                 example: Ducimus consequuntur.
-            oauth_target:
-                type: boolean
-                description: Whether the function environment variable is an OAuth target
-                example: false
         example:
             description: Vel consequatur ullam consectetur tenetur molestiae.
+            is_oauth_target: false
             name: Mollitia aspernatur vitae.
-            oauth_target: false
         required:
             - name
     FunctionResourceDefinition:
@@ -25673,11 +25673,11 @@ definitions:
                 description: The function environment variables that are relevant to the toolset
                 example:
                     - description: Corrupti sunt nihil iste.
+                      is_oauth_target: true
                       name: Voluptas dolores in temporibus minima.
-                      oauth_target: true
                     - description: Corrupti sunt nihil iste.
+                      is_oauth_target: true
                       name: Voluptas dolores in temporibus minima.
-                      oauth_target: true
             name:
                 type: string
                 description: The name of the toolset
@@ -26332,11 +26332,11 @@ definitions:
                 updated_at: "2006-06-09T06:56:09Z"
             function_environment_variables:
                 - description: Corrupti sunt nihil iste.
+                  is_oauth_target: true
                   name: Voluptas dolores in temporibus minima.
-                  oauth_target: true
                 - description: Corrupti sunt nihil iste.
+                  is_oauth_target: true
                   name: Voluptas dolores in temporibus minima.
-                  oauth_target: true
             name: Et similique fuga et doloribus deserunt enim.
             prompt_templates:
                 - canonical:
@@ -32659,11 +32659,11 @@ definitions:
                       description: Maxime sint dolorem maxime.
                       function_environment_variables:
                         - description: Corrupti sunt nihil iste.
+                          is_oauth_target: true
                           name: Voluptas dolores in temporibus minima.
-                          oauth_target: true
                         - description: Corrupti sunt nihil iste.
+                          is_oauth_target: true
                           name: Voluptas dolores in temporibus minima.
-                          oauth_target: true
                       id: Eveniet et eius sunt non aliquid at.
                       mcp_enabled: false
                       mcp_is_public: false
@@ -32799,11 +32799,11 @@ definitions:
                       description: Maxime sint dolorem maxime.
                       function_environment_variables:
                         - description: Corrupti sunt nihil iste.
+                          is_oauth_target: true
                           name: Voluptas dolores in temporibus minima.
-                          oauth_target: true
                         - description: Corrupti sunt nihil iste.
+                          is_oauth_target: true
                           name: Voluptas dolores in temporibus minima.
-                          oauth_target: true
                       id: Eveniet et eius sunt non aliquid at.
                       mcp_enabled: false
                       mcp_is_public: false
@@ -32939,11 +32939,11 @@ definitions:
                       description: Maxime sint dolorem maxime.
                       function_environment_variables:
                         - description: Corrupti sunt nihil iste.
+                          is_oauth_target: true
                           name: Voluptas dolores in temporibus minima.
-                          oauth_target: true
                         - description: Corrupti sunt nihil iste.
+                          is_oauth_target: true
                           name: Voluptas dolores in temporibus minima.
-                          oauth_target: true
                       id: Eveniet et eius sunt non aliquid at.
                       mcp_enabled: false
                       mcp_is_public: false
@@ -33081,11 +33081,11 @@ definitions:
                   description: Maxime sint dolorem maxime.
                   function_environment_variables:
                     - description: Corrupti sunt nihil iste.
+                      is_oauth_target: true
                       name: Voluptas dolores in temporibus minima.
-                      oauth_target: true
                     - description: Corrupti sunt nihil iste.
+                      is_oauth_target: true
                       name: Voluptas dolores in temporibus minima.
-                      oauth_target: true
                   id: Eveniet et eius sunt non aliquid at.
                   mcp_enabled: false
                   mcp_is_public: false
@@ -33221,11 +33221,11 @@ definitions:
                   description: Maxime sint dolorem maxime.
                   function_environment_variables:
                     - description: Corrupti sunt nihil iste.
+                      is_oauth_target: true
                       name: Voluptas dolores in temporibus minima.
-                      oauth_target: true
                     - description: Corrupti sunt nihil iste.
+                      is_oauth_target: true
                       name: Voluptas dolores in temporibus minima.
-                      oauth_target: true
                   id: Eveniet et eius sunt non aliquid at.
                   mcp_enabled: false
                   mcp_is_public: false
@@ -33361,11 +33361,11 @@ definitions:
                   description: Maxime sint dolorem maxime.
                   function_environment_variables:
                     - description: Corrupti sunt nihil iste.
+                      is_oauth_target: true
                       name: Voluptas dolores in temporibus minima.
-                      oauth_target: true
                     - description: Corrupti sunt nihil iste.
+                      is_oauth_target: true
                       name: Voluptas dolores in temporibus minima.
-                      oauth_target: true
                   id: Eveniet et eius sunt non aliquid at.
                   mcp_enabled: false
                   mcp_is_public: false
@@ -33501,11 +33501,11 @@ definitions:
                   description: Maxime sint dolorem maxime.
                   function_environment_variables:
                     - description: Corrupti sunt nihil iste.
+                      is_oauth_target: true
                       name: Voluptas dolores in temporibus minima.
-                      oauth_target: true
                     - description: Corrupti sunt nihil iste.
+                      is_oauth_target: true
                       name: Voluptas dolores in temporibus minima.
-                      oauth_target: true
                   id: Eveniet et eius sunt non aliquid at.
                   mcp_enabled: false
                   mcp_is_public: false
@@ -46653,14 +46653,14 @@ definitions:
                 description: The function environment variables that are relevant to the toolset
                 example:
                     - description: Corrupti sunt nihil iste.
+                      is_oauth_target: true
                       name: Voluptas dolores in temporibus minima.
-                      oauth_target: true
                     - description: Corrupti sunt nihil iste.
+                      is_oauth_target: true
                       name: Voluptas dolores in temporibus minima.
-                      oauth_target: true
                     - description: Corrupti sunt nihil iste.
+                      is_oauth_target: true
                       name: Voluptas dolores in temporibus minima.
-                      oauth_target: true
             id:
                 type: string
                 description: The ID of the toolset
@@ -47492,11 +47492,11 @@ definitions:
                 updated_at: "1988-09-05T03:42:02Z"
             function_environment_variables:
                 - description: Corrupti sunt nihil iste.
+                  is_oauth_target: true
                   name: Voluptas dolores in temporibus minima.
-                  oauth_target: true
                 - description: Corrupti sunt nihil iste.
+                  is_oauth_target: true
                   name: Voluptas dolores in temporibus minima.
-                  oauth_target: true
             id: Deserunt et eaque neque.
             mcp_enabled: true
             mcp_is_public: false
@@ -48243,11 +48243,11 @@ definitions:
                 description: The function environment variables that are relevant to the toolset
                 example:
                     - description: Corrupti sunt nihil iste.
+                      is_oauth_target: true
                       name: Voluptas dolores in temporibus minima.
-                      oauth_target: true
                     - description: Corrupti sunt nihil iste.
+                      is_oauth_target: true
                       name: Voluptas dolores in temporibus minima.
-                      oauth_target: true
             id:
                 type: string
                 description: The ID of the toolset
@@ -48456,14 +48456,14 @@ definitions:
             description: Delectus a sit in repudiandae.
             function_environment_variables:
                 - description: Corrupti sunt nihil iste.
+                  is_oauth_target: true
                   name: Voluptas dolores in temporibus minima.
-                  oauth_target: true
                 - description: Corrupti sunt nihil iste.
+                  is_oauth_target: true
                   name: Voluptas dolores in temporibus minima.
-                  oauth_target: true
                 - description: Corrupti sunt nihil iste.
+                  is_oauth_target: true
                   name: Voluptas dolores in temporibus minima.
-                  oauth_target: true
             id: Eum alias et et.
             mcp_enabled: true
             mcp_is_public: false

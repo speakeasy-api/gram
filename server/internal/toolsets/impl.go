@@ -542,7 +542,7 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 	}
 
 	for _, functionEnvironmentVariable := range toolsetDetails.FunctionEnvironmentVariables {
-		if functionEnvironmentVariable != nil && functionEnvironmentVariable.OauthTarget != nil && *functionEnvironmentVariable.OauthTarget {
+		if functionEnvironmentVariable != nil && functionEnvironmentVariable.IsOauthTarget != nil && *functionEnvironmentVariable.IsOauthTarget {
 			oauth2AuthCodeSecurityCount++
 		}
 	}

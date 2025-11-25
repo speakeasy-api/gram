@@ -325,7 +325,7 @@ func resolveUserConfiguration(
 	if plan != nil && plan.Kind == gateway.ToolKindFunction {
 		for _, token := range payload.oauthTokenInputs {
 			for key, value := range plan.Function.Variables {
-				if value != nil && value.OAuthTarget != nil && *value.OAuthTarget {
+				if value != nil && value.IsOAuthTarget != nil && *value.IsOAuthTarget {
 					userConfig[key] = token.Token
 				}
 			}

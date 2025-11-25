@@ -14,13 +14,13 @@ export type FunctionEnvironmentVariable = {
    */
   description?: string | undefined;
   /**
+   * Whether the function environment variable is an OAuth target
+   */
+  isOauthTarget?: boolean | undefined;
+  /**
    * The environment variables
    */
   name: string;
-  /**
-   * Whether the function environment variable is an OAuth target
-   */
-  oauthTarget?: boolean | undefined;
 };
 
 /** @internal */
@@ -30,11 +30,11 @@ export const FunctionEnvironmentVariable$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   description: z.string().optional(),
+  is_oauth_target: z.boolean().optional(),
   name: z.string(),
-  oauth_target: z.boolean().optional(),
 }).transform((v) => {
   return remap$(v, {
-    "oauth_target": "oauthTarget",
+    "is_oauth_target": "isOauthTarget",
   });
 });
 

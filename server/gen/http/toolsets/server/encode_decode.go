@@ -2173,9 +2173,9 @@ func marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableRespons
 		return nil
 	}
 	res := &FunctionEnvironmentVariableResponseBody{
-		Description: v.Description,
-		OauthTarget: v.OauthTarget,
-		Name:        v.Name,
+		Description:   v.Description,
+		IsOauthTarget: v.IsOauthTarget,
+		Name:          v.Name,
 	}
 
 	return res

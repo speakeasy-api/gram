@@ -11,7 +11,7 @@ type FunctionEnvironmentVariable struct {
 	// Description of the function environment variable
 	Description *string
 	// Whether the function environment variable is an OAuth target
-	OauthTarget *bool
+	IsOauthTarget *bool
 	// The environment variables
 	Name string
 }

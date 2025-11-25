@@ -2232,9 +2232,9 @@ func unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentV
 		return nil
 	}
 	res := &types.FunctionEnvironmentVariable{
-		Description: v.Description,
-		OauthTarget: v.OauthTarget,
-		Name:        *v.Name,
+		Description:   v.Description,
+		IsOauthTarget: v.IsOauthTarget,
+		Name:          *v.Name,
 	}
 
 	return res

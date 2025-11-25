@@ -472,7 +472,7 @@ type FunctionEnvironmentVariableResponseBody struct {
 	// Description of the function environment variable
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether the function environment variable is an OAuth target
-	OauthTarget *bool `form:"oauth_target,omitempty" json:"oauth_target,omitempty" xml:"oauth_target,omitempty"`
+	IsOauthTarget *bool `form:"is_oauth_target,omitempty" json:"is_oauth_target,omitempty" xml:"is_oauth_target,omitempty"`
 	// The environment variables
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
