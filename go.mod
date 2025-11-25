@@ -59,7 +59,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.38.0
 	go.opentelemetry.io/otel/trace v1.38.0
 	go.temporal.io/api v1.58.0
-	go.temporal.io/sdk v1.37.0
+	go.temporal.io/sdk v1.38.0
 	go.temporal.io/sdk/contrib/opentelemetry v0.6.0
 	go.yaml.in/yaml/v4 v4.0.0-rc.2
 	goa.design/clue v1.2.3
@@ -191,7 +191,7 @@ require (
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
-	github.com/nexus-rpc/sdk-go v0.3.0 // indirect
+	github.com/nexus-rpc/sdk-go v0.5.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/paulmach/orb v0.11.1 // indirect
