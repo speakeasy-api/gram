@@ -432,6 +432,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			ToolsetSlug:           &toolsetSlug,
 			ChatID:                &chatID,
 			ToolsetID:             toolsetID,
+			ResponseStatusCode:    interceptor.statusCode,
 			MCPURL:                nil, // Not applicable for direct tool calls
 			MCPSessionID:          nil, // Not applicable for direct tool calls
 			ResourceURI:           "",

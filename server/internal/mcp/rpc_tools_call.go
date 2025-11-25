@@ -197,6 +197,7 @@ func handleToolsCall(
 			OrganizationSlug:      &descriptor.OrganizationSlug,
 			ToolsetSlug:           &payload.toolset,
 			ToolsetID:             &toolset.ID,
+			ResponseStatusCode:    rw.statusCode,
 			MCPURL:                &mcpURL,
 			MCPSessionID:          &payload.sessionID,
 			ChatID:                nil,
