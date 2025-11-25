@@ -1,10 +1,14 @@
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useEnvironments } from "@/pages/environments/Environments";
-import { Environment } from "@gram/client/models/components";
+import {
+  Environment,
+  ToolsetEnvironmentLink,
+} from "@gram/client/models/components";
 import { useGetToolsetEnvironment } from "@gram/client/react-query";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useCallback, useEffect, useState } from "react";
+import { useMutation, UseMutationResult } from "@tanstack/react-query";
 
 interface UseAttachedEnvironmentFormParams {
   toolsetId: string;
@@ -15,7 +19,7 @@ interface UseAttachedEnvironmentFormReturn {
   selectedEnvironment: Environment | null;
   onEnvironmentSelectorChange: (slug: string) => void;
   isDirty: boolean;
-  persist: () => Promise<void>;
+  mutation: UseMutationResult<ToolsetEnvironmentLink | null, Error, void>;
   cancel: () => void;
   isLoading: boolean;
 }
@@ -117,12 +121,10 @@ export function useAttachedEnvironmentForm({
     serverDataReceived(attachedEnvironmentQuery.data ?? null);
   }, [attachedEnvironmentQuery.data]);
 
-  const persist = useCallback(async () => {
-    if (!formState.dirty) return;
-
-    try {
+  const mutation = useMutation<ToolsetEnvironmentLink | null, Error, void>({
+    mutationFn: async (): Promise<ToolsetEnvironmentLink | null> => {
       if (formState.environment?.id) {
-        await sdkClient.environments.setToolsetLink({
+        return await sdkClient.environments.setToolsetLink({
           setToolsetEnvironmentLinkRequestBody: {
             toolsetId,
             environmentId: formState.environment.id,
@@ -132,27 +134,21 @@ export function useAttachedEnvironmentForm({
         await sdkClient.environments.deleteToolsetLink({
           toolsetId,
         });
+        return null;
       }
-
+    },
+    onSuccess: () => {
       telemetry.capture("toolset_event", {
         action: formState.environment?.id
           ? "toolset_environment_attached"
           : "toolset_environment_detached",
       });
-
+    },
+    onSettled: async () => {
       reset(formState.environment);
-    } finally {
       await attachedEnvironmentQuery.refetch();
-    }
-  }, [
-    formState.dirty,
-    formState.environment,
-    sdkClient,
-    toolsetId,
-    telemetry,
-    reset,
-    attachedEnvironmentQuery,
-  ]);
+    },
+  });
 
   const handleEnvironmentSelectorChange = useCallback(
     (slug: string) => {
@@ -173,8 +169,8 @@ export function useAttachedEnvironmentForm({
     selectedEnvironment: formState.environment,
     onEnvironmentSelectorChange: handleEnvironmentSelectorChange,
     isDirty: formState.dirty,
-    persist,
+    mutation,
     cancel: handleCancel,
-    isLoading: attachedEnvironmentQuery.isLoading,
+    isLoading: attachedEnvironmentQuery.isLoading || mutation.isPending,
   };
 }
