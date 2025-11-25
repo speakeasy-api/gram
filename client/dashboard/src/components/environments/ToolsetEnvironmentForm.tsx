@@ -1,7 +1,6 @@
 import { useRegisterEnvironmentTelemetry } from "@/contexts/Telemetry";
 import { isHttpTool, Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
-import { Environment } from "@gram/client/models/components";
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { AlertCircle, ChevronDown, Plus, TriangleAlert, X } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -11,7 +10,6 @@ import { useAttachedEnvironmentForm } from "./useAttachedEnvironmentForm";
 import {
   EnvironmentEntriesFormFields,
   useEnvironmentForm,
-  EnvironmentEntryFormInput,
 } from "./EnvironmentEntriesFormFields";
 import {
   Collapsible,
@@ -220,7 +218,7 @@ export function ToolsetEnvironmentForm({
                 Attach Selected Environment
               </h3>
               {attachedEnvForm.selectedEnvironment && (
-                <Badge variant="outline">
+                <Badge variant="neutral">
                   {attachedEnvForm.selectedEnvironment.slug}
                 </Badge>
               )}
