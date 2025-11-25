@@ -877,6 +877,7 @@ export function ToolList({
                             ? () => onToolsRemove([toolId])
                             : undefined
                         }
+                        onToolClick={onToolClick}
                       />
                     );
                   })}

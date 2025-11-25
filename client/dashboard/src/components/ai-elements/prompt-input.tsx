@@ -15,7 +15,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@speakeasy-api/moonshine";
 import {
   HoverCard,
   HoverCardContent,
