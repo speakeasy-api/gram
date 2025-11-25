@@ -1514,7 +1514,7 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 		FunctionsAccessID: accessID,
 		Runtime:           "nodejs",
 		InputSchema:       []byte{},
-		Variables:         []string{},
+		Variables:         map[string]*functions.ManifestVariableAttributeV0{},
 	}
 	toolCallPlan := NewFunctionToolCallPlan(tool, plan)
 	// Mock the functions.ToolCaller to return our mock server URL
@@ -1804,7 +1804,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigNotInPlanNotSent(t *testing.T) {
 		FunctionsAccessID: accessID,
 		Runtime:           "nodejs",
 		InputSchema:       []byte{},
-		Variables:         []string{"ALLOWED_VAR"}, // Only ALLOWED_VAR is in the plan
+		Variables:         map[string]*functions.ManifestVariableAttributeV0{"ALLOWED_VAR": nil}, // Only ALLOWED_VAR is in the plan
 	}
 	toolCallPlan := NewFunctionToolCallPlan(tool, plan)
 
@@ -2008,7 +2008,7 @@ func TestToolProxy_Do_FunctionTool_SystemEnvSentWhenInPlan(t *testing.T) {
 		FunctionsAccessID: accessID,
 		Runtime:           "nodejs",
 		InputSchema:       []byte{},
-		Variables:         []string{"SYSTEM_VAR", "DB_PASSWORD"},
+		Variables:         map[string]*functions.ManifestVariableAttributeV0{"SYSTEM_VAR": nil, "DB_PASSWORD": nil},
 	}
 	toolCallPlan := NewFunctionToolCallPlan(tool, plan)
 
@@ -2216,7 +2216,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigPrefersOverSystemEnv(t *testing.T) 
 		FunctionsAccessID: accessID,
 		Runtime:           "nodejs",
 		InputSchema:       []byte{},
-		Variables:         []string{"DATABASE_URL", "API_KEY"},
+		Variables:         map[string]*functions.ManifestVariableAttributeV0{"DATABASE_URL": nil, "API_KEY": nil},
 	}
 	toolCallPlan := NewFunctionToolCallPlan(tool, plan)
 

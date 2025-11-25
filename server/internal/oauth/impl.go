@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"io"
 	"log/slog"
 	"net/http"
@@ -34,25 +33,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
-
-//go:embed consent_template.html
-var consentTemplateHTML string
-
-// ConsentTemplateData represents the data for the consent screen
-type ConsentTemplateData struct {
-	ClientID            string
-	ClientName          string
-	ToolsetName         string
-	RedirectURI         string
-	Scope               string
-	Scopes              []string
-	State               string
-	CodeChallenge       string
-	CodeChallengeMethod string
-	ResponseType        string
-	MCPURL              string
-	MCPSlug             string
-}
 
 type Service struct {
 	logger       *slog.Logger
@@ -109,11 +89,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// OAuth 2.1 Authorization Endpoint
 	o11y.AttachHandler(mux, "GET", "/oauth/{mcpSlug}/authorize", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.handleAuthorize).ServeHTTP(w, r)
-	})
-
-	// Consent Screen Complete
-	o11y.AttachHandler(mux, "POST", "/oauth/{mcpSlug}/complete", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, service.handleAuthorizationComplete).ServeHTTP(w, r)
 	})
 
 	// OAuth 2.1 Authorization Callback
@@ -214,90 +189,6 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		return nil
 	}
 
-	// Render consent screen
-	return s.renderConsentScreen(ctx, w, req, toolset, mcpSlug, fullMCPURL)
-}
-
-// validateAuthorizationRequest validates an authorization request
-func (s *Service) validateAuthorizationRequest(ctx context.Context, req *AuthorizationRequest, mcpURL string) error {
-	return s.grantManager.ValidateAuthorizationRequest(ctx, req, mcpURL)
-}
-
-// renderConsentScreen renders the OAuth consent screen
-func (s *Service) renderConsentScreen(ctx context.Context, w http.ResponseWriter, req *AuthorizationRequest, toolset *toolsets_repo.Toolset, mcpSlug, mcpURL string) error {
-	tmpl, err := template.New("consent").Parse(consentTemplateHTML)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to parse consent template").Log(ctx, s.logger)
-	}
-
-	client, err := s.clientRegistration.GetClient(ctx, mcpURL, req.ClientID)
-	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "client not found").Log(ctx, s.logger)
-	}
-
-	clientName := ""
-	if client != nil && client.ClientName != "" {
-		clientName = client.ClientName
-	}
-
-	// Prepare template data
-	data := ConsentTemplateData{
-		ClientID:            req.ClientID,
-		ClientName:          clientName,
-		ToolsetName:         toolset.Name,
-		RedirectURI:         req.RedirectURI,
-		Scope:               req.Scope,
-		Scopes:              strings.Fields(req.Scope),
-		State:               req.State,
-		CodeChallenge:       req.CodeChallenge,
-		CodeChallengeMethod: req.CodeChallengeMethod,
-		ResponseType:        req.ResponseType,
-		MCPURL:              mcpURL,
-		MCPSlug:             mcpSlug,
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-
-	if err := tmpl.Execute(w, data); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to render consent template").Log(ctx, s.logger)
-	}
-
-	return nil
-}
-
-// handleAuthorizationComplete handles the consent approval/denial
-func (s *Service) handleAuthorizationComplete(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-
-	mcpSlug := chi.URLParam(r, "mcpSlug")
-	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
-	}
-
-	toolset, _, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
-	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
-	}
-
-	if err := r.ParseForm(); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to parse form data").Log(ctx, s.logger)
-	}
-
-	action := r.FormValue("action")
-	if action == "deny" {
-		// User denied access, redirect back with error
-		redirectURI := r.FormValue("redirect_uri")
-		state := r.FormValue("state")
-
-		errorURL, _ := s.grantManager.BuildErrorResponse(ctx, redirectURI, "access_denied", "User denied the request", state)
-		http.Redirect(w, r, errorURL, http.StatusFound)
-		return nil
-	}
-
-	if action != "approve" {
-		return oops.E(oops.CodeBadRequest, nil, "invalid action").Log(ctx, s.logger)
-	}
-
 	// Get OAuth proxy providers for this toolset
 	providers, err := s.oauthRepo.ListOAuthProxyProvidersByServer(ctx, repo.ListOAuthProxyProvidersByServerParams{
 		OauthProxyServerID: toolset.OauthProxyServerID.UUID,
@@ -340,13 +231,13 @@ func (s *Service) handleAuthorizationComplete(w http.ResponseWriter, r *http.Req
 
 	// Prepare OAuth request info to encode in state parameter
 	oauthReqInfo := map[string]string{
-		"response_type":         r.FormValue("response_type"),
-		"client_id":             r.FormValue("client_id"),
-		"redirect_uri":          r.FormValue("redirect_uri"),
-		"scope":                 r.FormValue("scope"),
-		"state":                 r.FormValue("state"),
-		"code_challenge":        r.FormValue("code_challenge"),
-		"code_challenge_method": r.FormValue("code_challenge_method"),
+		"response_type":         req.ResponseType,
+		"client_id":             req.ClientID,
+		"redirect_uri":          req.RedirectURI,
+		"scope":                 req.Scope,
+		"state":                 req.State,
+		"code_challenge":        req.CodeChallenge,
+		"code_challenge_method": req.CodeChallengeMethod,
 	}
 
 	oauthReqInfoJSON, err := json.Marshal(oauthReqInfo)
@@ -371,7 +262,7 @@ func (s *Service) handleAuthorizationComplete(w http.ResponseWriter, r *http.Req
 	if len(provider.ScopesSupported) > 0 {
 		params.Set("scope", strings.Join(provider.ScopesSupported, " "))
 	} else {
-		params.Set("scope", r.FormValue("scope"))
+		params.Set("scope", req.Scope)
 	}
 
 	authURL.RawQuery = params.Encode()
@@ -383,6 +274,11 @@ func (s *Service) handleAuthorizationComplete(w http.ResponseWriter, r *http.Req
 	// Redirect to underlying OAuth provider, this MUST be a 302
 	http.Redirect(w, r, authURL.String(), http.StatusFound)
 	return nil
+}
+
+// validateAuthorizationRequest validates an authorization request
+func (s *Service) validateAuthorizationRequest(ctx context.Context, req *AuthorizationRequest, mcpURL string) error {
+	return s.grantManager.ValidateAuthorizationRequest(ctx, req, mcpURL)
 }
 
 // handleToken handles OAuth 2.1 token requests

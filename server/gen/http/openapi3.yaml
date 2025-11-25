@@ -9834,6 +9834,9 @@ components:
                 name:
                     type: string
                     description: The environment variables
+                oauth_target:
+                    type: boolean
+                    description: Whether the function environment variable is an OAuth target
             required:
                 - name
         FunctionResourceDefinition:

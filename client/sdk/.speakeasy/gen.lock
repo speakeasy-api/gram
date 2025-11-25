@@ -1,24 +1,24 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 90568ae9eeeb69be1d568608418c418f
+  docChecksum: d03896589cbf4278ab1c752ef4058632
   docVersion: 0.0.1
-  speakeasyVersion: 1.641.1
-  generationVersion: 2.730.5
-  releaseVersion: 0.18.1
-  configChecksum: c36684f886420c38fb40d9cae1f700c7
+  speakeasyVersion: 1.661.1
+  generationVersion: 2.763.2
+  releaseVersion: 0.19.0
+  configChecksum: 82e1adea26ba8a8a852cbc3f0b3444a5
 features:
   typescript:
     additionalDependencies: 0.1.0
     constsAndDefaults: 0.1.12
-    core: 3.24.1
+    core: 3.26.10
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
     downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
     globalSecurityCallbacks: 0.1.0
-    globalServerURLs: 2.82.5
+    globalServerURLs: 2.83.0
     methodArguments: 0.1.2
     methodSecurity: 2.82.6
     nameOverrides: 2.81.2
@@ -272,6 +272,7 @@ generatedFiles:
   - docs/models/operations/getinstancesecurity.md
   - docs/models/operations/getinstancesecurityoption1.md
   - docs/models/operations/getinstancesecurityoption2.md
+  - docs/models/operations/getinstancesecurityoption3.md
   - docs/models/operations/getlatestdeploymentrequest.md
   - docs/models/operations/getlatestdeploymentsecurity.md
   - docs/models/operations/getlatestdeploymentsecurityoption1.md
@@ -921,6 +922,7 @@ generatedFiles:
   - src/types/operations.ts
   - src/types/rfcdate.ts
   - src/types/streams.ts
+  - src/types/unrecognized.ts
   - tsconfig.json
 examples:
   slackLogin:

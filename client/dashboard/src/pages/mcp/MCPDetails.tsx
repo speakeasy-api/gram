@@ -50,13 +50,19 @@ export function MCPDetailPage() {
   const { toolsetSlug } = useParams();
 
   const { data: toolset, isLoading } = useToolset(toolsetSlug);
-  const activeOAuthAuthCode =
+  const activeHTTPOAuthAuthCode =
     toolset?.securityVariables?.some(
       (secVar) =>
         (secVar.type === "oauth2" &&
           secVar.oauthTypes?.includes("authorization_code")) ||
         secVar.type === "openIdConnect",
     ) ?? false;
+  
+    const activeFunctionsOAuthAuthCode =
+    toolset?.functionEnvironmentVariables?.some((envVar) => envVar.oauthTarget) ?? false;
+
+  const activeOAuthAuthCode = activeHTTPOAuthAuthCode || activeFunctionsOAuthAuthCode;
+
   const isOAuthConnected = !!(
     toolset?.oauthProxyServer || toolset?.externalOauthServer
   );
@@ -869,13 +875,20 @@ function OAuthTabModal({
   const telemetry = useTelemetry();
 
   // Check if there are multiple OAuth2 authorization_code security variables
-  const oauthAuthCodeCount =
+  const httpOAuth2AuthCodeCount =
     toolset.securityVariables?.filter(
       (secVar) =>
         (secVar.type === "oauth2" &&
           secVar.oauthTypes?.includes("authorization_code")) ||
         secVar.type === "openIdConnect",
     ).length ?? 0;
+
+const functionsOAuth2AuthCodeCount =
+  toolset.functionEnvironmentVariables?.filter(
+    (envVar) => envVar.oauthTarget,
+  ).length ?? 0;
+
+  const oauthAuthCodeCount = httpOAuth2AuthCodeCount + functionsOAuth2AuthCodeCount;
 
   const hasMultipleOAuth2AuthCode = oauthAuthCodeCount > 1;
   const queryClient = useQueryClient();

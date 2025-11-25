@@ -35,6 +35,7 @@ type ManifestResourceV0 struct {
 
 type ManifestVariableAttributeV0 struct {
 	Description *string `json:"description"`
+	OAuthTarget *bool   `json:"oauthTarget,omitempty"`
 }
 
 type Manifest struct {

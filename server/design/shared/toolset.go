@@ -30,6 +30,7 @@ var FunctionEnvironmentVariable = Type("FunctionEnvironmentVariable", func() {
 	Meta("struct:pkg:path", "types")
 
 	Attribute("description", String, "Description of the function environment variable")
+	Attribute("oauth_target", Boolean, "Whether the function environment variable is an OAuth target")
 	Attribute("name", String, "The environment variables")
 	Required("name")
 })

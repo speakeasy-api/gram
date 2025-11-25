@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -111,11 +112,11 @@ var DisableResponseFiltering = &ResponseFilter{
 
 // FunctionToolCallPlan describes a serverless function that can be invoked as a tool.
 type FunctionToolCallPlan struct {
-	FunctionID        string   `json:"function_id" yaml:"function_id"`
-	FunctionsAccessID string   `json:"functions_access_id" yaml:"functions_access_id"`
-	Runtime           string   `json:"runtime" yaml:"runtime"`
-	InputSchema       []byte   `json:"input_schema" yaml:"input_schema"`
-	Variables         []string `json:"variables" yaml:"variables"`
+	FunctionID        string                                            `json:"function_id" yaml:"function_id"`
+	FunctionsAccessID string                                            `json:"functions_access_id" yaml:"functions_access_id"`
+	Runtime           string                                            `json:"runtime" yaml:"runtime"`
+	InputSchema       []byte                                            `json:"input_schema" yaml:"input_schema"`
+	Variables         map[string]*functions.ManifestVariableAttributeV0 `json:"variables" yaml:"variables"`
 }
 
 type PromptToolCallPlan struct {

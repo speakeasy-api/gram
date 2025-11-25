@@ -34,6 +34,7 @@ import (
 // functionManifestVariable represents a variable definition from a function manifest.
 type functionManifestVariable struct {
 	Description *string `json:"description"`
+	OAuthTarget *bool   `json:"oauthTarget,omitempty"`
 }
 
 func DescribeToolsetEntry(
@@ -812,6 +813,7 @@ func extractFunctionEnvVars(ctx context.Context, logger *slog.Logger, variableDa
 				functionEnvVars = append(functionEnvVars, &types.FunctionEnvironmentVariable{
 					Name:        k,
 					Description: description,
+					OauthTarget: v.OAuthTarget,
 				})
 			}
 

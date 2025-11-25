@@ -2558,7 +2558,7 @@ func integrationsGetUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "integrations get --id \"Molestias ab et quod dolores pariatur.\" --name \"Amet et.\" --session-token \"Eius cumque maiores.\" --project-slug-input \"Qui quaerat tempore eos et libero animi.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "integrations get --id \"Amet et.\" --name \"Eius cumque maiores.\" --session-token \"Qui quaerat tempore eos et libero animi.\" --project-slug-input \"Omnis veniam similique.\"")
 }
 
 func integrationsListUsage() {
@@ -2580,7 +2580,7 @@ func integrationsListUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "integrations list --keywords '[\n      \"0y0\",\n      \"1ra\",\n      \"2sv\"\n   ]' --session-token \"Est rerum dolorem quam consequatur adipisci temporibus.\" --project-slug-input \"Odit aut autem exercitationem doloribus.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "integrations list --keywords '[\n      \"z1r\",\n      \"02s\",\n      \"tfe\"\n   ]' --session-token \"Quam consequatur adipisci temporibus est odit aut.\" --project-slug-input \"Exercitationem doloribus.\"")
 }
 
 // keysUsage displays the usage of the keys command and its subcommands.

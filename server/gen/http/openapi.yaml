@@ -25165,10 +25165,15 @@ definitions:
             name:
                 type: string
                 description: The environment variables
-                example: Laboriosam ducimus consequuntur exercitationem vel consequatur.
+                example: Ducimus consequuntur.
+            oauth_target:
+                type: boolean
+                description: Whether the function environment variable is an OAuth target
+                example: false
         example:
-            description: Consectetur tenetur molestiae accusamus.
+            description: Vel consequatur ullam consectetur tenetur molestiae.
             name: Mollitia aspernatur vitae.
+            oauth_target: false
         required:
             - name
     FunctionResourceDefinition:
@@ -25668,9 +25673,11 @@ definitions:
                 description: The function environment variables that are relevant to the toolset
                 example:
                     - description: Corrupti sunt nihil iste.
-                      name: Voluptas voluptas dolores.
+                      name: Voluptas dolores in temporibus minima.
+                      oauth_target: true
                     - description: Corrupti sunt nihil iste.
-                      name: Voluptas voluptas dolores.
+                      name: Voluptas dolores in temporibus minima.
+                      oauth_target: true
             name:
                 type: string
                 description: The name of the toolset
@@ -26325,9 +26332,11 @@ definitions:
                 updated_at: "2006-06-09T06:56:09Z"
             function_environment_variables:
                 - description: Corrupti sunt nihil iste.
-                  name: Voluptas voluptas dolores.
+                  name: Voluptas dolores in temporibus minima.
+                  oauth_target: true
                 - description: Corrupti sunt nihil iste.
-                  name: Voluptas voluptas dolores.
+                  name: Voluptas dolores in temporibus minima.
+                  oauth_target: true
             name: Et similique fuga et doloribus deserunt enim.
             prompt_templates:
                 - canonical:
@@ -26833,33 +26842,32 @@ definitions:
                 $ref: '#/definitions/Integration'
         example:
             integration:
-                package_description: Voluptatem ad.
-                package_description_raw: Ut et eius.
-                package_id: Omnis veniam similique.
-                package_image_asset_id: Minima sequi porro iste excepturi perspiciatis autem.
+                package_description: Ut et eius.
+                package_description_raw: Repellendus nesciunt quam sed.
+                package_id: Atque autem.
+                package_image_asset_id: Unde culpa dolorem minima sequi porro.
                 package_keywords:
-                    - Nostrum et.
-                    - Et illum sunt dolores.
-                    - Eaque et quisquam nihil voluptatem unde culpa.
-                package_name: Atque autem.
-                package_summary: Id dolores molestiae in.
-                package_title: Omnis odit amet beatae.
-                package_url: Repellendus nesciunt quam sed.
+                    - Illum sunt.
+                    - Aut eaque et quisquam nihil.
+                package_name: Omnis odit amet beatae.
+                package_summary: Voluptatem ad.
+                package_title: Id dolores molestiae in.
+                package_url: Sint nostrum et.
                 tool_names:
-                    - Exercitationem rerum.
-                    - Veritatis totam.
-                    - Dolor est et aliquam.
-                version: Sapiente odio nesciunt inventore.
-                version_created_at: "2007-02-11T06:17:04Z"
+                    - Corrupti error dolores asperiores consequatur qui architecto.
+                    - Rerum atque veritatis totam explicabo dolor.
+                    - Et aliquam nihil vel molestiae cumque tenetur.
+                version: Excepturi perspiciatis.
+                version_created_at: "1970-08-16T08:04:36Z"
                 versions:
-                    - created_at: "1984-11-09T04:26:50Z"
-                      version: Molestiae cumque tenetur.
-                    - created_at: "1984-11-09T04:26:50Z"
-                      version: Molestiae cumque tenetur.
-                    - created_at: "1984-11-09T04:26:50Z"
-                      version: Molestiae cumque tenetur.
-                    - created_at: "1984-11-09T04:26:50Z"
-                      version: Molestiae cumque tenetur.
+                    - created_at: "2005-12-21T11:18:55Z"
+                      version: Et architecto.
+                    - created_at: "2005-12-21T11:18:55Z"
+                      version: Et architecto.
+                    - created_at: "2005-12-21T11:18:55Z"
+                      version: Et architecto.
+                    - created_at: "2005-12-21T11:18:55Z"
+                      version: Et architecto.
     GetLatestDeploymentResult:
         title: GetLatestDeploymentResult
         type: object
@@ -27788,10 +27796,10 @@ definitions:
                 items:
                     $ref: '#/definitions/IntegrationVersion'
                 example:
-                    - created_at: "1984-11-09T04:26:50Z"
-                      version: Molestiae cumque tenetur.
-                    - created_at: "1984-11-09T04:26:50Z"
-                      version: Molestiae cumque tenetur.
+                    - created_at: "2005-12-21T11:18:55Z"
+                      version: Et architecto.
+                    - created_at: "2005-12-21T11:18:55Z"
+                      version: Et architecto.
         example:
             package_description: Ea fugiat aut laborum.
             package_description_raw: A delectus illo voluptate voluptas.
@@ -27811,12 +27819,12 @@ definitions:
             version: Magnam ratione commodi omnis itaque quasi sint.
             version_created_at: "1985-02-11T08:40:19Z"
             versions:
-                - created_at: "1984-11-09T04:26:50Z"
-                  version: Molestiae cumque tenetur.
-                - created_at: "1984-11-09T04:26:50Z"
-                  version: Molestiae cumque tenetur.
-                - created_at: "1984-11-09T04:26:50Z"
-                  version: Molestiae cumque tenetur.
+                - created_at: "2005-12-21T11:18:55Z"
+                  version: Et architecto.
+                - created_at: "2005-12-21T11:18:55Z"
+                  version: Et architecto.
+                - created_at: "2005-12-21T11:18:55Z"
+                  version: Et architecto.
         required:
             - package_id
             - package_name
@@ -32651,9 +32659,11 @@ definitions:
                       description: Maxime sint dolorem maxime.
                       function_environment_variables:
                         - description: Corrupti sunt nihil iste.
-                          name: Voluptas voluptas dolores.
+                          name: Voluptas dolores in temporibus minima.
+                          oauth_target: true
                         - description: Corrupti sunt nihil iste.
-                          name: Voluptas voluptas dolores.
+                          name: Voluptas dolores in temporibus minima.
+                          oauth_target: true
                       id: Eveniet et eius sunt non aliquid at.
                       mcp_enabled: false
                       mcp_is_public: false
@@ -32789,9 +32799,11 @@ definitions:
                       description: Maxime sint dolorem maxime.
                       function_environment_variables:
                         - description: Corrupti sunt nihil iste.
-                          name: Voluptas voluptas dolores.
+                          name: Voluptas dolores in temporibus minima.
+                          oauth_target: true
                         - description: Corrupti sunt nihil iste.
-                          name: Voluptas voluptas dolores.
+                          name: Voluptas dolores in temporibus minima.
+                          oauth_target: true
                       id: Eveniet et eius sunt non aliquid at.
                       mcp_enabled: false
                       mcp_is_public: false
@@ -32927,9 +32939,11 @@ definitions:
                       description: Maxime sint dolorem maxime.
                       function_environment_variables:
                         - description: Corrupti sunt nihil iste.
-                          name: Voluptas voluptas dolores.
+                          name: Voluptas dolores in temporibus minima.
+                          oauth_target: true
                         - description: Corrupti sunt nihil iste.
-                          name: Voluptas voluptas dolores.
+                          name: Voluptas dolores in temporibus minima.
+                          oauth_target: true
                       id: Eveniet et eius sunt non aliquid at.
                       mcp_enabled: false
                       mcp_is_public: false
@@ -33067,9 +33081,11 @@ definitions:
                   description: Maxime sint dolorem maxime.
                   function_environment_variables:
                     - description: Corrupti sunt nihil iste.
-                      name: Voluptas voluptas dolores.
+                      name: Voluptas dolores in temporibus minima.
+                      oauth_target: true
                     - description: Corrupti sunt nihil iste.
-                      name: Voluptas voluptas dolores.
+                      name: Voluptas dolores in temporibus minima.
+                      oauth_target: true
                   id: Eveniet et eius sunt non aliquid at.
                   mcp_enabled: false
                   mcp_is_public: false
@@ -33205,9 +33221,11 @@ definitions:
                   description: Maxime sint dolorem maxime.
                   function_environment_variables:
                     - description: Corrupti sunt nihil iste.
-                      name: Voluptas voluptas dolores.
+                      name: Voluptas dolores in temporibus minima.
+                      oauth_target: true
                     - description: Corrupti sunt nihil iste.
-                      name: Voluptas voluptas dolores.
+                      name: Voluptas dolores in temporibus minima.
+                      oauth_target: true
                   id: Eveniet et eius sunt non aliquid at.
                   mcp_enabled: false
                   mcp_is_public: false
@@ -33343,9 +33361,11 @@ definitions:
                   description: Maxime sint dolorem maxime.
                   function_environment_variables:
                     - description: Corrupti sunt nihil iste.
-                      name: Voluptas voluptas dolores.
+                      name: Voluptas dolores in temporibus minima.
+                      oauth_target: true
                     - description: Corrupti sunt nihil iste.
-                      name: Voluptas voluptas dolores.
+                      name: Voluptas dolores in temporibus minima.
+                      oauth_target: true
                   id: Eveniet et eius sunt non aliquid at.
                   mcp_enabled: false
                   mcp_is_public: false
@@ -33481,9 +33501,11 @@ definitions:
                   description: Maxime sint dolorem maxime.
                   function_environment_variables:
                     - description: Corrupti sunt nihil iste.
-                      name: Voluptas voluptas dolores.
+                      name: Voluptas dolores in temporibus minima.
+                      oauth_target: true
                     - description: Corrupti sunt nihil iste.
-                      name: Voluptas voluptas dolores.
+                      name: Voluptas dolores in temporibus minima.
+                      oauth_target: true
                   id: Eveniet et eius sunt non aliquid at.
                   mcp_enabled: false
                   mcp_is_public: false
@@ -46631,11 +46653,14 @@ definitions:
                 description: The function environment variables that are relevant to the toolset
                 example:
                     - description: Corrupti sunt nihil iste.
-                      name: Voluptas voluptas dolores.
+                      name: Voluptas dolores in temporibus minima.
+                      oauth_target: true
                     - description: Corrupti sunt nihil iste.
-                      name: Voluptas voluptas dolores.
+                      name: Voluptas dolores in temporibus minima.
+                      oauth_target: true
                     - description: Corrupti sunt nihil iste.
-                      name: Voluptas voluptas dolores.
+                      name: Voluptas dolores in temporibus minima.
+                      oauth_target: true
             id:
                 type: string
                 description: The ID of the toolset
@@ -47467,9 +47492,11 @@ definitions:
                 updated_at: "1988-09-05T03:42:02Z"
             function_environment_variables:
                 - description: Corrupti sunt nihil iste.
-                  name: Voluptas voluptas dolores.
+                  name: Voluptas dolores in temporibus minima.
+                  oauth_target: true
                 - description: Corrupti sunt nihil iste.
-                  name: Voluptas voluptas dolores.
+                  name: Voluptas dolores in temporibus minima.
+                  oauth_target: true
             id: Deserunt et eaque neque.
             mcp_enabled: true
             mcp_is_public: false
@@ -48216,9 +48243,11 @@ definitions:
                 description: The function environment variables that are relevant to the toolset
                 example:
                     - description: Corrupti sunt nihil iste.
-                      name: Voluptas voluptas dolores.
+                      name: Voluptas dolores in temporibus minima.
+                      oauth_target: true
                     - description: Corrupti sunt nihil iste.
-                      name: Voluptas voluptas dolores.
+                      name: Voluptas dolores in temporibus minima.
+                      oauth_target: true
             id:
                 type: string
                 description: The ID of the toolset
@@ -48427,11 +48456,14 @@ definitions:
             description: Delectus a sit in repudiandae.
             function_environment_variables:
                 - description: Corrupti sunt nihil iste.
-                  name: Voluptas voluptas dolores.
+                  name: Voluptas dolores in temporibus minima.
+                  oauth_target: true
                 - description: Corrupti sunt nihil iste.
-                  name: Voluptas voluptas dolores.
+                  name: Voluptas dolores in temporibus minima.
+                  oauth_target: true
                 - description: Corrupti sunt nihil iste.
-                  name: Voluptas voluptas dolores.
+                  name: Voluptas dolores in temporibus minima.
+                  oauth_target: true
             id: Eum alias et et.
             mcp_enabled: true
             mcp_is_public: false

@@ -3909,6 +3909,8 @@ paths:
           session_header_Gram-Session: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - {}
       summary: getInstance instances
       tags:
@@ -9914,6 +9916,9 @@ components:
         name:
           type: string
           description: The environment variables
+        oauth_target:
+          type: boolean
+          description: Whether the function environment variable is an OAuth target
       required:
         - name
     FunctionResourceDefinition:

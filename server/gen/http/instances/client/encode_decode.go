@@ -538,6 +538,7 @@ func unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentV
 	}
 	res := &types.FunctionEnvironmentVariable{
 		Description: v.Description,
+		OauthTarget: v.OauthTarget,
 		Name:        *v.Name,
 	}
 

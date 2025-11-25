@@ -12,7 +12,8 @@ let value: FunctionEnvironmentVariable = {
 
 ## Fields
 
-| Field                                            | Type                                             | Required                                         | Description                                      |
-| ------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------ |
-| `description`                                    | *string*                                         | :heavy_minus_sign:                               | Description of the function environment variable |
-| `name`                                           | *string*                                         | :heavy_check_mark:                               | The environment variables                        |
+| Field                                                        | Type                                                         | Required                                                     | Description                                                  |
+| ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| `description`                                                | *string*                                                     | :heavy_minus_sign:                                           | Description of the function environment variable             |
+| `name`                                                       | *string*                                                     | :heavy_check_mark:                                           | The environment variables                                    |
+| `oauthTarget`                                                | *boolean*                                                    | :heavy_minus_sign:                                           | Whether the function environment variable is an OAuth target |
