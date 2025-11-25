@@ -6,21 +6,25 @@ import {
   EnvironmentEntryInput as EnvironmentEntryInputType,
 } from "@gram/client/models/components";
 import { invalidateAllListEnvironments } from "@gram/client/react-query";
-import { useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  UseMutationResult,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 
 const SECRET_FIELD_INDICATORS = ["SECRET", "KEY"] as const;
 const PASSWORD_MASK = "••••••••";
 
-interface UseEnvironmentEntriesFormParams {
+interface UseEnvironmentFormParams {
   environment: Environment | null;
   relevantEnvVars: string[];
 }
 
-export interface UseEnvironmentEntriesFormReturn {
+export interface UseEnvironmentFormReturn {
   entries: EnvironmentEntryFormInput[];
   isDirty: boolean;
-  persist: () => Promise<void>;
+  mutation: UseMutationResult<Environment, Error, void>;
   cancel: () => void;
 }
 
@@ -32,10 +36,10 @@ export interface EnvironmentEntryFormInput {
   onValueChange: (value: string) => void;
 }
 
-export function useEnvironmentEntriesForm({
+export function useEnvironmentForm({
   environment,
   relevantEnvVars,
-}: UseEnvironmentEntriesFormParams): UseEnvironmentEntriesFormReturn {
+}: UseEnvironmentFormParams): UseEnvironmentFormReturn {
   const queryClient = useQueryClient();
   const sdkClient = useSdkClient();
   const telemetry = useTelemetry();
@@ -86,40 +90,37 @@ export function useEnvironmentEntriesForm({
     setIsDirty(environmentEntries.some((entry) => entry.inputValue !== ""));
   }, [environmentEntries]);
 
-  const persist = useCallback(async () => {
-    if (!isDirty || !environment) return;
+  const mutation = useMutation<Environment, Error, void>({
+    mutationFn: async (): Promise<Environment> => {
+      if (!environment) {
+        throw new Error("No environment selected");
+      }
 
-    const { slug: environmentSlug } = environment;
+      const { slug: environmentSlug } = environment;
 
-    const entriesToUpdate: EnvironmentEntryInputType[] = environmentEntries
-      .filter((entry) => entry.inputValue.trim() !== "")
-      .map((entry) => ({ name: entry.varName, value: entry.inputValue }));
+      const entriesToUpdate: EnvironmentEntryInputType[] = environmentEntries
+        .filter((entry) => entry.inputValue.trim() !== "")
+        .map((entry) => ({ name: entry.varName, value: entry.inputValue }));
 
-    try {
-      await sdkClient.environments.updateBySlug({
+      return await sdkClient.environments.updateBySlug({
         slug: environmentSlug,
         updateEnvironmentRequestBody: {
           entriesToUpdate,
           entriesToRemove: [],
         },
       });
-
+    },
+    onSuccess: () => {
       telemetry.capture("environment_event", {
         action: "environment_updated_from_toolset_auth",
       });
 
       setIsDirty(false);
-    } finally {
+    },
+    onSettled: () => {
       invalidateAllListEnvironments(queryClient);
-    }
-  }, [
-    isDirty,
-    environment,
-    environmentEntries,
-    sdkClient,
-    telemetry,
-    queryClient,
-  ]);
+    },
+  });
 
   const handleCancel = useCallback(() => {
     setEnvironmentEntries((prev) =>
@@ -130,7 +131,7 @@ export function useEnvironmentEntriesForm({
   return {
     entries: environmentEntries,
     isDirty,
-    persist,
+    mutation,
     cancel: handleCancel,
   };
 }
