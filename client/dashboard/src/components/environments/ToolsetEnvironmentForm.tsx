@@ -2,7 +2,7 @@ import { useRegisterEnvironmentTelemetry } from "@/contexts/Telemetry";
 import { isHttpTool, Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { Environment } from "@gram/client/models/components";
-import { Button } from "@speakeasy-api/moonshine";
+import { Badge, Button } from "@speakeasy-api/moonshine";
 import { AlertCircle, ChevronDown, Plus, TriangleAlert, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { EnvironmentSelector } from "@/pages/toolsets/EnvironmentSelector";
@@ -119,7 +119,7 @@ export function ToolsetEnvironmentForm({
     <div className="space-y-8">
       <div className="flex items-start justify-between">
         <div className="space-y-1">
-          <h2 className="text-heading-xs">Attached Environment</h2>
+          <h2 className="text-heading-xs">Environment Variables</h2>
           <p className="text-sm text-muted-foreground">
             Configure required API credentials for this toolset to use in the
             Gram dashboard
@@ -131,7 +131,9 @@ export function ToolsetEnvironmentForm({
         </div>
         <div className="flex-shrink-0 flex items-center gap-2">
           <EnvironmentSelector
-            selectedEnvironment={attachedEnvForm.selectedEnvironment?.slug ?? ""}
+            selectedEnvironment={
+              attachedEnvForm.selectedEnvironment?.slug ?? ""
+            }
             setSelectedEnvironment={attachedEnvForm.onEnvironmentSelectorChange}
             className="h-8"
           />
@@ -158,7 +160,9 @@ export function ToolsetEnvironmentForm({
           <div className="flex items-center gap-2">
             <EnvironmentSelector
               selectedEnvironment=""
-              setSelectedEnvironment={attachedEnvForm.onEnvironmentSelectorChange}
+              setSelectedEnvironment={
+                attachedEnvForm.onEnvironmentSelectorChange
+              }
               className="h-8"
             />
             <Button
@@ -210,8 +214,19 @@ export function ToolsetEnvironmentForm({
         </CollapsibleTrigger>
 
         <CollapsibleContent>
-          <div className="mt-4 space-y-4">
-            <h3 className="text-heading-xs">Attach Environment</h3>
+          <div className="mt-4 p-4 border rounded-lg space-y-4">
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-medium">Attach Selected Environment</h3>
+              {attachedEnvForm.selectedEnvironment && (
+                <Badge variant="outline">
+                  {attachedEnvForm.selectedEnvironment.slug}
+                </Badge>
+              )}
+            </div>
+
+            <p className="text-sm text-muted-foreground">
+              Attaching an environment at the toolset level will automatically apply these environment variables to all users of tools from this toolset. This can be useful when the toolset requires configuration that should remain hidden to users.
+            </p>
 
             <div className="flex items-start gap-2 px-4 py-3 bg-warning/10 border border-warning/20 rounded-md">
               <TriangleAlert
@@ -219,8 +234,7 @@ export function ToolsetEnvironmentForm({
                 aria-hidden="true"
               />
               <p className="text-sm text-warning">
-                Environments attached here will apply to all users of tools from
-                this toolset in both public and private servers
+                Environments attached here will apply to all users in both public and private servers
               </p>
             </div>
 
@@ -229,7 +243,9 @@ export function ToolsetEnvironmentForm({
                 type="button"
                 size="sm"
                 onClick={() => attachedEnvForm.mutation.mutate()}
-                disabled={!attachedEnvForm.isDirty || attachedEnvForm.mutation.isPending}
+                disabled={
+                  !attachedEnvForm.isDirty || attachedEnvForm.mutation.isPending
+                }
                 aria-label={
                   attachedEnvForm.mutation.isPending
                     ? "Attaching environment to toolset"
