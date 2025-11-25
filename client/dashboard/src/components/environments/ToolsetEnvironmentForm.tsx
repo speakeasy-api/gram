@@ -216,7 +216,9 @@ export function ToolsetEnvironmentForm({
         <CollapsibleContent>
           <div className="mt-4 p-4 border rounded-lg space-y-4">
             <div className="flex items-center gap-2">
-              <h3 className="text-base font-medium">Attach Selected Environment</h3>
+              <h3 className="text-base font-medium">
+                Attach Selected Environment
+              </h3>
               {attachedEnvForm.selectedEnvironment && (
                 <Badge variant="outline">
                   {attachedEnvForm.selectedEnvironment.slug}
@@ -225,7 +227,10 @@ export function ToolsetEnvironmentForm({
             </div>
 
             <p className="text-sm text-muted-foreground">
-              Attaching an environment at the toolset level will automatically apply these environment variables to all users of tools from this toolset. This can be useful when the toolset requires configuration that should remain hidden to users.
+              Attaching an environment at the toolset level will automatically
+              apply these environment variables to all users of tools from this
+              toolset. This can be useful when the toolset requires
+              configuration that should remain hidden to users.
             </p>
 
             <div className="flex items-start gap-2 px-4 py-3 bg-warning/10 border border-warning/20 rounded-md">
@@ -234,7 +239,8 @@ export function ToolsetEnvironmentForm({
                 aria-hidden="true"
               />
               <p className="text-sm text-warning">
-                Environments attached here will apply to all users in both public and private servers
+                Environments attached here will apply to all users in both
+                public and private servers
               </p>
             </div>
 
