@@ -27,19 +27,26 @@ import (
 
 const OpenRouterBaseURL = "https://openrouter.ai/api"
 
+// Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
+// This list can stay sufficiently robust, we should just need to allow list a model before it goes through us
 var allowList = map[string]bool{
 	"anthropic/claude-sonnet-4.5":   true,
 	"anthropic/claude-haiku-4.5":    true,
 	"anthropic/claude-sonnet-4":     true,
+	"anthropic/claude-opus-4.5":     true,
 	"openai/gpt-4o":                 true,
 	"openai/gpt-4o-mini":            true,
+	"openai/gpt-5.1-codex":          true,
 	"openai/gpt-5":                  true,
+	"openai/gpt-5.1":                true,
 	"openai/gpt-4.1":                true,
 	"anthropic/claude-3.7-sonnet":   true,
 	"anthropic/claude-opus-4":       true,
 	"google/gemini-2.5-pro-preview": true,
+	"google/gemini-3-pro-preview":   true,
 	"moonshotai/kimi-k2":            true,
 	"mistralai/mistral-medium-3":    true,
+	"mistralai/mistral-medium-3.1":  true,
 	"mistralai/codestral-2501":      true,
 }
 

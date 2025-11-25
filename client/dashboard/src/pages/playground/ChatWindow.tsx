@@ -39,20 +39,20 @@ const defaultModel = {
   value: "anthropic/claude-sonnet-4.5",
 };
 
+// when adding new models on the frontend ensure you update the server allow list
+// server/internal/thirdparty/openrouter/openrouter.go
 const availableModels = [
   defaultModel,
   { label: "Claude 4.5 Haiku", value: "anthropic/claude-haiku-4.5" },
-  { label: "Claude 4 Sonnet", value: "anthropic/claude-sonnet-4" },
-  { label: "GPT-4o", value: "openai/gpt-4o" },
-  { label: "GPT-4o-mini", value: "openai/gpt-4o-mini" },
+  { label: "Claude 4.5 Opus", value: "anthropic/claude-opus-4.5" },
+  { label: "GPT-5.1", value: "openai/gpt-5.1" },
   { label: "GPT-5", value: "openai/gpt-5" },
   { label: "GPT-4.1", value: "openai/gpt-4.1" },
-  { label: "Claude 3.7 Sonnet", value: "anthropic/claude-3.7-sonnet" },
-  { label: "Claude 4 Opus (Expensive)", value: "anthropic/claude-opus-4" },
+  { label: "GPT-4o-mini", value: "openai/gpt-4o-mini" },
+  { label: "Gemini 3 Pro Preview", value: "google/gemini-3-pro-preview" },
   { label: "Gemini 2.5 Pro Preview", value: "google/gemini-2.5-pro-preview" },
   { label: "Kimi K2", value: "moonshotai/kimi-k2" },
-  { label: "Mistral Medium 3", value: "mistralai/mistral-medium-3" },
-  { label: "Mistral Codestral 2501", value: "mistralai/codestral-2501" },
+  { label: "Mistral Medium 3.1", value: "mistralai/mistral-medium-3.1" },
 ];
 
 export type ChatConfig = React.RefObject<{
