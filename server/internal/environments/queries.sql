@@ -123,3 +123,31 @@ RETURNING *;
 -- name: DeleteSourceEnvironment :exec
 DELETE FROM source_environments
 WHERE source_kind = @source_kind AND source_slug = @source_slug AND project_id = @project_id;
+
+-- name: GetEnvironmentForToolset :one
+SELECT e.*
+FROM environments e
+INNER JOIN toolset_environments te ON te.environment_id = e.id
+WHERE te.toolset_id = @toolset_id
+    AND te.project_id = @project_id
+    AND e.deleted IS FALSE;
+
+-- name: SetToolsetEnvironment :one
+INSERT INTO toolset_environments (
+    toolset_id,
+    project_id,
+    environment_id
+) VALUES (
+    @toolset_id,
+    @project_id,
+    @environment_id
+)
+ON CONFLICT (toolset_id)
+DO UPDATE SET
+    environment_id = EXCLUDED.environment_id,
+    updated_at = now()
+RETURNING *;
+
+-- name: DeleteToolsetEnvironment :exec
+DELETE FROM toolset_environments
+WHERE toolset_id = @toolset_id AND project_id = @project_id;

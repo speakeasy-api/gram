@@ -50,6 +50,15 @@ type SetSourceEnvironmentLinkRequestBody struct {
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 }
 
+// SetToolsetEnvironmentLinkRequestBody is the type of the "environments"
+// service "setToolsetEnvironmentLink" endpoint HTTP request body.
+type SetToolsetEnvironmentLinkRequestBody struct {
+	// The ID of the toolset
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The ID of the environment to link
+	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+}
+
 // CreateEnvironmentResponseBody is the type of the "environments" service
 // "createEnvironment" endpoint HTTP response body.
 type CreateEnvironmentResponseBody struct {
@@ -118,6 +127,40 @@ type SetSourceEnvironmentLinkResponseBody struct {
 // GetSourceEnvironmentResponseBody is the type of the "environments" service
 // "getSourceEnvironment" endpoint HTTP response body.
 type GetSourceEnvironmentResponseBody struct {
+	// The ID of the environment
+	ID string `form:"id" json:"id" xml:"id"`
+	// The organization ID this environment belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The project ID this environment belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The name of the environment
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug identifier for the environment
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The description of the environment
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// List of environment entries
+	Entries []*EnvironmentEntryResponseBody `form:"entries" json:"entries" xml:"entries"`
+	// The creation date of the environment
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the environment was last updated
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// SetToolsetEnvironmentLinkResponseBody is the type of the "environments"
+// service "setToolsetEnvironmentLink" endpoint HTTP response body.
+type SetToolsetEnvironmentLinkResponseBody struct {
+	// The ID of the toolset environment link
+	ID string `form:"id" json:"id" xml:"id"`
+	// The ID of the toolset
+	ToolsetID string `form:"toolset_id" json:"toolset_id" xml:"toolset_id"`
+	// The ID of the environment
+	EnvironmentID string `form:"environment_id" json:"environment_id" xml:"environment_id"`
+}
+
+// GetToolsetEnvironmentResponseBody is the type of the "environments" service
+// "getToolsetEnvironment" endpoint HTTP response body.
+type GetToolsetEnvironmentResponseBody struct {
 	// The ID of the environment
 	ID string `form:"id" json:"id" xml:"id"`
 	// The organization ID this environment belongs to
@@ -1468,6 +1511,576 @@ type GetSourceEnvironmentGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SetToolsetEnvironmentLinkUnauthorizedResponseBody is the type of the
+// "environments" service "setToolsetEnvironmentLink" endpoint HTTP response
+// body for the "unauthorized" error.
+type SetToolsetEnvironmentLinkUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolsetEnvironmentLinkForbiddenResponseBody is the type of the
+// "environments" service "setToolsetEnvironmentLink" endpoint HTTP response
+// body for the "forbidden" error.
+type SetToolsetEnvironmentLinkForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolsetEnvironmentLinkBadRequestResponseBody is the type of the
+// "environments" service "setToolsetEnvironmentLink" endpoint HTTP response
+// body for the "bad_request" error.
+type SetToolsetEnvironmentLinkBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolsetEnvironmentLinkNotFoundResponseBody is the type of the
+// "environments" service "setToolsetEnvironmentLink" endpoint HTTP response
+// body for the "not_found" error.
+type SetToolsetEnvironmentLinkNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolsetEnvironmentLinkConflictResponseBody is the type of the
+// "environments" service "setToolsetEnvironmentLink" endpoint HTTP response
+// body for the "conflict" error.
+type SetToolsetEnvironmentLinkConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolsetEnvironmentLinkUnsupportedMediaResponseBody is the type of the
+// "environments" service "setToolsetEnvironmentLink" endpoint HTTP response
+// body for the "unsupported_media" error.
+type SetToolsetEnvironmentLinkUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolsetEnvironmentLinkInvalidResponseBody is the type of the
+// "environments" service "setToolsetEnvironmentLink" endpoint HTTP response
+// body for the "invalid" error.
+type SetToolsetEnvironmentLinkInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolsetEnvironmentLinkInvariantViolationResponseBody is the type of the
+// "environments" service "setToolsetEnvironmentLink" endpoint HTTP response
+// body for the "invariant_violation" error.
+type SetToolsetEnvironmentLinkInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolsetEnvironmentLinkUnexpectedResponseBody is the type of the
+// "environments" service "setToolsetEnvironmentLink" endpoint HTTP response
+// body for the "unexpected" error.
+type SetToolsetEnvironmentLinkUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolsetEnvironmentLinkGatewayErrorResponseBody is the type of the
+// "environments" service "setToolsetEnvironmentLink" endpoint HTTP response
+// body for the "gateway_error" error.
+type SetToolsetEnvironmentLinkGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolsetEnvironmentLinkUnauthorizedResponseBody is the type of the
+// "environments" service "deleteToolsetEnvironmentLink" endpoint HTTP response
+// body for the "unauthorized" error.
+type DeleteToolsetEnvironmentLinkUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolsetEnvironmentLinkForbiddenResponseBody is the type of the
+// "environments" service "deleteToolsetEnvironmentLink" endpoint HTTP response
+// body for the "forbidden" error.
+type DeleteToolsetEnvironmentLinkForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolsetEnvironmentLinkBadRequestResponseBody is the type of the
+// "environments" service "deleteToolsetEnvironmentLink" endpoint HTTP response
+// body for the "bad_request" error.
+type DeleteToolsetEnvironmentLinkBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolsetEnvironmentLinkNotFoundResponseBody is the type of the
+// "environments" service "deleteToolsetEnvironmentLink" endpoint HTTP response
+// body for the "not_found" error.
+type DeleteToolsetEnvironmentLinkNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolsetEnvironmentLinkConflictResponseBody is the type of the
+// "environments" service "deleteToolsetEnvironmentLink" endpoint HTTP response
+// body for the "conflict" error.
+type DeleteToolsetEnvironmentLinkConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolsetEnvironmentLinkUnsupportedMediaResponseBody is the type of the
+// "environments" service "deleteToolsetEnvironmentLink" endpoint HTTP response
+// body for the "unsupported_media" error.
+type DeleteToolsetEnvironmentLinkUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolsetEnvironmentLinkInvalidResponseBody is the type of the
+// "environments" service "deleteToolsetEnvironmentLink" endpoint HTTP response
+// body for the "invalid" error.
+type DeleteToolsetEnvironmentLinkInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolsetEnvironmentLinkInvariantViolationResponseBody is the type of
+// the "environments" service "deleteToolsetEnvironmentLink" endpoint HTTP
+// response body for the "invariant_violation" error.
+type DeleteToolsetEnvironmentLinkInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolsetEnvironmentLinkUnexpectedResponseBody is the type of the
+// "environments" service "deleteToolsetEnvironmentLink" endpoint HTTP response
+// body for the "unexpected" error.
+type DeleteToolsetEnvironmentLinkUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolsetEnvironmentLinkGatewayErrorResponseBody is the type of the
+// "environments" service "deleteToolsetEnvironmentLink" endpoint HTTP response
+// body for the "gateway_error" error.
+type DeleteToolsetEnvironmentLinkGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetEnvironmentUnauthorizedResponseBody is the type of the
+// "environments" service "getToolsetEnvironment" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetToolsetEnvironmentUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetEnvironmentForbiddenResponseBody is the type of the "environments"
+// service "getToolsetEnvironment" endpoint HTTP response body for the
+// "forbidden" error.
+type GetToolsetEnvironmentForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetEnvironmentBadRequestResponseBody is the type of the
+// "environments" service "getToolsetEnvironment" endpoint HTTP response body
+// for the "bad_request" error.
+type GetToolsetEnvironmentBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetEnvironmentNotFoundResponseBody is the type of the "environments"
+// service "getToolsetEnvironment" endpoint HTTP response body for the
+// "not_found" error.
+type GetToolsetEnvironmentNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetEnvironmentConflictResponseBody is the type of the "environments"
+// service "getToolsetEnvironment" endpoint HTTP response body for the
+// "conflict" error.
+type GetToolsetEnvironmentConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetEnvironmentUnsupportedMediaResponseBody is the type of the
+// "environments" service "getToolsetEnvironment" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetToolsetEnvironmentUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetEnvironmentInvalidResponseBody is the type of the "environments"
+// service "getToolsetEnvironment" endpoint HTTP response body for the
+// "invalid" error.
+type GetToolsetEnvironmentInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetEnvironmentInvariantViolationResponseBody is the type of the
+// "environments" service "getToolsetEnvironment" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetToolsetEnvironmentInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetEnvironmentUnexpectedResponseBody is the type of the
+// "environments" service "getToolsetEnvironment" endpoint HTTP response body
+// for the "unexpected" error.
+type GetToolsetEnvironmentUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetEnvironmentGatewayErrorResponseBody is the type of the
+// "environments" service "getToolsetEnvironment" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetToolsetEnvironmentGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // EnvironmentEntryResponseBody is used to define fields on response body types.
 type EnvironmentEntryResponseBody struct {
 	// The name of the environment variable
@@ -1591,6 +2204,42 @@ func NewSetSourceEnvironmentLinkResponseBody(res *environments.SourceEnvironment
 // result of the "getSourceEnvironment" endpoint of the "environments" service.
 func NewGetSourceEnvironmentResponseBody(res *types.Environment) *GetSourceEnvironmentResponseBody {
 	body := &GetSourceEnvironmentResponseBody{
+		ID:             res.ID,
+		OrganizationID: res.OrganizationID,
+		ProjectID:      res.ProjectID,
+		Name:           res.Name,
+		Slug:           string(res.Slug),
+		Description:    res.Description,
+		CreatedAt:      res.CreatedAt,
+		UpdatedAt:      res.UpdatedAt,
+	}
+	if res.Entries != nil {
+		body.Entries = make([]*EnvironmentEntryResponseBody, len(res.Entries))
+		for i, val := range res.Entries {
+			body.Entries[i] = marshalTypesEnvironmentEntryToEnvironmentEntryResponseBody(val)
+		}
+	} else {
+		body.Entries = []*EnvironmentEntryResponseBody{}
+	}
+	return body
+}
+
+// NewSetToolsetEnvironmentLinkResponseBody builds the HTTP response body from
+// the result of the "setToolsetEnvironmentLink" endpoint of the "environments"
+// service.
+func NewSetToolsetEnvironmentLinkResponseBody(res *environments.ToolsetEnvironmentLink) *SetToolsetEnvironmentLinkResponseBody {
+	body := &SetToolsetEnvironmentLinkResponseBody{
+		ID:            res.ID,
+		ToolsetID:     res.ToolsetID,
+		EnvironmentID: res.EnvironmentID,
+	}
+	return body
+}
+
+// NewGetToolsetEnvironmentResponseBody builds the HTTP response body from the
+// result of the "getToolsetEnvironment" endpoint of the "environments" service.
+func NewGetToolsetEnvironmentResponseBody(res *types.Environment) *GetToolsetEnvironmentResponseBody {
+	body := &GetToolsetEnvironmentResponseBody{
 		ID:             res.ID,
 		OrganizationID: res.OrganizationID,
 		ProjectID:      res.ProjectID,
@@ -2643,6 +3292,456 @@ func NewGetSourceEnvironmentGatewayErrorResponseBody(res *goa.ServiceError) *Get
 	return body
 }
 
+// NewSetToolsetEnvironmentLinkUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "setToolsetEnvironmentLink" endpoint of
+// the "environments" service.
+func NewSetToolsetEnvironmentLinkUnauthorizedResponseBody(res *goa.ServiceError) *SetToolsetEnvironmentLinkUnauthorizedResponseBody {
+	body := &SetToolsetEnvironmentLinkUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolsetEnvironmentLinkForbiddenResponseBody builds the HTTP response
+// body from the result of the "setToolsetEnvironmentLink" endpoint of the
+// "environments" service.
+func NewSetToolsetEnvironmentLinkForbiddenResponseBody(res *goa.ServiceError) *SetToolsetEnvironmentLinkForbiddenResponseBody {
+	body := &SetToolsetEnvironmentLinkForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolsetEnvironmentLinkBadRequestResponseBody builds the HTTP response
+// body from the result of the "setToolsetEnvironmentLink" endpoint of the
+// "environments" service.
+func NewSetToolsetEnvironmentLinkBadRequestResponseBody(res *goa.ServiceError) *SetToolsetEnvironmentLinkBadRequestResponseBody {
+	body := &SetToolsetEnvironmentLinkBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolsetEnvironmentLinkNotFoundResponseBody builds the HTTP response
+// body from the result of the "setToolsetEnvironmentLink" endpoint of the
+// "environments" service.
+func NewSetToolsetEnvironmentLinkNotFoundResponseBody(res *goa.ServiceError) *SetToolsetEnvironmentLinkNotFoundResponseBody {
+	body := &SetToolsetEnvironmentLinkNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolsetEnvironmentLinkConflictResponseBody builds the HTTP response
+// body from the result of the "setToolsetEnvironmentLink" endpoint of the
+// "environments" service.
+func NewSetToolsetEnvironmentLinkConflictResponseBody(res *goa.ServiceError) *SetToolsetEnvironmentLinkConflictResponseBody {
+	body := &SetToolsetEnvironmentLinkConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolsetEnvironmentLinkUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "setToolsetEnvironmentLink" endpoint of
+// the "environments" service.
+func NewSetToolsetEnvironmentLinkUnsupportedMediaResponseBody(res *goa.ServiceError) *SetToolsetEnvironmentLinkUnsupportedMediaResponseBody {
+	body := &SetToolsetEnvironmentLinkUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolsetEnvironmentLinkInvalidResponseBody builds the HTTP response
+// body from the result of the "setToolsetEnvironmentLink" endpoint of the
+// "environments" service.
+func NewSetToolsetEnvironmentLinkInvalidResponseBody(res *goa.ServiceError) *SetToolsetEnvironmentLinkInvalidResponseBody {
+	body := &SetToolsetEnvironmentLinkInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolsetEnvironmentLinkInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "setToolsetEnvironmentLink" endpoint of
+// the "environments" service.
+func NewSetToolsetEnvironmentLinkInvariantViolationResponseBody(res *goa.ServiceError) *SetToolsetEnvironmentLinkInvariantViolationResponseBody {
+	body := &SetToolsetEnvironmentLinkInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolsetEnvironmentLinkUnexpectedResponseBody builds the HTTP response
+// body from the result of the "setToolsetEnvironmentLink" endpoint of the
+// "environments" service.
+func NewSetToolsetEnvironmentLinkUnexpectedResponseBody(res *goa.ServiceError) *SetToolsetEnvironmentLinkUnexpectedResponseBody {
+	body := &SetToolsetEnvironmentLinkUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolsetEnvironmentLinkGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "setToolsetEnvironmentLink" endpoint of
+// the "environments" service.
+func NewSetToolsetEnvironmentLinkGatewayErrorResponseBody(res *goa.ServiceError) *SetToolsetEnvironmentLinkGatewayErrorResponseBody {
+	body := &SetToolsetEnvironmentLinkGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolsetEnvironmentLinkUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "deleteToolsetEnvironmentLink" endpoint
+// of the "environments" service.
+func NewDeleteToolsetEnvironmentLinkUnauthorizedResponseBody(res *goa.ServiceError) *DeleteToolsetEnvironmentLinkUnauthorizedResponseBody {
+	body := &DeleteToolsetEnvironmentLinkUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolsetEnvironmentLinkForbiddenResponseBody builds the HTTP
+// response body from the result of the "deleteToolsetEnvironmentLink" endpoint
+// of the "environments" service.
+func NewDeleteToolsetEnvironmentLinkForbiddenResponseBody(res *goa.ServiceError) *DeleteToolsetEnvironmentLinkForbiddenResponseBody {
+	body := &DeleteToolsetEnvironmentLinkForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolsetEnvironmentLinkBadRequestResponseBody builds the HTTP
+// response body from the result of the "deleteToolsetEnvironmentLink" endpoint
+// of the "environments" service.
+func NewDeleteToolsetEnvironmentLinkBadRequestResponseBody(res *goa.ServiceError) *DeleteToolsetEnvironmentLinkBadRequestResponseBody {
+	body := &DeleteToolsetEnvironmentLinkBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolsetEnvironmentLinkNotFoundResponseBody builds the HTTP response
+// body from the result of the "deleteToolsetEnvironmentLink" endpoint of the
+// "environments" service.
+func NewDeleteToolsetEnvironmentLinkNotFoundResponseBody(res *goa.ServiceError) *DeleteToolsetEnvironmentLinkNotFoundResponseBody {
+	body := &DeleteToolsetEnvironmentLinkNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolsetEnvironmentLinkConflictResponseBody builds the HTTP response
+// body from the result of the "deleteToolsetEnvironmentLink" endpoint of the
+// "environments" service.
+func NewDeleteToolsetEnvironmentLinkConflictResponseBody(res *goa.ServiceError) *DeleteToolsetEnvironmentLinkConflictResponseBody {
+	body := &DeleteToolsetEnvironmentLinkConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolsetEnvironmentLinkUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "deleteToolsetEnvironmentLink" endpoint
+// of the "environments" service.
+func NewDeleteToolsetEnvironmentLinkUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteToolsetEnvironmentLinkUnsupportedMediaResponseBody {
+	body := &DeleteToolsetEnvironmentLinkUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolsetEnvironmentLinkInvalidResponseBody builds the HTTP response
+// body from the result of the "deleteToolsetEnvironmentLink" endpoint of the
+// "environments" service.
+func NewDeleteToolsetEnvironmentLinkInvalidResponseBody(res *goa.ServiceError) *DeleteToolsetEnvironmentLinkInvalidResponseBody {
+	body := &DeleteToolsetEnvironmentLinkInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolsetEnvironmentLinkInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "deleteToolsetEnvironmentLink"
+// endpoint of the "environments" service.
+func NewDeleteToolsetEnvironmentLinkInvariantViolationResponseBody(res *goa.ServiceError) *DeleteToolsetEnvironmentLinkInvariantViolationResponseBody {
+	body := &DeleteToolsetEnvironmentLinkInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolsetEnvironmentLinkUnexpectedResponseBody builds the HTTP
+// response body from the result of the "deleteToolsetEnvironmentLink" endpoint
+// of the "environments" service.
+func NewDeleteToolsetEnvironmentLinkUnexpectedResponseBody(res *goa.ServiceError) *DeleteToolsetEnvironmentLinkUnexpectedResponseBody {
+	body := &DeleteToolsetEnvironmentLinkUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolsetEnvironmentLinkGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "deleteToolsetEnvironmentLink" endpoint
+// of the "environments" service.
+func NewDeleteToolsetEnvironmentLinkGatewayErrorResponseBody(res *goa.ServiceError) *DeleteToolsetEnvironmentLinkGatewayErrorResponseBody {
+	body := &DeleteToolsetEnvironmentLinkGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetEnvironmentUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getToolsetEnvironment" endpoint of the
+// "environments" service.
+func NewGetToolsetEnvironmentUnauthorizedResponseBody(res *goa.ServiceError) *GetToolsetEnvironmentUnauthorizedResponseBody {
+	body := &GetToolsetEnvironmentUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetEnvironmentForbiddenResponseBody builds the HTTP response body
+// from the result of the "getToolsetEnvironment" endpoint of the
+// "environments" service.
+func NewGetToolsetEnvironmentForbiddenResponseBody(res *goa.ServiceError) *GetToolsetEnvironmentForbiddenResponseBody {
+	body := &GetToolsetEnvironmentForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetEnvironmentBadRequestResponseBody builds the HTTP response body
+// from the result of the "getToolsetEnvironment" endpoint of the
+// "environments" service.
+func NewGetToolsetEnvironmentBadRequestResponseBody(res *goa.ServiceError) *GetToolsetEnvironmentBadRequestResponseBody {
+	body := &GetToolsetEnvironmentBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetEnvironmentNotFoundResponseBody builds the HTTP response body
+// from the result of the "getToolsetEnvironment" endpoint of the
+// "environments" service.
+func NewGetToolsetEnvironmentNotFoundResponseBody(res *goa.ServiceError) *GetToolsetEnvironmentNotFoundResponseBody {
+	body := &GetToolsetEnvironmentNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetEnvironmentConflictResponseBody builds the HTTP response body
+// from the result of the "getToolsetEnvironment" endpoint of the
+// "environments" service.
+func NewGetToolsetEnvironmentConflictResponseBody(res *goa.ServiceError) *GetToolsetEnvironmentConflictResponseBody {
+	body := &GetToolsetEnvironmentConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetEnvironmentUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getToolsetEnvironment" endpoint of the
+// "environments" service.
+func NewGetToolsetEnvironmentUnsupportedMediaResponseBody(res *goa.ServiceError) *GetToolsetEnvironmentUnsupportedMediaResponseBody {
+	body := &GetToolsetEnvironmentUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetEnvironmentInvalidResponseBody builds the HTTP response body
+// from the result of the "getToolsetEnvironment" endpoint of the
+// "environments" service.
+func NewGetToolsetEnvironmentInvalidResponseBody(res *goa.ServiceError) *GetToolsetEnvironmentInvalidResponseBody {
+	body := &GetToolsetEnvironmentInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetEnvironmentInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getToolsetEnvironment" endpoint of the
+// "environments" service.
+func NewGetToolsetEnvironmentInvariantViolationResponseBody(res *goa.ServiceError) *GetToolsetEnvironmentInvariantViolationResponseBody {
+	body := &GetToolsetEnvironmentInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetEnvironmentUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getToolsetEnvironment" endpoint of the
+// "environments" service.
+func NewGetToolsetEnvironmentUnexpectedResponseBody(res *goa.ServiceError) *GetToolsetEnvironmentUnexpectedResponseBody {
+	body := &GetToolsetEnvironmentUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetEnvironmentGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getToolsetEnvironment" endpoint of the
+// "environments" service.
+func NewGetToolsetEnvironmentGatewayErrorResponseBody(res *goa.ServiceError) *GetToolsetEnvironmentGatewayErrorResponseBody {
+	body := &GetToolsetEnvironmentGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateEnvironmentPayload builds a environments service createEnvironment
 // endpoint payload.
 func NewCreateEnvironmentPayload(body *CreateEnvironmentRequestBody, sessionToken *string, projectSlugInput *string) *environments.CreateEnvironmentPayload {
@@ -2742,6 +3841,41 @@ func NewGetSourceEnvironmentPayload(sourceKind string, sourceSlug string, sessio
 	return v
 }
 
+// NewSetToolsetEnvironmentLinkPayload builds a environments service
+// setToolsetEnvironmentLink endpoint payload.
+func NewSetToolsetEnvironmentLinkPayload(body *SetToolsetEnvironmentLinkRequestBody, sessionToken *string, projectSlugInput *string) *environments.SetToolsetEnvironmentLinkPayload {
+	v := &environments.SetToolsetEnvironmentLinkPayload{
+		ToolsetID:     *body.ToolsetID,
+		EnvironmentID: *body.EnvironmentID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewDeleteToolsetEnvironmentLinkPayload builds a environments service
+// deleteToolsetEnvironmentLink endpoint payload.
+func NewDeleteToolsetEnvironmentLinkPayload(toolsetID string, sessionToken *string, projectSlugInput *string) *environments.DeleteToolsetEnvironmentLinkPayload {
+	v := &environments.DeleteToolsetEnvironmentLinkPayload{}
+	v.ToolsetID = toolsetID
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetToolsetEnvironmentPayload builds a environments service
+// getToolsetEnvironment endpoint payload.
+func NewGetToolsetEnvironmentPayload(toolsetID string, sessionToken *string, projectSlugInput *string) *environments.GetToolsetEnvironmentPayload {
+	v := &environments.GetToolsetEnvironmentPayload{}
+	v.ToolsetID = toolsetID
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // ValidateCreateEnvironmentRequestBody runs the validations defined on
 // CreateEnvironmentRequestBody
 func ValidateCreateEnvironmentRequestBody(body *CreateEnvironmentRequestBody) (err error) {
@@ -2799,6 +3933,24 @@ func ValidateSetSourceEnvironmentLinkRequestBody(body *SetSourceEnvironmentLinkR
 		if !(*body.SourceKind == "http" || *body.SourceKind == "function") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source_kind", *body.SourceKind, []any{"http", "function"}))
 		}
+	}
+	if body.EnvironmentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSetToolsetEnvironmentLinkRequestBody runs the validations defined on
+// SetToolsetEnvironmentLinkRequestBody
+func ValidateSetToolsetEnvironmentLinkRequestBody(body *SetToolsetEnvironmentLinkRequestBody) (err error) {
+	if body.ToolsetID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "body"))
+	}
+	if body.EnvironmentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("environment_id", "body"))
+	}
+	if body.ToolsetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
 	}
 	if body.EnvironmentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))

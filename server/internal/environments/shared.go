@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 
 	"github.com/google/uuid"
@@ -89,6 +90,54 @@ func (e *EnvironmentEntries) LoadSourceEnv(ctx context.Context, projectID uuid.U
 		envMap[entry.Name] = entry.Value
 	}
 	return envMap, nil
+}
+
+func (e *EnvironmentEntries) LoadToolsetEnv(ctx context.Context, projectID uuid.UUID, toolsetID uuid.UUID) (map[string]string, error) {
+	toolsetEnv, err := e.repo.GetEnvironmentForToolset(ctx, repo.GetEnvironmentForToolsetParams{
+		ToolsetID: toolsetID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return map[string]string{}, nil
+		}
+		return nil, fmt.Errorf("get environment for toolset: %w", err)
+	}
+
+	entries, err := e.ListEnvironmentEntries(ctx, projectID, toolsetEnv.ID, false)
+	if err != nil {
+		return nil, fmt.Errorf("list environment entries: %w", err)
+	}
+
+	envMap := make(map[string]string, len(entries))
+	for _, entry := range entries {
+		envMap[entry.Name] = entry.Value
+	}
+	return envMap, nil
+}
+
+// LoadSystemEnv loads and merges source and toolset environments.
+// Merges in order: source env (base) -> toolset env (override).
+// Returns empty map if neither environment exists.
+func (e *EnvironmentEntries) LoadSystemEnv(ctx context.Context, projectID uuid.UUID, toolsetID uuid.UUID, sourceKind string, sourceSlug string) (map[string]string, error) {
+	// Load source environment (tool-specific)
+	sourceEnv, err := e.LoadSourceEnv(ctx, projectID, sourceKind, sourceSlug)
+	if err != nil {
+		return nil, fmt.Errorf("load source environment: %w", err)
+	}
+
+	// Load toolset environment
+	toolsetEnv, err := e.LoadToolsetEnv(ctx, projectID, toolsetID)
+	if err != nil {
+		return nil, fmt.Errorf("load toolset environment: %w", err)
+	}
+
+	// Merge: source env (base) + toolset env (override)
+	systemEnv := make(map[string]string)
+	maps.Copy(systemEnv, sourceEnv)
+	maps.Copy(systemEnv, toolsetEnv)
+
+	return systemEnv, nil
 }
 
 func (e *EnvironmentEntries) ListEnvironmentEntries(ctx context.Context, projectID uuid.UUID, environmentID uuid.UUID, redacted bool) ([]repo.EnvironmentEntry, error) {

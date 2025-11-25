@@ -25,7 +25,7 @@ func BuildCreateEnvironmentPayload(environmentsCreateEnvironmentBody string, env
 	{
 		err = json.Unmarshal([]byte(environmentsCreateEnvironmentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Nemo enim sit.\",\n      \"entries\": [\n         {\n            \"name\": \"Esse architecto asperiores.\",\n            \"value\": \"Molestiae maxime.\"\n         },\n         {\n            \"name\": \"Esse architecto asperiores.\",\n            \"value\": \"Molestiae maxime.\"\n         },\n         {\n            \"name\": \"Esse architecto asperiores.\",\n            \"value\": \"Molestiae maxime.\"\n         },\n         {\n            \"name\": \"Esse architecto asperiores.\",\n            \"value\": \"Molestiae maxime.\"\n         }\n      ],\n      \"name\": \"Nesciunt nulla rem blanditiis eveniet ex consectetur.\",\n      \"organization_id\": \"Provident quia cum et natus.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Tempore perferendis ut.\",\n      \"entries\": [\n         {\n            \"name\": \"Deleniti magni cumque dolores.\",\n            \"value\": \"Occaecati ipsa voluptatem.\"\n         },\n         {\n            \"name\": \"Deleniti magni cumque dolores.\",\n            \"value\": \"Occaecati ipsa voluptatem.\"\n         },\n         {\n            \"name\": \"Deleniti magni cumque dolores.\",\n            \"value\": \"Occaecati ipsa voluptatem.\"\n         },\n         {\n            \"name\": \"Deleniti magni cumque dolores.\",\n            \"value\": \"Occaecati ipsa voluptatem.\"\n         }\n      ],\n      \"name\": \"Rerum error velit voluptates unde.\",\n      \"organization_id\": \"Accusamus tempore qui.\"\n   }'")
 		}
 		if body.Entries == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("entries", "body"))
@@ -95,7 +95,7 @@ func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, env
 	{
 		err = json.Unmarshal([]byte(environmentsUpdateEnvironmentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Enim deserunt et.\",\n      \"entries_to_remove\": [\n         \"Provident deleniti.\",\n         \"Quia omnis aut veniam.\",\n         \"Quod voluptatem illo ut facere soluta.\"\n      ],\n      \"entries_to_update\": [\n         {\n            \"name\": \"Esse architecto asperiores.\",\n            \"value\": \"Molestiae maxime.\"\n         },\n         {\n            \"name\": \"Esse architecto asperiores.\",\n            \"value\": \"Molestiae maxime.\"\n         },\n         {\n            \"name\": \"Esse architecto asperiores.\",\n            \"value\": \"Molestiae maxime.\"\n         }\n      ],\n      \"name\": \"Quod soluta voluptatibus cum.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Fugiat et odio eaque quis.\",\n      \"entries_to_remove\": [\n         \"Eligendi numquam ut debitis quis.\",\n         \"Possimus aut.\",\n         \"Voluptatem voluptatibus laborum voluptates.\"\n      ],\n      \"entries_to_update\": [\n         {\n            \"name\": \"Deleniti magni cumque dolores.\",\n            \"value\": \"Occaecati ipsa voluptatem.\"\n         },\n         {\n            \"name\": \"Deleniti magni cumque dolores.\",\n            \"value\": \"Occaecati ipsa voluptatem.\"\n         }\n      ],\n      \"name\": \"Soluta placeat facilis sunt id qui voluptates.\"\n   }'")
 		}
 		if body.EntriesToUpdate == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("entries_to_update", "body"))
@@ -200,7 +200,7 @@ func BuildSetSourceEnvironmentLinkPayload(environmentsSetSourceEnvironmentLinkBo
 	{
 		err = json.Unmarshal([]byte(environmentsSetSourceEnvironmentLinkBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"b2deaf3c-1e3e-4bcf-9afd-d144566055cd\",\n      \"source_kind\": \"http\",\n      \"source_slug\": \"Optio autem cupiditate rem explicabo.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"995fd872-fa75-4bdb-bc55-37cfa25f0009\",\n      \"source_kind\": \"function\",\n      \"source_slug\": \"Numquam et sint maxime ut molestiae.\"\n   }'")
 		}
 		if !(body.SourceKind == "http" || body.SourceKind == "function") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source_kind", body.SourceKind, []any{"http", "function"}))
@@ -305,6 +305,108 @@ func BuildGetSourceEnvironmentPayload(environmentsGetSourceEnvironmentSourceKind
 	v := &environments.GetSourceEnvironmentPayload{}
 	v.SourceKind = environments.SourceKind(sourceKind)
 	v.SourceSlug = sourceSlug
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSetToolsetEnvironmentLinkPayload builds the payload for the
+// environments setToolsetEnvironmentLink endpoint from CLI flags.
+func BuildSetToolsetEnvironmentLinkPayload(environmentsSetToolsetEnvironmentLinkBody string, environmentsSetToolsetEnvironmentLinkSessionToken string, environmentsSetToolsetEnvironmentLinkProjectSlugInput string) (*environments.SetToolsetEnvironmentLinkPayload, error) {
+	var err error
+	var body SetToolsetEnvironmentLinkRequestBody
+	{
+		err = json.Unmarshal([]byte(environmentsSetToolsetEnvironmentLinkBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"18f71bb6-e17c-43e2-b225-8618f336e01b\",\n      \"toolset_id\": \"bd18bb1a-36ec-4056-98d7-1540612f2101\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", body.ToolsetID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", body.EnvironmentID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if environmentsSetToolsetEnvironmentLinkSessionToken != "" {
+			sessionToken = &environmentsSetToolsetEnvironmentLinkSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if environmentsSetToolsetEnvironmentLinkProjectSlugInput != "" {
+			projectSlugInput = &environmentsSetToolsetEnvironmentLinkProjectSlugInput
+		}
+	}
+	v := &environments.SetToolsetEnvironmentLinkPayload{
+		ToolsetID:     body.ToolsetID,
+		EnvironmentID: body.EnvironmentID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDeleteToolsetEnvironmentLinkPayload builds the payload for the
+// environments deleteToolsetEnvironmentLink endpoint from CLI flags.
+func BuildDeleteToolsetEnvironmentLinkPayload(environmentsDeleteToolsetEnvironmentLinkToolsetID string, environmentsDeleteToolsetEnvironmentLinkSessionToken string, environmentsDeleteToolsetEnvironmentLinkProjectSlugInput string) (*environments.DeleteToolsetEnvironmentLinkPayload, error) {
+	var err error
+	var toolsetID string
+	{
+		toolsetID = environmentsDeleteToolsetEnvironmentLinkToolsetID
+		err = goa.MergeErrors(err, goa.ValidateFormat("toolset_id", toolsetID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if environmentsDeleteToolsetEnvironmentLinkSessionToken != "" {
+			sessionToken = &environmentsDeleteToolsetEnvironmentLinkSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if environmentsDeleteToolsetEnvironmentLinkProjectSlugInput != "" {
+			projectSlugInput = &environmentsDeleteToolsetEnvironmentLinkProjectSlugInput
+		}
+	}
+	v := &environments.DeleteToolsetEnvironmentLinkPayload{}
+	v.ToolsetID = toolsetID
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetToolsetEnvironmentPayload builds the payload for the environments
+// getToolsetEnvironment endpoint from CLI flags.
+func BuildGetToolsetEnvironmentPayload(environmentsGetToolsetEnvironmentToolsetID string, environmentsGetToolsetEnvironmentSessionToken string, environmentsGetToolsetEnvironmentProjectSlugInput string) (*environments.GetToolsetEnvironmentPayload, error) {
+	var err error
+	var toolsetID string
+	{
+		toolsetID = environmentsGetToolsetEnvironmentToolsetID
+		err = goa.MergeErrors(err, goa.ValidateFormat("toolset_id", toolsetID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if environmentsGetToolsetEnvironmentSessionToken != "" {
+			sessionToken = &environmentsGetToolsetEnvironmentSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if environmentsGetToolsetEnvironmentProjectSlugInput != "" {
+			projectSlugInput = &environmentsGetToolsetEnvironmentProjectSlugInput
+		}
+	}
+	v := &environments.GetToolsetEnvironmentPayload{}
+	v.ToolsetID = toolsetID
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

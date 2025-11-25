@@ -16,25 +16,31 @@ import (
 
 // Client is the "environments" service client.
 type Client struct {
-	CreateEnvironmentEndpoint           goa.Endpoint
-	ListEnvironmentsEndpoint            goa.Endpoint
-	UpdateEnvironmentEndpoint           goa.Endpoint
-	DeleteEnvironmentEndpoint           goa.Endpoint
-	SetSourceEnvironmentLinkEndpoint    goa.Endpoint
-	DeleteSourceEnvironmentLinkEndpoint goa.Endpoint
-	GetSourceEnvironmentEndpoint        goa.Endpoint
+	CreateEnvironmentEndpoint            goa.Endpoint
+	ListEnvironmentsEndpoint             goa.Endpoint
+	UpdateEnvironmentEndpoint            goa.Endpoint
+	DeleteEnvironmentEndpoint            goa.Endpoint
+	SetSourceEnvironmentLinkEndpoint     goa.Endpoint
+	DeleteSourceEnvironmentLinkEndpoint  goa.Endpoint
+	GetSourceEnvironmentEndpoint         goa.Endpoint
+	SetToolsetEnvironmentLinkEndpoint    goa.Endpoint
+	DeleteToolsetEnvironmentLinkEndpoint goa.Endpoint
+	GetToolsetEnvironmentEndpoint        goa.Endpoint
 }
 
 // NewClient initializes a "environments" service client given the endpoints.
-func NewClient(createEnvironment, listEnvironments, updateEnvironment, deleteEnvironment, setSourceEnvironmentLink, deleteSourceEnvironmentLink, getSourceEnvironment goa.Endpoint) *Client {
+func NewClient(createEnvironment, listEnvironments, updateEnvironment, deleteEnvironment, setSourceEnvironmentLink, deleteSourceEnvironmentLink, getSourceEnvironment, setToolsetEnvironmentLink, deleteToolsetEnvironmentLink, getToolsetEnvironment goa.Endpoint) *Client {
 	return &Client{
-		CreateEnvironmentEndpoint:           createEnvironment,
-		ListEnvironmentsEndpoint:            listEnvironments,
-		UpdateEnvironmentEndpoint:           updateEnvironment,
-		DeleteEnvironmentEndpoint:           deleteEnvironment,
-		SetSourceEnvironmentLinkEndpoint:    setSourceEnvironmentLink,
-		DeleteSourceEnvironmentLinkEndpoint: deleteSourceEnvironmentLink,
-		GetSourceEnvironmentEndpoint:        getSourceEnvironment,
+		CreateEnvironmentEndpoint:            createEnvironment,
+		ListEnvironmentsEndpoint:             listEnvironments,
+		UpdateEnvironmentEndpoint:            updateEnvironment,
+		DeleteEnvironmentEndpoint:            deleteEnvironment,
+		SetSourceEnvironmentLinkEndpoint:     setSourceEnvironmentLink,
+		DeleteSourceEnvironmentLinkEndpoint:  deleteSourceEnvironmentLink,
+		GetSourceEnvironmentEndpoint:         getSourceEnvironment,
+		SetToolsetEnvironmentLinkEndpoint:    setToolsetEnvironmentLink,
+		DeleteToolsetEnvironmentLinkEndpoint: deleteToolsetEnvironmentLink,
+		GetToolsetEnvironmentEndpoint:        getToolsetEnvironment,
 	}
 }
 
@@ -185,6 +191,71 @@ func (c *Client) DeleteSourceEnvironmentLink(ctx context.Context, p *DeleteSourc
 func (c *Client) GetSourceEnvironment(ctx context.Context, p *GetSourceEnvironmentPayload) (res *types.Environment, err error) {
 	var ires any
 	ires, err = c.GetSourceEnvironmentEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.Environment), nil
+}
+
+// SetToolsetEnvironmentLink calls the "setToolsetEnvironmentLink" endpoint of
+// the "environments" service.
+// SetToolsetEnvironmentLink may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetToolsetEnvironmentLink(ctx context.Context, p *SetToolsetEnvironmentLinkPayload) (res *ToolsetEnvironmentLink, err error) {
+	var ires any
+	ires, err = c.SetToolsetEnvironmentLinkEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ToolsetEnvironmentLink), nil
+}
+
+// DeleteToolsetEnvironmentLink calls the "deleteToolsetEnvironmentLink"
+// endpoint of the "environments" service.
+// DeleteToolsetEnvironmentLink may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteToolsetEnvironmentLink(ctx context.Context, p *DeleteToolsetEnvironmentLinkPayload) (err error) {
+	_, err = c.DeleteToolsetEnvironmentLinkEndpoint(ctx, p)
+	return
+}
+
+// GetToolsetEnvironment calls the "getToolsetEnvironment" endpoint of the
+// "environments" service.
+// GetToolsetEnvironment may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetToolsetEnvironment(ctx context.Context, p *GetToolsetEnvironmentPayload) (res *types.Environment, err error) {
+	var ires any
+	ires, err = c.GetToolsetEnvironmentEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

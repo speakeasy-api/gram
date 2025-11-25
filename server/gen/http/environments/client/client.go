@@ -45,6 +45,18 @@ type Client struct {
 	// getSourceEnvironment endpoint.
 	GetSourceEnvironmentDoer goahttp.Doer
 
+	// SetToolsetEnvironmentLink Doer is the HTTP client used to make requests to
+	// the setToolsetEnvironmentLink endpoint.
+	SetToolsetEnvironmentLinkDoer goahttp.Doer
+
+	// DeleteToolsetEnvironmentLink Doer is the HTTP client used to make requests
+	// to the deleteToolsetEnvironmentLink endpoint.
+	DeleteToolsetEnvironmentLinkDoer goahttp.Doer
+
+	// GetToolsetEnvironment Doer is the HTTP client used to make requests to the
+	// getToolsetEnvironment endpoint.
+	GetToolsetEnvironmentDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -65,18 +77,21 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateEnvironmentDoer:           doer,
-		ListEnvironmentsDoer:            doer,
-		UpdateEnvironmentDoer:           doer,
-		DeleteEnvironmentDoer:           doer,
-		SetSourceEnvironmentLinkDoer:    doer,
-		DeleteSourceEnvironmentLinkDoer: doer,
-		GetSourceEnvironmentDoer:        doer,
-		RestoreResponseBody:             restoreBody,
-		scheme:                          scheme,
-		host:                            host,
-		decoder:                         dec,
-		encoder:                         enc,
+		CreateEnvironmentDoer:            doer,
+		ListEnvironmentsDoer:             doer,
+		UpdateEnvironmentDoer:            doer,
+		DeleteEnvironmentDoer:            doer,
+		SetSourceEnvironmentLinkDoer:     doer,
+		DeleteSourceEnvironmentLinkDoer:  doer,
+		GetSourceEnvironmentDoer:         doer,
+		SetToolsetEnvironmentLinkDoer:    doer,
+		DeleteToolsetEnvironmentLinkDoer: doer,
+		GetToolsetEnvironmentDoer:        doer,
+		RestoreResponseBody:              restoreBody,
+		scheme:                           scheme,
+		host:                             host,
+		decoder:                          dec,
+		encoder:                          enc,
 	}
 }
 
@@ -243,6 +258,78 @@ func (c *Client) GetSourceEnvironment() goa.Endpoint {
 		resp, err := c.GetSourceEnvironmentDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("environments", "getSourceEnvironment", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetToolsetEnvironmentLink returns an endpoint that makes HTTP requests to
+// the environments service setToolsetEnvironmentLink server.
+func (c *Client) SetToolsetEnvironmentLink() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetToolsetEnvironmentLinkRequest(c.encoder)
+		decodeResponse = DecodeSetToolsetEnvironmentLinkResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetToolsetEnvironmentLinkRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetToolsetEnvironmentLinkDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("environments", "setToolsetEnvironmentLink", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteToolsetEnvironmentLink returns an endpoint that makes HTTP requests to
+// the environments service deleteToolsetEnvironmentLink server.
+func (c *Client) DeleteToolsetEnvironmentLink() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteToolsetEnvironmentLinkRequest(c.encoder)
+		decodeResponse = DecodeDeleteToolsetEnvironmentLinkResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteToolsetEnvironmentLinkRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteToolsetEnvironmentLinkDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("environments", "deleteToolsetEnvironmentLink", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetToolsetEnvironment returns an endpoint that makes HTTP requests to the
+// environments service getToolsetEnvironment server.
+func (c *Client) GetToolsetEnvironment() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetToolsetEnvironmentRequest(c.encoder)
+		decodeResponse = DecodeGetToolsetEnvironmentResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetToolsetEnvironmentRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetToolsetEnvironmentDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("environments", "getToolsetEnvironment", err)
 		}
 		return decodeResponse(resp)
 	}
