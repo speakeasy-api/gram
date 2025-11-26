@@ -28,47 +28,6 @@ export const DeleteGlobalToolVariationResult$inboundSchema: z.ZodType<
   });
 });
 
-/** @internal */
-export type DeleteGlobalToolVariationResult$Outbound = {
-  variation_id: string;
-};
-
-/** @internal */
-export const DeleteGlobalToolVariationResult$outboundSchema: z.ZodType<
-  DeleteGlobalToolVariationResult$Outbound,
-  z.ZodTypeDef,
-  DeleteGlobalToolVariationResult
-> = z.object({
-  variationId: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    variationId: "variation_id",
-  });
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace DeleteGlobalToolVariationResult$ {
-  /** @deprecated use `DeleteGlobalToolVariationResult$inboundSchema` instead. */
-  export const inboundSchema = DeleteGlobalToolVariationResult$inboundSchema;
-  /** @deprecated use `DeleteGlobalToolVariationResult$outboundSchema` instead. */
-  export const outboundSchema = DeleteGlobalToolVariationResult$outboundSchema;
-  /** @deprecated use `DeleteGlobalToolVariationResult$Outbound` instead. */
-  export type Outbound = DeleteGlobalToolVariationResult$Outbound;
-}
-
-export function deleteGlobalToolVariationResultToJSON(
-  deleteGlobalToolVariationResult: DeleteGlobalToolVariationResult,
-): string {
-  return JSON.stringify(
-    DeleteGlobalToolVariationResult$outboundSchema.parse(
-      deleteGlobalToolVariationResult,
-    ),
-  );
-}
-
 export function deleteGlobalToolVariationResultFromJSON(
   jsonString: string,
 ): SafeParseResult<DeleteGlobalToolVariationResult, SDKValidationError> {

@@ -408,6 +408,18 @@ func DescribeToolset(
 
 			providers := make([]*types.OAuthProxyProvider, 0, len(oauthProxyProviders))
 			for _, provider := range oauthProxyProviders {
+				// Parse environment_slug from secrets JSON
+				var environmentSlug *types.Slug
+				if provider.Secrets != nil {
+					var secrets map[string]string
+					if err := json.Unmarshal(provider.Secrets, &secrets); err == nil {
+						if envSlug, ok := secrets["environment_slug"]; ok && envSlug != "" {
+							slug := types.Slug(envSlug)
+							environmentSlug = &slug
+						}
+					}
+				}
+
 				providers = append(providers, &types.OAuthProxyProvider{
 					ID:                                provider.ID.String(),
 					Slug:                              types.Slug(provider.Slug),
@@ -416,6 +428,7 @@ func DescribeToolset(
 					ScopesSupported:                   provider.ScopesSupported,
 					GrantTypesSupported:               provider.GrantTypesSupported,
 					TokenEndpointAuthMethodsSupported: provider.TokenEndpointAuthMethodsSupported,
+					EnvironmentSlug:                   environmentSlug,
 					CreatedAt:                         provider.CreatedAt.Time.Format(time.RFC3339),
 					UpdatedAt:                         provider.UpdatedAt.Time.Format(time.RFC3339),
 				})
