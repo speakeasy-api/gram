@@ -54,6 +54,7 @@ export function PlaygroundRHS({
                   not configured.{" "}
                   <routes.toolsets.toolset.Link
                     params={[authWarning.toolsetSlug]}
+                    hash="auth"
                     className="underline hover:text-foreground font-medium"
                   >
                     Configure now

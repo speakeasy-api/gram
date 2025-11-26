@@ -326,14 +326,18 @@ function ToolRow({
         onClick={() => onToolClick?.(tool)}
       >
         <div className="flex gap-4 items-center min-w-0 flex-[0_1_60%]">
-          <Checkbox
-            checked={isSelected}
-            onCheckedChange={onCheckboxChange}
-            className={cn(
-              "shrink-0 transition-opacity",
-              !isSelected && !isFocused && "opacity-0 group-hover:opacity-100",
-            )}
-          />
+          <div onClick={(e) => e.stopPropagation()}>
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={onCheckboxChange}
+              className={cn(
+                "shrink-0 transition-opacity",
+                !isSelected &&
+                  !isFocused &&
+                  "opacity-0 group-hover:opacity-100",
+              )}
+            />
+          </div>
           <div className="flex flex-col min-w-0 flex-1">
             <Stack direction="horizontal" gap={2} align="center">
               <p className="text-sm leading-6 text-foreground truncate">

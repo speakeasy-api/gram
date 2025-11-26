@@ -5,7 +5,6 @@ import {
 } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { Checkbox } from "@/components/ui/checkbox";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { Button } from "@/components/ui/button";
@@ -28,7 +27,6 @@ import {
 import { MethodBadge } from "@/components/tool-list/MethodBadge";
 import { useState, useEffect } from "react";
 import { Tool } from "@/lib/toolTypes";
-import { cn } from "@/lib/utils";
 
 interface ToolsetInfo {
   name: string;
@@ -233,8 +231,8 @@ function groupTools(
 
 export function PlaygroundConfigPanel({
   tools = [],
-  selectedTools = new Set(),
-  onToolToggle,
+  selectedTools: _selectedTools = new Set(),
+  onToolToggle: _onToolToggle,
   temperature,
   onTemperatureChange,
   model,
@@ -399,23 +397,11 @@ export function PlaygroundConfigPanel({
                       {isExpanded && (
                         <div>
                           {group.tools.map((tool) => {
-                            const isSelected = selectedTools?.has(tool.id);
                             return (
                               <div
                                 key={tool.toolUrn}
                                 className="group w-full px-3 py-2 flex items-center gap-2 hover:bg-muted/30 transition-colors"
                               >
-                                <Checkbox
-                                  checked={isSelected}
-                                  onCheckedChange={() => {
-                                    onToolToggle?.(tool.id);
-                                  }}
-                                  className={cn(
-                                    "!size-3.5 shrink-0 transition-opacity",
-                                    !isSelected &&
-                                      "opacity-0 group-hover:opacity-100",
-                                  )}
-                                />
                                 <button
                                   onClick={() => onToolClick?.(tool)}
                                   className="flex-1 flex items-center justify-between text-left min-w-0"

@@ -401,7 +401,8 @@ function ChatInner({
     sendMessage,
     addToolResult,
   } = useChat({
-    id: chat.id,
+    // Include model in the chat ID to force a fresh session when switching models
+    id: `${chat.id}-${model}`,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     transport: transport as any,
     onError: (error) => {
@@ -524,25 +525,18 @@ function ChatInner({
         {authWarning}
         <PromptInput
           onSubmit={(message) => {
-            if (message.text && !authWarning) {
+            if (message.text) {
               handleSend(message.text);
             }
           }}
         >
           <PromptInputBody>
-            <PromptInputTextarea
-              placeholder={
-                authWarning
-                  ? "Configure authentication to start chatting..."
-                  : "Send a message..."
-              }
-              disabled={!!authWarning}
-            />
+            <PromptInputTextarea placeholder="Send a message..." />
           </PromptInputBody>
           <PromptInputFooter className="bg-secondary border-t border-neutral-softest rounded-bl-lg rounded-br-lg">
             <PromptInputTools>{additionalActions}</PromptInputTools>
             <PromptInputSubmit
-              disabled={status === "streaming" || !!authWarning}
+              disabled={status === "streaming"}
               status={status}
             />
           </PromptInputFooter>

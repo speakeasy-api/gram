@@ -339,15 +339,21 @@ export function ToolsetPanel({
     }
   }, [configRef, setSelectedEnvironment, toolset]);
 
-  // Transform tools data for the config panel
+  // Transform tools data for the config panel - use working state to allow modifications
   const apiTools = useMemo(
     () => instanceData?.tools?.map(asTool) ?? [],
     [instanceData?.tools],
   );
+
+  // Working state for tools - allows adding/removing tools in the playground session
   const [workingTools, setWorkingTools] = useState<Tool[]>([]);
+
+  // Sync working tools with API data when it changes
   useEffect(() => {
     setWorkingTools(apiTools);
   }, [apiTools]);
+
+  // Use working tools for display, falling back to API tools
   const tools = workingTools.length > 0 ? workingTools : apiTools;
 
   // Track which tools are selected for bulk actions
@@ -486,14 +492,24 @@ export function ToolsetPanel({
         documentIdToName={documentIdToName}
         functionIdToName={functionIdToName}
         onSave={(updates) => {
-          // TODO: Update tool in working state
-          console.log("Update tool:", updates);
+          if (editingTool) {
+            setWorkingTools((prev) =>
+              prev.map((tool) =>
+                tool.toolUrn === editingTool.toolUrn
+                  ? { ...tool, ...updates }
+                  : tool,
+              ),
+            );
+          }
           toast.success("Tool updated");
           setEditingTool(null);
         }}
         onRemove={() => {
-          // TODO: Remove tool from working state
-          console.log("Remove tool:", editingTool?.toolUrn);
+          if (editingTool?.toolUrn) {
+            setWorkingTools((prev) =>
+              prev.filter((tool) => tool.toolUrn !== editingTool.toolUrn),
+            );
+          }
           toast.success("Tool removed");
           setEditingTool(null);
         }}
