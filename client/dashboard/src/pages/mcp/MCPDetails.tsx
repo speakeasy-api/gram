@@ -1212,7 +1212,9 @@ function OAuthTabModal({
                       <select
                         className="w-full border rounded px-3 py-2 bg-background"
                         value={proxyTokenAuthMethod}
-                        onChange={(e) => setProxyTokenAuthMethod(e.target.value)}
+                        onChange={(e) =>
+                          setProxyTokenAuthMethod(e.target.value)
+                        }
                       >
                         <option value="client_secret_post">
                           client_secret_post
@@ -1417,10 +1419,7 @@ function OAuthDetailsModal({
                     )}
                   {provider.environmentSlug && (
                     <div>
-                      <Type
-                        small
-                        className="font-medium text-muted-foreground"
-                      >
+                      <Type small className="font-medium text-muted-foreground">
                         Environment:
                       </Type>
                       <CodeBlock className="mt-1">
