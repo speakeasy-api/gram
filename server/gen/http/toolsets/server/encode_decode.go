@@ -2181,6 +2181,17 @@ func marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableRespons
 	return res
 }
 
+// marshalTypesOAuthEnablementMetadataToOAuthEnablementMetadataResponseBody
+// builds a value of type *OAuthEnablementMetadataResponseBody from a value of
+// type *types.OAuthEnablementMetadata.
+func marshalTypesOAuthEnablementMetadataToOAuthEnablementMetadataResponseBody(v *types.OAuthEnablementMetadata) *OAuthEnablementMetadataResponseBody {
+	res := &OAuthEnablementMetadataResponseBody{
+		Oauth2SecurityCount: v.Oauth2SecurityCount,
+	}
+
+	return res
+}
+
 // marshalTypesToolToToolResponseBody builds a value of type *ToolResponseBody
 // from a value of type *types.Tool.
 func marshalTypesToolToToolResponseBody(v *types.Tool) *ToolResponseBody {

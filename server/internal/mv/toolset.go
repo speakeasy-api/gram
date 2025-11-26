@@ -438,6 +438,23 @@ func DescribeToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").Log(ctx, logger)
 	}
 
+	oauth2AuthCodeSecurityCount := 0
+	for _, securityVariable := range toolsetTools.SecurityVars {
+		isAuthorizationCode := securityVariable.Type != nil && *securityVariable.Type == "oauth2" && securityVariable.OauthTypes != nil && slices.Contains(securityVariable.OauthTypes, "authorization_code")
+		isOpenIdConnect := securityVariable.Type != nil && *securityVariable.Type == "openIdConnect"
+		if isAuthorizationCode || isOpenIdConnect {
+			oauth2AuthCodeSecurityCount++
+		}
+	}
+
+	functionEnvVars := dedupeFunctionEnvVars(toolsetTools.FunctionEnvVars)
+
+	for _, functionEnvironmentVariable := range functionEnvVars {
+		if functionEnvironmentVariable != nil && functionEnvironmentVariable.IsOauthTarget != nil && *functionEnvironmentVariable.IsOauthTarget {
+			oauth2AuthCodeSecurityCount++
+		}
+	}
+
 	result := &types.Toolset{
 		ID:                           toolset.ID.String(),
 		OrganizationID:               toolset.OrganizationID,
@@ -448,7 +465,7 @@ func DescribeToolset(
 		DefaultEnvironmentSlug:       conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
 		SecurityVariables:            toolsetTools.SecurityVars,
 		ServerVariables:              toolsetTools.ServerVars,
-		FunctionEnvironmentVariables: dedupeFunctionEnvVars(toolsetTools.FunctionEnvVars),
+		FunctionEnvironmentVariables: functionEnvVars,
 		Description:                  conv.FromPGText[string](toolset.Description),
 		Tools:                        toolsetTools.Tools,
 		ToolsetVersion:               toolsetVersion,
@@ -465,6 +482,9 @@ func DescribeToolset(
 		ResourceUrns:                 resourceUrns,
 		ExternalOauthServer:          externalOAuthServer,
 		OauthProxyServer:             oauthProxyServer,
+		OauthEnablementMetadata: &types.OAuthEnablementMetadata{
+			Oauth2SecurityCount: oauth2AuthCodeSecurityCount,
+		},
 	}
 
 	return result, nil

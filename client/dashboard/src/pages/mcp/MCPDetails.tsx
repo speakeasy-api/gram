@@ -50,21 +50,6 @@ export function MCPDetailPage() {
   const { toolsetSlug } = useParams();
 
   const { data: toolset, isLoading } = useToolset(toolsetSlug);
-  const activeHTTPOAuthAuthCode =
-    toolset?.securityVariables?.some(
-      (secVar) =>
-        (secVar.type === "oauth2" &&
-          secVar.oauthTypes?.includes("authorization_code")) ||
-        secVar.type === "openIdConnect",
-    ) ?? false;
-
-  const activeFunctionsOAuthAuthCode =
-    toolset?.functionEnvironmentVariables?.some(
-      (envVar) => envVar.isOauthTarget,
-    ) ?? false;
-
-  const activeOAuthAuthCode =
-    activeHTTPOAuthAuthCode || activeFunctionsOAuthAuthCode;
 
   const isOAuthConnected = !!(
     toolset?.oauthProxyServer || toolset?.externalOauthServer
@@ -81,6 +66,8 @@ export function MCPDetailPage() {
     return <div>Loading...</div>;
   }
 
+  const availableOAuthAuthCode = toolset?.oauthEnablementMetadata?.oauth2SecurityCount > 0;
+
   return (
     <Stack>
       <Stack
@@ -92,7 +79,7 @@ export function MCPDetailPage() {
         <Stack direction="horizontal" gap={2}>
           <Tooltip>
             <TooltipTrigger asChild>
-              {!activeOAuthAuthCode || !toolset?.mcpIsPublic ? (
+              {!availableOAuthAuthCode || !toolset?.mcpIsPublic ? (
                 <span className="inline-block">
                   <Button variant="secondary" size="md" disabled={true}>
                     {isOAuthConnected ? "OAuth Connected" : "Connect OAuth"}
@@ -112,9 +99,9 @@ export function MCPDetailPage() {
                 </Button>
               )}
             </TooltipTrigger>
-            {(!activeOAuthAuthCode || !toolset?.mcpIsPublic) && (
+            {(!availableOAuthAuthCode || !toolset?.mcpIsPublic) && (
               <TooltipContent>
-                {!activeOAuthAuthCode
+                {!availableOAuthAuthCode
                   ? "This MCP server does not require the OAuth authorization code flow"
                   : "This MCP Server must not be private to enable OAuth"}
               </TooltipContent>
@@ -877,23 +864,7 @@ function OAuthTabModal({
   const [jsonError, setJsonError] = useState<string | null>(null);
   const telemetry = useTelemetry();
 
-  // Check if there are multiple OAuth2 authorization_code security variables
-  const httpOAuth2AuthCodeCount =
-    toolset.securityVariables?.filter(
-      (secVar) =>
-        (secVar.type === "oauth2" &&
-          secVar.oauthTypes?.includes("authorization_code")) ||
-        secVar.type === "openIdConnect",
-    ).length ?? 0;
-
-  const functionsOAuth2AuthCodeCount =
-    toolset.functionEnvironmentVariables?.filter((envVar) => envVar.isOauthTarget)
-      .length ?? 0;
-
-  const oauthAuthCodeCount =
-    httpOAuth2AuthCodeCount + functionsOAuth2AuthCodeCount;
-
-  const hasMultipleOAuth2AuthCode = oauthAuthCodeCount > 1;
+  const hasMultipleOAuth2AuthCode = toolset.oauthEnablementMetadata?.oauth2SecurityCount > 1;
   const queryClient = useQueryClient();
 
   const handleBookMeeting = () => {

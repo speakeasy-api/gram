@@ -35,6 +35,13 @@ var FunctionEnvironmentVariable = Type("FunctionEnvironmentVariable", func() {
 	Required("name")
 })
 
+var OAuthEnablementMetadata = Type("OAuthEnablementMetadata", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("oauth2_security_count", Int, "Count of security variables that are OAuth2 supported")
+	Required("oauth2_security_count")
+})
+
 var Toolset = Type("Toolset", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -49,6 +56,7 @@ var Toolset = Type("Toolset", func() {
 	Attribute("security_variables", ArrayOf(SecurityVariable), "The security variables that are relevant to the toolset")
 	Attribute("server_variables", ArrayOf(ServerVariable), "The server variables that are relevant to the toolset")
 	Attribute("function_environment_variables", ArrayOf(FunctionEnvironmentVariable), "The function environment variables that are relevant to the toolset")
+	Attribute("oauth_enablement_metadata", OAuthEnablementMetadata, "The metadata surrounding oauth enabled tools within this server")
 	Attribute("tools", ArrayOf(Tool), "The tools in this toolset")
 	Attribute("tool_urns", ArrayOf(String), "The tool URNs in this toolset")
 	Attribute("toolset_version", Int64, "The version of the toolset (will be 0 if none exists)")
@@ -71,7 +79,7 @@ var Toolset = Type("Toolset", func() {
 		Description("When the toolset was last updated.")
 		Format(FormatDateTime)
 	})
-	Required("id", "project_id", "organization_id", "account_type", "name", "slug", "tools", "tool_selection_mode", "toolset_version", "prompt_templates", "tool_urns", "resources", "resource_urns", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "account_type", "name", "slug", "tools", "tool_selection_mode", "toolset_version", "prompt_templates", "tool_urns", "resources", "resource_urns", "oauth_enablement_metadata", "created_at", "updated_at")
 })
 
 var ToolsetEntry = Type("ToolsetEntry", func() {

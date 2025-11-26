@@ -10977,6 +10977,15 @@ components:
           type: string
       required:
         - location
+    OAuthEnablementMetadata:
+      type: object
+      properties:
+        oauth2_security_count:
+          type: integer
+          description: Count of security variables that are OAuth2 supported
+          format: int64
+      required:
+        - oauth2_security_count
     OAuthProxyProvider:
       type: object
       properties:
@@ -11969,6 +11978,8 @@ components:
         name:
           type: string
           description: The name of the toolset
+        oauth_enablement_metadata:
+          $ref: '#/components/schemas/OAuthEnablementMetadata'
         oauth_proxy_server:
           $ref: '#/components/schemas/OAuthProxyServer'
         organization_id:
@@ -12042,6 +12053,7 @@ components:
         - tool_urns
         - resources
         - resource_urns
+        - oauth_enablement_metadata
         - created_at
         - updated_at
     ToolsetEntry:

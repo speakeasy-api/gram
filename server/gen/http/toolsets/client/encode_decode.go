@@ -2240,6 +2240,17 @@ func unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentV
 	return res
 }
 
+// unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata
+// builds a value of type *types.OAuthEnablementMetadata from a value of type
+// *OAuthEnablementMetadataResponseBody.
+func unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(v *OAuthEnablementMetadataResponseBody) *types.OAuthEnablementMetadata {
+	res := &types.OAuthEnablementMetadata{
+		Oauth2SecurityCount: *v.Oauth2SecurityCount,
+	}
+
+	return res
+}
+
 // unmarshalToolResponseBodyToTypesTool builds a value of type *types.Tool from
 // a value of type *ToolResponseBody.
 func unmarshalToolResponseBodyToTypesTool(v *ToolResponseBody) *types.Tool {

@@ -90,6 +90,8 @@ type CreateToolsetResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The metadata surrounding oauth enabled tools within this server
+	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
 	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
@@ -155,6 +157,8 @@ type UpdateToolsetResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The metadata surrounding oauth enabled tools within this server
+	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
 	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
@@ -213,6 +217,8 @@ type GetToolsetResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The metadata surrounding oauth enabled tools within this server
+	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
 	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
@@ -271,6 +277,8 @@ type CloneToolsetResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The metadata surrounding oauth enabled tools within this server
+	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
 	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
@@ -329,6 +337,8 @@ type AddExternalOAuthServerResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The metadata surrounding oauth enabled tools within this server
+	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
 	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
@@ -387,6 +397,8 @@ type RemoveOAuthServerResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The metadata surrounding oauth enabled tools within this server
+	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
 	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
@@ -2116,6 +2128,13 @@ type FunctionEnvironmentVariableResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
+// OAuthEnablementMetadataResponseBody is used to define fields on response
+// body types.
+type OAuthEnablementMetadataResponseBody struct {
+	// Count of security variables that are OAuth2 supported
+	Oauth2SecurityCount *int `form:"oauth2_security_count,omitempty" json:"oauth2_security_count,omitempty" xml:"oauth2_security_count,omitempty"`
+}
+
 // ToolResponseBody is used to define fields on response body types.
 type ToolResponseBody struct {
 	// The HTTP tool definition
@@ -2647,6 +2666,7 @@ func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *types.Toolset {
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
 		}
 	}
+	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
 	v.Tools = make([]*types.Tool, len(body.Tools))
 	for i, val := range body.Tools {
 		v.Tools[i] = unmarshalToolResponseBodyToTypesTool(val)
@@ -3034,6 +3054,7 @@ func NewUpdateToolsetToolsetOK(body *UpdateToolsetResponseBody) *types.Toolset {
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
 		}
 	}
+	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
 	v.Tools = make([]*types.Tool, len(body.Tools))
 	for i, val := range body.Tools {
 		v.Tools[i] = unmarshalToolResponseBodyToTypesTool(val)
@@ -3409,6 +3430,7 @@ func NewGetToolsetToolsetOK(body *GetToolsetResponseBody) *types.Toolset {
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
 		}
 	}
+	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
 	v.Tools = make([]*types.Tool, len(body.Tools))
 	for i, val := range body.Tools {
 		v.Tools[i] = unmarshalToolResponseBodyToTypesTool(val)
@@ -3784,6 +3806,7 @@ func NewCloneToolsetToolsetOK(body *CloneToolsetResponseBody) *types.Toolset {
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
 		}
 	}
+	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
 	v.Tools = make([]*types.Tool, len(body.Tools))
 	for i, val := range body.Tools {
 		v.Tools[i] = unmarshalToolResponseBodyToTypesTool(val)
@@ -4009,6 +4032,7 @@ func NewAddExternalOAuthServerToolsetOK(body *AddExternalOAuthServerResponseBody
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
 		}
 	}
+	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
 	v.Tools = make([]*types.Tool, len(body.Tools))
 	for i, val := range body.Tools {
 		v.Tools[i] = unmarshalToolResponseBodyToTypesTool(val)
@@ -4234,6 +4258,7 @@ func NewRemoveOAuthServerToolsetOK(body *RemoveOAuthServerResponseBody) *types.T
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
 		}
 	}
+	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
 	v.Tools = make([]*types.Tool, len(body.Tools))
 	for i, val := range body.Tools {
 		v.Tools[i] = unmarshalToolResponseBodyToTypesTool(val)
@@ -4456,6 +4481,9 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 	if body.ResourceUrns == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_urns", "body"))
 	}
+	if body.OauthEnablementMetadata == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oauth_enablement_metadata", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -4497,6 +4525,11 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.OauthEnablementMetadata != nil {
+		if err2 := ValidateOAuthEnablementMetadataResponseBody(body.OauthEnablementMetadata); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	for _, e := range body.Tools {
@@ -4605,6 +4638,9 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 	if body.ResourceUrns == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_urns", "body"))
 	}
+	if body.OauthEnablementMetadata == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oauth_enablement_metadata", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -4646,6 +4682,11 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.OauthEnablementMetadata != nil {
+		if err2 := ValidateOAuthEnablementMetadataResponseBody(body.OauthEnablementMetadata); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	for _, e := range body.Tools {
@@ -4738,6 +4779,9 @@ func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 	if body.ResourceUrns == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_urns", "body"))
 	}
+	if body.OauthEnablementMetadata == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oauth_enablement_metadata", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -4779,6 +4823,11 @@ func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.OauthEnablementMetadata != nil {
+		if err2 := ValidateOAuthEnablementMetadataResponseBody(body.OauthEnablementMetadata); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	for _, e := range body.Tools {
@@ -4871,6 +4920,9 @@ func ValidateCloneToolsetResponseBody(body *CloneToolsetResponseBody) (err error
 	if body.ResourceUrns == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_urns", "body"))
 	}
+	if body.OauthEnablementMetadata == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oauth_enablement_metadata", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -4912,6 +4964,11 @@ func ValidateCloneToolsetResponseBody(body *CloneToolsetResponseBody) (err error
 			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.OauthEnablementMetadata != nil {
+		if err2 := ValidateOAuthEnablementMetadataResponseBody(body.OauthEnablementMetadata); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	for _, e := range body.Tools {
@@ -5004,6 +5061,9 @@ func ValidateAddExternalOAuthServerResponseBody(body *AddExternalOAuthServerResp
 	if body.ResourceUrns == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_urns", "body"))
 	}
+	if body.OauthEnablementMetadata == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oauth_enablement_metadata", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -5045,6 +5105,11 @@ func ValidateAddExternalOAuthServerResponseBody(body *AddExternalOAuthServerResp
 			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.OauthEnablementMetadata != nil {
+		if err2 := ValidateOAuthEnablementMetadataResponseBody(body.OauthEnablementMetadata); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	for _, e := range body.Tools {
@@ -5137,6 +5202,9 @@ func ValidateRemoveOAuthServerResponseBody(body *RemoveOAuthServerResponseBody) 
 	if body.ResourceUrns == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_urns", "body"))
 	}
+	if body.OauthEnablementMetadata == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oauth_enablement_metadata", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -5178,6 +5246,11 @@ func ValidateRemoveOAuthServerResponseBody(body *RemoveOAuthServerResponseBody) 
 			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.OauthEnablementMetadata != nil {
+		if err2 := ValidateOAuthEnablementMetadataResponseBody(body.OauthEnablementMetadata); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	for _, e := range body.Tools {
@@ -7426,6 +7499,15 @@ func ValidateServerVariableResponseBody(body *ServerVariableResponseBody) (err e
 func ValidateFunctionEnvironmentVariableResponseBody(body *FunctionEnvironmentVariableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	return
+}
+
+// ValidateOAuthEnablementMetadataResponseBody runs the validations defined on
+// OAuthEnablementMetadataResponseBody
+func ValidateOAuthEnablementMetadataResponseBody(body *OAuthEnablementMetadataResponseBody) (err error) {
+	if body.Oauth2SecurityCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oauth2_security_count", "body"))
 	}
 	return
 }
