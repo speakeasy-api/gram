@@ -366,6 +366,8 @@ CREATE TABLE IF NOT EXISTS function_tool_definitions (
   input_schema JSONB,
   -- Record<string, { description?: string }>
   variables JSONB,
+    -- Record{ type: string, variable: string }>
+  auth_input JSONB,
   -- Record<string, string>
   meta JSONB,
 
