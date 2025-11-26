@@ -138,7 +138,6 @@ func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*
 }
 
 // handleAuthorize handles OAuth 2.1 authorization requests
-// This directly redirects to the external OAuth provider without showing a consent screen
 func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 

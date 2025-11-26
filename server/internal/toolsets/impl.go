@@ -677,6 +677,18 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 	}
 
 	// Create the OAuth proxy server
+	// Validate that the environment exists for this project
+	_, err = s.environmentRepo.GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
+		Slug:      string(payload.OauthProxyServer.EnvironmentSlug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "environment not found").Log(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment").Log(ctx, s.logger)
+	}
+
 	oauthProxyServer, err := s.oauthRepo.UpsertOAuthProxyServer(ctx, oauthRepo.UpsertOAuthProxyServerParams{
 		ProjectID: *authCtx.ProjectID,
 		Slug:      conv.ToLower(payload.OauthProxyServer.Slug),
