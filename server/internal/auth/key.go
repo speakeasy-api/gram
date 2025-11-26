@@ -25,12 +25,14 @@ const (
 	APIKeyScopeInvalid  APIKeyScope = iota
 	APIKeyScopeConsumer APIKeyScope = iota
 	APIKeyScopeProducer APIKeyScope = iota
+	APIKeyScopeChat     APIKeyScope = iota
 )
 
 var APIKeyScopes = map[string]APIKeyScope{
 	"invalid":  APIKeyScopeInvalid,
 	"consumer": APIKeyScopeConsumer,
 	"producer": APIKeyScopeProducer,
+	"chat":     APIKeyScopeChat,
 }
 
 func (scope APIKeyScope) String() string {
@@ -39,6 +41,8 @@ func (scope APIKeyScope) String() string {
 		return "consumer"
 	case APIKeyScopeProducer:
 		return "producer"
+	case APIKeyScopeChat:
+		return "chat"
 	default:
 		return "invalid"
 	}

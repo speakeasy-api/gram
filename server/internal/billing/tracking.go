@@ -12,6 +12,24 @@ const (
 	ToolCallTypeHigherOrder ToolCallType = "higher-order"
 )
 
+type ModelUsageSource string
+
+const (
+	ModelUsageSourceChat ModelUsageSource = "playground"
+)
+
+type ModelUsageEvent struct {
+	OrganizationID string
+	ProjectID      string
+	Source         ModelUsageSource
+	ChatID         string
+	Model          string
+	InputTokens    int64
+	OutputTokens   int64
+	TotalTokens    int64
+	Cost           *float64 // Cost in dollars, nil if pricing unavailable
+}
+
 type ToolCallUsageEvent struct {
 	OrganizationID        string
 	RequestBytes          int64
@@ -26,6 +44,7 @@ type ToolCallUsageEvent struct {
 	ChatID                *string
 	MCPURL                *string
 	Type                  ToolCallType
+	ResponseStatusCode    int
 	ToolsetID             *string
 	MCPSessionID          *string
 	FunctionCPUUsage      *float64
@@ -61,5 +80,6 @@ type PlatformUsageEvent struct {
 type Tracker interface {
 	TrackToolCallUsage(ctx context.Context, event ToolCallUsageEvent)
 	TrackPromptCallUsage(ctx context.Context, event PromptCallUsageEvent)
+	TrackModelUsage(ctx context.Context, event ModelUsageEvent)
 	TrackPlatformUsage(ctx context.Context, events []PlatformUsageEvent)
 }

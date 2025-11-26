@@ -244,6 +244,10 @@ func (c *ChatClient) LoadToolsetTools(
 		// Capture for closure
 		name := httpTool.Name
 		projID := projectID
+		toolsetIDParsed, err := uuid.Parse(toolset.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse toolset ID: %w", err)
+		}
 
 		executor := func(ctx context.Context, rawArgs string) (string, error) {
 			plan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, *toolURN, projID)
@@ -254,7 +258,7 @@ func (c *ChatClient) LoadToolsetTools(
 			descriptor := plan.Descriptor
 			ctx, _ = o11y.EnrichToolCallContext(ctx, c.logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
-			systemConfig, err := c.env.LoadSourceEnv(ctx, projID, string(toolURN.Kind), toolURN.Source)
+			systemConfig, err := c.env.LoadSystemEnv(ctx, projID, toolsetIDParsed, string(toolURN.Kind), toolURN.Source)
 			if err != nil {
 				return "", fmt.Errorf("failed to load system environment: %w", err)
 			}

@@ -16,14 +16,45 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 )
 
 const OpenRouterBaseURL = "https://openrouter.ai/api"
+
+// Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
+// This list can stay sufficiently robust, we should just need to allow list a model before it goes through us
+var allowList = map[string]bool{
+	"anthropic/claude-sonnet-4.5":   true,
+	"anthropic/claude-haiku-4.5":    true,
+	"anthropic/claude-sonnet-4":     true,
+	"anthropic/claude-opus-4.5":     true,
+	"openai/gpt-4o":                 true,
+	"openai/gpt-4o-mini":            true,
+	"openai/gpt-5.1-codex":          true,
+	"openai/gpt-5":                  true,
+	"openai/gpt-5.1":                true,
+	"openai/gpt-4.1":                true,
+	"anthropic/claude-3.7-sonnet":   true,
+	"anthropic/claude-opus-4":       true,
+	"google/gemini-2.5-pro-preview": true,
+	"google/gemini-3-pro-preview":   true,
+	"moonshotai/kimi-k2":            true,
+	"mistralai/mistral-medium-3":    true,
+	"mistralai/mistral-medium-3.1":  true,
+	"mistralai/codestral-2501":      true,
+}
+
+// IsModelAllowed checks if a model is in the allowlist
+func IsModelAllowed(model string) bool {
+	return allowList[model]
+}
 
 var creditsAccountTypeMap = map[string]int{
 	"free":       5,
@@ -40,6 +71,8 @@ type Provisioner interface {
 	ProvisionAPIKey(ctx context.Context, orgID string) (string, error)
 	RefreshAPIKeyLimit(ctx context.Context, orgID string) (int, error)
 	GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error)
+	GetModelPricing(ctx context.Context, id string) (*mv.ModelPricing, error)
+	FetchAndCacheModelPricing(ctx context.Context) error
 }
 
 type KeyRefresher interface {
@@ -47,24 +80,28 @@ type KeyRefresher interface {
 }
 
 type OpenRouter struct {
-	provisioningKey string
-	env             string
-	logger          *slog.Logger
-	repo            *repo.Queries
-	orgRepo         *orgRepo.Queries
-	orClient        *http.Client
-	refresher       KeyRefresher
+	provisioningKey   string
+	env               string
+	logger            *slog.Logger
+	repo              *repo.Queries
+	orgRepo           *orgRepo.Queries
+	orClient          *http.Client
+	refresher         KeyRefresher
+	featureClient     *productfeatures.Client
+	modelPricingCache cache.TypedCacheObject[mv.ModelPricing]
 }
 
-func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher) *OpenRouter {
+func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, cacheImpl cache.Cache) *OpenRouter {
 	return &OpenRouter{
-		provisioningKey: provisioningKey,
-		env:             env,
-		logger:          logger,
-		repo:            repo.New(db),
-		orgRepo:         orgRepo.New(db),
-		orClient:        retryablehttp.NewClient().StandardClient(),
-		refresher:       refresher,
+		provisioningKey:   provisioningKey,
+		env:               env,
+		logger:            logger,
+		repo:              repo.New(db),
+		orgRepo:           orgRepo.New(db),
+		orClient:          retryablehttp.NewClient().StandardClient(),
+		refresher:         refresher,
+		featureClient:     featureClient,
+		modelPricingCache: cache.NewTypedObjectCache[mv.ModelPricing](logger.With(attr.SlogCacheNamespace("model_pricing")), cacheImpl, cache.SuffixNone),
 	}
 }
 
@@ -79,7 +116,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 			return "", oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
 		}
 
-		creditAmount := getLimitForOrg(org)
+		creditAmount := o.getLimitForOrg(ctx, org)
 
 		keyResponse, err := o.createOpenRouterAPIKey(ctx, orgID, org.Slug, creditAmount)
 		if err != nil {
@@ -135,7 +172,7 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string) (int,
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
 	}
 
-	limit := getLimitForOrg(org)
+	limit := o.getLimitForOrg(ctx, org)
 
 	keyResponse, err := o.createOpenRouterAPIKey(ctx, orgID, org.Slug, limit)
 	if err != nil {
@@ -171,7 +208,7 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64,
 	if err != nil {
 		return 0, 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
 	}
-	limit := getLimitForOrg(org)
+	limit := o.getLimitForOrg(ctx, org)
 
 	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
 	if err != nil {
@@ -215,10 +252,24 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64,
 	return creditsUsed, limit, nil
 }
 
-func getLimitForOrg(org orgRepo.OrganizationMetadatum) int {
+func (o *OpenRouter) getLimitForOrg(ctx context.Context, org orgRepo.OrganizationMetadatum) int {
 	if slices.Contains(specialLimitOrgs, org.ID) {
 		return 500
 	}
+
+	chatEnabled, err := o.featureClient.IsFeatureEnabled(ctx, org.ID, productfeatures.FeatureChat)
+	if err != nil {
+		o.logger.WarnContext(ctx, "failed to check chat feature status, using default limit",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(org.ID),
+		)
+	}
+
+	// when we provide billable chat/agent usage we need to make sure the openrouter key being has enough credits to cover the usage
+	if chatEnabled && slices.Contains([]string{"pro", "enterprise"}, org.GramAccountType) {
+		return 500 // this upper bound max will likely eventually be user configurable
+	}
+
 	return creditsAccountTypeMap[org.GramAccountType]
 }
 
@@ -308,4 +359,107 @@ func (o *OpenRouter) deleteOpenRouterAPIKey(ctx context.Context, keyHash string)
 	}
 
 	return nil
+}
+
+// modelPricingResponse represents pricing information from the OpenRouter API response
+type modelPricingResponse struct {
+	Prompt     string `json:"prompt"`
+	Completion string `json:"completion"`
+	Request    string `json:"request"`
+	Image      string `json:"image"`
+}
+
+// ModelInfo represents information about an OpenRouter model
+type ModelInfo struct {
+	ID            string               `json:"id"`
+	Name          string               `json:"name"`
+	Pricing       modelPricingResponse `json:"pricing"`
+	ContextLength int                  `json:"context_length"`
+	Created       int64                `json:"created"`
+}
+
+// ModelsResponse represents the response from OpenRouter /v1/models endpoint
+type ModelsResponse struct {
+	Data []ModelInfo `json:"data"`
+}
+
+// FetchAndCacheModelPricing fetches model pricing data from OpenRouter API and stores it in Redis cache.
+// Each model's pricing is stored with a key based on its canonical slug.
+func (o *OpenRouter) FetchAndCacheModelPricing(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", OpenRouterBaseURL+"/v1/models", nil)
+	if err != nil {
+		o.logger.ErrorContext(ctx, "failed to create openrouter models HTTP request", attr.SlogError(err))
+		return fmt.Errorf("failed to create models request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+o.provisioningKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := o.orClient.Do(req)
+	if err != nil {
+		o.logger.ErrorContext(ctx, "failed to send HTTP request to fetch models", attr.SlogError(err))
+		return fmt.Errorf("failed to send models request: %w", err)
+	}
+
+	defer o11y.NoLogDefer(func() error {
+		return resp.Body.Close()
+	})
+
+	if resp.StatusCode != http.StatusOK {
+		o.logger.ErrorContext(ctx, "failed to fetch models from OpenRouter")
+		return fmt.Errorf("failed to fetch models from OpenRouter: %s", resp.Status)
+	}
+
+	var modelsResp ModelsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
+		o.logger.ErrorContext(ctx, "failed to decode models response", attr.SlogError(err))
+		return fmt.Errorf("failed to decode models response: %w", err)
+	}
+
+	// Cache pricing data for each model using canonical slug as key
+	for _, model := range modelsResp.Data {
+		if model.ID == "" {
+			o.logger.WarnContext(ctx, "skipping model with empty id")
+			continue
+		}
+
+		pricing := mv.ModelPricing{
+			ID:         model.ID,
+			Prompt:     model.Pricing.Prompt,
+			Completion: model.Pricing.Completion,
+			Request:    model.Pricing.Request,
+			Image:      model.Pricing.Image,
+		}
+
+		if err := o.modelPricingCache.Store(ctx, pricing); err != nil {
+			o.logger.ErrorContext(ctx, "failed to cache model pricing",
+				attr.SlogError(err))
+			// Continue caching other models even if one fails
+			continue
+		}
+
+		o.logger.DebugContext(ctx, "cached model pricing")
+	}
+
+	o.logger.InfoContext(ctx, "successfully fetched and cached model pricing")
+
+	return nil
+}
+
+// GetModelPricing retrieves pricing data for a model from Redis cache using its canonical slug.
+// Returns an error if the pricing data is not found in cache or if cache is not configured.
+func (o *OpenRouter) GetModelPricing(ctx context.Context, id string) (*mv.ModelPricing, error) {
+	if id == "" {
+		return nil, errors.New("model id is required")
+	}
+
+	cacheKey := mv.ModelPricingCacheKey(id)
+	pricing, err := o.modelPricingCache.Get(ctx, cacheKey)
+	if err != nil {
+		o.logger.DebugContext(ctx, "model pricing not found in cache",
+			attr.SlogError(err))
+		return nil, fmt.Errorf("model pricing not found for id %s: %w", id, err)
+	}
+
+	return &pricing, nil
 }

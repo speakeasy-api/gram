@@ -162,7 +162,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: jdx/mise-action@9dc7d5dd454262207dea3ab5a06a3df6afc8ff26 # v3.4.1
+        uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3.5.0
         with:
           install: true
           cache: true
@@ -190,7 +190,7 @@ jobs:
 
       - name: Lint with golangci-lint
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: golangci/golangci-lint-action@0a35821d5c230e903fcfe077583637dea1b27b47 # v9.0.0
+        uses: golangci/golangci-lint-action@e7fa5ac41e1cf5b7d48e45e42232ce7ada589601 # v9.1.0
         with:
           install-mode: none
           working-directory: server
@@ -251,7 +251,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.cli == 'true' }}
-        uses: jdx/mise-action@9dc7d5dd454262207dea3ab5a06a3df6afc8ff26 # v3.4.1
+        uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3.5.0
         with:
           install: true
           cache: true
@@ -279,7 +279,7 @@ jobs:
 
       - name: Lint with golangci-lint
         if: ${{ needs.changes.outputs.cli == 'true' }}
-        uses: golangci/golangci-lint-action@0a35821d5c230e903fcfe077583637dea1b27b47 # v9.0.0
+        uses: golangci/golangci-lint-action@e7fa5ac41e1cf5b7d48e45e42232ce7ada589601 # v9.1.0
         with:
           install-mode: none
           working-directory: cli
@@ -318,7 +318,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: jdx/mise-action@9dc7d5dd454262207dea3ab5a06a3df6afc8ff26 # v3.4.1
+        uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3.5.0
         with:
           install: true
           cache: true
@@ -364,7 +364,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.client == 'true' }}
-        uses: jdx/mise-action@9dc7d5dd454262207dea3ab5a06a3df6afc8ff26 # v3.4.1
+        uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3.5.0
         with:
           install: true
           cache: true
@@ -447,7 +447,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.client == 'true' }}
-        uses: jdx/mise-action@9dc7d5dd454262207dea3ab5a06a3df6afc8ff26 # v3.4.1
+        uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3.5.0
         with:
           install: true
           cache: true
@@ -508,7 +508,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.client == 'true' }}
-        uses: jdx/mise-action@9dc7d5dd454262207dea3ab5a06a3df6afc8ff26 # v3.4.1
+        uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3.5.0
         with:
           install: true
           cache: true
@@ -565,7 +565,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: jdx/mise-action@9dc7d5dd454262207dea3ab5a06a3df6afc8ff26 # v3.4.1
+        uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3.5.0
         with:
           install: true
           cache: true
@@ -623,7 +623,7 @@ jobs:
 
       - name: Lint Go server
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: golangci/golangci-lint-action@0a35821d5c230e903fcfe077583637dea1b27b47 # v9.0.0
+        uses: golangci/golangci-lint-action@e7fa5ac41e1cf5b7d48e45e42232ce7ada589601 # v9.1.0
         with:
           install-mode: none
           working-directory: functions
@@ -680,7 +680,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: jdx/mise-action@9dc7d5dd454262207dea3ab5a06a3df6afc8ff26 # v3.4.1
+        uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3.5.0
         with:
           install: true
           cache: true
@@ -831,7 +831,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.tsframework == 'true' }}
-        uses: jdx/mise-action@9dc7d5dd454262207dea3ab5a06a3df6afc8ff26 # v3.4.1
+        uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3.5.0
         with:
           install: true
           cache: true

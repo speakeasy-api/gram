@@ -183,6 +183,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.PreprocessAgentsInput)
 	temporalWorker.RegisterActivity(activities.ExecuteToolCall)
 	temporalWorker.RegisterActivity(activities.ExecuteModelCall)
+	temporalWorker.RegisterActivity(activities.RefreshModelPricing)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
@@ -194,6 +195,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(AgentsResponseWorkflow)
 	temporalWorker.RegisterWorkflow(SubAgentWorkflow)
+	temporalWorker.RegisterWorkflow(RefreshModelPricingWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), client); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -204,6 +206,12 @@ func NewTemporalWorker(
 	if err := AddRefreshBillingUsageSchedule(context.Background(), client); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add refresh billing usage schedule", attr.SlogError(err))
+		}
+	}
+
+	if err := AddRefreshModelPricingSchedule(context.Background(), client); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add refresh model pricing schedule", attr.SlogError(err))
 		}
 	}
 

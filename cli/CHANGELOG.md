@@ -1,5 +1,13 @@
 # cli
 
+## 0.14.0
+
+### Minor Changes
+
+- 809fb43: `gram update` command to provide a self-update mechanism for the Gram CLI.
+  `--check` flag - Check for updates without installing (dry-run)
+  `--force` flag - Force update even if already on latest version
+
 ## 0.13.5
 
 ### Patch Changes

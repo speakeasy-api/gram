@@ -174,6 +174,60 @@ func (p *Client) InvalidateBillingCustomerCaches(ctx context.Context, orgID stri
 	return nil
 }
 
+func (p *Client) TrackModelUsage(ctx context.Context, event billing.ModelUsageEvent) {
+	ctx, span := p.tracer.Start(ctx, "polar_client.track_model_usage")
+	defer span.End()
+
+	source := string(event.Source)
+	metadata := map[string]polarComponents.EventMetadataInput{
+		"input_tokens": {
+			Integer: &event.InputTokens,
+		},
+		"output_tokens": {
+			Integer: &event.OutputTokens,
+		},
+		"total_tokens": {
+			Integer: &event.TotalTokens,
+		},
+		"model": {
+			Str: &event.Model,
+		},
+		"project_id": {
+			Str: &event.ProjectID,
+		},
+		"source": {
+			Str: &source,
+		},
+		"chat_id": {
+			Str: &event.ChatID,
+		},
+	}
+
+	if event.Cost != nil {
+		metadata["cost"] = polarComponents.EventMetadataInput{
+			Number: event.Cost,
+		}
+	}
+
+	_, err := p.polar.Events.Ingest(ctx, polarComponents.EventsIngest{
+		Events: []polarComponents.Events{
+			{
+				Type: polarComponents.EventsTypeEventCreateExternalCustomer,
+				EventCreateExternalCustomer: &polarComponents.EventCreateExternalCustomer{
+					ExternalCustomerID: event.OrganizationID,
+					Name:               "model-usage",
+					Metadata:           metadata,
+				},
+			},
+		},
+	})
+
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		p.logger.ErrorContext(ctx, "failed to ingest model usage event to Polar", attr.SlogError(err))
+	}
+}
+
 func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallUsageEvent) {
 	ctx, span := p.tracer.Start(ctx, "polar_client.track_tool_call_usage")
 	defer span.End()
@@ -181,7 +235,7 @@ func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallU
 	totalBytes := event.RequestBytes + event.OutputBytes
 	typeStr := string(event.Type)
 
-	metadata := map[string]polarComponents.EventCreateExternalCustomerMetadata{
+	metadata := map[string]polarComponents.EventMetadataInput{
 		"request_bytes": {
 			Integer: &event.RequestBytes,
 		},
@@ -206,55 +260,55 @@ func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallU
 	}
 
 	if event.ResourceURI != "" {
-		metadata["resource_uri"] = polarComponents.EventCreateExternalCustomerMetadata{
+		metadata["resource_uri"] = polarComponents.EventMetadataInput{
 			Str: &event.ResourceURI,
 		}
 	}
 
 	if event.ProjectSlug != nil {
-		metadata["project_slug"] = polarComponents.EventCreateExternalCustomerMetadata{
+		metadata["project_slug"] = polarComponents.EventMetadataInput{
 			Str: event.ProjectSlug,
 		}
 	}
 
 	if event.OrganizationSlug != nil {
-		metadata["organization_slug"] = polarComponents.EventCreateExternalCustomerMetadata{
+		metadata["organization_slug"] = polarComponents.EventMetadataInput{
 			Str: event.OrganizationSlug,
 		}
 	}
 
 	if event.ToolsetSlug != nil {
-		metadata["toolset_slug"] = polarComponents.EventCreateExternalCustomerMetadata{
+		metadata["toolset_slug"] = polarComponents.EventMetadataInput{
 			Str: event.ToolsetSlug,
 		}
 	}
 
 	if event.ChatID != nil {
-		metadata["chat_id"] = polarComponents.EventCreateExternalCustomerMetadata{
+		metadata["chat_id"] = polarComponents.EventMetadataInput{
 			Str: event.ChatID,
 		}
 	}
 
 	if event.MCPURL != nil {
-		metadata["mcp_url"] = polarComponents.EventCreateExternalCustomerMetadata{
+		metadata["mcp_url"] = polarComponents.EventMetadataInput{
 			Str: event.MCPURL,
 		}
 	}
 
 	if event.FunctionCPUUsage != nil {
-		metadata["function_cpu_usage"] = polarComponents.EventCreateExternalCustomerMetadata{
+		metadata["function_cpu_usage"] = polarComponents.EventMetadataInput{
 			Number: event.FunctionCPUUsage,
 		}
 	}
 
 	if event.FunctionMemUsage != nil {
-		metadata["function_mem_usage"] = polarComponents.EventCreateExternalCustomerMetadata{
+		metadata["function_mem_usage"] = polarComponents.EventMetadataInput{
 			Number: event.FunctionMemUsage,
 		}
 	}
 
 	if event.FunctionExecutionTime != nil {
-		metadata["function_execution_time"] = polarComponents.EventCreateExternalCustomerMetadata{
+		metadata["function_execution_time"] = polarComponents.EventMetadataInput{
 			Number: event.FunctionExecutionTime,
 		}
 	}
@@ -284,7 +338,7 @@ func (p *Client) TrackPromptCallUsage(ctx context.Context, event billing.PromptC
 
 	totalBytes := event.RequestBytes + event.OutputBytes
 
-	metadata := map[string]polarComponents.EventCreateExternalCustomerMetadata{
+	metadata := map[string]polarComponents.EventMetadataInput{
 		"request_bytes": {
 			Integer: &event.RequestBytes,
 		},
@@ -303,37 +357,37 @@ func (p *Client) TrackPromptCallUsage(ctx context.Context, event billing.PromptC
 	}
 
 	if event.PromptID != nil {
-		metadata["prompt_id"] = polarComponents.EventCreateExternalCustomerMetadata{
+		metadata["prompt_id"] = polarComponents.EventMetadataInput{
 			Str: event.PromptID,
 		}
 	}
 
 	if event.ProjectSlug != nil {
-		metadata["project_slug"] = polarComponents.EventCreateExternalCustomerMetadata{
+		metadata["project_slug"] = polarComponents.EventMetadataInput{
 			Str: event.ProjectSlug,
 		}
 	}
 
 	if event.OrganizationSlug != nil {
-		metadata["organization_slug"] = polarComponents.EventCreateExternalCustomerMetadata{
+		metadata["organization_slug"] = polarComponents.EventMetadataInput{
 			Str: event.OrganizationSlug,
 		}
 	}
 
 	if event.ToolsetSlug != nil {
-		metadata["toolset_slug"] = polarComponents.EventCreateExternalCustomerMetadata{
+		metadata["toolset_slug"] = polarComponents.EventMetadataInput{
 			Str: event.ToolsetSlug,
 		}
 	}
 
 	if event.ChatID != nil {
-		metadata["chat_id"] = polarComponents.EventCreateExternalCustomerMetadata{
+		metadata["chat_id"] = polarComponents.EventMetadataInput{
 			Str: event.ChatID,
 		}
 	}
 
 	if event.MCPURL != nil {
-		metadata["mcp_url"] = polarComponents.EventCreateExternalCustomerMetadata{
+		metadata["mcp_url"] = polarComponents.EventMetadataInput{
 			Str: event.MCPURL,
 		}
 	}
@@ -364,7 +418,7 @@ func (p *Client) TrackPlatformUsage(ctx context.Context, events []billing.Platfo
 	var polarEvents = make([]polarComponents.Events, 0, len(events))
 	for _, event := range events {
 
-		metadata := map[string]polarComponents.EventCreateExternalCustomerMetadata{
+		metadata := map[string]polarComponents.EventMetadataInput{
 			"public_mcp_servers": {
 				Integer: &event.PublicMCPServers,
 			},
@@ -742,7 +796,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			IncludedBullets: []string{
 				fmt.Sprintf("%d MCP %s (public or private)", freeTierLimits.Servers, conv.Ternary(freeTierLimits.Servers == 1, "server", "servers")),
 				fmt.Sprintf("%d tool calls / month", freeTierLimits.ToolCalls),
-				fmt.Sprintf("$%d in playground credits", freeIncludedCredits),
+				fmt.Sprintf("$%d in chat based credits", freeIncludedCredits),
 				"Slack community support",
 			},
 			AddOnBullets: []string{},
@@ -763,7 +817,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			IncludedBullets: []string{
 				fmt.Sprintf("%d MCP %s (public or private)", proTierLimits.Servers, conv.Ternary(proTierLimits.Servers == 1, "server", "servers")),
 				fmt.Sprintf("%d tool calls / month", proTierLimits.ToolCalls),
-				fmt.Sprintf("$%d in playground credits", proIncludedCredits),
+				fmt.Sprintf("$%d in chat based credits", proIncludedCredits),
 				"Email support",
 			},
 			AddOnBullets: []string{

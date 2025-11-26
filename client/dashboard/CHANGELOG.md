@@ -1,5 +1,34 @@
 # dashboard
 
+## 0.20.0
+
+### Minor Changes
+
+- 6716410: Add the ability to attach gram environments at the toolset level for easier configuration set up
+
+### Patch Changes
+
+- 6716410: restructure MCP authentication form to hide attach environments in advanced section
+- e34b505: updating of openrouter key limits for chat based usage
+- Updated dependencies [6716410]
+  - @gram/client@0.19.0
+
+## 0.19.5
+
+### Patch Changes
+
+- 6b04cc2: Updates playground chat models to a more modern list. Add Claude 4.5 Opus and ChatGPT 5.1
+
+## 0.19.4
+
+### Patch Changes
+
+- 5396fd8: Update login page animation with interactive Gram function demo
+  - Redesigned the login page animation from a sequential upload/generate flow to an interactive two-window demo
+  - Replaced the generic Pet Store OpenAPI example with a real Gram function showcasing Supabase integration and UK property data querying
+  - Added draggable, focusable windows to create a more engaging and realistic demonstration
+  - Implemented progressive tool generation animation with reset functionality
+
 ## 0.19.3
 
 ### Patch Changes

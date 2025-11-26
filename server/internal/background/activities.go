@@ -40,6 +40,7 @@ type Activities struct {
 	reapFlyApps                   *activities.ReapFlyApps
 	refreshBillingUsage           *activities.RefreshBillingUsage
 	refreshOpenRouterKey          *activities.RefreshOpenRouterKey
+	refreshModelPricing           *activities.RefreshModelPricing
 	slackChatCompletion           *activities.SlackChatCompletion
 	transitionDeployment          *activities.TransitionDeployment
 	validateDeployment            *activities.ValidateDeployment
@@ -60,7 +61,7 @@ func NewActivities(
 	assetStorage assets.BlobStore,
 	slackClient *slack_client.SlackClient,
 	chatClient *chat.ChatClient,
-	openrouter openrouter.Provisioner,
+	openrouterProvisioner openrouter.Provisioner,
 	k8sClient *k8s.KubernetesClients,
 	expectedTargetCNAME string,
 	billingTracker billing.Tracker,
@@ -84,7 +85,8 @@ func NewActivities(
 		deployFunctionRunners:         activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		reapFlyApps:                   activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 3),
 		refreshBillingUsage:           activities.NewRefreshBillingUsage(logger, db, billingRepo),
-		refreshOpenRouterKey:          activities.NewRefreshOpenRouterKey(logger, db, openrouter),
+		refreshOpenRouterKey:          activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
+		refreshModelPricing:           activities.NewRefreshModelPricing(logger, openrouterProvisioner),
 		slackChatCompletion:           activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
 		transitionDeployment:          activities.NewTransitionDeployment(logger, db),
 		validateDeployment:            activities.NewValidateDeployment(logger, db, billingRepo),
@@ -182,4 +184,8 @@ func (a *Activities) ExecuteModelCall(ctx context.Context, input activities.Exec
 		return nil, fmt.Errorf("execute model call activity failed: %w", err)
 	}
 	return output, nil
+}
+
+func (a *Activities) RefreshModelPricing(ctx context.Context, input activities.RefreshModelPricingArgs) error {
+	return a.refreshModelPricing.Do(ctx, input)
 }

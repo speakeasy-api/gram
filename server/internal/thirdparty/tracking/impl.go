@@ -26,6 +26,29 @@ func New(polar *polar.Client, posthog *posthog.Posthog, logger *slog.Logger) *Co
 	}
 }
 
+func (c *Composite) TrackModelUsage(ctx context.Context, event billing.ModelUsageEvent) {
+	c.polar.TrackModelUsage(ctx, event)
+
+	properties := map[string]any{
+		"organization_id":      event.OrganizationID,
+		"model":                event.Model,
+		"source":               string(event.Source),
+		"input_tokens":         event.InputTokens,
+		"output_tokens":        event.OutputTokens,
+		"total_tokens":         event.TotalTokens,
+		"project_id":           event.ProjectID,
+		"chat_id":              event.ChatID,
+		"disable_notification": true,
+	}
+	if event.Cost != nil {
+		properties["cost"] = *event.Cost
+	}
+
+	if err := c.posthog.CaptureEvent(ctx, "model_usage", event.OrganizationID, properties); err != nil {
+		c.logger.ErrorContext(ctx, "failed to capture model usage event", attr.SlogError(err))
+	}
+}
+
 func (c *Composite) TrackToolCallUsage(ctx context.Context, event billing.ToolCallUsageEvent) {
 	c.polar.TrackToolCallUsage(ctx, event)
 
@@ -39,6 +62,8 @@ func (c *Composite) TrackToolCallUsage(ctx context.Context, event billing.ToolCa
 		"project_id":           event.ProjectID,
 		"type":                 string(event.Type),
 		"disable_notification": true,
+		"status_code":          event.ResponseStatusCode,
+		"success":              toolCallSuccessHeuristic(event.ResponseStatusCode),
 	}
 
 	if event.ResourceURI != "" {
@@ -128,4 +153,11 @@ func (c *Composite) TrackPromptCallUsage(ctx context.Context, event billing.Prom
 
 func (c *Composite) TrackPlatformUsage(ctx context.Context, events []billing.PlatformUsageEvent) {
 	c.polar.TrackPlatformUsage(ctx, events)
+}
+
+// for product metrics we create our own heuristic to estimate tool call success
+// this is for cases of unauthenticated requests, timeouts, our server errors that we are fairly certain are indicative of a failed tool call
+// it's important to note that a non 200 alone does not indicate that the actual tool did not suceed in its job
+func toolCallSuccessHeuristic(statusCode int) bool {
+	return statusCode == 0 || statusCode == 401 || statusCode != 403 || statusCode >= 500
 }

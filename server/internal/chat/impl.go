@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -49,9 +51,10 @@ type Service struct {
 	logger         *slog.Logger
 	sessions       *sessions.Manager
 	proxyTransport http.RoundTripper
+	tracker        billing.Tracker
 }
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, openRouter openrouter.Provisioner) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, openRouter openrouter.Provisioner, tracking billing.Tracker) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
@@ -62,6 +65,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		tracer:         otel.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
 		openRouter:     openRouter,
 		proxyTransport: cleanhttp.DefaultPooledTransport(),
+		tracker:        tracking,
 	}
 }
 
@@ -203,7 +207,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		sc := security.APIKeyScheme{
 			Name:           auth.KeySecurityScheme,
-			RequiredScopes: []string{"consumer"},
+			RequiredScopes: []string{"chat"},
 			Scopes:         []string{},
 		}
 		ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(auth.APIKeyHeader), &sc)
@@ -271,6 +275,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeBadRequest, err, "failed to parse request body").Log(ctx, s.logger)
 	}
 
+	// Validate that the model is in the allowlist
+	if !openrouter.IsModelAllowed(chatRequest.Model) {
+		return oops.E(oops.CodeBadRequest, nil, "model %s is not allowed", chatRequest.Model).Log(ctx, s.logger)
+	}
+
 	chatIDHeader := r.Header.Get("Gram-Chat-ID")
 
 	respCaptor := w
@@ -287,9 +296,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		// Create a custom response writer to capture the response
 		respCaptor = &responseCaptor{
 			ResponseWriter:       w,
+			Tracker:              s.tracker,
 			logger:               s.logger,
 			ctx:                  ctx,
 			isStreaming:          isStreaming,
+			orgID:                orgID,
 			chatID:               chatID,
 			projectID:            *authCtx.ProjectID,
 			repo:                 s.repo,
@@ -306,6 +317,8 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 				CompletionTokens: 0,
 				TotalTokens:      0,
 			},
+			usageSet:   false,
+			openRouter: s.openRouter,
 		}
 	}
 
@@ -426,25 +439,85 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 	return chatID, nil
 }
 
+// calculateModelCost calculates the cost in dollars based on model pricing and token usage.
+// Returns nil if pricing is unavailable or cannot be parsed.
+func calculateModelCost(ctx context.Context, openRouter openrouter.Provisioner, logger *slog.Logger, model string, inputTokens, outputTokens int64) *float64 {
+	if model == "" || inputTokens == 0 && outputTokens == 0 {
+		return nil
+	}
+
+	pricing, err := openRouter.GetModelPricing(ctx, model)
+	if err != nil {
+		logger.ErrorContext(ctx, "model pricing not available, skipping cost calculation",
+			attr.SlogError(err))
+		return nil
+	}
+
+	var cost float64
+
+	// Parse prompt pricing (per token)
+	if pricing.Prompt != "" && inputTokens > 0 {
+		promptPrice, err := strconv.ParseFloat(pricing.Prompt, 64)
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to parse prompt pricing",
+				attr.SlogError(err))
+		} else {
+			cost += promptPrice * float64(inputTokens)
+		}
+	}
+
+	// Parse completion pricing (per token)
+	if pricing.Completion != "" && outputTokens > 0 {
+		completionPrice, err := strconv.ParseFloat(pricing.Completion, 64)
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to parse completion pricing",
+				attr.SlogError(err))
+		} else {
+			cost += completionPrice * float64(outputTokens)
+		}
+	}
+
+	// Add request pricing if present (per request, not per token)
+	if pricing.Request != "" {
+		requestPrice, err := strconv.ParseFloat(pricing.Request, 64)
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to parse request pricing",
+				attr.SlogError(err))
+		} else {
+			cost += requestPrice
+		}
+	}
+
+	if cost == 0 {
+		return nil
+	}
+
+	return &cost
+}
+
 // responseCaptor captures and logs response data
 type responseCaptor struct {
 	http.ResponseWriter
+	billing.Tracker
 	//nolint:containedctx // responseCaptor needs to implement io.Writer so its methods cannot accept a context
 	ctx                  context.Context
 	logger               *slog.Logger
 	isStreaming          bool
+	orgID                string
 	chatID               uuid.UUID
 	projectID            uuid.UUID
 	messageContent       *strings.Builder
 	messageID            string
 	model                string
 	isDone               bool
+	usageSet             bool
 	messageWritten       bool
 	finishReason         *string
 	repo                 *repo.Queries
 	toolCallID           string
 	accumulatedToolCalls map[int]openrouter.ToolCall // Map of index to accumulated tool call data
 	usage                openrouter.Usage
+	openRouter           openrouter.Provisioner
 }
 
 func (r *responseCaptor) WriteHeader(statusCode int) {
@@ -455,13 +528,21 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 	// If this is a streaming response, parse and collect the chunks
 	if r.isStreaming {
 		chunkData := string(b)
+		isDoneBeforeLineProcess := r.isDone
 		for _, line := range strings.Split(chunkData, "\n") {
 			r.processLine(line)
+		}
+
+		// Log if we are unexpectedly not receiving usage data on the next message after
+		// Could be a sign of a parsing issue
+		if isDoneBeforeLineProcess && !r.usageSet && r.usage.TotalTokens == 0 {
+			r.logger.ErrorContext(r.ctx, fmt.Sprintf("streaming response finished without usage data for chat message: %s", r.chatID.String()))
 		}
 	}
 
 	// If we're done, log the message
-	if r.isDone && !r.messageWritten {
+	// openrouter streams the usage data after the finish_reason, it's important we wait for that
+	if r.isDone && r.usageSet && !r.messageWritten {
 		// Convert accumulated tool calls to JSON for storage if needed
 		var toolCallsJSON []byte
 		if len(r.accumulatedToolCalls) > 0 {
@@ -472,6 +553,20 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 				r.logger.ErrorContext(r.ctx, "failed to marshal tool calls", attr.SlogError(err))
 			}
 		}
+
+		cost := calculateModelCost(r.ctx, r.openRouter, r.logger, r.model, int64(r.usage.PromptTokens), int64(r.usage.CompletionTokens))
+
+		go r.TrackModelUsage(r.ctx, billing.ModelUsageEvent{
+			OrganizationID: r.orgID,
+			ProjectID:      r.projectID.String(),
+			Model:          r.model,
+			Source:         billing.ModelUsageSourceChat, // currently the only source
+			InputTokens:    int64(r.usage.PromptTokens),
+			OutputTokens:   int64(r.usage.CompletionTokens),
+			TotalTokens:    int64(r.usage.TotalTokens),
+			ChatID:         r.chatID.String(),
+			Cost:           cost,
+		})
 
 		// TODO batch insert the messages
 		_, err := r.repo.CreateChatMessage(r.ctx, []repo.CreateChatMessageParams{{
@@ -510,6 +605,7 @@ func (r *responseCaptor) processLine(line string) {
 		// Check if this is the [DONE] marker
 		if strings.TrimSpace(data) == "[DONE]" {
 			r.isDone = true
+			r.usageSet = true
 			return
 		}
 
@@ -521,6 +617,7 @@ func (r *responseCaptor) processLine(line string) {
 
 			if chunk.Usage != nil {
 				r.usage = *chunk.Usage
+				r.usageSet = true
 			}
 
 			// Process each choice in the chunk

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -233,7 +234,15 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		}
 		ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(auth.APIKeyHeader), &sc)
 		if err != nil {
-			return oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, logger)
+			sc := security.APIKeyScheme{
+				Name:           auth.KeySecurityScheme,
+				RequiredScopes: []string{"chat"},
+				Scopes:         []string{},
+			}
+			ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(auth.APIKeyHeader), &sc)
+			if err != nil {
+				return oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, logger)
+			}
 		}
 	}
 
@@ -321,15 +330,21 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
 	var toolset *types.Toolset
+	var toolsetUUID uuid.UUID
 	if chatID != "" && toolsetSlug != "" {
 		var toolsetErr error
 		toolset, toolsetErr = mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolsetSlug), &s.toolsetCache)
 		if toolsetErr != nil {
 			logger.ErrorContext(ctx, "failed to load toolset", attr.SlogError(err))
+		} else if toolset != nil {
+			toolsetUUID, err = uuid.Parse(toolset.ID)
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "failed to parse toolset ID").Log(ctx, logger)
+			}
 		}
 	}
 
-	systemConfig, err := s.env.LoadSourceEnv(ctx, *authCtx.ProjectID, string(toolURN.Kind), toolURN.Source)
+	systemConfig, err := s.env.LoadSystemEnv(ctx, *authCtx.ProjectID, toolsetUUID, string(toolURN.Kind), toolURN.Source)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
 	}
@@ -424,6 +439,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			ToolsetSlug:           &toolsetSlug,
 			ChatID:                &chatID,
 			ToolsetID:             toolsetID,
+			ResponseStatusCode:    interceptor.statusCode,
 			MCPURL:                nil, // Not applicable for direct tool calls
 			MCPSessionID:          nil, // Not applicable for direct tool calls
 			ResourceURI:           "",

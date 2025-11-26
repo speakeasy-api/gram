@@ -1,0 +1,49 @@
+{
+  "type": "module",
+  "name": "turbopuffer",
+  "version": "0.0.0",
+  "author": "",
+  "description": "",
+  "private": true,
+  "keywords": [
+    "mcp",
+    "getgram.ai"
+  ],
+  "license": "ISC",
+  "main": "dist/functions.js",
+  "files": [
+    "src",
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "dev": "mcp-inspector nodemon -q --watch src --exec node ./src/server.ts",
+    "lint": "tsc --noEmit",
+    "push": "gf push",
+    "prebuild": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build",
+    "build": "gf build",
+    "db:seed": "node --import tsx scripts/seed.ts",
+    "db:delete": "node --import tsx scripts/delete-movies-namespace.ts",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@gram-ai/functions": "^0.11.1",
+    "@modelcontextprotocol/sdk": "^1.20.1",
+    "@openrouter/sdk": "^0.1.27",
+    "@turbopuffer/turbopuffer": "^1.7.0",
+    "papaparse": "^5.5.3",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/inspector": "^0.17.1",
+    "@types/node": "22.x",
+    "@types/papaparse": "^5.5.0",
+    "nodemon": "^3.1.9",
+    "tsx": "^4.19.2",
+    "typescript": "^5",
+    "vitest": "^3.2.4"
+  }
+}

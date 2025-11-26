@@ -109,7 +109,12 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		return nil, err
 	}
 
-	systemConfig, err := env.LoadSourceEnv(ctx, payload.projectID, string(resourceURN.Kind), resourceURN.Source)
+	toolsetID, err := uuid.Parse(toolset.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").Log(ctx, logger)
+	}
+
+	systemConfig, err := env.LoadSystemEnv(ctx, payload.projectID, toolsetID, string(resourceURN.Kind), resourceURN.Source)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
 	}
@@ -151,6 +156,7 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 			MCPSessionID:          &payload.sessionID,
 			ChatID:                nil,
 			Type:                  plan.BillingType,
+			ResponseStatusCode:    rw.statusCode,
 			FunctionCPUUsage:      functionCPU,
 			FunctionMemUsage:      functionMem,
 			FunctionExecutionTime: functionsExecutionTime,

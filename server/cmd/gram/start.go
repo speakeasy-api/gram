@@ -450,11 +450,15 @@ func newStartCommand() *cli.Command {
 				shutdownFuncs = append(shutdownFuncs, shutdown)
 			}
 
+			productFeatures := productfeatures.NewClient(logger, db, redisClient)
+
 			var openRouter openrouter.Provisioner
+			var openRouterKeyRefresher productfeatures.OpenRouterKeyRefresher
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{Temporal: temporalClient})
+				openRouterKeyRefresher = &background.OpenRouterKeyRefresher{Temporal: temporalClient}
+				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{Temporal: temporalClient}, productFeatures, cache.NewRedisCacheAdapter(redisClient))
 			}
 
 			{
@@ -510,8 +514,6 @@ func newStartCommand() *cli.Command {
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
 
-			productFeatures := productfeatures.NewClient(logger, db, redisClient)
-
 			tcm, shutdown, err := newToolMetricsClient(ctx, logger, c, tracerProvider, productFeatures)
 			if err != nil {
 				return fmt.Errorf("failed to connect to tool metrics client: %w", err)
@@ -541,7 +543,7 @@ func newStartCommand() *cli.Command {
 			}))
 			projects.Attach(mux, projects.NewService(logger, db, sessionManager))
 			packages.Attach(mux, packages.NewService(logger, db, sessionManager))
-			productfeatures.Attach(mux, productfeatures.NewService(logger, db, sessionManager, redisClient))
+			productfeatures.Attach(mux, productfeatures.NewService(logger, db, sessionManager, redisClient, openRouterKeyRefresher))
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, db, sessionManager))
 			templates.Attach(mux, templates.NewService(logger, db, sessionManager, toolsetsSvc))
@@ -557,7 +559,7 @@ func newStartCommand() *cli.Command {
 			mcpMetadataService := mcpmetadata.NewService(logger, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, oauthService, billingTracker, billingRepo, tcm, ragService, temporalClient), mcpMetadataService)
-			chat.Attach(mux, chat.NewService(logger, db, sessionManager, openRouter))
+			chat.Attach(mux, chat.NewService(logger, db, sessionManager, openRouter, billingTracker))
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
 					GramServerURL:      c.String("server-url"),
