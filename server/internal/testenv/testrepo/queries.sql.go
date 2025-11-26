@@ -76,7 +76,7 @@ func (q *Queries) ListDeploymentFunctionsResources(ctx context.Context, deployme
 }
 
 const listDeploymentFunctionsTools = `-- name: ListDeploymentFunctionsTools :many
-SELECT id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, meta, created_at, updated_at, deleted_at, deleted
+SELECT id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, auth_input, meta, created_at, updated_at, deleted_at, deleted
 FROM function_tool_definitions
 WHERE deployment_id = $1
 `
@@ -101,6 +101,7 @@ func (q *Queries) ListDeploymentFunctionsTools(ctx context.Context, deploymentID
 			&i.Description,
 			&i.InputSchema,
 			&i.Variables,
+			&i.AuthInput,
 			&i.Meta,
 			&i.CreatedAt,
 			&i.UpdatedAt,
