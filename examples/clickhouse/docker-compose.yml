@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse-dev
+    ports:
+      - "8124:8123"  # HTTP interface
+      - "9001:9000"  # Native protocol
+    environment:
+      CLICKHOUSE_DB: gram_example
+      CLICKHOUSE_USER: gram_user
+      CLICKHOUSE_PASSWORD: gram_password
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+volumes:
+  clickhouse_data:
+  clickhouse_logs:
