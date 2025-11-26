@@ -859,3 +859,44 @@ func (q *Queries) UpdateToolsetExternalOAuthServer(ctx context.Context, arg Upda
 	)
 	return i, err
 }
+
+const updateToolsetOAuthProxyServer = `-- name: UpdateToolsetOAuthProxyServer :one
+UPDATE toolsets
+SET
+    oauth_proxy_server_id = $1
+  , updated_at = clock_timestamp()
+WHERE slug = $2 AND project_id = $3
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateToolsetOAuthProxyServerParams struct {
+	OauthProxyServerID uuid.NullUUID
+	Slug               string
+	ProjectID          uuid.UUID
+}
+
+func (q *Queries) UpdateToolsetOAuthProxyServer(ctx context.Context, arg UpdateToolsetOAuthProxyServerParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, updateToolsetOAuthProxyServer, arg.OauthProxyServerID, arg.Slug, arg.ProjectID)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}

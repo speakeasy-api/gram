@@ -3,6 +3,7 @@
  */
 
 import { toolsetsAddExternalOAuthServer } from "../funcs/toolsetsAddExternalOAuthServer.js";
+import { toolsetsAddOAuthProxyServer } from "../funcs/toolsetsAddOAuthProxyServer.js";
 import { toolsetsCheckMCPSlugAvailability } from "../funcs/toolsetsCheckMCPSlugAvailability.js";
 import { toolsetsCloneBySlug } from "../funcs/toolsetsCloneBySlug.js";
 import { toolsetsCreate } from "../funcs/toolsetsCreate.js";
@@ -29,6 +30,25 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Toolset> {
     return unwrapAsync(toolsetsAddExternalOAuthServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * addOAuthProxyServer toolsets
+   *
+   * @remarks
+   * Associate an OAuth proxy server with a toolset (admin only)
+   */
+  async addOAuthProxyServer(
+    request: operations.AddOAuthProxyServerRequest,
+    security?: operations.AddOAuthProxyServerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Toolset> {
+    return unwrapAsync(toolsetsAddOAuthProxyServer(
       this,
       request,
       security,

@@ -10,20 +10,14 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
   FunctionToolDefinition,
   FunctionToolDefinition$inboundSchema,
-  FunctionToolDefinition$Outbound,
-  FunctionToolDefinition$outboundSchema,
 } from "./functiontooldefinition.js";
 import {
   HTTPToolDefinition,
   HTTPToolDefinition$inboundSchema,
-  HTTPToolDefinition$Outbound,
-  HTTPToolDefinition$outboundSchema,
 } from "./httptooldefinition.js";
 import {
   PromptTemplate,
   PromptTemplate$inboundSchema,
-  PromptTemplate$Outbound,
-  PromptTemplate$outboundSchema,
 } from "./prompttemplate.js";
 
 /**
@@ -57,44 +51,6 @@ export const Tool$inboundSchema: z.ZodType<Tool, z.ZodTypeDef, unknown> = z
       "prompt_template": "promptTemplate",
     });
   });
-
-/** @internal */
-export type Tool$Outbound = {
-  function_tool_definition?: FunctionToolDefinition$Outbound | undefined;
-  http_tool_definition?: HTTPToolDefinition$Outbound | undefined;
-  prompt_template?: PromptTemplate$Outbound | undefined;
-};
-
-/** @internal */
-export const Tool$outboundSchema: z.ZodType<Tool$Outbound, z.ZodTypeDef, Tool> =
-  z.object({
-    functionToolDefinition: FunctionToolDefinition$outboundSchema.optional(),
-    httpToolDefinition: HTTPToolDefinition$outboundSchema.optional(),
-    promptTemplate: PromptTemplate$outboundSchema.optional(),
-  }).transform((v) => {
-    return remap$(v, {
-      functionToolDefinition: "function_tool_definition",
-      httpToolDefinition: "http_tool_definition",
-      promptTemplate: "prompt_template",
-    });
-  });
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace Tool$ {
-  /** @deprecated use `Tool$inboundSchema` instead. */
-  export const inboundSchema = Tool$inboundSchema;
-  /** @deprecated use `Tool$outboundSchema` instead. */
-  export const outboundSchema = Tool$outboundSchema;
-  /** @deprecated use `Tool$Outbound` instead. */
-  export type Outbound = Tool$Outbound;
-}
-
-export function toolToJSON(tool: Tool): string {
-  return JSON.stringify(Tool$outboundSchema.parse(tool));
-}
 
 export function toolFromJSON(
   jsonString: string,

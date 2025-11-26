@@ -486,3 +486,66 @@ func BuildRemoveOAuthServerPayload(toolsetsRemoveOAuthServerSlug string, toolset
 
 	return v, nil
 }
+
+// BuildAddOAuthProxyServerPayload builds the payload for the toolsets
+// addOAuthProxyServer endpoint from CLI flags.
+func BuildAddOAuthProxyServerPayload(toolsetsAddOAuthProxyServerBody string, toolsetsAddOAuthProxyServerSlug string, toolsetsAddOAuthProxyServerSessionToken string, toolsetsAddOAuthProxyServerApikeyToken string, toolsetsAddOAuthProxyServerProjectSlugInput string) (*toolsets.AddOAuthProxyServerPayload, error) {
+	var err error
+	var body AddOAuthProxyServerRequestBody
+	{
+		err = json.Unmarshal([]byte(toolsetsAddOAuthProxyServerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"oauth_proxy_server\": {\n         \"authorization_endpoint\": \"Sunt id facilis dicta.\",\n         \"environment_slug\": \"aph\",\n         \"scopes_supported\": [\n            \"Alias sit autem est quaerat eaque dolor.\",\n            \"Qui omnis exercitationem culpa.\",\n            \"Suscipit earum doloremque.\",\n            \"Possimus quo qui eum.\"\n         ],\n         \"slug\": \"0am\",\n         \"token_endpoint\": \"Sunt nesciunt soluta quia velit impedit.\",\n         \"token_endpoint_auth_methods_supported\": [\n            \"Delectus soluta ab.\",\n            \"Autem et alias aut.\",\n            \"Beatae omnis quaerat quas non ea a.\"\n         ]\n      }\n   }'")
+		}
+		if body.OauthProxyServer == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("oauth_proxy_server", "body"))
+		}
+		if body.OauthProxyServer != nil {
+			if err2 := ValidateOAuthProxyServerFormRequestBody(body.OauthProxyServer); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var slug string
+	{
+		slug = toolsetsAddOAuthProxyServerSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if toolsetsAddOAuthProxyServerSessionToken != "" {
+			sessionToken = &toolsetsAddOAuthProxyServerSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if toolsetsAddOAuthProxyServerApikeyToken != "" {
+			apikeyToken = &toolsetsAddOAuthProxyServerApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if toolsetsAddOAuthProxyServerProjectSlugInput != "" {
+			projectSlugInput = &toolsetsAddOAuthProxyServerProjectSlugInput
+		}
+	}
+	v := &toolsets.AddOAuthProxyServerPayload{}
+	if body.OauthProxyServer != nil {
+		v.OauthProxyServer = marshalOAuthProxyServerFormRequestBodyToTypesOAuthProxyServerForm(body.OauthProxyServer)
+	}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

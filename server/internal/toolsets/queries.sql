@@ -133,6 +133,14 @@ SET
 WHERE slug = @slug AND project_id = @project_id
 RETURNING *;
 
+-- name: UpdateToolsetOAuthProxyServer :one
+UPDATE toolsets
+SET
+    oauth_proxy_server_id = @oauth_proxy_server_id
+  , updated_at = clock_timestamp()
+WHERE slug = @slug AND project_id = @project_id
+RETURNING *;
+
 -- name: ClearToolsetOAuthServers :one
 UPDATE toolsets
 SET

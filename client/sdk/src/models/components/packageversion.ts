@@ -55,53 +55,6 @@ export const PackageVersion$inboundSchema: z.ZodType<
   });
 });
 
-/** @internal */
-export type PackageVersion$Outbound = {
-  created_at: string;
-  deployment_id: string;
-  id: string;
-  package_id: string;
-  semver: string;
-  visibility: string;
-};
-
-/** @internal */
-export const PackageVersion$outboundSchema: z.ZodType<
-  PackageVersion$Outbound,
-  z.ZodTypeDef,
-  PackageVersion
-> = z.object({
-  createdAt: z.date().transform(v => v.toISOString()),
-  deploymentId: z.string(),
-  id: z.string(),
-  packageId: z.string(),
-  semver: z.string(),
-  visibility: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    createdAt: "created_at",
-    deploymentId: "deployment_id",
-    packageId: "package_id",
-  });
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace PackageVersion$ {
-  /** @deprecated use `PackageVersion$inboundSchema` instead. */
-  export const inboundSchema = PackageVersion$inboundSchema;
-  /** @deprecated use `PackageVersion$outboundSchema` instead. */
-  export const outboundSchema = PackageVersion$outboundSchema;
-  /** @deprecated use `PackageVersion$Outbound` instead. */
-  export type Outbound = PackageVersion$Outbound;
-}
-
-export function packageVersionToJSON(packageVersion: PackageVersion): string {
-  return JSON.stringify(PackageVersion$outboundSchema.parse(packageVersion));
-}
-
 export function packageVersionFromJSON(
   jsonString: string,
 ): SafeParseResult<PackageVersion, SDKValidationError> {

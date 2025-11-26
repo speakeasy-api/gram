@@ -30,7 +30,7 @@ INSERT INTO oauth_proxy_servers (
 ) VALUES (
     @project_id,
     @slug
-) ON CONFLICT (project_id, slug) DO UPDATE SET
+) ON CONFLICT (project_id, slug) WHERE deleted IS FALSE DO UPDATE SET
     updated_at = clock_timestamp()
 RETURNING *;
 
@@ -76,7 +76,7 @@ INSERT INTO oauth_proxy_providers (
     @token_endpoint_auth_methods_supported,
     @security_key_names,
     @secrets
-) ON CONFLICT (project_id, slug) DO UPDATE SET
+) ON CONFLICT (project_id, slug) WHERE deleted IS FALSE DO UPDATE SET
     oauth_proxy_server_id = EXCLUDED.oauth_proxy_server_id,
     authorization_endpoint = EXCLUDED.authorization_endpoint,
     token_endpoint = EXCLUDED.token_endpoint,

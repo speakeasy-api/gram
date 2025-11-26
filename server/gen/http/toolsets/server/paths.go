@@ -51,3 +51,8 @@ func AddExternalOAuthServerToolsetsPath() string {
 func RemoveOAuthServerToolsetsPath() string {
 	return "/rpc/toolsets.removeOAuthServer"
 }
+
+// AddOAuthProxyServerToolsetsPath returns the URL path to the toolsets service addOAuthProxyServer HTTP endpoint.
+func AddOAuthProxyServerToolsetsPath() string {
+	return "/rpc/toolsets.addOAuthProxyServer"
+}

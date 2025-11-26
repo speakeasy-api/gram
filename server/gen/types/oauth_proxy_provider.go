@@ -22,6 +22,8 @@ type OAuthProxyProvider struct {
 	GrantTypesSupported []string
 	// The token endpoint auth methods supported by this provider
 	TokenEndpointAuthMethodsSupported []string
+	// The environment slug where OAuth credentials are stored
+	EnvironmentSlug *Slug
 	// When the OAuth proxy provider was created.
 	CreatedAt string
 	// When the OAuth proxy provider was last updated.

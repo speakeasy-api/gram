@@ -65,6 +65,13 @@ type AddExternalOAuthServerRequestBody struct {
 	ExternalOauthServer *ExternalOAuthServerFormRequestBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 }
 
+// AddOAuthProxyServerRequestBody is the type of the "toolsets" service
+// "addOAuthProxyServer" endpoint HTTP request body.
+type AddOAuthProxyServerRequestBody struct {
+	// The OAuth proxy server data to create and associate with the toolset
+	OauthProxyServer *OAuthProxyServerFormRequestBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+}
+
 // CreateToolsetResponseBody is the type of the "toolsets" service
 // "createToolset" endpoint HTTP response body.
 type CreateToolsetResponseBody struct {
@@ -365,6 +372,64 @@ type AddExternalOAuthServerResponseBody struct {
 // RemoveOAuthServerResponseBody is the type of the "toolsets" service
 // "removeOAuthServer" endpoint HTTP response body.
 type RemoveOAuthServerResponseBody struct {
+	// The ID of the toolset
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this toolset belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The organization ID this toolset belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The account type of the organization
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// The name of the toolset
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Description of the toolset
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// The tool URNs in this toolset
+	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
+	// The resources in this toolset
+	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
+	// The resource URNs in this toolset
+	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// The ID of the custom domain to use for the toolset
+	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// When the toolset was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the toolset was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// AddOAuthProxyServerResponseBody is the type of the "toolsets" service
+// "addOAuthProxyServer" endpoint HTTP response body.
+type AddOAuthProxyServerResponseBody struct {
 	// The ID of the toolset
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID this toolset belongs to
@@ -2077,6 +2142,195 @@ type RemoveOAuthServerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// AddOAuthProxyServerUnauthorizedResponseBody is the type of the "toolsets"
+// service "addOAuthProxyServer" endpoint HTTP response body for the
+// "unauthorized" error.
+type AddOAuthProxyServerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddOAuthProxyServerForbiddenResponseBody is the type of the "toolsets"
+// service "addOAuthProxyServer" endpoint HTTP response body for the
+// "forbidden" error.
+type AddOAuthProxyServerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddOAuthProxyServerBadRequestResponseBody is the type of the "toolsets"
+// service "addOAuthProxyServer" endpoint HTTP response body for the
+// "bad_request" error.
+type AddOAuthProxyServerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddOAuthProxyServerNotFoundResponseBody is the type of the "toolsets"
+// service "addOAuthProxyServer" endpoint HTTP response body for the
+// "not_found" error.
+type AddOAuthProxyServerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddOAuthProxyServerConflictResponseBody is the type of the "toolsets"
+// service "addOAuthProxyServer" endpoint HTTP response body for the "conflict"
+// error.
+type AddOAuthProxyServerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddOAuthProxyServerUnsupportedMediaResponseBody is the type of the
+// "toolsets" service "addOAuthProxyServer" endpoint HTTP response body for the
+// "unsupported_media" error.
+type AddOAuthProxyServerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddOAuthProxyServerInvalidResponseBody is the type of the "toolsets" service
+// "addOAuthProxyServer" endpoint HTTP response body for the "invalid" error.
+type AddOAuthProxyServerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddOAuthProxyServerInvariantViolationResponseBody is the type of the
+// "toolsets" service "addOAuthProxyServer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type AddOAuthProxyServerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddOAuthProxyServerUnexpectedResponseBody is the type of the "toolsets"
+// service "addOAuthProxyServer" endpoint HTTP response body for the
+// "unexpected" error.
+type AddOAuthProxyServerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddOAuthProxyServerGatewayErrorResponseBody is the type of the "toolsets"
+// service "addOAuthProxyServer" endpoint HTTP response body for the
+// "gateway_error" error.
+type AddOAuthProxyServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SecurityVariableResponseBody is used to define fields on response body types.
 type SecurityVariableResponseBody struct {
 	// The type of security
@@ -2425,6 +2679,8 @@ type OAuthProxyProviderResponseBody struct {
 	GrantTypesSupported []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
 	// The token endpoint auth methods supported by this provider
 	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	// The environment slug where OAuth credentials are stored
+	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
 	// When the OAuth proxy provider was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the OAuth proxy provider was last updated.
@@ -2522,6 +2778,23 @@ type ExternalOAuthServerFormRequestBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The metadata for the external OAuth server
 	Metadata any `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
+}
+
+// OAuthProxyServerFormRequestBody is used to define fields on request body
+// types.
+type OAuthProxyServerFormRequestBody struct {
+	// The slug of the OAuth proxy server
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The authorization endpoint URL
+	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
+	// The token endpoint URL
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// OAuth scopes to request
+	ScopesSupported []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	// Auth methods (client_secret_basic or client_secret_post)
+	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	// The environment slug to store secrets
+	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
 }
 
 // NewCreateToolsetResponseBody builds the HTTP response body from the result
@@ -3013,6 +3286,100 @@ func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuth
 // result of the "removeOAuthServer" endpoint of the "toolsets" service.
 func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResponseBody {
 	body := &RemoveOAuthServerResponseBody{
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		OrganizationID:    res.OrganizationID,
+		AccountType:       res.AccountType,
+		Name:              res.Name,
+		Slug:              string(res.Slug),
+		Description:       res.Description,
+		ToolsetVersion:    res.ToolsetVersion,
+		McpIsPublic:       res.McpIsPublic,
+		McpEnabled:        res.McpEnabled,
+		ToolSelectionMode: res.ToolSelectionMode,
+		CustomDomainID:    res.CustomDomainID,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
+	}
+	if res.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
+		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if res.McpSlug != nil {
+		mcpSlug := string(*res.McpSlug)
+		body.McpSlug = &mcpSlug
+	}
+	if res.SecurityVariables != nil {
+		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
+		for i, val := range res.SecurityVariables {
+			body.SecurityVariables[i] = marshalTypesSecurityVariableToSecurityVariableResponseBody(val)
+		}
+	}
+	if res.ServerVariables != nil {
+		body.ServerVariables = make([]*ServerVariableResponseBody, len(res.ServerVariables))
+		for i, val := range res.ServerVariables {
+			body.ServerVariables[i] = marshalTypesServerVariableToServerVariableResponseBody(val)
+		}
+	}
+	if res.FunctionEnvironmentVariables != nil {
+		body.FunctionEnvironmentVariables = make([]*FunctionEnvironmentVariableResponseBody, len(res.FunctionEnvironmentVariables))
+		for i, val := range res.FunctionEnvironmentVariables {
+			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
+		}
+	}
+	if res.Tools != nil {
+		body.Tools = make([]*ToolResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			body.Tools[i] = marshalTypesToolToToolResponseBody(val)
+		}
+	} else {
+		body.Tools = []*ToolResponseBody{}
+	}
+	if res.ToolUrns != nil {
+		body.ToolUrns = make([]string, len(res.ToolUrns))
+		for i, val := range res.ToolUrns {
+			body.ToolUrns[i] = val
+		}
+	} else {
+		body.ToolUrns = []string{}
+	}
+	if res.Resources != nil {
+		body.Resources = make([]*ResourceResponseBody, len(res.Resources))
+		for i, val := range res.Resources {
+			body.Resources[i] = marshalTypesResourceToResourceResponseBody(val)
+		}
+	} else {
+		body.Resources = []*ResourceResponseBody{}
+	}
+	if res.ResourceUrns != nil {
+		body.ResourceUrns = make([]string, len(res.ResourceUrns))
+		for i, val := range res.ResourceUrns {
+			body.ResourceUrns[i] = val
+		}
+	} else {
+		body.ResourceUrns = []string{}
+	}
+	if res.PromptTemplates != nil {
+		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
+		for i, val := range res.PromptTemplates {
+			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+		}
+	} else {
+		body.PromptTemplates = []*PromptTemplateResponseBody{}
+	}
+	if res.ExternalOauthServer != nil {
+		body.ExternalOauthServer = marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody(res.ExternalOauthServer)
+	}
+	if res.OauthProxyServer != nil {
+		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	return body
+}
+
+// NewAddOAuthProxyServerResponseBody builds the HTTP response body from the
+// result of the "addOAuthProxyServer" endpoint of the "toolsets" service.
+func NewAddOAuthProxyServerResponseBody(res *types.Toolset) *AddOAuthProxyServerResponseBody {
+	body := &AddOAuthProxyServerResponseBody{
 		ID:                res.ID,
 		ProjectID:         res.ProjectID,
 		OrganizationID:    res.OrganizationID,
@@ -4389,6 +4756,155 @@ func NewRemoveOAuthServerGatewayErrorResponseBody(res *goa.ServiceError) *Remove
 	return body
 }
 
+// NewAddOAuthProxyServerUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "addOAuthProxyServer" endpoint of the "toolsets"
+// service.
+func NewAddOAuthProxyServerUnauthorizedResponseBody(res *goa.ServiceError) *AddOAuthProxyServerUnauthorizedResponseBody {
+	body := &AddOAuthProxyServerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddOAuthProxyServerForbiddenResponseBody builds the HTTP response body
+// from the result of the "addOAuthProxyServer" endpoint of the "toolsets"
+// service.
+func NewAddOAuthProxyServerForbiddenResponseBody(res *goa.ServiceError) *AddOAuthProxyServerForbiddenResponseBody {
+	body := &AddOAuthProxyServerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddOAuthProxyServerBadRequestResponseBody builds the HTTP response body
+// from the result of the "addOAuthProxyServer" endpoint of the "toolsets"
+// service.
+func NewAddOAuthProxyServerBadRequestResponseBody(res *goa.ServiceError) *AddOAuthProxyServerBadRequestResponseBody {
+	body := &AddOAuthProxyServerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddOAuthProxyServerNotFoundResponseBody builds the HTTP response body
+// from the result of the "addOAuthProxyServer" endpoint of the "toolsets"
+// service.
+func NewAddOAuthProxyServerNotFoundResponseBody(res *goa.ServiceError) *AddOAuthProxyServerNotFoundResponseBody {
+	body := &AddOAuthProxyServerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddOAuthProxyServerConflictResponseBody builds the HTTP response body
+// from the result of the "addOAuthProxyServer" endpoint of the "toolsets"
+// service.
+func NewAddOAuthProxyServerConflictResponseBody(res *goa.ServiceError) *AddOAuthProxyServerConflictResponseBody {
+	body := &AddOAuthProxyServerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddOAuthProxyServerUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "addOAuthProxyServer" endpoint of the "toolsets"
+// service.
+func NewAddOAuthProxyServerUnsupportedMediaResponseBody(res *goa.ServiceError) *AddOAuthProxyServerUnsupportedMediaResponseBody {
+	body := &AddOAuthProxyServerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddOAuthProxyServerInvalidResponseBody builds the HTTP response body from
+// the result of the "addOAuthProxyServer" endpoint of the "toolsets" service.
+func NewAddOAuthProxyServerInvalidResponseBody(res *goa.ServiceError) *AddOAuthProxyServerInvalidResponseBody {
+	body := &AddOAuthProxyServerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddOAuthProxyServerInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "addOAuthProxyServer" endpoint of the
+// "toolsets" service.
+func NewAddOAuthProxyServerInvariantViolationResponseBody(res *goa.ServiceError) *AddOAuthProxyServerInvariantViolationResponseBody {
+	body := &AddOAuthProxyServerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddOAuthProxyServerUnexpectedResponseBody builds the HTTP response body
+// from the result of the "addOAuthProxyServer" endpoint of the "toolsets"
+// service.
+func NewAddOAuthProxyServerUnexpectedResponseBody(res *goa.ServiceError) *AddOAuthProxyServerUnexpectedResponseBody {
+	body := &AddOAuthProxyServerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddOAuthProxyServerGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "addOAuthProxyServer" endpoint of the "toolsets"
+// service.
+func NewAddOAuthProxyServerGatewayErrorResponseBody(res *goa.ServiceError) *AddOAuthProxyServerGatewayErrorResponseBody {
+	body := &AddOAuthProxyServerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateToolsetPayload builds a toolsets service createToolset endpoint
 // payload.
 func NewCreateToolsetPayload(body *CreateToolsetRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.CreateToolsetPayload {
@@ -4547,6 +5063,19 @@ func NewRemoveOAuthServerPayload(slug string, sessionToken *string, apikeyToken 
 	return v
 }
 
+// NewAddOAuthProxyServerPayload builds a toolsets service addOAuthProxyServer
+// endpoint payload.
+func NewAddOAuthProxyServerPayload(body *AddOAuthProxyServerRequestBody, slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.AddOAuthProxyServerPayload {
+	v := &toolsets.AddOAuthProxyServerPayload{}
+	v.OauthProxyServer = unmarshalOAuthProxyServerFormRequestBodyToTypesOAuthProxyServerForm(body.OauthProxyServer)
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // ValidateCreateToolsetRequestBody runs the validations defined on
 // CreateToolsetRequestBody
 func ValidateCreateToolsetRequestBody(body *CreateToolsetRequestBody) (err error) {
@@ -4600,6 +5129,20 @@ func ValidateAddExternalOAuthServerRequestBody(body *AddExternalOAuthServerReque
 	return
 }
 
+// ValidateAddOAuthProxyServerRequestBody runs the validations defined on
+// AddOAuthProxyServerRequestBody
+func ValidateAddOAuthProxyServerRequestBody(body *AddOAuthProxyServerRequestBody) (err error) {
+	if body.OauthProxyServer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oauth_proxy_server", "body"))
+	}
+	if body.OauthProxyServer != nil {
+		if err2 := ValidateOAuthProxyServerFormRequestBody(body.OauthProxyServer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
 // ValidateExternalOAuthServerFormRequestBody runs the validations defined on
 // ExternalOAuthServerFormRequestBody
 func ValidateExternalOAuthServerFormRequestBody(body *ExternalOAuthServerFormRequestBody) (err error) {
@@ -4615,6 +5158,46 @@ func ValidateExternalOAuthServerFormRequestBody(body *ExternalOAuthServerFormReq
 	if body.Slug != nil {
 		if utf8.RuneCountInString(*body.Slug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
+	}
+	return
+}
+
+// ValidateOAuthProxyServerFormRequestBody runs the validations defined on
+// OAuthProxyServerFormRequestBody
+func ValidateOAuthProxyServerFormRequestBody(body *OAuthProxyServerFormRequestBody) (err error) {
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.AuthorizationEndpoint == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorization_endpoint", "body"))
+	}
+	if body.TokenEndpoint == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("token_endpoint", "body"))
+	}
+	if body.ScopesSupported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scopes_supported", "body"))
+	}
+	if body.TokenEndpointAuthMethodsSupported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("token_endpoint_auth_methods_supported", "body"))
+	}
+	if body.EnvironmentSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("environment_slug", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
+	}
+	if body.EnvironmentSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.environment_slug", *body.EnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.EnvironmentSlug != nil {
+		if utf8.RuneCountInString(*body.EnvironmentSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.environment_slug", *body.EnvironmentSlug, utf8.RuneCountInString(*body.EnvironmentSlug), 40, false))
 		}
 	}
 	return

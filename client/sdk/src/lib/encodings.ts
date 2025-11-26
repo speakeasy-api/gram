@@ -102,8 +102,9 @@ export function encodeLabel(
       });
       encValue = mapped?.join("").slice(1);
     } else {
-      const k =
-        options?.explode && isPlainObject(value) ? `${encodeString(pk)}=` : "";
+      const k = options?.explode && isPlainObject(value)
+        ? `${encodeString(pk)}=`
+        : "";
       encValue = `${k}${encodeValue(pv)}`;
     }
 
@@ -440,7 +441,7 @@ type BulkQueryEncoder = (
 ) => string;
 
 export function queryEncoder(f: QueryEncoder): BulkQueryEncoder {
-  const bulkEncode = function (
+  const bulkEncode = function(
     values: Record<string, unknown>,
     options?: QueryEncoderOptions,
   ): string {
