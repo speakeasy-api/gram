@@ -971,7 +971,7 @@ function OAuthTabModal({
               {hasMultipleOAuth2AuthCode && (
                 <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
                   <Type small className="text-red-600 mt-1">
-                    Not Supported: This MCP server has {oauthAuthCodeCount}{" "}
+                    Not Supported: This MCP server has {toolset.oauthEnablementMetadata?.oauth2SecurityCount}{" "}
                     OAuth2 security schemes detected.
                   </Type>
                 </div>
