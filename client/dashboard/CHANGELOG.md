@@ -1,5 +1,18 @@
 # dashboard
 
+## 0.20.0
+
+### Minor Changes
+
+- 6716410: Add the ability to attach gram environments at the toolset level for easier configuration set up
+
+### Patch Changes
+
+- 6716410: restructure MCP authentication form to hide attach environments in advanced section
+- e34b505: updating of openrouter key limits for chat based usage
+- Updated dependencies [6716410]
+  - @gram/client@0.19.0
+
 ## 0.19.5
 
 ### Patch Changes
