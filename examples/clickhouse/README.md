@@ -124,14 +124,7 @@ This automatically starts ClickHouse (if not running) and spins up [MCP inspecto
 
 ## Testing
 
-The project includes a comprehensive test suite with 7 tests covering:
-- Simple SELECT queries
-- Parameterized queries with named parameters
-- Time series aggregations
-- JOIN queries across multiple tables
-- UUID filtering
-- Genre popularity analysis by month
-- User listening pattern analysis
+The test suite demonstrates how to programmatically call Gram tools using `gram.handleToolCall()` - the same interface an LLM would use when invoking your tools. This allows you to verify tool behavior and test your functions locally before deployment.
 
 ### Running Tests
 
@@ -162,108 +155,6 @@ CLICKHOUSE_PASSWORD=gram_password \
 CLICKHOUSE_DATABASE=gram_example \
 npm test -- --watch
 ```
-
-### Test Coverage
-
-The tests verify:
-- ✅ Connection to ClickHouse and database accessibility
-- ✅ 1M+ TrackPlays rows are loaded
-- ✅ Basic query execution returns correct data
-- ✅ Named parameter substitution works correctly
-- ✅ Time series aggregations (COUNT, DISTINCT, GROUP BY)
-- ✅ Multi-table JOINs with Track, Album, Artist, Genre
-- ✅ UUID data type handling
-- ✅ Date range filtering and date functions
-
-## Example Queries
-
-ClickHouse uses **named parameters** with `{param_name: Type}` syntax (not PostgreSQL's `$1, $2`):
-
-### Daily play counts
-```sql
-SELECT Date, COUNT(*) as plays
-FROM TrackPlays
-WHERE Date >= {start_date: Date} AND Date <= {end_date: Date}
-GROUP BY Date
-ORDER BY Date;
-```
-
-Parameters: `{ start_date: "2023-01-01", end_date: "2023-01-31" }`
-
-### Top 10 most played tracks with details
-```sql
-SELECT
-  t.Name as TrackName,
-  ar.Name as ArtistName,
-  al.Title as AlbumName,
-  COUNT(*) as PlayCount
-FROM TrackPlays tp
-JOIN Track t ON tp.TrackId = t.TrackId
-JOIN Album al ON t.AlbumId = al.AlbumId
-JOIN Artist ar ON al.ArtistId = ar.ArtistId
-WHERE tp.Date >= {start_date: Date}
-GROUP BY t.TrackId, t.Name, ar.Name, al.Title
-ORDER BY PlayCount DESC
-LIMIT 10;
-```
-
-Parameters: `{ start_date: "2023-01-01" }`
-
-### User listening patterns
-```sql
-SELECT
-  UserId,
-  COUNT(*) as total_plays,
-  COUNT(DISTINCT TrackId) as unique_tracks,
-  MIN(Date) as first_play,
-  MAX(Date) as last_play
-FROM TrackPlays
-GROUP BY UserId
-ORDER BY total_plays DESC
-LIMIT {limit: UInt32};
-```
-
-Parameters: `{ limit: 100 }`
-
-### Genre popularity by month
-```sql
-SELECT
-  toYYYYMM(tp.Date) as month,
-  g.Name as Genre,
-  COUNT(*) as plays
-FROM TrackPlays tp
-JOIN Track t ON tp.TrackId = t.TrackId
-JOIN Genre g ON t.GenreId = g.GenreId
-GROUP BY month, g.GenreId, g.Name
-ORDER BY month, plays DESC
-LIMIT 20;
-```
-
-## ClickHouse SQL Features
-
-This example demonstrates several ClickHouse-specific features:
-
-### Time Series Optimization
-- TrackPlays table uses `MergeTree` engine
-- Partitioned by month: `PARTITION BY toYYYYMM(Date)`
-- Ordered for query performance: `ORDER BY (Date, UserId, TrackId)`
-
-### Named Parameters
-Unlike PostgreSQL (`$1, $2`), ClickHouse uses:
-```sql
-WHERE Date = {target_date: Date}
-AND TrackId = {track_id: UInt32}
-```
-
-### Date Functions
-- `toYYYYMM(date)` - Extract year-month as integer
-- `toStartOfMonth(date)` - First day of month
-- `dateDiff('day', start, end)` - Date difference
-
-### Aggregation
-- `COUNT(DISTINCT column)` - Unique values
-- `uniq(column)` - Approximate unique count (faster)
-- `groupArray(column)` - Array of values
 
 ## Docker Management
 
