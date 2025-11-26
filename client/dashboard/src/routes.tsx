@@ -33,6 +33,8 @@ import ToolsetPage, { ToolsetRoot } from "./pages/toolsets/Toolset";
 import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
 import Billing from "./pages/billing/Billing";
 import Logs from "./pages/logs/Logs.tsx";
+import { SourcesRoot, SourcesPage } from "./pages/sources/Sources";
+import SourceDetails from "./pages/sources/SourceDetails";
 
 type AppRouteBasic = {
   title: string;
@@ -177,6 +179,20 @@ const ROUTE_STRUCTURE = {
         url: ":toolsetSlug",
         component: ToolsetRoot,
         indexComponent: ToolsetPage,
+      },
+    },
+  },
+  sources: {
+    title: "Sources",
+    url: "sources",
+    icon: "file-code",
+    component: SourcesRoot,
+    indexComponent: SourcesPage,
+    subPages: {
+      source: {
+        title: "Source Details",
+        url: ":sourceKind/:sourceSlug",
+        component: SourceDetails,
       },
     },
   },

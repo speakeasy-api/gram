@@ -11,7 +11,14 @@ import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query/index.js";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
-import { CircleAlertIcon, FileCode, SquareFunction } from "lucide-react";
+import {
+  CircleAlertIcon,
+  FileCode,
+  SquareFunction,
+  Sparkles,
+} from "lucide-react";
+import { Badge } from "@speakeasy-api/moonshine";
+import { isAfter, subDays } from "date-fns";
 
 export type NamedAsset = Asset & {
   deploymentAssetId: string;
@@ -35,7 +42,18 @@ export function SourceCard({
   handleViewAsset: (assetId: string) => void;
   setChangeDocumentTargetSlug: (slug: string) => void;
 }) {
+  const routes = useRoutes();
   const IconComponent = asset.type === "openapi" ? FileCode : SquareFunction;
+
+  const handleCardClick = () => {
+    const sourceKind = asset.type === "openapi" ? "http" : "function";
+    routes.sources.source.goTo(sourceKind, asset.slug);
+  };
+
+  // Check if source was updated in the last 7 days
+  const isRecentlyUpdated = asset.updatedAt
+    ? isAfter(new Date(asset.updatedAt), subDays(new Date(), 7))
+    : false;
 
   const actions = [
     ...(asset.type === "openapi"
@@ -68,23 +86,28 @@ export function SourceCard({
   return (
     <div
       key={asset.id}
-      className="bg-secondary max-w-sm text-card-foreground flex flex-col rounded-md border px-3 py-3"
+      onClick={handleCardClick}
+      className="bg-secondary max-w-sm text-card-foreground flex flex-col rounded-md border px-3 py-3 cursor-pointer hover:bg-surface-tertiary transition-colors"
     >
       <div className="flex items-center justify-between mb-2">
         <IconComponent className="size-5 shrink-0" strokeWidth={2} />
-        <MoreActions actions={actions} />
+        <div onClick={(e) => e.stopPropagation()}>
+          <MoreActions actions={actions} />
+        </div>
       </div>
 
-      <div
-        onClick={
-          asset.type === "openapi" ? () => handleViewAsset(asset.id) : undefined
-        }
-        className={cn(
-          "leading-none mb-1.5",
-          asset.type === "openapi" && "cursor-pointer",
-        )}
-      >
+      <div className="leading-none mb-1.5 flex items-center gap-2">
         <Type>{asset.name}</Type>
+        {isRecentlyUpdated && (
+          <Badge
+            variant="primary"
+            size="sm"
+            className="flex items-center gap-1"
+          >
+            <Sparkles className="h-3 w-3" />
+            Updated
+          </Badge>
+        )}
       </div>
 
       <div className="flex gap-1.5 items-center text-muted-foreground text-xs">
