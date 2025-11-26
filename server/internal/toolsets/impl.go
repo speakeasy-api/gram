@@ -711,8 +711,13 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 		Slug:                              conv.ToLower(payload.OauthProxyServer.Slug),
 		AuthorizationEndpoint:             payload.OauthProxyServer.AuthorizationEndpoint,
 		TokenEndpoint:                     payload.OauthProxyServer.TokenEndpoint,
+		RegistrationEndpoint:              conv.PtrToPGText(nil),
 		ScopesSupported:                   payload.OauthProxyServer.ScopesSupported,
+		ResponseTypesSupported:            []string{"code"},
+		ResponseModesSupported:            []string{},
+		GrantTypesSupported:               []string{"authorization_code"},
 		TokenEndpointAuthMethodsSupported: payload.OauthProxyServer.TokenEndpointAuthMethodsSupported,
+		SecurityKeyNames:                  []string{},
 		Secrets:                           secretsJSON,
 	})
 	if err != nil {
