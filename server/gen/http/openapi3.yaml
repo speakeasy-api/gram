@@ -9828,12 +9828,12 @@ components:
         FunctionEnvironmentVariable:
             type: object
             properties:
+                auth_input_type:
+                    type: string
+                    description: Optional value of the function variable comes from a specific auth input
                 description:
                     type: string
                     description: Description of the function environment variable
-                is_oauth_target:
-                    type: boolean
-                    description: Whether the function environment variable is an OAuth target
                 name:
                     type: string
                     description: The environment variables

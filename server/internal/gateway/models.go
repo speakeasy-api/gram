@@ -117,6 +117,7 @@ type FunctionToolCallPlan struct {
 	Runtime           string                                            `json:"runtime" yaml:"runtime"`
 	InputSchema       []byte                                            `json:"input_schema" yaml:"input_schema"`
 	Variables         map[string]*functions.ManifestVariableAttributeV0 `json:"variables" yaml:"variables"`
+	AuthInput         *functions.ManifestAuthInputAttributeV0           `json:"auth_input,omitempty" yaml:"auth_input,omitempty"`
 }
 
 type PromptToolCallPlan struct {

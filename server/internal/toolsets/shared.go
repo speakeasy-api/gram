@@ -192,6 +192,13 @@ func (t *Toolsets) extractFunctionToolCallPlan(ctx context.Context, tool toolsRe
 		}
 	}
 
+	var authInput *functions.ManifestAuthInputAttributeV0
+	if len(tool.AuthInput) > 0 {
+		if err := json.Unmarshal(tool.AuthInput, authInput); err != nil {
+			return nil, fmt.Errorf("unmarshal function tool auth input: %w", err)
+		}
+	}
+
 	descriptor := &gateway.ToolDescriptor{
 		ID:               tool.ID.String(),
 		Name:             tool.Name,
@@ -208,6 +215,7 @@ func (t *Toolsets) extractFunctionToolCallPlan(ctx context.Context, tool toolsRe
 		Runtime:           tool.Runtime,
 		InputSchema:       tool.InputSchema,
 		Variables:         envconfig,
+		AuthInput:         authInput,
 	}
 
 	return gateway.NewFunctionToolCallPlan(descriptor, plan), nil

@@ -20,6 +20,7 @@ type ManifestToolV0 struct {
 	Description string                                  `json:"description"`
 	InputSchema json.RawMessage                         `json:"inputSchema"`
 	Variables   map[string]*ManifestVariableAttributeV0 `json:"variables"`
+	AuthInput   *ManifestAuthInputAttributeV0           `json:"authInput,omitempty"`
 	Meta        map[string]string                       `json:"meta"`
 }
 
@@ -34,8 +35,12 @@ type ManifestResourceV0 struct {
 }
 
 type ManifestVariableAttributeV0 struct {
-	Description   *string `json:"description"`
-	IsOAuthTarget *bool   `json:"isOauthTarget,omitempty"`
+	Description *string `json:"description"`
+}
+
+type ManifestAuthInputAttributeV0 struct {
+	Type     string `json:"type"`
+	Variable string `json:"variable"`
 }
 
 type Manifest struct {

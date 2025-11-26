@@ -218,6 +218,12 @@ func (tp *ToolProxy) doFunction(
 		}
 	}
 
+	if plan.AuthInput != nil {
+		if val := env.UserConfig.Get(plan.AuthInput.Variable); val != "" {
+			payloadEnv[plan.AuthInput.Variable] = val
+		}
+	}
+
 	req, err := tp.functions.ToolCall(ctx, functions.RunnerToolCallRequest{
 		RunnerBaseRequest: functions.RunnerBaseRequest{
 			InvocationID:      invocationID,

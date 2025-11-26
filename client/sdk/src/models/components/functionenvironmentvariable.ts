@@ -10,13 +10,13 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type FunctionEnvironmentVariable = {
   /**
+   * Optional value of the function variable comes from a specific auth input
+   */
+  authInputType?: string | undefined;
+  /**
    * Description of the function environment variable
    */
   description?: string | undefined;
-  /**
-   * Whether the function environment variable is an OAuth target
-   */
-  isOauthTarget?: boolean | undefined;
   /**
    * The environment variables
    */
@@ -29,12 +29,12 @@ export const FunctionEnvironmentVariable$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  auth_input_type: z.string().optional(),
   description: z.string().optional(),
-  is_oauth_target: z.boolean().optional(),
   name: z.string(),
 }).transform((v) => {
   return remap$(v, {
-    "is_oauth_target": "isOauthTarget",
+    "auth_input_type": "authInputType",
   });
 });
 

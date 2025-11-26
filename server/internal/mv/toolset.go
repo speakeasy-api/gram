@@ -34,7 +34,12 @@ import (
 // functionManifestVariable represents a variable definition from a function manifest.
 type functionManifestVariable struct {
 	Description   *string `json:"description"`
-	IsOAuthTarget *bool   `json:"isOauthTarget,omitempty"`
+	AuthInputType string  `json:"authInputType,omitempty"`
+}
+
+type authInputManifest struct {
+	Type     string `json:"type"`
+	Variable string `json:"variable"`
 }
 
 func DescribeToolsetEntry(
@@ -157,7 +162,7 @@ func DescribeToolsetEntry(
 				ToolUrn: tool.ToolUrn.String(),
 			})
 
-			envVars, err := extractFunctionEnvVars(ctx, logger, tool.Variables)
+			envVars, err := extractFunctionEnvVars(ctx, logger, tool.Variables, tool.AuthInput)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables").Log(ctx, logger)
 			}
@@ -208,7 +213,7 @@ func DescribeToolsetEntry(
 				ResourceUrn: resource.ResourceUrn.String(),
 			})
 
-			envVars, err := extractFunctionEnvVars(ctx, logger, resource.Variables)
+			envVars, err := extractFunctionEnvVars(ctx, logger, resource.Variables, nil)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables from resource").Log(ctx, logger)
 			}
@@ -450,7 +455,7 @@ func DescribeToolset(
 	functionEnvVars := dedupeFunctionEnvVars(toolsetTools.FunctionEnvVars)
 
 	for _, functionEnvironmentVariable := range functionEnvVars {
-		if functionEnvironmentVariable != nil && functionEnvironmentVariable.IsOauthTarget != nil && *functionEnvironmentVariable.IsOauthTarget {
+		if functionEnvironmentVariable != nil && functionEnvironmentVariable.AuthInputType != nil && *functionEnvironmentVariable.AuthInputType == "oauth2" {
 			oauth2AuthCodeSecurityCount++
 		}
 	}
@@ -675,7 +680,7 @@ func readToolsetTools(
 				functionTool.Schema = constants.DefaultEmptyToolSchema
 			}
 
-			envVars, err := extractFunctionEnvVars(ctx, logger, def.FunctionToolDefinition.Variables)
+			envVars, err := extractFunctionEnvVars(ctx, logger, def.FunctionToolDefinition.Variables, def.FunctionToolDefinition.AuthInput)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables").Log(ctx, logger)
 			}
@@ -730,7 +735,7 @@ func readToolsetTools(
 				UpdatedAt:    def.FunctionResourceDefinition.UpdatedAt.Time.Format(time.RFC3339),
 			}
 
-			envVars, err := extractFunctionEnvVars(ctx, logger, def.FunctionResourceDefinition.Variables)
+			envVars, err := extractFunctionEnvVars(ctx, logger, def.FunctionResourceDefinition.Variables, nil)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables from resource").Log(ctx, logger)
 			}
@@ -817,7 +822,7 @@ func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectI
 	return nil
 }
 
-func extractFunctionEnvVars(ctx context.Context, logger *slog.Logger, variableData []byte) ([]*types.FunctionEnvironmentVariable, error) {
+func extractFunctionEnvVars(ctx context.Context, logger *slog.Logger, variableData []byte, authInputData []byte) ([]*types.FunctionEnvironmentVariable, error) {
 	var functionEnvVars []*types.FunctionEnvironmentVariable
 
 	if variableData != nil {
@@ -830,17 +835,26 @@ func extractFunctionEnvVars(ctx context.Context, logger *slog.Logger, variableDa
 				if v != nil && v.Description != nil {
 					description = v.Description
 				}
-				var isoauthTarget *bool
-				if v != nil && v.IsOAuthTarget != nil {
-					isoauthTarget = v.IsOAuthTarget
-				}
 				functionEnvVars = append(functionEnvVars, &types.FunctionEnvironmentVariable{
 					Name:          k,
 					Description:   description,
-					IsOauthTarget: isoauthTarget,
+					AuthInputType: nil,
 				})
 			}
 
+		}
+	}
+
+	if authInputData != nil {
+		var authInputs *authInputManifest
+		if err := json.Unmarshal(authInputData, &authInputs); err != nil {
+			logger.ErrorContext(ctx, "failed to unmarshal function tool auth input", attr.SlogError(err))
+		} else if authInputs != nil {
+			functionEnvVars = append(functionEnvVars, &types.FunctionEnvironmentVariable{
+				Name:          authInputs.Variable,
+				AuthInputType: &authInputs.Type,
+				Description:   nil,
+			})
 		}
 	}
 

@@ -10,8 +10,8 @@ package types
 type FunctionEnvironmentVariable struct {
 	// Description of the function environment variable
 	Description *string
-	// Whether the function environment variable is an OAuth target
-	IsOauthTarget *bool
+	// Optional value of the function variable comes from a specific auth input
+	AuthInputType *string
 	// The environment variables
 	Name string
 }
