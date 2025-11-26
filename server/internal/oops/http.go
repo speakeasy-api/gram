@@ -31,12 +31,15 @@ func handleWithRecovery(
 	r *http.Request,
 ) (recErr error) {
 	defer func() {
-		if rec := recover(); rec != nil {
-			if err, ok := rec.(error); ok {
-				recErr = &panicError{cause: err}
-			} else {
-				recErr = &panicError{cause: fmt.Errorf("panic: %v", rec)}
-			}
+		rec := recover()
+		if rec == nil {
+			return
+		}
+
+		if err, ok := rec.(error); ok {
+			recErr = &panicError{cause: err}
+		} else {
+			recErr = &panicError{cause: fmt.Errorf("panic: %v", rec)}
 		}
 	}()
 
