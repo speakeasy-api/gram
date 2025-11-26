@@ -66,7 +66,8 @@ export function MCPDetailPage() {
     return <div>Loading...</div>;
   }
 
-  const availableOAuthAuthCode = toolset?.oauthEnablementMetadata?.oauth2SecurityCount > 0;
+  const availableOAuthAuthCode =
+    toolset?.oauthEnablementMetadata?.oauth2SecurityCount > 0;
 
   return (
     <Stack>
@@ -864,7 +865,8 @@ function OAuthTabModal({
   const [jsonError, setJsonError] = useState<string | null>(null);
   const telemetry = useTelemetry();
 
-  const hasMultipleOAuth2AuthCode = toolset.oauthEnablementMetadata?.oauth2SecurityCount > 1;
+  const hasMultipleOAuth2AuthCode =
+    toolset.oauthEnablementMetadata?.oauth2SecurityCount > 1;
   const queryClient = useQueryClient();
 
   const handleBookMeeting = () => {
