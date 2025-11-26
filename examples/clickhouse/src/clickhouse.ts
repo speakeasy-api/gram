@@ -1,5 +1,4 @@
 import { createClient } from "@clickhouse/client-web";
-import type { ClickHouseClient } from "@clickhouse/client-web";
 
 export type ClickHouseConfig = {
   host: string;
@@ -19,28 +18,16 @@ export type QueryResult = {
   rowCount: number;
 };
 
-let cachedClient: ClickHouseClient | null = null;
-
-function getClient(cfg: ClickHouseConfig): ClickHouseClient {
-  if (cachedClient) {
-    return cachedClient;
-  }
-
-  cachedClient = createClient({
+export async function executeQuery(
+  cfg: ClickHouseConfig,
+  params: ExecuteQueryParams,
+): Promise<QueryResult> {
+  const client = createClient({
     url: `http://${cfg.host}:${cfg.port}`,
     username: cfg.username,
     password: cfg.password,
     database: cfg.database,
   });
-
-  return cachedClient;
-}
-
-export async function executeQuery(
-  cfg: ClickHouseConfig,
-  params: ExecuteQueryParams,
-): Promise<QueryResult> {
-  const client = getClient(cfg);
 
   const resultSet = await client.query({
     query: params.query,
