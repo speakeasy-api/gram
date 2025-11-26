@@ -427,7 +427,6 @@ export function queryJoin(...args: (string | undefined)[]): string {
 type QueryEncoderOptions = {
   explode?: boolean;
   charEncoding?: "percent" | "none";
-  allowEmptyValue?: string[];
 };
 
 type QueryEncoder = (
@@ -452,19 +451,7 @@ export function queryEncoder(f: QueryEncoder): BulkQueryEncoder {
       charEncoding: options?.charEncoding ?? "percent",
     };
 
-    const allowEmptySet = new Set(options?.allowEmptyValue ?? []);
-
     const encoded = Object.entries(values).map(([key, value]) => {
-      if (allowEmptySet.has(key)) {
-        if (
-          value === undefined
-          || value === null
-          || value === ""
-          || (Array.isArray(value) && value.length === 0)
-        ) {
-          return `${encodeURIComponent(key)}=`;
-        }
-      }
       return f(key, value, opts);
     });
     return queryJoin(...encoded);

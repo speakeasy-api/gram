@@ -41,7 +41,7 @@ interface ManageToolsDialogProps {
   onOpenChange: (open: boolean) => void;
   toolset: Toolset;
   currentTools: Tool[];
-  onAddTools: (toolUrns: string[], tools: Tool[]) => void;
+  onAddTools: (toolUrns: string[]) => void;
   onRemoveTools: (toolUrns: string[]) => void;
   initialGroup?: string; // If provided, filter to this source initially
 }
@@ -145,11 +145,7 @@ export function ManageToolsDialog({
 
   const handleApply = () => {
     if (mode === "add") {
-      const urns = Array.from(selectedToolUrns);
-      const toolsToAdd = availableTools.filter((t) =>
-        selectedToolUrns.has(t.toolUrn),
-      );
-      onAddTools(urns, toolsToAdd);
+      onAddTools(Array.from(selectedToolUrns));
     } else {
       onRemoveTools(Array.from(selectedToolUrns));
     }

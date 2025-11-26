@@ -2,6 +2,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { TextArea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { Tool } from "@/lib/toolTypes";
 import { Button } from "@speakeasy-api/moonshine";
 import { useEffect, useState, useRef } from "react";
@@ -134,21 +135,32 @@ export function EditToolDialog({
         </div>
 
         {/* Editable fields */}
-        <div className="py-4 space-y-6">
-          <Input
-            ref={nameInputRef}
-            value={name}
-            onChange={(value) => setName(value)}
-            placeholder="Tool name"
-            className="text-2xl font-semibold border-0 px-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-          />
+        <div className="py-4 space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="tool-name" className="text-sm font-medium">
+              Name
+            </Label>
+            <Input
+              id="tool-name"
+              ref={nameInputRef}
+              value={name}
+              onChange={(value) => setName(value)}
+              placeholder="Tool name"
+            />
+          </div>
 
-          <TextArea
-            value={description}
-            onChange={(value) => setDescription(value)}
-            placeholder="Add description..."
-            className="min-h-32 border-0 px-0 focus-visible:ring-0 focus-visible:ring-offset-0 resize-none"
-          />
+          <div className="space-y-2">
+            <Label htmlFor="tool-description" className="text-sm font-medium">
+              Description
+            </Label>
+            <TextArea
+              id="tool-description"
+              value={description}
+              onChange={(value) => setDescription(value)}
+              placeholder="Add a description for this tool..."
+              rows={4}
+            />
+          </div>
         </div>
 
         {/* Actions */}

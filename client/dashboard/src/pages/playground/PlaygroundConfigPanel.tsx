@@ -5,7 +5,6 @@ import {
 } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { Checkbox } from "@/components/ui/checkbox";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { Button } from "@/components/ui/button";
@@ -28,7 +27,6 @@ import {
 import { MethodBadge } from "@/components/tool-list/MethodBadge";
 import { useState, useEffect } from "react";
 import { Tool } from "@/lib/toolTypes";
-import { cn } from "@/lib/utils";
 
 interface ToolsetInfo {
   name: string;
@@ -233,8 +231,8 @@ function groupTools(
 
 export function PlaygroundConfigPanel({
   tools = [],
-  selectedTools = new Set(),
-  onToolToggle,
+  selectedTools: _selectedTools = new Set(),
+  onToolToggle: _onToolToggle,
   temperature,
   onTemperatureChange,
   model,
@@ -249,7 +247,7 @@ export function PlaygroundConfigPanel({
   documentIdToName,
   functionIdToName,
   onOpenToolsModal,
-  onOpenGroupModal,
+  onOpenGroupModal: _onOpenGroupModal,
   onToolClick,
 }: ToolsetSectionProps) {
   const [toolsOpen, setToolsOpen] = useState(true);
@@ -376,46 +374,17 @@ export function PlaygroundConfigPanel({
                         <div className="text-[11px] text-muted-foreground tabular-nums">
                           {group.tools.length}
                         </div>
-                        <button
-                          onClick={(e: React.MouseEvent) => {
-                            e.stopPropagation();
-                            onOpenGroupModal?.(group.title);
-                          }}
-                          className="p-0.5 hover:bg-muted rounded"
-                        >
-                          <svg
-                            className="size-3.5 text-muted-foreground"
-                            fill="currentColor"
-                            viewBox="0 0 16 16"
-                          >
-                            <circle cx="8" cy="3" r="1.5" />
-                            <circle cx="8" cy="8" r="1.5" />
-                            <circle cx="8" cy="13" r="1.5" />
-                          </svg>
-                        </button>
                       </button>
 
                       {/* Expanded Tool List */}
                       {isExpanded && (
                         <div>
                           {group.tools.map((tool) => {
-                            const isSelected = selectedTools?.has(tool.id);
                             return (
                               <div
                                 key={tool.toolUrn}
                                 className="group w-full px-3 py-2 flex items-center gap-2 hover:bg-muted/30 transition-colors"
                               >
-                                <Checkbox
-                                  checked={isSelected}
-                                  onCheckedChange={() => {
-                                    onToolToggle?.(tool.id);
-                                  }}
-                                  className={cn(
-                                    "!size-3.5 shrink-0 transition-opacity",
-                                    !isSelected &&
-                                      "opacity-0 group-hover:opacity-100",
-                                  )}
-                                />
                                 <button
                                   onClick={() => onToolClick?.(tool)}
                                   className="flex-1 flex items-center justify-between text-left min-w-0"

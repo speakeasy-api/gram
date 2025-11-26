@@ -329,6 +329,7 @@ function ToolRow({
           <Checkbox
             checked={isSelected}
             onCheckedChange={onCheckboxChange}
+            onClick={(e) => e.stopPropagation()}
             className={cn(
               "shrink-0 transition-opacity",
               !isSelected && !isFocused && "opacity-0 group-hover:opacity-100",

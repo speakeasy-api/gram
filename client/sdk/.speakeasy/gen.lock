@@ -3,15 +3,15 @@ id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
   docChecksum: 824011ee00f5d0bdb04997d159c37917
   docVersion: 0.0.1
-  speakeasyVersion: 1.665.1
-  generationVersion: 2.767.2
-  releaseVersion: 0.21.1
-  configChecksum: 65fb7234f48886e0c7cce61f23979b6f
+  speakeasyVersion: 1.661.1
+  generationVersion: 2.763.2
+  releaseVersion: 0.21.2
+  configChecksum: 764c45e3c82b7e30ef40d0a03b1c6580
 features:
   typescript:
     additionalDependencies: 0.1.0
     constsAndDefaults: 0.1.12
-    core: 3.26.13
+    core: 3.26.10
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
     downloadStreams: 0.1.1
@@ -25,7 +25,7 @@ features:
     reactQueryHooks: 0.2.3
     responseFormat: 0.2.3
     retries: 2.83.0
-    sdkHooks: 0.4.0
+    sdkHooks: 0.3.0
 generatedFiles:
   - .devcontainer/README.md
   - .devcontainer/devcontainer.json

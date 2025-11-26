@@ -2,7 +2,12 @@ import { HttpRoute } from "@/components/http-route";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { asTool, filterHttpTools, filterPromptTools } from "@/lib/toolTypes";
+import {
+  asTool,
+  filterHttpTools,
+  filterPromptTools,
+  filterFunctionTools,
+} from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useChat } from "@ai-sdk/react";
 import { useInstance } from "@gram/client/react-query/index.js";
@@ -225,12 +230,6 @@ function ChatInner({
   const client = useSdkClient();
 
   const allTools: AiSdkToolset = useMemo(() => {
-    console.log("allTools: instance.data?.tools:", instance.data?.tools);
-    console.log("allTools: toolsetSlug:", configRef.current.toolsetSlug);
-    console.log(
-      "allTools: environmentSlug:",
-      configRef.current.environmentSlug,
-    );
     const baseTools = instance.data?.tools.map(asTool);
 
     const tools: AiSdkToolset = Object.fromEntries(
@@ -267,6 +266,19 @@ function ChatInner({
 
           return res.prompt;
         },
+      };
+    });
+
+    // Add function tools
+    filterFunctionTools(baseTools).forEach((ft) => {
+      tools[ft.name] = {
+        id: ft.id,
+        description: ft.description ?? "",
+        inputSchema: jsonSchema(ft.schema ? JSON.parse(ft.schema) : {}),
+        execute: createToolExecutor(
+          { toolUrn: ft.toolUrn },
+          configRef.current.toolsetSlug || "",
+        ),
       };
     });
 
@@ -401,7 +413,8 @@ function ChatInner({
     sendMessage,
     addToolResult,
   } = useChat({
-    id: chat.id,
+    // Include model in the chat ID to force a fresh session when switching models
+    id: `${chat.id}-${model}`,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     transport: transport as any,
     onError: (error) => {
@@ -415,9 +428,6 @@ function ChatInner({
       });
     },
     onToolCall: async ({ toolCall }) => {
-      console.log("onToolCall received:", toolCall);
-      console.log("onToolCall keys:", Object.keys(toolCall));
-      console.log("onToolCall stringified:", JSON.stringify(toolCall, null, 2));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const toolName = (toolCall as any).toolName;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -425,24 +435,15 @@ function ChatInner({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const toolCallId = (toolCall as any).toolCallId;
 
-      console.log("Executing tool:", toolName, "with input:", toolArgs);
-
       const tool = allToolsRef.current[toolName];
 
       if (!tool) {
-        console.error(
-          "Tool not found:",
-          toolName,
-          "Available tools:",
-          Object.keys(allToolsRef.current),
-        );
         appendDisplayOnlyMessage(`**Error:** *Tool ${toolName} not found*`);
         return;
       }
 
       try {
         const result = await tool.execute!(toolArgs);
-        console.log("Tool result:", result);
 
         addToolResult({
           toolCallId,
@@ -450,7 +451,6 @@ function ChatInner({
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any);
       } catch (error) {
-        console.error("Tool execution error:", error);
         appendDisplayOnlyMessage(
           `**Tool Error:** *${error instanceof Error ? error.message : "Unknown error"}*`,
         );
@@ -524,25 +524,18 @@ function ChatInner({
         {authWarning}
         <PromptInput
           onSubmit={(message) => {
-            if (message.text && !authWarning) {
+            if (message.text) {
               handleSend(message.text);
             }
           }}
         >
           <PromptInputBody>
-            <PromptInputTextarea
-              placeholder={
-                authWarning
-                  ? "Configure authentication to start chatting..."
-                  : "Send a message..."
-              }
-              disabled={!!authWarning}
-            />
+            <PromptInputTextarea placeholder="Send a message..." />
           </PromptInputBody>
           <PromptInputFooter className="bg-secondary border-t border-neutral-softest rounded-bl-lg rounded-br-lg">
             <PromptInputTools>{additionalActions}</PromptInputTools>
             <PromptInputSubmit
-              disabled={status === "streaming" || !!authWarning}
+              disabled={status === "streaming"}
               status={status}
             />
           </PromptInputFooter>

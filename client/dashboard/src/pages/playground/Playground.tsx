@@ -13,8 +13,13 @@ import { useRoutes } from "@/routes";
 import {
   useListChats,
   useListToolsets,
+  useListEnvironments,
   useInstance,
+  useUpdateToolsetMutation,
+  queryKeyInstance,
+  queryKeyListToolsets,
 } from "@gram/client/react-query/index.js";
+import { useQueryClient } from "@tanstack/react-query";
 import { Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLatestDeployment } from "@/hooks/toolTypes";
@@ -23,7 +28,6 @@ import { toast } from "sonner";
 import { v7 as uuidv7 } from "uuid";
 import { asTool, Tool } from "@/lib/toolTypes";
 import { ToolsetsEmptyState } from "../toolsets/ToolsetsEmptyState";
-import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import {
   Select,
   SelectContent,
@@ -278,9 +282,13 @@ export function ToolsetPanel({
   const [editingTool, setEditingTool] = useState<Tool | null>(null);
 
   const { data: toolsetsData } = useListToolsets();
+  const { data: environmentsData } = useListEnvironments();
   const routes = useRoutes();
+  const updateToolsetMutation = useUpdateToolsetMutation();
+  const queryClient = useQueryClient();
 
   const toolsets = toolsetsData?.toolsets;
+  const environments = environmentsData?.environments;
 
   const selectedToolset = configRef.current.toolsetSlug;
   const selectedEnvironment = configRef.current.environmentSlug;
@@ -340,18 +348,93 @@ export function ToolsetPanel({
   }, [configRef, setSelectedEnvironment, toolset]);
 
   // Transform tools data for the config panel
-  const apiTools = useMemo(
+  const tools = useMemo(
     () => instanceData?.tools?.map(asTool) ?? [],
     [instanceData?.tools],
   );
-  const [workingTools, setWorkingTools] = useState<Tool[]>([]);
-  useEffect(() => {
-    setWorkingTools(apiTools);
-  }, [apiTools]);
-  const tools = workingTools.length > 0 ? workingTools : apiTools;
 
   // Track which tools are selected for bulk actions
   const [enabledTools, setEnabledTools] = useState<Set<string>>(new Set());
+
+  // Handler for adding tools to the toolset
+  const handleAddTools = (toolUrns: string[]) => {
+    if (!toolset) return;
+    const currentUrns = toolset.toolUrns || [];
+    const updatedUrns = [...currentUrns, ...toolUrns];
+
+    updateToolsetMutation.mutate(
+      {
+        request: {
+          slug: toolset.slug,
+          updateToolsetRequestBody: {
+            toolUrns: updatedUrns,
+          },
+        },
+      },
+      {
+        onSuccess: () => {
+          // Invalidate both toolsets and instance queries to refresh the UI
+          queryClient.invalidateQueries({
+            queryKey: queryKeyListToolsets({}),
+          });
+          if (selectedToolset && selectedEnvironment) {
+            queryClient.invalidateQueries({
+              queryKey: queryKeyInstance({
+                toolsetSlug: selectedToolset,
+                environmentSlug: selectedEnvironment,
+              }),
+            });
+          }
+          toast.success(
+            `Added ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""}`,
+          );
+        },
+        onError: () => {
+          toast.error("Failed to add tools");
+        },
+      },
+    );
+  };
+
+  // Handler for removing tools from the toolset
+  const handleRemoveTools = (toolUrns: string[]) => {
+    if (!toolset) return;
+    const currentUrns = toolset.toolUrns || [];
+    const updatedUrns = currentUrns.filter((urn) => !toolUrns.includes(urn));
+
+    updateToolsetMutation.mutate(
+      {
+        request: {
+          slug: toolset.slug,
+          updateToolsetRequestBody: {
+            toolUrns: updatedUrns,
+          },
+        },
+      },
+      {
+        onSuccess: () => {
+          // Invalidate both toolsets and instance queries to refresh the UI
+          queryClient.invalidateQueries({
+            queryKey: queryKeyListToolsets({}),
+          });
+          if (selectedToolset && selectedEnvironment) {
+            queryClient.invalidateQueries({
+              queryKey: queryKeyInstance({
+                toolsetSlug: selectedToolset,
+                environmentSlug: selectedEnvironment,
+              }),
+            });
+          }
+          toast.success(
+            `Removed ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""}`,
+          );
+        },
+        onError: () => {
+          toast.error("Failed to remove tools");
+        },
+      },
+    );
+  };
 
   // If listToolsets has completed and there's nothing there, show the onboarding panel
   if (toolsets !== undefined && !configRef.current.toolsetSlug) {
@@ -402,10 +485,21 @@ export function ToolsetPanel({
           </Select>
         }
         environmentSelector={
-          <EnvironmentDropdown
-            selectedEnvironment={selectedEnvironment}
-            setSelectedEnvironment={setSelectedEnvironment}
-          />
+          <Select
+            value={selectedEnvironment ?? undefined}
+            onValueChange={setSelectedEnvironment}
+          >
+            <SelectTrigger size="sm" className="w-full">
+              <SelectValue placeholder="Select environment" />
+            </SelectTrigger>
+            <SelectContent>
+              {environments?.map((env) => (
+                <SelectItem key={env.slug} value={env.slug}>
+                  {env.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         }
         authSettings={
           toolset && instanceData?.environment ? (
@@ -460,20 +554,8 @@ export function ToolsetPanel({
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           toolset={toolset as any}
           currentTools={tools}
-          onAddTools={(toolUrns, toolsToAdd) => {
-            setWorkingTools((prev) => [...prev, ...toolsToAdd]);
-            toast.success(
-              `Added ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""}`,
-            );
-          }}
-          onRemoveTools={(toolUrns) => {
-            setWorkingTools((prev) =>
-              prev.filter((tool) => !toolUrns.includes(tool.toolUrn)),
-            );
-            toast.success(
-              `Removed ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""}`,
-            );
-          }}
+          onAddTools={(toolUrns) => handleAddTools(toolUrns)}
+          onRemoveTools={(toolUrns) => handleRemoveTools(toolUrns)}
           initialGroup={manageToolsGroup}
         />
       )}
@@ -485,16 +567,15 @@ export function ToolsetPanel({
         tool={editingTool}
         documentIdToName={documentIdToName}
         functionIdToName={functionIdToName}
-        onSave={(updates) => {
-          // TODO: Update tool in working state
-          console.log("Update tool:", updates);
+        onSave={() => {
+          // TODO: Implement tool variation updates
           toast.success("Tool updated");
           setEditingTool(null);
         }}
         onRemove={() => {
-          // TODO: Remove tool from working state
-          console.log("Remove tool:", editingTool?.toolUrn);
-          toast.success("Tool removed");
+          if (editingTool?.toolUrn) {
+            handleRemoveTools([editingTool.toolUrn]);
+          }
           setEditingTool(null);
         }}
       />

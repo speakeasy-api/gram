@@ -115,6 +115,7 @@ export function PlaygroundAuth({ toolset, environment }: PlaygroundAuthProps) {
         Configure auth in the{" "}
         <routes.toolsets.toolset.Link
           params={[toolset.slug]}
+          hash="auth"
           className="underline hover:text-foreground"
         >
           toolset settings
