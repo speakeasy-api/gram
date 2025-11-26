@@ -1,5 +1,20 @@
 # server
 
+## 0.11.0
+
+### Minor Changes
+
+- 6716410: Add the ability to attach gram environments at the toolset level for easier configuration set up
+
+### Patch Changes
+
+- a2ff014: fix: incorrect mapping of openrouter model pricing
+- e34b505: updating of openrouter key limits for chat based usage
+- e016bcc: fix: capture of openrouter usage data streaming
+- 2788cf3: Fixed a type mismatch in the Polar client when creating events with metadata
+  following an update to the Polar Go SDK
+- 38b9b22: Apply simple HTTP status code heuristic for estimating successful tool calls
+
 ## 0.10.6
 
 ### Patch Changes
