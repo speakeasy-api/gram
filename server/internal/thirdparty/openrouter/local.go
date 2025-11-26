@@ -27,7 +27,7 @@ func (o *Development) GetCreditsUsed(ctx context.Context, orgID string) (float64
 	return 12.5, 10, nil // arbitrary local numbers
 }
 
-func (o *Development) GetModelPricing(ctx context.Context, canonicalSlug string) (*mv.ModelPricing, error) {
+func (o *Development) GetModelPricing(ctx context.Context, id string) (*mv.ModelPricing, error) {
 	// Development mode doesn't have access to cached pricing
 	return nil, errors.New("model pricing not available in development mode")
 }

@@ -71,7 +71,7 @@ type Provisioner interface {
 	ProvisionAPIKey(ctx context.Context, orgID string) (string, error)
 	RefreshAPIKeyLimit(ctx context.Context, orgID string) (int, error)
 	GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error)
-	GetModelPricing(ctx context.Context, canonicalSlug string) (*mv.ModelPricing, error)
+	GetModelPricing(ctx context.Context, id string) (*mv.ModelPricing, error)
 	FetchAndCacheModelPricing(ctx context.Context) error
 }
 
@@ -372,7 +372,6 @@ type modelPricingResponse struct {
 // ModelInfo represents information about an OpenRouter model
 type ModelInfo struct {
 	ID            string               `json:"id"`
-	CanonicalSlug string               `json:"canonical_slug"`
 	Name          string               `json:"name"`
 	Pricing       modelPricingResponse `json:"pricing"`
 	ContextLength int                  `json:"context_length"`
@@ -419,17 +418,17 @@ func (o *OpenRouter) FetchAndCacheModelPricing(ctx context.Context) error {
 
 	// Cache pricing data for each model using canonical slug as key
 	for _, model := range modelsResp.Data {
-		if model.CanonicalSlug == "" {
-			o.logger.WarnContext(ctx, "skipping model with empty canonical slug")
+		if model.ID == "" {
+			o.logger.WarnContext(ctx, "skipping model with empty id")
 			continue
 		}
 
 		pricing := mv.ModelPricing{
-			CanonicalSlug: model.CanonicalSlug,
-			Prompt:        model.Pricing.Prompt,
-			Completion:    model.Pricing.Completion,
-			Request:       model.Pricing.Request,
-			Image:         model.Pricing.Image,
+			ID:         model.ID,
+			Prompt:     model.Pricing.Prompt,
+			Completion: model.Pricing.Completion,
+			Request:    model.Pricing.Request,
+			Image:      model.Pricing.Image,
 		}
 
 		if err := o.modelPricingCache.Store(ctx, pricing); err != nil {
@@ -449,17 +448,17 @@ func (o *OpenRouter) FetchAndCacheModelPricing(ctx context.Context) error {
 
 // GetModelPricing retrieves pricing data for a model from Redis cache using its canonical slug.
 // Returns an error if the pricing data is not found in cache or if cache is not configured.
-func (o *OpenRouter) GetModelPricing(ctx context.Context, canonicalSlug string) (*mv.ModelPricing, error) {
-	if canonicalSlug == "" {
-		return nil, errors.New("canonical slug is required")
+func (o *OpenRouter) GetModelPricing(ctx context.Context, id string) (*mv.ModelPricing, error) {
+	if id == "" {
+		return nil, errors.New("model id is required")
 	}
 
-	cacheKey := mv.ModelPricingCacheKey(canonicalSlug)
+	cacheKey := mv.ModelPricingCacheKey(id)
 	pricing, err := o.modelPricingCache.Get(ctx, cacheKey)
 	if err != nil {
 		o.logger.DebugContext(ctx, "model pricing not found in cache",
 			attr.SlogError(err))
-		return nil, fmt.Errorf("model pricing not found for canonical slug %s: %w", canonicalSlug, err)
+		return nil, fmt.Errorf("model pricing not found for id %s: %w", id, err)
 	}
 
 	return &pricing, nil
