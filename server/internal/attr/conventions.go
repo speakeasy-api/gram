@@ -13,6 +13,7 @@ type Key = attribute.Key
 
 const (
 	ErrorMessageKey                   = semconv.ErrorMessageKey
+	ExceptionStacktraceKey            = semconv.ExceptionStacktraceKey
 	ContainerIDKey                    = semconv.ContainerIDKey
 	ContainerNetworkIDKey             = attribute.Key("container.network.id")
 	FilePathKey                       = semconv.FilePathKey
@@ -174,6 +175,11 @@ func SlogError(v error) slog.Attr      { return slog.String(string(ErrorMessageK
 
 func ErrorMessage(v string) attribute.KeyValue { return ErrorMessageKey.String(v) }
 func SlogErrorMessage(v string) slog.Attr      { return slog.String(string(ErrorMessageKey), v) }
+
+func ExceptionStacktrace(v string) attribute.KeyValue { return ExceptionStacktraceKey.String(v) }
+func SlogExceptionStacktrace(v string) slog.Attr {
+	return slog.String(string(ExceptionStacktraceKey), v)
+}
 
 func ContainerID(v string) attribute.KeyValue { return ContainerIDKey.String(v) }
 func SlogContainerID(v string) slog.Attr      { return slog.String(string(ContainerIDKey), v) }
