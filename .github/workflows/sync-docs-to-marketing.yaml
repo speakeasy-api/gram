@@ -134,7 +134,7 @@ jobs:
             echo "_No file changes detected after sync._" >> ../PR_BODY.md
           fi
       - name: Create pull request in Marketing
-        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c  # v6.1.0
+        uses: peter-evans/create-pull-request@84ae59a2cdc2258d6fa0732dd66352dddae2a412  # v7.0.9
         with:
           token: ${{ secrets.SERVICE_BOT_TOKEN }}
           path: marketing-repo
