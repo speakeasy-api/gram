@@ -16,11 +16,11 @@ const (
 	ProcessExitCodeKey     = semconv.ProcessExitCodeKey
 	ServerAddressKey       = semconv.ServerAddressKey
 
-	ComponentKey             = attribute.Key("gram.component")
-	ProjectIDKey             = attribute.Key("gram.project.id")
-	ProjectSlugKey           = attribute.Key("gram.project.slug")
-	DeploymentIDKey          = attribute.Key("gram.deployment.id")
-	DeploymentFunctionsIDKey = attribute.Key("gram.deployment.functions.id")
+	ComponentKey    = attribute.Key("gram.component")
+	ProjectIDKey    = attribute.Key("gram.project.id")
+	ProjectSlugKey  = attribute.Key("gram.project.slug")
+	DeploymentIDKey = attribute.Key("gram.deployment.id")
+	FunctionIDKey   = attribute.Key("gram.function.id")
 
 	SpanIDKey         = attribute.Key("span.id")
 	TraceIDKey        = attribute.Key("trace.id")
@@ -60,9 +60,9 @@ func SlogProjectSlug(v string) slog.Attr      { return slog.String(string(Projec
 func DeploymentID(v string) attribute.KeyValue { return DeploymentIDKey.String(v) }
 func SlogDeploymentID(v string) slog.Attr      { return slog.String(string(DeploymentIDKey), v) }
 
-func DeploymentFunctionsID(v string) attribute.KeyValue { return DeploymentFunctionsIDKey.String(v) }
-func SlogDeploymentFunctionsID(v string) slog.Attr {
-	return slog.String(string(DeploymentFunctionsIDKey), v)
+func FunctionID(v string) attribute.KeyValue { return FunctionIDKey.String(v) }
+func SlogFunctionID(v string) slog.Attr {
+	return slog.String(string(FunctionIDKey), v)
 }
 
 func SpanID(v string) attribute.KeyValue { return SpanIDKey.String(v) }
