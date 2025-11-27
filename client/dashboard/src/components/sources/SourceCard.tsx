@@ -137,7 +137,7 @@ export function SourceCard({
             </TooltipTrigger>
             <TooltipContent inverted>
               <div className="text-sm">
-                <div className="font-medium mb-1">Environment Attached</div>
+                <div className="font-medium mb-1">Attached Environment</div>
                 <div className="text-muted-foreground">
                   {sourceEnvironment.data?.name || "Unknown"}
                 </div>
@@ -158,7 +158,7 @@ export function SourceCard({
             </TooltipTrigger>
             <TooltipContent inverted>
               <div className="text-sm">
-                <div className="font-medium mb-1">Recently Updated</div>
+                <div className="font-medium mb-1">Last Updated</div>
                 <div className="text-muted-foreground">
                   {asset.updatedAt
                     ? format(new Date(asset.updatedAt), "PPpp")
