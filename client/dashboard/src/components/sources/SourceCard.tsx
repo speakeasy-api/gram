@@ -83,7 +83,7 @@ export function SourceCard({
     <routes.sources.source.Link
       key={asset.id}
       params={[sourceKind, asset.slug]}
-      className="bg-secondary max-w-sm text-card-foreground flex flex-col rounded-md border px-3 py-3 hover:bg-surface-tertiary transition-colors"
+      className="bg-secondary max-w-sm text-card-foreground flex flex-col rounded-md border px-3 py-3 hover:brightness-95 transition-colors hover:no-underline"
     >
       <div className="flex items-center justify-between mb-2">
         <IconComponent className="size-5 shrink-0" strokeWidth={2} />
