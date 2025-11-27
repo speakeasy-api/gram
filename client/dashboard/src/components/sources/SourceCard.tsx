@@ -8,16 +8,21 @@ import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components";
-import { useLatestDeployment } from "@gram/client/react-query/index.js";
+import {
+  useLatestDeployment,
+  useGetSourceEnvironment,
+} from "@gram/client/react-query/index.js";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
 import {
   CircleAlertIcon,
   FileCode,
   SquareFunction,
   Sparkles,
+  Globe,
 } from "lucide-react";
 import { Badge } from "@speakeasy-api/moonshine";
 import { isAfter, subDays } from "date-fns";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 
 export type NamedAsset = Asset & {
   deploymentAssetId: string;
@@ -50,6 +55,26 @@ export function SourceCard({
   const isRecentlyUpdated = asset.updatedAt
     ? isAfter(new Date(asset.updatedAt), subDays(new Date(), 7))
     : false;
+
+  // Check if environment is attached
+  const sourceEnvironment = useGetSourceEnvironment(
+    {
+      sourceKind: sourceKind as "http" | "function",
+      sourceSlug: asset.slug,
+    },
+    undefined,
+    {
+      retry: (_, err) => {
+        if (err instanceof GramError && err.statusCode === 404) {
+          return false;
+        }
+        return true;
+      },
+      throwOnError: false,
+    },
+  );
+
+  const hasEnvironment = !!sourceEnvironment.data?.id;
 
   const actions = [
     ...(asset.type === "openapi"
@@ -92,8 +117,14 @@ export function SourceCard({
         </div>
       </div>
 
-      <div className="leading-none mb-1.5 flex items-center gap-2">
+      <div className="leading-none mb-1.5 flex items-center gap-2 flex-wrap">
         <Type>{asset.name}</Type>
+        {hasEnvironment && (
+          <Badge variant="success" className="flex items-center gap-1 text-xs">
+            <Globe className="h-3 w-3" />
+            Environment
+          </Badge>
+        )}
         {isRecentlyUpdated && (
           <Badge
             variant="information"
