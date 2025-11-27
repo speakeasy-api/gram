@@ -96,9 +96,8 @@ export function SourceCard({
         <Type>{asset.name}</Type>
         {isRecentlyUpdated && (
           <Badge
-            variant="primary"
-            size="sm"
-            className="flex items-center gap-1"
+            variant="information"
+            className="flex items-center gap-1 text-xs"
           >
             <Sparkles className="h-3 w-3" />
             Updated

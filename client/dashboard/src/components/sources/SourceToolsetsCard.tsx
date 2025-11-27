@@ -2,10 +2,16 @@ import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
 import { Badge } from "@speakeasy-api/moonshine";
 import { Package } from "lucide-react";
-import { Toolset } from "@gram/client/models/components";
+
+type ToolsetLike = {
+  slug: string;
+  name: string;
+  description?: string;
+  toolUrns?: string[];
+};
 
 interface SourceToolsetsCardProps {
-  toolsetsUsingSource: Toolset[];
+  toolsetsUsingSource: ToolsetLike[];
   sourceToolUrns: Set<string>;
 }
 
@@ -13,7 +19,7 @@ function ToolsetItem({
   toolset,
   sourceToolUrns,
 }: {
-  toolset: Toolset;
+  toolset: ToolsetLike;
   sourceToolUrns: Set<string>;
 }) {
   const routes = useRoutes();
@@ -36,7 +42,7 @@ function ToolsetItem({
           </Type>
         )}
       </div>
-      <Badge variant="outline" className="ml-2">
+      <Badge variant="neutral" className="ml-2">
         {toolCount} {toolCount === 1 ? "tool" : "tools"}
       </Badge>
     </routes.toolsets.toolset.Link>

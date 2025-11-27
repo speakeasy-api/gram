@@ -261,23 +261,19 @@ export default function SourceDetails() {
             <Heading variant="h2" className="normal-case">
               {source?.name || sourceSlug}
             </Heading>
-            <Badge variant="outline">{sourceType}</Badge>
+            <Badge variant="neutral">{sourceType}</Badge>
           </div>
           <div className="flex gap-2">
             <Button
               variant="secondary"
               size="sm"
-              icon={<Eye />}
               onClick={() => setIsModalOpen(true)}
             >
+              <Eye className="h-4 w-4" />
               View {isOpenAPI ? "Spec" : "Manifest"}
             </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={<Download />}
-              onClick={handleDownload}
-            >
+            <Button variant="secondary" size="sm" onClick={handleDownload}>
+              <Download className="h-4 w-4" />
               Download
             </Button>
           </div>
@@ -307,7 +303,7 @@ export default function SourceDetails() {
                   <Type className="text-sm text-muted-foreground mb-1">
                     Runtime
                   </Type>
-                  <Type className="font-medium">{source.runtime}</Type>
+                  <Type className="font-medium">{String(source.runtime)}</Type>
                 </div>
               )}
               <div>
@@ -492,7 +488,10 @@ export default function SourceDetails() {
         {/* View Spec/Source Modal */}
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
           <Dialog.Content className="min-w-[80vw] h-[90vh]">
-            <ViewSourceDialogContent source={source} isOpenAPI={isOpenAPI} />
+            <ViewSourceDialogContent
+              source={source || null}
+              isOpenAPI={isOpenAPI}
+            />
           </Dialog.Content>
         </Dialog>
       </Page.Body>
