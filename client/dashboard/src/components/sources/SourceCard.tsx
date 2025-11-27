@@ -21,7 +21,7 @@ import {
   Globe,
 } from "lucide-react";
 import { Badge } from "@speakeasy-api/moonshine";
-import { isAfter, subDays } from "date-fns";
+import { isAfter, subDays, format } from "date-fns";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 
 export type NamedAsset = Asset & {
@@ -120,19 +120,52 @@ export function SourceCard({
       <div className="leading-none mb-1.5 flex items-center gap-2 flex-wrap">
         <Type>{asset.name}</Type>
         {hasEnvironment && (
-          <Badge variant="success" className="flex items-center gap-1 text-xs">
-            <Globe className="h-3 w-3" />
-            Environment
-          </Badge>
+          <HoverCard>
+            <HoverCardTrigger className="cursor-default">
+              <Badge
+                variant="success"
+                className="flex items-center gap-1 text-xs"
+              >
+                <Globe className="h-3 w-3" />
+                Env
+              </Badge>
+            </HoverCardTrigger>
+            <HoverCardPortal>
+              <HoverCardContent side="top" className="text-sm">
+                <div>
+                  <div className="font-medium mb-1">Environment Attached</div>
+                  <div className="text-muted-foreground">
+                    {sourceEnvironment.data?.name || "Unknown"}
+                  </div>
+                </div>
+              </HoverCardContent>
+            </HoverCardPortal>
+          </HoverCard>
         )}
         {isRecentlyUpdated && (
-          <Badge
-            variant="information"
-            className="flex items-center gap-1 text-xs"
-          >
-            <Sparkles className="h-3 w-3" />
-            Updated
-          </Badge>
+          <HoverCard>
+            <HoverCardTrigger className="cursor-default">
+              <Badge
+                variant="information"
+                className="flex items-center gap-1 text-xs"
+              >
+                <Sparkles className="h-3 w-3" />
+                Updated
+              </Badge>
+            </HoverCardTrigger>
+            <HoverCardPortal>
+              <HoverCardContent side="top" className="text-sm">
+                <div>
+                  <div className="font-medium mb-1">Recently Updated</div>
+                  <div className="text-muted-foreground">
+                    {asset.updatedAt
+                      ? format(new Date(asset.updatedAt), "PPpp")
+                      : "Unknown"}
+                  </div>
+                </div>
+              </HoverCardContent>
+            </HoverCardPortal>
+          </HoverCard>
         )}
       </div>
 
