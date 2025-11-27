@@ -5,15 +5,18 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/agents"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 type ExecuteModelCallInput struct {
-	OrgID    string
-	Messages []openrouter.OpenAIChatMessage
-	ToolDefs []openrouter.Tool
+	OrgID       string
+	ProjectID   string
+	Messages    []openrouter.OpenAIChatMessage
+	ToolDefs    []openrouter.Tool
+	Temperature *float64
+	Model       string
 }
 
 type ExecuteModelCallOutput struct {
@@ -33,12 +36,12 @@ func NewExecuteModelCall(logger *slog.Logger, agentsService *agents.Service) *Ex
 	}
 }
 
-func (a *ExecuteModelCall) Execute(ctx context.Context, input ExecuteModelCallInput) (*ExecuteModelCallOutput, error) {
+func (a *ExecuteModelCall) Do(ctx context.Context, input ExecuteModelCallInput) (*ExecuteModelCallOutput, error) {
 	a.logger.InfoContext(ctx, "executing model call",
 		attr.SlogOrganizationID(input.OrgID))
 
 	// Use the chat client from agents service
-	msg, err := a.agentsService.GetCompletionFromMessages(ctx, input.OrgID, input.Messages, input.ToolDefs)
+	msg, err := a.agentsService.GetCompletionFromMessages(ctx, input.OrgID, input.ProjectID, input.Messages, input.ToolDefs, input.Temperature, input.Model)
 	if err != nil {
 		a.logger.ErrorContext(ctx, "failed to get completion", attr.SlogError(err))
 		return &ExecuteModelCallOutput{
@@ -52,4 +55,3 @@ func (a *ExecuteModelCall) Execute(ctx context.Context, input ExecuteModelCallIn
 		Error:   nil,
 	}, nil
 }
-

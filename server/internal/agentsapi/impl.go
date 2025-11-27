@@ -178,11 +178,7 @@ func (s *Service) HandleResponse(w http.ResponseWriter, r *http.Request) error {
 			Text: agents.ResponseText{
 				Format: agents.TextFormat{Type: "text"},
 			},
-			Usage: agents.ResponseUsage{
-				InputTokens:  0,
-				OutputTokens: 0,
-				TotalTokens:  0,
-			},
+			Result: "",
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -194,15 +190,15 @@ func (s *Service) HandleResponse(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Wait for workflow to complete (synchronous mode)
-	var response agents.ResponseOutput
-	if err := workflowRun.Get(authorizedCtx, &response); err != nil {
+	var workflowResult agents.AgentsResponseWorkflowResult
+	if err := workflowRun.Get(authorizedCtx, &workflowResult); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "workflow execution failed").Log(ctx, s.logger)
 	}
 
-	// Write response
+	// Write response (extract just ResponseOutput from wrapper)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+	if err := json.NewEncoder(w).Encode(workflowResult.ResponseOutput); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to encode response").Log(ctx, s.logger)
 	}
 
@@ -246,6 +242,15 @@ func (s *Service) HandleGetResponse(w http.ResponseWriter, r *http.Request) erro
 	// Check workflow status
 	workflowStatus := desc.WorkflowExecutionInfo.Status
 
+	// Query workflow for request parameters
+	var requestParams agents.ResponseRequest
+	queryValue, queryErr := s.temporalClient.QueryWorkflow(authorizedCtx, responseID, "", "request")
+	if queryErr != nil {
+		s.logger.DebugContext(ctx, "failed to query workflow request parameters", attr.SlogError(queryErr))
+	} else if err := queryValue.Get(&requestParams); err != nil {
+		s.logger.DebugContext(ctx, "failed to decode workflow request parameters", attr.SlogError(err))
+	}
+
 	var response agents.ResponseOutput
 
 	switch workflowStatus {
@@ -256,24 +261,21 @@ func (s *Service) HandleGetResponse(w http.ResponseWriter, r *http.Request) erro
 			CreatedAt:          time.Now().Unix(),
 			Status:             "in_progress",
 			Error:              nil,
-			Instructions:       nil,
-			Model:              "",
+			Instructions:       requestParams.Instructions,
+			Model:              requestParams.Model,
 			Output:             []agents.OutputItem{},
-			PreviousResponseID: nil,
-			Temperature:        1.0,
+			PreviousResponseID: requestParams.PreviousResponseID,
+			Temperature:        getTemperature(requestParams.Temperature),
 			Text: agents.ResponseText{
 				Format: agents.TextFormat{Type: "text"},
 			},
-			Usage: agents.ResponseUsage{
-				InputTokens:  0,
-				OutputTokens: 0,
-				TotalTokens:  0,
-			},
+			Result: "",
 		}
 	case 2: // Completed
-		// Workflow is complete, get the result
+		// Workflow is complete, get the result wrapper and extract ResponseOutput
 		workflowRun := s.temporalClient.GetWorkflow(authorizedCtx, responseID, "")
-		err = workflowRun.Get(authorizedCtx, &response)
+		var workflowResult agents.AgentsResponseWorkflowResult
+		err = workflowRun.Get(authorizedCtx, &workflowResult)
 		if err != nil {
 			errMsg := err.Error()
 			response = agents.ResponseOutput{
@@ -282,20 +284,18 @@ func (s *Service) HandleGetResponse(w http.ResponseWriter, r *http.Request) erro
 				CreatedAt:          time.Now().Unix(),
 				Status:             "failed",
 				Error:              &errMsg,
-				Instructions:       nil,
-				Model:              "",
+				Instructions:       requestParams.Instructions,
+				Model:              requestParams.Model,
 				Output:             []agents.OutputItem{},
-				PreviousResponseID: nil,
-				Temperature:        1.0,
+				PreviousResponseID: requestParams.PreviousResponseID,
+				Temperature:        getTemperature(requestParams.Temperature),
 				Text: agents.ResponseText{
 					Format: agents.TextFormat{Type: "text"},
 				},
-				Usage: agents.ResponseUsage{
-					InputTokens:  0,
-					OutputTokens: 0,
-					TotalTokens:  0,
-				},
+				Result: errMsg,
 			}
+		} else {
+			response = workflowResult.ResponseOutput
 		}
 	default:
 		// Workflow failed, cancelled, or terminated
@@ -306,19 +306,15 @@ func (s *Service) HandleGetResponse(w http.ResponseWriter, r *http.Request) erro
 			CreatedAt:          time.Now().Unix(),
 			Status:             "failed",
 			Error:              &errMsg,
-			Instructions:       nil,
-			Model:              "",
+			Instructions:       requestParams.Instructions,
+			Model:              requestParams.Model,
 			Output:             []agents.OutputItem{},
-			PreviousResponseID: nil,
-			Temperature:        1.0,
+			PreviousResponseID: requestParams.PreviousResponseID,
+			Temperature:        getTemperature(requestParams.Temperature),
 			Text: agents.ResponseText{
 				Format: agents.TextFormat{Type: "text"},
 			},
-			Usage: agents.ResponseUsage{
-				InputTokens:  0,
-				OutputTokens: 0,
-				TotalTokens:  0,
-			},
+			Result: "",
 		}
 	}
 
@@ -336,5 +332,5 @@ func getTemperature(temp *float64) float64 {
 	if temp != nil {
 		return *temp
 	}
-	return 1.0
+	return 0.5
 }

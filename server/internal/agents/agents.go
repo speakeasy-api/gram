@@ -3,9 +3,11 @@ package agents
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"mime"
 	"net/http"
 	"strings"
 	"time"
@@ -17,6 +19,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contenttypes"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
@@ -29,40 +32,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// Request types matching OpenAI Responses API
-
-type ResponseMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
+// ResponseInput represents the input to an agent response.
+// It can be any JSON value (string, array, object, etc.) - parsing is handled in PreprocessAgentsInput
 type ResponseInput any
-
-type Toolset struct {
-	ToolsetSlug     string            `json:"toolset_slug"`
-	EnvironmentSlug string            `json:"environment_slug"`
-	Headers         map[string]string `json:"headers"`
-}
-
-type ResponseRequest struct {
-	ProjectSlug        string        `json:"project_slug"`
-	Model              string        `json:"model"`
-	Instructions       *string       `json:"instructions,omitempty"`
-	Input              ResponseInput `json:"input"` // Can be string or []ResponseMessage
-	PreviousResponseID *string       `json:"previous_response_id,omitempty"`
-	Temperature        *float64      `json:"temperature,omitempty"`
-	Toolsets           []Toolset     `json:"toolsets,omitempty"`
-	Async              *bool         `json:"async,omitempty"`
-}
-
-// Response types matching OpenAI Responses API
-
-type OutputTextContent struct {
-	Type string `json:"type"` // "output_text"
-	Text string `json:"text"`
-}
 
 // OutputMessage represents an output message from the model
 type OutputMessage struct {
@@ -71,6 +46,11 @@ type OutputMessage struct {
 	Status  string              `json:"status"` // "in_progress", "completed", or "incomplete"
 	Role    string              `json:"role"`   // "assistant"
 	Content []OutputTextContent `json:"content"`
+}
+
+type OutputTextContent struct {
+	Type string `json:"type"` // "output_text"
+	Text string `json:"text"`
 }
 
 // MCPToolCall represents an MCP tool invocation in OpenAI Responses API format
@@ -86,8 +66,93 @@ type MCPToolCall struct {
 }
 
 // OutputItem is a union type for different output types
-// Can be one of: OutputMessage, MCPToolCall, FunctionToolCall
-type OutputItem any
+// Can be one of: OutputMessage, MCPToolCall
+type OutputItem interface {
+	outputItemType() string
+}
+
+func (o OutputMessage) outputItemType() string { return o.Type }
+func (o MCPToolCall) outputItemType() string   { return o.Type }
+
+// OutputItems is a wrapper for []OutputItem that provides custom JSON unmarshaling
+type OutputItems []OutputItem
+
+// UnmarshalJSON implements json.Unmarshaler for OutputItems
+func (o *OutputItems) UnmarshalJSON(data []byte) error {
+	var raw []json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("unmarshal output items array: %w", err)
+	}
+
+	items := make([]OutputItem, 0, len(raw))
+	for _, itemData := range raw {
+		// Try to determine the type by looking at the "type" field
+		var typeCheck struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(itemData, &typeCheck); err != nil {
+			return fmt.Errorf("unmarshal output item type: %w", err)
+		}
+
+		switch typeCheck.Type {
+		case "message":
+			var msg OutputMessage
+			if err := json.Unmarshal(itemData, &msg); err != nil {
+				return fmt.Errorf("unmarshal OutputMessage: %w", err)
+			}
+			items = append(items, msg)
+		case "mcp_call":
+			var toolCall MCPToolCall
+			if err := json.Unmarshal(itemData, &toolCall); err != nil {
+				return fmt.Errorf("unmarshal MCPToolCall: %w", err)
+			}
+			items = append(items, toolCall)
+		default:
+			return fmt.Errorf("unknown output item type: %s", typeCheck.Type)
+		}
+	}
+
+	*o = items
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler for OutputItems
+func (o OutputItems) MarshalJSON() ([]byte, error) {
+	if o == nil {
+		return []byte(""), nil
+	}
+	data, err := json.Marshal([]OutputItem(o))
+	if err != nil {
+		return nil, fmt.Errorf("marshal output items: %w", err)
+	}
+	return data, nil
+}
+
+type Toolset struct {
+	ToolsetSlug     string `json:"toolset_slug"`
+	EnvironmentSlug string `json:"environment_slug"`
+}
+
+type SubAgent struct {
+	Instructions    string     `json:"instructions"`
+	Name            string     `json:"name"`
+	Description     string     `json:"description"`
+	Tools           []urn.Tool `json:"tools"`
+	Toolsets        []Toolset  `json:"toolsets"`
+	EnvironmentSlug string     `json:"environment_slug"`
+}
+
+type ResponseRequest struct {
+	ProjectSlug        string        `json:"project_slug"`
+	Model              string        `json:"model"`
+	Instructions       *string       `json:"instructions,omitempty"`
+	Input              ResponseInput `json:"input"` // Can be string or []OutputMessage
+	PreviousResponseID *string       `json:"previous_response_id,omitempty"`
+	Temperature        *float64      `json:"temperature,omitempty"`
+	Toolsets           []Toolset     `json:"toolsets,omitempty"`
+	SubAgents          []SubAgent    `json:"sub_agents,omitempty"`
+	Async              *bool         `json:"async,omitempty"`
+}
 
 type ResponseUsage struct {
 	InputTokens  int `json:"input_tokens"`
@@ -109,29 +174,41 @@ type Reasoning struct {
 }
 
 type ResponseOutput struct {
-	ID                 string        `json:"id"`
-	Object             string        `json:"object"` // "response"
-	CreatedAt          int64         `json:"created_at"`
-	Status             string        `json:"status"` // "completed"
-	Error              *string       `json:"error"`
-	Instructions       *string       `json:"instructions"`
-	Model              string        `json:"model"`
-	Output             []OutputItem  `json:"output"` // Can contain OutputMessage, MCPToolCall, or FunctionToolCall
-	PreviousResponseID *string       `json:"previous_response_id"`
-	Temperature        float64       `json:"temperature"`
-	Text               ResponseText  `json:"text"`
-	Usage              ResponseUsage `json:"usage"`
+	ID                 string       `json:"id"`
+	Object             string       `json:"object"` // "response"
+	CreatedAt          int64        `json:"created_at"`
+	Status             string       `json:"status"` // "completed"
+	Error              *string      `json:"error"`
+	Instructions       *string      `json:"instructions"`
+	Model              string       `json:"model"`
+	Output             OutputItems  `json:"output"` // Can contain OutputMessage, MCPToolCall
+	PreviousResponseID *string      `json:"previous_response_id"`
+	Temperature        float64      `json:"temperature"`
+	Text               ResponseText `json:"text"`
+	Result             string       `json:"result"`
+}
+
+// ExecutionHistory tracks execution metrics for agent workflows
+type ExecutionHistory struct {
+	MainThreadToolCalls int            `json:"main_thread_tool_calls"`
+	SubAgentToolCalls   map[string]int `json:"sub_agent_tool_calls"`
+}
+
+// AgentsResponseWorkflowResult is the wrapper result returned by AgentsResponseWorkflow
+type AgentsResponseWorkflowResult struct {
+	OrgID            string           `json:"org_id"`
+	ResponseOutput   ResponseOutput   `json:"response_output"`
+	ExecutionHistory ExecutionHistory `json:"execution_history"`
 }
 
 type AgentTool struct {
 	Definition  openrouter.Tool
-	Executor    func(ctx context.Context, rawArgs string) (string, error)
-	IsMCPTool   bool   // true if this tool comes from a toolset (MCP server)
-	ServerLabel string // label of the MCP server (e.g., toolset slug)
+	IsMCPTool   bool      // true if this tool comes from a toolset (MCP server)
+	ServerLabel string    // label of the MCP server (e.g., toolset slug)
+	ToolURN     *urn.Tool // URN for the tool, used to create executor when executing
 }
 
 type AgentChatOptions struct {
-	SystemPrompt    *string
 	Toolsets        []Toolset
 	AdditionalTools []AgentTool
 	AgentTimeout    *time.Duration
@@ -210,23 +287,36 @@ type toolCallResult struct {
 }
 
 func formatResult(rw toolCallResponseWriter) (toolCallResult, error) {
-	contentType := rw.Header().Get("Content-Type")
-	if contentType == "" {
-		return toolCallResult{Text: rw.body.String(), Data: ""}, nil
+	body := rw.body.Bytes()
+	if len(body) == 0 {
+		return toolCallResult{Text: "", Data: ""}, nil
 	}
 
-	if strings.Contains(contentType, "text/plain") {
-		return toolCallResult{Text: rw.body.String(), Data: ""}, nil
+	ct := rw.Header().Get("Content-Type")
+	if ct == "" {
+		return toolCallResult{Text: string(body), Data: ""}, nil
 	}
 
-	if strings.Contains(contentType, "application/json") {
-		return toolCallResult{Text: "", Data: rw.body.String()}, nil
+	mt, _, err := mime.ParseMediaType(ct)
+	if err != nil {
+		return toolCallResult{Text: "", Data: ""}, fmt.Errorf("failed to parse content type %q: %w", ct, err)
 	}
 
-	return toolCallResult{Text: rw.body.String(), Data: ""}, nil
+	switch {
+	case strings.HasPrefix(mt, "text/"), contenttypes.IsJSON(mt), contenttypes.IsYAML(mt):
+		return toolCallResult{Text: string(body), Data: ""}, nil
+	case strings.HasPrefix(mt, "image/"):
+		encoded := base64.StdEncoding.EncodeToString(body)
+		return toolCallResult{Text: "", Data: encoded}, nil
+	case strings.HasPrefix(mt, "audio/"):
+		encoded := base64.StdEncoding.EncodeToString(body)
+		return toolCallResult{Text: "", Data: encoded}, nil
+	default:
+		return toolCallResult{Text: string(body), Data: ""}, nil
+	}
 }
 
-// LoadToolsetTools loads tools from a toolset and returns them as AgentTools marked as MCP tools
+// LoadToolsetTools loads tool definitions from a toolset (without executors)
 func (s *Service) LoadToolsetTools(
 	ctx context.Context,
 	projectID uuid.UUID,
@@ -239,41 +329,11 @@ func (s *Service) LoadToolsetTools(
 		return nil, err
 	}
 
-	envRepo := env_repo.New(s.db)
 	toolsetHelpers := toolsets.NewToolsets(s.db)
-
-	// Use provided environment slug, or fall back to default
-	envSlug := environmentSlug
-	if envSlug == "" {
-		if toolset.DefaultEnvironmentSlug == nil {
-			return nil, fmt.Errorf("toolset has no default environment slug")
-		}
-		envSlug = string(*toolset.DefaultEnvironmentSlug)
-	}
-
-	// Find environment by slug
-	envModel, err := envRepo.GetEnvironmentBySlug(ctx, env_repo.GetEnvironmentBySlugParams{
-		ProjectID: projectID,
-		Slug:      strings.ToLower(envSlug),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to load environment: %w", err)
-	}
-
-	// Load environment entries
-	environmentEntries, err := s.env.ListEnvironmentEntries(ctx, projectID, envModel.ID, false)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load environment entries: %w", err)
-	}
 
 	agentTools := make([]AgentTool, 0, len(toolset.Tools))
 	for _, tool := range toolset.Tools {
 		if tool == nil {
-			continue
-		}
-
-		if tool.HTTPToolDefinition == nil {
-			// TODO: support other tool types
 			continue
 		}
 
@@ -282,100 +342,216 @@ func (s *Service) LoadToolsetTools(
 			return nil, fmt.Errorf("failed to get tool urn: %w", err)
 		}
 
-		httpTool := tool.HTTPToolDefinition
+		tool := conv.ToBaseTool(tool)
 
-		// Capture for closure
-		name := httpTool.Name
-		projID := projectID
-
-		executor := func(ctx context.Context, rawArgs string) (string, error) {
-			plan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, *toolURN, projID)
-			if err != nil {
-				return "", fmt.Errorf("failed to get tool call plan: %w", err)
-			}
-
-			descriptor := plan.Descriptor
-			ctx, _ = o11y.EnrichToolCallContext(ctx, s.logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
-
-			systemConfig, err := s.env.LoadSourceEnv(ctx, projID, string(toolURN.Kind), toolURN.Source)
-			if err != nil {
-				return "", fmt.Errorf("failed to load system environment: %w", err)
-			}
-
-			rw := &toolCallResponseWriter{
-				headers:    make(http.Header),
-				body:       new(bytes.Buffer),
-				statusCode: http.StatusOK,
-			}
-
-			ciEnv := gateway.NewCaseInsensitiveEnv()
-			for _, entry := range environmentEntries {
-				ciEnv.Set(entry.Name, entry.Value)
-			}
-
-			// use header overrides
-			for key, value := range headers {
-				ciEnv.Set(key, value)
-			}
-
-			err = s.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), gateway.ToolCallEnv{
-				SystemEnv:  gateway.CIEnvFrom(systemConfig),
-				UserConfig: ciEnv,
-			}, plan, tm.NewNoopToolCallLogger())
-			if err != nil {
-				return "", fmt.Errorf("tool proxy error: %w", err)
-			}
-
-			result, err := formatResult(*rw)
-			if err != nil {
-				return "", fmt.Errorf("failed to format tool call result: %w", err)
-			}
-
-			if result.Text != "" {
-				return result.Text, nil
-			}
-			if result.Data != "" {
-				jsonData, err := json.Marshal(result.Data)
-				if err != nil {
-					return "", fmt.Errorf("failed to marshal data: %w", err)
-				}
-				return string(jsonData), nil
-			}
-			return fmt.Sprintf("status code: %d", rw.statusCode), nil
+		// Get tool schema from plan
+		plan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, *toolURN, projectID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tool call plan: %w", err)
 		}
 
-		schema := json.RawMessage(httpTool.Schema)
-		// This check is important for empty schema tool calls
-		if httpTool.Schema == "" {
+		var schema json.RawMessage
+		switch plan.Kind {
+		case gateway.ToolKindHTTP:
+			if plan.HTTP != nil {
+				schema = json.RawMessage(plan.HTTP.Schema)
+			}
+		case gateway.ToolKindFunction:
+			if plan.Function != nil {
+				schema = json.RawMessage(plan.Function.InputSchema)
+			}
+		case gateway.ToolKindPrompt:
 			schema = json.RawMessage(`{}`)
+		}
+
+		if len(schema) == 0 {
+			schema = json.RawMessage(`{}`)
+		}
+
+		var description string
+		if plan.Descriptor != nil && plan.Descriptor.Description != nil {
+			description = *plan.Descriptor.Description
+		} else {
+			description = tool.Description
 		}
 
 		agentTools = append(agentTools, AgentTool{
 			Definition: openrouter.Tool{
 				Type: "function",
 				Function: &openrouter.FunctionDefinition{
-					Name:        name,
-					Description: httpTool.Description,
+					Name:        tool.Name,
+					Description: description,
 					Parameters:  schema,
 				},
 			},
-			Executor:    executor,
 			IsMCPTool:   true,
 			ServerLabel: toolsetSlug,
+			ToolURN:     toolURN,
 		})
 	}
 
 	return agentTools, nil
 }
 
+// LoadToolsByURN loads tool definitions by their URNs (without executors)
+func (s *Service) LoadToolsByURN(
+	ctx context.Context,
+	projectID uuid.UUID,
+	toolURNs []urn.Tool,
+	environmentSlug string,
+	headers map[string]string,
+) ([]AgentTool, error) {
+	toolsetHelpers := toolsets.NewToolsets(s.db)
+
+	agentTools := make([]AgentTool, 0, len(toolURNs))
+	for _, toolURN := range toolURNs {
+		plan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, toolURN, projectID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tool call plan for %s: %w", toolURN.String(), err)
+		}
+
+		if plan.Descriptor == nil {
+			continue
+		}
+
+		// Extract tool info from plan
+		var name, description string
+		var schema json.RawMessage
+
+		name = plan.Descriptor.Name
+		switch plan.Kind {
+		case gateway.ToolKindHTTP:
+			if plan.HTTP != nil {
+				schema = json.RawMessage(plan.HTTP.Schema)
+			}
+		case gateway.ToolKindFunction:
+			if plan.Function != nil {
+				schema = json.RawMessage(plan.Function.InputSchema)
+			}
+		case gateway.ToolKindPrompt:
+			// Prompt tools don't have a schema in the same way
+			schema = json.RawMessage(`{}`)
+		}
+
+		if plan.Descriptor.Description != nil {
+			description = *plan.Descriptor.Description
+		}
+
+		if len(schema) == 0 {
+			schema = json.RawMessage(`{}`)
+		}
+
+		toolURNCopy := toolURN
+		agentTools = append(agentTools, AgentTool{
+			Definition: openrouter.Tool{
+				Type: "function",
+				Function: &openrouter.FunctionDefinition{
+					Name:        name,
+					Description: description,
+					Parameters:  schema,
+				},
+			},
+			IsMCPTool:   true,
+			ServerLabel: toolURN.Source,
+			ToolURN:     &toolURNCopy,
+		})
+	}
+
+	return agentTools, nil
+}
+
+// ExecuteTool executes a tool by its URN and returns the result
+func (s *Service) ExecuteTool(
+	ctx context.Context,
+	projectID uuid.UUID,
+	toolURN urn.Tool,
+	environmentSlug string,
+	headers map[string]string,
+	rawArgs string,
+) (string, error) {
+	envRepo := env_repo.New(s.db)
+	toolsetHelpers := toolsets.NewToolsets(s.db)
+
+	plan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, toolURN, projectID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get tool call plan: %w", err)
+	}
+
+	descriptor := plan.Descriptor
+	ctx, _ = o11y.EnrichToolCallContext(ctx, s.logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
+
+	systemConfig, err := s.env.LoadSourceEnv(ctx, projectID, string(toolURN.Kind), toolURN.Source)
+	if err != nil {
+		return "", fmt.Errorf("failed to load system environment: %w", err)
+	}
+
+	// Load environment entries if environment slug provided
+	var environmentEntries []env_repo.EnvironmentEntry
+	if environmentSlug != "" {
+		envModel, err := envRepo.GetEnvironmentBySlug(ctx, env_repo.GetEnvironmentBySlugParams{
+			ProjectID: projectID,
+			Slug:      strings.ToLower(environmentSlug),
+		})
+		if err != nil {
+			return "", fmt.Errorf("failed to load environment: %w", err)
+		}
+
+		environmentEntries, err = s.env.ListEnvironmentEntries(ctx, projectID, envModel.ID, false)
+		if err != nil {
+			return "", fmt.Errorf("failed to load environment entries: %w", err)
+		}
+	}
+
+	rw := &toolCallResponseWriter{
+		headers:    make(http.Header),
+		body:       new(bytes.Buffer),
+		statusCode: http.StatusOK,
+	}
+
+	ciEnv := gateway.NewCaseInsensitiveEnv()
+	for _, entry := range environmentEntries {
+		ciEnv.Set(entry.Name, entry.Value)
+	}
+
+	// use header overrides
+	for key, value := range headers {
+		ciEnv.Set(key, value)
+	}
+
+	err = s.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), gateway.ToolCallEnv{
+		SystemEnv:  gateway.CIEnvFrom(systemConfig),
+		UserConfig: ciEnv,
+	}, plan, tm.NewNoopToolCallLogger())
+	if err != nil {
+		return "", fmt.Errorf("tool proxy error: %w", err)
+	}
+
+	result, err := formatResult(*rw)
+	if err != nil {
+		return "", fmt.Errorf("failed to format tool call result: %w", err)
+	}
+
+	if result.Text != "" {
+		return result.Text, nil
+	}
+	if result.Data != "" {
+		// result.Data is already a string (base64-encoded for images/audio), return it directly
+		return result.Data, nil
+	}
+	return fmt.Sprintf("status code: %d", rw.statusCode), nil
+}
+
 // GetCompletionFromMessages calls the chat client to get a completion from messages
 func (s *Service) GetCompletionFromMessages(
 	ctx context.Context,
 	orgID string,
+	projectID string,
 	messages []openrouter.OpenAIChatMessage,
 	toolDefs []openrouter.Tool,
+	temperature *float64,
+	model string,
 ) (*openrouter.OpenAIChatMessage, error) {
-	msg, err := s.chatClient.GetCompletionFromMessages(ctx, orgID, messages, toolDefs)
+	msg, err := s.chatClient.GetCompletionFromMessages(ctx, orgID, projectID, messages, toolDefs, temperature, model)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get completion from messages: %w", err)
 	}

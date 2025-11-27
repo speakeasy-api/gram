@@ -361,14 +361,15 @@ func newWorkerCommand() *cli.Command {
 			runnerVersion := functions.RunnerVersion(conv.Default(strings.TrimPrefix(c.String("functions-runner-version"), "sha-"), GitSHA))
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
-			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			ragService := rag.NewToolsetVectorStore(tracerProvider, db, baseChatClient)
-			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator)
 
 			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, posthogClient, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
+
+			baseChatClient := openrouter.NewChatClient(logger, openRouter, billingTracker)
+			ragService := rag.NewToolsetVectorStore(tracerProvider, db, baseChatClient)
+			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator)
 
 			// Create agents service for the worker
 			agentsService := agents.NewService(

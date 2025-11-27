@@ -28,6 +28,7 @@ func NewFilterType(s string) (FilterType, error) {
 type ToolDescriptor struct {
 	ID               string   `json:"id" yaml:"id"`
 	Name             string   `json:"name" yaml:"name"`
+	Description      *string  `json:"description" yaml:"description"`
 	DeploymentID     string   `json:"deployment_id" yaml:"deployment_id"`
 	ProjectID        string   `json:"project_id" yaml:"project_id"`
 	ProjectSlug      string   `json:"project_slug" yaml:"project_slug"`
@@ -119,11 +120,10 @@ type FunctionToolCallPlan struct {
 }
 
 type PromptToolCallPlan struct {
-	TemplateID  string  `json:"template_id" yaml:"template_id"`
-	Description *string `json:"description" yaml:"description"`
-	Prompt      string  `json:"prompt" yaml:"prompt"`
-	Engine      string  `json:"engine" yaml:"engine"`
-	Kind        string  `json:"kind" yaml:"kind"`
+	TemplateID string `json:"template_id" yaml:"template_id"`
+	Prompt     string `json:"prompt" yaml:"prompt"`
+	Engine     string `json:"engine" yaml:"engine"`
+	Kind       string `json:"kind" yaml:"kind"`
 }
 
 type ResourceFunctionCallPlan struct {

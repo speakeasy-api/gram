@@ -160,6 +160,7 @@ func NewTemporalWorker(
 		opts.FunctionsVersion,
 		opts.RagService,
 		opts.AgentsService,
+		client,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -184,6 +185,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ExecuteToolCall)
 	temporalWorker.RegisterActivity(activities.ExecuteModelCall)
 	temporalWorker.RegisterActivity(activities.RefreshModelPricing)
+	temporalWorker.RegisterActivity(activities.LoadToolsByURN)
+	temporalWorker.RegisterActivity(activities.LoadToolsetTools)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)

@@ -2,13 +2,13 @@ package background
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/sdk/client"
 
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -49,6 +49,8 @@ type Activities struct {
 	preprocessAgentsInput         *activities.PreprocessAgentsInput
 	executeToolCall               *activities.ExecuteToolCall
 	executeModelCall              *activities.ExecuteModelCall
+	loadToolsByURN                *activities.LoadToolsByURN
+	loadToolsetTools              *activities.LoadToolsetTools
 }
 
 func NewActivities(
@@ -71,6 +73,7 @@ func NewActivities(
 	functionsVersion functions.RunnerVersion,
 	ragService *rag.ToolsetVectorStore,
 	agentsService *agents.Service,
+	temporalClient client.Client,
 ) *Activities {
 	return &Activities{
 		collectPlatformUsageMetrics:   activities.NewCollectPlatformUsageMetrics(logger, db),
@@ -92,9 +95,11 @@ func NewActivities(
 		validateDeployment:            activities.NewValidateDeployment(logger, db, billingRepo),
 		verifyCustomDomain:            activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
 		generateToolsetEmbeddings:     activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
-		preprocessAgentsInput:         activities.NewPreprocessAgentsInput(logger, agentsService),
+		preprocessAgentsInput:         activities.NewPreprocessAgentsInput(logger, agentsService, temporalClient),
 		executeToolCall:               activities.NewExecuteToolCall(logger, agentsService),
 		executeModelCall:              activities.NewExecuteModelCall(logger, agentsService),
+		loadToolsByURN:                activities.NewLoadToolsByURN(logger, agentsService),
+		loadToolsetTools:              activities.NewLoadToolsetTools(logger, agentsService),
 	}
 }
 
@@ -179,13 +184,17 @@ func (a *Activities) ExecuteToolCall(ctx context.Context, input activities.Execu
 }
 
 func (a *Activities) ExecuteModelCall(ctx context.Context, input activities.ExecuteModelCallInput) (*activities.ExecuteModelCallOutput, error) {
-	output, err := a.executeModelCall.Execute(ctx, input)
-	if err != nil {
-		return nil, fmt.Errorf("execute model call activity failed: %w", err)
-	}
-	return output, nil
+	return a.executeModelCall.Do(ctx, input)
 }
 
 func (a *Activities) RefreshModelPricing(ctx context.Context, input activities.RefreshModelPricingArgs) error {
 	return a.refreshModelPricing.Do(ctx, input)
+}
+
+func (a *Activities) LoadToolsByURN(ctx context.Context, input activities.LoadToolsByURNInput) (*activities.LoadToolsByURNOutput, error) {
+	return a.loadToolsByURN.Do(ctx, input)
+}
+
+func (a *Activities) LoadToolsetTools(ctx context.Context, input activities.LoadToolsetToolsInput) (*activities.LoadToolsetToolsOutput, error) {
+	return a.loadToolsetTools.Do(ctx, input)
 }

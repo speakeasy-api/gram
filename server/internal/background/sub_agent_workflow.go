@@ -11,22 +11,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type SubAgentWorkflowParams struct {
 	OrgID        string
 	ProjectID    uuid.UUID
 	Goal         string
+	Instructions string
 	Context      string
-	Tools        []openrouter.Tool
+	Toolsets     []agents.Toolset
+	ToolURNs     []urn.Tool // Tool URNs to load
 	ToolMetadata map[string]activities.ToolMetadata
 	ParentID     string // ID of parent workflow
+	Temperature  *float64
+	Model        string
+	Environment  string // Environment slug for loading tools
 }
 
 type SubAgentWorkflowResult struct {
-	Result string
-	Output []agents.OutputItem
-	Error  *string
+	Result        string
+	Output        agents.OutputItems
+	Error         *string
+	ToolCallCount int
 }
 
 func SubAgentWorkflow(ctx workflow.Context, params SubAgentWorkflowParams) (*SubAgentWorkflowResult, error) {
@@ -51,12 +58,15 @@ func SubAgentWorkflow(ctx workflow.Context, params SubAgentWorkflowParams) (*Sub
 You will receive:
 - Goal: The specific objective you need to accomplish
 - Context: Additional context or information relevant to completing the goal
-- Tools: A set of tools you can use to complete the task
 
 Please use the tools available to you to complete the goal. Think step by step and use the tools as needed to achieve the objective.
 
 PARALLEL EXECUTION:
 When making tool calls, prioritize parallel execution. If multiple operations don't depend on each other's results, execute them in parallel to improve efficiency.`
+
+	if params.Instructions != "" {
+		systemPrompt += fmt.Sprintf("\n\nInstructions: %s", params.Instructions)
+	}
 
 	// Initialize messages with system prompt, goal, and context
 	messages := []openrouter.OpenAIChatMessage{
@@ -76,21 +86,84 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 		},
 	}
 
-	toolDefs := params.Tools
-	// Use tool metadata passed from parent workflow
-	toolMetadata := params.ToolMetadata
-	if toolMetadata == nil {
-		toolMetadata = make(map[string]activities.ToolMetadata)
+	var toolDefs []openrouter.Tool
+	toolMetadata := make(map[string]activities.ToolMetadata)
+	toolCallCount := 0
+
+	// Load tools from URNs if provided
+	if len(params.ToolURNs) > 0 {
+		var loadOutput activities.LoadToolsByURNOutput
+		err := workflow.ExecuteActivity(
+			ctx,
+			a.LoadToolsByURN,
+			activities.LoadToolsByURNInput{
+				OrgID:           params.OrgID,
+				ProjectID:       params.ProjectID,
+				ToolURNs:        params.ToolURNs,
+				EnvironmentSlug: params.Environment,
+				Headers:         nil,
+			},
+		).Get(ctx, &loadOutput)
+		if err != nil {
+			logger.Error("failed to load tools by URN", "error", err)
+			errMsg := err.Error()
+			return &SubAgentWorkflowResult{
+				Result:        "",
+				Output:        agents.OutputItems{},
+				Error:         &errMsg,
+				ToolCallCount: toolCallCount,
+			}, nil
+		}
+		toolDefs = append(toolDefs, loadOutput.ToolDefs...)
+		// Merge tool metadata
+		for k, v := range loadOutput.ToolMetadata {
+			toolMetadata[k] = v
+		}
 	}
-	var output []agents.OutputItem
+
+	// Load tools from toolsets if provided
+	for _, toolset := range params.Toolsets {
+		var toolsetOutput activities.LoadToolsetToolsOutput
+		err := workflow.ExecuteActivity(
+			ctx,
+			a.LoadToolsetTools,
+			activities.LoadToolsetToolsInput{
+				OrgID:           params.OrgID,
+				ProjectID:       params.ProjectID,
+				ToolsetSlug:     toolset.ToolsetSlug,
+				EnvironmentSlug: toolset.EnvironmentSlug,
+				Headers:         nil,
+			},
+		).Get(ctx, &toolsetOutput)
+		if err != nil {
+			logger.Error("failed to load toolset tools", "error", err, "toolset_slug", toolset.ToolsetSlug)
+			errMsg := fmt.Sprintf("failed to load toolset %q: %v", toolset.ToolsetSlug, err)
+			return &SubAgentWorkflowResult{
+				Result:        "",
+				Output:        agents.OutputItems{},
+				Error:         &errMsg,
+				ToolCallCount: toolCallCount,
+			}, nil
+		}
+		toolDefs = append(toolDefs, toolsetOutput.ToolDefs...)
+		// Merge tool metadata
+		for k, v := range toolsetOutput.ToolMetadata {
+			toolMetadata[k] = v
+		}
+	}
+
+	var output agents.OutputItems
 
 	// Agentic loop: continue until we get a final message without tool calls
 	for {
 		// Execute model call
 		modelCallInput := activities.ExecuteModelCallInput{
-			OrgID:    params.OrgID,
-			Messages: messages,
-			ToolDefs: toolDefs,
+			OrgID:       params.OrgID,
+			ProjectID:   params.ProjectID.String(),
+			Messages:    messages,
+			ToolDefs:    toolDefs,
+			Temperature: params.Temperature,
+			Model:       params.Model,
 		}
 
 		var modelCallOutput activities.ExecuteModelCallOutput
@@ -103,9 +176,10 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 			logger.Error("failed to execute model call in sub-agent", "error", err)
 			errMsg := err.Error()
 			return &SubAgentWorkflowResult{
-				Result: "",
-				Output: []agents.OutputItem{},
-				Error:  &errMsg,
+				Result:        "",
+				Output:        agents.OutputItems{},
+				Error:         &errMsg,
+				ToolCallCount: toolCallCount,
 			}, nil
 		}
 
@@ -113,9 +187,10 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 			logger.Error("model call returned error in sub-agent", "error", modelCallOutput.Error)
 			errMsg := modelCallOutput.Error.Error()
 			return &SubAgentWorkflowResult{
-				Result: "",
-				Output: []agents.OutputItem{},
-				Error:  &errMsg,
+				Result:        "",
+				Output:        agents.OutputItems{},
+				Error:         &errMsg,
+				ToolCallCount: toolCallCount,
 			}, nil
 		}
 
@@ -140,9 +215,10 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 			})
 			// Return the final message content as the result, along with output for history
 			return &SubAgentWorkflowResult{
-				Result: msg.Content,
-				Output: output,
-				Error:  nil,
+				Result:        msg.Content,
+				Output:        output,
+				Error:         nil,
+				ToolCallCount: toolCallCount,
 			}, nil
 		}
 
@@ -159,7 +235,7 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 			toolMeta, ok := toolMetadata[tc.Function.Name]
 			if !ok {
 				toolMeta = activities.ToolMetadata{
-					ToolsetSlug:     "",
+					ToolURN:         nil,
 					EnvironmentSlug: "",
 					Headers:         nil,
 					IsMCPTool:       false,
@@ -187,6 +263,7 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 				future:       future,
 				toolCallName: tc.Function.Name,
 			})
+			toolCallCount++
 		}
 
 		// Wait for all tool calls to complete and process results

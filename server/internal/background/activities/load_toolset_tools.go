@@ -1,0 +1,71 @@
+package activities
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+
+	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/agents"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+)
+
+type LoadToolsetToolsInput struct {
+	OrgID           string
+	ProjectID       uuid.UUID
+	ToolsetSlug     string
+	EnvironmentSlug string
+	Headers         map[string]string
+}
+
+type LoadToolsetToolsOutput struct {
+	ToolDefs     []openrouter.Tool
+	ToolMetadata map[string]ToolMetadata
+}
+
+type LoadToolsetTools struct {
+	logger        *slog.Logger
+	agentsService *agents.Service
+}
+
+func NewLoadToolsetTools(logger *slog.Logger, agentsService *agents.Service) *LoadToolsetTools {
+	return &LoadToolsetTools{
+		logger:        logger.With(attr.SlogComponent("load-toolset-tools-activity")),
+		agentsService: agentsService,
+	}
+}
+
+func (a *LoadToolsetTools) Do(ctx context.Context, input LoadToolsetToolsInput) (*LoadToolsetToolsOutput, error) {
+	a.logger.InfoContext(ctx, "loading toolset tools",
+		attr.SlogOrganizationID(input.OrgID),
+		attr.SlogProjectID(input.ProjectID.String()),
+		attr.SlogToolsetSlug(input.ToolsetSlug))
+
+	agentTools, err := a.agentsService.LoadToolsetTools(ctx, input.ProjectID, input.ToolsetSlug, input.EnvironmentSlug, input.Headers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load toolset tools: %w", err)
+	}
+
+	toolDefs := make([]openrouter.Tool, 0, len(agentTools))
+	toolMetadata := make(map[string]ToolMetadata)
+
+	for _, t := range agentTools {
+		if t.Definition.Function != nil {
+			toolDefs = append(toolDefs, t.Definition)
+			toolMetadata[t.Definition.Function.Name] = ToolMetadata{
+				ToolURN:         t.ToolURN,
+				EnvironmentSlug: input.EnvironmentSlug,
+				Headers:         input.Headers,
+				IsMCPTool:       t.IsMCPTool,
+				ServerLabel:     t.ServerLabel,
+			}
+		}
+	}
+
+	return &LoadToolsetToolsOutput{
+		ToolDefs:     toolDefs,
+		ToolMetadata: toolMetadata,
+	}, nil
+}

@@ -14,7 +14,7 @@ headers = {
 }
 
 context = """Please help me with the following things
-1. Please get the details of the organization with slug 'dub' and get all the workspaces for it (use a sub-agent)
+1. Please get the details of the organization with slug 'dub' and get all the workspaces for it 
 2. Then, find the user associated with the workspaces of the 'dub' organization
 3. Please use the email address to search for a stripe customer and get the stripe charges and refunds associated with that customer
 

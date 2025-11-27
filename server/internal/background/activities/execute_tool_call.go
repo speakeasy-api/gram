@@ -43,52 +43,29 @@ func (a *ExecuteToolCall) Do(ctx context.Context, input ExecuteToolCallInput) (*
 	var toolOutput string
 	var toolError *string
 
-	// Load tool executor from toolset if this is an MCP tool
-	if input.ToolMetadata.IsMCPTool && input.ToolMetadata.ToolsetSlug != "" {
-		toolsetTools, err := a.agentsService.LoadToolsetTools(
+	// Execute tool using ToolURN if available
+	if input.ToolMetadata.ToolURN != nil {
+		result, err := a.agentsService.ExecuteTool(
 			ctx,
 			input.ProjectID,
-			input.ToolMetadata.ToolsetSlug,
+			*input.ToolMetadata.ToolURN,
 			input.ToolMetadata.EnvironmentSlug,
 			input.ToolMetadata.Headers,
+			input.ToolCall.Function.Arguments,
 		)
 		if err != nil {
-			errMsg := fmt.Sprintf("Failed to load toolset %q: %v", input.ToolMetadata.ToolsetSlug, err)
+			errMsg := fmt.Sprintf("Error calling tool %q: %v", input.ToolCall.Function.Name, err)
 			toolOutput = errMsg
 			toolError = &errMsg
-			a.logger.ErrorContext(ctx, "Failed to load toolset", attr.SlogError(err), attr.SlogToolsetSlug(input.ToolMetadata.ToolsetSlug))
+			a.logger.ErrorContext(ctx, "Tool error", attr.SlogToolName(input.ToolCall.Function.Name), attr.SlogError(err))
 		} else {
-			// Find the executor for this tool
-			var executor func(context.Context, string) (string, error)
-			for _, tool := range toolsetTools {
-				if tool.Definition.Function != nil && tool.Definition.Function.Name == input.ToolCall.Function.Name {
-					executor = tool.Executor
-					break
-				}
-			}
-
-			if executor == nil {
-				errMsg := fmt.Sprintf("No executor found for %q in toolset %q", input.ToolCall.Function.Name, input.ToolMetadata.ToolsetSlug)
-				toolOutput = errMsg
-				toolError = &errMsg
-				a.logger.ErrorContext(ctx, "Missing executor", attr.SlogToolName(input.ToolCall.Function.Name))
-			} else {
-				result, err := executor(ctx, input.ToolCall.Function.Arguments)
-				if err != nil {
-					errMsg := fmt.Sprintf("Error calling tool %q: %v", input.ToolCall.Function.Name, err)
-					toolOutput = errMsg
-					toolError = &errMsg
-					a.logger.ErrorContext(ctx, "Tool error", attr.SlogToolName(input.ToolCall.Function.Name), attr.SlogError(err))
-				} else {
-					toolOutput = result
-				}
-			}
+			toolOutput = result
 		}
 	} else {
-		errMsg := fmt.Sprintf("No executor found for %q", input.ToolCall.Function.Name)
+		errMsg := fmt.Sprintf("No ToolURN found for %q", input.ToolCall.Function.Name)
 		toolOutput = errMsg
 		toolError = &errMsg
-		a.logger.ErrorContext(ctx, "Missing executor or tool metadata", attr.SlogToolName(input.ToolCall.Function.Name))
+		a.logger.ErrorContext(ctx, "Missing ToolURN", attr.SlogToolName(input.ToolCall.Function.Name))
 	}
 
 	return &ExecuteToolCallOutput{

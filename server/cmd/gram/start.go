@@ -512,7 +512,7 @@ func newStartCommand() *cli.Command {
 			runnerVersion := functions.RunnerVersion(conv.Default(strings.TrimPrefix(c.String("functions-runner-version"), "sha-"), GitSHA))
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
-			baseChatClient := openrouter.NewChatClient(logger, openRouter)
+			baseChatClient := openrouter.NewChatClient(logger, openRouter, billingTracker)
 
 			tcm, shutdown, err := newToolMetricsClient(ctx, logger, c, tracerProvider, productFeatures)
 			if err != nil {

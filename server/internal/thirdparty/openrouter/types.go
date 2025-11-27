@@ -88,6 +88,7 @@ type OpenAIChatResponse struct {
 		Message      OpenAIChatMessage `json:"message"`
 		FinishReason string            `json:"finish_reason"`
 	} `json:"choices"`
+	Usage *Usage `json:"usage,omitempty"`
 }
 
 // AIEmbeddingRequest represents the generic request payload for embeddings
