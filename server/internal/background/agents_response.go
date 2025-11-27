@@ -48,6 +48,12 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 	workflowInfo := workflow.GetInfo(ctx)
 	responseID := workflowInfo.WorkflowExecution.ID
 
+	if err := workflow.SetQueryHandler(ctx, "org_id", func() (string, error) {
+		return params.OrgID, nil
+	}); err != nil {
+		logger.Warn("failed to register query handler", "error", err)
+	}
+
 	// Register query handler to expose request parameters
 	if err := workflow.SetQueryHandler(ctx, "request", func() (agents.ResponseRequest, error) {
 		return params.Request, nil

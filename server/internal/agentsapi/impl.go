@@ -242,6 +242,19 @@ func (s *Service) HandleGetResponse(w http.ResponseWriter, r *http.Request) erro
 	// Check workflow status
 	workflowStatus := desc.WorkflowExecutionInfo.Status
 
+	// Check org id from query handler
+	var orgID string
+	queryValue, err := s.temporalClient.QueryWorkflow(authorizedCtx, responseID, "", "org_id")
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
+	}
+	if err := queryValue.Get(&orgID); err != nil {
+		return oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
+	}
+	if orgID != authCtx.ActiveOrganizationID {
+		return oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
+	}
+
 	// Query workflow for request parameters
 	var requestParams agents.ResponseRequest
 	queryValue, queryErr := s.temporalClient.QueryWorkflow(authorizedCtx, responseID, "", "request")
