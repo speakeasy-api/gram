@@ -136,9 +136,9 @@ export function SourceCard({
               </Badge>
             </TooltipTrigger>
             <TooltipContent inverted>
-              <div className="text-sm">
-                <div className="mb-1">Attached Environment</div>
-                <div>{sourceEnvironment.data?.name || "Unknown"}</div>
+              <div className="space-y-1">
+                <Type small>Attached Environment</Type>
+                <Type small>{sourceEnvironment.data?.name || "Unknown"}</Type>
               </div>
             </TooltipContent>
           </Tooltip>
@@ -155,13 +155,13 @@ export function SourceCard({
               </Badge>
             </TooltipTrigger>
             <TooltipContent inverted>
-              <div className="text-sm">
-                <div className="mb-1">Last Updated</div>
-                <div>
+              <div className="space-y-1">
+                <Type small>Last Updated</Type>
+                <Type small>
                   {asset.updatedAt
                     ? format(new Date(asset.updatedAt), "PPpp")
                     : "Unknown"}
-                </div>
+                </Type>
               </div>
             </TooltipContent>
           </Tooltip>
