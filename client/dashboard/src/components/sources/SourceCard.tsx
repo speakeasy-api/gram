@@ -14,6 +14,11 @@ import {
 } from "@gram/client/react-query/index.js";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   CircleAlertIcon,
   FileCode,
   SquareFunction,
@@ -120,8 +125,8 @@ export function SourceCard({
       <div className="leading-none mb-1.5 flex items-center gap-2 flex-wrap">
         <Type>{asset.name}</Type>
         {hasEnvironment && (
-          <HoverCard>
-            <HoverCardTrigger className="cursor-default">
+          <Tooltip>
+            <TooltipTrigger asChild>
               <Badge
                 variant="success"
                 className="flex items-center gap-1 text-xs"
@@ -129,22 +134,20 @@ export function SourceCard({
                 <Globe className="h-3 w-3" />
                 Env
               </Badge>
-            </HoverCardTrigger>
-            <HoverCardPortal>
-              <HoverCardContent side="top" className="text-sm">
-                <div>
-                  <div className="font-medium mb-1">Environment Attached</div>
-                  <div className="text-muted-foreground">
-                    {sourceEnvironment.data?.name || "Unknown"}
-                  </div>
+            </TooltipTrigger>
+            <TooltipContent inverted>
+              <div className="text-sm">
+                <div className="font-medium mb-1">Environment Attached</div>
+                <div className="text-muted-foreground">
+                  {sourceEnvironment.data?.name || "Unknown"}
                 </div>
-              </HoverCardContent>
-            </HoverCardPortal>
-          </HoverCard>
+              </div>
+            </TooltipContent>
+          </Tooltip>
         )}
         {isRecentlyUpdated && (
-          <HoverCard>
-            <HoverCardTrigger className="cursor-default">
+          <Tooltip>
+            <TooltipTrigger asChild>
               <Badge
                 variant="information"
                 className="flex items-center gap-1 text-xs"
@@ -152,20 +155,18 @@ export function SourceCard({
                 <Sparkles className="h-3 w-3" />
                 Updated
               </Badge>
-            </HoverCardTrigger>
-            <HoverCardPortal>
-              <HoverCardContent side="top" className="text-sm">
-                <div>
-                  <div className="font-medium mb-1">Recently Updated</div>
-                  <div className="text-muted-foreground">
-                    {asset.updatedAt
-                      ? format(new Date(asset.updatedAt), "PPpp")
-                      : "Unknown"}
-                  </div>
+            </TooltipTrigger>
+            <TooltipContent inverted>
+              <div className="text-sm">
+                <div className="font-medium mb-1">Recently Updated</div>
+                <div className="text-muted-foreground">
+                  {asset.updatedAt
+                    ? format(new Date(asset.updatedAt), "PPpp")
+                    : "Unknown"}
                 </div>
-              </HoverCardContent>
-            </HoverCardPortal>
-          </HoverCard>
+              </div>
+            </TooltipContent>
+          </Tooltip>
         )}
       </div>
 
