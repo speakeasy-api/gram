@@ -6,7 +6,6 @@ import {
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
-import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query/index.js";
@@ -45,10 +44,7 @@ export function SourceCard({
   const routes = useRoutes();
   const IconComponent = asset.type === "openapi" ? FileCode : SquareFunction;
 
-  const handleCardClick = () => {
-    const sourceKind = asset.type === "openapi" ? "http" : "function";
-    routes.sources.source.goTo(sourceKind, asset.slug);
-  };
+  const sourceKind = asset.type === "openapi" ? "http" : "function";
 
   // Check if source was updated in the last 7 days
   const isRecentlyUpdated = asset.updatedAt
@@ -84,10 +80,10 @@ export function SourceCard({
   ];
 
   return (
-    <div
+    <routes.sources.source.Link
       key={asset.id}
-      onClick={handleCardClick}
-      className="bg-secondary max-w-sm text-card-foreground flex flex-col rounded-md border px-3 py-3 cursor-pointer hover:bg-surface-tertiary transition-colors"
+      params={[sourceKind, asset.slug]}
+      className="bg-secondary max-w-sm text-card-foreground flex flex-col rounded-md border px-3 py-3 hover:bg-surface-tertiary transition-colors"
     >
       <div className="flex items-center justify-between mb-2">
         <IconComponent className="size-5 shrink-0" strokeWidth={2} />
@@ -114,7 +110,7 @@ export function SourceCard({
         {causingFailure && <AssetIsCausingFailureNotice />}
         <UpdatedAt date={asset.updatedAt} italic={false} className="text-xs" />
       </div>
-    </div>
+    </routes.sources.source.Link>
   );
 }
 

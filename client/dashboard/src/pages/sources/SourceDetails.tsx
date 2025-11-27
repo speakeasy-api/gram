@@ -7,10 +7,7 @@ import {
   Icon,
 } from "@speakeasy-api/moonshine";
 import { Type } from "@/components/ui/type";
-import { CodeBlock } from "@/components/code";
-import { SkeletonCode } from "@/components/ui/skeleton";
 import { useProject } from "@/contexts/Auth";
-import { useSlugs } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
 import {
   useLatestDeployment,
@@ -29,15 +26,15 @@ import {
   SquareFunction,
   Download,
   Calendar,
-  Package,
   Eye,
   TriangleAlertIcon,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { useMemo, useState, useCallback, useEffect } from "react";
-import { unzipSync, strFromU8 } from "fflate";
+import { useMemo, useState, useEffect } from "react";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { toast } from "sonner";
+import { SourceToolsetsCard } from "@/components/sources/SourceToolsetsCard";
+import { ViewSourceDialogContent } from "@/components/sources/ViewSourceDialogContent";
 
 export default function SourceDetails() {
   const { sourceKind, sourceSlug } = useParams<{
@@ -46,7 +43,6 @@ export default function SourceDetails() {
   }>();
   const routes = useRoutes();
   const project = useProject();
-  const { projectSlug } = useSlugs();
   const { data: deployment, isLoading: isLoadingDeployment } =
     useLatestDeployment();
   const { data: assetsData } = useListAssets();
@@ -55,10 +51,7 @@ export default function SourceDetails() {
   });
   const { data: toolsetsData } = useListToolsets();
 
-  const [sourceContent, setSourceContent] = useState<string>("");
-  const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Environment management state and hooks
   const environments = useListEnvironments();
@@ -221,80 +214,6 @@ export default function SourceDetails() {
     );
   }, [toolsetsData, sourceToolUrns]);
 
-  // Fetch source content using SDK client's httpClient for proper auth handling
-  const fetchContent = useCallback(async () => {
-    if (!source) return;
-
-    setIsLoadingContent(true);
-    setFetchError(null);
-    try {
-      const path = isOpenAPI
-        ? "/rpc/assets.serveOpenAPIv3"
-        : "/rpc/assets.serveFunction";
-      const url = new URL(path, getServerURL());
-      url.searchParams.set("id", source.assetId);
-      url.searchParams.set("project_id", project.id);
-
-      // Use the same fetch pattern as the SDK client
-      const request = new Request(url.toString(), {
-        method: "GET",
-        credentials: "include",
-      });
-
-      // Add the gram-project header like the SDK does
-      if (projectSlug) {
-        request.headers.set("gram-project", projectSlug);
-      }
-
-      const response = await fetch(request);
-
-      if (response.ok) {
-        if (isOpenAPI) {
-          // OpenAPI specs are served as text (YAML/JSON)
-          const text = await response.text();
-          setSourceContent(text);
-        } else {
-          // Function bundles are served as zip files - extract manifest.json
-          const arrayBuffer = await response.arrayBuffer();
-          const uint8Array = new Uint8Array(arrayBuffer);
-          const unzipped = unzipSync(uint8Array);
-
-          // Try to extract manifest.json (contains tool definitions)
-          if (unzipped["manifest.json"]) {
-            const manifestText = strFromU8(unzipped["manifest.json"]);
-            const manifest = JSON.parse(manifestText);
-            // Pretty-print the manifest
-            setSourceContent(JSON.stringify(manifest, null, 2));
-          } else if (unzipped["functions.js"]) {
-            // Fallback to functions.js if no manifest
-            const code = strFromU8(unzipped["functions.js"]);
-            setSourceContent(code);
-          } else {
-            setFetchError("No readable content found in bundle");
-          }
-        }
-      } else {
-        setFetchError(
-          `Failed to load: ${response.status} ${response.statusText}`,
-        );
-      }
-    } catch (error) {
-      setFetchError(
-        error instanceof Error ? error.message : "Failed to fetch content",
-      );
-    } finally {
-      setIsLoadingContent(false);
-    }
-  }, [source, project.id, isOpenAPI, projectSlug]);
-
-  // Open modal and fetch content
-  const handleViewSpec = useCallback(() => {
-    setIsModalOpen(true);
-    if (!sourceContent && !isLoadingContent) {
-      fetchContent();
-    }
-  }, [sourceContent, isLoadingContent, fetchContent]);
-
   // Download functionality
   const handleDownload = () => {
     if (!source) return;
@@ -358,7 +277,7 @@ export default function SourceDetails() {
               variant="secondary"
               size="sm"
               icon={<Eye />}
-              onClick={handleViewSpec}
+              onClick={() => setIsModalOpen(true)}
             >
               View {isOpenAPI ? "Spec" : "Manifest"}
             </Button>
@@ -543,85 +462,16 @@ export default function SourceDetails() {
           </div>
 
           {/* Toolsets Using This Source */}
-          <div className="rounded-lg border bg-card p-6">
-            <Type as="h2" className="text-lg font-semibold mb-4">
-              Used in Toolsets ({toolsetsUsingSource.length})
-            </Type>
-            {toolsetsUsingSource.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Package className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <Type>This source is not currently used in any toolsets</Type>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {toolsetsUsingSource.map((toolset) => (
-                  <div
-                    key={toolset.slug}
-                    onClick={() => routes.toolsets.toolset.goTo(toolset.slug)}
-                    className="flex items-center justify-between p-3 rounded-md border bg-surface-secondary hover:bg-surface-tertiary transition-colors cursor-pointer"
-                  >
-                    <div className="flex-1">
-                      <Type className="font-medium">{toolset.name}</Type>
-                      {toolset.description && (
-                        <Type className="text-sm text-muted-foreground mt-1">
-                          {toolset.description}
-                        </Type>
-                      )}
-                    </div>
-                    <Badge variant="outline" className="ml-2">
-                      {
-                        toolset.toolUrns?.filter((urn) =>
-                          sourceToolUrns.has(urn),
-                        ).length
-                      }{" "}
-                      tools
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <SourceToolsetsCard
+            toolsetsUsingSource={toolsetsUsingSource}
+            sourceToolUrns={sourceToolUrns}
+          />
         </div>
 
         {/* View Spec/Source Modal */}
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
           <Dialog.Content className="min-w-[80vw] h-[90vh]">
-            <Dialog.Header>
-              <Dialog.Title>
-                {source?.name} -{" "}
-                {isOpenAPI ? "OpenAPI Specification" : "Tool Manifest"}
-              </Dialog.Title>
-              {!isOpenAPI && (
-                <Type className="text-muted-foreground text-sm mt-1">
-                  Shows the tool definitions extracted from the function bundle
-                </Type>
-              )}
-            </Dialog.Header>
-            <div className="flex-1 overflow-auto">
-              {isLoadingContent ? (
-                <SkeletonCode lines={20} />
-              ) : fetchError ? (
-                <div className="text-center py-8">
-                  <Type className="text-destructive">{fetchError}</Type>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="mt-4"
-                    onClick={fetchContent}
-                  >
-                    Retry
-                  </Button>
-                </div>
-              ) : sourceContent ? (
-                <CodeBlock language={isOpenAPI ? "yaml" : "json"} copyable>
-                  {sourceContent}
-                </CodeBlock>
-              ) : (
-                <Type className="text-muted-foreground text-center py-8">
-                  No content available
-                </Type>
-              )}
-            </div>
+            <ViewSourceDialogContent source={source} isOpenAPI={isOpenAPI} />
           </Dialog.Content>
         </Dialog>
       </Page.Body>
