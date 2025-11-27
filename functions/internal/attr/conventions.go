@@ -10,6 +10,7 @@ import (
 type Key = attribute.Key
 
 const (
+	DeviceKey              = semconv.SystemDeviceKey
 	ExceptionStacktraceKey = semconv.ExceptionStacktraceKey
 	ErrorMessageKey        = semconv.ErrorMessageKey
 	ErrorIDKey             = attribute.Key("gram.error.id")
@@ -27,6 +28,9 @@ const (
 	DataDogTraceIDKey = attribute.Key("dd.trace_id")
 	DataDogSpanIDKey  = attribute.Key("dd.span_id")
 )
+
+func Device(v string) attribute.KeyValue { return DeviceKey.String(v) }
+func SlogDevice(v string) slog.Attr      { return slog.String(string(DeviceKey), v) }
 
 func ExceptionStacktrace(v string) attribute.KeyValue { return ExceptionStacktraceKey.String(v) }
 func SlogExceptionStacktrace(v string) slog.Attr {

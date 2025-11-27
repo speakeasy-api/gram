@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -64,12 +65,27 @@ func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.Re
 	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer timeoutCancel()
 
+	var logwg sync.WaitGroup
+	stdoutRdr, stdoutWrt := io.Pipe()
+	stderrRdr, stderrWrt := io.Pipe()
+	logwg.Go(func() {
+		o11y.CaptureRawLogLines(ctx, logger, stdoutRdr, attr.SlogDevice("stdout"))
+	})
+	logwg.Go(func() {
+		o11y.CaptureRawLogLines(ctx, logger, stderrRdr, attr.SlogDevice("stderr"))
+	})
+	defer func() {
+		stdoutWrt.Close()
+		stderrWrt.Close()
+		logwg.Wait()
+	}()
+
 	args := s.args
 	args = append(args, fifoPath, string(req.requestArg), req.requestType)
 	cmd := guardian.NewCommand(timeoutCtx, s.command, args...)
 	cmd.Dir = s.workDir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = stdoutWrt
+	cmd.Stderr = stderrWrt
 
 	cmd.Env = make([]string, 0, len(req.environment))
 	for key, value := range req.environment {
