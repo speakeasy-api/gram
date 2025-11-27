@@ -23,7 +23,7 @@ atlas migrate diff "${usage_name:?}" \
 # atlas login
 echo "Generating golang-migrate migrations..."
 exec atlas migrate diff "${usage_name:?}" \
-  --dir file://clickhouse/migrations/golang_migrate?format=golang-migrate \
+  --dir file://clickhouse/local/golang_migrate?format=golang-migrate \
   --config file://atlas.hcl \
   --to file://clickhouse/schema.sql \
   --dev-url "docker://clickhouse/clickhouse-server/25.8.3/dev" \

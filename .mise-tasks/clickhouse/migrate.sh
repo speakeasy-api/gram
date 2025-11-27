@@ -11,7 +11,7 @@ echo "Applying ClickHouse migrations..."
 migration_engine="${CLICKHOUSE_MIGRATION_ENGINE:-atlas}"
 
 if [ "$migration_engine" = "golang-migrate" ]; then
-  echo "Using golang-migrate engine..."
+  echo "Using golang-migrate engine"
 
   if [ "${usage_dry:-false}" = "true" ]; then
     echo "Dry run mode is not supported with golang-migrate"
@@ -19,11 +19,11 @@ if [ "$migration_engine" = "golang-migrate" ]; then
   fi
 
   exec migrate \
-    -path clickhouse/migrations/golang_migrate \
-    -database "${GRAM_CLICKHOUSE_MIGRATE_URL}" \
+    -path clickhouse/local/golang_migrate \
+    -database "${GRAM_CLICKHOUSE_GOMIGRATE_URL}" \
     up
 else
-  echo "Using atlas engine..."
+  echo "Using atlas engine"
 
   args=()
 
