@@ -207,6 +207,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		ProjectID:                *authCtx.ProjectID,
 		ExternalDocumentationUrl: externalDocURL,
 		LogoID:                   logoID,
+		Instructions:             pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert MCP install page metadata").Log(ctx, s.logger)
