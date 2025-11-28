@@ -21,6 +21,7 @@ var McpMetadata = Type("McpMetadata", func() {
 	Attribute("external_documentation_url", String, "A link to external documentation for the MCP install page", func() {
 		Format(FormatURI)
 	})
+	Attribute("instructions", String, "Server instructions returned in the MCP initialize response")
 	Attribute("created_at", String, "When the metadata entry was created", func() {
 		Format(FormatDateTime)
 	})
@@ -73,6 +74,7 @@ var _ = Service("mcpMetadata", func() {
 			Attribute("toolset_slug", shared.Slug, "The slug of the toolset associated with this install page metadata")
 			Attribute("logo_asset_id", String, "The asset ID for the MCP install page logo")
 			Attribute("external_documentation_url", String, "A link to external documentation for the MCP install page")
+			Attribute("instructions", String, "Server instructions returned in the MCP initialize response")
 
 			Required("toolset_slug")
 
