@@ -31886,12 +31886,48 @@ definitions:
                         updated_at: "1977-07-13T23:25:13Z"
                         uri: Deleniti nesciunt amet.
                         variables: Tenetur voluptatem dolor voluptas dolores possimus et.
+                    - function_resource_definition:
+                        created_at: "2003-11-13T12:22:27Z"
+                        deployment_id: Vel officia similique temporibus est.
+                        description: Repellat iste tempore quae porro.
+                        function_id: Quod qui molestias voluptates quidem.
+                        id: Autem nostrum possimus omnis maiores quae nam.
+                        meta:
+                            Aut ab ut minima at dolor vel.: Quasi minus.
+                            Inventore aut repellat qui omnis ea.: Autem quia voluptatem dolor quod est est.
+                        mime_type: Reiciendis soluta pariatur.
+                        name: Est unde.
+                        project_id: Repellat reprehenderit quaerat omnis.
+                        resource_urn: Occaecati dolore modi.
+                        runtime: Et quod accusantium ea molestiae expedita repudiandae.
+                        title: Cupiditate rerum aut rerum delectus quia error.
+                        updated_at: "1977-07-13T23:25:13Z"
+                        uri: Deleniti nesciunt amet.
+                        variables: Tenetur voluptatem dolor voluptas dolores possimus et.
+                    - function_resource_definition:
+                        created_at: "2003-11-13T12:22:27Z"
+                        deployment_id: Vel officia similique temporibus est.
+                        description: Repellat iste tempore quae porro.
+                        function_id: Quod qui molestias voluptates quidem.
+                        id: Autem nostrum possimus omnis maiores quae nam.
+                        meta:
+                            Aut ab ut minima at dolor vel.: Quasi minus.
+                            Inventore aut repellat qui omnis ea.: Autem quia voluptatem dolor quod est est.
+                        mime_type: Reiciendis soluta pariatur.
+                        name: Est unde.
+                        project_id: Repellat reprehenderit quaerat omnis.
+                        resource_urn: Occaecati dolore modi.
+                        runtime: Et quod accusantium ea molestiae expedita repudiandae.
+                        title: Cupiditate rerum aut rerum delectus quia error.
+                        updated_at: "1977-07-13T23:25:13Z"
+                        uri: Deleniti nesciunt amet.
+                        variables: Tenetur voluptatem dolor voluptas dolores possimus et.
         example:
-            next_cursor: Accusamus non officia earum aut.
+            next_cursor: Ipsum omnis assumenda asperiores eligendi est.
             resources:
                 - function_resource_definition:
                     created_at: "2003-11-13T12:22:27Z"
-                    deployment_id: Temporibus est.
+                    deployment_id: Vel officia similique temporibus est.
                     description: Repellat iste tempore quae porro.
                     function_id: Quod qui molestias voluptates quidem.
                     id: Autem nostrum possimus omnis maiores quae nam.
@@ -31909,25 +31945,7 @@ definitions:
                     variables: Tenetur voluptatem dolor voluptas dolores possimus et.
                 - function_resource_definition:
                     created_at: "2003-11-13T12:22:27Z"
-                    deployment_id: Temporibus est.
-                    description: Repellat iste tempore quae porro.
-                    function_id: Quod qui molestias voluptates quidem.
-                    id: Autem nostrum possimus omnis maiores quae nam.
-                    meta:
-                        Aut ab ut minima at dolor vel.: Quasi minus.
-                        Inventore aut repellat qui omnis ea.: Autem quia voluptatem dolor quod est est.
-                    mime_type: Reiciendis soluta pariatur.
-                    name: Est unde.
-                    project_id: Repellat reprehenderit quaerat omnis.
-                    resource_urn: Occaecati dolore modi.
-                    runtime: Et quod accusantium ea molestiae expedita repudiandae.
-                    title: Cupiditate rerum aut rerum delectus quia error.
-                    updated_at: "1977-07-13T23:25:13Z"
-                    uri: Deleniti nesciunt amet.
-                    variables: Tenetur voluptatem dolor voluptas dolores possimus et.
-                - function_resource_definition:
-                    created_at: "2003-11-13T12:22:27Z"
-                    deployment_id: Temporibus est.
+                    deployment_id: Vel officia similique temporibus est.
                     description: Repellat iste tempore quae porro.
                     function_id: Quod qui molestias voluptates quidem.
                     id: Autem nostrum possimus omnis maiores quae nam.
@@ -34013,18 +34031,30 @@ definitions:
                 updated_at: "1997-05-21T19:48:35Z"
                 url: Et eum odit fugit.
             versions:
-                - created_at: "2009-12-17T05:24:56Z"
-                  deployment_id: Hic id aliquid natus officia.
-                  id: Doloribus aperiam qui ea in est.
-                  package_id: Omnis omnis eveniet doloremque quaerat.
-                  semver: Aut ipsa quia.
-                  visibility: Dolor accusamus aut.
-                - created_at: "2009-12-17T05:24:56Z"
-                  deployment_id: Hic id aliquid natus officia.
-                  id: Doloribus aperiam qui ea in est.
-                  package_id: Omnis omnis eveniet doloremque quaerat.
-                  semver: Aut ipsa quia.
-                  visibility: Dolor accusamus aut.
+                - created_at: "2014-06-05T20:17:12Z"
+                  deployment_id: Voluptatem sit molestiae iste quibusdam.
+                  id: Mollitia ut ipsam.
+                  package_id: Qui totam qui odit labore est.
+                  semver: Doloribus aperiam qui ea in est.
+                  visibility: Voluptates commodi nisi.
+                - created_at: "2014-06-05T20:17:12Z"
+                  deployment_id: Voluptatem sit molestiae iste quibusdam.
+                  id: Mollitia ut ipsam.
+                  package_id: Qui totam qui odit labore est.
+                  semver: Doloribus aperiam qui ea in est.
+                  visibility: Voluptates commodi nisi.
+                - created_at: "2014-06-05T20:17:12Z"
+                  deployment_id: Voluptatem sit molestiae iste quibusdam.
+                  id: Mollitia ut ipsam.
+                  package_id: Qui totam qui odit labore est.
+                  semver: Doloribus aperiam qui ea in est.
+                  visibility: Voluptates commodi nisi.
+                - created_at: "2014-06-05T20:17:12Z"
+                  deployment_id: Voluptatem sit molestiae iste quibusdam.
+                  id: Mollitia ut ipsam.
+                  package_id: Qui totam qui odit labore est.
+                  semver: Doloribus aperiam qui ea in est.
+                  visibility: Voluptates commodi nisi.
         required:
             - package
             - versions
@@ -34465,7 +34495,7 @@ definitions:
             created_at:
                 type: string
                 description: When the metadata entry was created
-                example: "1983-02-04T05:21:37Z"
+                example: "1987-05-20T02:58:21Z"
                 format: date-time
             external_documentation_url:
                 type: string
@@ -34475,11 +34505,7 @@ definitions:
             id:
                 type: string
                 description: The ID of the metadata record
-                example: Fugiat eos.
-            instructions:
-                type: string
-                description: Server instructions returned in the MCP initialize response
-                example: Repellendus eius et cum magnam et totam.
+                example: Maiores laudantium.
             logo_asset_id:
                 type: string
                 description: The asset ID for the MCP install page logo
@@ -34493,17 +34519,16 @@ definitions:
             updated_at:
                 type: string
                 description: When the metadata entry was last updated
-                example: "1973-12-25T05:57:36Z"
+                example: "1984-09-03T08:44:43Z"
                 format: date-time
         description: Metadata used to configure the MCP install page.
         example:
-            created_at: "1982-10-01T13:10:31Z"
-            external_documentation_url: http://cassin.com/friedrich
-            id: Dicta soluta temporibus eos tempore maiores.
-            instructions: Non consequatur.
-            logo_asset_id: 20ceca73-f3a9-47e1-b4aa-0f93bdf7d9a1
-            toolset_id: 6828d1e7-f5a2-4193-84af-f581c1a72331
-            updated_at: "2004-09-10T07:51:01Z"
+            created_at: "1994-08-27T07:39:12Z"
+            external_documentation_url: http://zemlak.net/rosalia
+            id: Tenetur qui commodi natus eligendi.
+            logo_asset_id: 049f3821-1178-4e9d-bcd3-8b508d8c8a45
+            toolset_id: bba9132b-bbdf-4b1d-823d-7e5e1816012a
+            updated_at: "1998-12-07T17:04:41Z"
         required:
             - id
             - toolset_id
@@ -34539,12 +34564,12 @@ definitions:
                 example: true
         description: request is invalid (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -34559,7 +34584,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -34575,7 +34600,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -34602,7 +34627,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -34629,7 +34654,7 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: false
         required:
             - name
@@ -34672,8 +34697,8 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: true
+            temporary: false
+            timeout: false
         required:
             - name
             - id
@@ -34747,7 +34772,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -34759,7 +34784,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -34790,7 +34815,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -34802,7 +34827,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -34848,14 +34873,14 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: unauthorized access (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -34903,7 +34928,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -34941,12 +34966,12 @@ definitions:
                 example: false
         description: unsupported media type (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -34977,7 +35002,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -34988,7 +35013,7 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: true
         required:
             - name
@@ -35075,7 +35100,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -35106,7 +35131,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -35118,7 +35143,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -35161,7 +35186,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -35192,7 +35217,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -35204,7 +35229,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -35235,18 +35260,18 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: false
         description: resource not found (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: false
         required:
             - name
@@ -35262,26 +35287,21 @@ definitions:
             external_documentation_url:
                 type: string
                 description: A link to external documentation for the MCP install page
-                example: Sunt qui ut id officiis tenetur animi.
-            instructions:
-                type: string
-                description: Server instructions returned in the MCP initialize response
-                example: Sunt porro.
+                example: Deleniti explicabo exercitationem sit velit fugit.
             logo_asset_id:
                 type: string
                 description: The asset ID for the MCP install page logo
-                example: Velit totam est veritatis et.
+                example: Animi sequi et et.
             toolset_slug:
                 type: string
                 description: The slug of the toolset associated with this install page metadata
-                example: k5i
+                example: ilb
                 pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
         example:
-            external_documentation_url: Voluptates molestiae nam ut.
-            instructions: Pariatur et.
-            logo_asset_id: Incidunt quis voluptas.
-            toolset_slug: e8h
+            external_documentation_url: Sed et earum incidunt est.
+            logo_asset_id: Labore praesentium amet ea qui voluptatem ex.
+            toolset_slug: rm7
         required:
             - toolset_slug
     McpMetadataSetMcpMetadataUnauthorizedResponseBody:
@@ -35361,7 +35381,7 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: false
         required:
             - name
@@ -35397,7 +35417,7 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: unsupported media type (default view)
         example:
             fault: true
@@ -35854,91 +35874,92 @@ definitions:
             created_at:
                 type: string
                 description: The creation date of the package
-                example: "1986-02-06T12:53:55Z"
+                example: "1996-08-30T11:19:29Z"
                 format: date-time
             deleted_at:
                 type: string
                 description: The deletion date of the package
-                example: "2010-04-06T02:49:35Z"
+                example: "1985-08-20T19:54:27Z"
                 format: date-time
             description:
                 type: string
                 description: The description of the package. This contains HTML content.
-                example: Modi hic officiis doloribus et voluptatibus aut.
+                example: Est molestias quaerat.
             description_raw:
                 type: string
                 description: The unsanitized, user-supplied description of the package. Limited markdown syntax is supported.
-                example: Laboriosam qui ipsum.
+                example: Molestiae saepe ut dicta rem laborum doloremque.
             id:
                 type: string
                 description: The ID of the package
-                example: Suscipit sunt est.
+                example: Ut perferendis et nulla et sunt.
             image_asset_id:
                 type: string
                 description: The asset ID of the image to show for this package
-                example: Tenetur sunt autem cupiditate distinctio.
+                example: Sit sed aut minima qui.
             keywords:
                 type: array
                 items:
                     type: string
-                    example: Et harum accusantium.
+                    example: Repudiandae facere reprehenderit porro sint eius eos.
                 description: The keywords of the package
                 example:
-                    - Ea quisquam qui.
-                    - Illum fugiat et qui laborum.
-                    - Harum repudiandae provident.
-                    - Alias voluptatum veritatis autem aut.
+                    - Qui eveniet labore sapiente voluptates.
+                    - Id ut exercitationem dolor laudantium et.
+                    - Consequatur atque eius.
+                    - Sed iste nulla deserunt excepturi et.
             latest_version:
                 type: string
                 description: The latest version of the package
-                example: Ab accusamus sapiente.
+                example: Et sed sunt molestias.
             name:
                 type: string
                 description: The name of the package
-                example: Rerum quis aspernatur sunt ipsam iusto.
+                example: Beatae perspiciatis quia animi nostrum.
             organization_id:
                 type: string
                 description: The ID of the organization that owns the package
-                example: Id eos vel ipsam labore quod est.
+                example: Facere eveniet sapiente autem consequatur.
             project_id:
                 type: string
                 description: The ID of the project that owns the package
-                example: Quas sit sit odio optio qui.
+                example: Beatae qui quia cum rerum quia et.
             summary:
                 type: string
                 description: The summary of the package
-                example: Magnam odio dolor.
+                example: Dicta eaque doloribus ut.
             title:
                 type: string
                 description: The title of the package
-                example: Et deserunt.
+                example: Voluptatem in ratione eos.
             updated_at:
                 type: string
                 description: The last update date of the package
-                example: "2008-06-27T22:23:50Z"
+                example: "1974-10-18T06:26:11Z"
                 format: date-time
             url:
                 type: string
                 description: External URL for the package owner
-                example: Aspernatur perspiciatis ut ullam perferendis non pariatur.
+                example: Exercitationem nobis similique.
         example:
-            created_at: "1981-07-26T16:40:42Z"
-            deleted_at: "1991-05-02T05:55:36Z"
-            description: Atque deleniti aut sunt inventore non.
-            description_raw: Qui cum et praesentium quo voluptatibus.
-            id: Tempora nihil consequuntur repellat cupiditate.
-            image_asset_id: Quam ad exercitationem est.
+            created_at: "1983-08-20T11:54:51Z"
+            deleted_at: "1983-11-30T16:26:55Z"
+            description: Voluptatem sunt quidem id rerum modi.
+            description_raw: Ipsam velit.
+            id: Laborum omnis molestias ut rerum id.
+            image_asset_id: Et et suscipit.
             keywords:
-                - Et quis ad.
-                - Ut veniam sed nobis ab.
-            latest_version: Voluptatibus nobis pariatur.
-            name: Molestiae velit culpa.
-            organization_id: Non est et eos.
-            project_id: Aut et maxime in nihil qui aut.
-            summary: Et alias.
-            title: Similique temporibus.
-            updated_at: "1996-03-03T11:53:23Z"
-            url: Ut ut nihil optio alias.
+                - Veritatis et dolorem sunt qui ut.
+                - Officiis tenetur animi quia sunt.
+                - Blanditiis et dolorem sapiente qui incidunt.
+            latest_version: Est cupiditate quas.
+            name: Eos voluptatem quia.
+            organization_id: Rem vel vitae aut quia aut eveniet.
+            project_id: Debitis eligendi illum similique.
+            summary: Debitis recusandae commodi officiis facilis.
+            title: Enim sunt autem ut aut.
+            updated_at: "2005-05-01T21:01:22Z"
+            url: Voluptas voluptatem voluptates molestiae nam ut cum.
         required:
             - id
             - name
@@ -47171,25 +47192,7 @@ definitions:
                         variables: Tenetur voluptatem dolor voluptas dolores possimus et.
                     - function_resource_definition:
                         created_at: "2003-11-13T12:22:27Z"
-                        deployment_id: Temporibus est.
-                        description: Repellat iste tempore quae porro.
-                        function_id: Quod qui molestias voluptates quidem.
-                        id: Autem nostrum possimus omnis maiores quae nam.
-                        meta:
-                            Aut ab ut minima at dolor vel.: Quasi minus.
-                            Inventore aut repellat qui omnis ea.: Autem quia voluptatem dolor quod est est.
-                        mime_type: Reiciendis soluta pariatur.
-                        name: Est unde.
-                        project_id: Repellat reprehenderit quaerat omnis.
-                        resource_urn: Occaecati dolore modi.
-                        runtime: Et quod accusantium ea molestiae expedita repudiandae.
-                        title: Cupiditate rerum aut rerum delectus quia error.
-                        updated_at: "1977-07-13T23:25:13Z"
-                        uri: Deleniti nesciunt amet.
-                        variables: Tenetur voluptatem dolor voluptas dolores possimus et.
-                    - function_resource_definition:
-                        created_at: "2003-11-13T12:22:27Z"
-                        deployment_id: Temporibus est.
+                        deployment_id: Vel officia similique temporibus est.
                         description: Repellat iste tempore quae porro.
                         function_id: Quod qui molestias voluptates quidem.
                         id: Autem nostrum possimus omnis maiores quae nam.
