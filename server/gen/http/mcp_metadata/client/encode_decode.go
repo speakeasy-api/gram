@@ -505,6 +505,7 @@ func unmarshalMcpMetadataResponseBodyToTypesMcpMetadata(v *McpMetadataResponseBo
 		ToolsetID:                *v.ToolsetID,
 		LogoAssetID:              v.LogoAssetID,
 		ExternalDocumentationURL: v.ExternalDocumentationURL,
+		Instructions:             v.Instructions,
 		CreatedAt:                *v.CreatedAt,
 		UpdatedAt:                *v.UpdatedAt,
 	}
