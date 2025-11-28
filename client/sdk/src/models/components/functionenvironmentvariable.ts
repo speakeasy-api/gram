@@ -3,11 +3,16 @@
  */
 
 import * as z from "zod/v3";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type FunctionEnvironmentVariable = {
+  /**
+   * Optional value of the function variable comes from a specific auth input
+   */
+  authInputType?: string | undefined;
   /**
    * Description of the function environment variable
    */
@@ -24,48 +29,14 @@ export const FunctionEnvironmentVariable$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  auth_input_type: z.string().optional(),
   description: z.string().optional(),
   name: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "auth_input_type": "authInputType",
+  });
 });
-
-/** @internal */
-export type FunctionEnvironmentVariable$Outbound = {
-  description?: string | undefined;
-  name: string;
-};
-
-/** @internal */
-export const FunctionEnvironmentVariable$outboundSchema: z.ZodType<
-  FunctionEnvironmentVariable$Outbound,
-  z.ZodTypeDef,
-  FunctionEnvironmentVariable
-> = z.object({
-  description: z.string().optional(),
-  name: z.string(),
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace FunctionEnvironmentVariable$ {
-  /** @deprecated use `FunctionEnvironmentVariable$inboundSchema` instead. */
-  export const inboundSchema = FunctionEnvironmentVariable$inboundSchema;
-  /** @deprecated use `FunctionEnvironmentVariable$outboundSchema` instead. */
-  export const outboundSchema = FunctionEnvironmentVariable$outboundSchema;
-  /** @deprecated use `FunctionEnvironmentVariable$Outbound` instead. */
-  export type Outbound = FunctionEnvironmentVariable$Outbound;
-}
-
-export function functionEnvironmentVariableToJSON(
-  functionEnvironmentVariable: FunctionEnvironmentVariable,
-): string {
-  return JSON.stringify(
-    FunctionEnvironmentVariable$outboundSchema.parse(
-      functionEnvironmentVariable,
-    ),
-  );
-}
 
 export function functionEnvironmentVariableFromJSON(
   jsonString: string,

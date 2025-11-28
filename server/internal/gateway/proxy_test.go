@@ -1514,7 +1514,8 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 		FunctionsAccessID: accessID,
 		Runtime:           "nodejs",
 		InputSchema:       []byte{},
-		Variables:         []string{},
+		Variables:         map[string]*functions.ManifestVariableAttributeV0{},
+		AuthInput:         nil,
 	}
 	toolCallPlan := NewFunctionToolCallPlan(tool, plan)
 	// Mock the functions.ToolCaller to return our mock server URL
@@ -1804,7 +1805,8 @@ func TestToolProxy_Do_FunctionTool_UserConfigNotInPlanNotSent(t *testing.T) {
 		FunctionsAccessID: accessID,
 		Runtime:           "nodejs",
 		InputSchema:       []byte{},
-		Variables:         []string{"ALLOWED_VAR"}, // Only ALLOWED_VAR is in the plan
+		Variables:         map[string]*functions.ManifestVariableAttributeV0{"ALLOWED_VAR": nil}, // Only ALLOWED_VAR is in the plan
+		AuthInput:         nil,
 	}
 	toolCallPlan := NewFunctionToolCallPlan(tool, plan)
 
@@ -2008,7 +2010,8 @@ func TestToolProxy_Do_FunctionTool_SystemEnvSentWhenInPlan(t *testing.T) {
 		FunctionsAccessID: accessID,
 		Runtime:           "nodejs",
 		InputSchema:       []byte{},
-		Variables:         []string{"SYSTEM_VAR", "DB_PASSWORD"},
+		Variables:         map[string]*functions.ManifestVariableAttributeV0{"SYSTEM_VAR": nil, "DB_PASSWORD": nil},
+		AuthInput:         nil,
 	}
 	toolCallPlan := NewFunctionToolCallPlan(tool, plan)
 
@@ -2216,7 +2219,8 @@ func TestToolProxy_Do_FunctionTool_UserConfigPrefersOverSystemEnv(t *testing.T) 
 		FunctionsAccessID: accessID,
 		Runtime:           "nodejs",
 		InputSchema:       []byte{},
-		Variables:         []string{"DATABASE_URL", "API_KEY"},
+		Variables:         map[string]*functions.ManifestVariableAttributeV0{"DATABASE_URL": nil, "API_KEY": nil},
+		AuthInput:         nil,
 	}
 	toolCallPlan := NewFunctionToolCallPlan(tool, plan)
 
@@ -2278,4 +2282,566 @@ func TestToolProxy_Do_FunctionTool_UserConfigPrefersOverSystemEnv(t *testing.T) 
 	// Verify the USER CONFIG values were used (not system env)
 	require.Equal(t, "postgres://user-override-db", capturedEnvironment["DATABASE_URL"])
 	require.Equal(t, "user-override-key", capturedEnvironment["API_KEY"])
+}
+
+func TestToolProxy_Do_FunctionTool_AuthInputSentWhenInUserConfig(t *testing.T) {
+	t.Parallel()
+
+	// Track the invocation ID that will be generated
+	var invocationID uuid.UUID
+	var capturedEnvironment map[string]string
+
+	// Create a mock server that captures the function request
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Read the request body to capture environment variables
+		bodyBytes, _ := io.ReadAll(r.Body)
+		var requestPayload map[string]any
+		_ = json.Unmarshal(bodyBytes, &requestPayload)
+
+		if env, ok := requestPayload["environment"].(map[string]any); ok {
+			capturedEnvironment = make(map[string]string)
+			for k, v := range env {
+				if strVal, ok := v.(string); ok {
+					capturedEnvironment[k] = strVal
+				}
+			}
+		}
+
+		w.Header().Set("Gram-Invoke-ID", invocationID.String())
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"result": "success"}`))
+	}))
+	defer mockServer.Close()
+
+	// Setup test dependencies
+	ctx := context.Background()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	enc := testenv.NewEncryptionClient(t)
+	policy, err := guardian.NewUnsafePolicy([]string{})
+	require.NoError(t, err)
+
+	tool := newTestToolDescriptor()
+
+	// Create function call plan with AuthInput configured
+	functionID := uuid.New().String()
+	accessID := uuid.New().String()
+	plan := &FunctionToolCallPlan{
+		FunctionID:        functionID,
+		FunctionsAccessID: accessID,
+		Runtime:           "nodejs",
+		InputSchema:       []byte{},
+		Variables:         map[string]*functions.ManifestVariableAttributeV0{},
+		AuthInput: &functions.ManifestAuthInputAttributeV0{
+			Type:     "oauth",
+			Variable: "OAUTH_TOKEN",
+		},
+	}
+	toolCallPlan := NewFunctionToolCallPlan(tool, plan)
+
+	// Mock the functions.ToolCaller to return our mock server URL
+	mockFuncCaller := &mockToolCaller{
+		serverURL: mockServer.URL,
+		onCall: func(invID uuid.UUID) {
+			invocationID = invID
+		},
+	}
+
+	// Create tool proxy
+	proxy := NewToolProxy(
+		logger,
+		tracerProvider,
+		meterProvider,
+		ToolCallSourceDirect,
+		enc,
+		nil,
+		policy,
+		mockFuncCaller,
+	)
+
+	// Create request body
+	requestBody := ToolCallBody{
+		PathParameters:       nil,
+		QueryParameters:      nil,
+		HeaderParameters:     nil,
+		Body:                 json.RawMessage(`{"test": "data"}`),
+		ResponseFilter:       nil,
+		EnvironmentVariables: nil,
+		GramRequestSummary:   "",
+	}
+
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	// Create response recorder
+	recorder := httptest.NewRecorder()
+
+	// Set up environment with user config containing the auth input variable
+	userConfig := NewCaseInsensitiveEnv()
+	userConfig.Set("OAUTH_TOKEN", "user-oauth-token-value")
+
+	// Execute the proxy call
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
+		SystemEnv:  NewCaseInsensitiveEnv(),
+		UserConfig: userConfig,
+	}, toolCallPlan, tm.NewNoopToolCallLogger())
+
+	require.NoError(t, err)
+	require.NotNil(t, capturedEnvironment)
+
+	// Verify the auth input variable was sent
+	require.Equal(t, "user-oauth-token-value", capturedEnvironment["OAUTH_TOKEN"])
+}
+
+func TestToolProxy_Do_FunctionTool_AuthInputNotSentWhenNotInUserConfig(t *testing.T) {
+	t.Parallel()
+
+	// Track the invocation ID that will be generated
+	var invocationID uuid.UUID
+	var capturedEnvironment map[string]string
+
+	// Create a mock server that captures the function request
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Read the request body to capture environment variables
+		bodyBytes, _ := io.ReadAll(r.Body)
+		var requestPayload map[string]any
+		_ = json.Unmarshal(bodyBytes, &requestPayload)
+
+		if env, ok := requestPayload["environment"].(map[string]any); ok {
+			capturedEnvironment = make(map[string]string)
+			for k, v := range env {
+				if strVal, ok := v.(string); ok {
+					capturedEnvironment[k] = strVal
+				}
+			}
+		}
+
+		w.Header().Set("Gram-Invoke-ID", invocationID.String())
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"result": "success"}`))
+	}))
+	defer mockServer.Close()
+
+	// Setup test dependencies
+	ctx := context.Background()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	enc := testenv.NewEncryptionClient(t)
+	policy, err := guardian.NewUnsafePolicy([]string{})
+	require.NoError(t, err)
+
+	tool := newTestToolDescriptor()
+
+	// Create function call plan with AuthInput configured
+	functionID := uuid.New().String()
+	accessID := uuid.New().String()
+	plan := &FunctionToolCallPlan{
+		FunctionID:        functionID,
+		FunctionsAccessID: accessID,
+		Runtime:           "nodejs",
+		InputSchema:       []byte{},
+		Variables:         map[string]*functions.ManifestVariableAttributeV0{},
+		AuthInput: &functions.ManifestAuthInputAttributeV0{
+			Type:     "apiKey",
+			Variable: "API_KEY",
+		},
+	}
+	toolCallPlan := NewFunctionToolCallPlan(tool, plan)
+
+	// Mock the functions.ToolCaller to return our mock server URL
+	mockFuncCaller := &mockToolCaller{
+		serverURL: mockServer.URL,
+		onCall: func(invID uuid.UUID) {
+			invocationID = invID
+		},
+	}
+
+	// Create tool proxy
+	proxy := NewToolProxy(
+		logger,
+		tracerProvider,
+		meterProvider,
+		ToolCallSourceDirect,
+		enc,
+		nil,
+		policy,
+		mockFuncCaller,
+	)
+
+	// Create request body
+	requestBody := ToolCallBody{
+		PathParameters:       nil,
+		QueryParameters:      nil,
+		HeaderParameters:     nil,
+		Body:                 json.RawMessage(`{"test": "data"}`),
+		ResponseFilter:       nil,
+		EnvironmentVariables: nil,
+		GramRequestSummary:   "",
+	}
+
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	// Create response recorder
+	recorder := httptest.NewRecorder()
+
+	// Set up environment WITHOUT the auth input variable in user config
+	userConfig := NewCaseInsensitiveEnv()
+	userConfig.Set("OTHER_VAR", "some-value")
+
+	// Execute the proxy call
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
+		SystemEnv:  NewCaseInsensitiveEnv(),
+		UserConfig: userConfig,
+	}, toolCallPlan, tm.NewNoopToolCallLogger())
+
+	require.NoError(t, err)
+	require.NotNil(t, capturedEnvironment)
+
+	// Verify the auth input variable was NOT sent
+	require.NotContains(t, capturedEnvironment, "API_KEY")
+}
+
+func TestToolProxy_Do_FunctionTool_AuthInputPrefersUserConfigOverSystemEnv(t *testing.T) {
+	t.Parallel()
+
+	// Track the invocation ID that will be generated
+	var invocationID uuid.UUID
+	var capturedEnvironment map[string]string
+
+	// Create a mock server that captures the function request
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Read the request body to capture environment variables
+		bodyBytes, _ := io.ReadAll(r.Body)
+		var requestPayload map[string]any
+		_ = json.Unmarshal(bodyBytes, &requestPayload)
+
+		if env, ok := requestPayload["environment"].(map[string]any); ok {
+			capturedEnvironment = make(map[string]string)
+			for k, v := range env {
+				if strVal, ok := v.(string); ok {
+					capturedEnvironment[k] = strVal
+				}
+			}
+		}
+
+		w.Header().Set("Gram-Invoke-ID", invocationID.String())
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"result": "success"}`))
+	}))
+	defer mockServer.Close()
+
+	// Setup test dependencies
+	ctx := context.Background()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	enc := testenv.NewEncryptionClient(t)
+	policy, err := guardian.NewUnsafePolicy([]string{})
+	require.NoError(t, err)
+
+	tool := newTestToolDescriptor()
+
+	// Create function call plan with AuthInput configured
+	functionID := uuid.New().String()
+	accessID := uuid.New().String()
+	plan := &FunctionToolCallPlan{
+		FunctionID:        functionID,
+		FunctionsAccessID: accessID,
+		Runtime:           "nodejs",
+		InputSchema:       []byte{},
+		Variables:         map[string]*functions.ManifestVariableAttributeV0{},
+		AuthInput: &functions.ManifestAuthInputAttributeV0{
+			Type:     "bearer",
+			Variable: "BEARER_TOKEN",
+		},
+	}
+	toolCallPlan := NewFunctionToolCallPlan(tool, plan)
+
+	// Mock the functions.ToolCaller to return our mock server URL
+	mockFuncCaller := &mockToolCaller{
+		serverURL: mockServer.URL,
+		onCall: func(invID uuid.UUID) {
+			invocationID = invID
+		},
+	}
+
+	// Create tool proxy
+	proxy := NewToolProxy(
+		logger,
+		tracerProvider,
+		meterProvider,
+		ToolCallSourceDirect,
+		enc,
+		nil,
+		policy,
+		mockFuncCaller,
+	)
+
+	// Create request body
+	requestBody := ToolCallBody{
+		PathParameters:       nil,
+		QueryParameters:      nil,
+		HeaderParameters:     nil,
+		Body:                 json.RawMessage(`{"test": "data"}`),
+		ResponseFilter:       nil,
+		EnvironmentVariables: nil,
+		GramRequestSummary:   "",
+	}
+
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	// Create response recorder
+	recorder := httptest.NewRecorder()
+
+	// Set up BOTH system env and user config with the auth input variable
+	systemEnv := NewCaseInsensitiveEnv()
+	systemEnv.Set("BEARER_TOKEN", "system-bearer-token")
+
+	userConfig := NewCaseInsensitiveEnv()
+	userConfig.Set("BEARER_TOKEN", "user-bearer-token")
+
+	// Execute the proxy call
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
+		SystemEnv:  systemEnv,
+		UserConfig: userConfig,
+	}, toolCallPlan, tm.NewNoopToolCallLogger())
+
+	require.NoError(t, err)
+	require.NotNil(t, capturedEnvironment)
+
+	// Verify the USER CONFIG value was used (not system env)
+	require.Equal(t, "user-bearer-token", capturedEnvironment["BEARER_TOKEN"])
+}
+
+func TestToolProxy_Do_FunctionTool_AuthInputSentWithRegularVariables(t *testing.T) {
+	t.Parallel()
+
+	// Track the invocation ID that will be generated
+	var invocationID uuid.UUID
+	var capturedEnvironment map[string]string
+
+	// Create a mock server that captures the function request
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Read the request body to capture environment variables
+		bodyBytes, _ := io.ReadAll(r.Body)
+		var requestPayload map[string]any
+		_ = json.Unmarshal(bodyBytes, &requestPayload)
+
+		if env, ok := requestPayload["environment"].(map[string]any); ok {
+			capturedEnvironment = make(map[string]string)
+			for k, v := range env {
+				if strVal, ok := v.(string); ok {
+					capturedEnvironment[k] = strVal
+				}
+			}
+		}
+
+		w.Header().Set("Gram-Invoke-ID", invocationID.String())
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"result": "success"}`))
+	}))
+	defer mockServer.Close()
+
+	// Setup test dependencies
+	ctx := context.Background()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	enc := testenv.NewEncryptionClient(t)
+	policy, err := guardian.NewUnsafePolicy([]string{})
+	require.NoError(t, err)
+
+	tool := newTestToolDescriptor()
+
+	// Create function call plan with both Variables and AuthInput configured
+	functionID := uuid.New().String()
+	accessID := uuid.New().String()
+	plan := &FunctionToolCallPlan{
+		FunctionID:        functionID,
+		FunctionsAccessID: accessID,
+		Runtime:           "nodejs",
+		InputSchema:       []byte{},
+		Variables: map[string]*functions.ManifestVariableAttributeV0{
+			"DATABASE_URL": nil,
+			"API_KEY":      nil,
+		},
+		AuthInput: &functions.ManifestAuthInputAttributeV0{
+			Type:     "oauth",
+			Variable: "OAUTH_TOKEN",
+		},
+	}
+	toolCallPlan := NewFunctionToolCallPlan(tool, plan)
+
+	// Mock the functions.ToolCaller to return our mock server URL
+	mockFuncCaller := &mockToolCaller{
+		serverURL: mockServer.URL,
+		onCall: func(invID uuid.UUID) {
+			invocationID = invID
+		},
+	}
+
+	// Create tool proxy
+	proxy := NewToolProxy(
+		logger,
+		tracerProvider,
+		meterProvider,
+		ToolCallSourceDirect,
+		enc,
+		nil,
+		policy,
+		mockFuncCaller,
+	)
+
+	// Create request body
+	requestBody := ToolCallBody{
+		PathParameters:       nil,
+		QueryParameters:      nil,
+		HeaderParameters:     nil,
+		Body:                 json.RawMessage(`{"test": "data"}`),
+		ResponseFilter:       nil,
+		EnvironmentVariables: nil,
+		GramRequestSummary:   "",
+	}
+
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	// Create response recorder
+	recorder := httptest.NewRecorder()
+
+	// Set up environment with both regular variables and auth input variable
+	userConfig := NewCaseInsensitiveEnv()
+	userConfig.Set("DATABASE_URL", "postgres://localhost/db")
+	userConfig.Set("API_KEY", "regular-api-key")
+	userConfig.Set("OAUTH_TOKEN", "oauth-token-value")
+
+	// Execute the proxy call
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
+		SystemEnv:  NewCaseInsensitiveEnv(),
+		UserConfig: userConfig,
+	}, toolCallPlan, tm.NewNoopToolCallLogger())
+
+	require.NoError(t, err)
+	require.NotNil(t, capturedEnvironment)
+
+	// Verify both regular variables and auth input variable were sent
+	require.Equal(t, "postgres://localhost/db", capturedEnvironment["DATABASE_URL"])
+	require.Equal(t, "regular-api-key", capturedEnvironment["API_KEY"])
+	require.Equal(t, "oauth-token-value", capturedEnvironment["OAUTH_TOKEN"])
+}
+
+func TestToolProxy_Do_FunctionTool_AuthInputNilNotSent(t *testing.T) {
+	t.Parallel()
+
+	// Track the invocation ID that will be generated
+	var invocationID uuid.UUID
+	var capturedEnvironment map[string]string
+
+	// Create a mock server that captures the function request
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Read the request body to capture environment variables
+		bodyBytes, _ := io.ReadAll(r.Body)
+		var requestPayload map[string]any
+		_ = json.Unmarshal(bodyBytes, &requestPayload)
+
+		if env, ok := requestPayload["environment"].(map[string]any); ok {
+			capturedEnvironment = make(map[string]string)
+			for k, v := range env {
+				if strVal, ok := v.(string); ok {
+					capturedEnvironment[k] = strVal
+				}
+			}
+		}
+
+		w.Header().Set("Gram-Invoke-ID", invocationID.String())
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"result": "success"}`))
+	}))
+	defer mockServer.Close()
+
+	// Setup test dependencies
+	ctx := context.Background()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	enc := testenv.NewEncryptionClient(t)
+	policy, err := guardian.NewUnsafePolicy([]string{})
+	require.NoError(t, err)
+
+	tool := newTestToolDescriptor()
+
+	// Create function call plan with AuthInput set to nil
+	functionID := uuid.New().String()
+	accessID := uuid.New().String()
+	plan := &FunctionToolCallPlan{
+		FunctionID:        functionID,
+		FunctionsAccessID: accessID,
+		Runtime:           "nodejs",
+		InputSchema:       []byte{},
+		Variables:         map[string]*functions.ManifestVariableAttributeV0{},
+		AuthInput:         nil, // Explicitly nil
+	}
+	toolCallPlan := NewFunctionToolCallPlan(tool, plan)
+
+	// Mock the functions.ToolCaller to return our mock server URL
+	mockFuncCaller := &mockToolCaller{
+		serverURL: mockServer.URL,
+		onCall: func(invID uuid.UUID) {
+			invocationID = invID
+		},
+	}
+
+	// Create tool proxy
+	proxy := NewToolProxy(
+		logger,
+		tracerProvider,
+		meterProvider,
+		ToolCallSourceDirect,
+		enc,
+		nil,
+		policy,
+		mockFuncCaller,
+	)
+
+	// Create request body
+	requestBody := ToolCallBody{
+		PathParameters:       nil,
+		QueryParameters:      nil,
+		HeaderParameters:     nil,
+		Body:                 json.RawMessage(`{"test": "data"}`),
+		ResponseFilter:       nil,
+		EnvironmentVariables: nil,
+		GramRequestSummary:   "",
+	}
+
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	// Create response recorder
+	recorder := httptest.NewRecorder()
+
+	// Set up environment with a potential auth input variable
+	userConfig := NewCaseInsensitiveEnv()
+	userConfig.Set("OAUTH_TOKEN", "should-not-be-sent")
+
+	// Execute the proxy call
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
+		SystemEnv:  NewCaseInsensitiveEnv(),
+		UserConfig: userConfig,
+	}, toolCallPlan, tm.NewNoopToolCallLogger())
+
+	require.NoError(t, err)
+	require.NotNil(t, capturedEnvironment)
+
+	// Verify the auth input variable was NOT sent when AuthInput is nil
+	require.NotContains(t, capturedEnvironment, "OAUTH_TOKEN")
 }

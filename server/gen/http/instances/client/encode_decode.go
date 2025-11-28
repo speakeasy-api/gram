@@ -537,8 +537,9 @@ func unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentV
 		return nil
 	}
 	res := &types.FunctionEnvironmentVariable{
-		Description: v.Description,
-		Name:        *v.Name,
+		Description:   v.Description,
+		AuthInputType: v.AuthInputType,
+		Name:          *v.Name,
 	}
 
 	return res

@@ -281,6 +281,7 @@ INSERT INTO function_tool_definitions (
   , description
   , runtime
   , variables
+  , auth_input
   , input_schema
 )
 SELECT 
@@ -292,6 +293,7 @@ SELECT
   , current.description
   , current.runtime
   , current.variables
+  , current.auth_input
   , current.input_schema
 FROM function_tool_definitions as current
 WHERE current.deployment_id = @original_deployment_id
@@ -508,6 +510,7 @@ INSERT INTO function_tool_definitions (
   , description
   , input_schema
   , variables
+  , auth_input
   , meta
 ) VALUES (
     @deployment_id
@@ -519,6 +522,7 @@ INSERT INTO function_tool_definitions (
   , @description
   , @input_schema
   , @variables
+  , @auth_input
   , @meta
 )
 RETURNING *;

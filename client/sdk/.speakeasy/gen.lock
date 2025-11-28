@@ -1,24 +1,24 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 90568ae9eeeb69be1d568608418c418f
+  docChecksum: 016e43154a1523c626bc3163830b7deb
   docVersion: 0.0.1
-  speakeasyVersion: 1.641.1
-  generationVersion: 2.730.5
-  releaseVersion: 0.18.1
-  configChecksum: c36684f886420c38fb40d9cae1f700c7
+  speakeasyVersion: 1.661.1
+  generationVersion: 2.763.2
+  releaseVersion: 0.19.3
+  configChecksum: f9ce2edc93cb876cb0f6501a92571c2d
 features:
   typescript:
     additionalDependencies: 0.1.0
     constsAndDefaults: 0.1.12
-    core: 3.24.1
+    core: 3.26.10
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
     downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
     globalSecurityCallbacks: 0.1.0
-    globalServerURLs: 2.82.5
+    globalServerURLs: 2.83.0
     methodArguments: 0.1.2
     methodSecurity: 2.82.6
     nameOverrides: 2.81.2
@@ -116,6 +116,7 @@ generatedFiles:
   - docs/models/components/listversionsresult.md
   - docs/models/components/mcpmetadata.md
   - docs/models/components/notmodified.md
+  - docs/models/components/oauthenablementmetadata.md
   - docs/models/components/oauthproxyprovider.md
   - docs/models/components/oauthproxyserver.md
   - docs/models/components/openapiv3deploymentasset.md
@@ -272,6 +273,7 @@ generatedFiles:
   - docs/models/operations/getinstancesecurity.md
   - docs/models/operations/getinstancesecurityoption1.md
   - docs/models/operations/getinstancesecurityoption2.md
+  - docs/models/operations/getinstancesecurityoption3.md
   - docs/models/operations/getlatestdeploymentrequest.md
   - docs/models/operations/getlatestdeploymentsecurity.md
   - docs/models/operations/getlatestdeploymentsecurityoption1.md
@@ -656,6 +658,7 @@ generatedFiles:
   - src/models/components/listversionsresult.ts
   - src/models/components/mcpmetadata.ts
   - src/models/components/notmodified.ts
+  - src/models/components/oauthenablementmetadata.ts
   - src/models/components/oauthproxyprovider.ts
   - src/models/components/oauthproxyserver.ts
   - src/models/components/openapiv3deploymentasset.ts
@@ -921,6 +924,7 @@ generatedFiles:
   - src/types/operations.ts
   - src/types/rfcdate.ts
   - src/types/streams.ts
+  - src/types/unrecognized.ts
   - tsconfig.json
 examples:
   slackLogin:
@@ -1424,7 +1428,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-03-22T17:12:26.250Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "tools": [{}], "toolset_version": 740618, "updated_at": "2024-05-10T06:01:51.541Z"}
+          application/json: {"account_type": "<value>", "created_at": "2025-03-22T17:12:26.250Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 740618}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "tools": [{}], "toolset_version": 740618, "updated_at": "2024-05-10T06:01:51.541Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1446,7 +1450,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 157800, "updated_at": "2025-12-20T03:22:44.412Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 157800}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 157800, "updated_at": "2025-12-20T03:22:44.412Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1469,7 +1473,7 @@ examples:
         application/json: {}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "description": "mushy comparison messy lady fly", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2023-07-28T22:54:49.336Z"}], "resource_urns": ["<value 1>", "<value 2>", "<value 3>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [{}], "toolset_version": 873620, "updated_at": "2025-08-07T19:20:12.233Z"}
+          application/json: {"account_type": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 873620}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "description": "mushy comparison messy lady fly", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2023-07-28T22:54:49.336Z"}], "resource_urns": ["<value 1>", "<value 2>", "<value 3>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [{}], "toolset_version": 873620, "updated_at": "2025-08-07T19:20:12.233Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1603,7 +1607,7 @@ examples:
         application/json: {"external_oauth_server": {"metadata": "<value>", "slug": "<value>"}}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-08-31T03:23:36.997Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 220932, "updated_at": "2025-03-28T09:33:33.851Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-08-31T03:23:36.997Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 220932}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 220932, "updated_at": "2025-03-28T09:33:33.851Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1627,7 +1631,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-08-30T05:28:04.458Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 220098, "updated_at": "2023-10-21T14:21:06.001Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-08-30T05:28:04.458Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 220098}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 220098, "updated_at": "2023-10-21T14:21:06.001Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1730,7 +1734,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-07-27T03:45:28.599Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2024-10-23T10:29:38.107Z", "description": "chap whoa gee lightly devastation vivacious about t-shirt", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2024-11-26T08:12:18.787Z"}], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>"], "tools": [], "toolset_version": 189011, "updated_at": "2024-04-29T05:29:07.967Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-07-27T03:45:28.599Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 189011}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2024-10-23T10:29:38.107Z", "description": "chap whoa gee lightly devastation vivacious about t-shirt", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2024-11-26T08:12:18.787Z"}], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>"], "tools": [], "toolset_version": 189011, "updated_at": "2024-04-29T05:29:07.967Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

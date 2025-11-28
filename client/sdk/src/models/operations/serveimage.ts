@@ -21,15 +21,6 @@ export type ServeImageResponse = {
 };
 
 /** @internal */
-export const ServeImageRequest$inboundSchema: z.ZodType<
-  ServeImageRequest,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  id: z.string(),
-});
-
-/** @internal */
 export type ServeImageRequest$Outbound = {
   id: string;
 };
@@ -43,34 +34,11 @@ export const ServeImageRequest$outboundSchema: z.ZodType<
   id: z.string(),
 });
 
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace ServeImageRequest$ {
-  /** @deprecated use `ServeImageRequest$inboundSchema` instead. */
-  export const inboundSchema = ServeImageRequest$inboundSchema;
-  /** @deprecated use `ServeImageRequest$outboundSchema` instead. */
-  export const outboundSchema = ServeImageRequest$outboundSchema;
-  /** @deprecated use `ServeImageRequest$Outbound` instead. */
-  export type Outbound = ServeImageRequest$Outbound;
-}
-
 export function serveImageRequestToJSON(
   serveImageRequest: ServeImageRequest,
 ): string {
   return JSON.stringify(
     ServeImageRequest$outboundSchema.parse(serveImageRequest),
-  );
-}
-
-export function serveImageRequestFromJSON(
-  jsonString: string,
-): SafeParseResult<ServeImageRequest, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => ServeImageRequest$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'ServeImageRequest' from JSON`,
   );
 }
 
@@ -88,48 +56,6 @@ export const ServeImageResponse$inboundSchema: z.ZodType<
     "Result": "result",
   });
 });
-
-/** @internal */
-export type ServeImageResponse$Outbound = {
-  Headers: { [k: string]: Array<string> };
-  Result: ReadableStream<Uint8Array>;
-};
-
-/** @internal */
-export const ServeImageResponse$outboundSchema: z.ZodType<
-  ServeImageResponse$Outbound,
-  z.ZodTypeDef,
-  ServeImageResponse
-> = z.object({
-  headers: z.record(z.array(z.string())),
-  result: z.instanceof(ReadableStream<Uint8Array>),
-}).transform((v) => {
-  return remap$(v, {
-    headers: "Headers",
-    result: "Result",
-  });
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace ServeImageResponse$ {
-  /** @deprecated use `ServeImageResponse$inboundSchema` instead. */
-  export const inboundSchema = ServeImageResponse$inboundSchema;
-  /** @deprecated use `ServeImageResponse$outboundSchema` instead. */
-  export const outboundSchema = ServeImageResponse$outboundSchema;
-  /** @deprecated use `ServeImageResponse$Outbound` instead. */
-  export type Outbound = ServeImageResponse$Outbound;
-}
-
-export function serveImageResponseToJSON(
-  serveImageResponse: ServeImageResponse,
-): string {
-  return JSON.stringify(
-    ServeImageResponse$outboundSchema.parse(serveImageResponse),
-  );
-}
 
 export function serveImageResponseFromJSON(
   jsonString: string,

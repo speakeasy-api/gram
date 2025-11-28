@@ -561,8 +561,9 @@ func marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableRespons
 		return nil
 	}
 	res := &FunctionEnvironmentVariableResponseBody{
-		Description: v.Description,
-		Name:        v.Name,
+		Description:   v.Description,
+		AuthInputType: v.AuthInputType,
+		Name:          v.Name,
 	}
 
 	return res

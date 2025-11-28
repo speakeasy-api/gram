@@ -212,9 +212,15 @@ func (tp *ToolProxy) doFunction(
 	}
 
 	// For each variable required by the function, allow user config to merge/override
-	for _, varName := range plan.Variables {
-		if val := env.UserConfig.Get(varName); val != "" {
-			payloadEnv[varName] = val
+	for key := range plan.Variables {
+		if val := env.UserConfig.Get(key); val != "" {
+			payloadEnv[key] = val
+		}
+	}
+
+	if plan.AuthInput != nil {
+		if val := env.UserConfig.Get(plan.AuthInput.Variable); val != "" {
+			payloadEnv[plan.AuthInput.Variable] = val
 		}
 	}
 

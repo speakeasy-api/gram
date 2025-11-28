@@ -1216,3 +1216,80 @@ func TestDeploymentsService_CreateDeployment_ResourcesWithOpenAPI(t *testing.T) 
 	require.NoError(t, err, "list deployment function resources")
 	require.Len(t, resources, 3, "expected 3 function resources")
 }
+
+func TestCreateDeployment_WithFunctions_AuthInputSaved(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Upload functions file with authInput in manifest
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-authinput.json", "nodejs:22")
+
+	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey:  "test-functions-authinput",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		Functions: []*gen.AddFunctionsForm{
+			{
+				AssetID: fres.Asset.ID,
+				Name:    "authinput-functions",
+				Slug:    "authinput-functions",
+				Runtime: "nodejs:22",
+			},
+		},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment with functions that have authInput")
+	require.Equal(t, "completed", dep.Deployment.Status, "deployment status should be completed")
+
+	// Verify function tools were created
+	repo := testrepo.New(ti.conn)
+	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment function tools")
+	require.Len(t, functionTools, 3, "expected 3 function tools")
+
+	// Verify tool with oauth authInput
+	oauthTool, ok := lo.Find(functionTools, func(tool testrepo.FunctionToolDefinition) bool {
+		return tool.Name == "authenticated_api_call"
+	})
+	require.True(t, ok, "authenticated_api_call tool not found")
+	require.NotNil(t, oauthTool.AuthInput, "authenticated_api_call should have authInput")
+	require.NotEmpty(t, oauthTool.AuthInput, "authInput should not be empty")
+
+	// Verify authInput content matches expected structure
+	var authInput map[string]any
+	err = json.Unmarshal(oauthTool.AuthInput, &authInput)
+	require.NoError(t, err, "authInput should unmarshal to map")
+	require.Equal(t, "oauth2", authInput["type"], "authInput type should be oauth2")
+	require.Equal(t, "OAUTH_TOKEN", authInput["variable"], "authInput variable should be OAUTH_TOKEN")
+
+	// Verify tool with bearer authInput
+	bearerTool, ok := lo.Find(functionTools, func(tool testrepo.FunctionToolDefinition) bool {
+		return tool.Name == "bearer_authenticated_call"
+	})
+	require.True(t, ok, "bearer_authenticated_call tool not found")
+	require.NotNil(t, bearerTool.AuthInput, "bearer_authenticated_call should have authInput")
+	require.NotEmpty(t, bearerTool.AuthInput, "authInput should not be empty")
+
+	// Verify bearer authInput content
+	var bearerAuthInput map[string]any
+	err = json.Unmarshal(bearerTool.AuthInput, &bearerAuthInput)
+	require.NoError(t, err, "bearer authInput should unmarshal to map")
+	require.Equal(t, "bearer", bearerAuthInput["type"], "authInput type should be bearer")
+	require.Equal(t, "BEARER_TOKEN", bearerAuthInput["variable"], "authInput variable should be BEARER_TOKEN")
+
+	// Verify tool without authInput has nil authInput
+	simpleTool, ok := lo.Find(functionTools, func(tool testrepo.FunctionToolDefinition) bool {
+		return tool.Name == "simple_api_call"
+	})
+	require.True(t, ok, "simple_api_call tool not found")
+	require.Nil(t, simpleTool.AuthInput, "simple_api_call should have no authInput")
+}

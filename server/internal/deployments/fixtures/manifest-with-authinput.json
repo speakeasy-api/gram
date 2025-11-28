@@ -1,0 +1,71 @@
+{
+  "version": "0.0.0",
+  "tools": [
+    {
+      "name": "authenticated_api_call",
+      "description": "Make an authenticated API call",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "description": "The API endpoint to call"
+          },
+          "method": {
+            "type": "string",
+            "enum": ["GET", "POST", "PUT", "DELETE"],
+            "description": "The HTTP method to use"
+          }
+        },
+        "required": ["endpoint", "method"]
+      },
+      "variables": {
+        "API_BASE_URL": {
+          "description": "Base URL for the API"
+        }
+      },
+      "authInput": {
+        "type": "oauth2",
+        "variable": "OAUTH_TOKEN"
+      }
+    },
+    {
+      "name": "simple_api_call",
+      "description": "Make a simple API call without authentication",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "description": "The API endpoint to call"
+          }
+        },
+        "required": ["endpoint"]
+      },
+      "variables": {
+        "API_BASE_URL": {
+          "description": "Base URL for the API"
+        }
+      }
+    },
+    {
+      "name": "bearer_authenticated_call",
+      "description": "Make an API call with bearer token authentication",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "description": "The API endpoint to call"
+          }
+        },
+        "required": ["endpoint"]
+      },
+      "authInput": {
+        "type": "bearer",
+        "variable": "BEARER_TOKEN"
+      }
+    }
+  ]
+}
+

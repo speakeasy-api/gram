@@ -2,6 +2,7 @@ package deployments_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"testing"
 
@@ -1597,4 +1598,250 @@ func TestEvolve_WithResources_MixedWithOpenAPI(t *testing.T) {
 	resources, err := repo.ListDeploymentFunctionsResources(ctx, uuid.MustParse(result.Deployment.ID))
 	require.NoError(t, err, "list deployment function resources")
 	require.Len(t, resources, 3, "expected 3 function resources")
+}
+
+func TestEvolve_WithFunctions_AuthInputSaved(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Upload functions file with authInput in manifest
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-authinput.json", "nodejs:22")
+
+	// Evolve deployment with functions that have authInput
+	result, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:           nil,
+		SessionToken:          nil,
+		ProjectSlugInput:      nil,
+		DeploymentID:          nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions: []*gen.AddFunctionsForm{
+			{
+				AssetID: fres.Asset.ID,
+				Name:    "authinput-functions",
+				Slug:    "authinput-functions",
+				Runtime: "nodejs:22",
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "evolve deployment with functions that have authInput")
+	require.Equal(t, "completed", result.Deployment.Status, "deployment status should be completed")
+
+	// Verify function tools were created
+	repo := testrepo.New(ti.conn)
+	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(result.Deployment.ID))
+	require.NoError(t, err, "list deployment function tools")
+	require.Len(t, functionTools, 3, "expected 3 function tools")
+
+	// Verify tool with oauth authInput
+	oauthTool, ok := lo.Find(functionTools, func(tool testrepo.FunctionToolDefinition) bool {
+		return tool.Name == "authenticated_api_call"
+	})
+	require.True(t, ok, "authenticated_api_call tool not found")
+	require.NotNil(t, oauthTool.AuthInput, "authenticated_api_call should have authInput")
+	require.NotEmpty(t, oauthTool.AuthInput, "authInput should not be empty")
+
+	// Verify authInput content matches expected structure
+	var authInput map[string]any
+	err = json.Unmarshal(oauthTool.AuthInput, &authInput)
+	require.NoError(t, err, "authInput should unmarshal to map")
+	require.Equal(t, "oauth2", authInput["type"], "authInput type should be oauth2")
+	require.Equal(t, "OAUTH_TOKEN", authInput["variable"], "authInput variable should be OAUTH_TOKEN")
+
+	// Verify tool with bearer authInput
+	bearerTool, ok := lo.Find(functionTools, func(tool testrepo.FunctionToolDefinition) bool {
+		return tool.Name == "bearer_authenticated_call"
+	})
+	require.True(t, ok, "bearer_authenticated_call tool not found")
+	require.NotNil(t, bearerTool.AuthInput, "bearer_authenticated_call should have authInput")
+	require.NotEmpty(t, bearerTool.AuthInput, "authInput should not be empty")
+
+	// Verify bearer authInput content
+	var bearerAuthInput map[string]any
+	err = json.Unmarshal(bearerTool.AuthInput, &bearerAuthInput)
+	require.NoError(t, err, "bearer authInput should unmarshal to map")
+	require.Equal(t, "bearer", bearerAuthInput["type"], "authInput type should be bearer")
+	require.Equal(t, "BEARER_TOKEN", bearerAuthInput["variable"], "authInput variable should be BEARER_TOKEN")
+
+	// Verify tool without authInput has nil authInput
+	simpleTool, ok := lo.Find(functionTools, func(tool testrepo.FunctionToolDefinition) bool {
+		return tool.Name == "simple_api_call"
+	})
+	require.True(t, ok, "simple_api_call tool not found")
+	require.Nil(t, simpleTool.AuthInput, "simple_api_call should have no authInput")
+}
+
+func TestEvolve_UpdateFunctions_AddAuthInput(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Upload initial functions file without authInput
+	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+
+	// Create initial deployment with functions without authInput
+	initial, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:           nil,
+		SessionToken:          nil,
+		ProjectSlugInput:      nil,
+		DeploymentID:          nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions: []*gen.AddFunctionsForm{
+			{
+				AssetID: fres1.Asset.ID,
+				Name:    "my-functions",
+				Slug:    "my-functions",
+				Runtime: "nodejs:22",
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "create initial deployment without authInput")
+	require.Equal(t, "completed", initial.Deployment.Status, "initial deployment status should be completed")
+
+	repo := testrepo.New(ti.conn)
+
+	// Verify initial tools have no authInput
+	initialTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(initial.Deployment.ID))
+	require.NoError(t, err, "list initial deployment function tools")
+	for _, tool := range initialTools {
+		require.Nil(t, tool.AuthInput, "initial tools should have no authInput")
+	}
+
+	// Upload updated functions file with authInput
+	fres2 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-authinput.json", "nodejs:22")
+
+	// Evolve deployment to update functions with authInput (same name/slug, different asset)
+	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:           nil,
+		SessionToken:          nil,
+		ProjectSlugInput:      nil,
+		DeploymentID:          nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions: []*gen.AddFunctionsForm{
+			{
+				AssetID: fres2.Asset.ID,
+				Name:    "my-functions", // Same name
+				Slug:    "my-functions", // Same slug
+				Runtime: "nodejs:22",
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "evolve deployment to add authInput")
+	require.Equal(t, "completed", evolved.Deployment.Status, "evolved deployment status should be completed")
+
+	// Verify evolved tools have authInput where expected
+	evolvedTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(evolved.Deployment.ID))
+	require.NoError(t, err, "list evolved deployment function tools")
+	require.Len(t, evolvedTools, 3, "expected 3 function tools")
+
+	// Verify tool with oauth authInput
+	oauthTool, ok := lo.Find(evolvedTools, func(tool testrepo.FunctionToolDefinition) bool {
+		return tool.Name == "authenticated_api_call"
+	})
+	require.True(t, ok, "authenticated_api_call tool not found")
+	require.NotNil(t, oauthTool.AuthInput, "authenticated_api_call should have authInput")
+
+	var authInput map[string]any
+	err = json.Unmarshal(oauthTool.AuthInput, &authInput)
+	require.NoError(t, err, "authInput should unmarshal to map")
+	require.Equal(t, "oauth2", authInput["type"], "authInput type should be oauth2")
+	require.Equal(t, "OAUTH_TOKEN", authInput["variable"], "authInput variable should be OAUTH_TOKEN")
+
+	// Verify tool without authInput still has nil
+	simpleTool, ok := lo.Find(evolvedTools, func(tool testrepo.FunctionToolDefinition) bool {
+		return tool.Name == "simple_api_call"
+	})
+	require.True(t, ok, "simple_api_call tool not found")
+	require.Nil(t, simpleTool.AuthInput, "simple_api_call should have no authInput")
+}
+
+func TestEvolve_UpdateFunctions_RemoveAuthInput(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Upload initial functions file with authInput
+	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-authinput.json", "nodejs:22")
+
+	// Create initial deployment with functions that have authInput
+	initial, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:           nil,
+		SessionToken:          nil,
+		ProjectSlugInput:      nil,
+		DeploymentID:          nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions: []*gen.AddFunctionsForm{
+			{
+				AssetID: fres1.Asset.ID,
+				Name:    "my-functions",
+				Slug:    "my-functions",
+				Runtime: "nodejs:22",
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "create initial deployment with authInput")
+	require.Equal(t, "completed", initial.Deployment.Status, "initial deployment status should be completed")
+
+	repo := testrepo.New(ti.conn)
+
+	// Verify initial tools have authInput where expected
+	initialTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(initial.Deployment.ID))
+	require.NoError(t, err, "list initial deployment function tools")
+	oauthTool, ok := lo.Find(initialTools, func(tool testrepo.FunctionToolDefinition) bool {
+		return tool.Name == "authenticated_api_call"
+	})
+	require.True(t, ok, "authenticated_api_call tool not found")
+	require.NotNil(t, oauthTool.AuthInput, "initial tool should have authInput")
+
+	// Upload updated functions file without authInput
+	fres2 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+
+	// Evolve deployment to update functions without authInput (same name/slug, different asset)
+	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:           nil,
+		SessionToken:          nil,
+		ProjectSlugInput:      nil,
+		DeploymentID:          nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions: []*gen.AddFunctionsForm{
+			{
+				AssetID: fres2.Asset.ID,
+				Name:    "my-functions", // Same name
+				Slug:    "my-functions", // Same slug
+				Runtime: "nodejs:22",
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "evolve deployment to remove authInput")
+	require.Equal(t, "completed", evolved.Deployment.Status, "evolved deployment status should be completed")
+
+	// Verify evolved tools have no authInput
+	evolvedTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(evolved.Deployment.ID))
+	require.NoError(t, err, "list evolved deployment function tools")
+	for _, tool := range evolvedTools {
+		require.Nil(t, tool.AuthInput, "evolved tools should have no authInput")
+	}
 }

@@ -33,45 +33,6 @@ export const PromptTemplateEntry$inboundSchema: z.ZodType<
   name: z.string(),
 });
 
-/** @internal */
-export type PromptTemplateEntry$Outbound = {
-  id: string;
-  kind?: string | undefined;
-  name: string;
-};
-
-/** @internal */
-export const PromptTemplateEntry$outboundSchema: z.ZodType<
-  PromptTemplateEntry$Outbound,
-  z.ZodTypeDef,
-  PromptTemplateEntry
-> = z.object({
-  id: z.string(),
-  kind: z.string().optional(),
-  name: z.string(),
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace PromptTemplateEntry$ {
-  /** @deprecated use `PromptTemplateEntry$inboundSchema` instead. */
-  export const inboundSchema = PromptTemplateEntry$inboundSchema;
-  /** @deprecated use `PromptTemplateEntry$outboundSchema` instead. */
-  export const outboundSchema = PromptTemplateEntry$outboundSchema;
-  /** @deprecated use `PromptTemplateEntry$Outbound` instead. */
-  export type Outbound = PromptTemplateEntry$Outbound;
-}
-
-export function promptTemplateEntryToJSON(
-  promptTemplateEntry: PromptTemplateEntry,
-): string {
-  return JSON.stringify(
-    PromptTemplateEntry$outboundSchema.parse(promptTemplateEntry),
-  );
-}
-
 export function promptTemplateEntryFromJSON(
   jsonString: string,
 ): SafeParseResult<PromptTemplateEntry, SDKValidationError> {
