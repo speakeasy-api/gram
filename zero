@@ -77,6 +77,7 @@ echo -e "\n⏳ Starting infra"
 mise infra:start
 
 echo -e "\n⏳ Running migrations"
+mise run zero:migrations
 mise db:migrate
 mise clickhouse:migrate
 
