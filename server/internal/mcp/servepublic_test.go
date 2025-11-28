@@ -9,11 +9,13 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -136,5 +138,86 @@ func TestService_ServePublic(t *testing.T) {
 		err = ti.service.ServePublic(w, req)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not found")
+	})
+
+	t.Run("returns server instructions in initialize response", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestMCPService(t)
+		toolsetsRepo := toolsets_repo.New(ti.conn)
+		metadataRepo := metadata_repo.New(ti.conn)
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectID)
+
+		toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			Name:                   "Test MCP Server with Instructions",
+			Slug:                   "test-mcp-instructions",
+			Description:            conv.ToPGText("A test MCP server"),
+			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+			McpSlug:                conv.ToPGText("test-mcp-instructions"),
+			McpEnabled:             true,
+		})
+		require.NoError(t, err)
+
+		// Set MCP metadata with instructions
+		instructions := "You have tools for searching the Test Hub. Use them wisely."
+		_, err = metadataRepo.UpsertMetadata(ctx, metadata_repo.UpsertMetadataParams{
+			ToolsetID:                toolset.ID,
+			ProjectID:                *authCtx.ProjectID,
+			ExternalDocumentationUrl: pgtype.Text{String: "", Valid: false},
+			LogoID:                   uuid.NullUUID{Valid: false},
+			Instructions:             conv.ToPGText(instructions),
+		})
+		require.NoError(t, err)
+
+		reqBody := []map[string]any{
+			{
+				"jsonrpc": "2.0",
+				"id":      1,
+				"method":  "initialize",
+				"params": map[string]any{
+					"protocolVersion": "2024-11-05",
+					"capabilities":    map[string]any{},
+					"clientInfo": map[string]any{
+						"name":    "test-client",
+						"version": "1.0.0",
+					},
+				},
+			},
+		}
+		bodyBytes, err := json.Marshal(reqBody)
+		require.NoError(t, err)
+
+		mcpSlug := toolset.McpSlug.String
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(bodyBytes))
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Content-Type", "application/json")
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", mcpSlug)
+		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
+		req = req.WithContext(ctx)
+
+		w := httptest.NewRecorder()
+
+		err = ti.service.ServePublic(w, req)
+		require.NoError(t, err)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var response map[string]any
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err, "response body: %s", w.Body.String())
+
+		result, ok := response["result"].(map[string]any)
+		require.True(t, ok, "result should be a map")
+		require.Equal(t, "2024-11-05", result["protocolVersion"])
+		require.NotNil(t, result["capabilities"])
+		require.NotNil(t, result["serverInfo"])
+		require.Equal(t, instructions, result["instructions"])
 	})
 }
