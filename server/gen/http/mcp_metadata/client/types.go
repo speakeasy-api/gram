@@ -22,6 +22,8 @@ type SetMcpMetadataRequestBody struct {
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// A link to external documentation for the MCP install page
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
+	// Server instructions returned in the MCP initialize response
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 }
 
 // GetMcpMetadataResponseBody is the type of the "mcpMetadata" service
@@ -42,6 +44,8 @@ type SetMcpMetadataResponseBody struct {
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// A link to external documentation for the MCP install page
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
+	// Server instructions returned in the MCP initialize response
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// When the metadata entry was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the metadata entry was last updated
@@ -430,6 +434,8 @@ type McpMetadataResponseBody struct {
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// A link to external documentation for the MCP install page
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
+	// Server instructions returned in the MCP initialize response
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// When the metadata entry was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the metadata entry was last updated
@@ -443,6 +449,7 @@ func NewSetMcpMetadataRequestBody(p *mcpmetadata.SetMcpMetadataPayload) *SetMcpM
 		ToolsetSlug:              string(p.ToolsetSlug),
 		LogoAssetID:              p.LogoAssetID,
 		ExternalDocumentationURL: p.ExternalDocumentationURL,
+		Instructions:             p.Instructions,
 	}
 	return body
 }
@@ -616,6 +623,7 @@ func NewSetMcpMetadataMcpMetadataOK(body *SetMcpMetadataResponseBody) *types.Mcp
 		ToolsetID:                *body.ToolsetID,
 		LogoAssetID:              body.LogoAssetID,
 		ExternalDocumentationURL: body.ExternalDocumentationURL,
+		Instructions:             body.Instructions,
 		CreatedAt:                *body.CreatedAt,
 		UpdatedAt:                *body.UpdatedAt,
 	}

@@ -164,4 +164,49 @@ func TestService_SetMcpMetadata(t *testing.T) {
 		require.Equal(t, logoAssetID, *result.LogoAssetID)
 		require.Nil(t, result.ExternalDocumentationURL)
 	})
+
+	t.Run("sets server instructions", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestMCPMetadataService(t)
+		toolsetsRepo := toolsets_repo.New(ti.conn)
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectID)
+
+		toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			Name:                   "Test MCP Server",
+			Slug:                   "test-mcp-instructions",
+			Description:            conv.ToPGText("A test MCP server"),
+			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+			McpSlug:                pgtype.Text{String: "", Valid: false},
+			McpEnabled:             false,
+		})
+		require.NoError(t, err)
+
+		instructions := "You have tools for searching the Test Hub. Use them wisely."
+
+		payload := &gen.SetMcpMetadataPayload{
+			ToolsetSlug:              types.Slug(toolset.Slug),
+			LogoAssetID:              nil,
+			ExternalDocumentationURL: nil,
+			Instructions:             &instructions,
+			SessionToken:             nil,
+			ProjectSlugInput:         nil,
+		}
+
+		result, err := ti.service.SetMcpMetadata(ctx, payload)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		require.NotEmpty(t, result.ID)
+		require.Equal(t, toolset.ID.String(), result.ToolsetID)
+		require.NotNil(t, result.Instructions)
+		require.Equal(t, instructions, *result.Instructions)
+		require.Nil(t, result.LogoAssetID)
+		require.Nil(t, result.ExternalDocumentationURL)
+	})
 }
