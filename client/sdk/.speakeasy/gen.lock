@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 90568ae9eeeb69be1d568608418c418f
+  docChecksum: 3faaf74407199de61d622281a32472ab
   docVersion: 0.0.1
   speakeasyVersion: 1.641.1
   generationVersion: 2.730.5
-  releaseVersion: 0.18.1
-  configChecksum: c36684f886420c38fb40d9cae1f700c7
+  releaseVersion: 0.18.2
+  configChecksum: c765c08dc574e633cbf5e610b730d0c1
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -272,6 +272,7 @@ generatedFiles:
   - docs/models/operations/getinstancesecurity.md
   - docs/models/operations/getinstancesecurityoption1.md
   - docs/models/operations/getinstancesecurityoption2.md
+  - docs/models/operations/getinstancesecurityoption3.md
   - docs/models/operations/getlatestdeploymentrequest.md
   - docs/models/operations/getlatestdeploymentsecurity.md
   - docs/models/operations/getlatestdeploymentsecurityoption1.md

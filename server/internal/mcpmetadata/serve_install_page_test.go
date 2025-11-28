@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/mcp_metadata"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -236,4 +238,65 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 // Helper function to create string pointers
 func stringPtr(s string) *string {
 	return &s
+}
+
+func TestServeInstallPage_Instructions(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok, "Auth context should be available from test setup")
+	require.NotNil(t, authCtx.ProjectID, "Project ID should be available from test setup")
+
+	// Create a public toolset
+	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Test MCP Server with Instructions",
+		Slug:                   "test-instructions-toolset",
+		McpSlug:                conv.ToPGText("test-instructions-toolset"),
+		Description:            conv.ToPGText("A test MCP server with instructions"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	// Make it public
+	_, err = testInstance.conn.Exec(ctx,
+		"UPDATE toolsets SET mcp_is_public = true WHERE id = $1", toolset.ID)
+	require.NoError(t, err)
+
+	// Set metadata with instructions
+	instructions := "Test Hub - Search and analyze test data\n\n## Key Capabilities\n\n- Search test records\n- Filter by status\n\n## Usage Patterns\n\nUse search before filtering"
+	_, err = testInstance.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:      types.Slug(toolset.Slug),
+		Instructions:     &instructions,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	// Create request
+	req := httptest.NewRequest("GET", "/mcp/test-instructions-toolset/install", nil)
+
+	// Add URL param for mcpSlug
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", "test-instructions-toolset")
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	// Create response recorder
+	rr := httptest.NewRecorder()
+
+	// Call the handler
+	err = testInstance.service.ServeInstallPage(rr, req)
+	require.NoError(t, err)
+
+	// Verify response
+	assert.Equal(t, http.StatusOK, rr.Code, "Expected successful response")
+	assert.Equal(t, "text/html", rr.Header().Get("Content-Type"), "Expected HTML content type")
+
+	// Verify instructions are in the HTML
+	body := rr.Body.String()
+	assert.Contains(t, body, "Server Instructions", "Should contain instructions section header")
+	assert.Contains(t, body, "Test Hub - Search and analyze test data", "Should contain instructions content")
 }
