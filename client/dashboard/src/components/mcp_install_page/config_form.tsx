@@ -6,6 +6,7 @@ import {
 } from "@gram/client/react-query";
 import { Button, Stack, Input, cn, Icon } from "@speakeasy-api/moonshine";
 import { Link } from "@/components/ui/link";
+import { Textarea } from "@/components/moon/textarea";
 import { CompactUpload, useAssetImageUploadHandler } from "../upload";
 import { Label as Heading } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
@@ -33,6 +34,7 @@ interface ConfigFormProps {
 interface MetadataParams {
   logoAssetId: string | undefined;
   externalDocumentationUrl: string | undefined;
+  instructions: string | undefined;
 }
 
 type ValidationResult =
@@ -58,6 +60,10 @@ interface UseMcpMetadataMetadataFormResult {
     value: string | undefined;
     error?: boolean;
     onChange: ChangeEventHandler<HTMLInputElement>;
+  };
+  instructionsHandlers: {
+    value: string | undefined;
+    onChange: ChangeEventHandler<HTMLTextAreaElement>;
   };
   reset: () => void;
   save: () => void;
@@ -85,6 +91,7 @@ function useMcpMetadataMetadataForm(
     externalDocumentationUrl:
       currentMetadata?.externalDocumentationUrl ?? undefined,
     logoAssetId: currentMetadata?.logoAssetId ?? undefined,
+    instructions: currentMetadata?.instructions ?? undefined,
   });
 
   const [urlValid, setUrlValid] = useState<ValidationResult>({ valid: true });
@@ -103,6 +110,7 @@ function useMcpMetadataMetadataForm(
       setMetadataParams({
         externalDocumentationUrl: currentMetadata?.externalDocumentationUrl,
         logoAssetId: currentMetadata?.logoAssetId,
+        instructions: currentMetadata?.instructions,
       });
     }
   }, [currentMetadata]);
@@ -164,6 +172,7 @@ function useMcpMetadataMetadataForm(
     setMetadataParams({
       logoAssetId: currentMetadata?.logoAssetId,
       externalDocumentationUrl: currentMetadata?.externalDocumentationUrl,
+      instructions: currentMetadata?.instructions,
     });
   }, [currentMetadata]);
 
@@ -205,6 +214,14 @@ function useMcpMetadataMetadataForm(
           ...prev,
           externalDocumentationUrl:
             e.target.value === "" ? undefined : e.target.value,
+        })),
+    },
+    instructionsHandlers: {
+      value: metadataParams.instructions ?? "",
+      onChange: (e) =>
+        setMetadataParams((prev) => ({
+          ...prev,
+          instructions: e.target.value === "" ? undefined : e.target.value,
         })),
     },
     reset,
@@ -303,6 +320,45 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
                       {form.valid.message}
                     </span>
                   )}
+                </div>
+                <div>
+                  <Heading> Server Instructions </Heading>
+                  <Type muted small className="max-w-2xl">
+                    Instructions returned to LLMs when they connect to your MCP
+                    server. Use this to provide context about your tools, usage
+                    patterns, and any important constraints.
+                  </Type>
+                </div>
+                <div>
+                  <Textarea
+                    placeholder="Enter instructions for LLMs using your MCP server..."
+                    className="w-full min-h-[120px]"
+                    {...form.instructionsHandlers}
+                  />
+                </div>
+                <div className="rounded-md bg-neutral-50 dark:bg-neutral-900 p-3 text-xs">
+                  <Type muted small className="font-medium mb-2">
+                    Suggested Template:
+                  </Type>
+                  <pre className="text-neutral-600 dark:text-neutral-400 whitespace-pre-wrap font-mono text-xs leading-relaxed">
+                    {`[Server Name] - [One-line purpose]
+
+## Key Capabilities
+
+[Brief list of main features]
+
+## Usage Patterns
+
+[How tools/resources work together]
+
+## Important Notes
+
+[Critical constraints or requirements]
+
+## Performance
+
+[Expected behavior, timing, limits]`}
+                  </pre>
                 </div>
               </Stack>
               <Dialog.Footer>

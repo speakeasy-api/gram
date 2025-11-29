@@ -14,6 +14,10 @@ export type SetMcpMetadataRequestBody = {
    */
   externalDocumentationUrl?: string | undefined;
   /**
+   * Server instructions returned in the MCP initialize response
+   */
+  instructions?: string | undefined;
+  /**
    * The asset ID for the MCP install page logo
    */
   logoAssetId?: string | undefined;
@@ -30,6 +34,7 @@ export const SetMcpMetadataRequestBody$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   external_documentation_url: z.string().optional(),
+  instructions: z.string().optional(),
   logo_asset_id: z.string().optional(),
   toolset_slug: z.string(),
 }).transform((v) => {
@@ -43,6 +48,7 @@ export const SetMcpMetadataRequestBody$inboundSchema: z.ZodType<
 /** @internal */
 export type SetMcpMetadataRequestBody$Outbound = {
   external_documentation_url?: string | undefined;
+  instructions?: string | undefined;
   logo_asset_id?: string | undefined;
   toolset_slug: string;
 };
@@ -54,6 +60,7 @@ export const SetMcpMetadataRequestBody$outboundSchema: z.ZodType<
   SetMcpMetadataRequestBody
 > = z.object({
   externalDocumentationUrl: z.string().optional(),
+  instructions: z.string().optional(),
   logoAssetId: z.string().optional(),
   toolsetSlug: z.string(),
 }).transform((v) => {

@@ -70,8 +70,10 @@ type SetMcpMetadataPayload struct {
 	LogoAssetID *string
 	// A link to external documentation for the MCP install page
 	ExternalDocumentationURL *string
-	SessionToken             *string
-	ProjectSlugInput         *string
+	// Server instructions returned in the MCP initialize response
+	Instructions     *string
+	SessionToken     *string
+	ProjectSlugInput *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
