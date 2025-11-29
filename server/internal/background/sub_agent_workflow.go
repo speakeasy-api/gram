@@ -124,6 +124,10 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 	// Load tools from toolsets if provided
 	for _, toolset := range params.Toolsets {
 		var toolsetOutput activities.LoadToolsetToolsOutput
+		envSlug := params.Environment
+		if toolset.EnvironmentSlug != "" {
+			envSlug = toolset.EnvironmentSlug
+		}
 		err := workflow.ExecuteActivity(
 			ctx,
 			a.LoadToolsetTools,
@@ -131,7 +135,7 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 				OrgID:           params.OrgID,
 				ProjectID:       params.ProjectID,
 				ToolsetSlug:     toolset.ToolsetSlug,
-				EnvironmentSlug: toolset.EnvironmentSlug,
+				EnvironmentSlug: envSlug,
 				Headers:         nil,
 			},
 		).Get(ctx, &toolsetOutput)
