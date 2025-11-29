@@ -6,12 +6,28 @@ import {
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
-import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components";
-import { useLatestDeployment } from "@gram/client/react-query/index.js";
+import {
+  useLatestDeployment,
+  useGetSourceEnvironment,
+} from "@gram/client/react-query/index.js";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
-import { CircleAlertIcon, FileCode, SquareFunction } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  CircleAlertIcon,
+  FileCode,
+  SquareFunction,
+  Sparkles,
+  Globe,
+} from "lucide-react";
+import { Badge } from "@speakeasy-api/moonshine";
+import { isAfter, subDays, format } from "date-fns";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 
 export type NamedAsset = Asset & {
   deploymentAssetId: string;
@@ -35,7 +51,35 @@ export function SourceCard({
   handleViewAsset: (assetId: string) => void;
   setChangeDocumentTargetSlug: (slug: string) => void;
 }) {
+  const routes = useRoutes();
   const IconComponent = asset.type === "openapi" ? FileCode : SquareFunction;
+
+  const sourceKind = asset.type === "openapi" ? "http" : "function";
+
+  // Check if source was updated in the last 7 days
+  const isRecentlyUpdated = asset.updatedAt
+    ? isAfter(new Date(asset.updatedAt), subDays(new Date(), 7))
+    : false;
+
+  // Check if environment is attached
+  const sourceEnvironment = useGetSourceEnvironment(
+    {
+      sourceKind: sourceKind as "http" | "function",
+      sourceSlug: asset.slug,
+    },
+    undefined,
+    {
+      retry: (_, err) => {
+        if (err instanceof GramError && err.statusCode === 404) {
+          return false;
+        }
+        return true;
+      },
+      throwOnError: false,
+    },
+  );
+
+  const hasEnvironment = !!sourceEnvironment.data?.id;
 
   const actions = [
     ...(asset.type === "openapi"
@@ -66,32 +110,69 @@ export function SourceCard({
   ];
 
   return (
-    <div
+    <routes.sources.source.Link
       key={asset.id}
-      className="bg-secondary max-w-sm text-card-foreground flex flex-col rounded-md border px-3 py-3"
+      params={[sourceKind, asset.slug]}
+      className="bg-secondary max-w-sm text-card-foreground flex flex-col rounded-md border px-3 py-3 hover:brightness-95 transition-colors hover:no-underline"
     >
       <div className="flex items-center justify-between mb-2">
         <IconComponent className="size-5 shrink-0" strokeWidth={2} />
-        <MoreActions actions={actions} />
+        <div onClick={(e) => e.stopPropagation()}>
+          <MoreActions actions={actions} />
+        </div>
       </div>
 
-      <div
-        onClick={
-          asset.type === "openapi" ? () => handleViewAsset(asset.id) : undefined
-        }
-        className={cn(
-          "leading-none mb-1.5",
-          asset.type === "openapi" && "cursor-pointer",
-        )}
-      >
+      <div className="leading-none mb-1.5 flex items-center gap-2 flex-wrap">
         <Type>{asset.name}</Type>
+        {hasEnvironment && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge
+                variant="success"
+                className="flex items-center gap-1 text-xs"
+              >
+                <Globe className="h-3 w-3" />
+                Env
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent inverted>
+              <div className="space-y-1">
+                <Type small>Attached Environment</Type>
+                <Type small>{sourceEnvironment.data?.name || "Unknown"}</Type>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        )}
+        {isRecentlyUpdated && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge
+                variant="information"
+                className="flex items-center gap-1 text-xs"
+              >
+                <Sparkles className="h-3 w-3" />
+                Updated
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent inverted>
+              <div className="space-y-1">
+                <Type small>Last Updated</Type>
+                <Type small>
+                  {asset.updatedAt
+                    ? format(new Date(asset.updatedAt), "PPpp")
+                    : "Unknown"}
+                </Type>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
 
       <div className="flex gap-1.5 items-center text-muted-foreground text-xs">
         {causingFailure && <AssetIsCausingFailureNotice />}
         <UpdatedAt date={asset.updatedAt} italic={false} className="text-xs" />
       </div>
-    </div>
+    </routes.sources.source.Link>
   );
 }
 
