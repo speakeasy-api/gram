@@ -18,6 +18,8 @@ type McpMetadata struct {
 	LogoAssetID *string
 	// A link to external documentation for the MCP install page
 	ExternalDocumentationURL *string
+	// Server instructions returned in the MCP initialize response
+	Instructions *string
 	// When the metadata entry was created
 	CreatedAt string
 	// When the metadata entry was last updated
