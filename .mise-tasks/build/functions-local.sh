@@ -28,5 +28,18 @@ docker rmi --force "gram-runner-nodejs22:dev-$arch" gram-runner-nodejs22:dev || 
 docker image load -i ./oci/nodejs22/image.tar
 docker tag "gram-runner-nodejs22:dev-$arch" "gram-runner-nodejs22:dev"
 docker rmi "gram-runner-nodejs22:dev-$arch"
+
+if [ -n "${GRAM_FUNCTIONS_RUNNER_OCI_IMAGE:-}" ] && [ "${GRAM_FUNCTIONS_RUNNER_VERSION:-}" = "dev" ] && [ "$arch" = "amd64" ]; then
+  ver="${GRAM_FUNCTIONS_RUNNER_VERSION}"
+  fly_image="${GRAM_FUNCTIONS_RUNNER_OCI_IMAGE}:${ver}-nodejs22"
+  docker rmi "$fly_image" || true
+  docker tag "gram-runner-nodejs22:dev" "$fly_image"
+  docker push "$fly_image"
+  echo ""
+  echo "Pushed image to Fly.io registry as:"
+  echo "$fly_image"
+  echo ""
+fi
+
 echo "Image available locally as:"
 echo "gram-runner-nodejs22:dev"
