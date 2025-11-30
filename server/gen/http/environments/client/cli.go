@@ -25,7 +25,7 @@ func BuildCreateEnvironmentPayload(environmentsCreateEnvironmentBody string, env
 	{
 		err = json.Unmarshal([]byte(environmentsCreateEnvironmentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Tempore perferendis ut.\",\n      \"entries\": [\n         {\n            \"name\": \"Deleniti magni cumque dolores.\",\n            \"value\": \"Occaecati ipsa voluptatem.\"\n         },\n         {\n            \"name\": \"Deleniti magni cumque dolores.\",\n            \"value\": \"Occaecati ipsa voluptatem.\"\n         },\n         {\n            \"name\": \"Deleniti magni cumque dolores.\",\n            \"value\": \"Occaecati ipsa voluptatem.\"\n         },\n         {\n            \"name\": \"Deleniti magni cumque dolores.\",\n            \"value\": \"Occaecati ipsa voluptatem.\"\n         }\n      ],\n      \"name\": \"Rerum error velit voluptates unde.\",\n      \"organization_id\": \"Accusamus tempore qui.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Delectus ea.\",\n      \"entries\": [\n         {\n            \"name\": \"Voluptatum aut minima debitis quisquam similique.\",\n            \"value\": \"Fuga sed nisi ipsum molestiae.\"\n         },\n         {\n            \"name\": \"Voluptatum aut minima debitis quisquam similique.\",\n            \"value\": \"Fuga sed nisi ipsum molestiae.\"\n         },\n         {\n            \"name\": \"Voluptatum aut minima debitis quisquam similique.\",\n            \"value\": \"Fuga sed nisi ipsum molestiae.\"\n         }\n      ],\n      \"name\": \"Delectus dignissimos.\",\n      \"organization_id\": \"Nulla non qui.\"\n   }'")
 		}
 		if body.Entries == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("entries", "body"))
@@ -95,7 +95,7 @@ func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, env
 	{
 		err = json.Unmarshal([]byte(environmentsUpdateEnvironmentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Fugiat et odio eaque quis.\",\n      \"entries_to_remove\": [\n         \"Eligendi numquam ut debitis quis.\",\n         \"Possimus aut.\",\n         \"Voluptatem voluptatibus laborum voluptates.\"\n      ],\n      \"entries_to_update\": [\n         {\n            \"name\": \"Deleniti magni cumque dolores.\",\n            \"value\": \"Occaecati ipsa voluptatem.\"\n         },\n         {\n            \"name\": \"Deleniti magni cumque dolores.\",\n            \"value\": \"Occaecati ipsa voluptatem.\"\n         }\n      ],\n      \"name\": \"Soluta placeat facilis sunt id qui voluptates.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Velit amet laudantium dolor asperiores voluptas.\",\n      \"entries_to_remove\": [\n         \"Qui accusamus ea quidem dolores dignissimos aut.\",\n         \"Culpa illum reiciendis qui error et.\",\n         \"Enim quia nobis.\",\n         \"Atque cumque perferendis accusantium voluptate vel.\"\n      ],\n      \"entries_to_update\": [\n         {\n            \"name\": \"Voluptatum aut minima debitis quisquam similique.\",\n            \"value\": \"Fuga sed nisi ipsum molestiae.\"\n         },\n         {\n            \"name\": \"Voluptatum aut minima debitis quisquam similique.\",\n            \"value\": \"Fuga sed nisi ipsum molestiae.\"\n         },\n         {\n            \"name\": \"Voluptatum aut minima debitis quisquam similique.\",\n            \"value\": \"Fuga sed nisi ipsum molestiae.\"\n         },\n         {\n            \"name\": \"Voluptatum aut minima debitis quisquam similique.\",\n            \"value\": \"Fuga sed nisi ipsum molestiae.\"\n         }\n      ],\n      \"name\": \"Quia ab.\"\n   }'")
 		}
 		if body.EntriesToUpdate == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("entries_to_update", "body"))
@@ -200,7 +200,7 @@ func BuildSetSourceEnvironmentLinkPayload(environmentsSetSourceEnvironmentLinkBo
 	{
 		err = json.Unmarshal([]byte(environmentsSetSourceEnvironmentLinkBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"995fd872-fa75-4bdb-bc55-37cfa25f0009\",\n      \"source_kind\": \"function\",\n      \"source_slug\": \"Numquam et sint maxime ut molestiae.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"32acbae5-7126-4665-bd7d-d457ecf81178\",\n      \"source_kind\": \"http\",\n      \"source_slug\": \"Sed enim voluptates et.\"\n   }'")
 		}
 		if !(body.SourceKind == "http" || body.SourceKind == "function") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source_kind", body.SourceKind, []any{"http", "function"}))
@@ -319,7 +319,7 @@ func BuildSetToolsetEnvironmentLinkPayload(environmentsSetToolsetEnvironmentLink
 	{
 		err = json.Unmarshal([]byte(environmentsSetToolsetEnvironmentLinkBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"18f71bb6-e17c-43e2-b225-8618f336e01b\",\n      \"toolset_id\": \"bd18bb1a-36ec-4056-98d7-1540612f2101\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"64f142cf-4132-4d86-a1b8-add797530bc1\",\n      \"toolset_id\": \"af181af4-133b-4121-80bf-8a1db2510f80\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", body.ToolsetID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", body.EnvironmentID, goa.FormatUUID))

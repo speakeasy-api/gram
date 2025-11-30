@@ -14,7 +14,6 @@ import (
 	"net/url"
 	"path"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -439,62 +438,6 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 	return chatID, nil
 }
 
-// calculateModelCost calculates the cost in dollars based on model pricing and token usage.
-// Returns nil if pricing is unavailable or cannot be parsed.
-func calculateModelCost(ctx context.Context, openRouter openrouter.Provisioner, logger *slog.Logger, model string, inputTokens, outputTokens int64) *float64 {
-	if model == "" || inputTokens == 0 && outputTokens == 0 {
-		return nil
-	}
-
-	pricing, err := openRouter.GetModelPricing(ctx, model)
-	if err != nil {
-		logger.ErrorContext(ctx, "model pricing not available, skipping cost calculation",
-			attr.SlogError(err))
-		return nil
-	}
-
-	var cost float64
-
-	// Parse prompt pricing (per token)
-	if pricing.Prompt != "" && inputTokens > 0 {
-		promptPrice, err := strconv.ParseFloat(pricing.Prompt, 64)
-		if err != nil {
-			logger.ErrorContext(ctx, "failed to parse prompt pricing",
-				attr.SlogError(err))
-		} else {
-			cost += promptPrice * float64(inputTokens)
-		}
-	}
-
-	// Parse completion pricing (per token)
-	if pricing.Completion != "" && outputTokens > 0 {
-		completionPrice, err := strconv.ParseFloat(pricing.Completion, 64)
-		if err != nil {
-			logger.ErrorContext(ctx, "failed to parse completion pricing",
-				attr.SlogError(err))
-		} else {
-			cost += completionPrice * float64(outputTokens)
-		}
-	}
-
-	// Add request pricing if present (per request, not per token)
-	if pricing.Request != "" {
-		requestPrice, err := strconv.ParseFloat(pricing.Request, 64)
-		if err != nil {
-			logger.ErrorContext(ctx, "failed to parse request pricing",
-				attr.SlogError(err))
-		} else {
-			cost += requestPrice
-		}
-	}
-
-	if cost == 0 {
-		return nil
-	}
-
-	return &cost
-}
-
 // responseCaptor captures and logs response data
 type responseCaptor struct {
 	http.ResponseWriter
@@ -554,7 +497,7 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 			}
 		}
 
-		cost := calculateModelCost(r.ctx, r.openRouter, r.logger, r.model, int64(r.usage.PromptTokens), int64(r.usage.CompletionTokens))
+		cost := openrouter.CalculateModelCost(r.ctx, r.openRouter, r.logger, r.model, int64(r.usage.PromptTokens), int64(r.usage.CompletionTokens))
 
 		go r.TrackModelUsage(r.ctx, billing.ModelUsageEvent{
 			OrganizationID: r.orgID,

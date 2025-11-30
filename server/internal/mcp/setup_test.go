@@ -98,7 +98,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env)
 	billingStub := billing.NewStubClient(logger, tracerProvider)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
-	chatClient := openrouter.NewChatClient(logger, devProvisioner)
+	chatClient := openrouter.NewChatClient(logger, devProvisioner, billingStub)
 	vectorToolStore := rag.NewToolsetVectorStore(tracerProvider, conn, chatClient)
 
 	chConn, err := infra.NewClickhouseClient(t)

@@ -13,23 +13,26 @@ import (
 	"github.com/hashicorp/go-cleanhttp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 )
 
 type ChatClient struct {
-	openRouter Provisioner
-	chatClient *http.Client
-	logger     *slog.Logger
+	openRouter     Provisioner
+	chatClient     *http.Client
+	logger         *slog.Logger
+	billingTracker billing.Tracker
 }
 
 const (
 	DefaultChatModel = "openai/gpt-4o"
 )
 
-func NewChatClient(logger *slog.Logger, openRouter Provisioner) *ChatClient {
+func NewChatClient(logger *slog.Logger, openRouter Provisioner, billingTracker billing.Tracker) *ChatClient {
 	return &ChatClient{
-		openRouter: openRouter,
-		chatClient: cleanhttp.DefaultPooledClient(),
-		logger:     logger,
+		openRouter:     openRouter,
+		chatClient:     cleanhttp.DefaultPooledClient(),
+		logger:         logger,
+		billingTracker: billingTracker,
 	}
 }
 
@@ -134,21 +137,33 @@ func (c *ChatClient) GetCompletion(ctx context.Context, orgID string, systemProm
 		Name:       "",
 	})
 
-	return c.GetCompletionFromMessages(ctx, orgID, messages, tools)
+	return c.GetCompletionFromMessages(ctx, orgID, "", messages, tools, nil, "")
 }
 
-func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string, messages []OpenAIChatMessage, tools []Tool) (*OpenAIChatMessage, error) {
+func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string, projectID string, messages []OpenAIChatMessage, tools []Tool, temperature *float64, model string) (*OpenAIChatMessage, error) {
 	openrouterKey, err := c.openRouter.ProvisionAPIKey(ctx, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("provisioning OpenRouter key: %w", err)
 	}
 
+	// Default temperature to 1.0 if not provided
+	temp := float32(1.0)
+	if temperature != nil {
+		temp = float32(*temperature)
+	}
+
+	// Default model if not provided
+	modelToUse := model
+	if modelToUse == "" {
+		modelToUse = DefaultChatModel
+	}
+
 	reqBody := OpenAIChatRequest{
-		Model:       DefaultChatModel,
+		Model:       modelToUse,
 		Messages:    messages,
 		Stream:      false,
 		Tools:       tools,
-		Temperature: 0.5,
+		Temperature: temp,
 	}
 
 	data, err := json.Marshal(reqBody)
@@ -185,6 +200,24 @@ func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string
 	var chatResp OpenAIChatResponse
 	if err := json.Unmarshal(body, &chatResp); err != nil {
 		return nil, fmt.Errorf("unmarshal response error: %w", err)
+	}
+
+	// Track model usage for billing
+	if chatResp.Usage != nil {
+		cost := CalculateModelCost(ctx, c.openRouter, c.logger, modelToUse, int64(chatResp.Usage.PromptTokens), int64(chatResp.Usage.CompletionTokens))
+		go c.billingTracker.TrackModelUsage(ctx, billing.ModelUsageEvent{
+			OrganizationID: orgID,
+			ProjectID:      projectID,
+			Model:          modelToUse,
+			Source:         billing.ModelUsageSourceAgents,
+			InputTokens:    int64(chatResp.Usage.PromptTokens),
+			OutputTokens:   int64(chatResp.Usage.CompletionTokens),
+			TotalTokens:    int64(chatResp.Usage.TotalTokens),
+			Cost:           cost,
+			ChatID:         "",
+		})
+	} else {
+		c.logger.WarnContext(ctx, "no usage data in OpenRouter response")
 	}
 
 	msg := chatResp.Choices[0].Message
