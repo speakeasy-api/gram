@@ -26,8 +26,10 @@ function getToolSource(
     if (tool.deploymentId) return tool.deploymentId;
     return "custom";
   } else if (tool.type === "function") {
-    if (tool.functionId && functionIdToName) {
-      return functionIdToName[tool.functionId];
+    const sourceName =
+      functionIdToName?.[tool.functionId] || functionIdToName?.[tool.assetId];
+    if (sourceName) {
+      return sourceName;
     }
     return "Functions";
   }
@@ -76,13 +78,12 @@ export function AddToolsDialog({
   }, [deployment]);
 
   const functionIdToName = useMemo(() => {
-    return deployment?.deployment?.functionsAssets?.reduce(
-      (acc, asset) => {
-        acc[asset.id] = asset.name;
-        return acc;
-      },
-      {} as Record<string, string>,
-    );
+    const mapping: Record<string, string> = {};
+    deployment?.deployment?.functionsAssets?.forEach((asset) => {
+      mapping[asset.id] = asset.name; // functionId -> name
+      mapping[asset.assetId] = asset.name; // assetId -> name (fallback)
+    });
+    return mapping;
   }, [deployment]);
 
   const sources = useMemo(() => {
