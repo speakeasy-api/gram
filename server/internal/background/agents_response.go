@@ -32,7 +32,7 @@ func ExecuteAgentsResponseWorkflow(ctx context.Context, temporalClient client.Cl
 		TaskQueue:                string(TaskQueueMain),
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-		WorkflowRunTimeout:       time.Minute * 60,
+		WorkflowRunTimeout:       time.Minute * 15,
 	}, AgentsResponseWorkflow, params)
 }
 
@@ -62,7 +62,7 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 	}
 
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 1 * time.Minute,
+		StartToCloseTimeout: 2 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts: 3,
 		},

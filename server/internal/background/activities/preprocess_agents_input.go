@@ -163,6 +163,7 @@ func (a *PreprocessAgentsInput) Do(ctx context.Context, input PreprocessAgentsIn
 }
 
 // convertInputToMessages converts ResponseInput (any JSON value) directly to chat messages
+// TODO: Figure out some union like approach to do this in a cleaner way
 func convertInputToMessages(input agents.ResponseInput) ([]openrouter.OpenAIChatMessage, error) {
 	if input == nil {
 		return []openrouter.OpenAIChatMessage{}, nil

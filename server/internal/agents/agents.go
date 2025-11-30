@@ -49,7 +49,7 @@ type OutputMessage struct {
 }
 
 type OutputTextContent struct {
-	Type string `json:"type"` // "output_text"
+	Type string `json:"type"`
 	Text string `json:"text"`
 }
 
@@ -203,9 +203,9 @@ type AgentsResponseWorkflowResult struct {
 
 type AgentTool struct {
 	Definition  openrouter.Tool
-	IsMCPTool   bool      // true if this tool comes from a toolset (MCP server)
-	ServerLabel string    // label of the MCP server (e.g., toolset slug)
-	ToolURN     *urn.Tool // URN for the tool, used to create executor when executing
+	IsMCPTool   bool
+	ServerLabel string
+	ToolURN     *urn.Tool
 }
 
 type AgentChatOptions struct {

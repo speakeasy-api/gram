@@ -15,7 +15,7 @@ headers = {
 
 context = """Please help me with the following things
 1. Please get the details of the organization and workspaces for the slug 'dub', the users associated with that account
-3. Please use the email address to search for a stripe customer and get the stripe charges and refunds associated with that customer
+2. For the users you retrieve, please use the email addresses you get to search for stripe customers and get the stripe charges and refunds associated with that customer
 
 Structure your final result like:
 PLAN

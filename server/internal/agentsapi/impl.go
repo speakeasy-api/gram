@@ -1,22 +1,23 @@
 package agentsapi
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	"github.com/speakeasy-api/gram/server/internal/agents"
+	"github.com/speakeasy-api/gram/server/gen/agents"
+	srv "github.com/speakeasy-api/gram/server/gen/http/agents/server"
+	agentspkg "github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -26,15 +27,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+var _ agents.Service = (*Service)(nil)
+
 type Service struct {
+	tracer         trace.Tracer
 	logger         *slog.Logger
-	agentsService  *agents.Service
+	agentsService  *agentspkg.Service
 	db             *pgxpool.Pool
 	auth           *auth.Auth
 	temporalClient client.Client
@@ -58,7 +63,7 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("agents-api"))
 
 	// Create the agents service
-	agentsService := agents.NewService(
+	agentsService := agentspkg.NewService(
 		logger,
 		tracerProvider,
 		meterProvider,
@@ -73,6 +78,7 @@ func NewService(
 	)
 
 	return &Service{
+		tracer:         otel.Tracer("github.com/speakeasy-api/gram/server/internal/agentsapi"),
 		logger:         logger,
 		agentsService:  agentsService,
 		db:             db,
@@ -82,59 +88,36 @@ func NewService(
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
-	o11y.AttachHandler(mux, "POST", "/rpc/agents.response", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, service.HandleResponse).ServeHTTP(w, r)
-	})
-
-	o11y.AttachHandler(mux, "GET", "/rpc/agents.response", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, service.HandleGetResponse).ServeHTTP(w, r)
-	})
+	endpoints := agents.NewEndpoints(service)
+	endpoints.Use(middleware.MapErrors())
+	endpoints.Use(middleware.TraceMethods(service.tracer))
+	srv.Mount(
+		mux,
+		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
+	)
 }
 
-// HandleResponse handles the /rpc/agents.response endpoint
-// This endpoint accepts an OpenAI Responses API request and returns a response
-func (s *Service) HandleResponse(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-
-	// Read the request body
-	reqBody, err := io.ReadAll(r.Body)
-	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, s.logger)
+// CreateResponse implements agents.Service.
+func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResponsePayload) (*agents.AgentResponseOutput, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	defer func() {
-		if err := r.Body.Close(); err != nil {
-			s.logger.ErrorContext(ctx, "failed to close request body", attr.SlogError(err))
-		}
-	}()
 
-	// Parse the request
-	var request agents.ResponseRequest
-	if err := json.Unmarshal(reqBody, &request); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to parse request body").Log(ctx, s.logger)
+	if payload.Body == nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "request body is required")
 	}
+
+	request := toServiceRequest(payload.Body)
 
 	s.logger.InfoContext(ctx, "agents response request received",
 		attr.SlogProjectSlug(request.ProjectSlug))
 
-	authorizedCtx, err := s.auth.Authorize(ctx, r.Header.Get("Gram-Key"), &security.APIKeyScheme{
-		Name:           auth.KeySecurityScheme,
-		RequiredScopes: []string{"consumer"},
-		Scopes:         []string{},
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "failed to authorize with API key").Log(ctx, s.logger)
-	}
-
-	authCtx, ok := contextvalues.GetAuthContext(authorizedCtx)
-	if !ok || authCtx.ActiveOrganizationID == "" {
-		return oops.E(oops.CodeUnauthorized, fmt.Errorf("no active organization"), "unauthorized").Log(ctx, s.logger)
-	}
-
 	// Look up project by slug within the organization
 	projectsRepo := projects_repo.New(s.db)
-	projects, err := projectsRepo.ListProjectsByOrganization(authorizedCtx, authCtx.ActiveOrganizationID)
+	projects, err := projectsRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to list projects").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list projects").Log(ctx, s.logger)
 	}
 
 	var projectID uuid.UUID
@@ -146,17 +129,17 @@ func (s *Service) HandleResponse(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if projectID == uuid.Nil {
-		return oops.E(oops.CodeNotFound, fmt.Errorf("project not found"), "project not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, fmt.Errorf("project not found"), "project not found").Log(ctx, s.logger)
 	}
 
 	// Execute workflow
-	workflowRun, err := background.ExecuteAgentsResponseWorkflow(authorizedCtx, s.temporalClient, background.AgentsResponseWorkflowParams{
+	workflowRun, err := background.ExecuteAgentsResponseWorkflow(ctx, s.temporalClient, background.AgentsResponseWorkflowParams{
 		OrgID:     authCtx.ActiveOrganizationID,
 		ProjectID: projectID,
 		Request:   request,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to start workflow").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to start workflow").Log(ctx, s.logger)
 	}
 
 	// Check if request is async
@@ -164,7 +147,7 @@ func (s *Service) HandleResponse(w http.ResponseWriter, r *http.Request) error {
 
 	if isAsync {
 		// Return immediately with workflow ID and in-progress status
-		response := agents.ResponseOutput{
+		return &agents.AgentResponseOutput{
 			ID:                 workflowRun.GetID(),
 			Object:             "response",
 			CreatedAt:          time.Now().Unix(),
@@ -172,103 +155,72 @@ func (s *Service) HandleResponse(w http.ResponseWriter, r *http.Request) error {
 			Error:              nil,
 			Instructions:       request.Instructions,
 			Model:              request.Model,
-			Output:             []agents.OutputItem{},
+			Output:             []any{},
 			PreviousResponseID: request.PreviousResponseID,
 			Temperature:        getTemperature(request.Temperature),
-			Text: agents.ResponseText{
-				Format: agents.TextFormat{Type: "text"},
+			Text: &agents.AgentResponseText{
+				Format: &agents.AgentTextFormat{Type: "text"},
 			},
 			Result: "",
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(response); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to encode response").Log(ctx, s.logger)
-		}
-		return nil
+		}, nil
 	}
 
 	// Wait for workflow to complete (synchronous mode)
-	var workflowResult agents.AgentsResponseWorkflowResult
-	if err := workflowRun.Get(authorizedCtx, &workflowResult); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "workflow execution failed").Log(ctx, s.logger)
+	var workflowResult agentspkg.AgentsResponseWorkflowResult
+	if err := workflowRun.Get(ctx, &workflowResult); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "workflow execution failed").Log(ctx, s.logger)
 	}
 
-	// Write response (extract just ResponseOutput from wrapper)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(workflowResult.ResponseOutput); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to encode response").Log(ctx, s.logger)
-	}
-
-	return nil
+	return toHTTPResponse(workflowResult.ResponseOutput), nil
 }
 
-// HandleGetResponse handles GET /rpc/agents.response?response_id=<id>
-// This endpoint allows querying the status of an async agent response
-func (s *Service) HandleGetResponse(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-
-	// Get response_id from query params
-	responseID := r.URL.Query().Get("response_id")
-	if responseID == "" {
-		return oops.E(oops.CodeBadRequest, fmt.Errorf("missing response_id"), "response_id query parameter is required").Log(ctx, s.logger)
+// GetResponse implements agents.Service.
+func (s *Service) GetResponse(ctx context.Context, payload *agents.GetResponsePayload) (*agents.AgentResponseOutput, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
+
+	responseID := payload.ResponseID
 
 	s.logger.InfoContext(ctx, "agents response status query",
 		slog.String("response_id", responseID)) //nolint:sloglint // response_id is a valid key for this context
 
-	authorizedCtx, err := s.auth.Authorize(ctx, r.Header.Get("Gram-Key"), &security.APIKeyScheme{
-		Name:           auth.KeySecurityScheme,
-		RequiredScopes: []string{"consumer"},
-		Scopes:         []string{},
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "failed to authorize with API key").Log(ctx, s.logger)
-	}
-
-	authCtx, ok := contextvalues.GetAuthContext(authorizedCtx)
-	if !ok || authCtx.ActiveOrganizationID == "" {
-		return oops.E(oops.CodeUnauthorized, fmt.Errorf("no active organization"), "unauthorized").Log(ctx, s.logger)
-	}
-
 	// Describe workflow to check status without blocking
-	desc, err := s.temporalClient.DescribeWorkflowExecution(authorizedCtx, responseID, "")
+	desc, err := s.temporalClient.DescribeWorkflowExecution(ctx, responseID, "")
 	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
 	}
 
 	// Check workflow status
 	workflowStatus := desc.WorkflowExecutionInfo.Status
 
-	// Check org id from query handler
-	var orgID string
-	queryValue, err := s.temporalClient.QueryWorkflow(authorizedCtx, responseID, "", "org_id")
-	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
-	}
-	if err := queryValue.Get(&orgID); err != nil {
-		return oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
-	}
-	if orgID != authCtx.ActiveOrganizationID {
-		return oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
-	}
-
-	// Query workflow for request parameters
-	var requestParams agents.ResponseRequest
-	queryValue, queryErr := s.temporalClient.QueryWorkflow(authorizedCtx, responseID, "", "request")
-	if queryErr != nil {
-		s.logger.DebugContext(ctx, "failed to query workflow request parameters", attr.SlogError(queryErr))
-	} else if err := queryValue.Get(&requestParams); err != nil {
-		s.logger.DebugContext(ctx, "failed to decode workflow request parameters", attr.SlogError(err))
-	}
-
-	var response agents.ResponseOutput
+	var response *agents.AgentResponseOutput
 
 	switch workflowStatus {
 	case 1: // Running
-		response = agents.ResponseOutput{
+		// Query workflow for org_id and request parameters (only available while running)
+		var orgID string
+		queryValue, queryErr := s.temporalClient.QueryWorkflow(ctx, responseID, "", "org_id")
+		if queryErr != nil {
+			return nil, oops.E(oops.CodeNotFound, queryErr, "workflow not found").Log(ctx, s.logger)
+		}
+		if err := queryValue.Get(&orgID); err != nil {
+			return nil, oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
+		}
+		if orgID != authCtx.ActiveOrganizationID {
+			return nil, oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
+		}
+
+		var requestParams agentspkg.ResponseRequest
+		queryValue, queryErr = s.temporalClient.QueryWorkflow(ctx, responseID, "", "request")
+		if queryErr != nil {
+			s.logger.DebugContext(ctx, "failed to query workflow request parameters", attr.SlogError(queryErr))
+		} else if err := queryValue.Get(&requestParams); err != nil {
+			s.logger.DebugContext(ctx, "failed to decode workflow request parameters", attr.SlogError(err))
+		}
+
+		response = &agents.AgentResponseOutput{
 			ID:                 responseID,
 			Object:             "response",
 			CreatedAt:          time.Now().Unix(),
@@ -276,69 +228,87 @@ func (s *Service) HandleGetResponse(w http.ResponseWriter, r *http.Request) erro
 			Error:              nil,
 			Instructions:       requestParams.Instructions,
 			Model:              requestParams.Model,
-			Output:             []agents.OutputItem{},
+			Output:             []any{},
 			PreviousResponseID: requestParams.PreviousResponseID,
 			Temperature:        getTemperature(requestParams.Temperature),
-			Text: agents.ResponseText{
-				Format: agents.TextFormat{Type: "text"},
+			Text: &agents.AgentResponseText{
+				Format: &agents.AgentTextFormat{Type: "text"},
 			},
 			Result: "",
 		}
 	case 2: // Completed
-		// Workflow is complete, get the result wrapper and extract ResponseOutput
-		workflowRun := s.temporalClient.GetWorkflow(authorizedCtx, responseID, "")
-		var workflowResult agents.AgentsResponseWorkflowResult
-		err = workflowRun.Get(authorizedCtx, &workflowResult)
+		// Workflow is complete, get the result which contains org_id and all request params
+		workflowRun := s.temporalClient.GetWorkflow(ctx, responseID, "")
+		var workflowResult agentspkg.AgentsResponseWorkflowResult
+		err = workflowRun.Get(ctx, &workflowResult)
 		if err != nil {
 			errMsg := err.Error()
-			response = agents.ResponseOutput{
+			response = &agents.AgentResponseOutput{
 				ID:                 responseID,
 				Object:             "response",
 				CreatedAt:          time.Now().Unix(),
 				Status:             "failed",
 				Error:              &errMsg,
-				Instructions:       requestParams.Instructions,
-				Model:              requestParams.Model,
-				Output:             []agents.OutputItem{},
-				PreviousResponseID: requestParams.PreviousResponseID,
-				Temperature:        getTemperature(requestParams.Temperature),
-				Text: agents.ResponseText{
-					Format: agents.TextFormat{Type: "text"},
+				Instructions:       nil,
+				Model:              "",
+				Output:             []any{},
+				PreviousResponseID: nil,
+				Temperature:        0,
+				Text: &agents.AgentResponseText{
+					Format: &agents.AgentTextFormat{Type: "text"},
 				},
 				Result: errMsg,
 			}
 		} else {
-			response = workflowResult.ResponseOutput
+			// Verify org_id matches
+			if workflowResult.OrgID != authCtx.ActiveOrganizationID {
+				return nil, oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
+			}
+			response = toHTTPResponse(workflowResult.ResponseOutput)
 		}
 	default:
-		// Workflow failed, cancelled, or terminated
+		// Workflow failed, cancelled, or terminated - try to get result for any available data
+		workflowRun := s.temporalClient.GetWorkflow(ctx, responseID, "")
+		var workflowResult agentspkg.AgentsResponseWorkflowResult
+		err = workflowRun.Get(ctx, &workflowResult)
+
 		errMsg := fmt.Sprintf("workflow in unexpected state: %v", workflowStatus)
-		response = agents.ResponseOutput{
-			ID:                 responseID,
-			Object:             "response",
-			CreatedAt:          time.Now().Unix(),
-			Status:             "failed",
-			Error:              &errMsg,
-			Instructions:       requestParams.Instructions,
-			Model:              requestParams.Model,
-			Output:             []agents.OutputItem{},
-			PreviousResponseID: requestParams.PreviousResponseID,
-			Temperature:        getTemperature(requestParams.Temperature),
-			Text: agents.ResponseText{
-				Format: agents.TextFormat{Type: "text"},
-			},
-			Result: "",
+		if err == nil && workflowResult.OrgID != "" {
+			// Verify org_id matches
+			if workflowResult.OrgID != authCtx.ActiveOrganizationID {
+				return nil, oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
+			}
+			// Use data from workflow result if available
+			response = toHTTPResponse(workflowResult.ResponseOutput)
+			response.Status = "failed"
+			response.Error = &errMsg
+		} else {
+			// Fallback to minimal response
+			response = &agents.AgentResponseOutput{
+				ID:                 responseID,
+				Object:             "response",
+				CreatedAt:          time.Now().Unix(),
+				Status:             "failed",
+				Error:              &errMsg,
+				Instructions:       nil,
+				Model:              "",
+				Output:             []any{},
+				PreviousResponseID: nil,
+				Temperature:        0,
+				Text: &agents.AgentResponseText{
+					Format: &agents.AgentTextFormat{Type: "text"},
+				},
+				Result: "",
+			}
 		}
 	}
 
-	// Write response
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to encode response").Log(ctx, s.logger)
-	}
+	return response, nil
+}
 
-	return nil
+// APIKeyAuth implements agents.Auther.
+func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	return s.auth.Authorize(ctx, key, schema)
 }
 
 func getTemperature(temp *float64) float64 {
@@ -346,4 +316,90 @@ func getTemperature(temp *float64) float64 {
 		return *temp
 	}
 	return 0.5
+}
+
+// toInternalRequest converts a Goa request to the internal request type.
+func toServiceRequest(req *agents.AgentResponseRequest) agentspkg.ResponseRequest {
+	var toolsets []agentspkg.Toolset
+	for _, ts := range req.Toolsets {
+		toolsets = append(toolsets, agentspkg.Toolset{
+			ToolsetSlug:     ts.ToolsetSlug,
+			EnvironmentSlug: ts.EnvironmentSlug,
+		})
+	}
+
+	var subAgents []agentspkg.SubAgent
+	for _, sa := range req.SubAgents {
+		var saToolsets []agentspkg.Toolset
+		for _, ts := range sa.Toolsets {
+			saToolsets = append(saToolsets, agentspkg.Toolset{
+				ToolsetSlug:     ts.ToolsetSlug,
+				EnvironmentSlug: ts.EnvironmentSlug,
+			})
+		}
+
+		var tools []urn.Tool
+		for _, t := range sa.Tools {
+			toolURN, err := urn.ParseTool(t)
+			if err == nil {
+				tools = append(tools, toolURN)
+			}
+		}
+
+		var envSlug string
+		if sa.EnvironmentSlug != nil {
+			envSlug = *sa.EnvironmentSlug
+		}
+
+		var instructions string
+		if sa.Instructions != nil {
+			instructions = *sa.Instructions
+		}
+
+		subAgents = append(subAgents, agentspkg.SubAgent{
+			Instructions:    instructions,
+			Name:            sa.Name,
+			Description:     sa.Description,
+			Tools:           tools,
+			Toolsets:        saToolsets,
+			EnvironmentSlug: envSlug,
+		})
+	}
+
+	return agentspkg.ResponseRequest{
+		ProjectSlug:        req.ProjectSlug,
+		Model:              req.Model,
+		Instructions:       req.Instructions,
+		Input:              req.Input,
+		PreviousResponseID: req.PreviousResponseID,
+		Temperature:        req.Temperature,
+		Toolsets:           toolsets,
+		SubAgents:          subAgents,
+		Async:              req.Async,
+	}
+}
+
+// toGoaResponse converts an internal response to the Goa response type.
+func toHTTPResponse(resp agentspkg.ResponseOutput) *agents.AgentResponseOutput {
+	var output []any
+	for _, item := range resp.Output {
+		output = append(output, item)
+	}
+
+	return &agents.AgentResponseOutput{
+		ID:                 resp.ID,
+		Object:             resp.Object,
+		CreatedAt:          resp.CreatedAt,
+		Status:             resp.Status,
+		Error:              resp.Error,
+		Instructions:       resp.Instructions,
+		Model:              resp.Model,
+		Output:             output,
+		PreviousResponseID: resp.PreviousResponseID,
+		Temperature:        resp.Temperature,
+		Text: &agents.AgentResponseText{
+			Format: &agents.AgentTextFormat{Type: resp.Text.Format.Type},
+		},
+		Result: resp.Result,
+	}
 }
