@@ -368,17 +368,19 @@ export class Gram<
       const schema = zm.object(tool.inputSchema);
 
       // Create a custom metadata registry to ensure descriptions are preserved
-      const registry = new (zm as any).core.$ZodRegistry();
+      const constructRegistryWithDescriptions = (schema: z.core.$ZodShape) => {
+        const registry = new (zm as any).core.$ZodRegistry();
+        Object.entries(schema).forEach(([_, zodSchema]) => {
+          const description = (zodSchema as any).description;
+          if (description) {
+            registry.add(zodSchema, { description });
+          }
+        });
+        return registry;
+      };
 
-      // Register each schema with its description in the metadata registry
-      Object.entries(tool.inputSchema).forEach(([_, zodSchema]) => {
-        const description = (zodSchema as any).description;
-        if (description) {
-          registry.add(zodSchema, { description });
-        }
-      });
-
-      const inputSchema = zm.toJSONSchema(schema);
+      const registry = constructRegistryWithDescriptions(tool.inputSchema);
+      const inputSchema = zm.toJSONSchema(schema, { metadata: registry });
 
       const result: {
         name: string;
@@ -398,15 +400,7 @@ export class Gram<
       }
 
       if (tool.envSchema != null) {
-        const registry = new (zm as any).core.$ZodRegistry();
-
-        // Register each schema with its description in the metadata registry
-        Object.entries(tool.envSchema).forEach(([_, zodSchema]) => {
-          const description = (zodSchema as any).description;
-          if (description) {
-            registry.add(zodSchema, { description });
-          }
-        });
+        const registry = constructRegistryWithDescriptions(tool.envSchema);
 
         const obj = z.object(tool.envSchema);
         result.variables = envMapFromJSONSchema(
