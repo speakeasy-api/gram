@@ -101,11 +101,7 @@ func BuildRegisterPayload(authRegisterBody string, authRegisterSessionToken stri
 	{
 		err = json.Unmarshal([]byte(authRegisterBody), &body)
 		if err != nil {
-<<<<<<< HEAD
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"org_name\": \"Soluta qui reiciendis ipsa aliquid.\"\n   }'")
-=======
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"org_name\": \"Doloremque itaque.\"\n   }'")
->>>>>>> 01346a0a1ff9b3ac4e07cb19e58825bea8a0b7d6
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"org_name\": \"Quaerat sit necessitatibus sed.\"\n   }'")
 		}
 	}
 	var sessionToken *string

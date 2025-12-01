@@ -60,11 +60,7 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 	{
 		err = json.Unmarshal([]byte(mcpMetadataSetMcpMetadataBody), &body)
 		if err != nil {
-<<<<<<< HEAD
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_documentation_url\": \"Beatae dolor ut ea illum qui similique.\",\n      \"logo_asset_id\": \"Occaecati quasi ut corrupti qui.\",\n      \"toolset_slug\": \"ln9\"\n   }'")
-=======
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_documentation_url\": \"Soluta aperiam consequatur quis reprehenderit.\",\n      \"instructions\": \"Quas sunt.\",\n      \"logo_asset_id\": \"Saepe eius aperiam.\",\n      \"toolset_slug\": \"rly\"\n   }'")
->>>>>>> 01346a0a1ff9b3ac4e07cb19e58825bea8a0b7d6
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_documentation_url\": \"Qui nemo.\",\n      \"instructions\": \"Ipsum quisquam aliquid.\",\n      \"logo_asset_id\": \"Aut dolore occaecati est tenetur ad et.\",\n      \"toolset_slug\": \"1et\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.ToolsetSlug) > 40 {

@@ -24,11 +24,7 @@ func BuildSetProductFeaturePayload(featuresSetProductFeatureBody string, feature
 	{
 		err = json.Unmarshal([]byte(featuresSetProductFeatureBody), &body)
 		if err != nil {
-<<<<<<< HEAD
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"feature_name\": \"lc9\"\n   }'")
-=======
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": true,\n      \"feature_name\": \"20s\"\n   }'")
->>>>>>> 01346a0a1ff9b3ac4e07cb19e58825bea8a0b7d6
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"feature_name\": \"xug\"\n   }'")
 		}
 		if !(body.FeatureName == "logs") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", body.FeatureName, []any{"logs"}))

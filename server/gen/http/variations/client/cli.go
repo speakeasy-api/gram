@@ -23,11 +23,7 @@ func BuildUpsertGlobalPayload(variationsUpsertGlobalBody string, variationsUpser
 	{
 		err = json.Unmarshal([]byte(variationsUpsertGlobalBody), &body)
 		if err != nil {
-<<<<<<< HEAD
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"confirm\": \"session\",\n      \"confirm_prompt\": \"Beatae expedita placeat voluptatum consequatur aliquid.\",\n      \"description\": \"Qui vitae et ipsum sequi hic aut.\",\n      \"name\": \"Voluptatem iure consequatur est veniam voluptatem ipsam.\",\n      \"src_tool_name\": \"Alias cumque omnis.\",\n      \"src_tool_urn\": \"Dolor repudiandae possimus.\",\n      \"summarizer\": \"Molestiae culpa non.\",\n      \"summary\": \"Omnis voluptatum ut.\",\n      \"tags\": [\n         \"Voluptatum adipisci impedit.\",\n         \"Sit ad accusantium perferendis.\"\n      ]\n   }'")
-=======
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"confirm\": \"never\",\n      \"confirm_prompt\": \"Eum nesciunt.\",\n      \"description\": \"Nesciunt culpa possimus voluptates veniam nisi cupiditate.\",\n      \"name\": \"Porro est ratione possimus.\",\n      \"src_tool_name\": \"Illum et et consequatur rerum ut est.\",\n      \"src_tool_urn\": \"Qui doloribus quis et accusantium.\",\n      \"summarizer\": \"Repudiandae explicabo cupiditate aut labore.\",\n      \"summary\": \"Omnis qui.\",\n      \"tags\": [\n         \"Sint suscipit id necessitatibus occaecati.\",\n         \"Dignissimos earum voluptate id aspernatur.\",\n         \"Accusamus dolores optio vel magnam et.\"\n      ]\n   }'")
->>>>>>> 01346a0a1ff9b3ac4e07cb19e58825bea8a0b7d6
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"confirm\": \"always\",\n      \"confirm_prompt\": \"Commodi officia minima ut odio ipsam.\",\n      \"description\": \"Expedita itaque quis.\",\n      \"name\": \"Ipsum vero.\",\n      \"src_tool_name\": \"Inventore quis facilis quia harum occaecati.\",\n      \"src_tool_urn\": \"Voluptas aliquam nulla atque sed corporis.\",\n      \"summarizer\": \"Nulla ut architecto.\",\n      \"summary\": \"Eius consequuntur repellendus voluptatem sint ea quisquam.\",\n      \"tags\": [\n         \"Aut et maxime quo et est.\",\n         \"Dolores suscipit aliquam non.\",\n         \"Voluptates minus.\"\n      ]\n   }'")
 		}
 		if body.Confirm != nil {
 			if !(*body.Confirm == "always" || *body.Confirm == "never" || *body.Confirm == "session") {
