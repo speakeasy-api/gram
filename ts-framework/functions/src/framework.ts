@@ -64,16 +64,17 @@ type InferInput<T> = ToolSignature<T>[1];
 
 type InferResult<T> = ToolSignature<T>[3];
 
-export type ManifestVariables = Record<
-  string,
-  { description?: string; oauthTarget?: boolean }
->;
+export type ManifestVariables = Record<string, { description?: string }>;
 
 export type ManifestTool = {
   name: string;
   description?: string;
   inputSchema: unknown;
   variables?: ManifestVariables;
+  authInput?: {
+    type: "oauth2";
+    variable: string;
+  };
   meta?: unknown;
 };
 
@@ -213,6 +214,7 @@ export class Gram<
   #lax: boolean;
   #inputEnv?: Record<string, string | undefined> | undefined;
   #envSchema?: EnvSchema;
+  #oauthVariable?: string;
 
   constructor(opts?: {
     /**
@@ -231,11 +233,22 @@ export class Gram<
      * tools.
      */
     envSchema?: EnvSchema;
+    /**
+     * Authentication configuration for OAuth2 tokens.
+     */
+    authInput?: {
+      /**
+       * The name of the environment variable that contains the OAuth2 access token.
+       * Must be a key in envSchema.
+       */
+      oauthVariable: keyof EnvSchema & string;
+    };
   }) {
     this.#tools = new Map();
     this.#lax = Boolean(opts?.lax);
     this.#inputEnv = opts?.env;
     this.#envSchema = opts?.envSchema;
+    this.#oauthVariable = opts?.authInput?.oauthVariable;
   }
 
   protected get tools() {
@@ -358,7 +371,7 @@ export class Gram<
       const registry = new (zm as any).core.$ZodRegistry();
 
       // Register each schema with its description in the metadata registry
-      Object.entries(tool.inputSchema).forEach(([key, zodSchema]) => {
+      Object.entries(tool.inputSchema).forEach(([_, zodSchema]) => {
         const description = (zodSchema as any).description;
         if (description) {
           registry.add(zodSchema, { description });
@@ -372,6 +385,10 @@ export class Gram<
         description?: string;
         inputSchema: unknown;
         variables?: ManifestVariables;
+        authInput?: {
+          type: "oauth2";
+          variable: string;
+        };
       } = {
         name: tool.name,
         inputSchema: inputSchema,
@@ -379,11 +396,12 @@ export class Gram<
       if (tool.description != null) {
         result.description = tool.description;
       }
+
       if (tool.envSchema != null) {
         const registry = new (zm as any).core.$ZodRegistry();
 
         // Register each schema with its description in the metadata registry
-        Object.entries(tool.envSchema).forEach(([key, zodSchema]) => {
+        Object.entries(tool.envSchema).forEach(([_, zodSchema]) => {
           const description = (zodSchema as any).description;
           if (description) {
             registry.add(zodSchema, { description });
@@ -394,6 +412,13 @@ export class Gram<
         result.variables = envMapFromJSONSchema(
           z.toJSONSchema(obj, { metadata: registry }),
         );
+      }
+
+      if (this.#oauthVariable != null) {
+        result.authInput = {
+          type: "oauth2",
+          variable: this.#oauthVariable,
+        };
       }
 
       return result;
@@ -407,34 +432,22 @@ export class Gram<
 }
 
 function envMapFromJSONSchema(jsonSchema: unknown): ManifestVariables {
-  console.log(jsonSchema);
   const parsed = zm
     .object({
       properties: zm.record(
         zm.string(),
         zm.object({
           description: zm.optional(zm.string()),
-          // meta: zm.optional(zm.record(zm.string(), zm.string())),
+          meta: zm.optional(zm.record(zm.string(), zm.string())),
         }),
       ),
     })
     .parse(jsonSchema);
 
-  console.log(parsed);
-
   const out: ManifestVariables = {};
   for (const [key, value] of Object.entries(parsed.properties)) {
-    let oauthTarget = null;
-    // if (
-    //   value.meta != null &&
-    //   Object.keys(value.meta).includes("oauth_target")
-    // ) {
-    //   oauthTarget = value.meta["oauth_target"] === "true" ? true : false;
-    // }
-
     const res = {
       ...(value.description != null ? { description: value.description } : {}),
-      ...(oauthTarget != null ? { oauthTarget: oauthTarget } : {}),
     };
 
     out[key] = res;
