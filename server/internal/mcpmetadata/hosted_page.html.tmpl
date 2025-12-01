@@ -1330,6 +1330,17 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
             </span>
           </span>
         </section>
+        {{- if .Instructions }}
+        <section class="server-instructions container">
+          <header class="section-title">Server Instructions</header>
+          <div class="section-description">
+            These instructions are provided to LLMs when they connect to help them understand how to use the server effectively.
+          </div>
+          <div class="card">
+            <pre style="white-space: pre-wrap; margin: 0; font-family: var(--font-diatype); line-height: 175%;">{{ .Instructions }}</pre>
+          </div>
+        </section>
+        {{- end }}
         <section class="mcp-url container">
           <header class="section-title">Server URL</header>
           <div class="code-container card">

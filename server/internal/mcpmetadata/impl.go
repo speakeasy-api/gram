@@ -99,6 +99,7 @@ type hostedPageData struct {
 	SiteURL             string
 	LogoAssetURL        string
 	DocsURL             string
+	Instructions        string
 	IsPublic            bool
 }
 
@@ -298,6 +299,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	logoAssetURL := s.siteURL.String() + "/external/sticker-logo.png"
 
 	var docsURL string
+	var instructions string
 	metadataRecord, metadataErr := s.repo.GetMetadataForToolset(ctx, toolset.ID)
 	if metadataErr != nil {
 		if !errors.Is(metadataErr, pgx.ErrNoRows) {
@@ -314,6 +316,9 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		}
 		if docs := conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl); docs != nil {
 			docsURL = strings.TrimSpace(*docs)
+		}
+		if inst := conv.FromPGText[string](metadataRecord.Instructions); inst != nil {
+			instructions = strings.TrimSpace(*inst)
 		}
 	}
 
@@ -369,6 +374,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		SiteURL:             s.siteURL.String(),
 		LogoAssetURL:        logoAssetURL,
 		DocsURL:             docsURL,
+		Instructions:        instructions,
 		IsPublic:            toolset.McpIsPublic,
 	}
 
