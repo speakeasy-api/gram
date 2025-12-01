@@ -24,7 +24,7 @@ var _ = Service("agents", func() {
 
 		HTTP(func() {
 			POST("/rpc/agents.response")
-			security.ByKeyNamedHeader("Gram-Key")
+			security.ByKeyHeader()
 			Body("body")
 			Response(StatusOK)
 		})
@@ -46,7 +46,27 @@ var _ = Service("agents", func() {
 
 		HTTP(func() {
 			GET("/rpc/agents.response")
-			security.ByKeyNamedHeader("Gram-Key")
+			security.ByKeyHeader()
+			Param("response_id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getAgentResponse")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+	})
+
+	Method("deleteResponse", func() {
+		Description("Deletes any response associated with a given agent run.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			Attribute("response_id", String, "The ID of the response to retrieve")
+			Required("response_id")
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/agents.response")
+			security.ByKeyHeader()
 			Param("response_id")
 			Response(StatusOK)
 		})
@@ -91,6 +111,7 @@ var AgentResponseRequest = Type("AgentResponseRequest", func() {
 	Attribute("toolsets", ArrayOf(AgentToolset), "Toolsets available to the agent")
 	Attribute("sub_agents", ArrayOf(AgentSubAgent), "Sub-agents available for delegation")
 	Attribute("async", Boolean, "If true, returns immediately with a response ID for polling")
+	Attribute("store", Boolean, "If true, stores the response defaults to true")
 
 	Required("project_slug", "model", "input")
 })

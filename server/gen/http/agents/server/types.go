@@ -33,6 +33,8 @@ type CreateResponseRequestBody struct {
 	SubAgents []*AgentSubAgentRequestBodyRequestBody `form:"sub_agents,omitempty" json:"sub_agents,omitempty" xml:"sub_agents,omitempty"`
 	// If true, returns immediately with a response ID for polling
 	Async *bool `form:"async,omitempty" json:"async,omitempty" xml:"async,omitempty"`
+	// If true, stores the response defaults to true
+	Store *bool `form:"store,omitempty" json:"store,omitempty" xml:"store,omitempty"`
 }
 
 // CreateResponseResponseBody is the type of the "agents" service
@@ -456,6 +458,188 @@ type GetResponseGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DeleteResponseUnauthorizedResponseBody is the type of the "agents" service
+// "deleteResponse" endpoint HTTP response body for the "unauthorized" error.
+type DeleteResponseUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteResponseForbiddenResponseBody is the type of the "agents" service
+// "deleteResponse" endpoint HTTP response body for the "forbidden" error.
+type DeleteResponseForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteResponseBadRequestResponseBody is the type of the "agents" service
+// "deleteResponse" endpoint HTTP response body for the "bad_request" error.
+type DeleteResponseBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteResponseNotFoundResponseBody is the type of the "agents" service
+// "deleteResponse" endpoint HTTP response body for the "not_found" error.
+type DeleteResponseNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteResponseConflictResponseBody is the type of the "agents" service
+// "deleteResponse" endpoint HTTP response body for the "conflict" error.
+type DeleteResponseConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteResponseUnsupportedMediaResponseBody is the type of the "agents"
+// service "deleteResponse" endpoint HTTP response body for the
+// "unsupported_media" error.
+type DeleteResponseUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteResponseInvalidResponseBody is the type of the "agents" service
+// "deleteResponse" endpoint HTTP response body for the "invalid" error.
+type DeleteResponseInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteResponseInvariantViolationResponseBody is the type of the "agents"
+// service "deleteResponse" endpoint HTTP response body for the
+// "invariant_violation" error.
+type DeleteResponseInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteResponseUnexpectedResponseBody is the type of the "agents" service
+// "deleteResponse" endpoint HTTP response body for the "unexpected" error.
+type DeleteResponseUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteResponseGatewayErrorResponseBody is the type of the "agents" service
+// "deleteResponse" endpoint HTTP response body for the "gateway_error" error.
+type DeleteResponseGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AgentResponseTextResponseBody is used to define fields on response body
 // types.
 type AgentResponseTextResponseBody struct {
@@ -836,6 +1020,147 @@ func NewGetResponseGatewayErrorResponseBody(res *goa.ServiceError) *GetResponseG
 	return body
 }
 
+// NewDeleteResponseUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "deleteResponse" endpoint of the "agents" service.
+func NewDeleteResponseUnauthorizedResponseBody(res *goa.ServiceError) *DeleteResponseUnauthorizedResponseBody {
+	body := &DeleteResponseUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteResponseForbiddenResponseBody builds the HTTP response body from
+// the result of the "deleteResponse" endpoint of the "agents" service.
+func NewDeleteResponseForbiddenResponseBody(res *goa.ServiceError) *DeleteResponseForbiddenResponseBody {
+	body := &DeleteResponseForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteResponseBadRequestResponseBody builds the HTTP response body from
+// the result of the "deleteResponse" endpoint of the "agents" service.
+func NewDeleteResponseBadRequestResponseBody(res *goa.ServiceError) *DeleteResponseBadRequestResponseBody {
+	body := &DeleteResponseBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteResponseNotFoundResponseBody builds the HTTP response body from the
+// result of the "deleteResponse" endpoint of the "agents" service.
+func NewDeleteResponseNotFoundResponseBody(res *goa.ServiceError) *DeleteResponseNotFoundResponseBody {
+	body := &DeleteResponseNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteResponseConflictResponseBody builds the HTTP response body from the
+// result of the "deleteResponse" endpoint of the "agents" service.
+func NewDeleteResponseConflictResponseBody(res *goa.ServiceError) *DeleteResponseConflictResponseBody {
+	body := &DeleteResponseConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteResponseUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "deleteResponse" endpoint of the "agents" service.
+func NewDeleteResponseUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteResponseUnsupportedMediaResponseBody {
+	body := &DeleteResponseUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteResponseInvalidResponseBody builds the HTTP response body from the
+// result of the "deleteResponse" endpoint of the "agents" service.
+func NewDeleteResponseInvalidResponseBody(res *goa.ServiceError) *DeleteResponseInvalidResponseBody {
+	body := &DeleteResponseInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteResponseInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "deleteResponse" endpoint of the "agents"
+// service.
+func NewDeleteResponseInvariantViolationResponseBody(res *goa.ServiceError) *DeleteResponseInvariantViolationResponseBody {
+	body := &DeleteResponseInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteResponseUnexpectedResponseBody builds the HTTP response body from
+// the result of the "deleteResponse" endpoint of the "agents" service.
+func NewDeleteResponseUnexpectedResponseBody(res *goa.ServiceError) *DeleteResponseUnexpectedResponseBody {
+	body := &DeleteResponseUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteResponseGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "deleteResponse" endpoint of the "agents" service.
+func NewDeleteResponseGatewayErrorResponseBody(res *goa.ServiceError) *DeleteResponseGatewayErrorResponseBody {
+	body := &DeleteResponseGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateResponsePayload builds a agents service createResponse endpoint
 // payload.
 func NewCreateResponsePayload(body *CreateResponseRequestBody, apikeyToken *string) *agents.CreateResponsePayload {
@@ -847,6 +1172,7 @@ func NewCreateResponsePayload(body *CreateResponseRequestBody, apikeyToken *stri
 		PreviousResponseID: body.PreviousResponseID,
 		Temperature:        body.Temperature,
 		Async:              body.Async,
+		Store:              body.Store,
 	}
 	if body.Toolsets != nil {
 		v.Toolsets = make([]*agents.AgentToolset, len(body.Toolsets))
@@ -871,6 +1197,16 @@ func NewCreateResponsePayload(body *CreateResponseRequestBody, apikeyToken *stri
 // NewGetResponsePayload builds a agents service getResponse endpoint payload.
 func NewGetResponsePayload(responseID string, apikeyToken *string) *agents.GetResponsePayload {
 	v := &agents.GetResponsePayload{}
+	v.ResponseID = responseID
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewDeleteResponsePayload builds a agents service deleteResponse endpoint
+// payload.
+func NewDeleteResponsePayload(responseID string, apikeyToken *string) *agents.DeleteResponsePayload {
+	v := &agents.DeleteResponsePayload{}
 	v.ResponseID = responseID
 	v.ApikeyToken = apikeyToken
 

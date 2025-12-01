@@ -11,6 +11,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	commonv1 "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -110,6 +112,15 @@ func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResp
 
 	request := toServiceRequest(payload.Body)
 
+	shouldStore := request.Store == nil || *request.Store
+
+	// Check if request is async
+	isAsync := request.Async != nil && *request.Async
+
+	if isAsync && !shouldStore {
+		return nil, oops.E(oops.CodeBadRequest, nil, "async responses cannot have non stored agent history")
+	}
+
 	s.logger.InfoContext(ctx, "agents response request received",
 		attr.SlogProjectSlug(request.ProjectSlug))
 
@@ -142,9 +153,6 @@ func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResp
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to start workflow").Log(ctx, s.logger)
 	}
 
-	// Check if request is async
-	isAsync := request.Async != nil && *request.Async
-
 	if isAsync {
 		// Return immediately with workflow ID and in-progress status
 		return &agents.AgentResponseOutput{
@@ -171,6 +179,15 @@ func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResp
 		return nil, oops.E(oops.CodeUnexpected, err, "workflow execution failed").Log(ctx, s.logger)
 	}
 
+	if !shouldStore {
+		// Delete the workflow execution to avoid storing history
+		go func() {
+			if delErr := s.deleteAgentRun(ctx, workflowRun.GetID()); delErr != nil {
+				s.logger.ErrorContext(ctx, "failed to delete non-stored agent run", attr.SlogError(delErr))
+			}
+		}()
+	}
+
 	return toHTTPResponse(workflowResult.ResponseOutput), nil
 }
 
@@ -182,9 +199,6 @@ func (s *Service) GetResponse(ctx context.Context, payload *agents.GetResponsePa
 	}
 
 	responseID := payload.ResponseID
-
-	s.logger.InfoContext(ctx, "agents response status query",
-		slog.String("response_id", responseID)) //nolint:sloglint // response_id is a valid key for this context
 
 	// Describe workflow to check status without blocking
 	desc, err := s.temporalClient.DescribeWorkflowExecution(ctx, responseID, "")
@@ -306,9 +320,71 @@ func (s *Service) GetResponse(ctx context.Context, payload *agents.GetResponsePa
 	return response, nil
 }
 
-// APIKeyAuth implements agents.Auther.
+func (s *Service) DeleteResponse(ctx context.Context, payload *agents.DeleteResponsePayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx.ActiveOrganizationID == "" {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	responseID := payload.ResponseID
+
+	// Verify the workflow exists and belongs to this organization before deleting
+	desc, err := s.temporalClient.DescribeWorkflowExecution(ctx, responseID, "")
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
+	}
+
+	// Check workflow status to determine how to verify ownership
+	workflowStatus := desc.WorkflowExecutionInfo.Status
+
+	// Verify ownership based on workflow status
+	switch workflowStatus {
+	case 1: // Running
+		// Query workflow for org_id (only available while running)
+		var orgID string
+		queryValue, queryErr := s.temporalClient.QueryWorkflow(ctx, responseID, "", "org_id")
+		if queryErr != nil {
+			return oops.E(oops.CodeNotFound, queryErr, "workflow not found").Log(ctx, s.logger)
+		}
+		if err := queryValue.Get(&orgID); err != nil {
+			return oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
+		}
+		if orgID != authCtx.ActiveOrganizationID {
+			return oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
+		}
+	default:
+		// For failed, cancelled, or terminated workflows, try to get result
+		workflowRun := s.temporalClient.GetWorkflow(ctx, responseID, "")
+		var workflowResult agentspkg.AgentsResponseWorkflowResult
+		if err := workflowRun.Get(ctx, &workflowResult); err != nil {
+			// Cannot verify ownership, deny access
+			return oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
+		}
+		if workflowResult.OrgID != authCtx.ActiveOrganizationID {
+			return oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
+		}
+	}
+
+	return s.deleteAgentRun(ctx, responseID)
+}
+
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+// TODO: Solve the namespace location before merging
+func (s *Service) deleteAgentRun(ctx context.Context, responseID string) error {
+	_, err := s.temporalClient.WorkflowService().DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
+		Namespace: "",
+		WorkflowExecution: &commonv1.WorkflowExecution{
+			WorkflowId: responseID,
+			RunId:      "",
+		},
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to delete agent run").Log(ctx, s.logger)
+	}
+	return nil
 }
 
 func getTemperature(temp *float64) float64 {
@@ -376,6 +452,7 @@ func toServiceRequest(req *agents.AgentResponseRequest) agentspkg.ResponseReques
 		Toolsets:           toolsets,
 		SubAgents:          subAgents,
 		Async:              req.Async,
+		Store:              req.Store,
 	}
 }
 

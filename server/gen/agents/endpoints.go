@@ -18,6 +18,7 @@ import (
 type Endpoints struct {
 	CreateResponse goa.Endpoint
 	GetResponse    goa.Endpoint
+	DeleteResponse goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "agents" service with endpoints.
@@ -27,6 +28,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		CreateResponse: NewCreateResponseEndpoint(s, a.APIKeyAuth),
 		GetResponse:    NewGetResponseEndpoint(s, a.APIKeyAuth),
+		DeleteResponse: NewDeleteResponseEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -34,6 +36,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateResponse = m(e.CreateResponse)
 	e.GetResponse = m(e.GetResponse)
+	e.DeleteResponse = m(e.DeleteResponse)
 }
 
 // NewCreateResponseEndpoint returns an endpoint function that calls the method
@@ -79,5 +82,28 @@ func NewGetResponseEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 			return nil, err
 		}
 		return s.GetResponse(ctx, p)
+	}
+}
+
+// NewDeleteResponseEndpoint returns an endpoint function that calls the method
+// "deleteResponse" of service "agents".
+func NewDeleteResponseEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteResponsePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat"},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteResponse(ctx, p)
 	}
 }

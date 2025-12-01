@@ -16,3 +16,8 @@ func CreateResponseAgentsPath() string {
 func GetResponseAgentsPath() string {
 	return "/rpc/agents.response"
 }
+
+// DeleteResponseAgentsPath returns the URL path to the agents service deleteResponse HTTP endpoint.
+func DeleteResponseAgentsPath() string {
+	return "/rpc/agents.response"
+}

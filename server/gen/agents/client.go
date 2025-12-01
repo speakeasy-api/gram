@@ -17,13 +17,15 @@ import (
 type Client struct {
 	CreateResponseEndpoint goa.Endpoint
 	GetResponseEndpoint    goa.Endpoint
+	DeleteResponseEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "agents" service client given the endpoints.
-func NewClient(createResponse, getResponse goa.Endpoint) *Client {
+func NewClient(createResponse, getResponse, deleteResponse goa.Endpoint) *Client {
 	return &Client{
 		CreateResponseEndpoint: createResponse,
 		GetResponseEndpoint:    getResponse,
+		DeleteResponseEndpoint: deleteResponse,
 	}
 }
 
@@ -69,4 +71,22 @@ func (c *Client) GetResponse(ctx context.Context, p *GetResponsePayload) (res *A
 		return
 	}
 	return ires.(*AgentResponseOutput), nil
+}
+
+// DeleteResponse calls the "deleteResponse" endpoint of the "agents" service.
+// DeleteResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteResponse(ctx context.Context, p *DeleteResponsePayload) (err error) {
+	_, err = c.DeleteResponseEndpoint(ctx, p)
+	return
 }

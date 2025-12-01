@@ -22,6 +22,7 @@ type Server struct {
 	Mounts         []*MountPoint
 	CreateResponse http.Handler
 	GetResponse    http.Handler
+	DeleteResponse http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -53,9 +54,11 @@ func New(
 		Mounts: []*MountPoint{
 			{"CreateResponse", "POST", "/rpc/agents.response"},
 			{"GetResponse", "GET", "/rpc/agents.response"},
+			{"DeleteResponse", "DELETE", "/rpc/agents.response"},
 		},
 		CreateResponse: NewCreateResponseHandler(e.CreateResponse, mux, decoder, encoder, errhandler, formatter),
 		GetResponse:    NewGetResponseHandler(e.GetResponse, mux, decoder, encoder, errhandler, formatter),
+		DeleteResponse: NewDeleteResponseHandler(e.DeleteResponse, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -66,6 +69,7 @@ func (s *Server) Service() string { return "agents" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateResponse = m(s.CreateResponse)
 	s.GetResponse = m(s.GetResponse)
+	s.DeleteResponse = m(s.DeleteResponse)
 }
 
 // MethodNames returns the methods served.
@@ -75,6 +79,7 @@ func (s *Server) MethodNames() []string { return agents.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateResponseHandler(mux, h.CreateResponse)
 	MountGetResponseHandler(mux, h.GetResponse)
+	MountDeleteResponseHandler(mux, h.DeleteResponse)
 }
 
 // Mount configures the mux to serve the agents endpoints.
@@ -165,6 +170,59 @@ func NewGetResponseHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getResponse")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteResponseHandler configures the mux to serve the "agents" service
+// "deleteResponse" endpoint.
+func MountDeleteResponseHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/agents.response", otelhttp.WithRouteTag("/rpc/agents.response", f).ServeHTTP)
+}
+
+// NewDeleteResponseHandler creates a HTTP handler which loads the HTTP request
+// and calls the "agents" service "deleteResponse" endpoint.
+func NewDeleteResponseHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteResponseRequest(mux, decoder)
+		encodeResponse = EncodeDeleteResponseResponse(encoder)
+		encodeError    = EncodeDeleteResponseError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteResponse")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
 		payload, err := decodeRequest(r)
 		if err != nil {

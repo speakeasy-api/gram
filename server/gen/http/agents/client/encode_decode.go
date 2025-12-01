@@ -485,6 +485,226 @@ func DecodeGetResponseResponse(decoder func(*http.Response) goahttp.Decoder, res
 	}
 }
 
+// BuildDeleteResponseRequest instantiates a HTTP request object with method
+// and path set to call the "agents" service "deleteResponse" endpoint
+func (c *Client) BuildDeleteResponseRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteResponseAgentsPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agents", "deleteResponse", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeleteResponseRequest returns an encoder for requests sent to the
+// agents deleteResponse server.
+func EncodeDeleteResponseRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agents.DeleteResponsePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agents", "deleteResponse", "*agents.DeleteResponsePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		values := req.URL.Query()
+		values.Add("response_id", p.ResponseID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDeleteResponseResponse returns a decoder for responses returned by the
+// agents deleteResponse endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeDeleteResponseResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDeleteResponseResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeleteResponseUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deleteResponse", err)
+			}
+			err = ValidateDeleteResponseUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deleteResponse", err)
+			}
+			return nil, NewDeleteResponseUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeleteResponseForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deleteResponse", err)
+			}
+			err = ValidateDeleteResponseForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deleteResponse", err)
+			}
+			return nil, NewDeleteResponseForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeleteResponseBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deleteResponse", err)
+			}
+			err = ValidateDeleteResponseBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deleteResponse", err)
+			}
+			return nil, NewDeleteResponseBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeleteResponseNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deleteResponse", err)
+			}
+			err = ValidateDeleteResponseNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deleteResponse", err)
+			}
+			return nil, NewDeleteResponseNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeleteResponseConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deleteResponse", err)
+			}
+			err = ValidateDeleteResponseConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deleteResponse", err)
+			}
+			return nil, NewDeleteResponseConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeleteResponseUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deleteResponse", err)
+			}
+			err = ValidateDeleteResponseUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deleteResponse", err)
+			}
+			return nil, NewDeleteResponseUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeleteResponseInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deleteResponse", err)
+			}
+			err = ValidateDeleteResponseInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deleteResponse", err)
+			}
+			return nil, NewDeleteResponseInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeleteResponseInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "deleteResponse", err)
+				}
+				err = ValidateDeleteResponseInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "deleteResponse", err)
+				}
+				return nil, NewDeleteResponseInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeleteResponseUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "deleteResponse", err)
+				}
+				err = ValidateDeleteResponseUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "deleteResponse", err)
+				}
+				return nil, NewDeleteResponseUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agents", "deleteResponse", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DeleteResponseGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deleteResponse", err)
+			}
+			err = ValidateDeleteResponseGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deleteResponse", err)
+			}
+			return nil, NewDeleteResponseGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agents", "deleteResponse", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // marshalAgentsAgentToolsetToAgentToolsetRequestBodyRequestBody builds a value
 // of type *AgentToolsetRequestBodyRequestBody from a value of type
 // *agents.AgentToolset.

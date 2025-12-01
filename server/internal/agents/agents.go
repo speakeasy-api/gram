@@ -152,6 +152,7 @@ type ResponseRequest struct {
 	Toolsets           []Toolset     `json:"toolsets,omitempty"`
 	SubAgents          []SubAgent    `json:"sub_agents,omitempty"`
 	Async              *bool         `json:"async,omitempty"`
+	Store              *bool         `json:"store,omitempty"`
 }
 
 type ResponseUsage struct {

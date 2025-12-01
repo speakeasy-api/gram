@@ -104,6 +104,88 @@ paths:
             x-speakeasy-react-hook:
                 disabled: true
     /rpc/agents.response:
+        delete:
+            description: Deletes any response associated with a given agent run.
+            operationId: getAgentResponse
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the response to retrieve
+                  in: query
+                  name: response_id
+                  required: true
+                  schema:
+                    description: The ID of the response to retrieve
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+            summary: deleteResponse agents
+            tags:
+                - agents
+            x-speakeasy-name-override: get
         get:
             description: Get the status of an async agent response by its ID.
             operationId: getAgentResponse
@@ -9150,6 +9232,9 @@ components:
                 project_slug:
                     type: string
                     description: The slug of the project to run the agent in
+                store:
+                    type: boolean
+                    description: If true, stores the response defaults to true
                 sub_agents:
                     type: array
                     items:

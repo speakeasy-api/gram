@@ -21,6 +21,8 @@ type Service interface {
 	CreateResponse(context.Context, *CreateResponsePayload) (res *AgentResponseOutput, err error)
 	// Get the status of an async agent response by its ID.
 	GetResponse(context.Context, *GetResponsePayload) (res *AgentResponseOutput, err error)
+	// Deletes any response associated with a given agent run.
+	DeleteResponse(context.Context, *DeleteResponsePayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -43,7 +45,7 @@ const ServiceName = "agents"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"createResponse", "getResponse"}
+var MethodNames = [3]string{"createResponse", "getResponse", "deleteResponse"}
 
 // The agent response output
 type AgentResponseOutput struct {
@@ -93,6 +95,8 @@ type AgentResponseRequest struct {
 	SubAgents []*AgentSubAgent
 	// If true, returns immediately with a response ID for polling
 	Async *bool
+	// If true, stores the response defaults to true
+	Store *bool
 }
 
 // Text format configuration for the response
@@ -139,6 +143,14 @@ type CreateResponsePayload struct {
 	ApikeyToken *string
 	// The agent response request body
 	Body *AgentResponseRequest
+}
+
+// DeleteResponsePayload is the payload type of the agents service
+// deleteResponse method.
+type DeleteResponsePayload struct {
+	ApikeyToken *string
+	// The ID of the response to retrieve
+	ResponseID string
 }
 
 // GetResponsePayload is the payload type of the agents service getResponse
