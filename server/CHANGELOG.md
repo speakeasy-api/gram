@@ -1,5 +1,35 @@
 # server
 
+## 0.12.0
+
+### Minor Changes
+
+- acb124f: Add instructions column to mcp metadata schema
+
+### Patch Changes
+
+- b69cb2b: Include MCP server instructions in initalize endpoint
+- 010561a: Add backend logic to upsert/retrieve MCP server instructions. Also updates API spec to include this new field.
+- c2ea282: admin view for creating oauth proxies
+- 444da5b: Updated oops.ErrHandle to include panic recovery. There are a few HTTP handlers
+  included in some services (alongside Goa endpoints) that needed this protection.
+  The log messages will also include stack traces for easier debugging.
+
+## 0.11.0
+
+### Minor Changes
+
+- 6716410: Add the ability to attach gram environments at the toolset level for easier configuration set up
+
+### Patch Changes
+
+- a2ff014: fix: incorrect mapping of openrouter model pricing
+- e34b505: updating of openrouter key limits for chat based usage
+- e016bcc: fix: capture of openrouter usage data streaming
+- 2788cf3: Fixed a type mismatch in the Polar client when creating events with metadata
+  following an update to the Polar Go SDK
+- 38b9b22: Apply simple HTTP status code heuristic for estimating successful tool calls
+
 ## 0.10.6
 
 ### Patch Changes

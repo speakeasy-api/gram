@@ -38,3 +38,5 @@ cover.*
 *gram.deploy.json
 .tmp-melange/
 poetry-installer-error-*.log
+package-lock.json
+/examples/*/pnpm-lock.yaml

@@ -162,6 +162,7 @@ SELECT
   ftd.description,
   ftd.input_schema,
   ftd.variables,
+  ftd.auth_input,
   ftd.runtime,
   ftd.function_id,
   ftd.meta,
@@ -210,7 +211,7 @@ WITH deployment AS (
     LIMIT 1
 )
 SELECT
-  ftd.id, ftd.tool_urn, ftd.deployment_id, ftd.name, ftd.variables
+  ftd.id, ftd.tool_urn, ftd.deployment_id, ftd.name, ftd.variables, ftd.auth_input
 FROM function_tool_definitions ftd
 WHERE
   ftd.deployment_id = (SELECT id FROM deployment)
@@ -238,6 +239,7 @@ SELECT
   , tool.description
   , tool.input_schema
   , tool.variables
+  , tool.auth_input
   , tool.meta
   , access.id AS access_id
 FROM deployment dep

@@ -1,5 +1,11 @@
 # function-runners
 
+## 0.2.1
+
+### Patch Changes
+
+- bc147e0: Updated dependencies to address dependabot security alerts
+
 ## 0.2.0
 
 ### Minor Changes

@@ -249,6 +249,7 @@ run();
 ### [toolsets](docs/sdks/toolsets/README.md)
 
 * [addExternalOAuthServer](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
+* [addOAuthProxyServer](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
 * [checkMCPSlugAvailability](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 * [cloneBySlug](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 * [create](docs/sdks/toolsets/README.md#create) - createToolset toolsets
@@ -359,6 +360,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`templatesRenderByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 - [`templatesUpdate`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`toolsetsAddExternalOAuthServer`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
+- [`toolsetsAddOAuthProxyServer`](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
 - [`toolsetsCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 - [`toolsetsCloneBySlug`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 - [`toolsetsCreate`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
@@ -403,6 +405,7 @@ To learn about this feature and how to get started, check
 
 - [`useActiveDeployment`](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 - [`useAddExternalOAuthServerMutation`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
+- [`useAddOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 - [`useCloneToolsetMutation`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys

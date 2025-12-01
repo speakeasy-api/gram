@@ -448,7 +448,7 @@ func calculateModelCost(ctx context.Context, openRouter openrouter.Provisioner, 
 
 	pricing, err := openRouter.GetModelPricing(ctx, model)
 	if err != nil {
-		logger.DebugContext(ctx, "model pricing not available, skipping cost calculation",
+		logger.ErrorContext(ctx, "model pricing not available, skipping cost calculation",
 			attr.SlogError(err))
 		return nil
 	}
@@ -459,7 +459,7 @@ func calculateModelCost(ctx context.Context, openRouter openrouter.Provisioner, 
 	if pricing.Prompt != "" && inputTokens > 0 {
 		promptPrice, err := strconv.ParseFloat(pricing.Prompt, 64)
 		if err != nil {
-			logger.DebugContext(ctx, "failed to parse prompt pricing",
+			logger.ErrorContext(ctx, "failed to parse prompt pricing",
 				attr.SlogError(err))
 		} else {
 			cost += promptPrice * float64(inputTokens)
@@ -470,7 +470,7 @@ func calculateModelCost(ctx context.Context, openRouter openrouter.Provisioner, 
 	if pricing.Completion != "" && outputTokens > 0 {
 		completionPrice, err := strconv.ParseFloat(pricing.Completion, 64)
 		if err != nil {
-			logger.DebugContext(ctx, "failed to parse completion pricing",
+			logger.ErrorContext(ctx, "failed to parse completion pricing",
 				attr.SlogError(err))
 		} else {
 			cost += completionPrice * float64(outputTokens)
@@ -481,7 +481,7 @@ func calculateModelCost(ctx context.Context, openRouter openrouter.Provisioner, 
 	if pricing.Request != "" {
 		requestPrice, err := strconv.ParseFloat(pricing.Request, 64)
 		if err != nil {
-			logger.DebugContext(ctx, "failed to parse request pricing",
+			logger.ErrorContext(ctx, "failed to parse request pricing",
 				attr.SlogError(err))
 		} else {
 			cost += requestPrice

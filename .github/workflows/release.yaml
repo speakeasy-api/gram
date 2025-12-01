@@ -28,7 +28,7 @@ jobs:
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
 
       - name: Setup Mise
-        uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3.5.0
+        uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3.5.1
         with:
           install: true
           cache: true

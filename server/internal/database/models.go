@@ -234,6 +234,7 @@ type FunctionToolDefinition struct {
 	Description  string
 	InputSchema  []byte
 	Variables    []byte
+	AuthInput    []byte
 	Meta         []byte
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
@@ -318,6 +319,7 @@ type McpMetadatum struct {
 	ProjectID                uuid.UUID
 	ExternalDocumentationUrl pgtype.Text
 	LogoID                   uuid.NullUUID
+	Instructions             pgtype.Text
 	CreatedAt                pgtype.Timestamptz
 	UpdatedAt                pgtype.Timestamptz
 }

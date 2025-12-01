@@ -1,5 +1,17 @@
 # @gram/client
 
+## 0.20.1
+
+### Patch Changes
+
+- c2ea282: admin view for creating oauth proxies
+
+## 0.19.0
+
+### Minor Changes
+
+- 6716410: Add the ability to attach gram environments at the toolset level for easier configuration set up
+
 ## 0.18.1
 
 ### Patch Changes

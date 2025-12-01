@@ -42,50 +42,6 @@ export const ToolsetEnvironmentLink$inboundSchema: z.ZodType<
   });
 });
 
-/** @internal */
-export type ToolsetEnvironmentLink$Outbound = {
-  environment_id: string;
-  id: string;
-  toolset_id: string;
-};
-
-/** @internal */
-export const ToolsetEnvironmentLink$outboundSchema: z.ZodType<
-  ToolsetEnvironmentLink$Outbound,
-  z.ZodTypeDef,
-  ToolsetEnvironmentLink
-> = z.object({
-  environmentId: z.string(),
-  id: z.string(),
-  toolsetId: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    environmentId: "environment_id",
-    toolsetId: "toolset_id",
-  });
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace ToolsetEnvironmentLink$ {
-  /** @deprecated use `ToolsetEnvironmentLink$inboundSchema` instead. */
-  export const inboundSchema = ToolsetEnvironmentLink$inboundSchema;
-  /** @deprecated use `ToolsetEnvironmentLink$outboundSchema` instead. */
-  export const outboundSchema = ToolsetEnvironmentLink$outboundSchema;
-  /** @deprecated use `ToolsetEnvironmentLink$Outbound` instead. */
-  export type Outbound = ToolsetEnvironmentLink$Outbound;
-}
-
-export function toolsetEnvironmentLinkToJSON(
-  toolsetEnvironmentLink: ToolsetEnvironmentLink,
-): string {
-  return JSON.stringify(
-    ToolsetEnvironmentLink$outboundSchema.parse(toolsetEnvironmentLink),
-  );
-}
-
 export function toolsetEnvironmentLinkFromJSON(
   jsonString: string,
 ): SafeParseResult<ToolsetEnvironmentLink, SDKValidationError> {

@@ -245,6 +245,31 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "removeOAuthServer")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoveOAuthServer"}`)
 	})
+
+	Method("addOAuthProxyServer", func() {
+		Description("Associate an OAuth proxy server with a toolset (admin only)")
+
+		Payload(func() {
+			Extend(AddOAuthProxyServerForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(shared.Toolset)
+
+		HTTP(func() {
+			Param("slug")
+			POST("/rpc/toolsets.addOAuthProxyServer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "addOAuthProxyServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "addOAuthProxyServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AddOAuthProxyServer"}`)
+	})
 })
 
 var CreateToolsetForm = Type("CreateToolsetForm", func() {
@@ -284,4 +309,11 @@ var AddExternalOAuthServerForm = Type("AddExternalOAuthServerForm", func() {
 	Attribute("external_oauth_server", shared.ExternalOAuthServerForm, "The external OAuth server data to create and associate with the toolset")
 	security.ProjectPayload()
 	Required("slug", "external_oauth_server")
+})
+
+var AddOAuthProxyServerForm = Type("AddOAuthProxyServerForm", func() {
+	Attribute("slug", shared.Slug, "The slug of the toolset to update")
+	Attribute("oauth_proxy_server", shared.OAuthProxyServerForm, "The OAuth proxy server data to create and associate with the toolset")
+	security.ProjectPayload()
+	Required("slug", "oauth_proxy_server")
 })

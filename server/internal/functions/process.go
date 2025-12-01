@@ -323,6 +323,14 @@ func processManifestToolV0(
 		}
 	}
 
+	var authInput []byte
+	if tool.AuthInput != nil {
+		authInput, err = json.Marshal(tool.AuthInput)
+		if err != nil {
+			return nil, fmt.Errorf("serialize auth input to json: %w", err)
+		}
+	}
+
 	t, err := tx.CreateFunctionsTool(ctx, repo.CreateFunctionsToolParams{
 		DeploymentID: deploymentID,
 		FunctionID:   attachementID,
@@ -333,6 +341,7 @@ func processManifestToolV0(
 		Description:  description,
 		InputSchema:  inputSchema,
 		Variables:    varBs,
+		AuthInput:    authInput,
 		Meta:         metaBs,
 	})
 	if err != nil {
