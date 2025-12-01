@@ -432,7 +432,6 @@ function envMapFromJSONSchema(jsonSchema: unknown): ManifestVariables {
         zm.string(),
         zm.object({
           description: zm.optional(zm.string()),
-          meta: zm.optional(zm.record(zm.string(), zm.string())),
         }),
       ),
     })
@@ -440,11 +439,9 @@ function envMapFromJSONSchema(jsonSchema: unknown): ManifestVariables {
 
   const out: ManifestVariables = {};
   for (const [key, value] of Object.entries(parsed.properties)) {
-    const res = {
+    out[key] = {
       ...(value.description != null ? { description: value.description } : {}),
     };
-
-    out[key] = res;
   }
 
   return out;
