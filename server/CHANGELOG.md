@@ -1,5 +1,20 @@
 # server
 
+## 0.12.0
+
+### Minor Changes
+
+- acb124f: Add instructions column to mcp metadata schema
+
+### Patch Changes
+
+- b69cb2b: Include MCP server instructions in initalize endpoint
+- 010561a: Add backend logic to upsert/retrieve MCP server instructions. Also updates API spec to include this new field.
+- c2ea282: admin view for creating oauth proxies
+- 444da5b: Updated oops.ErrHandle to include panic recovery. There are a few HTTP handlers
+  included in some services (alongside Goa endpoints) that needed this protection.
+  The log messages will also include stack traces for easier debugging.
+
 ## 0.11.0
 
 ### Minor Changes
