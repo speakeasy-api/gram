@@ -5,8 +5,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "tsx src/run-tests.ts",
-    "dev": "tsx watch src/run-tests.ts",
+    "test": "node src/run-tests.ts",
+    "dev": "node --watch src/run-tests.ts",
     "type-check": "tsc --noEmit"
   },
   "keywords": [],
@@ -18,8 +18,7 @@
     "openai": "^6.8.1"
   },
   "devDependencies": {
-    "@types/node": "^24.5.2",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "@types/node": "^24.10.1",
+    "typescript": "catalog:"
   }
 }

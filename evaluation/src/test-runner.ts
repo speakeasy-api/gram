@@ -1,12 +1,12 @@
 import OpenAI from "openai";
-import { MCPClient } from "./mcp-client.js";
+import { MCPClient } from "./mcp-client.ts";
 import type {
   MCPServerConfig,
   TestConfig,
   TestPrompt,
   TestResult,
   TestSummary,
-} from "./types.js";
+} from "./types.ts";
 
 /**
  * Main test runner for MCP server evaluation
@@ -143,9 +143,13 @@ export class TestRunner {
         }
 
         // Track which tools were called
-        toolCalls.forEach((toolCall) =>
-          allToolsCalled.push(toolCall.function.name),
-        );
+        toolCalls.forEach((toolCall) => {
+          if (toolCall.type === "function") {
+            allToolsCalled.push(toolCall.function.name);
+          } else {
+            allToolsCalled.push(toolCall.custom.name);
+          }
+        });
 
         // Add assistant's response to messages
         messages.push(assistantMessage);
@@ -153,17 +157,23 @@ export class TestRunner {
         // Execute tool calls and collect results
         const toolResults = await Promise.all(
           toolCalls.map(async (toolCall) => {
+            const funcName =
+              toolCall.type === "function"
+                ? toolCall.function.name
+                : toolCall.custom.name;
+            const funcInput =
+              toolCall.type === "function"
+                ? JSON.parse(toolCall.function.arguments)
+                : JSON.parse(toolCall.custom.input);
+
             try {
-              const functionArgs = JSON.parse(toolCall.function.arguments);
-              const result = await mcpClient!.callTool(
-                toolCall.function.name,
-                functionArgs,
-              );
+              const functionArgs = JSON.parse(funcInput);
+              const result = await mcpClient!.callTool(funcName, functionArgs);
 
               // Log the tool call details
               toolCallLogs.push({
                 turnNumber: turnCount,
-                toolName: toolCall.function.name,
+                toolName: funcName,
                 toolInput: functionArgs,
                 toolOutput: result,
                 isError: false,
@@ -181,8 +191,8 @@ export class TestRunner {
               // Log the tool call error
               toolCallLogs.push({
                 turnNumber: turnCount,
-                toolName: toolCall.function.name,
-                toolInput: JSON.parse(toolCall.function.arguments),
+                toolName: funcName,
+                toolInput: JSON.parse(funcInput),
                 toolOutput: { error: errorMessage },
                 isError: true,
               });
