@@ -101,7 +101,7 @@ func BuildListLogsPayload(logsListLogsToolID string, logsListLogsTsStart string,
 		if logsListLogsToolUrns != "" {
 			err = json.Unmarshal([]byte(logsListLogsToolUrns), &toolUrns)
 			if err != nil {
-				return nil, fmt.Errorf("invalid JSON for toolUrns, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"Voluptatibus molestiae.\",\n      \"Qui et cupiditate.\",\n      \"Error ea vel ad eius vel soluta.\"\n   ]'")
+				return nil, fmt.Errorf("invalid JSON for toolUrns, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"Omnis quia.\",\n      \"Rerum porro velit est enim occaecati vel.\",\n      \"Officiis modi praesentium assumenda maxime.\"\n   ]'")
 			}
 		}
 	}

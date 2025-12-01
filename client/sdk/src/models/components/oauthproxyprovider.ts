@@ -18,6 +18,10 @@ export type OAuthProxyProvider = {
    */
   createdAt: Date;
   /**
+   * A short url-friendly label that uniquely identifies a resource.
+   */
+  environmentSlug?: string | undefined;
+  /**
    * The grant types supported by this provider
    */
   grantTypesSupported?: Array<string> | undefined;
@@ -55,6 +59,7 @@ export const OAuthProxyProvider$inboundSchema: z.ZodType<
 > = z.object({
   authorization_endpoint: z.string(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
+  environment_slug: z.string().optional(),
   grant_types_supported: z.array(z.string()).optional(),
   id: z.string(),
   scopes_supported: z.array(z.string()).optional(),
@@ -66,6 +71,7 @@ export const OAuthProxyProvider$inboundSchema: z.ZodType<
   return remap$(v, {
     "authorization_endpoint": "authorizationEndpoint",
     "created_at": "createdAt",
+    "environment_slug": "environmentSlug",
     "grant_types_supported": "grantTypesSupported",
     "scopes_supported": "scopesSupported",
     "token_endpoint": "tokenEndpoint",
@@ -74,67 +80,6 @@ export const OAuthProxyProvider$inboundSchema: z.ZodType<
     "updated_at": "updatedAt",
   });
 });
-
-/** @internal */
-export type OAuthProxyProvider$Outbound = {
-  authorization_endpoint: string;
-  created_at: string;
-  grant_types_supported?: Array<string> | undefined;
-  id: string;
-  scopes_supported?: Array<string> | undefined;
-  slug: string;
-  token_endpoint: string;
-  token_endpoint_auth_methods_supported?: Array<string> | undefined;
-  updated_at: string;
-};
-
-/** @internal */
-export const OAuthProxyProvider$outboundSchema: z.ZodType<
-  OAuthProxyProvider$Outbound,
-  z.ZodTypeDef,
-  OAuthProxyProvider
-> = z.object({
-  authorizationEndpoint: z.string(),
-  createdAt: z.date().transform(v => v.toISOString()),
-  grantTypesSupported: z.array(z.string()).optional(),
-  id: z.string(),
-  scopesSupported: z.array(z.string()).optional(),
-  slug: z.string(),
-  tokenEndpoint: z.string(),
-  tokenEndpointAuthMethodsSupported: z.array(z.string()).optional(),
-  updatedAt: z.date().transform(v => v.toISOString()),
-}).transform((v) => {
-  return remap$(v, {
-    authorizationEndpoint: "authorization_endpoint",
-    createdAt: "created_at",
-    grantTypesSupported: "grant_types_supported",
-    scopesSupported: "scopes_supported",
-    tokenEndpoint: "token_endpoint",
-    tokenEndpointAuthMethodsSupported: "token_endpoint_auth_methods_supported",
-    updatedAt: "updated_at",
-  });
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace OAuthProxyProvider$ {
-  /** @deprecated use `OAuthProxyProvider$inboundSchema` instead. */
-  export const inboundSchema = OAuthProxyProvider$inboundSchema;
-  /** @deprecated use `OAuthProxyProvider$outboundSchema` instead. */
-  export const outboundSchema = OAuthProxyProvider$outboundSchema;
-  /** @deprecated use `OAuthProxyProvider$Outbound` instead. */
-  export type Outbound = OAuthProxyProvider$Outbound;
-}
-
-export function oAuthProxyProviderToJSON(
-  oAuthProxyProvider: OAuthProxyProvider,
-): string {
-  return JSON.stringify(
-    OAuthProxyProvider$outboundSchema.parse(oAuthProxyProvider),
-  );
-}
 
 export function oAuthProxyProviderFromJSON(
   jsonString: string,
