@@ -33,7 +33,13 @@ import (
 
 // functionManifestVariable represents a variable definition from a function manifest.
 type functionManifestVariable struct {
-	Description *string `json:"description"`
+	Description   *string `json:"description"`
+	AuthInputType string  `json:"authInputType,omitempty"`
+}
+
+type authInputManifest struct {
+	Type     string `json:"type"`
+	Variable string `json:"variable"`
 }
 
 func DescribeToolsetEntry(
@@ -156,7 +162,7 @@ func DescribeToolsetEntry(
 				ToolUrn: tool.ToolUrn.String(),
 			})
 
-			envVars, err := extractFunctionEnvVars(ctx, logger, tool.Variables)
+			envVars, err := extractFunctionEnvVars(ctx, logger, tool.Variables, tool.AuthInput)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables").Log(ctx, logger)
 			}
@@ -207,7 +213,7 @@ func DescribeToolsetEntry(
 				ResourceUrn: resource.ResourceUrn.String(),
 			})
 
-			envVars, err := extractFunctionEnvVars(ctx, logger, resource.Variables)
+			envVars, err := extractFunctionEnvVars(ctx, logger, resource.Variables, nil)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables from resource").Log(ctx, logger)
 			}
@@ -450,6 +456,23 @@ func DescribeToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").Log(ctx, logger)
 	}
 
+	oauth2AuthCodeSecurityCount := 0
+	for _, securityVariable := range toolsetTools.SecurityVars {
+		isAuthorizationCode := securityVariable.Type != nil && *securityVariable.Type == "oauth2" && securityVariable.OauthTypes != nil && slices.Contains(securityVariable.OauthTypes, "authorization_code")
+		isOpenIdConnect := securityVariable.Type != nil && *securityVariable.Type == "openIdConnect"
+		if isAuthorizationCode || isOpenIdConnect {
+			oauth2AuthCodeSecurityCount++
+		}
+	}
+
+	functionEnvVars := dedupeFunctionEnvVars(toolsetTools.FunctionEnvVars)
+
+	for _, functionEnvironmentVariable := range functionEnvVars {
+		if functionEnvironmentVariable != nil && functionEnvironmentVariable.AuthInputType != nil && *functionEnvironmentVariable.AuthInputType == "oauth2" {
+			oauth2AuthCodeSecurityCount++
+		}
+	}
+
 	result := &types.Toolset{
 		ID:                           toolset.ID.String(),
 		OrganizationID:               toolset.OrganizationID,
@@ -460,7 +483,7 @@ func DescribeToolset(
 		DefaultEnvironmentSlug:       conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
 		SecurityVariables:            toolsetTools.SecurityVars,
 		ServerVariables:              toolsetTools.ServerVars,
-		FunctionEnvironmentVariables: dedupeFunctionEnvVars(toolsetTools.FunctionEnvVars),
+		FunctionEnvironmentVariables: functionEnvVars,
 		Description:                  conv.FromPGText[string](toolset.Description),
 		Tools:                        toolsetTools.Tools,
 		ToolsetVersion:               toolsetVersion,
@@ -477,6 +500,9 @@ func DescribeToolset(
 		ResourceUrns:                 resourceUrns,
 		ExternalOauthServer:          externalOAuthServer,
 		OauthProxyServer:             oauthProxyServer,
+		OauthEnablementMetadata: &types.OAuthEnablementMetadata{
+			Oauth2SecurityCount: oauth2AuthCodeSecurityCount,
+		},
 	}
 
 	return result, nil
@@ -667,7 +693,7 @@ func readToolsetTools(
 				functionTool.Schema = constants.DefaultEmptyToolSchema
 			}
 
-			envVars, err := extractFunctionEnvVars(ctx, logger, def.FunctionToolDefinition.Variables)
+			envVars, err := extractFunctionEnvVars(ctx, logger, def.FunctionToolDefinition.Variables, def.FunctionToolDefinition.AuthInput)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables").Log(ctx, logger)
 			}
@@ -722,7 +748,7 @@ func readToolsetTools(
 				UpdatedAt:    def.FunctionResourceDefinition.UpdatedAt.Time.Format(time.RFC3339),
 			}
 
-			envVars, err := extractFunctionEnvVars(ctx, logger, def.FunctionResourceDefinition.Variables)
+			envVars, err := extractFunctionEnvVars(ctx, logger, def.FunctionResourceDefinition.Variables, nil)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables from resource").Log(ctx, logger)
 			}
@@ -809,7 +835,7 @@ func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectI
 	return nil
 }
 
-func extractFunctionEnvVars(ctx context.Context, logger *slog.Logger, variableData []byte) ([]*types.FunctionEnvironmentVariable, error) {
+func extractFunctionEnvVars(ctx context.Context, logger *slog.Logger, variableData []byte, authInputData []byte) ([]*types.FunctionEnvironmentVariable, error) {
 	var functionEnvVars []*types.FunctionEnvironmentVariable
 
 	if variableData != nil {
@@ -823,11 +849,25 @@ func extractFunctionEnvVars(ctx context.Context, logger *slog.Logger, variableDa
 					description = v.Description
 				}
 				functionEnvVars = append(functionEnvVars, &types.FunctionEnvironmentVariable{
-					Name:        k,
-					Description: description,
+					Name:          k,
+					Description:   description,
+					AuthInputType: nil,
 				})
 			}
 
+		}
+	}
+
+	if authInputData != nil {
+		var authInputs *authInputManifest
+		if err := json.Unmarshal(authInputData, &authInputs); err != nil {
+			logger.ErrorContext(ctx, "failed to unmarshal function tool auth input", attr.SlogError(err))
+		} else if authInputs != nil {
+			functionEnvVars = append(functionEnvVars, &types.FunctionEnvironmentVariable{
+				Name:          authInputs.Variable,
+				AuthInputType: &authInputs.Type,
+				Description:   nil,
+			})
 		}
 	}
 

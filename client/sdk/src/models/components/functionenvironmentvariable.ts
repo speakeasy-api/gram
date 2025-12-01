@@ -3,11 +3,16 @@
  */
 
 import * as z from "zod/v3";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type FunctionEnvironmentVariable = {
+  /**
+   * Optional value of the function variable comes from a specific auth input
+   */
+  authInputType?: string | undefined;
   /**
    * Description of the function environment variable
    */
@@ -24,8 +29,13 @@ export const FunctionEnvironmentVariable$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  auth_input_type: z.string().optional(),
   description: z.string().optional(),
   name: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "auth_input_type": "authInputType",
+  });
 });
 
 export function functionEnvironmentVariableFromJSON(

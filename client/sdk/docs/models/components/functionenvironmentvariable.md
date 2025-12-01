@@ -12,7 +12,8 @@ let value: FunctionEnvironmentVariable = {
 
 ## Fields
 
-| Field                                            | Type                                             | Required                                         | Description                                      |
-| ------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------ |
-| `description`                                    | *string*                                         | :heavy_minus_sign:                               | Description of the function environment variable |
-| `name`                                           | *string*                                         | :heavy_check_mark:                               | The environment variables                        |
+| Field                                                                    | Type                                                                     | Required                                                                 | Description                                                              |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| `authInputType`                                                          | *string*                                                                 | :heavy_minus_sign:                                                       | Optional value of the function variable comes from a specific auth input |
+| `description`                                                            | *string*                                                                 | :heavy_minus_sign:                                                       | Description of the function environment variable                         |
+| `name`                                                                   | *string*                                                                 | :heavy_check_mark:                                                       | The environment variables                                                |

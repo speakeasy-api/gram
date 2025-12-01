@@ -16,6 +16,10 @@ import {
   FunctionEnvironmentVariable$inboundSchema,
 } from "./functionenvironmentvariable.js";
 import {
+  OAuthEnablementMetadata,
+  OAuthEnablementMetadata$inboundSchema,
+} from "./oauthenablementmetadata.js";
+import {
   OAuthProxyServer,
   OAuthProxyServer$inboundSchema,
 } from "./oauthproxyserver.js";
@@ -80,6 +84,7 @@ export type Toolset = {
    * The name of the toolset
    */
   name: string;
+  oauthEnablementMetadata: OAuthEnablementMetadata;
   oauthProxyServer?: OAuthProxyServer | undefined;
   /**
    * The organization ID this toolset belongs to
@@ -154,6 +159,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
     mcp_is_public: z.boolean().optional(),
     mcp_slug: z.string().optional(),
     name: z.string(),
+    oauth_enablement_metadata: OAuthEnablementMetadata$inboundSchema,
     oauth_proxy_server: OAuthProxyServer$inboundSchema.optional(),
     organization_id: z.string(),
     project_id: z.string(),
@@ -181,6 +187,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
       "mcp_enabled": "mcpEnabled",
       "mcp_is_public": "mcpIsPublic",
       "mcp_slug": "mcpSlug",
+      "oauth_enablement_metadata": "oauthEnablementMetadata",
       "oauth_proxy_server": "oauthProxyServer",
       "organization_id": "organizationId",
       "project_id": "projectId",

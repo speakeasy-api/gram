@@ -29,7 +29,7 @@ generation:
     generateNewTests: false
     skipResponseBodyAssertions: false
 typescript:
-  version: 0.20.0
+  version: 0.21.1
   acceptHeaderEnum: true
   additionalDependencies:
     dependencies: {}
@@ -59,6 +59,7 @@ typescript:
   flatteningOrder: parameters-first
   formStringArrayEncodeMode: encoded-string
   forwardCompatibleEnumsByDefault: false
+  forwardCompatibleUnionsByDefault: "false"
   generateExamples: true
   imports:
     option: openapi
@@ -76,6 +77,7 @@ typescript:
   methodArguments: infer-optional-args
   modelPropertyCasing: camel
   moduleFormat: esm
+  multipartArrayFormat: legacy
   outputModelSuffix: output
   packageName: '@gram/client'
   responseFormat: flat

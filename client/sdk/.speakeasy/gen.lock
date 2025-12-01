@@ -1,17 +1,17 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: c142ec74edc83fda789a9e4382178abe
+  docChecksum: 824011ee00f5d0bdb04997d159c37917
   docVersion: 0.0.1
-  speakeasyVersion: 1.661.1
-  generationVersion: 2.763.2
-  releaseVersion: 0.20.0
-  configChecksum: a291087bdfc61490e1295f1eaaf68d1b
+  speakeasyVersion: 1.665.1
+  generationVersion: 2.767.2
+  releaseVersion: 0.21.1
+  configChecksum: 65fb7234f48886e0c7cce61f23979b6f
 features:
   typescript:
     additionalDependencies: 0.1.0
     constsAndDefaults: 0.1.12
-    core: 3.26.10
+    core: 3.26.13
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
     downloadStreams: 0.1.1
@@ -25,7 +25,7 @@ features:
     reactQueryHooks: 0.2.3
     responseFormat: 0.2.3
     retries: 2.83.0
-    sdkHooks: 0.3.0
+    sdkHooks: 0.4.0
 generatedFiles:
   - .devcontainer/README.md
   - .devcontainer/devcontainer.json
@@ -117,6 +117,7 @@ generatedFiles:
   - docs/models/components/listversionsresult.md
   - docs/models/components/mcpmetadata.md
   - docs/models/components/notmodified.md
+  - docs/models/components/oauthenablementmetadata.md
   - docs/models/components/oauthproxyprovider.md
   - docs/models/components/oauthproxyserver.md
   - docs/models/components/oauthproxyserverform.md
@@ -665,6 +666,7 @@ generatedFiles:
   - src/models/components/listversionsresult.ts
   - src/models/components/mcpmetadata.ts
   - src/models/components/notmodified.ts
+  - src/models/components/oauthenablementmetadata.ts
   - src/models/components/oauthproxyprovider.ts
   - src/models/components/oauthproxyserver.ts
   - src/models/components/oauthproxyserverform.ts
@@ -1437,7 +1439,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-03-22T17:12:26.250Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "tools": [{}], "toolset_version": 740618, "updated_at": "2024-05-10T06:01:51.541Z"}
+          application/json: {"account_type": "<value>", "created_at": "2025-03-22T17:12:26.250Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 740618}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "tools": [{}], "toolset_version": 740618, "updated_at": "2024-05-10T06:01:51.541Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1459,7 +1461,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 157800, "updated_at": "2025-12-20T03:22:44.412Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 157800}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 157800, "updated_at": "2025-12-20T03:22:44.412Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1482,7 +1484,7 @@ examples:
         application/json: {}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "description": "mushy comparison messy lady fly", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2023-07-28T22:54:49.336Z"}], "resource_urns": ["<value 1>", "<value 2>", "<value 3>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [{}], "toolset_version": 873620, "updated_at": "2025-08-07T19:20:12.233Z"}
+          application/json: {"account_type": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 873620}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "description": "mushy comparison messy lady fly", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2023-07-28T22:54:49.336Z"}], "resource_urns": ["<value 1>", "<value 2>", "<value 3>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [{}], "toolset_version": 873620, "updated_at": "2025-08-07T19:20:12.233Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1616,7 +1618,7 @@ examples:
         application/json: {"external_oauth_server": {"metadata": "<value>", "slug": "<value>"}}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-08-31T03:23:36.997Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 220932, "updated_at": "2025-03-28T09:33:33.851Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-08-31T03:23:36.997Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 220932}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 220932, "updated_at": "2025-03-28T09:33:33.851Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1640,7 +1642,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-08-30T05:28:04.458Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 220098, "updated_at": "2023-10-21T14:21:06.001Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-08-30T05:28:04.458Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 220098}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 220098, "updated_at": "2023-10-21T14:21:06.001Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1743,7 +1745,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-07-27T03:45:28.599Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2024-10-23T10:29:38.107Z", "description": "chap whoa gee lightly devastation vivacious about t-shirt", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2024-11-26T08:12:18.787Z"}], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>"], "tools": [], "toolset_version": 189011, "updated_at": "2024-04-29T05:29:07.967Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-07-27T03:45:28.599Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 189011}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2024-10-23T10:29:38.107Z", "description": "chap whoa gee lightly devastation vivacious about t-shirt", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2024-11-26T08:12:18.787Z"}], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>"], "tools": [], "toolset_version": 189011, "updated_at": "2024-04-29T05:29:07.967Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1890,7 +1892,7 @@ examples:
         application/json: {"oauth_proxy_server": {"authorization_endpoint": "<value>", "environment_slug": "<value>", "scopes_supported": ["<value 1>"], "slug": "<value>", "token_endpoint": "<value>", "token_endpoint_auth_methods_supported": ["<value 1>"]}}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-08-02T11:30:20.724Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2024-06-15T10:22:33.413Z", "description": "upset when yuppify closely healthily lyre", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>"], "updated_at": "2025-03-06T13:35:09.866Z"}], "resource_urns": ["<value 1>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "tools": [], "toolset_version": 447928, "updated_at": "2025-11-21T11:46:48.787Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-08-02T11:30:20.724Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 368382}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2024-06-15T10:22:33.413Z", "description": "upset when yuppify closely healthily lyre", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>"], "updated_at": "2025-03-06T13:35:09.866Z"}], "resource_urns": ["<value 1>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "tools": [], "toolset_version": 447928, "updated_at": "2025-11-21T11:46:48.787Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

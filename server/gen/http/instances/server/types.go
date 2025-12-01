@@ -469,6 +469,8 @@ type ServerVariableResponseBody struct {
 type FunctionEnvironmentVariableResponseBody struct {
 	// Description of the function environment variable
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Optional value of the function variable comes from a specific auth input
+	AuthInputType *string `form:"auth_input_type,omitempty" json:"auth_input_type,omitempty" xml:"auth_input_type,omitempty"`
 	// The environment variables
 	Name string `form:"name" json:"name" xml:"name"`
 }

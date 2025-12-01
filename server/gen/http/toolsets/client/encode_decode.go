@@ -2478,8 +2478,20 @@ func unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentV
 		return nil
 	}
 	res := &types.FunctionEnvironmentVariable{
-		Description: v.Description,
-		Name:        *v.Name,
+		Description:   v.Description,
+		AuthInputType: v.AuthInputType,
+		Name:          *v.Name,
+	}
+
+	return res
+}
+
+// unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata
+// builds a value of type *types.OAuthEnablementMetadata from a value of type
+// *OAuthEnablementMetadataResponseBody.
+func unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(v *OAuthEnablementMetadataResponseBody) *types.OAuthEnablementMetadata {
+	res := &types.OAuthEnablementMetadata{
+		Oauth2SecurityCount: *v.Oauth2SecurityCount,
 	}
 
 	return res

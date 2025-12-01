@@ -25,7 +25,7 @@ WITH deployment AS (
     LIMIT 1
 )
 SELECT
-  ftd.id, ftd.tool_urn, ftd.deployment_id, ftd.name, ftd.variables
+  ftd.id, ftd.tool_urn, ftd.deployment_id, ftd.name, ftd.variables, ftd.auth_input
 FROM function_tool_definitions ftd
 WHERE
   ftd.deployment_id = (SELECT id FROM deployment)
@@ -45,6 +45,7 @@ type FindFunctionToolEntriesByUrnRow struct {
 	DeploymentID uuid.UUID
 	Name         string
 	Variables    []byte
+	AuthInput    []byte
 }
 
 func (q *Queries) FindFunctionToolEntriesByUrn(ctx context.Context, arg FindFunctionToolEntriesByUrnParams) ([]FindFunctionToolEntriesByUrnRow, error) {
@@ -62,6 +63,7 @@ func (q *Queries) FindFunctionToolEntriesByUrn(ctx context.Context, arg FindFunc
 			&i.DeploymentID,
 			&i.Name,
 			&i.Variables,
+			&i.AuthInput,
 		); err != nil {
 			return nil, err
 		}
@@ -338,6 +340,7 @@ SELECT
   , tool.description
   , tool.input_schema
   , tool.variables
+  , tool.auth_input
   , tool.meta
   , access.id AS access_id
 FROM deployment dep
@@ -371,6 +374,7 @@ type GetFunctionToolByURNRow struct {
 	Description  string
 	InputSchema  []byte
 	Variables    []byte
+	AuthInput    []byte
 	Meta         []byte
 	AccessID     uuid.NullUUID
 }
@@ -389,6 +393,7 @@ func (q *Queries) GetFunctionToolByURN(ctx context.Context, arg GetFunctionToolB
 		&i.Description,
 		&i.InputSchema,
 		&i.Variables,
+		&i.AuthInput,
 		&i.Meta,
 		&i.AccessID,
 	)
@@ -482,6 +487,7 @@ SELECT
   ftd.description,
   ftd.input_schema,
   ftd.variables,
+  ftd.auth_input,
   ftd.runtime,
   ftd.function_id,
   ftd.meta,
@@ -513,6 +519,7 @@ type ListFunctionToolsRow struct {
 	Description  string
 	InputSchema  []byte
 	Variables    []byte
+	AuthInput    []byte
 	Runtime      string
 	FunctionID   uuid.UUID
 	Meta         []byte
@@ -546,6 +553,7 @@ func (q *Queries) ListFunctionTools(ctx context.Context, arg ListFunctionToolsPa
 			&i.Description,
 			&i.InputSchema,
 			&i.Variables,
+			&i.AuthInput,
 			&i.Runtime,
 			&i.FunctionID,
 			&i.Meta,
