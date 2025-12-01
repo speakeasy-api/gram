@@ -72,61 +72,6 @@ export const ChatMessage$inboundSchema: z.ZodType<
   });
 });
 
-/** @internal */
-export type ChatMessage$Outbound = {
-  content?: string | undefined;
-  created_at: string;
-  finish_reason?: string | undefined;
-  id: string;
-  model: string;
-  role: string;
-  tool_call_id?: string | undefined;
-  tool_calls?: string | undefined;
-  user_id?: string | undefined;
-};
-
-/** @internal */
-export const ChatMessage$outboundSchema: z.ZodType<
-  ChatMessage$Outbound,
-  z.ZodTypeDef,
-  ChatMessage
-> = z.object({
-  content: z.string().optional(),
-  createdAt: z.date().transform(v => v.toISOString()),
-  finishReason: z.string().optional(),
-  id: z.string(),
-  model: z.string(),
-  role: z.string(),
-  toolCallId: z.string().optional(),
-  toolCalls: z.string().optional(),
-  userId: z.string().optional(),
-}).transform((v) => {
-  return remap$(v, {
-    createdAt: "created_at",
-    finishReason: "finish_reason",
-    toolCallId: "tool_call_id",
-    toolCalls: "tool_calls",
-    userId: "user_id",
-  });
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace ChatMessage$ {
-  /** @deprecated use `ChatMessage$inboundSchema` instead. */
-  export const inboundSchema = ChatMessage$inboundSchema;
-  /** @deprecated use `ChatMessage$outboundSchema` instead. */
-  export const outboundSchema = ChatMessage$outboundSchema;
-  /** @deprecated use `ChatMessage$Outbound` instead. */
-  export type Outbound = ChatMessage$Outbound;
-}
-
-export function chatMessageToJSON(chatMessage: ChatMessage): string {
-  return JSON.stringify(ChatMessage$outboundSchema.parse(chatMessage));
-}
-
 export function chatMessageFromJSON(
   jsonString: string,
 ): SafeParseResult<ChatMessage, SDKValidationError> {

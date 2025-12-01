@@ -38,22 +38,6 @@ export const ToolEntryType$inboundSchema: z.ZodNativeEnum<
 > = z.nativeEnum(ToolEntryType);
 
 /** @internal */
-export const ToolEntryType$outboundSchema: z.ZodNativeEnum<
-  typeof ToolEntryType
-> = ToolEntryType$inboundSchema;
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace ToolEntryType$ {
-  /** @deprecated use `ToolEntryType$inboundSchema` instead. */
-  export const inboundSchema = ToolEntryType$inboundSchema;
-  /** @deprecated use `ToolEntryType$outboundSchema` instead. */
-  export const outboundSchema = ToolEntryType$outboundSchema;
-}
-
-/** @internal */
 export const ToolEntry$inboundSchema: z.ZodType<
   ToolEntry,
   z.ZodTypeDef,
@@ -68,47 +52,6 @@ export const ToolEntry$inboundSchema: z.ZodType<
     "tool_urn": "toolUrn",
   });
 });
-
-/** @internal */
-export type ToolEntry$Outbound = {
-  id: string;
-  name: string;
-  tool_urn: string;
-  type: string;
-};
-
-/** @internal */
-export const ToolEntry$outboundSchema: z.ZodType<
-  ToolEntry$Outbound,
-  z.ZodTypeDef,
-  ToolEntry
-> = z.object({
-  id: z.string(),
-  name: z.string(),
-  toolUrn: z.string(),
-  type: ToolEntryType$outboundSchema,
-}).transform((v) => {
-  return remap$(v, {
-    toolUrn: "tool_urn",
-  });
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace ToolEntry$ {
-  /** @deprecated use `ToolEntry$inboundSchema` instead. */
-  export const inboundSchema = ToolEntry$inboundSchema;
-  /** @deprecated use `ToolEntry$outboundSchema` instead. */
-  export const outboundSchema = ToolEntry$outboundSchema;
-  /** @deprecated use `ToolEntry$Outbound` instead. */
-  export type Outbound = ToolEntry$Outbound;
-}
-
-export function toolEntryToJSON(toolEntry: ToolEntry): string {
-  return JSON.stringify(ToolEntry$outboundSchema.parse(toolEntry));
-}
 
 export function toolEntryFromJSON(
   jsonString: string,
