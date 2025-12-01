@@ -11003,6 +11003,9 @@ components:
                 id:
                     type: string
                     description: The ID of the metadata record
+                instructions:
+                    type: string
+                    description: Server instructions returned in the MCP initialize response
                 logo_asset_id:
                     type: string
                     description: The asset ID for the MCP install page logo
@@ -11784,6 +11787,9 @@ components:
                 external_documentation_url:
                     type: string
                     description: A link to external documentation for the MCP install page
+                instructions:
+                    type: string
+                    description: Server instructions returned in the MCP initialize response
                 logo_asset_id:
                     type: string
                     description: The asset ID for the MCP install page logo

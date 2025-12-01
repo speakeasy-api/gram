@@ -202,12 +202,17 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		externalDocURL = conv.ToPGText(*payload.ExternalDocumentationURL)
 	}
 
+	var instructions pgtype.Text
+	if payload.Instructions != nil {
+		instructions = conv.ToPGText(*payload.Instructions)
+	}
+
 	result, err := s.repo.UpsertMetadata(ctx, repo.UpsertMetadataParams{
 		ToolsetID:                toolset.ID,
 		ProjectID:                *authCtx.ProjectID,
 		ExternalDocumentationUrl: externalDocURL,
 		LogoID:                   logoID,
-		Instructions:             pgtype.Text{String: "", Valid: false},
+		Instructions:             instructions,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert MCP install page metadata").Log(ctx, s.logger)
@@ -228,6 +233,7 @@ func toMcpMetadata(record repo.McpMetadatum) *types.McpMetadata {
 		UpdatedAt:                record.UpdatedAt.Time.Format(time.RFC3339),
 		ExternalDocumentationURL: conv.FromPGText[string](record.ExternalDocumentationUrl),
 		LogoAssetID:              conv.FromNullableUUID(record.LogoID),
+		Instructions:             conv.FromPGText[string](record.Instructions),
 	}
 	return metadata
 }
