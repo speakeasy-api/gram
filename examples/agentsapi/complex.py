@@ -6,16 +6,19 @@ import requests
 # Check for -v flag
 verbose = "-v" in sys.argv
 
+# Configuration
+org_slug = ""  # Change this to your organization slug
+
 url = "http://localhost:8080/rpc/agents.response"
 headers = {
     "Content-Type": "application/json",
     "Gram-Key": os.getenv("GRAM_API_KEY"),
 }
 
-context = """Please help me with the following tasks in order:
+context = f"""Please help me with the following tasks in order:
 
-1. First, get the details of the organization with slug 'dub'
-2. Then, find the user associated with the workspaces of the 'dub' organization
+1. First, get the details of the organization with slug '{org_slug}'
+2. Then, find the user associated with the workspaces of the '{org_slug}' organization
 3. Please use the email address to search for a stripe customer
 4. Then get the stripe charges associated with that customer
 

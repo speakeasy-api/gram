@@ -6,6 +6,9 @@ import requests
 # Check for -v flag
 verbose = "-v" in sys.argv
 
+# Configuration
+org_slug = ""  # Change this to your organization slug
+
 url = "http://localhost:8080/rpc/agents.response"
 headers = {
     "Content-Type": "application/json",
@@ -16,7 +19,7 @@ payload = {
     "project_slug": "default",
     "model": "openai/gpt-4o",
     "instructions": "You are a helpful assistant that can help with Speakeasy SDK operations.",
-    "input": "Get me a speakeasy org ryan-local?",
+    "input": f"Get me a speakeasy org {org_slug}?",
     "toolsets": [
         {"toolset_slug": "speakeasy", "environment_slug": "default", "headers": {}},
         {"toolset_slug": "app-sdk", "environment_slug": "default", "headers": {}},

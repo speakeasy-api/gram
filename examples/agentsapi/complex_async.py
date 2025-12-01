@@ -7,15 +7,18 @@ import requests
 # Check for -v flag
 verbose = "-v" in sys.argv
 
+# Configuration
+org_slug = ""
+
 url = "http://localhost:8080/rpc/agents.response"
 headers = {
     "Content-Type": "application/json",
     "Gram-Key": os.getenv("GRAM_API_KEY"),
 }
 
-context = """Please help me with the following things
-1. Please get the details of the organization with slug 'dub' and get all the workspaces for it 
-2. Then, find the user associated with the workspaces of the 'dub' organization
+context = f"""Please help me with the following things
+1. Please get the details of the organization with slug '{org_slug}' and get all the workspaces for it
+2. Then, find the user associated with the workspaces of the '{org_slug}' organization
 3. Please use the email address to search for a stripe customer and get the stripe charges and refunds associated with that customer
 
 Structure your final result like:

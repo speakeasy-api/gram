@@ -6,6 +6,9 @@ import requests
 # Check for -v flag
 verbose = "-v" in sys.argv
 
+# Configuration
+org_slug = ""  # Change this to your organization slug
+
 url = "http://localhost:8080/rpc/agents.response"
 headers = {
     "Content-Type": "application/json",
@@ -13,7 +16,7 @@ headers = {
 }
 
 context = [
-  { "role": "role", "content": "Get me a speakeasy org ryan-local?" }
+  { "role": "role", "content": f"Get me a speakeasy org {org_slug}?" }
 ]
 
 payload = {
