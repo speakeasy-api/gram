@@ -10,8 +10,21 @@ if [ "${usage_name:-}" = "" ]; then
   exit 1
 fi
 
-exec atlas migrate diff "${usage_name:?}" \
+echo "Generating atlas migrations..."
+atlas migrate diff "${usage_name:?}" \
   --dir file://clickhouse/migrations \
   --config file://atlas.hcl \
   --to file://clickhouse/schema.sql \
   --dev-url "docker://clickhouse/clickhouse-server/25.8.3/dev"
+
+
+# We also generate golang-migrate migrations so to allow 
+# any user to run clickhouse migrations without requiring an 
+# atlas login
+echo "Generating golang-migrate migrations..."
+exec atlas migrate diff "${usage_name:?}" \
+  --dir file://clickhouse/local/golang_migrate?format=golang-migrate \
+  --config file://atlas.hcl \
+  --to file://clickhouse/schema.sql \
+  --dev-url "docker://clickhouse/clickhouse-server/25.8.3/dev" \
+  --format "{{ sql . \"  \" }}"
