@@ -28,9 +28,6 @@ catalogs:
       specifier: 5.9.3
       version: 5.9.3
 
-overrides:
-  glob@>=10.0 <10.5.0: 10.5.0
-
 importers:
 
   .:
@@ -186,7 +183,7 @@ importers:
         version: 4.1.0
       embla-carousel-react:
         specifier: ^8.6.0
-        version: 8.6.0(react@19.1.1)
+        version: 8.6.0(react@19.2.0)
       fflate:
         specifier: ^0.8.2
         version: 0.8.2
