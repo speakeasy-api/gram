@@ -33,7 +33,7 @@ require (
 	github.com/pgvector/pgvector-go v0.3.0
 	github.com/pgx-contrib/pgxotel v0.0.0-20250908221444-24ae56d05ec0
 	github.com/polarsource/polar-go v0.12.0
-	github.com/posthog/posthog-go v1.6.12
+	github.com/posthog/posthog-go v1.6.13
 	github.com/redis/go-redis/extra/redisotel/v9 v9.17.0
 	github.com/redis/go-redis/v9 v9.17.0
 	github.com/samber/lo v1.52.0
