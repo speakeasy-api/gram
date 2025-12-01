@@ -5,15 +5,16 @@
 # file, you can specify more tools or different version of listed ones below as
 # well as overriding environment variables.
 [tools]
-"aqua:ariga/atlas" = "0.34.0"
+"aqua:ariga/atlas" = "0.38.0"
 "aqua:pvolok/mprocs" = "0.7.2"
 "ubi:sbdchd/squawk" = "1.6.1"
-"ubi:speakeasy-api/speakeasy" = "1.641.1"
+"ubi:speakeasy-api/speakeasy" = "1.661.1"
 "ubi:FiloSottile/mkcert" = "1.4.4"
 apko = "0.30.13"
 flyctl = "0.3.189"
 go = "1.25.3"
 golangci-lint = "2.6.1"
+gomigrate = "4.19.0"
 gum = "0.16.0"
 jq = "1.7.1"
 melange = "0.30.6"
@@ -50,6 +51,8 @@ CLICKHOUSE_NATIVE_PORT = "9440"
 CLICKHOUSE_DATABASE = "default"
 CLICKHOUSE_INSECURE = true
 GRAM_CLICKHOUSE_URL = "clickhouse://{{env.CLICKHOUSE_USERNAME}}:{{env.CLICKHOUSE_PASSWORD}}@{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}/{{env.CLICKHOUSE_DATABASE}}?secure=true&skip_verify=true"
+## golang-migrate requires username/password as query parameters instead of in the URL
+GRAM_CLICKHOUSE_GOMIGRATE_URL =  "clickhouse://{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}/{{env.CLICKHOUSE_DATABASE}}?username={{env.CLICKHOUSE_USERNAME}}&password={{env.CLICKHOUSE_PASSWORD}}&secure=true&skip_verify=true"
 
 ############################
 ## Temporal configuration ##

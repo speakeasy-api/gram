@@ -1,18 +1,19 @@
 #!/usr/bin/env node
-import { TestRunner } from './test-runner.js';
-import type { TestConfig } from './types.js';
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import { TestRunner } from "./test-runner.ts";
+import type { TestConfig } from "./types.ts";
+import * as fs from "fs/promises";
+import * as path from "path";
 
 /**
  * Generate timestamp for filenames (YYYY-MM-DD_HH-MM-SS)
  */
 function getTimestamp(): string {
   const now = new Date();
-  return now.toISOString()
-    .replace(/T/, '_')
-    .replace(/\..+/, '')
-    .replace(/:/g, '-');
+  return now
+    .toISOString()
+    .replace(/T/, "_")
+    .replace(/\..+/, "")
+    .replace(/:/g, "-");
 }
 
 /**
@@ -22,19 +23,17 @@ async function main() {
   // Check for API key
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
-    console.error(
-      'Error: OPENROUTER_API_KEY environment variable is required'
-    );
+    console.error("Error: OPENROUTER_API_KEY environment variable is required");
     process.exit(1);
   }
 
   // Load config file (if provided)
   const configPath =
-    process.argv[2] || path.join(process.cwd(), 'test-config.json');
+    process.argv[2] || path.join(process.cwd(), "test-config.json");
 
   let config: TestConfig;
   try {
-    const configFile = await fs.readFile(configPath, 'utf-8');
+    const configFile = await fs.readFile(configPath, "utf-8");
     const parsedConfig = JSON.parse(configFile);
     config = {
       ...parsedConfig,
@@ -46,8 +45,8 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('Starting MCP Server Evaluation Tests...');
-  console.log(`Model: ${config.model || 'claude-3-5-sonnet-20241022'}`);
+  console.log("Starting MCP Server Evaluation Tests...");
+  console.log(`Model: ${config.model || "claude-3-5-sonnet-20241022"}`);
   console.log(`MCP Servers: ${config.mcpServers.length}`);
   console.log(`Test Prompts: ${config.prompts.length}`);
 
@@ -60,11 +59,11 @@ async function main() {
 
   // Create timestamped results directory
   const timestamp = getTimestamp();
-  const resultsDir = path.join(process.cwd(), 'results', timestamp);
+  const resultsDir = path.join(process.cwd(), "results", timestamp);
   await fs.mkdir(resultsDir, { recursive: true });
 
-  const summaryFile = path.join(resultsDir, 'summary.json');
-  const detailedFile = path.join(resultsDir, 'logs.json');
+  const summaryFile = path.join(resultsDir, "summary.json");
+  const detailedFile = path.join(resultsDir, "logs.json");
 
   // Save results
   await runner.saveResults(summary, summaryFile);
@@ -81,6 +80,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('Fatal error:', error);
+  console.error("Fatal error:", error);
   process.exit(1);
 });

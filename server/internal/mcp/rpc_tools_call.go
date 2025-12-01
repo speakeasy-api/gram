@@ -321,6 +321,15 @@ func resolveUserConfiguration(
 		}
 	}
 
+	// Process OAuth tokens for Function tools
+	if plan != nil && plan.Kind == gateway.ToolKindFunction && plan.Function.AuthInput != nil {
+		for _, token := range payload.oauthTokenInputs {
+			if plan.Function.AuthInput.Type == "oauth2" {
+				userConfig[plan.Function.AuthInput.Variable] = token.Token
+			}
+		}
+	}
+
 	return userConfig, nil
 }
 

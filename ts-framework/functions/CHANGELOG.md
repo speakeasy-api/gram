@@ -1,5 +1,11 @@
 # @gram-ai/functions
 
+## 0.11.2
+
+### Patch Changes
+
+- bc147e0: Updated dependencies to address dependabot security alerts
+
 ## 0.11.1
 
 ### Patch Changes

@@ -532,16 +532,7 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 		return nil, oops.E(oops.CodeConflict, nil, "external OAuth server already exists").Log(ctx, s.logger)
 	}
 
-	oauth2AuthCodeSecurityCount := 0
-	for _, securityVariable := range toolsetDetails.SecurityVariables {
-		isAuthorizationCode := securityVariable.Type != nil && *securityVariable.Type == "oauth2" && securityVariable.OauthTypes != nil && slices.Contains(securityVariable.OauthTypes, "authorization_code")
-		isOpenIdConnect := securityVariable.Type != nil && *securityVariable.Type == "openIdConnect"
-		if isAuthorizationCode || isOpenIdConnect {
-			oauth2AuthCodeSecurityCount++
-		}
-	}
-
-	if oauth2AuthCodeSecurityCount > 1 {
+	if toolsetDetails.OauthEnablementMetadata != nil && toolsetDetails.OauthEnablementMetadata.Oauth2SecurityCount > 1 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "multiple OAuth2 security schemes detected").Log(ctx, s.logger)
 	}
 

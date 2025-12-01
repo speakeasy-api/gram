@@ -64,16 +64,17 @@ type InferInput<T> = ToolSignature<T>[1];
 
 type InferResult<T> = ToolSignature<T>[3];
 
-export type ManifestVariables = Record<
-  string,
-  { description?: string | undefined }
->;
+export type ManifestVariables = Record<string, { description?: string }>;
 
 export type ManifestTool = {
   name: string;
   description?: string;
   inputSchema: unknown;
   variables?: ManifestVariables;
+  authInput?: {
+    type: "oauth2";
+    variable: string;
+  };
   meta?: unknown;
 };
 
@@ -213,6 +214,10 @@ export class Gram<
   #lax: boolean;
   #inputEnv?: Record<string, string | undefined> | undefined;
   #envSchema?: EnvSchema;
+  #authInput?: {
+    type: "oauth2";
+    variable: string;
+  };
 
   constructor(opts?: {
     /**
@@ -231,11 +236,27 @@ export class Gram<
      * tools.
      */
     envSchema?: EnvSchema;
+    /**
+     * Authentication configuration for OAuth2 tokens.
+     */
+    authInput?: {
+      /**
+       * The name of the environment variable that contains the OAuth2 access token.
+       * Must be a key in envSchema.
+       */
+      oauthVariable: keyof EnvSchema & string;
+    };
   }) {
     this.#tools = new Map();
     this.#lax = Boolean(opts?.lax);
     this.#inputEnv = opts?.env;
     this.#envSchema = opts?.envSchema;
+    this.#authInput = opts?.authInput
+      ? {
+          type: "oauth2",
+          variable: opts.authInput.oauthVariable,
+        }
+      : undefined;
   }
 
   protected get tools() {
@@ -354,12 +375,30 @@ export class Gram<
     const tools = Array.from(this.#tools.values()).map((tool) => {
       const schema = zm.object(tool.inputSchema);
 
-      const inputSchema = zm.toJSONSchema(schema);
+      // Create a custom metadata registry to ensure descriptions are preserved
+      const constructRegistryWithDescriptions = (schema: z.core.$ZodShape) => {
+        const registry = new (zm as any).core.$ZodRegistry();
+        Object.entries(schema).forEach(([_, zodSchema]) => {
+          const description = (zodSchema as any).description;
+          if (description) {
+            registry.add(zodSchema, { description });
+          }
+        });
+        return registry;
+      };
+
+      const registry = constructRegistryWithDescriptions(tool.inputSchema);
+      const inputSchema = zm.toJSONSchema(schema, { metadata: registry });
+
       const result: {
         name: string;
         description?: string;
         inputSchema: unknown;
         variables?: ManifestVariables;
+        authInput?: {
+          type: "oauth2";
+          variable: string;
+        };
       } = {
         name: tool.name,
         inputSchema: inputSchema,
@@ -367,9 +406,18 @@ export class Gram<
       if (tool.description != null) {
         result.description = tool.description;
       }
+
       if (tool.envSchema != null) {
-        const obj = zm.object(tool.envSchema);
-        result.variables = envMapFromJSONSchema(zm.toJSONSchema(obj));
+        const registry = constructRegistryWithDescriptions(tool.envSchema);
+
+        const obj = z.object(tool.envSchema);
+        result.variables = envMapFromJSONSchema(
+          z.toJSONSchema(obj, { metadata: registry }),
+        );
+      }
+
+      if (this.#authInput != null) {
+        result.authInput = this.#authInput;
       }
 
       return result;

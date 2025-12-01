@@ -10399,6 +10399,9 @@ components:
         FunctionEnvironmentVariable:
             type: object
             properties:
+                auth_input_type:
+                    type: string
+                    description: Optional value of the function variable comes from a specific auth input
                 description:
                     type: string
                     description: Description of the function environment variable
@@ -11438,6 +11441,9 @@ components:
                 id:
                     type: string
                     description: The ID of the metadata record
+                instructions:
+                    type: string
+                    description: Server instructions returned in the MCP initialize response
                 logo_asset_id:
                     type: string
                     description: The asset ID for the MCP install page logo
@@ -11463,6 +11469,15 @@ components:
                     type: string
             required:
                 - location
+        OAuthEnablementMetadata:
+            type: object
+            properties:
+                oauth2_security_count:
+                    type: integer
+                    description: Count of security variables that are OAuth2 supported
+                    format: int64
+            required:
+                - oauth2_security_count
         OAuthProxyProvider:
             type: object
             properties:
@@ -12219,6 +12234,9 @@ components:
                 external_documentation_url:
                     type: string
                     description: A link to external documentation for the MCP install page
+                instructions:
+                    type: string
+                    description: Server instructions returned in the MCP initialize response
                 logo_asset_id:
                     type: string
                     description: The asset ID for the MCP install page logo
@@ -12496,6 +12514,8 @@ components:
                 name:
                     type: string
                     description: The name of the toolset
+                oauth_enablement_metadata:
+                    $ref: '#/components/schemas/OAuthEnablementMetadata'
                 oauth_proxy_server:
                     $ref: '#/components/schemas/OAuthProxyServer'
                 organization_id:
@@ -12569,6 +12589,7 @@ components:
                 - tool_urns
                 - resources
                 - resource_urns
+                - oauth_enablement_metadata
                 - created_at
                 - updated_at
         ToolsetEntry:

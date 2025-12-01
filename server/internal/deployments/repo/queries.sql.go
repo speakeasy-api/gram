@@ -214,6 +214,7 @@ INSERT INTO function_tool_definitions (
   , description
   , runtime
   , variables
+  , auth_input
   , input_schema
 )
 SELECT 
@@ -225,6 +226,7 @@ SELECT
   , current.description
   , current.runtime
   , current.variables
+  , current.auth_input
   , current.input_schema
 FROM function_tool_definitions as current
 WHERE current.deployment_id = $2
@@ -442,6 +444,7 @@ INSERT INTO function_tool_definitions (
   , description
   , input_schema
   , variables
+  , auth_input
   , meta
 ) VALUES (
     $1
@@ -454,6 +457,7 @@ INSERT INTO function_tool_definitions (
   , $8
   , $9
   , $10
+  , $11
 )
 RETURNING id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, auth_input, meta, created_at, updated_at, deleted_at, deleted
 `
@@ -468,6 +472,7 @@ type CreateFunctionsToolParams struct {
 	Description  string
 	InputSchema  []byte
 	Variables    []byte
+	AuthInput    []byte
 	Meta         []byte
 }
 
@@ -482,6 +487,7 @@ func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsTo
 		arg.Description,
 		arg.InputSchema,
 		arg.Variables,
+		arg.AuthInput,
 		arg.Meta,
 	)
 	var i FunctionToolDefinition

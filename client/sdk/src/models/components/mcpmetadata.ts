@@ -25,6 +25,10 @@ export type McpMetadata = {
    */
   id: string;
   /**
+   * Server instructions returned in the MCP initialize response
+   */
+  instructions?: string | undefined;
+  /**
    * The asset ID for the MCP install page logo
    */
   logoAssetId?: string | undefined;
@@ -47,6 +51,7 @@ export const McpMetadata$inboundSchema: z.ZodType<
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   external_documentation_url: z.string().optional(),
   id: z.string(),
+  instructions: z.string().optional(),
   logo_asset_id: z.string().optional(),
   toolset_id: z.string(),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
