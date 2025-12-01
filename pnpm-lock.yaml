@@ -190,7 +190,6 @@ importers:
       fflate:
         specifier: ^0.8.2
         version: 0.8.2
-        version: 8.6.0(react@19.2.0)
       lucide-react:
         specifier: ^0.554.0
         version: 0.554.0(react@19.2.0)
