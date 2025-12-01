@@ -366,6 +366,8 @@ CREATE TABLE IF NOT EXISTS function_tool_definitions (
   input_schema JSONB,
   -- Record<string, { description?: string }>
   variables JSONB,
+    -- { type: string, variable: string }>
+  auth_input JSONB,
   -- Record<string, string>
   meta JSONB,
 
@@ -914,6 +916,7 @@ CREATE TABLE IF NOT EXISTS mcp_metadata (
   project_id UUID NOT NULL,
   external_documentation_url TEXT,
   logo_id UUID,
+  instructions TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

@@ -528,20 +528,11 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 		return nil, oops.E(oops.CodeBadRequest, nil, "private MCP servers cannot have external OAuth servers").Log(ctx, s.logger)
 	}
 
-	if toolsetDetails.ExternalOauthServer != nil {
+	if toolsetDetails.ExternalOauthServer != nil || toolsetDetails.OauthProxyServer != nil {
 		return nil, oops.E(oops.CodeConflict, nil, "external OAuth server already exists").Log(ctx, s.logger)
 	}
 
-	oauth2AuthCodeSecurityCount := 0
-	for _, securityVariable := range toolsetDetails.SecurityVariables {
-		isAuthorizationCode := securityVariable.Type != nil && *securityVariable.Type == "oauth2" && securityVariable.OauthTypes != nil && slices.Contains(securityVariable.OauthTypes, "authorization_code")
-		isOpenIdConnect := securityVariable.Type != nil && *securityVariable.Type == "openIdConnect"
-		if isAuthorizationCode || isOpenIdConnect {
-			oauth2AuthCodeSecurityCount++
-		}
-	}
-
-	if oauth2AuthCodeSecurityCount > 1 {
+	if toolsetDetails.OauthEnablementMetadata != nil && toolsetDetails.OauthEnablementMetadata.Oauth2SecurityCount > 1 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "multiple OAuth2 security schemes detected").Log(ctx, s.logger)
 	}
 
@@ -624,6 +615,120 @@ func (s *Service) RemoveOAuthServer(ctx context.Context, payload *gen.RemoveOAut
 	}
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache)
+	if err != nil {
+		return nil, err
+	}
+
+	return toolsetDetails, nil
+}
+
+func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuthProxyServerPayload) (*types.Toolset, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache)
+	if err != nil {
+		return nil, err
+	}
+
+	if toolsetDetails.McpIsPublic == nil || !*toolsetDetails.McpIsPublic {
+		return nil, oops.E(oops.CodeBadRequest, nil, "private MCP servers cannot have OAuth proxy servers").Log(ctx, s.logger)
+	}
+
+	if toolsetDetails.OauthProxyServer != nil || toolsetDetails.ExternalOauthServer != nil {
+		return nil, oops.E(oops.CodeConflict, nil, "OAuth server already exists").Log(ctx, s.logger)
+	}
+
+	oauth2AuthCodeSecurityCount := 0
+	for _, securityVariable := range toolsetDetails.SecurityVariables {
+		isAuthorizationCode := securityVariable.Type != nil && *securityVariable.Type == "oauth2" && securityVariable.OauthTypes != nil && slices.Contains(securityVariable.OauthTypes, "authorization_code")
+		isOpenIdConnect := securityVariable.Type != nil && *securityVariable.Type == "openIdConnect"
+		if isAuthorizationCode || isOpenIdConnect {
+			oauth2AuthCodeSecurityCount++
+		}
+	}
+
+	if oauth2AuthCodeSecurityCount > 1 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "multiple OAuth2 security schemes detected").Log(ctx, s.logger)
+	}
+
+	// Validate token_endpoint_auth_methods_supported
+	validAuthMethods := map[string]bool{
+		"client_secret_basic": true,
+		"client_secret_post":  true,
+		"none":                true,
+	}
+
+	for _, method := range payload.OauthProxyServer.TokenEndpointAuthMethodsSupported {
+		if !validAuthMethods[method] {
+			return nil, oops.E(oops.CodeBadRequest, nil, "invalid token_endpoint_auth_methods_supported value: %s (must be client_secret_basic or client_secret_post)", method).Log(ctx, s.logger)
+		}
+	}
+
+	// Create the OAuth proxy server
+	// Validate that the environment exists for this project
+	_, err = s.environmentRepo.GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
+		Slug:      string(payload.OauthProxyServer.EnvironmentSlug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "environment not found").Log(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment").Log(ctx, s.logger)
+	}
+
+	oauthProxyServer, err := s.oauthRepo.UpsertOAuthProxyServer(ctx, oauthRepo.UpsertOAuthProxyServerParams{
+		ProjectID: *authCtx.ProjectID,
+		Slug:      conv.ToLower(payload.OauthProxyServer.Slug),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create OAuth proxy server").Log(ctx, s.logger)
+	}
+
+	// Create the OAuth proxy provider with the secrets containing environment_slug
+	secretsJSON, err := json.Marshal(map[string]string{
+		"environment_slug": string(payload.OauthProxyServer.EnvironmentSlug),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal secrets").Log(ctx, s.logger)
+	}
+
+	_, err = s.oauthRepo.UpsertOAuthProxyProvider(ctx, oauthRepo.UpsertOAuthProxyProviderParams{
+		ProjectID:                         *authCtx.ProjectID,
+		OauthProxyServerID:                oauthProxyServer.ID,
+		Slug:                              conv.ToLower(payload.OauthProxyServer.Slug),
+		AuthorizationEndpoint:             payload.OauthProxyServer.AuthorizationEndpoint,
+		TokenEndpoint:                     payload.OauthProxyServer.TokenEndpoint,
+		RegistrationEndpoint:              conv.PtrToPGText(nil),
+		ScopesSupported:                   payload.OauthProxyServer.ScopesSupported,
+		ResponseTypesSupported:            []string{"code"},
+		ResponseModesSupported:            []string{},
+		GrantTypesSupported:               []string{"authorization_code"},
+		TokenEndpointAuthMethodsSupported: payload.OauthProxyServer.TokenEndpointAuthMethodsSupported,
+		SecurityKeyNames:                  []string{},
+		Secrets:                           secretsJSON,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create OAuth proxy provider").Log(ctx, s.logger)
+	}
+
+	// Associate the OAuth proxy server with the toolset
+	_, err = s.repo.UpdateToolsetOAuthProxyServer(ctx, repo.UpdateToolsetOAuthProxyServerParams{
+		Slug:               conv.ToLower(payload.Slug),
+		ProjectID:          *authCtx.ProjectID,
+		OauthProxyServerID: uuid.NullUUID{UUID: oauthProxyServer.ID, Valid: true},
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to associate OAuth proxy server with toolset").Log(ctx, s.logger)
+	}
+
+	toolsetDetails, err = mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache)
 	if err != nil {
 		return nil, err
 	}

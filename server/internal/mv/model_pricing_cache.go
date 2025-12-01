@@ -8,21 +8,21 @@ import (
 )
 
 type ModelPricing struct {
-	CanonicalSlug string
-	Prompt        string
-	Completion    string
-	Request       string
-	Image         string
+	ID         string
+	Prompt     string
+	Completion string
+	Request    string
+	Image      string
 }
 
 var _ cache.CacheableObject[ModelPricing] = (*ModelPricing)(nil)
 
 func (m ModelPricing) CacheKey() string {
-	return ModelPricingCacheKey(m.CanonicalSlug)
+	return ModelPricingCacheKey(m.ID)
 }
 
-func ModelPricingCacheKey(canonicalSlug string) string {
-	return fmt.Sprintf("openrouter:model:pricing:%s", canonicalSlug)
+func ModelPricingCacheKey(id string) string {
+	return fmt.Sprintf("openrouter:model:pricing:%s", id)
 }
 
 func (m ModelPricing) TTL() time.Duration {
@@ -32,4 +32,3 @@ func (m ModelPricing) TTL() time.Duration {
 func (m ModelPricing) AdditionalCacheKeys() []string {
 	return []string{}
 }
-

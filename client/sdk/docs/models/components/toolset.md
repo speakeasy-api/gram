@@ -10,21 +10,24 @@ let value: Toolset = {
   createdAt: new Date("2025-09-03T11:41:50.334Z"),
   id: "<id>",
   name: "<value>",
+  oauthEnablementMetadata: {
+    oauth2SecurityCount: 454195,
+  },
   organizationId: "<id>",
   projectId: "<id>",
   promptTemplates: [],
-  resourceUrns: [
-    "<value 1>",
-  ],
+  resourceUrns: [],
   resources: [],
   slug: "<value>",
   toolSelectionMode: "<value>",
   toolUrns: [
     "<value 1>",
   ],
-  tools: [],
-  toolsetVersion: 543692,
-  updatedAt: new Date("2024-10-26T12:09:43.842Z"),
+  tools: [
+    {},
+  ],
+  toolsetVersion: 606302,
+  updatedAt: new Date("2024-09-30T12:50:02.116Z"),
 };
 ```
 
@@ -44,6 +47,7 @@ let value: Toolset = {
 | `mcpIsPublic`                                                                                      | *boolean*                                                                                          | :heavy_minus_sign:                                                                                 | Whether the toolset is public in MCP                                                               |
 | `mcpSlug`                                                                                          | *string*                                                                                           | :heavy_minus_sign:                                                                                 | A short url-friendly label that uniquely identifies a resource.                                    |
 | `name`                                                                                             | *string*                                                                                           | :heavy_check_mark:                                                                                 | The name of the toolset                                                                            |
+| `oauthEnablementMetadata`                                                                          | [components.OAuthEnablementMetadata](../../models/components/oauthenablementmetadata.md)           | :heavy_check_mark:                                                                                 | N/A                                                                                                |
 | `oauthProxyServer`                                                                                 | [components.OAuthProxyServer](../../models/components/oauthproxyserver.md)                         | :heavy_minus_sign:                                                                                 | N/A                                                                                                |
 | `organizationId`                                                                                   | *string*                                                                                           | :heavy_check_mark:                                                                                 | The organization ID this toolset belongs to                                                        |
 | `projectId`                                                                                        | *string*                                                                                           | :heavy_check_mark:                                                                                 | The project ID this toolset belongs to                                                             |

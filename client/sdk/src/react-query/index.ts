@@ -7,6 +7,7 @@ export * from "./_types.js";
 
 export * from "./activeDeployment.js";
 export * from "./addExternalOAuthServer.js";
+export * from "./addOAuthProxyServer.js";
 export * from "./checkMCPSlugAvailability.js";
 export * from "./cloneToolset.js";
 export * from "./createAPIKey.js";

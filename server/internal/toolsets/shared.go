@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/openapi"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -184,14 +185,19 @@ func (t *Toolsets) extractFunctionToolCallPlan(ctx context.Context, tool toolsRe
 		return nil, fmt.Errorf("missing function access credentials")
 	}
 
-	var envconfig map[string]any
+	var envconfig map[string]*functions.ManifestVariableAttributeV0
 	if len(tool.Variables) > 0 {
 		if err := json.Unmarshal(tool.Variables, &envconfig); err != nil {
 			return nil, fmt.Errorf("unmarshal function tool env vars: %w", err)
 		}
 	}
 
-	envvars := slices.Collect(maps.Keys(envconfig))
+	var authInput *functions.ManifestAuthInputAttributeV0
+	if len(tool.AuthInput) > 0 {
+		if err := json.Unmarshal(tool.AuthInput, authInput); err != nil {
+			return nil, fmt.Errorf("unmarshal function tool auth input: %w", err)
+		}
+	}
 
 	descriptor := &gateway.ToolDescriptor{
 		ID:               tool.ID.String(),
@@ -208,7 +214,8 @@ func (t *Toolsets) extractFunctionToolCallPlan(ctx context.Context, tool toolsRe
 		FunctionsAccessID: accessID,
 		Runtime:           tool.Runtime,
 		InputSchema:       tool.InputSchema,
-		Variables:         envvars,
+		Variables:         envconfig,
+		AuthInput:         authInput,
 	}
 
 	return gateway.NewFunctionToolCallPlan(descriptor, plan), nil

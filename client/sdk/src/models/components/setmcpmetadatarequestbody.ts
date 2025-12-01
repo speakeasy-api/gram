@@ -4,15 +4,16 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { safeParse } from "../../lib/schemas.js";
-import { Result as SafeParseResult } from "../../types/fp.js";
-import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type SetMcpMetadataRequestBody = {
   /**
    * A link to external documentation for the MCP install page
    */
   externalDocumentationUrl?: string | undefined;
+  /**
+   * Server instructions returned in the MCP initialize response
+   */
+  instructions?: string | undefined;
   /**
    * The asset ID for the MCP install page logo
    */
@@ -24,25 +25,9 @@ export type SetMcpMetadataRequestBody = {
 };
 
 /** @internal */
-export const SetMcpMetadataRequestBody$inboundSchema: z.ZodType<
-  SetMcpMetadataRequestBody,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  external_documentation_url: z.string().optional(),
-  logo_asset_id: z.string().optional(),
-  toolset_slug: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    "external_documentation_url": "externalDocumentationUrl",
-    "logo_asset_id": "logoAssetId",
-    "toolset_slug": "toolsetSlug",
-  });
-});
-
-/** @internal */
 export type SetMcpMetadataRequestBody$Outbound = {
   external_documentation_url?: string | undefined;
+  instructions?: string | undefined;
   logo_asset_id?: string | undefined;
   toolset_slug: string;
 };
@@ -54,6 +39,7 @@ export const SetMcpMetadataRequestBody$outboundSchema: z.ZodType<
   SetMcpMetadataRequestBody
 > = z.object({
   externalDocumentationUrl: z.string().optional(),
+  instructions: z.string().optional(),
   logoAssetId: z.string().optional(),
   toolsetSlug: z.string(),
 }).transform((v) => {
@@ -64,33 +50,10 @@ export const SetMcpMetadataRequestBody$outboundSchema: z.ZodType<
   });
 });
 
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace SetMcpMetadataRequestBody$ {
-  /** @deprecated use `SetMcpMetadataRequestBody$inboundSchema` instead. */
-  export const inboundSchema = SetMcpMetadataRequestBody$inboundSchema;
-  /** @deprecated use `SetMcpMetadataRequestBody$outboundSchema` instead. */
-  export const outboundSchema = SetMcpMetadataRequestBody$outboundSchema;
-  /** @deprecated use `SetMcpMetadataRequestBody$Outbound` instead. */
-  export type Outbound = SetMcpMetadataRequestBody$Outbound;
-}
-
 export function setMcpMetadataRequestBodyToJSON(
   setMcpMetadataRequestBody: SetMcpMetadataRequestBody,
 ): string {
   return JSON.stringify(
     SetMcpMetadataRequestBody$outboundSchema.parse(setMcpMetadataRequestBody),
-  );
-}
-
-export function setMcpMetadataRequestBodyFromJSON(
-  jsonString: string,
-): SafeParseResult<SetMcpMetadataRequestBody, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => SetMcpMetadataRequestBody$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'SetMcpMetadataRequestBody' from JSON`,
   );
 }

@@ -25,6 +25,10 @@ export type McpMetadata = {
    */
   id: string;
   /**
+   * Server instructions returned in the MCP initialize response
+   */
+  instructions?: string | undefined;
+  /**
    * The asset ID for the MCP install page logo
    */
   logoAssetId?: string | undefined;
@@ -47,6 +51,7 @@ export const McpMetadata$inboundSchema: z.ZodType<
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   external_documentation_url: z.string().optional(),
   id: z.string(),
+  instructions: z.string().optional(),
   logo_asset_id: z.string().optional(),
   toolset_id: z.string(),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
@@ -59,55 +64,6 @@ export const McpMetadata$inboundSchema: z.ZodType<
     "updated_at": "updatedAt",
   });
 });
-
-/** @internal */
-export type McpMetadata$Outbound = {
-  created_at: string;
-  external_documentation_url?: string | undefined;
-  id: string;
-  logo_asset_id?: string | undefined;
-  toolset_id: string;
-  updated_at: string;
-};
-
-/** @internal */
-export const McpMetadata$outboundSchema: z.ZodType<
-  McpMetadata$Outbound,
-  z.ZodTypeDef,
-  McpMetadata
-> = z.object({
-  createdAt: z.date().transform(v => v.toISOString()),
-  externalDocumentationUrl: z.string().optional(),
-  id: z.string(),
-  logoAssetId: z.string().optional(),
-  toolsetId: z.string(),
-  updatedAt: z.date().transform(v => v.toISOString()),
-}).transform((v) => {
-  return remap$(v, {
-    createdAt: "created_at",
-    externalDocumentationUrl: "external_documentation_url",
-    logoAssetId: "logo_asset_id",
-    toolsetId: "toolset_id",
-    updatedAt: "updated_at",
-  });
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace McpMetadata$ {
-  /** @deprecated use `McpMetadata$inboundSchema` instead. */
-  export const inboundSchema = McpMetadata$inboundSchema;
-  /** @deprecated use `McpMetadata$outboundSchema` instead. */
-  export const outboundSchema = McpMetadata$outboundSchema;
-  /** @deprecated use `McpMetadata$Outbound` instead. */
-  export type Outbound = McpMetadata$Outbound;
-}
-
-export function mcpMetadataToJSON(mcpMetadata: McpMetadata): string {
-  return JSON.stringify(McpMetadata$outboundSchema.parse(mcpMetadata));
-}
 
 export function mcpMetadataFromJSON(
   jsonString: string,

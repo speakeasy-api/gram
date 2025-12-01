@@ -99,6 +99,7 @@ type hostedPageData struct {
 	SiteURL             string
 	LogoAssetURL        string
 	DocsURL             string
+	Instructions        string
 	IsPublic            bool
 }
 
@@ -202,11 +203,17 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		externalDocURL = conv.ToPGText(*payload.ExternalDocumentationURL)
 	}
 
+	var instructions pgtype.Text
+	if payload.Instructions != nil {
+		instructions = conv.ToPGText(*payload.Instructions)
+	}
+
 	result, err := s.repo.UpsertMetadata(ctx, repo.UpsertMetadataParams{
 		ToolsetID:                toolset.ID,
 		ProjectID:                *authCtx.ProjectID,
 		ExternalDocumentationUrl: externalDocURL,
 		LogoID:                   logoID,
+		Instructions:             instructions,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert MCP install page metadata").Log(ctx, s.logger)
@@ -227,6 +234,7 @@ func toMcpMetadata(record repo.McpMetadatum) *types.McpMetadata {
 		UpdatedAt:                record.UpdatedAt.Time.Format(time.RFC3339),
 		ExternalDocumentationURL: conv.FromPGText[string](record.ExternalDocumentationUrl),
 		LogoAssetID:              conv.FromNullableUUID(record.LogoID),
+		Instructions:             conv.FromPGText[string](record.Instructions),
 	}
 	return metadata
 }
@@ -291,6 +299,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	logoAssetURL := s.siteURL.String() + "/external/sticker-logo.png"
 
 	var docsURL string
+	var instructions string
 	metadataRecord, metadataErr := s.repo.GetMetadataForToolset(ctx, toolset.ID)
 	if metadataErr != nil {
 		if !errors.Is(metadataErr, pgx.ErrNoRows) {
@@ -307,6 +316,9 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		}
 		if docs := conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl); docs != nil {
 			docsURL = strings.TrimSpace(*docs)
+		}
+		if inst := conv.FromPGText[string](metadataRecord.Instructions); inst != nil {
+			instructions = strings.TrimSpace(*inst)
 		}
 	}
 
@@ -362,6 +374,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		SiteURL:             s.siteURL.String(),
 		LogoAssetURL:        logoAssetURL,
 		DocsURL:             docsURL,
+		Instructions:        instructions,
 		IsPublic:            toolset.McpIsPublic,
 	}
 

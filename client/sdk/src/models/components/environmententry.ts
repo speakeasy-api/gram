@@ -47,52 +47,6 @@ export const EnvironmentEntry$inboundSchema: z.ZodType<
   });
 });
 
-/** @internal */
-export type EnvironmentEntry$Outbound = {
-  created_at: string;
-  name: string;
-  updated_at: string;
-  value: string;
-};
-
-/** @internal */
-export const EnvironmentEntry$outboundSchema: z.ZodType<
-  EnvironmentEntry$Outbound,
-  z.ZodTypeDef,
-  EnvironmentEntry
-> = z.object({
-  createdAt: z.date().transform(v => v.toISOString()),
-  name: z.string(),
-  updatedAt: z.date().transform(v => v.toISOString()),
-  value: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    createdAt: "created_at",
-    updatedAt: "updated_at",
-  });
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace EnvironmentEntry$ {
-  /** @deprecated use `EnvironmentEntry$inboundSchema` instead. */
-  export const inboundSchema = EnvironmentEntry$inboundSchema;
-  /** @deprecated use `EnvironmentEntry$outboundSchema` instead. */
-  export const outboundSchema = EnvironmentEntry$outboundSchema;
-  /** @deprecated use `EnvironmentEntry$Outbound` instead. */
-  export type Outbound = EnvironmentEntry$Outbound;
-}
-
-export function environmentEntryToJSON(
-  environmentEntry: EnvironmentEntry,
-): string {
-  return JSON.stringify(
-    EnvironmentEntry$outboundSchema.parse(environmentEntry),
-  );
-}
-
 export function environmentEntryFromJSON(
   jsonString: string,
 ): SafeParseResult<EnvironmentEntry, SDKValidationError> {

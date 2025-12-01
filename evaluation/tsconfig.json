@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ESNext",
+    "module": "nodenext",
     "lib": ["ES2022"],
-    "moduleResolution": "bundler",
+    "moduleResolution": "nodenext",
     "esModuleInterop": true,
     "skipLibCheck": true,
     "strict": true,
@@ -15,7 +15,9 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "allowImportingTsExtensions": true,
+    "noEmit": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

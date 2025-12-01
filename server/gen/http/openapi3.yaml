@@ -7166,6 +7166,120 @@ paths:
             x-speakeasy-name-override: addExternalOAuthServer
             x-speakeasy-react-hook:
                 name: AddExternalOAuthServer
+    /rpc/toolsets.addOAuthProxyServer:
+        post:
+            description: Associate an OAuth proxy server with a toolset (admin only)
+            operationId: addOAuthProxyServer
+            parameters:
+                - allowEmptyValue: true
+                  description: The slug of the toolset to update
+                  in: query
+                  name: slug
+                  required: true
+                  schema:
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    maxLength: 40
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AddOAuthProxyServerRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Toolset'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: addOAuthProxyServer toolsets
+            tags:
+                - toolsets
+            x-speakeasy-name-override: addOAuthProxyServer
+            x-speakeasy-react-hook:
+                name: AddOAuthProxyServer
     /rpc/toolsets.checkMCPSlugAvailability:
         get:
             description: Check if a MCP slug is available
@@ -8714,6 +8828,28 @@ components:
                 - name
                 - slug
                 - runtime
+        AddOAuthProxyServerForm:
+            type: object
+            properties:
+                oauth_proxy_server:
+                    $ref: '#/components/schemas/OAuthProxyServerForm'
+                project_slug_input:
+                    type: string
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+            required:
+                - slug
+                - oauth_proxy_server
+        AddOAuthProxyServerRequestBody:
+            type: object
+            properties:
+                oauth_proxy_server:
+                    $ref: '#/components/schemas/OAuthProxyServerForm'
+            required:
+                - oauth_proxy_server
         AddOpenAPIv3DeploymentAssetForm:
             type: object
             properties:
@@ -9828,6 +9964,9 @@ components:
         FunctionEnvironmentVariable:
             type: object
             properties:
+                auth_input_type:
+                    type: string
+                    description: Optional value of the function variable comes from a specific auth input
                 description:
                     type: string
                     description: Description of the function environment variable
@@ -10867,6 +11006,9 @@ components:
                 id:
                     type: string
                     description: The ID of the metadata record
+                instructions:
+                    type: string
+                    description: Server instructions returned in the MCP initialize response
                 logo_asset_id:
                     type: string
                     description: The asset ID for the MCP install page logo
@@ -10892,6 +11034,15 @@ components:
                     type: string
             required:
                 - location
+        OAuthEnablementMetadata:
+            type: object
+            properties:
+                oauth2_security_count:
+                    type: integer
+                    description: Count of security variables that are OAuth2 supported
+                    format: int64
+            required:
+                - oauth2_security_count
         OAuthProxyProvider:
             type: object
             properties:
@@ -10902,6 +11053,11 @@ components:
                     type: string
                     description: When the OAuth proxy provider was created.
                     format: date-time
+                environment_slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
                 grant_types_supported:
                     type: array
                     items:
@@ -10972,6 +11128,42 @@ components:
                 - slug
                 - created_at
                 - updated_at
+        OAuthProxyServerForm:
+            type: object
+            properties:
+                authorization_endpoint:
+                    type: string
+                    description: The authorization endpoint URL
+                environment_slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                scopes_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: OAuth scopes to request
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                token_endpoint:
+                    type: string
+                    description: The token endpoint URL
+                token_endpoint_auth_methods_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Auth methods (client_secret_basic or client_secret_post)
+            required:
+                - slug
+                - authorization_endpoint
+                - token_endpoint
+                - scopes_supported
+                - token_endpoint_auth_methods_supported
+                - environment_slug
         OpenAPIv3DeploymentAsset:
             type: object
             properties:
@@ -11607,6 +11799,9 @@ components:
                 external_documentation_url:
                     type: string
                     description: A link to external documentation for the MCP install page
+                instructions:
+                    type: string
+                    description: Server instructions returned in the MCP initialize response
                 logo_asset_id:
                     type: string
                     description: The asset ID for the MCP install page logo
@@ -11884,6 +12079,8 @@ components:
                 name:
                     type: string
                     description: The name of the toolset
+                oauth_enablement_metadata:
+                    $ref: '#/components/schemas/OAuthEnablementMetadata'
                 oauth_proxy_server:
                     $ref: '#/components/schemas/OAuthProxyServer'
                 organization_id:
@@ -11957,6 +12154,7 @@ components:
                 - tool_urns
                 - resources
                 - resource_urns
+                - oauth_enablement_metadata
                 - created_at
                 - updated_at
         ToolsetEntry:
