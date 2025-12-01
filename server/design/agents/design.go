@@ -8,7 +8,9 @@ import (
 
 var _ = Service("agents", func() {
 	Description("OpenAI Responses API compatible endpoint for running agent workflows.")
-	Security(security.ByKey)
+	Security(security.ByKey, func() {
+		Scope("chat")
+	})
 	shared.DeclareErrorResponses()
 
 	Method("createResponse", func() {

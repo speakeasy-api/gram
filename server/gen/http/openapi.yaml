@@ -88,7 +88,11 @@ paths:
                 disabled: true
     /rpc/agents.response:
         get:
-            description: Get the status of an async agent response by its ID.
+            description: |-
+                Get the status of an async agent response by its ID.
+
+                **Required security scopes for apikey**:
+                  * `chat`
             operationId: agents#getResponse
             parameters:
                 - description: The ID of the response to retrieve
@@ -161,7 +165,11 @@ paths:
                 - agents
             x-speakeasy-name-override: get
         post:
-            description: Create a new agent response. Executes an agent workflow with the provided input and tools.
+            description: |-
+                Create a new agent response. Executes an agent workflow with the provided input and tools.
+
+                **Required security scopes for apikey**:
+                  * `chat`
             operationId: agents#createResponse
             parameters:
                 - description: API Key header
@@ -235,7 +243,11 @@ paths:
                 - agents
             x-speakeasy-name-override: create
         delete:
-            description: Deletes any response associated with a given agent run.
+            description: |-
+                Deletes any response associated with a given agent run.
+
+                **Required security scopes for apikey**:
+                  * `chat`
             operationId: agents#deleteResponse
             parameters:
                 - description: The ID of the response to retrieve

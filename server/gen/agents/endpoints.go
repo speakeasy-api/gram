@@ -48,7 +48,7 @@ func NewCreateResponseEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
 			Scopes:         []string{"consumer", "producer", "chat"},
-			RequiredScopes: []string{},
+			RequiredScopes: []string{"chat"},
 		}
 		var key string
 		if p.ApikeyToken != nil {
@@ -71,7 +71,7 @@ func NewGetResponseEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
 			Scopes:         []string{"consumer", "producer", "chat"},
-			RequiredScopes: []string{},
+			RequiredScopes: []string{"chat"},
 		}
 		var key string
 		if p.ApikeyToken != nil {
@@ -94,7 +94,7 @@ func NewDeleteResponseEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
 			Scopes:         []string{"consumer", "producer", "chat"},
-			RequiredScopes: []string{},
+			RequiredScopes: []string{"chat"},
 		}
 		var key string
 		if p.ApikeyToken != nil {
