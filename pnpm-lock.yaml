@@ -28,6 +28,9 @@ catalogs:
       specifier: 5.9.2
       version: 5.9.2
 
+overrides:
+  zod: ^4.1.12
+
 importers:
 
   .:
@@ -63,10 +66,10 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: 'catalog:'
-        version: 1.3.24(zod@3.25.76)
+        version: 1.3.24(zod@4.1.12)
       '@ai-sdk/react':
         specifier: ^1.2.12
-        version: 1.2.12(react@19.1.1)(zod@3.25.76)
+        version: 1.2.12(react@19.1.1)(zod@4.1.12)
       '@datadog/browser-rum':
         specifier: ^6.20.0
         version: 6.20.0
@@ -87,7 +90,7 @@ importers:
         version: link:../sdk
       '@openrouter/ai-sdk-provider':
         specifier: 0.7.5
-        version: 0.7.5(ai@4.3.19(react@19.1.1)(zod@3.25.76))(zod@3.25.76)
+        version: 0.7.5(ai@4.3.19(react@19.1.1)(zod@4.1.12))(zod@4.1.12)
       '@polar-sh/checkout':
         specifier: ^0.1.11
         version: 0.1.12(@stripe/react-stripe-js@3.9.1(@stripe/stripe-js@7.8.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(@stripe/stripe-js@7.8.0)(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
@@ -153,7 +156,7 @@ importers:
         version: 3.0.4(@react-three/fiber@9.4.0(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(three@0.176.0))(@types/three@0.180.0)(react@19.1.1)(three@0.176.0)
       '@speakeasy-api/moonshine':
         specifier: 1.33.4
-        version: 1.33.4(@dnd-kit/core@6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(@dnd-kit/modifiers@9.0.0(@dnd-kit/core@6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1))(@dnd-kit/utilities@3.2.2(react@19.1.1))(@rive-app/react-canvas-lite@4.23.4(react@19.1.1))(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(ai@4.3.19(react@19.1.1)(zod@3.25.76))(lucide-react@0.544.0(react@19.1.1))(motion@12.23.14(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react-markdown@10.1.0(@types/react@19.1.13)(react@19.1.1))(react-resizable-panels@2.1.9(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-virtuoso@4.14.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)(remark-gfm@4.0.1)(shiki@3.13.0)
+        version: 1.33.4(@dnd-kit/core@6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(@dnd-kit/modifiers@9.0.0(@dnd-kit/core@6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1))(@dnd-kit/utilities@3.2.2(react@19.1.1))(@rive-app/react-canvas-lite@4.23.4(react@19.1.1))(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(ai@4.3.19(react@19.1.1)(zod@4.1.12))(lucide-react@0.544.0(react@19.1.1))(motion@12.23.14(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react-markdown@10.1.0(@types/react@19.1.13)(react@19.1.1))(react-resizable-panels@2.1.9(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-virtuoso@4.14.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)(remark-gfm@4.0.1)(shiki@3.13.0)
       '@tailwindcss/typography':
         specifier: ^0.5.16
         version: 0.5.16(tailwindcss@4.1.13)
@@ -168,7 +171,7 @@ importers:
         version: 8.21.3(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       ai:
         specifier: 'catalog:'
-        version: 4.3.19(react@19.1.1)(zod@3.25.76)
+        version: 4.3.19(react@19.1.1)(zod@4.1.12)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -248,8 +251,8 @@ importers:
         specifier: ^1.1.2
         version: 1.1.2(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       zod:
-        specifier: ^3.20.0
-        version: 3.25.76
+        specifier: ^4.1.12
+        version: 4.1.12
       zustand:
         specifier: ^5.0.4
         version: 5.0.8(@types/react@19.1.13)(react@19.1.1)(use-sync-external-store@1.5.0(react@19.1.1))
@@ -303,8 +306,8 @@ importers:
         specifier: ^18 || ^19
         version: 19.1.1(react@19.1.1)
       zod:
-        specifier: ^3.25.0 || ^4.0.0
-        version: 3.25.76
+        specifier: ^4.1.12
+        version: 4.1.12
     devDependencies:
       '@eslint/js':
         specifier: ^9.19.0
@@ -341,7 +344,7 @@ importers:
         version: 1.20.1
       openai:
         specifier: ^6.8.1
-        version: 6.8.1(zod@3.25.76)
+        version: 6.8.1(zod@4.1.12)
     devDependencies:
       '@types/node':
         specifier: ^24.5.2
@@ -398,8 +401,8 @@ importers:
         specifier: 'catalog:'
         version: 5.9.2
       zod:
-        specifier: ^3.25.76
-        version: 3.25.76
+        specifier: ^4.1.12
+        version: 4.1.12
 
   ts-framework/functions:
     dependencies:
@@ -425,7 +428,7 @@ importers:
         specifier: ^0.25.10
         version: 0.25.10
       zod:
-        specifier: ^4
+        specifier: ^4.1.12
         version: 4.1.12
       zx:
         specifier: 8.8.4-lite
@@ -444,13 +447,13 @@ packages:
     resolution: {integrity: sha512-GYXnGJTHRTZc4gJMSmFRgEQudjqd4PUN0ZjQhPwOAYH1yOAvQoG/Ikqs+HyISRbLPCrhbZnPKCNHuRU4OfpW0Q==}
     engines: {node: '>=18'}
     peerDependencies:
-      zod: ^3.0.0
+      zod: ^4.1.12
 
   '@ai-sdk/provider-utils@2.2.8':
     resolution: {integrity: sha512-fqhG+4sCVv8x7nFzYnFo19ryhAa3w096Kmc3hWxMQfW/TubPOmt3A6tYZhl4mUfQWWQMsuSkLrtjlWuXBVSGQA==}
     engines: {node: '>=18'}
     peerDependencies:
-      zod: ^3.23.8
+      zod: ^4.1.12
 
   '@ai-sdk/provider@1.1.3':
     resolution: {integrity: sha512-qZMxYJ0qqX/RfnuIaab+zp8UAeJn/ygXXAffR5I4N0n1IrvA6qBsjc8hXLmBiMV2zoXlifkacF7sEFnYnjBcqg==}
@@ -461,7 +464,7 @@ packages:
     engines: {node: '>=18'}
     peerDependencies:
       react: ^18 || ^19 || ^19.0.0-rc
-      zod: ^3.23.8
+      zod: ^4.1.12
     peerDependenciesMeta:
       zod:
         optional: true
@@ -470,7 +473,7 @@ packages:
     resolution: {integrity: sha512-3zcwCc8ezzFlwp3ZD15wAPjf2Au4s3vAbKsXQVyhxODHcmu0iyPO2Eua6D/vicq/AUm/BAo60r97O6HU+EI0+w==}
     engines: {node: '>=18'}
     peerDependencies:
-      zod: ^3.23.8
+      zod: ^4.1.12
 
   '@anthropic-ai/sdk@0.32.1':
     resolution: {integrity: sha512-U9JwTrDvdQ9iWuABVsMLj8nJVwAyQz6QXvgLsVhryhCEPkLsbcP/MXxm+jYcAwLoV8ESbaTTjnD4kuAFa+Hyjg==}
@@ -1309,7 +1312,7 @@ packages:
     engines: {node: '>=18'}
     peerDependencies:
       ai: ^4.3.17
-      zod: ^3.25.34
+      zod: ^4.1.12
 
   '@opentelemetry/api@1.9.0':
     resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
@@ -2766,7 +2769,7 @@ packages:
     engines: {node: '>=18'}
     peerDependencies:
       react: ^18 || ^19 || ^19.0.0-rc
-      zod: ^3.23.8
+      zod: ^4.1.12
     peerDependenciesMeta:
       react:
         optional: true
@@ -4692,7 +4695,7 @@ packages:
     hasBin: true
     peerDependencies:
       ws: ^8.18.0
-      zod: ^3.25 || ^4.0
+      zod: ^4.1.12
     peerDependenciesMeta:
       ws:
         optional: true
@@ -5931,10 +5934,7 @@ packages:
   zod-to-json-schema@3.24.6:
     resolution: {integrity: sha512-h/z3PKvcTcTetyjl1fkj79MHNEjm+HpD6NXheWjzOekY7kV+lwDYnHw+ivHkijnCSMz1yJaWBD9vu/Fcmk+vEg==}
     peerDependencies:
-      zod: ^3.24.1
-
-  zod@3.25.76:
-    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+      zod: ^4.1.12
 
   zod@4.1.12:
     resolution: {integrity: sha512-JInaHOamG8pt5+Ey8kGmdcAcg3OL9reK8ltczgHTAwNhMys/6ThXHityHxVV2p3fkw/c+MAvBHFVYHFZDmjMCQ==}
@@ -5986,39 +5986,39 @@ packages:
 
 snapshots:
 
-  '@ai-sdk/openai@1.3.24(zod@3.25.76)':
+  '@ai-sdk/openai@1.3.24(zod@4.1.12)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
-      zod: 3.25.76
+      '@ai-sdk/provider-utils': 2.2.8(zod@4.1.12)
+      zod: 4.1.12
 
-  '@ai-sdk/provider-utils@2.2.8(zod@3.25.76)':
+  '@ai-sdk/provider-utils@2.2.8(zod@4.1.12)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
       nanoid: 3.3.11
       secure-json-parse: 2.7.0
-      zod: 3.25.76
+      zod: 4.1.12
 
   '@ai-sdk/provider@1.1.3':
     dependencies:
       json-schema: 0.4.0
 
-  '@ai-sdk/react@1.2.12(react@19.1.1)(zod@3.25.76)':
+  '@ai-sdk/react@1.2.12(react@19.1.1)(zod@4.1.12)':
     dependencies:
-      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
-      '@ai-sdk/ui-utils': 1.2.11(zod@3.25.76)
+      '@ai-sdk/provider-utils': 2.2.8(zod@4.1.12)
+      '@ai-sdk/ui-utils': 1.2.11(zod@4.1.12)
       react: 19.1.1
       swr: 2.3.6(react@19.1.1)
       throttleit: 2.1.0
     optionalDependencies:
-      zod: 3.25.76
+      zod: 4.1.12
 
-  '@ai-sdk/ui-utils@1.2.11(zod@3.25.76)':
+  '@ai-sdk/ui-utils@1.2.11(zod@4.1.12)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
-      zod: 3.25.76
-      zod-to-json-schema: 3.24.6(zod@3.25.76)
+      '@ai-sdk/provider-utils': 2.2.8(zod@4.1.12)
+      zod: 4.1.12
+      zod-to-json-schema: 3.24.6(zod@4.1.12)
 
   '@anthropic-ai/sdk@0.32.1':
     dependencies:
@@ -7515,8 +7515,8 @@ snapshots:
       express-rate-limit: 7.5.1(express@5.1.0)
       pkce-challenge: 5.0.0
       raw-body: 3.0.1
-      zod: 3.25.76
-      zod-to-json-schema: 3.24.6(zod@3.25.76)
+      zod: 4.1.12
+      zod-to-json-schema: 3.24.6(zod@4.1.12)
     transitivePeerDependencies:
       - supports-color
 
@@ -7555,12 +7555,12 @@ snapshots:
 
   '@open-draft/until@2.1.0': {}
 
-  '@openrouter/ai-sdk-provider@0.7.5(ai@4.3.19(react@19.1.1)(zod@3.25.76))(zod@3.25.76)':
+  '@openrouter/ai-sdk-provider@0.7.5(ai@4.3.19(react@19.1.1)(zod@4.1.12))(zod@4.1.12)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
-      ai: 4.3.19(react@19.1.1)(zod@3.25.76)
-      zod: 3.25.76
+      '@ai-sdk/provider-utils': 2.2.8(zod@4.1.12)
+      ai: 4.3.19(react@19.1.1)(zod@4.1.12)
+      zod: 4.1.12
 
   '@opentelemetry/api@1.9.0': {}
 
@@ -7587,7 +7587,7 @@ snapshots:
   '@polar-sh/sdk@0.34.11':
     dependencies:
       standardwebhooks: 1.0.0
-      zod: 3.25.76
+      zod: 4.1.12
 
   '@polar-sh/ui@0.1.1(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:
@@ -8732,7 +8732,7 @@ snapshots:
       '@smithy/types': 4.4.0
       tslib: 2.8.1
 
-  '@speakeasy-api/moonshine@1.33.4(@dnd-kit/core@6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(@dnd-kit/modifiers@9.0.0(@dnd-kit/core@6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1))(@dnd-kit/utilities@3.2.2(react@19.1.1))(@rive-app/react-canvas-lite@4.23.4(react@19.1.1))(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(ai@4.3.19(react@19.1.1)(zod@3.25.76))(lucide-react@0.544.0(react@19.1.1))(motion@12.23.14(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react-markdown@10.1.0(@types/react@19.1.13)(react@19.1.1))(react-resizable-panels@2.1.9(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-virtuoso@4.14.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)(remark-gfm@4.0.1)(shiki@3.13.0)':
+  '@speakeasy-api/moonshine@1.33.4(@dnd-kit/core@6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(@dnd-kit/modifiers@9.0.0(@dnd-kit/core@6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1))(@dnd-kit/utilities@3.2.2(react@19.1.1))(@rive-app/react-canvas-lite@4.23.4(react@19.1.1))(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(ai@4.3.19(react@19.1.1)(zod@4.1.12))(lucide-react@0.544.0(react@19.1.1))(motion@12.23.14(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react-markdown@10.1.0(@types/react@19.1.13)(react@19.1.1))(react-resizable-panels@2.1.9(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-virtuoso@4.14.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)(remark-gfm@4.0.1)(shiki@3.13.0)':
     dependencies:
       '@dnd-kit/core': 6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@dnd-kit/modifiers': 9.0.0(@dnd-kit/core@6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)
@@ -8748,7 +8748,7 @@ snapshots:
       '@radix-ui/react-tooltip': 1.2.8(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@rive-app/react-canvas-lite': 4.23.4(react@19.1.1)
       '@types/react': 19.1.13
-      ai: 4.3.19(react@19.1.1)(zod@3.25.76)
+      ai: 4.3.19(react@19.1.1)(zod@4.1.12)
       class-variance-authority: 0.7.1
       clsx: 2.1.1
       cmdk: 1.1.1(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
@@ -9311,15 +9311,15 @@ snapshots:
     dependencies:
       humanize-ms: 1.2.1
 
-  ai@4.3.19(react@19.1.1)(zod@3.25.76):
+  ai@4.3.19(react@19.1.1)(zod@4.1.12):
     dependencies:
       '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
-      '@ai-sdk/react': 1.2.12(react@19.1.1)(zod@3.25.76)
-      '@ai-sdk/ui-utils': 1.2.11(zod@3.25.76)
+      '@ai-sdk/provider-utils': 2.2.8(zod@4.1.12)
+      '@ai-sdk/react': 1.2.12(react@19.1.1)(zod@4.1.12)
+      '@ai-sdk/ui-utils': 1.2.11(zod@4.1.12)
       '@opentelemetry/api': 1.9.0
       jsondiffpatch: 0.6.0
-      zod: 3.25.76
+      zod: 4.1.12
     optionalDependencies:
       react: 19.1.1
 
@@ -11509,9 +11509,9 @@ snapshots:
       is-inside-container: 1.0.0
       wsl-utils: 0.1.0
 
-  openai@6.8.1(zod@3.25.76):
+  openai@6.8.1(zod@4.1.12):
     optionalDependencies:
-      zod: 3.25.76
+      zod: 4.1.12
 
   optionator@0.9.4:
     dependencies:
@@ -12918,11 +12918,9 @@ snapshots:
       compress-commons: 6.0.2
       readable-stream: 4.7.0
 
-  zod-to-json-schema@3.24.6(zod@3.25.76):
+  zod-to-json-schema@3.24.6(zod@4.1.12):
     dependencies:
-      zod: 3.25.76
-
-  zod@3.25.76: {}
+      zod: 4.1.12
 
   zod@4.1.12: {}
 

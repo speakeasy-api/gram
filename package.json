@@ -27,6 +27,8 @@
     "zx": "^8.8.1"
   },
   "pnpm": {
-    "overrides": {}
+    "overrides": {
+      "zod": "^4.1.12"
+    }
   }
 }

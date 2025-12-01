@@ -66,7 +66,7 @@ type InferResult<T> = ToolSignature<T>[3];
 
 export type ManifestVariables = Record<
   string,
-  { description?: string | undefined }
+  { description?: string; oauthTarget?: boolean }
 >;
 
 export type ManifestTool = {
@@ -354,7 +354,19 @@ export class Gram<
     const tools = Array.from(this.#tools.values()).map((tool) => {
       const schema = zm.object(tool.inputSchema);
 
+      // Create a custom metadata registry to ensure descriptions are preserved
+      const registry = new (zm as any).core.$ZodRegistry();
+
+      // Register each schema with its description in the metadata registry
+      Object.entries(tool.inputSchema).forEach(([key, zodSchema]) => {
+        const description = (zodSchema as any).description;
+        if (description) {
+          registry.add(zodSchema, { description });
+        }
+      });
+
       const inputSchema = zm.toJSONSchema(schema);
+
       const result: {
         name: string;
         description?: string;
@@ -368,8 +380,20 @@ export class Gram<
         result.description = tool.description;
       }
       if (tool.envSchema != null) {
-        const obj = zm.object(tool.envSchema);
-        result.variables = envMapFromJSONSchema(zm.toJSONSchema(obj));
+        const registry = new (zm as any).core.$ZodRegistry();
+
+        // Register each schema with its description in the metadata registry
+        Object.entries(tool.envSchema).forEach(([key, zodSchema]) => {
+          const description = (zodSchema as any).description;
+          if (description) {
+            registry.add(zodSchema, { description });
+          }
+        });
+
+        const obj = z.object(tool.envSchema);
+        result.variables = envMapFromJSONSchema(
+          z.toJSONSchema(obj, { metadata: registry }),
+        );
       }
 
       return result;
@@ -383,22 +407,37 @@ export class Gram<
 }
 
 function envMapFromJSONSchema(jsonSchema: unknown): ManifestVariables {
+  console.log(jsonSchema);
   const parsed = zm
     .object({
       properties: zm.record(
         zm.string(),
         zm.object({
           description: zm.optional(zm.string()),
+          // meta: zm.optional(zm.record(zm.string(), zm.string())),
         }),
       ),
     })
     .parse(jsonSchema);
 
+  console.log(parsed);
+
   const out: ManifestVariables = {};
   for (const [key, value] of Object.entries(parsed.properties)) {
-    out[key] = {
+    let oauthTarget = null;
+    // if (
+    //   value.meta != null &&
+    //   Object.keys(value.meta).includes("oauth_target")
+    // ) {
+    //   oauthTarget = value.meta["oauth_target"] === "true" ? true : false;
+    // }
+
+    const res = {
       ...(value.description != null ? { description: value.description } : {}),
+      ...(oauthTarget != null ? { oauthTarget: oauthTarget } : {}),
     };
+
+    out[key] = res;
   }
 
   return out;
