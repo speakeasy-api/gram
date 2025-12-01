@@ -214,7 +214,10 @@ export class Gram<
   #lax: boolean;
   #inputEnv?: Record<string, string | undefined> | undefined;
   #envSchema?: EnvSchema;
-  #oauthVariable?: string;
+  #authInput?: {
+    type: "oauth2";
+    variable: string;
+  };
 
   constructor(opts?: {
     /**
@@ -248,7 +251,12 @@ export class Gram<
     this.#lax = Boolean(opts?.lax);
     this.#inputEnv = opts?.env;
     this.#envSchema = opts?.envSchema;
-    this.#oauthVariable = opts?.authInput?.oauthVariable;
+    this.#authInput = opts?.authInput
+      ? {
+          type: "oauth2",
+          variable: opts.authInput.oauthVariable,
+        }
+      : undefined;
   }
 
   protected get tools() {
@@ -408,11 +416,8 @@ export class Gram<
         );
       }
 
-      if (this.#oauthVariable != null) {
-        result.authInput = {
-          type: "oauth2",
-          variable: this.#oauthVariable,
-        };
+      if (this.#authInput != null) {
+        result.authInput = this.#authInput;
       }
 
       return result;
