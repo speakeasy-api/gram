@@ -1,5 +1,14 @@
 # dashboard
 
+## 0.20.1
+
+### Patch Changes
+
+- bc147e0: Updated dependencies to address dependabot security alerts
+- c2ea282: admin view for creating oauth proxies
+- Updated dependencies [c2ea282]
+  - @gram/client@0.20.1
+
 ## 0.20.0
 
 ### Minor Changes
