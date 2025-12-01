@@ -15,8 +15,6 @@ import (
 // CreateResponseRequestBody is the type of the "agents" service
 // "createResponse" endpoint HTTP request body.
 type CreateResponseRequestBody struct {
-	// The slug of the project to run the agent in
-	ProjectSlug string `form:"project_slug" json:"project_slug" xml:"project_slug"`
 	// The model to use for the agent (e.g., openai/gpt-4o)
 	Model string `form:"model" json:"model" xml:"model"`
 	// System instructions for the agent
@@ -28,9 +26,9 @@ type CreateResponseRequestBody struct {
 	// Temperature for model responses
 	Temperature *float64 `form:"temperature,omitempty" json:"temperature,omitempty" xml:"temperature,omitempty"`
 	// Toolsets available to the agent
-	Toolsets []*AgentToolsetRequestBodyRequestBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+	Toolsets []*AgentToolsetRequestBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
 	// Sub-agents available for delegation
-	SubAgents []*AgentSubAgentRequestBodyRequestBody `form:"sub_agents,omitempty" json:"sub_agents,omitempty" xml:"sub_agents,omitempty"`
+	SubAgents []*AgentSubAgentRequestBody `form:"sub_agents,omitempty" json:"sub_agents,omitempty" xml:"sub_agents,omitempty"`
 	// If true, returns immediately with a response ID for polling
 	Async *bool `form:"async,omitempty" json:"async,omitempty" xml:"async,omitempty"`
 	// If true, stores the response defaults to true
@@ -640,9 +638,8 @@ type DeleteResponseGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// AgentToolsetRequestBodyRequestBody is used to define fields on request body
-// types.
-type AgentToolsetRequestBodyRequestBody struct {
+// AgentToolsetRequestBody is used to define fields on request body types.
+type AgentToolsetRequestBody struct {
 	// The slug of the toolset to use
 	ToolsetSlug string `form:"toolset_slug" json:"toolset_slug" xml:"toolset_slug"`
 	// The slug of the environment for auth
@@ -651,9 +648,8 @@ type AgentToolsetRequestBodyRequestBody struct {
 	Headers map[string]string `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
 }
 
-// AgentSubAgentRequestBodyRequestBody is used to define fields on request body
-// types.
-type AgentSubAgentRequestBodyRequestBody struct {
+// AgentSubAgentRequestBody is used to define fields on request body types.
+type AgentSubAgentRequestBody struct {
 	// Instructions for this sub-agent
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// The name of this sub-agent
@@ -663,7 +659,7 @@ type AgentSubAgentRequestBodyRequestBody struct {
 	// Tool URNs available to this sub-agent
 	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// Toolsets available to this sub-agent
-	Toolsets []*AgentToolsetRequestBodyRequestBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+	Toolsets []*AgentToolsetRequestBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
 	// The environment slug for auth
 	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
 }
@@ -685,25 +681,24 @@ type AgentTextFormatResponseBody struct {
 // of the "createResponse" endpoint of the "agents" service.
 func NewCreateResponseRequestBody(p *agents.CreateResponsePayload) *CreateResponseRequestBody {
 	body := &CreateResponseRequestBody{
-		ProjectSlug:        p.Body.ProjectSlug,
-		Model:              p.Body.Model,
-		Instructions:       p.Body.Instructions,
-		Input:              p.Body.Input,
-		PreviousResponseID: p.Body.PreviousResponseID,
-		Temperature:        p.Body.Temperature,
-		Async:              p.Body.Async,
-		Store:              p.Body.Store,
+		Model:              p.Model,
+		Instructions:       p.Instructions,
+		Input:              p.Input,
+		PreviousResponseID: p.PreviousResponseID,
+		Temperature:        p.Temperature,
+		Async:              p.Async,
+		Store:              p.Store,
 	}
-	if p.Body.Toolsets != nil {
-		body.Toolsets = make([]*AgentToolsetRequestBodyRequestBody, len(p.Body.Toolsets))
-		for i, val := range p.Body.Toolsets {
-			body.Toolsets[i] = marshalAgentsAgentToolsetToAgentToolsetRequestBodyRequestBody(val)
+	if p.Toolsets != nil {
+		body.Toolsets = make([]*AgentToolsetRequestBody, len(p.Toolsets))
+		for i, val := range p.Toolsets {
+			body.Toolsets[i] = marshalAgentsAgentToolsetToAgentToolsetRequestBody(val)
 		}
 	}
-	if p.Body.SubAgents != nil {
-		body.SubAgents = make([]*AgentSubAgentRequestBodyRequestBody, len(p.Body.SubAgents))
-		for i, val := range p.Body.SubAgents {
-			body.SubAgents[i] = marshalAgentsAgentSubAgentToAgentSubAgentRequestBodyRequestBody(val)
+	if p.SubAgents != nil {
+		body.SubAgents = make([]*AgentSubAgentRequestBody, len(p.SubAgents))
+		for i, val := range p.SubAgents {
+			body.SubAgents[i] = marshalAgentsAgentSubAgentToAgentSubAgentRequestBody(val)
 		}
 	}
 	return body

@@ -123,6 +123,13 @@ paths:
                   schema:
                     description: API Key header
                     type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
             responses:
                 "200":
                     description: OK response.
@@ -182,6 +189,7 @@ paths:
                     description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
             summary: deleteResponse agents
             tags:
                 - agents
@@ -204,6 +212,13 @@ paths:
                   name: Gram-Key
                   schema:
                     description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
                     type: string
             responses:
                 "200":
@@ -268,6 +283,7 @@ paths:
                     description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
             summary: getResponse agents
             tags:
                 - agents
@@ -283,12 +299,18 @@ paths:
                   schema:
                     description: API Key header
                     type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
             requestBody:
                 content:
                     application/json:
                         schema:
                             $ref: '#/components/schemas/AgentResponseRequest'
-                description: The agent response request body
                 required: true
             responses:
                 "200":
@@ -353,6 +375,7 @@ paths:
                     description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
             summary: createResponse agents
             tags:
                 - agents
@@ -9229,9 +9252,6 @@ components:
                 previous_response_id:
                     type: string
                     description: ID of a previous response to continue from
-                project_slug:
-                    type: string
-                    description: The slug of the project to run the agent in
                 store:
                     type: boolean
                     description: If true, stores the response defaults to true
@@ -9251,7 +9271,6 @@ components:
                     description: Toolsets available to the agent
             description: Request payload for creating an agent response
             required:
-                - project_slug
                 - model
                 - input
         AgentResponseText:

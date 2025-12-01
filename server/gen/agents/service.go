@@ -75,30 +75,6 @@ type AgentResponseOutput struct {
 	Result string
 }
 
-// Request payload for creating an agent response
-type AgentResponseRequest struct {
-	// The slug of the project to run the agent in
-	ProjectSlug string
-	// The model to use for the agent (e.g., openai/gpt-4o)
-	Model string
-	// System instructions for the agent
-	Instructions *string
-	// The input to the agent - can be a string or array of messages
-	Input any
-	// ID of a previous response to continue from
-	PreviousResponseID *string
-	// Temperature for model responses
-	Temperature *float64
-	// Toolsets available to the agent
-	Toolsets []*AgentToolset
-	// Sub-agents available for delegation
-	SubAgents []*AgentSubAgent
-	// If true, returns immediately with a response ID for polling
-	Async *bool
-	// If true, stores the response defaults to true
-	Store *bool
-}
-
 // Text format configuration for the response
 type AgentResponseText struct {
 	// The format of the text response
@@ -140,15 +116,33 @@ type AgentToolset struct {
 // CreateResponsePayload is the payload type of the agents service
 // createResponse method.
 type CreateResponsePayload struct {
-	ApikeyToken *string
-	// The agent response request body
-	Body *AgentResponseRequest
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The model to use for the agent (e.g., openai/gpt-4o)
+	Model string
+	// System instructions for the agent
+	Instructions *string
+	// The input to the agent - can be a string or array of messages
+	Input any
+	// ID of a previous response to continue from
+	PreviousResponseID *string
+	// Temperature for model responses
+	Temperature *float64
+	// Toolsets available to the agent
+	Toolsets []*AgentToolset
+	// Sub-agents available for delegation
+	SubAgents []*AgentSubAgent
+	// If true, returns immediately with a response ID for polling
+	Async *bool
+	// If true, stores the response defaults to true
+	Store *bool
 }
 
 // DeleteResponsePayload is the payload type of the agents service
 // deleteResponse method.
 type DeleteResponsePayload struct {
-	ApikeyToken *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 	// The ID of the response to retrieve
 	ResponseID string
 }
@@ -156,7 +150,8 @@ type DeleteResponsePayload struct {
 // GetResponsePayload is the payload type of the agents service getResponse
 // method.
 type GetResponsePayload struct {
-	ApikeyToken *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 	// The ID of the response to retrieve
 	ResponseID string
 }

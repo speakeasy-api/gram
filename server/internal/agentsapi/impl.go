@@ -6,12 +6,12 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	commonv1 "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
@@ -31,7 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -39,12 +38,13 @@ import (
 var _ agents.Service = (*Service)(nil)
 
 type Service struct {
-	tracer         trace.Tracer
-	logger         *slog.Logger
-	agentsService  *agentspkg.Service
-	db             *pgxpool.Pool
-	auth           *auth.Auth
-	temporalClient client.Client
+	tracer            trace.Tracer
+	logger            *slog.Logger
+	agentsService     *agentspkg.Service
+	db                *pgxpool.Pool
+	auth              *auth.Auth
+	temporalClient    client.Client
+	temporalNamespace string // TODO: build a wrapper around temporal client to better encapsulate metadata like this
 }
 
 func NewService(
@@ -61,6 +61,7 @@ func NewService(
 	baseChatClient *openrouter.ChatClient,
 	authService *auth.Auth,
 	temporalClient client.Client,
+	temporalNamespace string,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agents-api"))
 
@@ -80,12 +81,13 @@ func NewService(
 	)
 
 	return &Service{
-		tracer:         otel.Tracer("github.com/speakeasy-api/gram/server/internal/agentsapi"),
-		logger:         logger,
-		agentsService:  agentsService,
-		db:             db,
-		auth:           authService,
-		temporalClient: temporalClient,
+		tracer:            otel.Tracer("github.com/speakeasy-api/gram/server/internal/agentsapi"),
+		logger:            logger,
+		agentsService:     agentsService,
+		db:                db,
+		auth:              authService,
+		temporalClient:    temporalClient,
+		temporalNamespace: temporalNamespace,
 	}
 }
 
@@ -106,11 +108,11 @@ func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResp
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if payload.Body == nil {
-		return nil, oops.E(oops.CodeBadRequest, nil, "request body is required")
+	if authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	request := toServiceRequest(payload.Body)
+	request := toServiceRequest(payload)
 
 	shouldStore := request.Store == nil || *request.Store
 
@@ -120,33 +122,10 @@ func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResp
 	if isAsync && !shouldStore {
 		return nil, oops.E(oops.CodeBadRequest, nil, "async responses cannot have non stored agent history")
 	}
-
-	s.logger.InfoContext(ctx, "agents response request received",
-		attr.SlogProjectSlug(request.ProjectSlug))
-
-	// Look up project by slug within the organization
-	projectsRepo := projects_repo.New(s.db)
-	projects, err := projectsRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list projects").Log(ctx, s.logger)
-	}
-
-	var projectID uuid.UUID
-	for _, proj := range projects {
-		if proj.Slug == request.ProjectSlug {
-			projectID = proj.ID
-			break
-		}
-	}
-
-	if projectID == uuid.Nil {
-		return nil, oops.E(oops.CodeNotFound, fmt.Errorf("project not found"), "project not found").Log(ctx, s.logger)
-	}
-
 	// Execute workflow
 	workflowRun, err := background.ExecuteAgentsResponseWorkflow(ctx, s.temporalClient, background.AgentsResponseWorkflowParams{
 		OrgID:     authCtx.ActiveOrganizationID,
-		ProjectID: projectID,
+		ProjectID: *authCtx.ProjectID,
 		Request:   request,
 	})
 	if err != nil {
@@ -182,7 +161,7 @@ func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResp
 	if !shouldStore {
 		// Delete the workflow execution to avoid storing history
 		go func() {
-			if delErr := s.deleteAgentRun(ctx, workflowRun.GetID()); delErr != nil {
+			if delErr := s.deleteAgentRun(context.WithoutCancel(ctx), workflowRun.GetID()); delErr != nil {
 				s.logger.ErrorContext(ctx, "failed to delete non-stored agent run", attr.SlogError(delErr))
 			}
 		}()
@@ -212,7 +191,7 @@ func (s *Service) GetResponse(ctx context.Context, payload *agents.GetResponsePa
 	var response *agents.AgentResponseOutput
 
 	switch workflowStatus {
-	case 1: // Running
+	case enums.WORKFLOW_EXECUTION_STATUS_RUNNING:
 		// Query workflow for org_id and request parameters (only available while running)
 		var orgID string
 		queryValue, queryErr := s.temporalClient.QueryWorkflow(ctx, responseID, "", "org_id")
@@ -250,7 +229,7 @@ func (s *Service) GetResponse(ctx context.Context, payload *agents.GetResponsePa
 			},
 			Result: "",
 		}
-	case 2: // Completed
+	case enums.WORKFLOW_EXECUTION_STATUS_COMPLETED:
 		// Workflow is complete, get the result which contains org_id and all request params
 		workflowRun := s.temporalClient.GetWorkflow(ctx, responseID, "")
 		var workflowResult agentspkg.AgentsResponseWorkflowResult
@@ -339,7 +318,7 @@ func (s *Service) DeleteResponse(ctx context.Context, payload *agents.DeleteResp
 
 	// Verify ownership based on workflow status
 	switch workflowStatus {
-	case 1: // Running
+	case enums.WORKFLOW_EXECUTION_STATUS_RUNNING:
 		// Query workflow for org_id (only available while running)
 		var orgID string
 		queryValue, queryErr := s.temporalClient.QueryWorkflow(ctx, responseID, "", "org_id")
@@ -372,10 +351,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// TODO: Solve the namespace location before merging
 func (s *Service) deleteAgentRun(ctx context.Context, responseID string) error {
 	_, err := s.temporalClient.WorkflowService().DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
-		Namespace: "",
+		Namespace: s.temporalNamespace,
 		WorkflowExecution: &commonv1.WorkflowExecution{
 			WorkflowId: responseID,
 			RunId:      "",
@@ -395,7 +373,7 @@ func getTemperature(temp *float64) float64 {
 }
 
 // toInternalRequest converts a Goa request to the internal request type.
-func toServiceRequest(req *agents.AgentResponseRequest) agentspkg.ResponseRequest {
+func toServiceRequest(req *agents.CreateResponsePayload) agentspkg.ResponseRequest {
 	var toolsets []agentspkg.Toolset
 	for _, ts := range req.Toolsets {
 		toolsets = append(toolsets, agentspkg.Toolset{
@@ -443,7 +421,6 @@ func toServiceRequest(req *agents.AgentResponseRequest) agentspkg.ResponseReques
 	}
 
 	return agentspkg.ResponseRequest{
-		ProjectSlug:        req.ProjectSlug,
 		Model:              req.Model,
 		Instructions:       req.Instructions,
 		Input:              req.Input,

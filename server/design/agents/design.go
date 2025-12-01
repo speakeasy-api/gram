@@ -8,7 +8,7 @@ import (
 
 var _ = Service("agents", func() {
 	Description("OpenAI Responses API compatible endpoint for running agent workflows.")
-	Security(security.ByKey, func() {
+	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("chat")
 	})
 	shared.DeclareErrorResponses()
@@ -18,8 +18,8 @@ var _ = Service("agents", func() {
 
 		Payload(func() {
 			security.ByKeyPayload()
-			Attribute("body", AgentResponseRequest, "The agent response request body")
-			Required("body")
+			security.ProjectPayload()
+			Extend(AgentResponseRequest)
 		})
 
 		Result(AgentResponseOutput, "The agent response output")
@@ -27,7 +27,7 @@ var _ = Service("agents", func() {
 		HTTP(func() {
 			POST("/rpc/agents.response")
 			security.ByKeyHeader()
-			Body("body")
+			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -40,6 +40,7 @@ var _ = Service("agents", func() {
 
 		Payload(func() {
 			security.ByKeyPayload()
+			security.ProjectPayload()
 			Attribute("response_id", String, "The ID of the response to retrieve")
 			Required("response_id")
 		})
@@ -49,6 +50,7 @@ var _ = Service("agents", func() {
 		HTTP(func() {
 			GET("/rpc/agents.response")
 			security.ByKeyHeader()
+			security.ProjectHeader()
 			Param("response_id")
 			Response(StatusOK)
 		})
@@ -62,6 +64,7 @@ var _ = Service("agents", func() {
 
 		Payload(func() {
 			security.ByKeyPayload()
+			security.ProjectPayload()
 			Attribute("response_id", String, "The ID of the response to retrieve")
 			Required("response_id")
 		})
@@ -69,6 +72,7 @@ var _ = Service("agents", func() {
 		HTTP(func() {
 			DELETE("/rpc/agents.response")
 			security.ByKeyHeader()
+			security.ProjectHeader()
 			Param("response_id")
 			Response(StatusOK)
 		})
@@ -104,7 +108,6 @@ var AgentSubAgent = Type("AgentSubAgent", func() {
 var AgentResponseRequest = Type("AgentResponseRequest", func() {
 	Description("Request payload for creating an agent response")
 
-	Attribute("project_slug", String, "The slug of the project to run the agent in")
 	Attribute("model", String, "The model to use for the agent (e.g., openai/gpt-4o)")
 	Attribute("instructions", String, "System instructions for the agent")
 	Attribute("input", Any, "The input to the agent - can be a string or array of messages")
@@ -115,7 +118,7 @@ var AgentResponseRequest = Type("AgentResponseRequest", func() {
 	Attribute("async", Boolean, "If true, returns immediately with a response ID for polling")
 	Attribute("store", Boolean, "If true, stores the response defaults to true")
 
-	Required("project_slug", "model", "input")
+	Required("model", "input")
 })
 
 var AgentResponseText = Type("AgentResponseText", func() {

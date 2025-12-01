@@ -13,20 +13,6 @@ import (
 func TestAgentsAPIService_CreateResponse(t *testing.T) {
 	t.Parallel()
 
-	t.Run("returns error when body is nil", func(t *testing.T) {
-		t.Parallel()
-		ctx, ti := newTestAgentsAPIService(t)
-
-		_, err := ti.service.CreateResponse(ctx, &gen.CreateResponsePayload{
-			Body: nil,
-		})
-		require.Error(t, err)
-
-		var oopsErr *oops.ShareableError
-		require.ErrorAs(t, err, &oopsErr)
-		require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
-	})
-
 	t.Run("returns error without auth context", func(t *testing.T) {
 		t.Parallel()
 		_, ti := newTestAgentsAPIService(t)
@@ -35,11 +21,8 @@ func TestAgentsAPIService_CreateResponse(t *testing.T) {
 		ctxWithoutAuth := t.Context()
 
 		_, err := ti.service.CreateResponse(ctxWithoutAuth, &gen.CreateResponsePayload{
-			Body: &gen.AgentResponseRequest{
-				ProjectSlug: "test-project",
-				Model:       "openai/gpt-4o",
-				Input:       "Hello, agent!",
-			},
+			Model: "openai/gpt-4o",
+			Input: "Hello, agent!",
 		})
 		require.Error(t, err)
 
@@ -48,41 +31,20 @@ func TestAgentsAPIService_CreateResponse(t *testing.T) {
 		require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 	})
 
-	t.Run("returns error for non-existent project", func(t *testing.T) {
-		t.Parallel()
-		ctx, ti := newTestAgentsAPIService(t)
-
-		_, err := ti.service.CreateResponse(ctx, &gen.CreateResponsePayload{
-			Body: &gen.AgentResponseRequest{
-				ProjectSlug: "non-existent-project",
-				Model:       "openai/gpt-4o",
-				Input:       "Hello, agent!",
-			},
-		})
-		require.Error(t, err)
-
-		var oopsErr *oops.ShareableError
-		require.ErrorAs(t, err, &oopsErr)
-		require.Equal(t, oops.CodeNotFound, oopsErr.Code)
-	})
-
 	t.Run("starts async workflow and returns response ID", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestAgentsAPIService(t)
 
-		// Get the project slug from the auth context
+		// Verify auth context has project ID set (from Gram-Project header)
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
-		require.NotNil(t, authCtx.ProjectSlug)
+		require.NotNil(t, authCtx.ProjectID)
 
 		async := true
 		resp, err := ti.service.CreateResponse(ctx, &gen.CreateResponsePayload{
-			Body: &gen.AgentResponseRequest{
-				ProjectSlug: *authCtx.ProjectSlug,
-				Model:       "openai/gpt-4o",
-				Input:       "Hello, agent!",
-				Async:       &async,
-			},
+			Model: "openai/gpt-4o",
+			Input: "Hello, agent!",
+			Async: &async,
 		})
 		require.NoError(t, err)
 
@@ -101,18 +63,15 @@ func TestAgentsAPIService_CreateResponse(t *testing.T) {
 
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
-		require.NotNil(t, authCtx.ProjectSlug)
+		require.NotNil(t, authCtx.ProjectID)
 
 		async := true
 		instructions := "You are a helpful assistant."
 		resp, err := ti.service.CreateResponse(ctx, &gen.CreateResponsePayload{
-			Body: &gen.AgentResponseRequest{
-				ProjectSlug:  *authCtx.ProjectSlug,
-				Model:        "openai/gpt-4o",
-				Input:        "Hello!",
-				Instructions: &instructions,
-				Async:        &async,
-			},
+			Model:        "openai/gpt-4o",
+			Input:        "Hello!",
+			Instructions: &instructions,
+			Async:        &async,
 		})
 		require.NoError(t, err)
 
@@ -126,18 +85,15 @@ func TestAgentsAPIService_CreateResponse(t *testing.T) {
 
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
-		require.NotNil(t, authCtx.ProjectSlug)
+		require.NotNil(t, authCtx.ProjectID)
 
 		async := true
 		temperature := 0.7
 		resp, err := ti.service.CreateResponse(ctx, &gen.CreateResponsePayload{
-			Body: &gen.AgentResponseRequest{
-				ProjectSlug: *authCtx.ProjectSlug,
-				Model:       "openai/gpt-4o",
-				Input:       "Hello!",
-				Temperature: &temperature,
-				Async:       &async,
-			},
+			Model:       "openai/gpt-4o",
+			Input:       "Hello!",
+			Temperature: &temperature,
+			Async:       &async,
 		})
 		require.NoError(t, err)
 
@@ -150,16 +106,13 @@ func TestAgentsAPIService_CreateResponse(t *testing.T) {
 
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
-		require.NotNil(t, authCtx.ProjectSlug)
+		require.NotNil(t, authCtx.ProjectID)
 
 		async := true
 		resp, err := ti.service.CreateResponse(ctx, &gen.CreateResponsePayload{
-			Body: &gen.AgentResponseRequest{
-				ProjectSlug: *authCtx.ProjectSlug,
-				Model:       "openai/gpt-4o",
-				Input:       "Hello!",
-				Async:       &async,
-			},
+			Model: "openai/gpt-4o",
+			Input: "Hello!",
+			Async: &async,
 		})
 		require.NoError(t, err)
 
@@ -173,16 +126,13 @@ func TestAgentsAPIService_CreateResponse(t *testing.T) {
 
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
-		require.NotNil(t, authCtx.ProjectSlug)
+		require.NotNil(t, authCtx.ProjectID)
 
 		async := true
 		resp, err := ti.service.CreateResponse(ctx, &gen.CreateResponsePayload{
-			Body: &gen.AgentResponseRequest{
-				ProjectSlug: *authCtx.ProjectSlug,
-				Model:       "openai/gpt-4o",
-				Input:       "Hello!",
-				Async:       &async,
-			},
+			Model: "openai/gpt-4o",
+			Input: "Hello!",
+			Async: &async,
 		})
 		require.NoError(t, err)
 
@@ -197,16 +147,13 @@ func TestAgentsAPIService_CreateResponse(t *testing.T) {
 
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
-		require.NotNil(t, authCtx.ProjectSlug)
+		require.NotNil(t, authCtx.ProjectID)
 
 		async := true
 		resp, err := ti.service.CreateResponse(ctx, &gen.CreateResponsePayload{
-			Body: &gen.AgentResponseRequest{
-				ProjectSlug: *authCtx.ProjectSlug,
-				Model:       "openai/gpt-4o",
-				Input:       "Hello!",
-				Async:       &async,
-			},
+			Model: "openai/gpt-4o",
+			Input: "Hello!",
+			Async: &async,
 		})
 		require.NoError(t, err)
 
@@ -253,20 +200,17 @@ func TestAgentsAPIService_GetResponse(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestAgentsAPIService(t)
 
-		// Get the project slug from the auth context
+		// Verify auth context has project ID set (from Gram-Project header)
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
-		require.NotNil(t, authCtx.ProjectSlug)
+		require.NotNil(t, authCtx.ProjectID)
 
 		// First create an async response to get a workflow ID
 		async := true
 		createResp, err := ti.service.CreateResponse(ctx, &gen.CreateResponsePayload{
-			Body: &gen.AgentResponseRequest{
-				ProjectSlug: *authCtx.ProjectSlug,
-				Model:       "openai/gpt-4o",
-				Input:       "Hello, agent!",
-				Async:       &async,
-			},
+			Model: "openai/gpt-4o",
+			Input: "Hello, agent!",
+			Async: &async,
 		})
 		require.NoError(t, err)
 		require.NotEmpty(t, createResp.ID)

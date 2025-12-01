@@ -45,6 +45,10 @@ func EncodeCreateResponseRequest(encoder func(*http.Request) goahttp.Encoder) fu
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
 		body := NewCreateResponseRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("agents", "createResponse", err)
@@ -279,6 +283,10 @@ func EncodeGetResponseRequest(encoder func(*http.Request) goahttp.Encoder) func(
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
 		values := req.URL.Query()
 		values.Add("response_id", p.ResponseID)
 		req.URL.RawQuery = values.Encode()
@@ -512,6 +520,10 @@ func EncodeDeleteResponseRequest(encoder func(*http.Request) goahttp.Encoder) fu
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
 		values := req.URL.Query()
 		values.Add("response_id", p.ResponseID)
 		req.URL.RawQuery = values.Encode()
@@ -705,14 +717,13 @@ func DecodeDeleteResponseResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
-// marshalAgentsAgentToolsetToAgentToolsetRequestBodyRequestBody builds a value
-// of type *AgentToolsetRequestBodyRequestBody from a value of type
-// *agents.AgentToolset.
-func marshalAgentsAgentToolsetToAgentToolsetRequestBodyRequestBody(v *agents.AgentToolset) *AgentToolsetRequestBodyRequestBody {
+// marshalAgentsAgentToolsetToAgentToolsetRequestBody builds a value of type
+// *AgentToolsetRequestBody from a value of type *agents.AgentToolset.
+func marshalAgentsAgentToolsetToAgentToolsetRequestBody(v *agents.AgentToolset) *AgentToolsetRequestBody {
 	if v == nil {
 		return nil
 	}
-	res := &AgentToolsetRequestBodyRequestBody{
+	res := &AgentToolsetRequestBody{
 		ToolsetSlug:     v.ToolsetSlug,
 		EnvironmentSlug: v.EnvironmentSlug,
 	}
@@ -728,14 +739,13 @@ func marshalAgentsAgentToolsetToAgentToolsetRequestBodyRequestBody(v *agents.Age
 	return res
 }
 
-// marshalAgentsAgentSubAgentToAgentSubAgentRequestBodyRequestBody builds a
-// value of type *AgentSubAgentRequestBodyRequestBody from a value of type
-// *agents.AgentSubAgent.
-func marshalAgentsAgentSubAgentToAgentSubAgentRequestBodyRequestBody(v *agents.AgentSubAgent) *AgentSubAgentRequestBodyRequestBody {
+// marshalAgentsAgentSubAgentToAgentSubAgentRequestBody builds a value of type
+// *AgentSubAgentRequestBody from a value of type *agents.AgentSubAgent.
+func marshalAgentsAgentSubAgentToAgentSubAgentRequestBody(v *agents.AgentSubAgent) *AgentSubAgentRequestBody {
 	if v == nil {
 		return nil
 	}
-	res := &AgentSubAgentRequestBodyRequestBody{
+	res := &AgentSubAgentRequestBody{
 		Instructions:    v.Instructions,
 		Name:            v.Name,
 		Description:     v.Description,
@@ -748,19 +758,18 @@ func marshalAgentsAgentSubAgentToAgentSubAgentRequestBodyRequestBody(v *agents.A
 		}
 	}
 	if v.Toolsets != nil {
-		res.Toolsets = make([]*AgentToolsetRequestBodyRequestBody, len(v.Toolsets))
+		res.Toolsets = make([]*AgentToolsetRequestBody, len(v.Toolsets))
 		for i, val := range v.Toolsets {
-			res.Toolsets[i] = marshalAgentsAgentToolsetToAgentToolsetRequestBodyRequestBody(val)
+			res.Toolsets[i] = marshalAgentsAgentToolsetToAgentToolsetRequestBody(val)
 		}
 	}
 
 	return res
 }
 
-// marshalAgentToolsetRequestBodyRequestBodyToAgentsAgentToolset builds a value
-// of type *agents.AgentToolset from a value of type
-// *AgentToolsetRequestBodyRequestBody.
-func marshalAgentToolsetRequestBodyRequestBodyToAgentsAgentToolset(v *AgentToolsetRequestBodyRequestBody) *agents.AgentToolset {
+// marshalAgentToolsetRequestBodyToAgentsAgentToolset builds a value of type
+// *agents.AgentToolset from a value of type *AgentToolsetRequestBody.
+func marshalAgentToolsetRequestBodyToAgentsAgentToolset(v *AgentToolsetRequestBody) *agents.AgentToolset {
 	if v == nil {
 		return nil
 	}
@@ -780,10 +789,9 @@ func marshalAgentToolsetRequestBodyRequestBodyToAgentsAgentToolset(v *AgentTools
 	return res
 }
 
-// marshalAgentSubAgentRequestBodyRequestBodyToAgentsAgentSubAgent builds a
-// value of type *agents.AgentSubAgent from a value of type
-// *AgentSubAgentRequestBodyRequestBody.
-func marshalAgentSubAgentRequestBodyRequestBodyToAgentsAgentSubAgent(v *AgentSubAgentRequestBodyRequestBody) *agents.AgentSubAgent {
+// marshalAgentSubAgentRequestBodyToAgentsAgentSubAgent builds a value of type
+// *agents.AgentSubAgent from a value of type *AgentSubAgentRequestBody.
+func marshalAgentSubAgentRequestBodyToAgentsAgentSubAgent(v *AgentSubAgentRequestBody) *agents.AgentSubAgent {
 	if v == nil {
 		return nil
 	}
@@ -802,7 +810,7 @@ func marshalAgentSubAgentRequestBodyRequestBodyToAgentsAgentSubAgent(v *AgentSub
 	if v.Toolsets != nil {
 		res.Toolsets = make([]*agents.AgentToolset, len(v.Toolsets))
 		for i, val := range v.Toolsets {
-			res.Toolsets[i] = marshalAgentToolsetRequestBodyRequestBodyToAgentsAgentToolset(val)
+			res.Toolsets[i] = marshalAgentToolsetRequestBodyToAgentsAgentToolset(val)
 		}
 	}
 

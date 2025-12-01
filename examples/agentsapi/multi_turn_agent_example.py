@@ -14,6 +14,7 @@ url = f"{server_url}/rpc/agents.response"
 headers = {
     "Content-Type": "application/json",
     "Gram-Key": os.getenv("GRAM_API_KEY"),
+    "Gram-Project": "default",
 }
 
 context = [
@@ -21,7 +22,6 @@ context = [
 ]
 
 payload = {
-    "project_slug": "default",
     "model": "openai/gpt-4o",
     "instructions": "You are a helpful assistant that can help with Speakeasy SDK operations.",
     "input": context,

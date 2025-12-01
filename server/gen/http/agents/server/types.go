@@ -15,8 +15,6 @@ import (
 // CreateResponseRequestBody is the type of the "agents" service
 // "createResponse" endpoint HTTP request body.
 type CreateResponseRequestBody struct {
-	// The slug of the project to run the agent in
-	ProjectSlug *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
 	// The model to use for the agent (e.g., openai/gpt-4o)
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// System instructions for the agent
@@ -28,9 +26,9 @@ type CreateResponseRequestBody struct {
 	// Temperature for model responses
 	Temperature *float64 `form:"temperature,omitempty" json:"temperature,omitempty" xml:"temperature,omitempty"`
 	// Toolsets available to the agent
-	Toolsets []*AgentToolsetRequestBodyRequestBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+	Toolsets []*AgentToolsetRequestBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
 	// Sub-agents available for delegation
-	SubAgents []*AgentSubAgentRequestBodyRequestBody `form:"sub_agents,omitempty" json:"sub_agents,omitempty" xml:"sub_agents,omitempty"`
+	SubAgents []*AgentSubAgentRequestBody `form:"sub_agents,omitempty" json:"sub_agents,omitempty" xml:"sub_agents,omitempty"`
 	// If true, returns immediately with a response ID for polling
 	Async *bool `form:"async,omitempty" json:"async,omitempty" xml:"async,omitempty"`
 	// If true, stores the response defaults to true
@@ -653,9 +651,8 @@ type AgentTextFormatResponseBody struct {
 	Type string `form:"type" json:"type" xml:"type"`
 }
 
-// AgentToolsetRequestBodyRequestBody is used to define fields on request body
-// types.
-type AgentToolsetRequestBodyRequestBody struct {
+// AgentToolsetRequestBody is used to define fields on request body types.
+type AgentToolsetRequestBody struct {
 	// The slug of the toolset to use
 	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
 	// The slug of the environment for auth
@@ -664,9 +661,8 @@ type AgentToolsetRequestBodyRequestBody struct {
 	Headers map[string]string `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
 }
 
-// AgentSubAgentRequestBodyRequestBody is used to define fields on request body
-// types.
-type AgentSubAgentRequestBodyRequestBody struct {
+// AgentSubAgentRequestBody is used to define fields on request body types.
+type AgentSubAgentRequestBody struct {
 	// Instructions for this sub-agent
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// The name of this sub-agent
@@ -676,7 +672,7 @@ type AgentSubAgentRequestBodyRequestBody struct {
 	// Tool URNs available to this sub-agent
 	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// Toolsets available to this sub-agent
-	Toolsets []*AgentToolsetRequestBodyRequestBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+	Toolsets []*AgentToolsetRequestBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
 	// The environment slug for auth
 	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
 }
@@ -1163,9 +1159,8 @@ func NewDeleteResponseGatewayErrorResponseBody(res *goa.ServiceError) *DeleteRes
 
 // NewCreateResponsePayload builds a agents service createResponse endpoint
 // payload.
-func NewCreateResponsePayload(body *CreateResponseRequestBody, apikeyToken *string) *agents.CreateResponsePayload {
-	v := &agents.AgentResponseRequest{
-		ProjectSlug:        *body.ProjectSlug,
+func NewCreateResponsePayload(body *CreateResponseRequestBody, apikeyToken *string, projectSlugInput *string) *agents.CreateResponsePayload {
+	v := &agents.CreateResponsePayload{
 		Model:              *body.Model,
 		Instructions:       body.Instructions,
 		Input:              body.Input,
@@ -1177,38 +1172,38 @@ func NewCreateResponsePayload(body *CreateResponseRequestBody, apikeyToken *stri
 	if body.Toolsets != nil {
 		v.Toolsets = make([]*agents.AgentToolset, len(body.Toolsets))
 		for i, val := range body.Toolsets {
-			v.Toolsets[i] = unmarshalAgentToolsetRequestBodyRequestBodyToAgentsAgentToolset(val)
+			v.Toolsets[i] = unmarshalAgentToolsetRequestBodyToAgentsAgentToolset(val)
 		}
 	}
 	if body.SubAgents != nil {
 		v.SubAgents = make([]*agents.AgentSubAgent, len(body.SubAgents))
 		for i, val := range body.SubAgents {
-			v.SubAgents[i] = unmarshalAgentSubAgentRequestBodyRequestBodyToAgentsAgentSubAgent(val)
+			v.SubAgents[i] = unmarshalAgentSubAgentRequestBodyToAgentsAgentSubAgent(val)
 		}
 	}
-	res := &agents.CreateResponsePayload{
-		Body: v,
-	}
-	res.ApikeyToken = apikeyToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
 
-	return res
+	return v
 }
 
 // NewGetResponsePayload builds a agents service getResponse endpoint payload.
-func NewGetResponsePayload(responseID string, apikeyToken *string) *agents.GetResponsePayload {
+func NewGetResponsePayload(responseID string, apikeyToken *string, projectSlugInput *string) *agents.GetResponsePayload {
 	v := &agents.GetResponsePayload{}
 	v.ResponseID = responseID
 	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewDeleteResponsePayload builds a agents service deleteResponse endpoint
 // payload.
-func NewDeleteResponsePayload(responseID string, apikeyToken *string) *agents.DeleteResponsePayload {
+func NewDeleteResponsePayload(responseID string, apikeyToken *string, projectSlugInput *string) *agents.DeleteResponsePayload {
 	v := &agents.DeleteResponsePayload{}
 	v.ResponseID = responseID
 	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
@@ -1216,9 +1211,6 @@ func NewDeleteResponsePayload(responseID string, apikeyToken *string) *agents.De
 // ValidateCreateResponseRequestBody runs the validations defined on
 // CreateResponseRequestBody
 func ValidateCreateResponseRequestBody(body *CreateResponseRequestBody) (err error) {
-	if body.ProjectSlug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "body"))
-	}
 	if body.Model == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("model", "body"))
 	}
@@ -1227,14 +1219,14 @@ func ValidateCreateResponseRequestBody(body *CreateResponseRequestBody) (err err
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {
-			if err2 := ValidateAgentToolsetRequestBodyRequestBody(e); err2 != nil {
+			if err2 := ValidateAgentToolsetRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
 	}
 	for _, e := range body.SubAgents {
 		if e != nil {
-			if err2 := ValidateAgentSubAgentRequestBodyRequestBody(e); err2 != nil {
+			if err2 := ValidateAgentSubAgentRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -1242,9 +1234,9 @@ func ValidateCreateResponseRequestBody(body *CreateResponseRequestBody) (err err
 	return
 }
 
-// ValidateAgentToolsetRequestBodyRequestBody runs the validations defined on
-// AgentToolsetRequestBodyRequestBody
-func ValidateAgentToolsetRequestBodyRequestBody(body *AgentToolsetRequestBodyRequestBody) (err error) {
+// ValidateAgentToolsetRequestBody runs the validations defined on
+// AgentToolsetRequestBody
+func ValidateAgentToolsetRequestBody(body *AgentToolsetRequestBody) (err error) {
 	if body.ToolsetSlug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_slug", "body"))
 	}
@@ -1254,9 +1246,9 @@ func ValidateAgentToolsetRequestBodyRequestBody(body *AgentToolsetRequestBodyReq
 	return
 }
 
-// ValidateAgentSubAgentRequestBodyRequestBody runs the validations defined on
-// AgentSubAgentRequestBodyRequestBody
-func ValidateAgentSubAgentRequestBodyRequestBody(body *AgentSubAgentRequestBodyRequestBody) (err error) {
+// ValidateAgentSubAgentRequestBody runs the validations defined on
+// AgentSubAgentRequestBody
+func ValidateAgentSubAgentRequestBody(body *AgentSubAgentRequestBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1265,7 +1257,7 @@ func ValidateAgentSubAgentRequestBodyRequestBody(body *AgentSubAgentRequestBodyR
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {
-			if err2 := ValidateAgentToolsetRequestBodyRequestBody(e); err2 != nil {
+			if err2 := ValidateAgentToolsetRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}

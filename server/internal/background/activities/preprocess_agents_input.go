@@ -53,8 +53,7 @@ func (a *PreprocessAgentsInput) Do(ctx context.Context, input PreprocessAgentsIn
 	a.logger.InfoContext(ctx, "preprocessing agents input",
 		attr.SlogOrganizationID(input.OrgID),
 		attr.SlogProjectID(input.ProjectID.String()),
-		attr.SlogProjectSlug(input.Request.ProjectSlug))
-
+	)
 	// If PreviousResponseID is provided, fetch its output and convert to messages
 	request := input.Request
 	var messages []openrouter.OpenAIChatMessage

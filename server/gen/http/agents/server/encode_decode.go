@@ -56,18 +56,30 @@ func DecodeCreateResponseRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		}
 
 		var (
-			apikeyToken *string
+			apikeyToken      *string
+			projectSlugInput *string
 		)
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
 		}
-		payload := NewCreateResponsePayload(&body, apikeyToken)
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload := NewCreateResponsePayload(&body, apikeyToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
 				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -248,9 +260,10 @@ func EncodeGetResponseResponse(encoder func(context.Context, http.ResponseWriter
 func DecodeGetResponseRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agents.GetResponsePayload, error) {
 	return func(r *http.Request) (*agents.GetResponsePayload, error) {
 		var (
-			responseID  string
-			apikeyToken *string
-			err         error
+			responseID       string
+			apikeyToken      *string
+			projectSlugInput *string
+			err              error
 		)
 		responseID = r.URL.Query().Get("response_id")
 		if responseID == "" {
@@ -260,15 +273,26 @@ func DecodeGetResponseRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
 		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewGetResponsePayload(responseID, apikeyToken)
+		payload := NewGetResponsePayload(responseID, apikeyToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
 				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -446,9 +470,10 @@ func EncodeDeleteResponseResponse(encoder func(context.Context, http.ResponseWri
 func DecodeDeleteResponseRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agents.DeleteResponsePayload, error) {
 	return func(r *http.Request) (*agents.DeleteResponsePayload, error) {
 		var (
-			responseID  string
-			apikeyToken *string
-			err         error
+			responseID       string
+			apikeyToken      *string
+			projectSlugInput *string
+			err              error
 		)
 		responseID = r.URL.Query().Get("response_id")
 		if responseID == "" {
@@ -458,15 +483,26 @@ func DecodeDeleteResponseRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
 		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewDeleteResponsePayload(responseID, apikeyToken)
+		payload := NewDeleteResponsePayload(responseID, apikeyToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
 				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -630,10 +666,9 @@ func EncodeDeleteResponseError(encoder func(context.Context, http.ResponseWriter
 	}
 }
 
-// unmarshalAgentToolsetRequestBodyRequestBodyToAgentsAgentToolset builds a
-// value of type *agents.AgentToolset from a value of type
-// *AgentToolsetRequestBodyRequestBody.
-func unmarshalAgentToolsetRequestBodyRequestBodyToAgentsAgentToolset(v *AgentToolsetRequestBodyRequestBody) *agents.AgentToolset {
+// unmarshalAgentToolsetRequestBodyToAgentsAgentToolset builds a value of type
+// *agents.AgentToolset from a value of type *AgentToolsetRequestBody.
+func unmarshalAgentToolsetRequestBodyToAgentsAgentToolset(v *AgentToolsetRequestBody) *agents.AgentToolset {
 	if v == nil {
 		return nil
 	}
@@ -653,10 +688,9 @@ func unmarshalAgentToolsetRequestBodyRequestBodyToAgentsAgentToolset(v *AgentToo
 	return res
 }
 
-// unmarshalAgentSubAgentRequestBodyRequestBodyToAgentsAgentSubAgent builds a
-// value of type *agents.AgentSubAgent from a value of type
-// *AgentSubAgentRequestBodyRequestBody.
-func unmarshalAgentSubAgentRequestBodyRequestBodyToAgentsAgentSubAgent(v *AgentSubAgentRequestBodyRequestBody) *agents.AgentSubAgent {
+// unmarshalAgentSubAgentRequestBodyToAgentsAgentSubAgent builds a value of
+// type *agents.AgentSubAgent from a value of type *AgentSubAgentRequestBody.
+func unmarshalAgentSubAgentRequestBodyToAgentsAgentSubAgent(v *AgentSubAgentRequestBody) *agents.AgentSubAgent {
 	if v == nil {
 		return nil
 	}
@@ -675,7 +709,7 @@ func unmarshalAgentSubAgentRequestBodyRequestBodyToAgentsAgentSubAgent(v *AgentS
 	if v.Toolsets != nil {
 		res.Toolsets = make([]*agents.AgentToolset, len(v.Toolsets))
 		for i, val := range v.Toolsets {
-			res.Toolsets[i] = unmarshalAgentToolsetRequestBodyRequestBodyToAgentsAgentToolset(val)
+			res.Toolsets[i] = unmarshalAgentToolsetRequestBodyToAgentsAgentToolset(val)
 		}
 	}
 

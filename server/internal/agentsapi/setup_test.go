@@ -11,8 +11,8 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/testsuite"
 
-	"github.com/speakeasy-api/gram/server/internal/agentsapi"
 	"github.com/speakeasy-api/gram/server/internal/agents"
+	"github.com/speakeasy-api/gram/server/internal/agentsapi"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -132,6 +132,7 @@ func newTestAgentsAPIService(t *testing.T) (context.Context, *testInstance) {
 		nil, // chat client
 		authService,
 		temporalClient,
+		"default",
 	)
 
 	return ctx, &testInstance{

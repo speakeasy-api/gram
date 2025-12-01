@@ -143,7 +143,6 @@ type SubAgent struct {
 }
 
 type ResponseRequest struct {
-	ProjectSlug        string        `json:"project_slug"`
 	Model              string        `json:"model"`
 	Instructions       *string       `json:"instructions,omitempty"`
 	Input              ResponseInput `json:"input"` // Can be string or []OutputMessage

@@ -17,13 +17,13 @@ import (
 
 // BuildCreateResponsePayload builds the payload for the agents createResponse
 // endpoint from CLI flags.
-func BuildCreateResponsePayload(agentsCreateResponseBody string, agentsCreateResponseApikeyToken string) (*agents.CreateResponsePayload, error) {
+func BuildCreateResponsePayload(agentsCreateResponseBody string, agentsCreateResponseApikeyToken string, agentsCreateResponseProjectSlugInput string) (*agents.CreateResponsePayload, error) {
 	var err error
 	var body CreateResponseRequestBody
 	{
 		err = json.Unmarshal([]byte(agentsCreateResponseBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"async\": false,\n      \"input\": \"Id ut nulla est soluta.\",\n      \"instructions\": \"Et aliquam et consequuntur vitae placeat.\",\n      \"model\": \"Nesciunt est.\",\n      \"previous_response_id\": \"Quia sint repudiandae vel.\",\n      \"project_slug\": \"Ut aut id ullam qui.\",\n      \"store\": false,\n      \"sub_agents\": [\n         {\n            \"description\": \"Blanditiis consequatur nostrum earum adipisci dolor autem.\",\n            \"environment_slug\": \"Dignissimos iste eos asperiores officia molestiae.\",\n            \"instructions\": \"Aut enim magni autem ipsum ab facere.\",\n            \"name\": \"Voluptates deserunt reiciendis voluptatem a id.\",\n            \"tools\": [\n               \"In in et voluptatem nulla dicta adipisci.\",\n               \"Dolor error sequi iste optio cum quo.\",\n               \"Itaque illo.\",\n               \"Iusto quo et minus.\"\n            ],\n            \"toolsets\": [\n               {\n                  \"environment_slug\": \"Qui voluptatem sapiente.\",\n                  \"headers\": {\n                     \"Et eligendi.\": \"Aliquam odit impedit.\",\n                     \"Repellendus autem consectetur.\": \"Ut rerum quia.\"\n                  },\n                  \"toolset_slug\": \"Voluptatem saepe officiis repudiandae placeat.\"\n               },\n               {\n                  \"environment_slug\": \"Qui voluptatem sapiente.\",\n                  \"headers\": {\n                     \"Et eligendi.\": \"Aliquam odit impedit.\",\n                     \"Repellendus autem consectetur.\": \"Ut rerum quia.\"\n                  },\n                  \"toolset_slug\": \"Voluptatem saepe officiis repudiandae placeat.\"\n               },\n               {\n                  \"environment_slug\": \"Qui voluptatem sapiente.\",\n                  \"headers\": {\n                     \"Et eligendi.\": \"Aliquam odit impedit.\",\n                     \"Repellendus autem consectetur.\": \"Ut rerum quia.\"\n                  },\n                  \"toolset_slug\": \"Voluptatem saepe officiis repudiandae placeat.\"\n               },\n               {\n                  \"environment_slug\": \"Qui voluptatem sapiente.\",\n                  \"headers\": {\n                     \"Et eligendi.\": \"Aliquam odit impedit.\",\n                     \"Repellendus autem consectetur.\": \"Ut rerum quia.\"\n                  },\n                  \"toolset_slug\": \"Voluptatem saepe officiis repudiandae placeat.\"\n               }\n            ]\n         },\n         {\n            \"description\": \"Blanditiis consequatur nostrum earum adipisci dolor autem.\",\n            \"environment_slug\": \"Dignissimos iste eos asperiores officia molestiae.\",\n            \"instructions\": \"Aut enim magni autem ipsum ab facere.\",\n            \"name\": \"Voluptates deserunt reiciendis voluptatem a id.\",\n            \"tools\": [\n               \"In in et voluptatem nulla dicta adipisci.\",\n               \"Dolor error sequi iste optio cum quo.\",\n               \"Itaque illo.\",\n               \"Iusto quo et minus.\"\n            ],\n            \"toolsets\": [\n               {\n                  \"environment_slug\": \"Qui voluptatem sapiente.\",\n                  \"headers\": {\n                     \"Et eligendi.\": \"Aliquam odit impedit.\",\n                     \"Repellendus autem consectetur.\": \"Ut rerum quia.\"\n                  },\n                  \"toolset_slug\": \"Voluptatem saepe officiis repudiandae placeat.\"\n               },\n               {\n                  \"environment_slug\": \"Qui voluptatem sapiente.\",\n                  \"headers\": {\n                     \"Et eligendi.\": \"Aliquam odit impedit.\",\n                     \"Repellendus autem consectetur.\": \"Ut rerum quia.\"\n                  },\n                  \"toolset_slug\": \"Voluptatem saepe officiis repudiandae placeat.\"\n               },\n               {\n                  \"environment_slug\": \"Qui voluptatem sapiente.\",\n                  \"headers\": {\n                     \"Et eligendi.\": \"Aliquam odit impedit.\",\n                     \"Repellendus autem consectetur.\": \"Ut rerum quia.\"\n                  },\n                  \"toolset_slug\": \"Voluptatem saepe officiis repudiandae placeat.\"\n               },\n               {\n                  \"environment_slug\": \"Qui voluptatem sapiente.\",\n                  \"headers\": {\n                     \"Et eligendi.\": \"Aliquam odit impedit.\",\n                     \"Repellendus autem consectetur.\": \"Ut rerum quia.\"\n                  },\n                  \"toolset_slug\": \"Voluptatem saepe officiis repudiandae placeat.\"\n               }\n            ]\n         }\n      ],\n      \"temperature\": 0.5008531155445158,\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"Qui voluptatem sapiente.\",\n            \"headers\": {\n               \"Et eligendi.\": \"Aliquam odit impedit.\",\n               \"Repellendus autem consectetur.\": \"Ut rerum quia.\"\n            },\n            \"toolset_slug\": \"Voluptatem saepe officiis repudiandae placeat.\"\n         },\n         {\n            \"environment_slug\": \"Qui voluptatem sapiente.\",\n            \"headers\": {\n               \"Et eligendi.\": \"Aliquam odit impedit.\",\n               \"Repellendus autem consectetur.\": \"Ut rerum quia.\"\n            },\n            \"toolset_slug\": \"Voluptatem saepe officiis repudiandae placeat.\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"async\": false,\n      \"input\": \"Itaque illo.\",\n      \"instructions\": \"Dolor error sequi iste optio cum quo.\",\n      \"model\": \"Voluptatem nulla dicta adipisci.\",\n      \"previous_response_id\": \"Iusto quo et minus.\",\n      \"store\": false,\n      \"sub_agents\": [\n         {\n            \"description\": \"Doloremque iste temporibus omnis sequi voluptas.\",\n            \"environment_slug\": \"Inventore voluptatem commodi suscipit accusamus necessitatibus.\",\n            \"instructions\": \"Sint mollitia.\",\n            \"name\": \"Ea qui necessitatibus praesentium est.\",\n            \"tools\": [\n               \"Qui amet ipsam.\",\n               \"Id voluptatem sed voluptatum aspernatur voluptatem.\",\n               \"Laudantium ut.\",\n               \"Est et.\"\n            ],\n            \"toolsets\": [\n               {\n                  \"environment_slug\": \"Ipsam nihil consequatur cum neque qui architecto.\",\n                  \"headers\": {\n                     \"Cumque molestiae saepe et.\": \"Atque accusamus illum aut.\",\n                     \"Qui libero sint aut.\": \"Alias labore.\",\n                     \"Voluptas aut culpa nobis fuga quibusdam.\": \"Eum natus omnis deserunt.\"\n                  },\n                  \"toolset_slug\": \"Iste eos asperiores officia.\"\n               },\n               {\n                  \"environment_slug\": \"Ipsam nihil consequatur cum neque qui architecto.\",\n                  \"headers\": {\n                     \"Cumque molestiae saepe et.\": \"Atque accusamus illum aut.\",\n                     \"Qui libero sint aut.\": \"Alias labore.\",\n                     \"Voluptas aut culpa nobis fuga quibusdam.\": \"Eum natus omnis deserunt.\"\n                  },\n                  \"toolset_slug\": \"Iste eos asperiores officia.\"\n               }\n            ]\n         },\n         {\n            \"description\": \"Doloremque iste temporibus omnis sequi voluptas.\",\n            \"environment_slug\": \"Inventore voluptatem commodi suscipit accusamus necessitatibus.\",\n            \"instructions\": \"Sint mollitia.\",\n            \"name\": \"Ea qui necessitatibus praesentium est.\",\n            \"tools\": [\n               \"Qui amet ipsam.\",\n               \"Id voluptatem sed voluptatum aspernatur voluptatem.\",\n               \"Laudantium ut.\",\n               \"Est et.\"\n            ],\n            \"toolsets\": [\n               {\n                  \"environment_slug\": \"Ipsam nihil consequatur cum neque qui architecto.\",\n                  \"headers\": {\n                     \"Cumque molestiae saepe et.\": \"Atque accusamus illum aut.\",\n                     \"Qui libero sint aut.\": \"Alias labore.\",\n                     \"Voluptas aut culpa nobis fuga quibusdam.\": \"Eum natus omnis deserunt.\"\n                  },\n                  \"toolset_slug\": \"Iste eos asperiores officia.\"\n               },\n               {\n                  \"environment_slug\": \"Ipsam nihil consequatur cum neque qui architecto.\",\n                  \"headers\": {\n                     \"Cumque molestiae saepe et.\": \"Atque accusamus illum aut.\",\n                     \"Qui libero sint aut.\": \"Alias labore.\",\n                     \"Voluptas aut culpa nobis fuga quibusdam.\": \"Eum natus omnis deserunt.\"\n                  },\n                  \"toolset_slug\": \"Iste eos asperiores officia.\"\n               }\n            ]\n         },\n         {\n            \"description\": \"Doloremque iste temporibus omnis sequi voluptas.\",\n            \"environment_slug\": \"Inventore voluptatem commodi suscipit accusamus necessitatibus.\",\n            \"instructions\": \"Sint mollitia.\",\n            \"name\": \"Ea qui necessitatibus praesentium est.\",\n            \"tools\": [\n               \"Qui amet ipsam.\",\n               \"Id voluptatem sed voluptatum aspernatur voluptatem.\",\n               \"Laudantium ut.\",\n               \"Est et.\"\n            ],\n            \"toolsets\": [\n               {\n                  \"environment_slug\": \"Ipsam nihil consequatur cum neque qui architecto.\",\n                  \"headers\": {\n                     \"Cumque molestiae saepe et.\": \"Atque accusamus illum aut.\",\n                     \"Qui libero sint aut.\": \"Alias labore.\",\n                     \"Voluptas aut culpa nobis fuga quibusdam.\": \"Eum natus omnis deserunt.\"\n                  },\n                  \"toolset_slug\": \"Iste eos asperiores officia.\"\n               },\n               {\n                  \"environment_slug\": \"Ipsam nihil consequatur cum neque qui architecto.\",\n                  \"headers\": {\n                     \"Cumque molestiae saepe et.\": \"Atque accusamus illum aut.\",\n                     \"Qui libero sint aut.\": \"Alias labore.\",\n                     \"Voluptas aut culpa nobis fuga quibusdam.\": \"Eum natus omnis deserunt.\"\n                  },\n                  \"toolset_slug\": \"Iste eos asperiores officia.\"\n               }\n            ]\n         },\n         {\n            \"description\": \"Doloremque iste temporibus omnis sequi voluptas.\",\n            \"environment_slug\": \"Inventore voluptatem commodi suscipit accusamus necessitatibus.\",\n            \"instructions\": \"Sint mollitia.\",\n            \"name\": \"Ea qui necessitatibus praesentium est.\",\n            \"tools\": [\n               \"Qui amet ipsam.\",\n               \"Id voluptatem sed voluptatum aspernatur voluptatem.\",\n               \"Laudantium ut.\",\n               \"Est et.\"\n            ],\n            \"toolsets\": [\n               {\n                  \"environment_slug\": \"Ipsam nihil consequatur cum neque qui architecto.\",\n                  \"headers\": {\n                     \"Cumque molestiae saepe et.\": \"Atque accusamus illum aut.\",\n                     \"Qui libero sint aut.\": \"Alias labore.\",\n                     \"Voluptas aut culpa nobis fuga quibusdam.\": \"Eum natus omnis deserunt.\"\n                  },\n                  \"toolset_slug\": \"Iste eos asperiores officia.\"\n               },\n               {\n                  \"environment_slug\": \"Ipsam nihil consequatur cum neque qui architecto.\",\n                  \"headers\": {\n                     \"Cumque molestiae saepe et.\": \"Atque accusamus illum aut.\",\n                     \"Qui libero sint aut.\": \"Alias labore.\",\n                     \"Voluptas aut culpa nobis fuga quibusdam.\": \"Eum natus omnis deserunt.\"\n                  },\n                  \"toolset_slug\": \"Iste eos asperiores officia.\"\n               }\n            ]\n         }\n      ],\n      \"temperature\": 0.024966261400284993,\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"Ipsam nihil consequatur cum neque qui architecto.\",\n            \"headers\": {\n               \"Cumque molestiae saepe et.\": \"Atque accusamus illum aut.\",\n               \"Qui libero sint aut.\": \"Alias labore.\",\n               \"Voluptas aut culpa nobis fuga quibusdam.\": \"Eum natus omnis deserunt.\"\n            },\n            \"toolset_slug\": \"Iste eos asperiores officia.\"\n         },\n         {\n            \"environment_slug\": \"Ipsam nihil consequatur cum neque qui architecto.\",\n            \"headers\": {\n               \"Cumque molestiae saepe et.\": \"Atque accusamus illum aut.\",\n               \"Qui libero sint aut.\": \"Alias labore.\",\n               \"Voluptas aut culpa nobis fuga quibusdam.\": \"Eum natus omnis deserunt.\"\n            },\n            \"toolset_slug\": \"Iste eos asperiores officia.\"\n         },\n         {\n            \"environment_slug\": \"Ipsam nihil consequatur cum neque qui architecto.\",\n            \"headers\": {\n               \"Cumque molestiae saepe et.\": \"Atque accusamus illum aut.\",\n               \"Qui libero sint aut.\": \"Alias labore.\",\n               \"Voluptas aut culpa nobis fuga quibusdam.\": \"Eum natus omnis deserunt.\"\n            },\n            \"toolset_slug\": \"Iste eos asperiores officia.\"\n         }\n      ]\n   }'")
 		}
 		if body.Input == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("input", "body"))
@@ -38,8 +38,13 @@ func BuildCreateResponsePayload(agentsCreateResponseBody string, agentsCreateRes
 			apikeyToken = &agentsCreateResponseApikeyToken
 		}
 	}
-	v := &agents.AgentResponseRequest{
-		ProjectSlug:        body.ProjectSlug,
+	var projectSlugInput *string
+	{
+		if agentsCreateResponseProjectSlugInput != "" {
+			projectSlugInput = &agentsCreateResponseProjectSlugInput
+		}
+	}
+	v := &agents.CreateResponsePayload{
 		Model:              body.Model,
 		Instructions:       body.Instructions,
 		Input:              body.Input,
@@ -51,26 +56,24 @@ func BuildCreateResponsePayload(agentsCreateResponseBody string, agentsCreateRes
 	if body.Toolsets != nil {
 		v.Toolsets = make([]*agents.AgentToolset, len(body.Toolsets))
 		for i, val := range body.Toolsets {
-			v.Toolsets[i] = marshalAgentToolsetRequestBodyRequestBodyToAgentsAgentToolset(val)
+			v.Toolsets[i] = marshalAgentToolsetRequestBodyToAgentsAgentToolset(val)
 		}
 	}
 	if body.SubAgents != nil {
 		v.SubAgents = make([]*agents.AgentSubAgent, len(body.SubAgents))
 		for i, val := range body.SubAgents {
-			v.SubAgents[i] = marshalAgentSubAgentRequestBodyRequestBodyToAgentsAgentSubAgent(val)
+			v.SubAgents[i] = marshalAgentSubAgentRequestBodyToAgentsAgentSubAgent(val)
 		}
 	}
-	res := &agents.CreateResponsePayload{
-		Body: v,
-	}
-	res.ApikeyToken = apikeyToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
 
-	return res, nil
+	return v, nil
 }
 
 // BuildGetResponsePayload builds the payload for the agents getResponse
 // endpoint from CLI flags.
-func BuildGetResponsePayload(agentsGetResponseResponseID string, agentsGetResponseApikeyToken string) (*agents.GetResponsePayload, error) {
+func BuildGetResponsePayload(agentsGetResponseResponseID string, agentsGetResponseApikeyToken string, agentsGetResponseProjectSlugInput string) (*agents.GetResponsePayload, error) {
 	var responseID string
 	{
 		responseID = agentsGetResponseResponseID
@@ -81,16 +84,23 @@ func BuildGetResponsePayload(agentsGetResponseResponseID string, agentsGetRespon
 			apikeyToken = &agentsGetResponseApikeyToken
 		}
 	}
+	var projectSlugInput *string
+	{
+		if agentsGetResponseProjectSlugInput != "" {
+			projectSlugInput = &agentsGetResponseProjectSlugInput
+		}
+	}
 	v := &agents.GetResponsePayload{}
 	v.ResponseID = responseID
 	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildDeleteResponsePayload builds the payload for the agents deleteResponse
 // endpoint from CLI flags.
-func BuildDeleteResponsePayload(agentsDeleteResponseResponseID string, agentsDeleteResponseApikeyToken string) (*agents.DeleteResponsePayload, error) {
+func BuildDeleteResponsePayload(agentsDeleteResponseResponseID string, agentsDeleteResponseApikeyToken string, agentsDeleteResponseProjectSlugInput string) (*agents.DeleteResponsePayload, error) {
 	var responseID string
 	{
 		responseID = agentsDeleteResponseResponseID
@@ -101,9 +111,16 @@ func BuildDeleteResponsePayload(agentsDeleteResponseResponseID string, agentsDel
 			apikeyToken = &agentsDeleteResponseApikeyToken
 		}
 	}
+	var projectSlugInput *string
+	{
+		if agentsDeleteResponseProjectSlugInput != "" {
+			projectSlugInput = &agentsDeleteResponseProjectSlugInput
+		}
+	}
 	v := &agents.DeleteResponsePayload{}
 	v.ResponseID = responseID
 	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
