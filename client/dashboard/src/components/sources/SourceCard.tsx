@@ -16,7 +16,6 @@ import {
 } from "@gram/client/react-query/index.js";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
 import { Badge } from "@speakeasy-api/moonshine";
-import { isAfter, subDays } from "date-fns";
 import { CircleAlertIcon, FileCode, Globe, SquareFunction } from "lucide-react";
 
 export type NamedAsset = Asset & {
@@ -45,11 +44,6 @@ export function SourceCard({
   const IconComponent = asset.type === "openapi" ? FileCode : SquareFunction;
 
   const sourceKind = asset.type === "openapi" ? "http" : "function";
-
-  // Check if source was updated in the last 7 days
-  const isRecentlyUpdated = asset.updatedAt
-    ? isAfter(new Date(asset.updatedAt), subDays(new Date(), 7))
-    : false;
 
   // Check if environment is attached
   const sourceEnvironment = useGetSourceEnvironment(
