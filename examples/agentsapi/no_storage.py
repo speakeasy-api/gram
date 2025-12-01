@@ -16,15 +16,12 @@ headers = {
     "Gram-Key": os.getenv("GRAM_API_KEY"),
 }
 
-context = [
-  { "role": "role", "content": f"Get me a speakeasy org {org_slug}?" }
-]
-
 payload = {
     "project_slug": "default",
     "model": "openai/gpt-4o",
     "instructions": "You are a helpful assistant that can help with Speakeasy SDK operations.",
-    "input": context,
+    "input": f"Get me a speakeasy org {org_slug}?",
+    "store": False,
     "toolsets": [
         {"toolset_slug": "speakeasy", "environment_slug": "default", "headers": {}},
         {"toolset_slug": "app-sdk", "environment_slug": "default", "headers": {}},
@@ -34,24 +31,18 @@ payload = {
 print("=== Turn 1 ===")
 resp = requests.post(url, headers=headers, json=payload)
 data = resp.json()
+response_id = data["id"]
 print(data["output"][-1]["content"][-1]["text"])
 
 if verbose:
     print("\nFull response:")
     print(json.dumps(data, indent=2))
 
-context = [
-  *data["output"],
-  { "role": "user", "content": "What are the workspaces in that org?" }
-]
+poll_url = f"{server_url}/rpc/agents.response?response_id={response_id}"
+try:
+    poll_resp = requests.get(poll_url, headers=headers)
+    poll_resp.raise_for_status()
+except requests.exceptions.HTTPError as e:
+    print(f"\nExpected error: {e}")
 
-payload["input"] = context
 
-print("\n=== Turn 2 ===")
-resp = requests.post(url, headers=headers, json=payload)
-data = resp.json()
-print(data["output"][-1]["content"][-1]["text"])
-
-if verbose:
-    print("\nFull response:")
-    print(json.dumps(data, indent=2))

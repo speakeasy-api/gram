@@ -8,9 +8,10 @@ import requests
 verbose = "-v" in sys.argv
 
 # Configuration
+server_url = "https://api.getgram.ai"
 org_slug = ""  # Change this to your organization slug
 
-url = "http://localhost:8080/rpc/agents.response"
+url = f"{server_url}/rpc/agents.response"
 headers = {
     "Content-Type": "application/json",
     "Gram-Key": os.getenv("GRAM_API_KEY"),
@@ -61,7 +62,7 @@ response_id = data["id"]
 print(f"Response ID: {response_id}")
 
 # Poll for completion
-poll_url = f"http://localhost:8080/rpc/agents.response?response_id={response_id}"
+poll_url = f"{server_url}/rpc/agents.response?response_id={response_id}"
 while True:
     time.sleep(5)
     poll_resp = requests.get(poll_url, headers=headers)
