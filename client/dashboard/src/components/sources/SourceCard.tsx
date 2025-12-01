@@ -4,30 +4,20 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { MoreActions } from "@/components/ui/more-actions";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
-  useLatestDeployment,
   useGetSourceEnvironment,
+  useLatestDeployment,
 } from "@gram/client/react-query/index.js";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  CircleAlertIcon,
-  FileCode,
-  SquareFunction,
-  Sparkles,
-  Globe,
-} from "lucide-react";
 import { Badge } from "@speakeasy-api/moonshine";
-import { isAfter, subDays, format } from "date-fns";
-import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { isAfter, subDays } from "date-fns";
+import { CircleAlertIcon, FileCode, Globe, SquareFunction } from "lucide-react";
 
 export type NamedAsset = Asset & {
   deploymentAssetId: string;
@@ -122,55 +112,28 @@ export function SourceCard({
         </div>
       </div>
 
-      <div className="leading-none mb-1.5 flex items-center gap-2 flex-wrap">
+      <div className="leading-none mb-1.5 flex items-center justify-between flex-wrap">
         <Type>{asset.name}</Type>
         {hasEnvironment && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge
-                variant="success"
-                className="flex items-center gap-1 text-xs"
-              >
-                <Globe className="h-3 w-3" />
-                Env
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent inverted>
-              <div className="space-y-1">
-                <Type small>Attached Environment</Type>
-                <Type small>{sourceEnvironment.data?.name || "Unknown"}</Type>
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        )}
-        {isRecentlyUpdated && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge
-                variant="information"
-                className="flex items-center gap-1 text-xs"
-              >
-                <Sparkles className="h-3 w-3" />
-                Updated
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent inverted>
-              <div className="space-y-1">
-                <Type small>Last Updated</Type>
-                <Type small>
-                  {asset.updatedAt
-                    ? format(new Date(asset.updatedAt), "PPpp")
-                    : "Unknown"}
-                </Type>
-              </div>
-            </TooltipContent>
-          </Tooltip>
+          <SimpleTooltip
+            tooltip={`Attached environment: ${sourceEnvironment.data?.name || "Unknown"}`}
+          >
+            <Badge className="flex items-center gap-1 text-xs">
+              <Globe className="h-3 w-3" />
+              Env
+            </Badge>
+          </SimpleTooltip>
         )}
       </div>
 
       <div className="flex gap-1.5 items-center text-muted-foreground text-xs">
         {causingFailure && <AssetIsCausingFailureNotice />}
-        <UpdatedAt date={asset.updatedAt} italic={false} className="text-xs" />
+        <UpdatedAt
+          date={asset.updatedAt}
+          italic={false}
+          className="text-xs"
+          showRecentness
+        />
       </div>
     </routes.sources.source.Link>
   );
