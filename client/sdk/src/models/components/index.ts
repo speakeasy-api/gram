@@ -5,6 +5,7 @@
 export * from "./adddeploymentpackageform.js";
 export * from "./addexternaloauthserverrequestbody.js";
 export * from "./addfunctionsform.js";
+export * from "./addoauthproxyserverrequestbody.js";
 export * from "./addopenapiv3deploymentassetform.js";
 export * from "./addpackageform.js";
 export * from "./asset.js";
@@ -78,6 +79,7 @@ export * from "./notmodified.js";
 export * from "./oauthenablementmetadata.js";
 export * from "./oauthproxyprovider.js";
 export * from "./oauthproxyserver.js";
+export * from "./oauthproxyserverform.js";
 export * from "./openapiv3deploymentasset.js";
 export * from "./organizationentry.js";
 export * from "./package.js";

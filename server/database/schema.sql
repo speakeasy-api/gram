@@ -916,6 +916,7 @@ CREATE TABLE IF NOT EXISTS mcp_metadata (
   project_id UUID NOT NULL,
   external_documentation_url TEXT,
   logo_id UUID,
+  instructions TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

@@ -162,7 +162,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3.5.0
+        uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3.5.1
         with:
           install: true
           cache: true
@@ -251,7 +251,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.cli == 'true' }}
-        uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3.5.0
+        uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3.5.1
         with:
           install: true
           cache: true
@@ -318,7 +318,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3.5.0
+        uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3.5.1
         with:
           install: true
           cache: true
@@ -364,7 +364,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.client == 'true' }}
-        uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3.5.0
+        uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3.5.1
         with:
           install: true
           cache: true
@@ -447,7 +447,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.client == 'true' }}
-        uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3.5.0
+        uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3.5.1
         with:
           install: true
           cache: true
@@ -508,7 +508,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.client == 'true' }}
-        uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3.5.0
+        uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3.5.1
         with:
           install: true
           cache: true
@@ -565,7 +565,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3.5.0
+        uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3.5.1
         with:
           install: true
           cache: true
@@ -680,7 +680,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3.5.0
+        uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3.5.1
         with:
           install: true
           cache: true
@@ -769,7 +769,7 @@ jobs:
       - name: Extract Docker metadata
         if: ${{ needs.changes.outputs.functions == 'true' }}
         id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # v5.9.0
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: |
             ${{ steps.flyCreateDev.outputs.flyAppRegistry }}
@@ -831,7 +831,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.tsframework == 'true' }}
-        uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3.5.0
+        uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3.5.1
         with:
           install: true
           cache: true

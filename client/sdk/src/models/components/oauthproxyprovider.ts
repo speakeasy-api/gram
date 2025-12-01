@@ -18,6 +18,10 @@ export type OAuthProxyProvider = {
    */
   createdAt: Date;
   /**
+   * A short url-friendly label that uniquely identifies a resource.
+   */
+  environmentSlug?: string | undefined;
+  /**
    * The grant types supported by this provider
    */
   grantTypesSupported?: Array<string> | undefined;
@@ -55,6 +59,7 @@ export const OAuthProxyProvider$inboundSchema: z.ZodType<
 > = z.object({
   authorization_endpoint: z.string(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
+  environment_slug: z.string().optional(),
   grant_types_supported: z.array(z.string()).optional(),
   id: z.string(),
   scopes_supported: z.array(z.string()).optional(),
@@ -66,6 +71,7 @@ export const OAuthProxyProvider$inboundSchema: z.ZodType<
   return remap$(v, {
     "authorization_endpoint": "authorizationEndpoint",
     "created_at": "createdAt",
+    "environment_slug": "environmentSlug",
     "grant_types_supported": "grantTypesSupported",
     "scopes_supported": "scopesSupported",
     "token_endpoint": "tokenEndpoint",

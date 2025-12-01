@@ -1,0 +1,52 @@
+{
+  "type": "module",
+  "name": "clickhouse",
+  "version": "0.0.0",
+  "author": "",
+  "description": "",
+  "private": true,
+  "keywords": [
+    "mcp",
+    "getgram.ai"
+  ],
+  "license": "ISC",
+  "main": "dist/functions.js",
+  "files": [
+    "src",
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "dev": "npm run db:start && mcp-inspector nodemon -q --watch src --exec node ./src/server.ts",
+    "lint": "tsc --noEmit",
+    "push": "gf push",
+    "prebuild": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build",
+    "build": "gf build",
+    "test": "vitest",
+    "db:start": "docker compose up -d && npm run db:wait && npm run db:seed",
+    "db:stop": "docker compose down",
+    "db:reset": "docker compose down -v && npm run db:start",
+    "db:wait": "for i in {1..30}; do curl -s http://localhost:8124/ > /dev/null 2>&1 && break || sleep 1; done",
+    "db:seed": "CLICKHOUSE_HOST=localhost CLICKHOUSE_PORT=8124 CLICKHOUSE_USERNAME=gram_user CLICKHOUSE_PASSWORD=gram_password CLICKHOUSE_DATABASE=gram_example node --import tsx scripts/seed.ts"
+  },
+  "dependencies": {
+    "@gram-ai/functions": "^0.11.1",
+    "@modelcontextprotocol/sdk": "^1.20.1",
+    "zod": "^4",
+    "@clickhouse/client-web": "^1.6.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/inspector": "^0.17.1",
+    "nodemon": "^3.1.9",
+    "@types/node": "22.x",
+    "typescript": "^5",
+    "@types/papaparse": "^5.3.15",
+    "papaparse": "^5.4.1",
+    "tsx": "^4.19.2",
+    "vitest": "^2.1.8",
+    "@vitest/ui": "^2.1.8"
+  }
+}
