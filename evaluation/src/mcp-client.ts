@@ -1,6 +1,6 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import type { MCPServerConfig } from './types.js';
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import type { MCPServerConfig } from "./types.ts";
 
 /**
  * Manages connection to an MCP server
@@ -10,17 +10,17 @@ export class MCPClient {
   private transport: StdioClientTransport;
   private connected = false;
 
-  constructor(private config: MCPServerConfig) {
+  constructor(config: MCPServerConfig) {
     this.client = new Client(
       {
-        name: 'gram-evaluation-client',
-        version: '1.0.0',
+        name: "gram-evaluation-client",
+        version: "1.0.0",
       },
       {
         capabilities: {
           tools: {},
         },
-      }
+      },
     );
 
     this.transport = new StdioClientTransport({
@@ -47,7 +47,7 @@ export class MCPClient {
    */
   async listTools(): Promise<any[]> {
     if (!this.connected) {
-      throw new Error('Not connected to MCP server');
+      throw new Error("Not connected to MCP server");
     }
 
     const response = await this.client.listTools();
@@ -59,7 +59,7 @@ export class MCPClient {
    */
   async callTool(name: string, args: any): Promise<any> {
     if (!this.connected) {
-      throw new Error('Not connected to MCP server');
+      throw new Error("Not connected to MCP server");
     }
 
     const response = await this.client.callTool({ name, arguments: args });

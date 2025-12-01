@@ -35,7 +35,7 @@
   "dependencies": {
     "@bomb.sh/args": "^0.3.1",
     "@clack/prompts": "^1.0.0-alpha.6",
-    "zx": "8.8.4-lite"
+    "zx": "8.8.5-lite"
   },
   "devDependencies": {
     "@gram-ai/functions": "workspace:^",
