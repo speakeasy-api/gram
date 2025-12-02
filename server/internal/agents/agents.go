@@ -194,11 +194,18 @@ type ExecutionHistory struct {
 	SubAgentToolCalls   map[string]int `json:"sub_agent_tool_calls"`
 }
 
+// InputDetails captures the input context for an agent workflow
+type InputDetails struct {
+	Instructions *string `json:"instructions,omitempty"`
+	Prompt       string  `json:"prompt"`
+}
+
 // AgentsResponseWorkflowResult is the wrapper result returned by AgentsResponseWorkflow
 type AgentsResponseWorkflowResult struct {
 	OrgID            string           `json:"org_id"`
 	ResponseOutput   ResponseOutput   `json:"response_output"`
 	ExecutionHistory ExecutionHistory `json:"execution_history"`
+	InputDetails     InputDetails     `json:"input_details"`
 }
 
 type AgentTool struct {

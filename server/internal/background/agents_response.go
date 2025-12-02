@@ -92,12 +92,26 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 	if err != nil {
 		logger.Error("failed to preprocess agents input", "error", err)
 		errMsg := err.Error()
-		return buildErrorResponse(ctx, params, responseID, &errMsg, executionHistory), nil
+		return buildErrorResponse(ctx, params, responseID, &errMsg, executionHistory, agents.InputDetails{Instructions: params.Request.Instructions, Prompt: ""}), nil
 	}
 
 	messages := preprocessOutput.Messages
 	toolDefs := preprocessOutput.ToolDefs
 	toolMetadata := preprocessOutput.ToolMetadata
+
+	// Capture the user prompt from the last message before adding orchestrator system prompt
+	var userPrompt string
+	if len(messages) > 0 {
+		lastMsg := messages[len(messages)-1]
+		if lastMsg.Role == "user" {
+			userPrompt = lastMsg.Content
+		}
+	}
+
+	inputDetails := agents.InputDetails{
+		Instructions: params.Request.Instructions,
+		Prompt:       userPrompt,
+	}
 
 	// Add orchestrator system prompt at the beginning
 	orchestratorSystemPrompt := `You are an agent orchestrator responsible for solving complex problems by planning and executing tasks.
@@ -210,13 +224,13 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 		if err != nil {
 			logger.Error("failed to execute model call", "error", err)
 			errMsg := err.Error()
-			return buildErrorResponse(ctx, params, responseID, &errMsg, executionHistory), nil
+			return buildErrorResponse(ctx, params, responseID, &errMsg, executionHistory, inputDetails), nil
 		}
 
 		if modelCallOutput.Error != nil {
 			logger.Error("model call returned error", "error", modelCallOutput.Error)
 			errMsg := modelCallOutput.Error.Error()
-			return buildErrorResponse(ctx, params, responseID, &errMsg, executionHistory), nil
+			return buildErrorResponse(ctx, params, responseID, &errMsg, executionHistory, inputDetails), nil
 		}
 
 		msg := modelCallOutput.Message
@@ -430,7 +444,7 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 
 	if len(output) == 0 {
 		errMsg := "agent loop completed without producing output"
-		return buildErrorResponse(ctx, params, responseID, &errMsg, executionHistory), nil
+		return buildErrorResponse(ctx, params, responseID, &errMsg, executionHistory, inputDetails), nil
 	}
 
 	// Extract result text from the last output message
@@ -459,10 +473,11 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 		},
 		ExecutionHistory: executionHistory,
 		OrgID:            params.OrgID,
+		InputDetails:     inputDetails,
 	}, nil
 }
 
-func buildErrorResponse(ctx workflow.Context, params AgentsResponseWorkflowParams, responseID string, errMsg *string, executionHistory agents.ExecutionHistory) *agents.AgentsResponseWorkflowResult {
+func buildErrorResponse(ctx workflow.Context, params AgentsResponseWorkflowParams, responseID string, errMsg *string, executionHistory agents.ExecutionHistory, inputDetails agents.InputDetails) *agents.AgentsResponseWorkflowResult {
 	return &agents.AgentsResponseWorkflowResult{
 		ResponseOutput: agents.ResponseOutput{
 			ID:                 responseID,
@@ -482,6 +497,7 @@ func buildErrorResponse(ctx workflow.Context, params AgentsResponseWorkflowParam
 		},
 		ExecutionHistory: executionHistory,
 		OrgID:            params.OrgID,
+		InputDetails:     inputDetails,
 	}
 }
 
