@@ -281,7 +281,8 @@ type createKeyRequest struct {
 }
 
 type updateKeyRequest struct {
-	Limit *float64 `json:"limit,omitempty"`
+	Limit      *float64 `json:"limit,omitempty"`
+	LimitReset string   `json:"limit_reset,omitempty"`
 }
 
 type keyResponse struct {
@@ -346,7 +347,7 @@ func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, o
 
 func (o *OpenRouter) updateOpenRouterAPIKeyLimit(ctx context.Context, keyHash string, keyLimit int) (*keyResponse, error) {
 	creditLimit := float64(keyLimit)
-	requestBody := updateKeyRequest{Limit: &creditLimit}
+	requestBody := updateKeyRequest{Limit: &creditLimit, LimitReset: "monthly"}
 
 	bodyBytes, err := json.Marshal(requestBody)
 	if err != nil {
