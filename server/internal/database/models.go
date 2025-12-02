@@ -13,6 +13,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+type AgentExecution struct {
+	ResponseID  string
+	ProjectID   uuid.UUID
+	Status      string
+	StartedAt   pgtype.Timestamptz
+	CompletedAt pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+	Deleted     bool
+}
+
 type ApiKey struct {
 	ID              uuid.UUID
 	OrganizationID  string

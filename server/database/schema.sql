@@ -1037,3 +1037,21 @@ WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS toolset_embeddings_tags_idx
 ON toolset_embeddings
 USING GIN (tags);
+
+-- Agent executions table
+CREATE TABLE IF NOT EXISTS agent_executions (
+  response_id TEXT NOT NULL,
+  project_id UUID NOT NULL,
+  status TEXT NOT NULL,
+  started_at TIMESTAMPTZ NOT NULL,
+  completed_at TIMESTAMPTZ,
+  deleted_at TIMESTAMPTZ,
+  deleted BOOLEAN NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT agent_executions_pkey PRIMARY KEY (response_id),
+  CONSTRAINT agent_executions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS agent_executions_project_id_started_at_idx
+ON agent_executions (project_id, started_at)
+WHERE deleted IS FALSE;
