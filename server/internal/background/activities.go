@@ -49,8 +49,7 @@ type Activities struct {
 	preprocessAgentsInput         *activities.PreprocessAgentsInput
 	executeToolCall               *activities.ExecuteToolCall
 	executeModelCall              *activities.ExecuteModelCall
-	loadToolsByURN                *activities.LoadToolsByURN
-	loadToolsetTools              *activities.LoadToolsetTools
+	loadAgentTools                *activities.LoadAgentTools
 }
 
 func NewActivities(
@@ -98,8 +97,7 @@ func NewActivities(
 		preprocessAgentsInput:         activities.NewPreprocessAgentsInput(logger, agentsService, temporalClient),
 		executeToolCall:               activities.NewExecuteToolCall(logger, agentsService),
 		executeModelCall:              activities.NewExecuteModelCall(logger, agentsService),
-		loadToolsByURN:                activities.NewLoadToolsByURN(logger, agentsService),
-		loadToolsetTools:              activities.NewLoadToolsetTools(logger, agentsService),
+		loadAgentTools:                activities.NewLoadAgentTools(logger, agentsService),
 	}
 }
 
@@ -191,10 +189,6 @@ func (a *Activities) RefreshModelPricing(ctx context.Context, input activities.R
 	return a.refreshModelPricing.Do(ctx, input)
 }
 
-func (a *Activities) LoadToolsByURN(ctx context.Context, input activities.LoadToolsByURNInput) (*activities.LoadToolsByURNOutput, error) {
-	return a.loadToolsByURN.Do(ctx, input)
-}
-
-func (a *Activities) LoadToolsetTools(ctx context.Context, input activities.LoadToolsetToolsInput) (*activities.LoadToolsetToolsOutput, error) {
-	return a.loadToolsetTools.Do(ctx, input)
+func (a *Activities) LoadAgentTools(ctx context.Context, input activities.LoadAgentToolsInput) (*activities.LoadAgentToolsOutput, error) {
+	return a.loadAgentTools.Do(ctx, input)
 }

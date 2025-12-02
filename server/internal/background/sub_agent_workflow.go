@@ -86,75 +86,45 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 		},
 	}
 
-	var toolDefs []openrouter.Tool
-	toolMetadata := make(map[string]activities.ToolMetadata)
 	toolCallCount := 0
 
-	// Load tools from URNs if provided
-	if len(params.ToolURNs) > 0 {
-		var loadOutput activities.LoadToolsByURNOutput
-		err := workflow.ExecuteActivity(
-			ctx,
-			a.LoadToolsByURN,
-			activities.LoadToolsByURNInput{
-				OrgID:           params.OrgID,
-				ProjectID:       params.ProjectID,
-				ToolURNs:        params.ToolURNs,
-				EnvironmentSlug: params.Environment,
-				Headers:         nil,
-			},
-		).Get(ctx, &loadOutput)
-		if err != nil {
-			logger.Error("failed to load tools by URN", "error", err)
-			errMsg := err.Error()
-			return &SubAgentWorkflowResult{
-				Result:        "",
-				Output:        agents.OutputItems{},
-				Error:         &errMsg,
-				ToolCallCount: toolCallCount,
-			}, nil
-		}
-		toolDefs = append(toolDefs, loadOutput.ToolDefs...)
-		// Merge tool metadata
-		for k, v := range loadOutput.ToolMetadata {
-			toolMetadata[k] = v
-		}
+	// Build toolset requests from params
+	toolsetRequests := make([]activities.ToolsetRequest, 0, len(params.Toolsets))
+	for _, toolset := range params.Toolsets {
+		toolsetRequests = append(toolsetRequests, activities.ToolsetRequest{
+			ToolsetSlug:     toolset.ToolsetSlug,
+			EnvironmentSlug: toolset.EnvironmentSlug,
+			Headers:         nil,
+		})
 	}
 
-	// Load tools from toolsets if provided
-	for _, toolset := range params.Toolsets {
-		var toolsetOutput activities.LoadToolsetToolsOutput
-		envSlug := params.Environment
-		if toolset.EnvironmentSlug != "" {
-			envSlug = toolset.EnvironmentSlug
-		}
-		err := workflow.ExecuteActivity(
-			ctx,
-			a.LoadToolsetTools,
-			activities.LoadToolsetToolsInput{
-				OrgID:           params.OrgID,
-				ProjectID:       params.ProjectID,
-				ToolsetSlug:     toolset.ToolsetSlug,
-				EnvironmentSlug: envSlug,
-				Headers:         nil,
-			},
-		).Get(ctx, &toolsetOutput)
-		if err != nil {
-			logger.Error("failed to load toolset tools", "error", err, "toolset_slug", toolset.ToolsetSlug)
-			errMsg := fmt.Sprintf("failed to load toolset %q: %v", toolset.ToolsetSlug, err)
-			return &SubAgentWorkflowResult{
-				Result:        "",
-				Output:        agents.OutputItems{},
-				Error:         &errMsg,
-				ToolCallCount: toolCallCount,
-			}, nil
-		}
-		toolDefs = append(toolDefs, toolsetOutput.ToolDefs...)
-		// Merge tool metadata
-		for k, v := range toolsetOutput.ToolMetadata {
-			toolMetadata[k] = v
-		}
+	// Load all tools in a single activity call
+	var loadOutput activities.LoadAgentToolsOutput
+	err := workflow.ExecuteActivity(
+		ctx,
+		a.LoadAgentTools,
+		activities.LoadAgentToolsInput{
+			OrgID:           params.OrgID,
+			ProjectID:       params.ProjectID,
+			ToolURNs:        params.ToolURNs,
+			Toolsets:        toolsetRequests,
+			EnvironmentSlug: params.Environment,
+			Headers:         nil,
+		},
+	).Get(ctx, &loadOutput)
+	if err != nil {
+		logger.Error("failed to load agent tools", "error", err)
+		errMsg := err.Error()
+		return &SubAgentWorkflowResult{
+			Result:        "",
+			Output:        agents.OutputItems{},
+			Error:         &errMsg,
+			ToolCallCount: toolCallCount,
+		}, nil
 	}
+
+	toolDefs := loadOutput.ToolDefs
+	toolMetadata := loadOutput.ToolMetadata
 
 	var output agents.OutputItems
 
