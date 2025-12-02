@@ -10,23 +10,31 @@ import (
 type Key = attribute.Key
 
 const (
+	DeviceKey              = semconv.SystemDeviceKey
 	ExceptionStacktraceKey = semconv.ExceptionStacktraceKey
 	ErrorMessageKey        = semconv.ErrorMessageKey
 	ErrorIDKey             = attribute.Key("gram.error.id")
 	ProcessExitCodeKey     = semconv.ProcessExitCodeKey
 	ServerAddressKey       = semconv.ServerAddressKey
 
-	ComponentKey             = attribute.Key("gram.component")
-	ProjectIDKey             = attribute.Key("gram.project.id")
-	ProjectSlugKey           = attribute.Key("gram.project.slug")
-	DeploymentIDKey          = attribute.Key("gram.deployment.id")
-	DeploymentFunctionsIDKey = attribute.Key("gram.deployment.functions.id")
+	ComponentKey = attribute.Key("gram.component")
+
+	ProjectIDKey    = attribute.Key("gram.project.id")
+	ProjectSlugKey  = attribute.Key("gram.project.slug")
+	DeploymentIDKey = attribute.Key("gram.deployment.id")
+	FunctionIDKey   = attribute.Key("gram.function.id")
+
+	EventPayloadKey = attribute.Key("gram.event.payload")
+	EventOriginKey  = attribute.Key("gram.event.origin")
 
 	SpanIDKey         = attribute.Key("span.id")
 	TraceIDKey        = attribute.Key("trace.id")
 	DataDogTraceIDKey = attribute.Key("dd.trace_id")
 	DataDogSpanIDKey  = attribute.Key("dd.span_id")
 )
+
+func Device(v string) attribute.KeyValue { return DeviceKey.String(v) }
+func SlogDevice(v string) slog.Attr      { return slog.String(string(DeviceKey), v) }
 
 func ExceptionStacktrace(v string) attribute.KeyValue { return ExceptionStacktraceKey.String(v) }
 func SlogExceptionStacktrace(v string) slog.Attr {
@@ -60,10 +68,16 @@ func SlogProjectSlug(v string) slog.Attr      { return slog.String(string(Projec
 func DeploymentID(v string) attribute.KeyValue { return DeploymentIDKey.String(v) }
 func SlogDeploymentID(v string) slog.Attr      { return slog.String(string(DeploymentIDKey), v) }
 
-func DeploymentFunctionsID(v string) attribute.KeyValue { return DeploymentFunctionsIDKey.String(v) }
-func SlogDeploymentFunctionsID(v string) slog.Attr {
-	return slog.String(string(DeploymentFunctionsIDKey), v)
+func FunctionID(v string) attribute.KeyValue { return FunctionIDKey.String(v) }
+func SlogFunctionID(v string) slog.Attr {
+	return slog.String(string(FunctionIDKey), v)
 }
+
+func EventPayload(v string) attribute.KeyValue { return EventPayloadKey.String(v) }
+func SlogEventPayload(v string) slog.Attr      { return slog.String(string(EventPayloadKey), v) }
+
+func EventOrigin(v string) attribute.KeyValue { return EventOriginKey.String(v) }
+func SlogEventOrigin(v string) slog.Attr      { return slog.String(string(EventOriginKey), v) }
 
 func SpanID(v string) attribute.KeyValue { return SpanIDKey.String(v) }
 func SlogSpanID(v string) slog.Attr      { return slog.String(string(SpanIDKey), v) }

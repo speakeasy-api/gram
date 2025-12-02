@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -64,12 +65,39 @@ func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.Re
 	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer timeoutCancel()
 
+	var logwg sync.WaitGroup
+	stdoutRdr, stdoutWrt := io.Pipe()
+	stderrRdr, stderrWrt := io.Pipe()
+	logwg.Go(func() {
+		if err := o11y.CaptureRawLogLines(ctx, logger, stdoutRdr, attr.SlogDevice("stdout"), attr.SlogEventOrigin("user")); err != nil {
+			s.logger.ErrorContext(ctx, "failed to capture stdout log lines", attr.SlogError(err))
+		}
+	})
+	logwg.Go(func() {
+		if err := o11y.CaptureRawLogLines(ctx, logger, stderrRdr, attr.SlogDevice("stderr"), attr.SlogEventOrigin("user")); err != nil {
+			s.logger.ErrorContext(ctx, "failed to capture stderr log lines", attr.SlogError(err))
+		}
+	})
+	defer o11y.LogDefer(ctx, logger, func() error {
+		var err error
+		if e := stdoutWrt.Close(); e != nil {
+			err = errors.Join(err, fmt.Errorf("close stdout writer: %w", e))
+		}
+		if e := stderrWrt.Close(); e != nil {
+			err = errors.Join(err, fmt.Errorf("close stderr writer: %w", e))
+		}
+
+		logwg.Wait()
+		return err
+
+	})
+
 	args := s.args
 	args = append(args, fifoPath, string(req.requestArg), req.requestType)
 	cmd := guardian.NewCommand(timeoutCtx, s.command, args...)
 	cmd.Dir = s.workDir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = stdoutWrt
+	cmd.Stderr = stderrWrt
 
 	cmd.Env = make([]string, 0, len(req.environment))
 	for key, value := range req.environment {

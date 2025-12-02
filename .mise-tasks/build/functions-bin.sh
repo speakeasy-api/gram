@@ -40,13 +40,14 @@ sha="$(git rev-parse --short HEAD)"
 # Create a minimal module layout for melange build context because
 # `.melangeignore` does not really work. They are using `github.com/zealic/xignore`
 # under the hood which does not seem to support negation patterns correctly.
+rm -rf .tmp-melange/functions
 mkdir -p .tmp-melange/functions
 trap 'rm -rf .tmp-melange' EXIT
 cp -r ../go.mod ../go.sum .tmp-melange/
 cp -r ./{internal,cmd,buildinfo} .tmp-melange/functions/
 
 rm -rf ./packages
-exec melange build \
+melange build \
   --source-dir .tmp-melange \
   --apk-cache-dir "$apk_cache_dir" \
   --cache-dir "$(go env GOMODCACHE)" \

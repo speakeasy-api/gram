@@ -239,9 +239,9 @@ func enrichLogger(logger *slog.Logger) *slog.Logger {
 	if deploymentID != "" {
 		attrs = append(attrs, attr.SlogDeploymentID(deploymentID))
 	}
-	functionID := os.Getenv("GRAM_FUNCTIONS_ID")
+	functionID := os.Getenv("GRAM_FUNCTION_ID")
 	if functionID != "" {
-		attrs = append(attrs, slog.String("function_id", functionID))
+		attrs = append(attrs, attr.SlogFunctionID(functionID))
 	}
 
 	return logger.With(attrs...)
