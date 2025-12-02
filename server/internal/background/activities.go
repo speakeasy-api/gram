@@ -8,7 +8,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/sdk/client"
 
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -44,6 +46,10 @@ type Activities struct {
 	validateDeployment            *activities.ValidateDeployment
 	verifyCustomDomain            *activities.VerifyCustomDomain
 	generateToolsetEmbeddings     *activities.GenerateToolsetEmbeddings
+	preprocessAgentsInput         *activities.PreprocessAgentsInput
+	executeToolCall               *activities.ExecuteToolCall
+	executeModelCall              *activities.ExecuteModelCall
+	loadAgentTools                *activities.LoadAgentTools
 }
 
 func NewActivities(
@@ -65,6 +71,8 @@ func NewActivities(
 	functionsDeployer functions.Deployer,
 	functionsVersion functions.RunnerVersion,
 	ragService *rag.ToolsetVectorStore,
+	agentsService *agents.Service,
+	temporalClient client.Client,
 ) *Activities {
 	return &Activities{
 		collectPlatformUsageMetrics:   activities.NewCollectPlatformUsageMetrics(logger, db),
@@ -86,6 +94,10 @@ func NewActivities(
 		validateDeployment:            activities.NewValidateDeployment(logger, db, billingRepo),
 		verifyCustomDomain:            activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
 		generateToolsetEmbeddings:     activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
+		preprocessAgentsInput:         activities.NewPreprocessAgentsInput(logger, agentsService, temporalClient),
+		executeToolCall:               activities.NewExecuteToolCall(logger, agentsService),
+		executeModelCall:              activities.NewExecuteModelCall(logger, agentsService),
+		loadAgentTools:                activities.NewLoadAgentTools(logger, agentsService),
 	}
 }
 
@@ -163,4 +175,20 @@ func (a *Activities) ReapFlyApps(ctx context.Context, req activities.ReapFlyApps
 
 func (a *Activities) RefreshModelPricing(ctx context.Context, input activities.RefreshModelPricingArgs) error {
 	return a.refreshModelPricing.Do(ctx, input)
+}
+
+func (a *Activities) PreprocessAgentsInput(ctx context.Context, input activities.PreprocessAgentsInputInput) (*activities.PreprocessAgentsInputOutput, error) {
+	return a.preprocessAgentsInput.Do(ctx, input)
+}
+
+func (a *Activities) ExecuteToolCall(ctx context.Context, input activities.ExecuteToolCallInput) (*activities.ExecuteToolCallOutput, error) {
+	return a.executeToolCall.Do(ctx, input)
+}
+
+func (a *Activities) ExecuteModelCall(ctx context.Context, input activities.ExecuteModelCallInput) (*activities.ExecuteModelCallOutput, error) {
+	return a.executeModelCall.Do(ctx, input)
+}
+
+func (a *Activities) LoadAgentTools(ctx context.Context, input activities.LoadAgentToolsInput) (*activities.LoadAgentToolsOutput, error) {
+	return a.loadAgentTools.Do(ctx, input)
 }

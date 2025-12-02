@@ -89,6 +89,8 @@ type AgentChatOptions struct {
 	AdditionalTools         []AgentTool
 	AddedEnvironmentEntries map[string]string
 	AgentTimeout            *time.Duration
+	Temperature             *float64
+	Model                   string
 }
 
 // AgentChat loops over tool calls until completion and returns the final message.
@@ -137,16 +139,16 @@ func (c *ChatClient) AgentChat(
 		agentTools = append(agentTools, toolsetTools...)
 	}
 	toolDefs := make([]openrouter.Tool, 0, len(agentTools))
-	executors := make(map[string]func(context.Context, string) (string, error))
+	toolMap := make(map[string]AgentTool)
 	for _, t := range agentTools {
 		if t.Definition.Function != nil {
 			toolDefs = append(toolDefs, t.Definition)
-			executors[t.Definition.Function.Name] = t.Executor
+			toolMap[t.Definition.Function.Name] = t
 		}
 	}
 
 	for {
-		msg, err := c.chatClient.GetCompletionFromMessages(ctx, orgID, messages, toolDefs)
+		msg, err := c.chatClient.GetCompletionFromMessages(ctx, orgID, projectID.String(), messages, toolDefs, opts.Temperature, opts.Model)
 		if err != nil {
 			return "", fmt.Errorf("failed to get completion: %w", err)
 		}
@@ -162,14 +164,13 @@ func (c *ChatClient) AgentChat(
 		for _, tc := range msg.ToolCalls {
 			c.logger.InfoContext(ctx, "Tool called", attr.SlogToolName(tc.Function.Name))
 
-			exec, ok := executors[tc.Function.Name]
 			var output string
-
-			if !ok {
-				output = fmt.Sprintf("No executor found for %q", tc.Function.Name)
-				c.logger.ErrorContext(ctx, "Missing executor", attr.SlogToolName(tc.Function.Name))
+			tool, ok := toolMap[tc.Function.Name]
+			if !ok || tool.Executor == nil {
+				output = fmt.Sprintf("No tool found for %q", tc.Function.Name)
+				c.logger.ErrorContext(ctx, "Missing tool", attr.SlogToolName(tc.Function.Name))
 			} else {
-				result, err := exec(ctx, tc.Function.Arguments)
+				result, err := tool.Executor(ctx, tc.Function.Arguments)
 				if err != nil {
 					output = fmt.Sprintf("Error calling tool %q: %v", tc.Function.Name, err)
 					c.logger.ErrorContext(ctx, "Tool error", attr.SlogToolName(tc.Function.Name), attr.SlogError(err))

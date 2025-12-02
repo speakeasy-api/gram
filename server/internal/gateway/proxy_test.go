@@ -31,6 +31,7 @@ func newTestToolDescriptor() *ToolDescriptor {
 	return &ToolDescriptor{
 		ID:               uuid.New().String(),
 		Name:             "test_tool",
+		Description:      conv.Ptr("test_tool_description"),
 		DeploymentID:     uuid.New().String(),
 		ProjectID:        uuid.New().String(),
 		ProjectSlug:      "test-project",

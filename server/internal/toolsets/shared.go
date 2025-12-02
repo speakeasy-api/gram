@@ -147,6 +147,7 @@ func (t *Toolsets) extractHTTPToolCallPlan(ctx context.Context, tool toolsRepo.H
 	descriptor := &gateway.ToolDescriptor{
 		ID:               tool.ID.String(),
 		Name:             tool.Name,
+		Description:      &tool.Description,
 		DeploymentID:     tool.DeploymentID.String(),
 		ProjectID:        tool.ProjectID.String(),
 		ProjectSlug:      orgData.ProjectSlug,
@@ -202,6 +203,7 @@ func (t *Toolsets) extractFunctionToolCallPlan(ctx context.Context, tool toolsRe
 	descriptor := &gateway.ToolDescriptor{
 		ID:               tool.ID.String(),
 		Name:             tool.Name,
+		Description:      &tool.Description,
 		DeploymentID:     tool.DeploymentID.String(),
 		ProjectID:        tool.ProjectID.String(),
 		ProjectSlug:      orgData.ProjectSlug,
@@ -227,9 +229,15 @@ func (t *Toolsets) extractPromptToolCallPlan(ctx context.Context, tool templates
 		return nil, fmt.Errorf("get project with organization metadata: %w", err)
 	}
 
+	var description *string
+	if tool.Description.Valid {
+		description = &tool.Description.String
+	}
+
 	descriptor := &gateway.ToolDescriptor{
 		ID:               tool.ID.String(),
 		Name:             tool.Name,
+		Description:      description,
 		ProjectID:        tool.ProjectID.String(),
 		ProjectSlug:      orgData.ProjectSlug,
 		OrganizationID:   orgData.ID,
@@ -238,22 +246,16 @@ func (t *Toolsets) extractPromptToolCallPlan(ctx context.Context, tool templates
 		DeploymentID:     "", // Prompts have no deployment ID
 	}
 
-	var description *string
-	if tool.Description.Valid {
-		description = &tool.Description.String
-	}
-
 	var engine string
 	if tool.Engine.Valid {
 		engine = tool.Engine.String
 	}
 
 	plan := &gateway.PromptToolCallPlan{
-		TemplateID:  tool.ID.String(),
-		Description: description,
-		Engine:      engine,
-		Prompt:      tool.Prompt,
-		Kind:        tool.Kind.String,
+		TemplateID: tool.ID.String(),
+		Engine:     engine,
+		Prompt:     tool.Prompt,
+		Kind:       tool.Kind.String,
 	}
 	return gateway.NewPromptToolCallPlan(descriptor, plan), nil
 }

@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
@@ -48,6 +49,7 @@ type WorkerOptions struct {
 	FunctionsDeployer    functions.Deployer
 	FunctionsVersion     functions.RunnerVersion
 	RagService           *rag.ToolsetVectorStore
+	AgentsService        *agents.Service
 }
 
 func ForDeploymentProcessing(
@@ -75,6 +77,7 @@ func ForDeploymentProcessing(
 		RagService:           nil,
 		RedisClient:          nil,
 		PosthogClient:        nil,
+		AgentsService:        nil,
 	}
 }
 
@@ -103,6 +106,7 @@ func NewTemporalWorker(
 		FunctionsDeployer:    nil,
 		FunctionsVersion:     "",
 		RagService:           nil,
+		AgentsService:        nil,
 	}
 
 	for _, o := range options {
@@ -124,6 +128,7 @@ func NewTemporalWorker(
 			FunctionsDeployer:    conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
 			FunctionsVersion:     conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
 			RagService:           conv.Default(o.RagService, opts.RagService),
+			AgentsService:        conv.Default(o.AgentsService, opts.AgentsService),
 		}
 	}
 
@@ -154,6 +159,8 @@ func NewTemporalWorker(
 		opts.FunctionsDeployer,
 		opts.FunctionsVersion,
 		opts.RagService,
+		opts.AgentsService,
+		client,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -175,6 +182,11 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
 	temporalWorker.RegisterActivity(activities.RefreshModelPricing)
+	// Agent runner related activities
+	temporalWorker.RegisterActivity(activities.PreprocessAgentsInput)
+	temporalWorker.RegisterActivity(activities.ExecuteToolCall)
+	temporalWorker.RegisterActivity(activities.ExecuteModelCall)
+	temporalWorker.RegisterActivity(activities.LoadAgentTools)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
@@ -185,6 +197,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshModelPricingWorkflow)
+	// Agent runner related workflows
+	temporalWorker.RegisterWorkflow(AgentsResponseWorkflow)
+	temporalWorker.RegisterWorkflow(SubAgentWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), client); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
