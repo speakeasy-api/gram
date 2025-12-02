@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import time
 import requests
 
 # Check for -v flag
@@ -33,6 +34,9 @@ resp = requests.post(url, headers=headers, json=payload)
 data = resp.json()
 response_id = data["id"]
 print(data["output"][-1]["content"][-1]["text"])
+
+# There is a delay of up to a minute befor a response is deleted on completion
+time.sleep(30)
 
 if verbose:
     print("\nFull response:")
