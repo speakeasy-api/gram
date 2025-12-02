@@ -891,7 +891,7 @@ function OAuthTabModal({
       toolset_slug: toolsetSlug,
     });
     window.open(
-      "https://calendly.com/d/crtj-3tk-wpd/demo-with-speakeasy",
+      "https://calendly.com/d/ctgg-5dv-3kw/intro-to-gram-call",
       "_blank",
     );
   };

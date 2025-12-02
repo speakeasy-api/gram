@@ -218,7 +218,7 @@ export function ProjectMenu() {
           </SimpleTooltip>
           <NavButton
             title="Contact us"
-            href="https://calendly.com/d/crtj-3tk-wpd/demo-with-speakeasy"
+            href="https://calendly.com/d/ctgg-5dv-3kw/intro-to-gram-call"
             Icon={(props) => (
               <Icon
                 name="message-circle"
