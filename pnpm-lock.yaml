@@ -28,6 +28,9 @@ catalogs:
       specifier: 5.9.3
       version: 5.9.3
 
+overrides:
+  glob@>=10.0 <10.5.0: 10.5.0
+
 importers:
 
   .:
