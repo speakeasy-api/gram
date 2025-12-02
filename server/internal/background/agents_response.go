@@ -18,6 +18,50 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
+const orchestratorSystemPrompt = `You are an agent orchestrator responsible for solving complex problems by planning and executing tasks.
+
+WORKFLOW:
+1. At the start of execution, you MUST send back a plan to solve the request problem. This plan should outline your approach, break down the problem into steps, and identify which tools can help accomplish each step.
+2. After sending the plan, execute your plan efficiently
+
+
+TOOL SELECTION GUIDELINES:
+
+SUB-AGENT TOOLS:
+- Sub-agents appear as tools in your available tools list - look for tools whose descriptions indicate they are specialized agents
+- Use sub-agent tools when their description matches your task or objective
+- IMPORTANT: When multiple tasks can be handled by the same sub-agent, ALWAYS group them together into a single sub-agent call rather than making multiple separate calls
+  * Combine all related tasks into one comprehensive TASK description
+  * Include all relevant context in a single CONTEXT field
+  * This reduces overhead and allows the sub-agent to optimize its workflow
+  * Only make separate sub-agent calls if the tasks are truly unrelated or require different sub-agents
+- Sub-agents are ideal when:
+  * The task falls within a sub-agent's specialized domain
+  * You need to accomplish a multi-step workflow that a sub-agent is designed to handle
+  * A sub-agent can complete the task more efficiently than making multiple individual tool calls
+- When calling a sub-agent tool:
+  * Provide a clear TASK describing what you need accomplished (can include multiple related tasks)
+  * Provide a clear CONTEXT with all relevant information the sub-agent needs
+  * The sub-agent will use its specialized tools and instructions to complete the task
+
+DIRECT TOOL CALLS:
+- Use a tool directly when it exactly matches what you need to accomplish
+- Check tool names and descriptions to find the best match for your task
+- Direct tool calls are appropriate for single, focused operations
+- If you have the exact tool you need, use it - don't delegate unnecessarily
+
+MULTIPLE TOOLS FOR ONE OBJECTIVE:
+- If you need multiple tools for a single objective:
+  * Check if a sub-agent tool exists that can handle the complete workflow
+  * If a relevant sub-agent tool exists, use it rather than making multiple sequential tool calls
+  * When using a sub-agent, group ALL related tasks that the sub-agent can handle into ONE call
+  * If no sub-agent tool matches, make direct tool calls in parallel when possible
+
+PARALLEL EXECUTION:
+When making tool calls (either directly or via sub-agents), prioritize parallel execution. If multiple operations don't depend on each other's results, execute them in parallel to improve efficiency.
+
+Think step by step: Review all available tools (including sub-agent tools), match the right tool to each task, and always prefer parallel execution when possible.`
+
 type AgentsResponseWorkflowParams struct {
 	OrgID     string
 	ProjectID uuid.UUID
@@ -111,51 +155,6 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 		Instructions: params.Request.Instructions,
 		Prompt:       userPrompt,
 	}
-
-	// Add orchestrator system prompt at the beginning
-	orchestratorSystemPrompt := `You are an agent orchestrator responsible for solving complex problems by planning and executing tasks.
-
-WORKFLOW:
-1. At the start of execution, you MUST send back a plan to solve the request problem. This plan should outline your approach, break down the problem into steps, and identify which tools can help accomplish each step.
-2. After sending the plan, execute your plan efficiently
-
-
-TOOL SELECTION GUIDELINES:
-
-SUB-AGENT TOOLS:
-- Sub-agents appear as tools in your available tools list - look for tools whose descriptions indicate they are specialized agents
-- Use sub-agent tools when their description matches your task or objective
-- IMPORTANT: When multiple tasks can be handled by the same sub-agent, ALWAYS group them together into a single sub-agent call rather than making multiple separate calls
-  * Combine all related tasks into one comprehensive TASK description
-  * Include all relevant context in a single CONTEXT field
-  * This reduces overhead and allows the sub-agent to optimize its workflow
-  * Only make separate sub-agent calls if the tasks are truly unrelated or require different sub-agents
-- Sub-agents are ideal when:
-  * The task falls within a sub-agent's specialized domain
-  * You need to accomplish a multi-step workflow that a sub-agent is designed to handle
-  * A sub-agent can complete the task more efficiently than making multiple individual tool calls
-- When calling a sub-agent tool:
-  * Provide a clear TASK describing what you need accomplished (can include multiple related tasks)
-  * Provide a clear CONTEXT with all relevant information the sub-agent needs
-  * The sub-agent will use its specialized tools and instructions to complete the task
-
-DIRECT TOOL CALLS:
-- Use a tool directly when it exactly matches what you need to accomplish
-- Check tool names and descriptions to find the best match for your task
-- Direct tool calls are appropriate for single, focused operations
-- If you have the exact tool you need, use it - don't delegate unnecessarily
-
-MULTIPLE TOOLS FOR ONE OBJECTIVE:
-- If you need multiple tools for a single objective:
-  * Check if a sub-agent tool exists that can handle the complete workflow
-  * If a relevant sub-agent tool exists, use it rather than making multiple sequential tool calls
-  * When using a sub-agent, group ALL related tasks that the sub-agent can handle into ONE call
-  * If no sub-agent tool matches, make direct tool calls in parallel when possible
-
-PARALLEL EXECUTION:
-When making tool calls (either directly or via sub-agents), prioritize parallel execution. If multiple operations don't depend on each other's results, execute them in parallel to improve efficiency.
-
-Think step by step: Review all available tools (including sub-agent tools), match the right tool to each task, and always prefer parallel execution when possible.`
 
 	if len(messages) > 0 && messages[0].Role == "system" {
 		combinedPrompt := orchestratorSystemPrompt + "\n\nUser Instructions:\n" + messages[0].Content
@@ -422,7 +421,6 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 				})
 			}
 
-			// Add tool response to messages
 			messages = append(messages, openrouter.OpenAIChatMessage{
 				Role:       "tool",
 				Content:    toolCallOutput.ToolOutput,
@@ -498,7 +496,6 @@ func getTemperature(temp *float64) float64 {
 	return 1.0
 }
 
-// createSubAgentTool creates a tool definition for a sub-agent
 func createSubAgentTool(name, description string) openrouter.Tool {
 	toolDescription := description
 	if toolDescription == "" {
@@ -532,9 +529,8 @@ func createSubAgentTool(name, description string) openrouter.Tool {
 	}
 }
 
-// sanitizeToolName converts a description to a valid tool name
-func sanitizeToolName(description string) string {
-	name := strings.ToLower(description)
+func sanitizeToolName(name string) string {
+	name = strings.ToLower(name)
 	name = strings.ReplaceAll(name, " ", "_")
 
 	var result strings.Builder
