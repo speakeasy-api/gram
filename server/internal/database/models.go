@@ -14,13 +14,14 @@ import (
 )
 
 type AgentExecution struct {
-	ID          string
-	ProjectID   uuid.UUID
-	Status      string
-	StartedAt   pgtype.Timestamptz
-	CompletedAt pgtype.Timestamptz
-	DeletedAt   pgtype.Timestamptz
-	Deleted     bool
+	ID           string
+	ProjectID    uuid.UUID
+	DeploymentID uuid.NullUUID
+	Status       string
+	StartedAt    pgtype.Timestamptz
+	CompletedAt  pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
 }
 
 type ApiKey struct {

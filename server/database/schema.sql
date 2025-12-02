@@ -1042,6 +1042,7 @@ USING GIN (tags);
 CREATE TABLE IF NOT EXISTS agent_executions (
   id TEXT NOT NULL,
   project_id UUID NOT NULL,
+  deployment_id UUID,
   status TEXT NOT NULL,
   started_at TIMESTAMPTZ NOT NULL,
   completed_at TIMESTAMPTZ,
@@ -1049,7 +1050,8 @@ CREATE TABLE IF NOT EXISTS agent_executions (
   deleted BOOLEAN NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
 
   CONSTRAINT agent_executions_pkey PRIMARY KEY (id),
-  CONSTRAINT agent_executions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
+  CONSTRAINT agent_executions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT agent_executions_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS agent_executions_project_id_started_at_idx
