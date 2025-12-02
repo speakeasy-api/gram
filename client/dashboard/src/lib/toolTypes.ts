@@ -91,12 +91,14 @@ export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
   }, [deployment]);
 
   const functionIdToSlug = useMemo(() => {
-    const mapping: Record<string, string> = {};
-    deployment?.deployment?.functionsAssets?.forEach((asset) => {
-      mapping[asset.id] = asset.slug; // functionId -> slug
-      mapping[asset.assetId] = asset.slug; // assetId -> slug (fallback)
-    });
-    return mapping;
+    return deployment?.deployment?.functionsAssets?.reduce(
+      (acc, asset) => {
+        acc[asset.id] = asset.slug;
+        acc[asset.assetId] = asset.slug;
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
   }, [deployment]);
 
   const toolGroups = useMemo(() => {
