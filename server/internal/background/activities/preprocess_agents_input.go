@@ -50,16 +50,11 @@ func NewPreprocessAgentsInput(logger *slog.Logger, agentsService *agents.Service
 }
 
 func (a *PreprocessAgentsInput) Do(ctx context.Context, input PreprocessAgentsInputInput) (*PreprocessAgentsInputOutput, error) {
-	a.logger.InfoContext(ctx, "preprocessing agents input",
-		attr.SlogOrganizationID(input.OrgID),
-		attr.SlogProjectID(input.ProjectID.String()),
-	)
 	// If PreviousResponseID is provided, fetch its output and convert to messages
 	request := input.Request
 	var messages []openrouter.OpenAIChatMessage
 	if request.PreviousResponseID != nil && *request.PreviousResponseID != "" {
 
-		// Get the workflow run for the previous response
 		workflowRun := a.temporalClient.GetWorkflow(ctx, *request.PreviousResponseID, "")
 
 		var prevWorkflowResult agents.AgentsResponseWorkflowResult
@@ -73,7 +68,6 @@ func (a *PreprocessAgentsInput) Do(ctx context.Context, input PreprocessAgentsIn
 			return nil, fmt.Errorf("previous response %s is not from the same org as the current request", *request.PreviousResponseID)
 		}
 
-		// Check if the previous response completed successfully
 		if prevResponse.Status != "completed" {
 			return nil, fmt.Errorf("previous response %s has status %q, expected 'completed'", *request.PreviousResponseID, prevResponse.Status)
 		}
@@ -103,15 +97,8 @@ func (a *PreprocessAgentsInput) Do(ctx context.Context, input PreprocessAgentsIn
 		}, messages...)
 	}
 
-	// Load tools
-	opts := agents.AgentChatOptions{
-		Toolsets:        request.Toolsets,
-		AdditionalTools: nil,
-		AgentTimeout:    nil,
-	}
-
-	agentTools := opts.AdditionalTools
-	for _, toolset := range opts.Toolsets {
+	var agentTools []agents.AgentTool
+	for _, toolset := range request.Toolsets {
 		toolsetTools, err := a.agentsService.LoadToolsetTools(ctx, input.ProjectID, toolset.ToolsetSlug, toolset.EnvironmentSlug, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load toolset %q: %w", toolset.ToolsetSlug, err)
@@ -124,7 +111,7 @@ func (a *PreprocessAgentsInput) Do(ctx context.Context, input PreprocessAgentsIn
 
 	// Build a map of toolset slug to toolset config for quick lookup
 	toolsetConfigMap := make(map[string]agents.Toolset)
-	for _, toolset := range opts.Toolsets {
+	for _, toolset := range request.Toolsets {
 		toolsetConfigMap[toolset.ToolsetSlug] = toolset
 	}
 
@@ -132,15 +119,10 @@ func (a *PreprocessAgentsInput) Do(ctx context.Context, input PreprocessAgentsIn
 		if t.Definition.Function != nil {
 			toolDefs = append(toolDefs, t.Definition)
 
-			// Find which toolset this tool belongs to using ServerLabel
 			var envSlug string
 			if t.IsMCPTool && t.ServerLabel != "" {
-				// ServerLabel should match the toolset slug
 				if toolset, ok := toolsetConfigMap[t.ServerLabel]; ok {
 					envSlug = toolset.EnvironmentSlug
-				} else if len(opts.Toolsets) > 0 {
-					// Use the first toolset's config as fallback
-					envSlug = opts.Toolsets[0].EnvironmentSlug
 				}
 			}
 

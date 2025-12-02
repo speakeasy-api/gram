@@ -10,7 +10,6 @@ import (
 	"mime"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -145,7 +144,7 @@ type SubAgent struct {
 type ResponseRequest struct {
 	Model              string        `json:"model"`
 	Instructions       *string       `json:"instructions,omitempty"`
-	Input              ResponseInput `json:"input"` // Can be string or []OutputMessage
+	Input              ResponseInput `json:"input"` // Can be string or []OutputMessage or []RoleMessage
 	PreviousResponseID *string       `json:"previous_response_id,omitempty"`
 	Temperature        *float64      `json:"temperature,omitempty"`
 	Toolsets           []Toolset     `json:"toolsets,omitempty"`
@@ -161,23 +160,18 @@ type ResponseUsage struct {
 }
 
 type TextFormat struct {
-	Type string `json:"type"` // "text"
+	Type string `json:"type"`
 }
 
 type ResponseText struct {
 	Format TextFormat `json:"format"`
 }
 
-type Reasoning struct {
-	Effort  *string `json:"effort"`
-	Summary *string `json:"summary"`
-}
-
 type ResponseOutput struct {
 	ID                 string       `json:"id"`
 	Object             string       `json:"object"` // "response"
 	CreatedAt          int64        `json:"created_at"`
-	Status             string       `json:"status"` // "completed"
+	Status             string       `json:"status"`
 	Error              *string      `json:"error"`
 	Instructions       *string      `json:"instructions"`
 	Model              string       `json:"model"`
@@ -213,12 +207,6 @@ type AgentTool struct {
 	IsMCPTool   bool
 	ServerLabel string
 	ToolURN     *urn.Tool
-}
-
-type AgentChatOptions struct {
-	Toolsets        []Toolset
-	AdditionalTools []AgentTool
-	AgentTimeout    *time.Duration
 }
 
 // Service holds dependencies for agent operations

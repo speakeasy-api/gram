@@ -68,7 +68,6 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 		},
 	})
 
-	// Track execution history
 	executionHistory := agents.ExecutionHistory{
 		MainThreadToolCalls: 0,
 		SubAgentToolCalls:   make(map[string]int),
@@ -158,13 +157,10 @@ When making tool calls (either directly or via sub-agents), prioritize parallel 
 
 Think step by step: Review all available tools (including sub-agent tools), match the right tool to each task, and always prefer parallel execution when possible.`
 
-	// Combine orchestrator prompt with any existing system message from instructions
 	if len(messages) > 0 && messages[0].Role == "system" {
-		// Merge with existing system message, labeling user instructions
 		combinedPrompt := orchestratorSystemPrompt + "\n\nUser Instructions:\n" + messages[0].Content
 		messages[0].Content = combinedPrompt
 	} else {
-		// Prepend system prompt if no existing system message
 		messages = append([]openrouter.OpenAIChatMessage{
 			{
 				Role:       "system",
@@ -179,16 +175,13 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 	// Create sub-agent tools from request.SubAgents
 	subAgentConfigs := make(map[string]agents.SubAgent)
 	for _, subAgent := range params.Request.SubAgents {
-		// Generate a unique tool name for this sub-agent
 		toolName := sanitizeToolName(subAgent.Name)
 		if toolName == "" {
 			toolName = "sub_agent"
 		}
-		// Create a tool definition for this sub-agent
 		subAgentTool := createSubAgentTool(toolName, subAgent.Description)
 		toolDefs = append(toolDefs, subAgentTool)
 
-		// Mark it as a sub-agent tool
 		toolMetadata[toolName] = activities.ToolMetadata{
 			ToolURN:         nil,
 			EnvironmentSlug: subAgent.EnvironmentSlug,
@@ -197,7 +190,6 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 			ServerLabel:     "",
 		}
 
-		// Store the sub-agent config for later execution
 		subAgentConfigs[toolName] = subAgent
 	}
 
@@ -205,7 +197,6 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 
 	// Agentic loop: continue until we get a final message without tool calls
 	for {
-		// Execute model call
 		modelCallInput := activities.ExecuteModelCallInput{
 			OrgID:       params.OrgID,
 			ProjectID:   params.ProjectID.String(),
@@ -283,7 +274,6 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 		for _, tc := range msg.ToolCalls {
 			// Check if this is a sub-agent tool
 			if subAgentConfig, isSubAgent := subAgentConfigs[tc.Function.Name]; isSubAgent {
-				// Parse the task and context arguments from the tool call
 				var args struct {
 					Task    string `json:"task"`
 					Context string `json:"context"`
@@ -301,7 +291,6 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 					continue
 				}
 
-				// Build child workflow params
 				childWorkflowParams := SubAgentWorkflowParams{
 					OrgID:        params.OrgID,
 					ProjectID:    params.ProjectID,
@@ -317,7 +306,6 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 					Environment:  subAgentConfig.EnvironmentSlug,
 				}
 
-				// Execute child workflow
 				childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 					WorkflowID:         uuid.Must(uuid.NewV7()).String(),
 					TaskQueue:          string(TaskQueueMain),
@@ -332,7 +320,6 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 					isSubAgent:   true,
 				})
 			} else {
-				// Regular tool call - execute via activity
 				toolMeta, ok := toolMetadata[tc.Function.Name]
 				if !ok {
 					logger.Warn("tool metadata not found", "tool_name", tc.Function.Name)
@@ -352,7 +339,6 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 					ToolMetadata: toolMeta,
 				}
 
-				// Start activity without waiting - allows parallel execution
 				future := workflow.ExecuteActivity(
 					ctx,
 					a.ExecuteToolCall,
@@ -385,12 +371,10 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 						ToolError:  &errMsg,
 					}
 				} else {
-					// Sub-agent returns simple result string
 					toolCallOutput = activities.ExecuteToolCallOutput{
 						ToolOutput: subAgentResult.Result,
 						ToolError:  subAgentResult.Error,
 					}
-					// Track tool calls per sub-agent name using count from sub-agent
 					if subAgentConfig, ok := subAgentConfigs[tcf.toolCallName]; ok {
 						subAgentName := subAgentConfig.Name
 						if subAgentName == "" {
@@ -400,7 +384,6 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 					}
 				}
 			} else {
-				// Regular tool call
 				err := tcf.future.Get(ctx, &toolCallOutput)
 				if err != nil {
 					logger.Error("failed to execute tool call", "error", err, "tool_name", tcf.toolCallName)
@@ -413,8 +396,6 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 				}
 			}
 
-			// Construct output item based on tool metadata
-			// Get tool metadata for this tool call
 			toolMeta, ok := toolMetadata[tcf.toolCall.Function.Name]
 			if (ok && toolMeta.IsMCPTool) || tcf.isSubAgent {
 				// MCP tool call in OpenAI Responses API format
@@ -453,7 +434,6 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 		result = msg.Content[0].Text
 	}
 
-	// Build successful response
 	return &agents.AgentsResponseWorkflowResult{
 		ResponseOutput: agents.ResponseOutput{
 			ID:                 responseID,
@@ -544,11 +524,9 @@ func createSubAgentTool(name, description string) openrouter.Tool {
 
 // sanitizeToolName converts a description to a valid tool name
 func sanitizeToolName(description string) string {
-	// Convert to lowercase and replace spaces with underscores
 	name := strings.ToLower(description)
 	name = strings.ReplaceAll(name, " ", "_")
 
-	// Remove any characters that aren't alphanumeric or underscores
 	var result strings.Builder
 	for _, r := range name {
 		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
@@ -556,13 +534,11 @@ func sanitizeToolName(description string) string {
 		}
 	}
 
-	// Truncate to reasonable length
 	finalName := result.String()
 	if len(finalName) > 50 {
 		finalName = finalName[:50]
 	}
 
-	// Ensure it doesn't start with a number
 	if len(finalName) > 0 && finalName[0] >= '0' && finalName[0] <= '9' {
 		finalName = "agent_" + finalName
 	}

@@ -112,7 +112,10 @@ func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResp
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	request := toServiceRequest(payload)
+	request, err := toServiceRequest(payload)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid request").Log(ctx, s.logger)
+	}
 
 	shouldStore := request.Store == nil || *request.Store
 
@@ -170,7 +173,6 @@ func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResp
 	return toHTTPResponse(workflowResult.ResponseOutput), nil
 }
 
-// GetResponse implements agents.Service.
 func (s *Service) GetResponse(ctx context.Context, payload *agents.GetResponsePayload) (*agents.AgentResponseOutput, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx.ActiveOrganizationID == "" {
@@ -271,12 +273,10 @@ func (s *Service) GetResponse(ctx context.Context, payload *agents.GetResponsePa
 			if workflowResult.OrgID != authCtx.ActiveOrganizationID {
 				return nil, oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
 			}
-			// Use data from workflow result if available
 			response = toHTTPResponse(workflowResult.ResponseOutput)
 			response.Status = "failed"
 			response.Error = &errMsg
 		} else {
-			// Fallback to minimal response
 			response = &agents.AgentResponseOutput{
 				ID:                 responseID,
 				Object:             "response",
@@ -313,7 +313,6 @@ func (s *Service) DeleteResponse(ctx context.Context, payload *agents.DeleteResp
 		return oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
 	}
 
-	// Check workflow status to determine how to verify ownership
 	workflowStatus := desc.WorkflowExecutionInfo.Status
 
 	// Verify ownership based on workflow status
@@ -373,7 +372,7 @@ func getTemperature(temp *float64) float64 {
 }
 
 // toInternalRequest converts a Goa request to the internal request type.
-func toServiceRequest(req *agents.CreateResponsePayload) agentspkg.ResponseRequest {
+func toServiceRequest(req *agents.CreateResponsePayload) (agentspkg.ResponseRequest, error) {
 	var toolsets []agentspkg.Toolset
 	for _, ts := range req.Toolsets {
 		toolsets = append(toolsets, agentspkg.Toolset{
@@ -382,8 +381,14 @@ func toServiceRequest(req *agents.CreateResponsePayload) agentspkg.ResponseReque
 		})
 	}
 
+	subAgentNames := make(map[string]bool)
 	var subAgents []agentspkg.SubAgent
 	for _, sa := range req.SubAgents {
+		if subAgentNames[sa.Name] {
+			return agentspkg.ResponseRequest{}, fmt.Errorf("duplicate sub-agent name: %q", sa.Name)
+		}
+		subAgentNames[sa.Name] = true
+
 		var saToolsets []agentspkg.Toolset
 		for _, ts := range sa.Toolsets {
 			saToolsets = append(saToolsets, agentspkg.Toolset{
@@ -430,7 +435,7 @@ func toServiceRequest(req *agents.CreateResponsePayload) agentspkg.ResponseReque
 		SubAgents:          subAgents,
 		Async:              req.Async,
 		Store:              req.Store,
-	}
+	}, nil
 }
 
 // toGoaResponse converts an internal response to the Goa response type.

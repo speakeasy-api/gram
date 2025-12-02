@@ -181,10 +181,11 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
+	temporalWorker.RegisterActivity(activities.RefreshModelPricing)
+	// Agent runner related activities
 	temporalWorker.RegisterActivity(activities.PreprocessAgentsInput)
 	temporalWorker.RegisterActivity(activities.ExecuteToolCall)
 	temporalWorker.RegisterActivity(activities.ExecuteModelCall)
-	temporalWorker.RegisterActivity(activities.RefreshModelPricing)
 	temporalWorker.RegisterActivity(activities.LoadAgentTools)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
@@ -195,9 +196,10 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
+	temporalWorker.RegisterWorkflow(RefreshModelPricingWorkflow)
+	// Agent runner related workflows
 	temporalWorker.RegisterWorkflow(AgentsResponseWorkflow)
 	temporalWorker.RegisterWorkflow(SubAgentWorkflow)
-	temporalWorker.RegisterWorkflow(RefreshModelPricingWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), client); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {

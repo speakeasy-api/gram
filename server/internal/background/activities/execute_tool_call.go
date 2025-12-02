@@ -37,13 +37,9 @@ func NewExecuteToolCall(logger *slog.Logger, agentsService *agents.Service) *Exe
 }
 
 func (a *ExecuteToolCall) Do(ctx context.Context, input ExecuteToolCallInput) (*ExecuteToolCallOutput, error) {
-	a.logger.InfoContext(ctx, "executing tool call",
-		attr.SlogToolName(input.ToolCall.Function.Name))
-
 	var toolOutput string
 	var toolError *string
 
-	// Execute tool using ToolURN if available
 	if input.ToolMetadata.ToolURN != nil {
 		result, err := a.agentsService.ExecuteTool(
 			ctx,

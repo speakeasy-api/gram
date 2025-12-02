@@ -173,6 +173,10 @@ func (a *Activities) ReapFlyApps(ctx context.Context, req activities.ReapFlyApps
 	return a.reapFlyApps.Do(ctx, req)
 }
 
+func (a *Activities) RefreshModelPricing(ctx context.Context, input activities.RefreshModelPricingArgs) error {
+	return a.refreshModelPricing.Do(ctx, input)
+}
+
 func (a *Activities) PreprocessAgentsInput(ctx context.Context, input activities.PreprocessAgentsInputInput) (*activities.PreprocessAgentsInputOutput, error) {
 	return a.preprocessAgentsInput.Do(ctx, input)
 }
@@ -183,10 +187,6 @@ func (a *Activities) ExecuteToolCall(ctx context.Context, input activities.Execu
 
 func (a *Activities) ExecuteModelCall(ctx context.Context, input activities.ExecuteModelCallInput) (*activities.ExecuteModelCallOutput, error) {
 	return a.executeModelCall.Do(ctx, input)
-}
-
-func (a *Activities) RefreshModelPricing(ctx context.Context, input activities.RefreshModelPricingArgs) error {
-	return a.refreshModelPricing.Do(ctx, input)
 }
 
 func (a *Activities) LoadAgentTools(ctx context.Context, input activities.LoadAgentToolsInput) (*activities.LoadAgentToolsOutput, error) {

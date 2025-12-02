@@ -37,10 +37,6 @@ func NewExecuteModelCall(logger *slog.Logger, agentsService *agents.Service) *Ex
 }
 
 func (a *ExecuteModelCall) Do(ctx context.Context, input ExecuteModelCallInput) (*ExecuteModelCallOutput, error) {
-	a.logger.InfoContext(ctx, "executing model call",
-		attr.SlogOrganizationID(input.OrgID))
-
-	// Use the chat client from agents service
 	msg, err := a.agentsService.GetCompletionFromMessages(ctx, input.OrgID, input.ProjectID, input.Messages, input.ToolDefs, input.Temperature, input.Model)
 	if err != nil {
 		a.logger.ErrorContext(ctx, "failed to get completion", attr.SlogError(err))

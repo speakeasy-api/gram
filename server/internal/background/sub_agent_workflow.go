@@ -68,7 +68,6 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 		systemPrompt += fmt.Sprintf("\n\nInstructions: %s", params.Instructions)
 	}
 
-	// Initialize messages with system prompt, goal, and context
 	messages := []openrouter.OpenAIChatMessage{
 		{
 			Role:       "system",
@@ -88,7 +87,6 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 
 	toolCallCount := 0
 
-	// Build toolset requests from params
 	toolsetRequests := make([]activities.ToolsetRequest, 0, len(params.Toolsets))
 	for _, toolset := range params.Toolsets {
 		toolsetRequests = append(toolsetRequests, activities.ToolsetRequest{
@@ -98,7 +96,6 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 		})
 	}
 
-	// Load all tools in a single activity call
 	var loadOutput activities.LoadAgentToolsOutput
 	err := workflow.ExecuteActivity(
 		ctx,
@@ -130,7 +127,6 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 
 	// Agentic loop: continue until we get a final message without tool calls
 	for {
-		// Execute model call
 		modelCallInput := activities.ExecuteModelCallInput{
 			OrgID:       params.OrgID,
 			ProjectID:   params.ProjectID.String(),
@@ -171,7 +167,6 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 		msg := modelCallOutput.Message
 		messages = append(messages, *msg)
 
-		// No tool calls = final assistant message
 		if len(msg.ToolCalls) == 0 {
 			// Add final message to output for history
 			messageID := "msg_" + workflow.Now(ctx).Format("20060102150405")
@@ -205,7 +200,6 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 
 		toolCallFutures := make([]toolCallFuture, 0, len(msg.ToolCalls))
 		for _, tc := range msg.ToolCalls {
-			// Get or create tool metadata for this tool
 			toolMeta, ok := toolMetadata[tc.Function.Name]
 			if !ok {
 				toolMeta = activities.ToolMetadata{
@@ -225,7 +219,6 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 				ToolMetadata: toolMeta,
 			}
 
-			// Start activity without waiting - allows parallel execution
 			future := workflow.ExecuteActivity(
 				ctx,
 				a.ExecuteToolCall,
@@ -246,7 +239,6 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 			err := tcf.future.Get(ctx, &toolCallOutput)
 			if err != nil {
 				logger.Error("failed to execute tool call in sub-agent", "error", err, "tool_name", tcf.toolCallName)
-				// Continue with error output
 				errMsg := err.Error()
 				toolCallOutput = activities.ExecuteToolCallOutput{
 					ToolOutput: fmt.Sprintf("Error executing tool: %v", err),
@@ -254,8 +246,6 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 				}
 			}
 
-			// Construct output item based on tool metadata for history
-			// Get tool metadata for this tool call
 			toolMeta, ok := toolMetadata[tcf.toolCall.Function.Name]
 			if ok && toolMeta.IsMCPTool {
 				// MCP tool call in OpenAI Responses API format
@@ -272,7 +262,6 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 				output = append(output, outputItem)
 			}
 
-			// Add tool response to messages
 			messages = append(messages, openrouter.OpenAIChatMessage{
 				Role:       "tool",
 				Content:    toolCallOutput.ToolOutput,
