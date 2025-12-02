@@ -43,7 +43,7 @@ import (
 	usageRepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
-var allowedPublicServers = map[string]int{
+var allowedEnabledServers = map[string]int{
 	"free": 1,
 	"pro":  5,
 }
@@ -288,29 +288,30 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		}
 	}
 
-	// TODO: Will we put account type restrictions here?
-	if payload.McpEnabled != nil {
-		updateParams.McpEnabled = *payload.McpEnabled
+	if payload.McpIsPublic != nil {
+		updateParams.McpIsPublic = *payload.McpIsPublic
 	}
 
-	if payload.McpIsPublic != nil {
-		if *payload.McpIsPublic && !existingToolset.McpSlug.Valid && (payload.McpSlug == nil || *payload.McpSlug == "") {
+	// Server-side enforcement of limit on # of enabled MCP servers by account type
+	if payload.McpEnabled != nil {
+		if *payload.McpEnabled && !existingToolset.McpSlug.Valid && (payload.McpSlug == nil || *payload.McpSlug == "") {
 			// sanity check this should not be able to happens
 			return nil, oops.E(oops.CodeBadRequest, nil, "mcp slug is required to set mcp is public")
 		}
-		publicServerLimit, ok := allowedPublicServers[authCtx.AccountType]
-		if *payload.McpIsPublic && !existingToolset.McpIsPublic && ok {
-			publicServers, err := s.repo.ListPublicToolsetsByOrganization(ctx, authCtx.ActiveOrganizationID)
+
+		enabledServerLimit, ok := allowedEnabledServers[authCtx.AccountType]
+		if *payload.McpEnabled && !existingToolset.McpEnabled && ok {
+			enabledServers, err := s.repo.ListEnabledToolsetsByOrganization(ctx, authCtx.ActiveOrganizationID)
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "error listing public toolsets").Log(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "error listing enabled toolsets").Log(ctx, logger)
 			}
 
-			if len(publicServers) >= publicServerLimit {
-				return nil, oops.E(oops.CodeForbidden, nil, "%s", fmt.Sprintf("you have reached the maximum number of public MCP servers for your account type: %d", publicServerLimit)).Log(ctx, logger)
+			if len(enabledServers) >= enabledServerLimit {
+				return nil, oops.E(oops.CodeForbidden, nil, "%s", fmt.Sprintf("you have reached the maximum number of public MCP servers for your account type: %d", enabledServerLimit)).Log(ctx, logger)
 			}
 		}
 
-		updateParams.McpIsPublic = *payload.McpIsPublic
+		updateParams.McpEnabled = *payload.McpEnabled
 	}
 
 	if payload.ToolSelectionMode != nil {

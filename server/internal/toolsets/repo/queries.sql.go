@@ -656,19 +656,19 @@ func (q *Queries) GetToolsetsByToolURN(ctx context.Context, arg GetToolsetsByToo
 	return items, nil
 }
 
-const listPublicToolsetsByOrganization = `-- name: ListPublicToolsetsByOrganization :many
+const listEnabledToolsetsByOrganization = `-- name: ListEnabledToolsetsByOrganization :many
 SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.created_at, t.updated_at, t.deleted_at, t.deleted
 FROM toolsets t
 JOIN projects p ON t.project_id = p.id
 WHERE p.organization_id = $1
-  AND t.mcp_is_public IS TRUE
+  AND t.mcp_enabled IS TRUE
   AND t.deleted IS FALSE
   AND p.deleted IS FALSE
 ORDER BY t.created_at DESC
 `
 
-func (q *Queries) ListPublicToolsetsByOrganization(ctx context.Context, organizationID string) ([]Toolset, error) {
-	rows, err := q.db.Query(ctx, listPublicToolsetsByOrganization, organizationID)
+func (q *Queries) ListEnabledToolsetsByOrganization(ctx context.Context, organizationID string) ([]Toolset, error) {
+	rows, err := q.db.Query(ctx, listEnabledToolsetsByOrganization, organizationID)
 	if err != nil {
 		return nil, err
 	}
