@@ -70,7 +70,7 @@ var specialLimitOrgs = []string{
 
 type Provisioner interface {
 	ProvisionAPIKey(ctx context.Context, orgID string) (string, error)
-	RefreshAPIKeyLimit(ctx context.Context, orgID string) (int, error)
+	RefreshAPIKeyLimit(ctx context.Context, orgID string, limit *int) (int, error)
 	GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error)
 	GetModelPricing(ctx context.Context, id string) (*mv.ModelPricing, error)
 	FetchAndCacheModelPricing(ctx context.Context) error
@@ -156,7 +156,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 	return openrouterKey, nil
 }
 
-func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string) (int, error) {
+func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, limit *int) (int, error) {
 	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get OpenRouter API key: %w", err)
@@ -166,41 +166,40 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string) (int,
 		return 0, errors.New("cannot make an update to monthly credits of 0")
 	}
 
-	previousKeyHash := key.KeyHash
-
 	org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
 	}
 
-	limit := o.getLimitForOrg(ctx, org)
+	var keyLimit int
+	if limit != nil {
+		keyLimit = *limit
+	} else {
+		keyLimit = o.getLimitForOrg(ctx, org)
+	}
 
-	keyResponse, err := o.createOpenRouterAPIKey(ctx, orgID, org.Slug, limit)
+	keyResponse, err := o.updateOpenRouterAPIKeyLimit(ctx, key.KeyHash, keyLimit)
 	if err != nil {
 		return 0, err
 	}
 
 	_, err = o.repo.UpdateOpenRouterKey(ctx, repo.UpdateOpenRouterKeyParams{
 		OrganizationID: orgID,
-		MonthlyCredits: int64(limit),
+		MonthlyCredits: int64(keyLimit),
 		KeyHash:        keyResponse.Data.Hash,
-		Key:            *keyResponse.Key,
+		Key:            key.Key,
 	})
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to update openrouter key").Log(ctx, o.logger)
 	}
 
-	if err := o.deleteOpenRouterAPIKey(ctx, previousKeyHash); err != nil {
-		return 0, oops.E(oops.CodeUnexpected, err, "failed to clean up previous openrouter key").Log(ctx, o.logger)
-	}
-
-	return limit, nil
+	return keyLimit, nil
 }
 
 type keyUsageResponse struct {
 	Data struct {
-		Limit *float64 `json:"limit"`
-		Usage *float64 `json:"usage"`
+		Limit        *float64 `json:"limit"`
+		UsageMonthly *float64 `json:"usage_monthly"`
 	} `json:"data"`
 }
 
@@ -246,8 +245,8 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64,
 	}
 
 	var creditsUsed float64
-	if usageResp.Data.Usage != nil {
-		creditsUsed = math.Round(*usageResp.Data.Usage*100) / 100
+	if usageResp.Data.UsageMonthly != nil {
+		creditsUsed = math.Round(*usageResp.Data.UsageMonthly*100) / 100
 	}
 
 	return creditsUsed, limit, nil
@@ -275,8 +274,13 @@ func (o *OpenRouter) getLimitForOrg(ctx context.Context, org orgRepo.Organizatio
 }
 
 type createKeyRequest struct {
-	Name  string   `json:"name"`
-	Label string   `json:"label"`
+	Name       string   `json:"name"`
+	Label      string   `json:"label"`
+	Limit      *float64 `json:"limit,omitempty"`
+	LimitReset string   `json:"limit_reset,omitempty"`
+}
+
+type updateKeyRequest struct {
 	Limit *float64 `json:"limit,omitempty"`
 }
 
@@ -290,7 +294,12 @@ type keyResponse struct {
 
 func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, orgSlug string, keyLimit int) (*keyResponse, error) {
 	creditLimit := float64(keyLimit)
-	requestBody := createKeyRequest{Name: fmt.Sprintf("gram-%s-%s", o.env, orgID), Label: fmt.Sprintf("%s (%s environment)", orgSlug, o.env), Limit: &creditLimit}
+	requestBody := createKeyRequest{
+		Name:       fmt.Sprintf("gram-%s-%s", o.env, orgID),
+		Label:      fmt.Sprintf("%s (%s environment)", orgSlug, o.env),
+		Limit:      &creditLimit,
+		LimitReset: "monthly",
+	}
 
 	bodyBytes, err := json.Marshal(requestBody)
 	if err != nil {
@@ -335,11 +344,20 @@ func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, o
 	return &response, nil
 }
 
-func (o *OpenRouter) deleteOpenRouterAPIKey(ctx context.Context, keyHash string) error {
-	req, err := http.NewRequestWithContext(ctx, "DELETE", OpenRouterBaseURL+fmt.Sprintf("/v1/keys/%s", keyHash), nil)
+func (o *OpenRouter) updateOpenRouterAPIKeyLimit(ctx context.Context, keyHash string, keyLimit int) (*keyResponse, error) {
+	creditLimit := float64(keyLimit)
+	requestBody := updateKeyRequest{Limit: &creditLimit}
+
+	bodyBytes, err := json.Marshal(requestBody)
 	if err != nil {
-		o.logger.ErrorContext(ctx, "failed to delete openrouter key HTTP request", attr.SlogError(err))
-		return fmt.Errorf("failed to create delete key request: %w", err)
+		o.logger.ErrorContext(ctx, "failed to marshal update openrouter key request body", attr.SlogError(err))
+		return nil, fmt.Errorf("failed to serialize update key request body: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "PATCH", OpenRouterBaseURL+fmt.Sprintf("/v1/keys/%s", keyHash), bytes.NewReader(bodyBytes))
+	if err != nil {
+		o.logger.ErrorContext(ctx, "failed to create update openrouter key HTTP request", attr.SlogError(err))
+		return nil, fmt.Errorf("failed to create update key request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+o.provisioningKey)
@@ -348,7 +366,7 @@ func (o *OpenRouter) deleteOpenRouterAPIKey(ctx context.Context, keyHash string)
 	resp, err := o.orClient.Do(req)
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to send HTTP request", attr.SlogError(err))
-		return fmt.Errorf("failed to send delete key request: %w", err)
+		return nil, fmt.Errorf("failed to send update key request: %w", err)
 	}
 
 	defer o11y.NoLogDefer(func() error {
@@ -356,10 +374,16 @@ func (o *OpenRouter) deleteOpenRouterAPIKey(ctx context.Context, keyHash string)
 	})
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("failed to update OpenRouter API key: " + resp.Status)
+		return nil, errors.New("failed to update OpenRouter API key limit: " + resp.Status)
 	}
 
-	return nil
+	var response keyResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		o.logger.ErrorContext(ctx, "failed to decode update openrouter key response body", attr.SlogError(err))
+		return nil, fmt.Errorf("failed to decode update openrouter key response body: %w", err)
+	}
+
+	return &response, nil
 }
 
 // modelPricingResponse represents pricing information from the OpenRouter API response

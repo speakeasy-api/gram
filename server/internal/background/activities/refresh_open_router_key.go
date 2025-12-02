@@ -24,10 +24,11 @@ func NewRefreshOpenRouterKey(logger *slog.Logger, db *pgxpool.Pool, openrouter o
 
 type RefreshOpenRouterKeyArgs struct {
 	OrgID string
+	Limit *int
 }
 
 func (o *RefreshOpenRouterKey) Do(ctx context.Context, args RefreshOpenRouterKeyArgs) error {
-	limit, err := o.openRouter.RefreshAPIKeyLimit(ctx, args.OrgID)
+	limit, err := o.openRouter.RefreshAPIKeyLimit(ctx, args.OrgID, args.Limit)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error updating openrouter key").Log(ctx, o.logger)
 	}
