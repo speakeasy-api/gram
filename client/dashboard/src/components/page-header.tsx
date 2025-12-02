@@ -60,10 +60,12 @@ function PageHeaderBreadcrumbs({
   fullWidth,
   className,
   substitutions = {}, // Any segment and how it should be displayed, for example toolset slug -> toolset name
+  skipSegments = [], // Segments to skip/hide from breadcrumbs
 }: {
   fullWidth?: boolean;
   className?: string;
   substitutions?: Record<string, string | undefined>;
+  skipSegments?: string[];
 }) {
   const params = useParams();
   const { orgSlug, projectSlug } = useSlugs();
@@ -80,6 +82,7 @@ function PageHeaderBreadcrumbs({
     .split("/")
     .filter(Boolean) // Remove empty strings
     .slice(2) // Remove the two leading elements (org slug and project slug)
+    .filter((segment) => !skipSegments.includes(segment)) // Skip specified segments
     .map((segment, index, segments) => {
       const url = "/" + segments.slice(0, index + 1).join("/");
       const isCurrentPage = location.pathname.endsWith(url);

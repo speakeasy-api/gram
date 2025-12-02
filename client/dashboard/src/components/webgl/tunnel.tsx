@@ -12,4 +12,4 @@ export const WebGLIn = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-export const WebGLOut = WebGL.Out;
+export const WebGLOut = WebGL.Out as () => React.ReactNode;
