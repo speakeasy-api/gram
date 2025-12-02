@@ -69,16 +69,28 @@ func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.Re
 	stdoutRdr, stdoutWrt := io.Pipe()
 	stderrRdr, stderrWrt := io.Pipe()
 	logwg.Go(func() {
-		o11y.CaptureRawLogLines(ctx, logger, stdoutRdr, attr.SlogDevice("stdout"))
+		if err := o11y.CaptureRawLogLines(ctx, logger, stdoutRdr, attr.SlogDevice("stdout")); err != nil {
+			s.logger.ErrorContext(ctx, "failed to capture stdout log lines", attr.SlogError(err))
+		}
 	})
 	logwg.Go(func() {
-		o11y.CaptureRawLogLines(ctx, logger, stderrRdr, attr.SlogDevice("stderr"))
+		if err := o11y.CaptureRawLogLines(ctx, logger, stderrRdr, attr.SlogDevice("stderr")); err != nil {
+			s.logger.ErrorContext(ctx, "failed to capture stderr log lines", attr.SlogError(err))
+		}
 	})
-	defer func() {
-		stdoutWrt.Close()
-		stderrWrt.Close()
+	defer o11y.LogDefer(ctx, logger, func() error {
+		var err error
+		if e := stdoutWrt.Close(); e != nil {
+			err = errors.Join(err, fmt.Errorf("close stdout writer: %w", e))
+		}
+		if e := stderrWrt.Close(); e != nil {
+			err = errors.Join(err, fmt.Errorf("close stderr writer: %w", e))
+		}
+
 		logwg.Wait()
-	}()
+		return err
+
+	})
 
 	args := s.args
 	args = append(args, fifoPath, string(req.requestArg), req.requestType)

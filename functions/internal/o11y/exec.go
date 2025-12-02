@@ -18,7 +18,9 @@ func CaptureRawLogLines(ctx context.Context, logger *slog.Logger, rdr io.Reader,
 		rec := slog.NewRecord(time.Now(), slog.LevelInfo, "log", 0)
 		rec.AddAttrs(slog.String("data", string(bs)))
 		rec.AddAttrs(attr...)
-		handler.Handle(ctx, rec)
+
+		// not being able to handle a log line is non-fatal
+		_ = handler.Handle(ctx, rec)
 	}
 
 	if err := scanner.Err(); err != nil {
