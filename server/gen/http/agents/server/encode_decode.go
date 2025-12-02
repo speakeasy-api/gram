@@ -676,14 +676,6 @@ func unmarshalAgentToolsetRequestBodyToAgentsAgentToolset(v *AgentToolsetRequest
 		ToolsetSlug:     *v.ToolsetSlug,
 		EnvironmentSlug: *v.EnvironmentSlug,
 	}
-	if v.Headers != nil {
-		res.Headers = make(map[string]string, len(v.Headers))
-		for key, val := range v.Headers {
-			tk := key
-			tv := val
-			res.Headers[tk] = tv
-		}
-	}
 
 	return res
 }

@@ -348,7 +348,6 @@ func (s *Service) LoadToolsetTools(
 	projectID uuid.UUID,
 	toolsetSlug string,
 	environmentSlug string,
-	headers map[string]string,
 ) ([]AgentTool, error) {
 	toolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(projectID), mv.ToolsetSlug(toolsetSlug), &s.toolsetCache)
 	if err != nil {
@@ -425,7 +424,6 @@ func (s *Service) LoadToolsByURN(
 	projectID uuid.UUID,
 	toolURNs []urn.Tool,
 	environmentSlug string,
-	headers map[string]string,
 ) ([]AgentTool, error) {
 	toolsetHelpers := toolsets.NewToolsets(s.db)
 
@@ -492,7 +490,6 @@ func (s *Service) ExecuteTool(
 	projectID uuid.UUID,
 	toolURN urn.Tool,
 	environmentSlug string,
-	headers map[string]string,
 	rawArgs string,
 ) (string, error) {
 	envRepo := env_repo.New(s.db)
@@ -537,11 +534,6 @@ func (s *Service) ExecuteTool(
 	ciEnv := gateway.NewCaseInsensitiveEnv()
 	for _, entry := range environmentEntries {
 		ciEnv.Set(entry.Name, entry.Value)
-	}
-
-	// use header overrides
-	for key, value := range headers {
-		ciEnv.Set(key, value)
 	}
 
 	err = s.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), gateway.ToolCallEnv{

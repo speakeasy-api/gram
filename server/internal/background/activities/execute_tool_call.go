@@ -46,7 +46,6 @@ func (a *ExecuteToolCall) Do(ctx context.Context, input ExecuteToolCallInput) (*
 			input.ProjectID,
 			*input.ToolMetadata.ToolURN,
 			input.ToolMetadata.EnvironmentSlug,
-			input.ToolMetadata.Headers,
 			input.ToolCall.Function.Arguments,
 		)
 		if err != nil {

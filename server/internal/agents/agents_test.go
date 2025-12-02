@@ -52,7 +52,6 @@ func TestAgentsService_LoadToolsetTools_Success(t *testing.T) {
 		*authCtx.ProjectID,
 		string(created.Slug),
 		"", // no environment
-		nil,
 	)
 	require.NoError(t, err)
 	require.Len(t, agentTools, 2, "should have 2 tools")
@@ -96,7 +95,6 @@ func TestAgentsService_LoadToolsetTools_EmptyToolset(t *testing.T) {
 		*authCtx.ProjectID,
 		string(created.Slug),
 		"",
-		nil,
 	)
 	require.NoError(t, err)
 	require.Empty(t, agentTools)
@@ -117,7 +115,6 @@ func TestAgentsService_LoadToolsetTools_NotFound(t *testing.T) {
 		*authCtx.ProjectID,
 		"non-existent-toolset",
 		"",
-		nil,
 	)
 	require.Error(t, err)
 }
@@ -157,7 +154,6 @@ func TestAgentsService_LoadToolsetTools_VerifyToolDefinition(t *testing.T) {
 		*authCtx.ProjectID,
 		string(created.Slug),
 		"",
-		nil,
 	)
 	require.NoError(t, err)
 	require.Len(t, agentTools, 1)
@@ -195,7 +191,6 @@ func TestAgentsService_LoadToolsByURN_Success(t *testing.T) {
 		*authCtx.ProjectID,
 		toolURNs,
 		"",
-		nil,
 	)
 	require.NoError(t, err)
 	require.Len(t, agentTools, 2)
@@ -224,7 +219,6 @@ func TestAgentsService_LoadToolsByURN_EmptyList(t *testing.T) {
 		*authCtx.ProjectID,
 		[]urn.Tool{},
 		"",
-		nil,
 	)
 	require.NoError(t, err)
 	require.Empty(t, agentTools)
@@ -253,7 +247,6 @@ func TestAgentsService_LoadToolsByURN_SingleTool(t *testing.T) {
 		*authCtx.ProjectID,
 		[]urn.Tool{tools[0].ToolUrn},
 		"",
-		nil,
 	)
 	require.NoError(t, err)
 	require.Len(t, agentTools, 1)
@@ -281,7 +274,6 @@ func TestAgentsService_LoadToolsByURN_InvalidURN(t *testing.T) {
 		*authCtx.ProjectID,
 		[]urn.Tool{invalidURN},
 		"",
-		nil,
 	)
 	require.Error(t, err)
 }
@@ -309,7 +301,6 @@ func TestAgentsService_LoadToolsByURN_VerifyServerLabel(t *testing.T) {
 		*authCtx.ProjectID,
 		[]urn.Tool{tools[0].ToolUrn},
 		"",
-		nil,
 	)
 	require.NoError(t, err)
 	require.Len(t, agentTools, 1)
@@ -342,7 +333,6 @@ func TestAgentsService_LoadToolsByURN_VerifyToolURNPointer(t *testing.T) {
 		*authCtx.ProjectID,
 		toolURNs,
 		"",
-		nil,
 	)
 	require.NoError(t, err)
 	require.Len(t, agentTools, 2)

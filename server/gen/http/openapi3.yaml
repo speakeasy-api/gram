@@ -9325,11 +9325,6 @@ components:
                 environment_slug:
                     type: string
                     description: The slug of the environment for auth
-                headers:
-                    type: object
-                    description: Optional headers to pass to the toolset
-                    additionalProperties:
-                        type: string
                 toolset_slug:
                     type: string
                     description: The slug of the toolset to use

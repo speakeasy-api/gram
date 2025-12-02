@@ -109,8 +109,6 @@ type AgentToolset struct {
 	ToolsetSlug string
 	// The slug of the environment for auth
 	EnvironmentSlug string
-	// Optional headers to pass to the toolset
-	Headers map[string]string
 }
 
 // CreateResponsePayload is the payload type of the agents service

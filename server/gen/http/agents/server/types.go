@@ -657,8 +657,6 @@ type AgentToolsetRequestBody struct {
 	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
 	// The slug of the environment for auth
 	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
-	// Optional headers to pass to the toolset
-	Headers map[string]string `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
 }
 
 // AgentSubAgentRequestBody is used to define fields on request body types.

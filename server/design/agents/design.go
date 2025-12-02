@@ -87,7 +87,6 @@ var AgentToolset = Type("AgentToolset", func() {
 
 	Attribute("toolset_slug", String, "The slug of the toolset to use")
 	Attribute("environment_slug", String, "The slug of the environment for auth")
-	Attribute("headers", MapOf(String, String), "Optional headers to pass to the toolset")
 
 	Required("toolset_slug", "environment_slug")
 })

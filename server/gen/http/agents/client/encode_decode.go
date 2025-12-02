@@ -727,14 +727,6 @@ func marshalAgentsAgentToolsetToAgentToolsetRequestBody(v *agents.AgentToolset) 
 		ToolsetSlug:     v.ToolsetSlug,
 		EnvironmentSlug: v.EnvironmentSlug,
 	}
-	if v.Headers != nil {
-		res.Headers = make(map[string]string, len(v.Headers))
-		for key, val := range v.Headers {
-			tk := key
-			tv := val
-			res.Headers[tk] = tv
-		}
-	}
 
 	return res
 }
@@ -780,14 +772,6 @@ func marshalAgentToolsetRequestBodyToAgentsAgentToolset(v *AgentToolsetRequestBo
 	res := &agents.AgentToolset{
 		ToolsetSlug:     v.ToolsetSlug,
 		EnvironmentSlug: v.EnvironmentSlug,
-	}
-	if v.Headers != nil {
-		res.Headers = make(map[string]string, len(v.Headers))
-		for key, val := range v.Headers {
-			tk := key
-			tv := val
-			res.Headers[tk] = tv
-		}
 	}
 
 	return res

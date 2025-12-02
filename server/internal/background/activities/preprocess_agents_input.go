@@ -24,7 +24,6 @@ type PreprocessAgentsInputInput struct {
 type ToolMetadata struct {
 	ToolURN         *urn.Tool
 	EnvironmentSlug string
-	Headers         map[string]string
 	IsMCPTool       bool
 	ServerLabel     string
 }
@@ -99,7 +98,7 @@ func (a *PreprocessAgentsInput) Do(ctx context.Context, input PreprocessAgentsIn
 
 	var agentTools []agents.AgentTool
 	for _, toolset := range request.Toolsets {
-		toolsetTools, err := a.agentsService.LoadToolsetTools(ctx, input.ProjectID, toolset.ToolsetSlug, toolset.EnvironmentSlug, nil)
+		toolsetTools, err := a.agentsService.LoadToolsetTools(ctx, input.ProjectID, toolset.ToolsetSlug, toolset.EnvironmentSlug)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load toolset %q: %w", toolset.ToolsetSlug, err)
 		}
@@ -129,7 +128,6 @@ func (a *PreprocessAgentsInput) Do(ctx context.Context, input PreprocessAgentsIn
 			toolMetadata[t.Definition.Function.Name] = ToolMetadata{
 				ToolURN:         t.ToolURN,
 				EnvironmentSlug: envSlug,
-				Headers:         nil,
 				IsMCPTool:       t.IsMCPTool,
 				ServerLabel:     t.ServerLabel,
 			}

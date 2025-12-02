@@ -92,7 +92,6 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 		toolsetRequests = append(toolsetRequests, activities.ToolsetRequest{
 			ToolsetSlug:     toolset.ToolsetSlug,
 			EnvironmentSlug: toolset.EnvironmentSlug,
-			Headers:         nil,
 		})
 	}
 
@@ -106,7 +105,6 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 			ToolURNs:        params.ToolURNs,
 			Toolsets:        toolsetRequests,
 			EnvironmentSlug: params.Environment,
-			Headers:         nil,
 		},
 	).Get(ctx, &loadOutput)
 	if err != nil {
@@ -205,7 +203,6 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 				toolMeta = activities.ToolMetadata{
 					ToolURN:         nil,
 					EnvironmentSlug: "",
-					Headers:         nil,
 					IsMCPTool:       false,
 					ServerLabel:     "",
 				}

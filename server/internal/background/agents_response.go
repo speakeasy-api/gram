@@ -185,7 +185,6 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 		toolMetadata[toolName] = activities.ToolMetadata{
 			ToolURN:         nil,
 			EnvironmentSlug: subAgent.EnvironmentSlug,
-			Headers:         nil,
 			IsMCPTool:       false,
 			ServerLabel:     "",
 		}
@@ -326,7 +325,6 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 					toolMeta = activities.ToolMetadata{
 						ToolURN:         nil,
 						EnvironmentSlug: "",
-						Headers:         nil,
 						IsMCPTool:       false,
 						ServerLabel:     "",
 					}
@@ -387,7 +385,6 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 				err := tcf.future.Get(ctx, &toolCallOutput)
 				if err != nil {
 					logger.Error("failed to execute tool call", "error", err, "tool_name", tcf.toolCallName)
-					// Continue with error output
 					errMsg := err.Error()
 					toolCallOutput = activities.ExecuteToolCallOutput{
 						ToolOutput: fmt.Sprintf("Error executing tool: %v", err),
