@@ -1,5 +1,11 @@
 # @gram-ai/functions
 
+## 0.12.0
+
+### Minor Changes
+
+- 3ff96b9: Allows the specification of a "oauth variable", into which an oauth token will be piped if available
+
 ## 0.11.2
 
 ### Patch Changes

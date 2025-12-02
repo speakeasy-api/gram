@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.21.2
+
+### Patch Changes
+
+- 4228c3e: Implements passthrough oauth support for function tools via oauthTarget indicator. Also simplifies the oauth proxy redirect for more recent usecases
+
 ## 0.20.1
 
 ### Patch Changes
