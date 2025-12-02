@@ -1040,7 +1040,7 @@ USING GIN (tags);
 
 -- Agent executions table
 CREATE TABLE IF NOT EXISTS agent_executions (
-  response_id TEXT NOT NULL,
+  id TEXT NOT NULL,
   project_id UUID NOT NULL,
   status TEXT NOT NULL,
   started_at TIMESTAMPTZ NOT NULL,
@@ -1048,7 +1048,7 @@ CREATE TABLE IF NOT EXISTS agent_executions (
   deleted_at TIMESTAMPTZ,
   deleted BOOLEAN NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
 
-  CONSTRAINT agent_executions_pkey PRIMARY KEY (response_id),
+  CONSTRAINT agent_executions_pkey PRIMARY KEY (id),
   CONSTRAINT agent_executions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
 );
 

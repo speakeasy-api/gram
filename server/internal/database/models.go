@@ -14,7 +14,7 @@ import (
 )
 
 type AgentExecution struct {
-	ResponseID  string
+	ID          string
 	ProjectID   uuid.UUID
 	Status      string
 	StartedAt   pgtype.Timestamptz
