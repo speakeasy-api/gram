@@ -104,7 +104,6 @@ func (o *OutputItems) UnmarshalJSON(data []byte) error {
 
 	items := make([]OutputItem, 0, len(raw))
 	for _, itemData := range raw {
-		// Try to determine the type by looking at the "type" field
 		var typeCheck struct {
 			Type string `json:"type"`
 		}
@@ -306,7 +305,6 @@ func (w *toolCallResponseWriter) WriteHeader(statusCode int) {
 	w.statusCode = statusCode
 }
 
-// formatResult formats the tool call result
 type toolCallResult struct {
 	Text string
 	Data string
@@ -369,7 +367,6 @@ func (s *Service) LoadToolsetTools(
 
 		tool := conv.ToBaseTool(tool)
 
-		// Get tool schema from plan
 		plan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, *toolURN, projectID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get tool call plan: %w", err)
@@ -438,7 +435,6 @@ func (s *Service) LoadToolsByURN(
 			continue
 		}
 
-		// Extract tool info from plan
 		var name, description string
 		var schema json.RawMessage
 

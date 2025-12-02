@@ -65,7 +65,6 @@ func NewService(
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agents-api"))
 
-	// Create the agents service
 	agentsService := agentspkg.NewService(
 		logger,
 		tracerProvider,
@@ -101,7 +100,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
-// CreateResponse implements agents.Service.
 func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResponsePayload) (*agents.AgentResponseOutput, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx.ActiveOrganizationID == "" {
@@ -118,14 +116,12 @@ func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResp
 	}
 
 	shouldStore := request.Store == nil || *request.Store
-
-	// Check if request is async
 	isAsync := request.Async != nil && *request.Async
 
 	if isAsync && !shouldStore {
 		return nil, oops.E(oops.CodeBadRequest, nil, "async responses cannot have non stored agent history")
 	}
-	// Execute workflow
+
 	workflowRun, err := background.ExecuteAgentsResponseWorkflow(ctx, s.temporalClient, background.AgentsResponseWorkflowParams{
 		OrgID:     authCtx.ActiveOrganizationID,
 		ProjectID: *authCtx.ProjectID,
@@ -162,7 +158,7 @@ func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResp
 	}
 
 	if !shouldStore {
-		// Delete the workflow execution to avoid storing history
+		// Delete the workflow execution to remove history
 		go func() {
 			if delErr := s.deleteAgentRun(context.WithoutCancel(ctx), workflowRun.GetID()); delErr != nil {
 				s.logger.ErrorContext(ctx, "failed to delete non-stored agent run", attr.SlogError(delErr))
@@ -181,13 +177,11 @@ func (s *Service) GetResponse(ctx context.Context, payload *agents.GetResponsePa
 
 	responseID := payload.ResponseID
 
-	// Describe workflow to check status without blocking
 	desc, err := s.temporalClient.DescribeWorkflowExecution(ctx, responseID, "")
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
 	}
 
-	// Check workflow status
 	workflowStatus := desc.WorkflowExecutionInfo.Status
 
 	var response *agents.AgentResponseOutput
@@ -307,7 +301,6 @@ func (s *Service) DeleteResponse(ctx context.Context, payload *agents.DeleteResp
 
 	responseID := payload.ResponseID
 
-	// Verify the workflow exists and belongs to this organization before deleting
 	desc, err := s.temporalClient.DescribeWorkflowExecution(ctx, responseID, "")
 	if err != nil {
 		return oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
@@ -318,7 +311,6 @@ func (s *Service) DeleteResponse(ctx context.Context, payload *agents.DeleteResp
 	// Verify ownership based on workflow status
 	switch workflowStatus {
 	case enums.WORKFLOW_EXECUTION_STATUS_RUNNING:
-		// Query workflow for org_id (only available while running)
 		var orgID string
 		queryValue, queryErr := s.temporalClient.QueryWorkflow(ctx, responseID, "", "org_id")
 		if queryErr != nil {
