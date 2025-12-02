@@ -12,11 +12,9 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// TODO: This will be 30 just setting to a lower value initially to test
-const OpenRouterKeyRefreshWindow = 30
-
 type OpenRouterKeyRefreshParams struct {
 	OrgID string
+	Limit *int // Allows for setting custom limits by kicking off this temporal workflow directly
 }
 
 type OpenRouterKeyRefresher struct {
@@ -26,6 +24,7 @@ type OpenRouterKeyRefresher struct {
 func (w *OpenRouterKeyRefresher) ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string) error {
 	_, err := ExecuteOpenrouterKeyRefreshWorkflow(ctx, w.Temporal, OpenRouterKeyRefreshParams{
 		OrgID: orgID,
+		Limit: nil,
 	})
 	return err
 }
@@ -53,17 +52,12 @@ func ExecuteOpenrouterKeyRefreshWorkflow(ctx context.Context, temporalClient cli
 		ID:                    id,
 		TaskQueue:             string(TaskQueueMain),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
-		WorkflowRunTimeout:    (OpenRouterKeyRefreshWindow + 1) * 24 * time.Hour, // slightly longer workflow timeout
+		WorkflowRunTimeout:    3 * time.Minute, // slightly longer workflow timeout
 	}, OpenrouterKeyRefreshWorkflow, params)
 }
 
 func OpenrouterKeyRefreshWorkflow(ctx workflow.Context, params OpenRouterKeyRefreshParams) error {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Sleeping for 30 days before key refresh", "OrgID", params.OrgID)
-
-	if err := workflow.Sleep(ctx, OpenRouterKeyRefreshWindow*24*time.Hour); err != nil {
-		return fmt.Errorf("workflow sleep interrupted: %w", err)
-	}
 
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
@@ -77,7 +71,7 @@ func OpenrouterKeyRefreshWorkflow(ctx workflow.Context, params OpenRouterKeyRefr
 	err := workflow.ExecuteActivity(
 		ctx,
 		a.RefreshOpenRouterKey,
-		activities.RefreshOpenRouterKeyArgs{OrgID: params.OrgID},
+		activities.RefreshOpenRouterKeyArgs{OrgID: params.OrgID, Limit: params.Limit},
 	).Get(ctx, &toolsResponse)
 	if err != nil {
 		return fmt.Errorf("failed to refresh openrouter key: %w", err)
@@ -86,5 +80,5 @@ func OpenrouterKeyRefreshWorkflow(ctx workflow.Context, params OpenRouterKeyRefr
 	logger.Info("Key refresh succeeded; continuing workflow for next cycle", "OrgID", params.OrgID)
 
 	// kick off a new workflow loop with clean history
-	return workflow.NewContinueAsNewError(ctx, OpenrouterKeyRefreshWorkflow, params)
+	return nil
 }

@@ -147,7 +147,7 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 	}
 
 	if previousAccountType != updatedAccountType {
-		if _, err := s.openRouter.RefreshAPIKeyLimit(ctx, refreshedOrg.ID); err != nil {
+		if _, err := s.openRouter.RefreshAPIKeyLimit(ctx, refreshedOrg.ID, nil); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to refresh openrouter key limit").Log(ctx, s.logger)
 		}
 	}
