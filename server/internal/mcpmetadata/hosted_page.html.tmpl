@@ -1014,17 +1014,16 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
               </button>
               <!-- prettier-ignore -->
               <code class="code-snippet language-toml">[mcp_servers.{{ .MCPSlug }}]
-command = "npx"
-args = ["-y", "mcp-remote", "{{ .MCPURL }}"{{- range .SecurityInputs }}, "--header", "{{ .SystemName | asHTTPHeader }}:${{ "{" }}{{ .DisplayName | asPosixName }}{{ "}" }}"{{- end }}]{{- if .SecurityInputs }}
-env = { {{- range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }}"{{ $input.DisplayName | asPosixName }}" = "your-{{ $input.DisplayName | asPosixName }}-value"{{- end }} }{{- end }}</code>
+url = "{{ .MCPURL }}"
+http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }}"{{ $input.SystemName | asHTTPHeader }}" = "your-{{ $input.DisplayName | asPosixName }}-value"{{- end }} }</code>
             </div>
             </div>
           </li>
           {{- if .SecurityInputs }}
           <li class="instruction-item">
-            (optional) If you'd rather set variables in your shell, you can
-            remove the env key from the config above and set these environment
-            variables in your shell:
+            (optional) If you would rather use variables from your system's
+            environment, remove the <code>http_headers</code> key from the config
+            above and set these replace it with the following configuration:
             <div class="card code-container">
               <button class="copy-button waiting">
                 <svg
@@ -1045,14 +1044,12 @@ env = { {{- range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }}"{{ $in
                 </svg>
               </button>
               <!-- prettier-ignore -->
-              <code class="code-snippet language-sh">{{- range .SecurityInputs -}}
-export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-value"{{- end }}</code>
-              >
+          <code class="code-snippet language-sh">env_http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }}"{{ $input.SystemName | asHTTPHeader }}" = "{{ $input.DisplayName | asPosixName }}"{{- end }} }</code>
             </div>
           </li>
           {{- end }}
           <li class="instruction-item">
-            Restart Codex CLI to load the new configuration
+            Restart Codex CLI to load the new configuration.
           </li>
         </ol>
       </div>
