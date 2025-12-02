@@ -397,9 +397,23 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 			}
 
 			toolMeta, ok := toolMetadata[tcf.toolCall.Function.Name]
-			if (ok && toolMeta.IsMCPTool) || tcf.isSubAgent {
-				// MCP tool call in OpenAI Responses API format
-				outputItem := agents.MCPToolCall{
+			switch {
+			case tcf.isSubAgent:
+				output = append(output, agents.FunctionToolCall{
+					Type:      "function_call",
+					ID:        tcf.toolCall.ID,
+					CallID:    tcf.toolCall.ID,
+					Name:      tcf.toolCall.Function.Name,
+					Arguments: tcf.toolCall.Function.Arguments,
+					Status:    "completed",
+				})
+				output = append(output, agents.FunctionToolCallOutput{
+					Type:   "function_call_output",
+					CallID: tcf.toolCall.ID,
+					Output: toolCallOutput.ToolOutput,
+				})
+			case ok && toolMeta.IsMCPTool:
+				output = append(output, agents.MCPToolCall{
 					Type:        "mcp_call",
 					ID:          tcf.toolCall.ID,
 					ServerLabel: toolMeta.ServerLabel,
@@ -408,8 +422,7 @@ Think step by step: Review all available tools (including sub-agent tools), matc
 					Output:      toolCallOutput.ToolOutput,
 					Error:       toolCallOutput.ToolError,
 					Status:      "completed",
-				}
-				output = append(output, outputItem)
+				})
 			}
 
 			// Add tool response to messages
