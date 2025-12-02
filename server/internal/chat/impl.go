@@ -499,7 +499,7 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 
 		cost := openrouter.CalculateModelCost(r.ctx, r.openRouter, r.logger, r.model, int64(r.usage.PromptTokens), int64(r.usage.CompletionTokens))
 
-		go r.TrackModelUsage(r.ctx, billing.ModelUsageEvent{
+		go r.TrackModelUsage(context.WithoutCancel(r.ctx), billing.ModelUsageEvent{
 			OrganizationID: r.orgID,
 			ProjectID:      r.projectID.String(),
 			Model:          r.model,
