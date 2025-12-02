@@ -1,5 +1,12 @@
 # function-runners
 
+## 0.2.2
+
+### Patch Changes
+
+- 83b8083: Updated the Gram Functions runner to capture raw output from sub-processes line by line and wrap each line into structured logs.
+- 83b8083: Fixed the Gram Functions runner service to detect function ID from the environment using the correct variable name, `GRAM_FUNCTION_ID`, and set it up as logger attribute.
+
 ## 0.2.1
 
 ### Patch Changes

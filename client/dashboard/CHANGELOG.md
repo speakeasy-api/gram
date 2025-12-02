@@ -1,5 +1,17 @@
 # dashboard
 
+## 0.21.0
+
+### Minor Changes
+
+- a041994: Introduces a new page for each source added to a users project. Source page provides details on the source, which toolsets its used and the abilty to attach an environment to a source.
+
+### Patch Changes
+
+- 4228c3e: Implements passthrough oauth support for function tools via oauthTarget indicator. Also simplifies the oauth proxy redirect for more recent usecases
+- Updated dependencies [4228c3e]
+  - @gram/client@0.21.2
+
 ## 0.20.1
 
 ### Patch Changes
