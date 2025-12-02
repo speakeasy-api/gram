@@ -205,7 +205,7 @@ func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string
 	// Track model usage for billing
 	if chatResp.Usage != nil {
 		cost := CalculateModelCost(ctx, c.openRouter, c.logger, modelToUse, int64(chatResp.Usage.PromptTokens), int64(chatResp.Usage.CompletionTokens))
-		go c.billingTracker.TrackModelUsage(ctx, billing.ModelUsageEvent{
+		go c.billingTracker.TrackModelUsage(context.WithoutCancel(ctx), billing.ModelUsageEvent{
 			OrganizationID: orgID,
 			ProjectID:      projectID,
 			Model:          modelToUse,
