@@ -69,12 +69,12 @@ func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.Re
 	stdoutRdr, stdoutWrt := io.Pipe()
 	stderrRdr, stderrWrt := io.Pipe()
 	logwg.Go(func() {
-		if err := o11y.CaptureRawLogLines(ctx, logger, stdoutRdr, attr.SlogDevice("stdout")); err != nil {
+		if err := o11y.CaptureRawLogLines(ctx, logger, stdoutRdr, attr.SlogDevice("stdout"), attr.SlogEventOrigin("user")); err != nil {
 			s.logger.ErrorContext(ctx, "failed to capture stdout log lines", attr.SlogError(err))
 		}
 	})
 	logwg.Go(func() {
-		if err := o11y.CaptureRawLogLines(ctx, logger, stderrRdr, attr.SlogDevice("stderr")); err != nil {
+		if err := o11y.CaptureRawLogLines(ctx, logger, stderrRdr, attr.SlogDevice("stderr"), attr.SlogEventOrigin("user")); err != nil {
 			s.logger.ErrorContext(ctx, "failed to capture stderr log lines", attr.SlogError(err))
 		}
 	})

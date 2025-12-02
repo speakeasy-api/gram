@@ -17,11 +17,15 @@ const (
 	ProcessExitCodeKey     = semconv.ProcessExitCodeKey
 	ServerAddressKey       = semconv.ServerAddressKey
 
-	ComponentKey    = attribute.Key("gram.component")
+	ComponentKey = attribute.Key("gram.component")
+
 	ProjectIDKey    = attribute.Key("gram.project.id")
 	ProjectSlugKey  = attribute.Key("gram.project.slug")
 	DeploymentIDKey = attribute.Key("gram.deployment.id")
 	FunctionIDKey   = attribute.Key("gram.function.id")
+
+	EventPayloadKey = attribute.Key("gram.event.payload")
+	EventOriginKey  = attribute.Key("gram.event.origin")
 
 	SpanIDKey         = attribute.Key("span.id")
 	TraceIDKey        = attribute.Key("trace.id")
@@ -68,6 +72,12 @@ func FunctionID(v string) attribute.KeyValue { return FunctionIDKey.String(v) }
 func SlogFunctionID(v string) slog.Attr {
 	return slog.String(string(FunctionIDKey), v)
 }
+
+func EventPayload(v string) attribute.KeyValue { return EventPayloadKey.String(v) }
+func SlogEventPayload(v string) slog.Attr      { return slog.String(string(EventPayloadKey), v) }
+
+func EventOrigin(v string) attribute.KeyValue { return EventOriginKey.String(v) }
+func SlogEventOrigin(v string) slog.Attr      { return slog.String(string(EventOriginKey), v) }
 
 func SpanID(v string) attribute.KeyValue { return SpanIDKey.String(v) }
 func SlogSpanID(v string) slog.Attr      { return slog.String(string(SpanIDKey), v) }
