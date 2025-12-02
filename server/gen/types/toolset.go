@@ -7,7 +7,7 @@
 
 package types
 
-// Toolset is the result type of the toolsets service createToolset method.
+// Toolset is the result type of the releases service rollbackToRelease method.
 type Toolset struct {
 	// The ID of the toolset
 	ID string
@@ -58,6 +58,11 @@ type Toolset struct {
 	ExternalOauthServer *ExternalOAuthServer
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServer
+	// The editing mode for this toolset: 'iteration' (direct edits) or 'staging'
+	// (explicit releases)
+	EditingMode string
+	// The ID of the parent toolset if this is a staging toolset
+	ParentToolsetID *string
 	// When the toolset was created.
 	CreatedAt string
 	// When the toolset was last updated.

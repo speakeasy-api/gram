@@ -22,6 +22,8 @@ type ToolVariation struct {
 	Description   pgtype.Text
 	Tags          []string
 	Summarizer    pgtype.Text
+	PredecessorID uuid.NullUUID
+	Version       int64
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz

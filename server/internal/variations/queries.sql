@@ -96,3 +96,46 @@ WHERE tool_variations.id = @id
   )
   AND tool_variations.deleted IS FALSE
 RETURNING tool_variations.id;
+
+-- ==============================================================================
+-- Variation Versioning Queries
+-- ==============================================================================
+
+-- name: GetToolVariationByID :one
+SELECT *
+FROM tool_variations
+WHERE id = @id
+  AND deleted IS FALSE;
+
+-- name: GetToolVariationByURN :one
+SELECT *
+FROM tool_variations
+WHERE group_id = @group_id
+  AND src_tool_urn = @src_tool_urn
+  AND deleted IS FALSE
+ORDER BY version DESC
+LIMIT 1;
+
+-- name: GetLatestToolVariationByURN :one
+SELECT *
+FROM tool_variations
+WHERE group_id = @group_id
+  AND src_tool_urn = @src_tool_urn
+  AND deleted IS FALSE
+ORDER BY version DESC
+LIMIT 1;
+
+-- name: ListToolVariationVersions :many
+SELECT *
+FROM tool_variations
+WHERE group_id = @group_id
+  AND src_tool_urn = @src_tool_urn
+  AND deleted IS FALSE
+ORDER BY version DESC;
+
+-- name: ListCurrentVariationsInGroup :many
+SELECT DISTINCT ON (src_tool_urn) *
+FROM tool_variations
+WHERE group_id = @group_id
+  AND deleted IS FALSE
+ORDER BY src_tool_urn, version DESC;

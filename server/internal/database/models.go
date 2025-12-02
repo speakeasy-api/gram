@@ -507,6 +507,21 @@ type SourceEnvironment struct {
 	UpdatedAt     pgtype.Timestamptz
 }
 
+type SourceState struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	DeploymentID        uuid.UUID
+	SystemSourceStateID uuid.UUID
+	CreatedAt           pgtype.Timestamptz
+}
+
+type SystemSourceState struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	PromptTemplateIds []uuid.UUID
+	CreatedAt         pgtype.Timestamptz
+}
+
 type ToolVariation struct {
 	ID            uuid.UUID
 	GroupID       uuid.UUID
@@ -519,6 +534,8 @@ type ToolVariation struct {
 	Description   pgtype.Text
 	Tags          []string
 	Summarizer    pgtype.Text
+	PredecessorID uuid.NullUUID
+	Version       int64
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz
@@ -536,6 +553,15 @@ type ToolVariationsGroup struct {
 	Deleted     bool
 }
 
+type ToolVariationsGroupVersion struct {
+	ID            uuid.UUID
+	GroupID       uuid.UUID
+	Version       int64
+	VariationIds  []uuid.UUID
+	PredecessorID uuid.NullUUID
+	CreatedAt     pgtype.Timestamptz
+}
+
 type Toolset struct {
 	ID                     uuid.UUID
 	OrganizationID         string
@@ -551,6 +577,12 @@ type Toolset struct {
 	CustomDomainID         uuid.NullUUID
 	ExternalOauthServerID  uuid.NullUUID
 	OauthProxyServerID     uuid.NullUUID
+	ParentToolsetID        uuid.NullUUID
+	EditingMode            string
+	CurrentReleaseID       uuid.NullUUID
+	PredecessorID          uuid.NullUUID
+	Version                int64
+	HistoryID              uuid.UUID
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
@@ -589,6 +621,19 @@ type ToolsetPrompt struct {
 	PromptHistoryID  uuid.UUID
 	PromptTemplateID uuid.NullUUID
 	PromptName       string
+}
+
+type ToolsetRelease struct {
+	ID                         uuid.UUID
+	ToolsetID                  uuid.UUID
+	SourceStateID              uuid.NullUUID
+	ToolsetVersionID           uuid.UUID
+	GlobalVariationsVersionID  uuid.NullUUID
+	ToolsetVariationsVersionID uuid.NullUUID
+	ReleaseNumber              int64
+	Notes                      pgtype.Text
+	ReleasedByUserID           string
+	CreatedAt                  pgtype.Timestamptz
 }
 
 type ToolsetVersion struct {

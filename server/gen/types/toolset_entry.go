@@ -49,6 +49,11 @@ type ToolsetEntry struct {
 	ToolSelectionMode string
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string
+	// The editing mode for this toolset: 'iteration' (direct edits) or 'staging'
+	// (explicit releases)
+	EditingMode string
+	// The ID of the parent toolset if this is a staging toolset
+	ParentToolsetID *string
 	// When the toolset was created.
 	CreatedAt string
 	// When the toolset was last updated.

@@ -245,6 +245,115 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "removeOAuthServer")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoveOAuthServer"}`)
 	})
+
+	Method("createStagingVersion", func() {
+		Description("Create a staging version of a toolset for testing changes before release")
+
+		Payload(func() {
+			Required("slug")
+			Attribute("slug", shared.Slug, "The slug of the toolset")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(shared.Toolset)
+
+		HTTP(func() {
+			POST("/rpc/toolsets.createStaging")
+			Param("slug")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createStagingVersion")
+		Meta("openapi:extension:x-speakeasy-name-override", "createStaging")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateStagingVersion"}`)
+	})
+
+	Method("getStagingVersion", func() {
+		Description("Get the staging version of a toolset if it exists")
+
+		Payload(func() {
+			Required("slug")
+			Attribute("slug", shared.Slug, "The slug of the parent toolset")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(shared.Toolset)
+
+		HTTP(func() {
+			GET("/rpc/toolsets.getStaging")
+			Param("slug")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getStagingVersion")
+		Meta("openapi:extension:x-speakeasy-name-override", "getStaging")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "StagingVersion"}`)
+	})
+
+	Method("discardStagingVersion", func() {
+		Description("Discard the staging version of a toolset")
+
+		Payload(func() {
+			Required("slug")
+			Attribute("slug", shared.Slug, "The slug of the parent toolset")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/toolsets.discardStaging")
+			Param("slug")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "discardStagingVersion")
+		Meta("openapi:extension:x-speakeasy-name-override", "discardStaging")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DiscardStagingVersion"}`)
+	})
+
+	Method("switchEditingMode", func() {
+		Description("Switch a toolset between iteration mode (direct edits) and staging mode (explicit releases)")
+
+		Payload(func() {
+			Required("slug", "mode")
+			Attribute("slug", shared.Slug, "The slug of the toolset")
+			Attribute("mode", String, func() {
+				Description("The editing mode: 'iteration' or 'staging'")
+				Enum("iteration", "staging")
+			})
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(shared.Toolset)
+
+		HTTP(func() {
+			POST("/rpc/toolsets.switchEditingMode")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "switchEditingMode")
+		Meta("openapi:extension:x-speakeasy-name-override", "switchEditingMode")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SwitchEditingMode"}`)
+	})
 })
 
 var CreateToolsetForm = Type("CreateToolsetForm", func() {

@@ -154,7 +154,20 @@ const (
 	ResourceURIKey                 = attribute.Key("gram.resource.uri")
 	ToolsetIDKey                   = attribute.Key("gram.toolset.id")
 	ToolsetSlugKey                 = attribute.Key("gram.toolset.slug")
+	ToolsetVersionKey              = attribute.Key("gram.toolset.version")
+	ToolsetVersionAttemptKey       = attribute.Key("gram.toolset.version_attempt")
+	ToolVariationsGroupIDKey       = attribute.Key("gram.tool_variations_group.id")
+	ToolVariationIDKey             = attribute.Key("gram.tool_variation.id")
+	ReleaseIDKey                   = attribute.Key("gram.release.id")
+	ReleaseNumberKey               = attribute.Key("gram.release.number")
+	SourceStateIDKey               = attribute.Key("gram.source_state.id")
+	SystemSourceStateIDKey         = attribute.Key("gram.system_source_state.id")
 	VisibilityKey                  = attribute.Key("gram.visibility")
+	PromptTemplateCountKey         = attribute.Key("gram.prompt_template.count")
+	VariationCountKey              = attribute.Key("gram.variation.count")
+	OldModeKey                     = attribute.Key("gram.editing_mode.old")
+	NewModeKey                     = attribute.Key("gram.editing_mode.new")
+	HasPredecessorKey              = attribute.Key("gram.has_predecessor")
 
 	PaginationTsStartKey     = attribute.Key("gram.pagination.ts_start")
 	PaginationTsEndKey       = attribute.Key("gram.pagination.ts_end")
@@ -621,6 +634,50 @@ func SlogToolsetID(v string) slog.Attr      { return slog.String(string(ToolsetI
 
 func ToolsetSlug(v string) attribute.KeyValue { return ToolsetSlugKey.String(v) }
 func SlogToolsetSlug(v string) slog.Attr      { return slog.String(string(ToolsetSlugKey), v) }
+
+func ToolsetVersion(v int64) attribute.KeyValue { return ToolsetVersionKey.Int64(v) }
+func SlogToolsetVersion(v int64) slog.Attr      { return slog.Int64(string(ToolsetVersionKey), v) }
+
+func ToolsetVersionAttempt(v int) attribute.KeyValue { return ToolsetVersionAttemptKey.Int(v) }
+func SlogToolsetVersionAttempt(v int) slog.Attr {
+	return slog.Int(string(ToolsetVersionAttemptKey), v)
+}
+
+func ToolVariationsGroupID(v string) attribute.KeyValue {
+	return ToolVariationsGroupIDKey.String(v)
+}
+func SlogToolVariationsGroupID(v string) slog.Attr {
+	return slog.String(string(ToolVariationsGroupIDKey), v)
+}
+
+func ToolVariationID(v string) attribute.KeyValue { return ToolVariationIDKey.String(v) }
+func SlogToolVariationID(v string) slog.Attr {
+	return slog.String(string(ToolVariationIDKey), v)
+}
+
+func ReleaseID(v string) attribute.KeyValue { return ReleaseIDKey.String(v) }
+func SlogReleaseID(v string) slog.Attr      { return slog.String(string(ReleaseIDKey), v) }
+
+func ReleaseNumber(v int64) attribute.KeyValue { return ReleaseNumberKey.Int64(v) }
+func SlogReleaseNumber(v int64) slog.Attr      { return slog.Int64(string(ReleaseNumberKey), v) }
+
+func SourceStateID(v string) attribute.KeyValue { return SourceStateIDKey.String(v) }
+func SlogSourceStateID(v string) slog.Attr      { return slog.String(string(SourceStateIDKey), v) }
+
+func SystemSourceStateID(v string) attribute.KeyValue { return SystemSourceStateIDKey.String(v) }
+func SlogSystemSourceStateID(v string) slog.Attr {
+	return slog.String(string(SystemSourceStateIDKey), v)
+}
+
+func SlogPromptTemplateCount(v int) slog.Attr {
+	return slog.Int(string(PromptTemplateCountKey), v)
+}
+
+func SlogVariationCount(v int) slog.Attr { return slog.Int(string(VariationCountKey), v) }
+
+func SlogOldMode(v string) slog.Attr      { return slog.String(string(OldModeKey), v) }
+func SlogNewMode(v string) slog.Attr      { return slog.String(string(NewModeKey), v) }
+func SlogHasPredecessor(v bool) slog.Attr { return slog.Bool(string(HasPredecessorKey), v) }
 
 func McpURL(v string) attribute.KeyValue { return McpURLKey.String(v) }
 func SlogMcpURL(v string) slog.Attr      { return slog.String(string(McpURLKey), v) }

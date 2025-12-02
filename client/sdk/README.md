@@ -220,6 +220,15 @@ run();
 * [list](docs/sdks/projects/README.md#list) - listProjects projects
 * [setLogo](docs/sdks/projects/README.md#setlogo) - setLogo projects
 
+### [releases](docs/sdks/releases/README.md)
+
+* [create](docs/sdks/releases/README.md#create) - createRelease releases
+* [get](docs/sdks/releases/README.md#get) - getRelease releases
+* [getByNumber](docs/sdks/releases/README.md#getbynumber) - getReleaseByNumber releases
+* [getLatest](docs/sdks/releases/README.md#getlatest) - getLatestRelease releases
+* [list](docs/sdks/releases/README.md#list) - listReleases releases
+* [rollback](docs/sdks/releases/README.md#rollback) - rollbackToRelease releases
+
 ### [resources](docs/sdks/resources/README.md)
 
 * [list](docs/sdks/resources/README.md#list) - listResources resources
@@ -252,10 +261,14 @@ run();
 * [checkMCPSlugAvailability](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 * [cloneBySlug](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 * [create](docs/sdks/toolsets/README.md#create) - createToolset toolsets
+* [createStaging](docs/sdks/toolsets/README.md#createstaging) - createStagingVersion toolsets
 * [deleteBySlug](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
+* [discardStaging](docs/sdks/toolsets/README.md#discardstaging) - discardStagingVersion toolsets
 * [getBySlug](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
+* [getStaging](docs/sdks/toolsets/README.md#getstaging) - getStagingVersion toolsets
 * [list](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 * [removeOAuthServer](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
+* [switchEditingMode](docs/sdks/toolsets/README.md#switcheditingmode) - switchEditingMode toolsets
 * [updateBySlug](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 
 ### [usage](docs/sdks/usage/README.md)
@@ -345,6 +358,12 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`projectsCreate`](docs/sdks/projects/README.md#create) - createProject projects
 - [`projectsList`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`projectsSetLogo`](docs/sdks/projects/README.md#setlogo) - setLogo projects
+- [`releasesCreate`](docs/sdks/releases/README.md#create) - createRelease releases
+- [`releasesGet`](docs/sdks/releases/README.md#get) - getRelease releases
+- [`releasesGetByNumber`](docs/sdks/releases/README.md#getbynumber) - getReleaseByNumber releases
+- [`releasesGetLatest`](docs/sdks/releases/README.md#getlatest) - getLatestRelease releases
+- [`releasesList`](docs/sdks/releases/README.md#list) - listReleases releases
+- [`releasesRollback`](docs/sdks/releases/README.md#rollback) - rollbackToRelease releases
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
 - [`slackDeleteSlackConnection`](docs/sdks/slack/README.md#deleteslackconnection) - deleteSlackConnection slack
 - [`slackGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
@@ -362,10 +381,14 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`toolsetsCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 - [`toolsetsCloneBySlug`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 - [`toolsetsCreate`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
+- [`toolsetsCreateStaging`](docs/sdks/toolsets/README.md#createstaging) - createStagingVersion toolsets
 - [`toolsetsDeleteBySlug`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
+- [`toolsetsDiscardStaging`](docs/sdks/toolsets/README.md#discardstaging) - discardStagingVersion toolsets
 - [`toolsetsGetBySlug`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
+- [`toolsetsGetStaging`](docs/sdks/toolsets/README.md#getstaging) - getStagingVersion toolsets
 - [`toolsetsList`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`toolsetsRemoveOAuthServer`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
+- [`toolsetsSwitchEditingMode`](docs/sdks/toolsets/README.md#switcheditingmode) - switchEditingMode toolsets
 - [`toolsetsUpdateBySlug`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`toolsList`](docs/sdks/tools/README.md#list) - listTools tools
 - [`usageCreateCheckout`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
@@ -412,6 +435,8 @@ To learn about this feature and how to get started, check
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreateProjectMutation`](docs/sdks/projects/README.md#create) - createProject projects
+- [`useCreateReleaseMutation`](docs/sdks/releases/README.md#create) - createRelease releases
+- [`useCreateStagingVersionMutation`](docs/sdks/toolsets/README.md#createstaging) - createStagingVersion toolsets
 - [`useCreateTemplateMutation`](docs/sdks/templates/README.md#create) - createTemplate templates
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
@@ -424,6 +449,7 @@ To learn about this feature and how to get started, check
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
+- [`useDiscardStagingVersionMutation`](docs/sdks/toolsets/README.md#discardstaging) - discardStagingVersion toolsets
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`useFeaturesSetMutation`](docs/sdks/features/README.md#set) - setProductFeature features
 - [`useGetCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
@@ -446,6 +472,7 @@ To learn about this feature and how to get started, check
 - [`useListIntegrations`](docs/sdks/integrations/README.md#list) - list integrations
 - [`useListPackages`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
+- [`useListReleases`](docs/sdks/releases/README.md#list) - listReleases releases
 - [`useListResources`](docs/sdks/resources/README.md#list) - listResources resources
 - [`useListToolLogs`](docs/sdks/logs/README.md#list) - listLogs logs
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
@@ -458,10 +485,14 @@ To learn about this feature and how to get started, check
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth
+- [`useReleasesGet`](docs/sdks/releases/README.md#get) - getRelease releases
+- [`useReleasesGetByNumber`](docs/sdks/releases/README.md#getbynumber) - getReleaseByNumber releases
+- [`useReleasesGetLatest`](docs/sdks/releases/README.md#getlatest) - getLatestRelease releases
 - [`useRemoveOAuthServerMutation`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
+- [`useRollbackToReleaseMutation`](docs/sdks/releases/README.md#rollback) - rollbackToRelease releases
 - [`useServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
@@ -469,6 +500,8 @@ To learn about this feature and how to get started, check
 - [`useSetProjectLogoMutation`](docs/sdks/projects/README.md#setlogo) - setLogo projects
 - [`useSetSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`useSetToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
+- [`useStagingVersion`](docs/sdks/toolsets/README.md#getstaging) - getStagingVersion toolsets
+- [`useSwitchEditingModeMutation`](docs/sdks/toolsets/README.md#switcheditingmode) - switchEditingMode toolsets
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates
 - [`useTemplates`](docs/sdks/templates/README.md#list) - listTemplates templates

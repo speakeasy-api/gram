@@ -9,6 +9,7 @@ let value: ListToolsetsResult = {
   toolsets: [
     {
       createdAt: new Date("2025-10-23T12:10:12.732Z"),
+      editingMode: "<value>",
       id: "<id>",
       name: "<value>",
       organizationId: "<id>",

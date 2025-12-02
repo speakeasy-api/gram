@@ -6,10 +6,14 @@ import { toolsetsAddExternalOAuthServer } from "../funcs/toolsetsAddExternalOAut
 import { toolsetsCheckMCPSlugAvailability } from "../funcs/toolsetsCheckMCPSlugAvailability.js";
 import { toolsetsCloneBySlug } from "../funcs/toolsetsCloneBySlug.js";
 import { toolsetsCreate } from "../funcs/toolsetsCreate.js";
+import { toolsetsCreateStaging } from "../funcs/toolsetsCreateStaging.js";
 import { toolsetsDeleteBySlug } from "../funcs/toolsetsDeleteBySlug.js";
+import { toolsetsDiscardStaging } from "../funcs/toolsetsDiscardStaging.js";
 import { toolsetsGetBySlug } from "../funcs/toolsetsGetBySlug.js";
+import { toolsetsGetStaging } from "../funcs/toolsetsGetStaging.js";
 import { toolsetsList } from "../funcs/toolsetsList.js";
 import { toolsetsRemoveOAuthServer } from "../funcs/toolsetsRemoveOAuthServer.js";
+import { toolsetsSwitchEditingMode } from "../funcs/toolsetsSwitchEditingMode.js";
 import { toolsetsUpdateBySlug } from "../funcs/toolsetsUpdateBySlug.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -94,6 +98,25 @@ export class Toolsets extends ClientSDK {
   }
 
   /**
+   * createStagingVersion toolsets
+   *
+   * @remarks
+   * Create a staging version of a toolset for testing changes before release
+   */
+  async createStaging(
+    request: operations.CreateStagingVersionRequest,
+    security?: operations.CreateStagingVersionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Toolset> {
+    return unwrapAsync(toolsetsCreateStaging(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * deleteToolset toolsets
    *
    * @remarks
@@ -113,6 +136,25 @@ export class Toolsets extends ClientSDK {
   }
 
   /**
+   * discardStagingVersion toolsets
+   *
+   * @remarks
+   * Discard the staging version of a toolset
+   */
+  async discardStaging(
+    request: operations.DiscardStagingVersionRequest,
+    security?: operations.DiscardStagingVersionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(toolsetsDiscardStaging(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getToolset toolsets
    *
    * @remarks
@@ -124,6 +166,25 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Toolset> {
     return unwrapAsync(toolsetsGetBySlug(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getStagingVersion toolsets
+   *
+   * @remarks
+   * Get the staging version of a toolset if it exists
+   */
+  async getStaging(
+    request: operations.GetStagingVersionRequest,
+    security?: operations.GetStagingVersionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Toolset> {
+    return unwrapAsync(toolsetsGetStaging(
       this,
       request,
       security,
@@ -162,6 +223,25 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Toolset> {
     return unwrapAsync(toolsetsRemoveOAuthServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * switchEditingMode toolsets
+   *
+   * @remarks
+   * Switch a toolset between iteration mode (direct edits) and staging mode (explicit releases)
+   */
+  async switchEditingMode(
+    request: operations.SwitchEditingModeRequest,
+    security?: operations.SwitchEditingModeSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Toolset> {
+    return unwrapAsync(toolsetsSwitchEditingMode(
       this,
       request,
       security,

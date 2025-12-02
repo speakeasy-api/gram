@@ -40,6 +40,7 @@ import { ToolsetAuthAlert } from "./ToolsetAuthAlert";
 import { ToolsetEmptyState } from "./ToolsetEmptyState";
 import { ToolsetHeader } from "./ToolsetHeader";
 import { useToolsets } from "./Toolsets";
+import { ReleasesTab } from "./ReleasesTab";
 
 export function useDeleteToolset({
   onSuccess,
@@ -232,7 +233,13 @@ export default function ToolsetPage() {
   return <ToolsetView toolsetSlug={toolsetSlug} />;
 }
 
-type ToolsetTabs = "tools" | "prompts" | "resources" | "auth" | "mcp";
+type ToolsetTabs =
+  | "tools"
+  | "prompts"
+  | "resources"
+  | "auth"
+  | "mcp"
+  | "releases";
 
 export function ToolsetView({
   toolsetSlug,
@@ -268,6 +275,7 @@ export function ToolsetView({
       "resources",
       "auth",
       "mcp",
+      "releases",
     ];
     return validTabs.includes(hash as ToolsetTabs)
       ? (hash as ToolsetTabs)
@@ -588,6 +596,7 @@ export function ToolsetView({
           <TabsTrigger value="prompts">Prompts</TabsTrigger>
           <TabsTrigger value="auth">Auth</TabsTrigger>
           <TabsTrigger value="mcp">MCP</TabsTrigger>
+          <TabsTrigger value="releases">Releases</TabsTrigger>
         </TabsList>
         <TabsContent value="tools">
           {toolsToDisplay.length > 0 ? (
@@ -640,6 +649,14 @@ export function ToolsetView({
               </Stack>
               <MCPDetails toolset={toolset} />
             </Stack>
+          )}
+        </TabsContent>
+        <TabsContent value="releases">
+          {toolset && (
+            <ReleasesTab
+              toolsetSlug={toolset.slug}
+              editingMode={toolset.editingMode}
+            />
           )}
         </TabsContent>
       </Tabs>

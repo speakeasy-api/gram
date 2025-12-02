@@ -35,6 +35,15 @@ type Service interface {
 	AddExternalOAuthServer(context.Context, *AddExternalOAuthServerPayload) (res *types.Toolset, err error)
 	// Remove OAuth server association from a toolset
 	RemoveOAuthServer(context.Context, *RemoveOAuthServerPayload) (res *types.Toolset, err error)
+	// Create a staging version of a toolset for testing changes before release
+	CreateStagingVersion(context.Context, *CreateStagingVersionPayload) (res *types.Toolset, err error)
+	// Get the staging version of a toolset if it exists
+	GetStagingVersion(context.Context, *GetStagingVersionPayload) (res *types.Toolset, err error)
+	// Discard the staging version of a toolset
+	DiscardStagingVersion(context.Context, *DiscardStagingVersionPayload) (err error)
+	// Switch a toolset between iteration mode (direct edits) and staging mode
+	// (explicit releases)
+	SwitchEditingMode(context.Context, *SwitchEditingModePayload) (res *types.Toolset, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -57,7 +66,7 @@ const ServiceName = "toolsets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"createToolset", "listToolsets", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer"}
+var MethodNames = [13]string{"createToolset", "listToolsets", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "createStagingVersion", "getStagingVersion", "discardStagingVersion", "switchEditingMode"}
 
 // AddExternalOAuthServerPayload is the payload type of the toolsets service
 // addExternalOAuthServer method.
@@ -91,6 +100,16 @@ type CloneToolsetPayload struct {
 	ProjectSlugInput *string
 }
 
+// CreateStagingVersionPayload is the payload type of the toolsets service
+// createStagingVersion method.
+type CreateStagingVersionPayload struct {
+	// The slug of the toolset
+	Slug             types.Slug
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // CreateToolsetPayload is the payload type of the toolsets service
 // createToolset method.
 type CreateToolsetPayload struct {
@@ -113,6 +132,26 @@ type CreateToolsetPayload struct {
 // deleteToolset method.
 type DeleteToolsetPayload struct {
 	// The slug of the toolset
+	Slug             types.Slug
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// DiscardStagingVersionPayload is the payload type of the toolsets service
+// discardStagingVersion method.
+type DiscardStagingVersionPayload struct {
+	// The slug of the parent toolset
+	Slug             types.Slug
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// GetStagingVersionPayload is the payload type of the toolsets service
+// getStagingVersion method.
+type GetStagingVersionPayload struct {
+	// The slug of the parent toolset
 	Slug             types.Slug
 	SessionToken     *string
 	ApikeyToken      *string
@@ -149,6 +188,18 @@ type ListToolsetsResult struct {
 type RemoveOAuthServerPayload struct {
 	// The slug of the toolset
 	Slug             types.Slug
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// SwitchEditingModePayload is the payload type of the toolsets service
+// switchEditingMode method.
+type SwitchEditingModePayload struct {
+	// The slug of the toolset
+	Slug types.Slug
+	// The editing mode: 'iteration' or 'staging'
+	Mode             string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

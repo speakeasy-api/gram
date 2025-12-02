@@ -124,6 +124,41 @@ CREATE TABLE IF NOT EXISTS deployment_logs (
   CONSTRAINT deployment_logs_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL
 );
 
+-- System source states (captures non-deployment sources like prompt templates)
+CREATE TABLE IF NOT EXISTS system_source_states (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  prompt_template_ids uuid[] NOT NULL DEFAULT ARRAY[]::uuid[],
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT system_source_states_pkey PRIMARY KEY (id),
+  CONSTRAINT system_source_states_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS system_source_states_project_id_idx ON system_source_states (project_id, created_at DESC);
+
+-- Complete source state (deployment + system sources)
+CREATE TABLE IF NOT EXISTS source_states (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  deployment_id uuid NOT NULL,
+  system_source_state_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT source_states_pkey PRIMARY KEY (id),
+  CONSTRAINT source_states_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT source_states_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE RESTRICT,
+  CONSTRAINT source_states_system_source_state_id_fkey FOREIGN KEY (system_source_state_id) REFERENCES system_source_states (id) ON DELETE RESTRICT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS source_states_deployment_system_key ON source_states (deployment_id, system_source_state_id);
+
+-- Note: Foreign keys from toolset_releases to source_states and variation versions are added at the end of the file
+
 CREATE TABLE IF NOT EXISTS assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
@@ -621,6 +656,16 @@ CREATE TABLE IF NOT EXISTS toolsets (
   external_oauth_server_id uuid,
   oauth_proxy_server_id uuid,
 
+  -- Staging and release support
+  parent_toolset_id uuid,
+  editing_mode TEXT NOT NULL DEFAULT 'iteration' CHECK (editing_mode IN ('iteration', 'staging')),
+  current_release_id uuid,
+
+  -- Versioning support for toolset metadata
+  predecessor_id uuid,
+  version BIGINT NOT NULL DEFAULT 1,
+  history_id uuid NOT NULL DEFAULT generate_uuidv7(),
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -631,11 +676,18 @@ CREATE TABLE IF NOT EXISTS toolsets (
   CONSTRAINT toolsets_custom_domain_id_fkey FOREIGN key (custom_domain_id) REFERENCES custom_domains (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_external_oauth_server_id_fkey FOREIGN KEY (external_oauth_server_id) REFERENCES external_oauth_server_metadata (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_oauth_proxy_server_id_fkey FOREIGN KEY (oauth_proxy_server_id) REFERENCES oauth_proxy_servers (id) ON DELETE SET NULL,
+  CONSTRAINT toolsets_parent_toolset_id_fkey FOREIGN KEY (parent_toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
+  CONSTRAINT toolsets_predecessor_id_fkey FOREIGN KEY (predecessor_id) REFERENCES toolsets (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_oauth_exclusivity CHECK ((external_oauth_server_id IS NULL) != (oauth_proxy_server_id IS NULL) OR (external_oauth_server_id IS NULL AND oauth_proxy_server_id IS NULL))
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS toolsets_project_id_slug_key
-ON toolsets (project_id, slug)
+CREATE UNIQUE INDEX IF NOT EXISTS toolsets_project_id_slug_version_key
+ON toolsets (project_id, slug, predecessor_id)
+NULLS NOT DISTINCT
+WHERE deleted IS FALSE AND parent_toolset_id IS NULL;
+
+CREATE INDEX IF NOT EXISTS toolsets_history_id_version_idx
+ON toolsets (history_id, version DESC)
 WHERE deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS toolsets_mcp_slug_custom_domain_id_key
@@ -645,6 +697,10 @@ WHERE mcp_slug IS NOT NULL AND custom_domain_id IS NOT NULL AND deleted IS FALSE
 CREATE UNIQUE INDEX IF NOT EXISTS toolsets_mcp_slug_null_custom_domain_id_key
 ON toolsets (mcp_slug)
 WHERE mcp_slug IS NOT NULL AND custom_domain_id IS NULL AND deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS toolsets_parent_toolset_id_idx
+ON toolsets (parent_toolset_id)
+WHERE parent_toolset_id IS NOT NULL AND deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS toolset_versions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -683,6 +739,33 @@ CREATE TABLE IF NOT EXISTS toolset_environments (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS toolset_environments_toolset_id_idx ON toolset_environments (toolset_id);
+
+CREATE TABLE IF NOT EXISTS toolset_releases (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  toolset_id uuid NOT NULL,
+
+  -- The complete state captured at release time
+  source_state_id uuid,
+  toolset_version_id uuid NOT NULL,
+  global_variations_version_id uuid,
+  toolset_variations_version_id uuid,
+
+  -- Release metadata
+  release_number BIGINT NOT NULL,
+  notes TEXT,
+  released_by_user_id TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT toolset_releases_pkey PRIMARY KEY (id),
+  CONSTRAINT toolset_releases_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
+  CONSTRAINT toolset_releases_toolset_version_id_fkey FOREIGN KEY (toolset_version_id) REFERENCES toolset_versions (id) ON DELETE RESTRICT,
+  CONSTRAINT toolset_releases_toolset_id_release_number_key UNIQUE (toolset_id, release_number)
+);
+
+CREATE INDEX IF NOT EXISTS toolset_releases_toolset_id_idx ON toolset_releases (toolset_id, created_at DESC);
+
+-- Note: Foreign key from toolsets.current_release_id to toolset_releases is added at the end of the file
 
 CREATE TABLE IF NOT EXISTS http_security (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -812,6 +895,26 @@ CREATE TABLE IF NOT EXISTS tool_variations_groups (
   CONSTRAINT tool_variations_groups_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS tool_variations_group_versions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  group_id uuid NOT NULL,
+  version BIGINT NOT NULL,
+
+  -- Which specific variation IDs are in this version
+  variation_ids uuid[] NOT NULL DEFAULT ARRAY[]::uuid[],
+
+  predecessor_id uuid,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT tool_variations_group_versions_pkey PRIMARY KEY (id),
+  CONSTRAINT tool_variations_group_versions_group_id_fkey FOREIGN KEY (group_id) REFERENCES tool_variations_groups (id) ON DELETE CASCADE,
+  CONSTRAINT tool_variations_group_versions_predecessor_id_fkey FOREIGN KEY (predecessor_id) REFERENCES tool_variations_group_versions (id) ON DELETE SET NULL,
+  CONSTRAINT tool_variations_group_versions_group_version_key UNIQUE (group_id, version)
+);
+
+CREATE INDEX IF NOT EXISTS tool_variations_group_versions_group_id_version_idx ON tool_variations_group_versions (group_id, version DESC);
+
 CREATE TABLE IF NOT EXISTS project_tool_variations (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
@@ -840,17 +943,23 @@ CREATE TABLE IF NOT EXISTS tool_variations (
   tags TEXT[],
   summarizer TEXT,
 
+  -- Versioning support
+  predecessor_id uuid,
+  version BIGINT NOT NULL DEFAULT 1,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT tool_variations_pkey PRIMARY KEY (id),
-  CONSTRAINT tool_variations_group_id_fkey FOREIGN KEY (group_id) REFERENCES tool_variations_groups (id) ON DELETE CASCADE
+  CONSTRAINT tool_variations_group_id_fkey FOREIGN KEY (group_id) REFERENCES tool_variations_groups (id) ON DELETE CASCADE,
+  CONSTRAINT tool_variations_predecessor_id_fkey FOREIGN KEY (predecessor_id) REFERENCES tool_variations (id) ON DELETE SET NULL
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS tool_variations_scoped_src_tool_urn_key
-ON tool_variations (group_id, src_tool_urn)
+CREATE UNIQUE INDEX IF NOT EXISTS tool_variations_scoped_src_tool_urn_version_key
+ON tool_variations (group_id, src_tool_urn, predecessor_id)
+NULLS NOT DISTINCT
 WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS prompt_templates (
@@ -1036,3 +1145,34 @@ WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS toolset_embeddings_tags_idx
 ON toolset_embeddings
 USING GIN (tags);
+
+-- ==============================================================================
+-- Cross-reference foreign keys added after all tables are defined
+-- ==============================================================================
+
+-- Foreign key from toolsets.current_release_id to toolset_releases (circular dependency)
+ALTER TABLE toolsets
+ADD CONSTRAINT toolsets_current_release_id_fkey
+  FOREIGN KEY (current_release_id)
+  REFERENCES toolset_releases (id)
+  ON DELETE SET NULL;
+
+-- Foreign key from toolset_releases.source_state_id to source_states
+ALTER TABLE toolset_releases
+ADD CONSTRAINT toolset_releases_source_state_id_fkey
+  FOREIGN KEY (source_state_id)
+  REFERENCES source_states (id)
+  ON DELETE RESTRICT;
+
+-- Foreign keys from toolset_releases to variation versions
+ALTER TABLE toolset_releases
+ADD CONSTRAINT toolset_releases_global_variations_version_id_fkey
+  FOREIGN KEY (global_variations_version_id)
+  REFERENCES tool_variations_group_versions (id)
+  ON DELETE RESTRICT;
+
+ALTER TABLE toolset_releases
+ADD CONSTRAINT toolset_releases_toolset_variations_version_id_fkey
+  FOREIGN KEY (toolset_variations_version_id)
+  REFERENCES tool_variations_group_versions (id)
+  ON DELETE RESTRICT;

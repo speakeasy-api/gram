@@ -51,3 +51,23 @@ func AddExternalOAuthServerToolsetsPath() string {
 func RemoveOAuthServerToolsetsPath() string {
 	return "/rpc/toolsets.removeOAuthServer"
 }
+
+// CreateStagingVersionToolsetsPath returns the URL path to the toolsets service createStagingVersion HTTP endpoint.
+func CreateStagingVersionToolsetsPath() string {
+	return "/rpc/toolsets.createStaging"
+}
+
+// GetStagingVersionToolsetsPath returns the URL path to the toolsets service getStagingVersion HTTP endpoint.
+func GetStagingVersionToolsetsPath() string {
+	return "/rpc/toolsets.getStaging"
+}
+
+// DiscardStagingVersionToolsetsPath returns the URL path to the toolsets service discardStagingVersion HTTP endpoint.
+func DiscardStagingVersionToolsetsPath() string {
+	return "/rpc/toolsets.discardStaging"
+}
+
+// SwitchEditingModeToolsetsPath returns the URL path to the toolsets service switchEditingMode HTTP endpoint.
+func SwitchEditingModeToolsetsPath() string {
+	return "/rpc/toolsets.switchEditingMode"
+}

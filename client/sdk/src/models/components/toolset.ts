@@ -77,6 +77,10 @@ export type Toolset = {
    * Description of the toolset
    */
   description?: string | undefined;
+  /**
+   * The editing mode for this toolset: 'iteration' (direct edits) or 'staging' (explicit releases)
+   */
+  editingMode: string;
   externalOauthServer?: ExternalOAuthServer | undefined;
   /**
    * The function environment variables that are relevant to the toolset
@@ -107,6 +111,10 @@ export type Toolset = {
    * The organization ID this toolset belongs to
    */
   organizationId: string;
+  /**
+   * The ID of the parent toolset if this is a staging toolset
+   */
+  parentToolsetId?: string | undefined;
   /**
    * The project ID this toolset belongs to
    */
@@ -167,6 +175,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
     custom_domain_id: z.string().optional(),
     default_environment_slug: z.string().optional(),
     description: z.string().optional(),
+    editing_mode: z.string(),
     external_oauth_server: ExternalOAuthServer$inboundSchema.optional(),
     function_environment_variables: z.array(
       FunctionEnvironmentVariable$inboundSchema,
@@ -178,6 +187,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
     name: z.string(),
     oauth_proxy_server: OAuthProxyServer$inboundSchema.optional(),
     organization_id: z.string(),
+    parent_toolset_id: z.string().optional(),
     project_id: z.string(),
     prompt_templates: z.array(PromptTemplate$inboundSchema),
     resource_urns: z.array(z.string()),
@@ -198,6 +208,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
       "created_at": "createdAt",
       "custom_domain_id": "customDomainId",
       "default_environment_slug": "defaultEnvironmentSlug",
+      "editing_mode": "editingMode",
       "external_oauth_server": "externalOauthServer",
       "function_environment_variables": "functionEnvironmentVariables",
       "mcp_enabled": "mcpEnabled",
@@ -205,6 +216,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
       "mcp_slug": "mcpSlug",
       "oauth_proxy_server": "oauthProxyServer",
       "organization_id": "organizationId",
+      "parent_toolset_id": "parentToolsetId",
       "project_id": "projectId",
       "prompt_templates": "promptTemplates",
       "resource_urns": "resourceUrns",
@@ -224,6 +236,7 @@ export type Toolset$Outbound = {
   custom_domain_id?: string | undefined;
   default_environment_slug?: string | undefined;
   description?: string | undefined;
+  editing_mode: string;
   external_oauth_server?: ExternalOAuthServer$Outbound | undefined;
   function_environment_variables?:
     | Array<FunctionEnvironmentVariable$Outbound>
@@ -235,6 +248,7 @@ export type Toolset$Outbound = {
   name: string;
   oauth_proxy_server?: OAuthProxyServer$Outbound | undefined;
   organization_id: string;
+  parent_toolset_id?: string | undefined;
   project_id: string;
   prompt_templates: Array<PromptTemplate$Outbound>;
   resource_urns: Array<string>;
@@ -260,6 +274,7 @@ export const Toolset$outboundSchema: z.ZodType<
   customDomainId: z.string().optional(),
   defaultEnvironmentSlug: z.string().optional(),
   description: z.string().optional(),
+  editingMode: z.string(),
   externalOauthServer: ExternalOAuthServer$outboundSchema.optional(),
   functionEnvironmentVariables: z.array(
     FunctionEnvironmentVariable$outboundSchema,
@@ -271,6 +286,7 @@ export const Toolset$outboundSchema: z.ZodType<
   name: z.string(),
   oauthProxyServer: OAuthProxyServer$outboundSchema.optional(),
   organizationId: z.string(),
+  parentToolsetId: z.string().optional(),
   projectId: z.string(),
   promptTemplates: z.array(PromptTemplate$outboundSchema),
   resourceUrns: z.array(z.string()),
@@ -289,6 +305,7 @@ export const Toolset$outboundSchema: z.ZodType<
     createdAt: "created_at",
     customDomainId: "custom_domain_id",
     defaultEnvironmentSlug: "default_environment_slug",
+    editingMode: "editing_mode",
     externalOauthServer: "external_oauth_server",
     functionEnvironmentVariables: "function_environment_variables",
     mcpEnabled: "mcp_enabled",
@@ -296,6 +313,7 @@ export const Toolset$outboundSchema: z.ZodType<
     mcpSlug: "mcp_slug",
     oauthProxyServer: "oauth_proxy_server",
     organizationId: "organization_id",
+    parentToolsetId: "parent_toolset_id",
     projectId: "project_id",
     promptTemplates: "prompt_templates",
     resourceUrns: "resource_urns",

@@ -13,6 +13,7 @@ INSERT INTO toolsets (
   , default_environment_slug
   , mcp_slug
   , mcp_enabled
+  , parent_toolset_id
 ) VALUES (
     @organization_id
   , @project_id
@@ -22,6 +23,7 @@ INSERT INTO toolsets (
   , @default_environment_slug
   , @mcp_slug
   , @mcp_enabled
+  , @parent_toolset_id
 )
 RETURNING *;
 
@@ -175,6 +177,12 @@ WHERE toolset_id = @toolset_id
 ORDER BY version DESC
 LIMIT 1;
 
+-- name: GetToolsetVersionByID :one
+SELECT *
+FROM toolset_versions
+WHERE id = @id
+  AND deleted IS FALSE;
+
 -- name: GetToolsetPromptTemplateNames :many
 SELECT tp.prompt_name
 FROM toolset_prompts tp
@@ -198,3 +206,50 @@ WHERE t.project_id = @project_id
     WHERE tv2.toolset_id = t.id
       AND tv2.deleted IS FALSE
   );
+
+-- ==============================================================================
+-- Staging and Releases Queries
+-- ==============================================================================
+
+-- name: GetStagingToolset :one
+SELECT *
+FROM toolsets
+WHERE parent_toolset_id = @parent_toolset_id
+  AND deleted IS FALSE
+LIMIT 1;
+
+-- name: GetToolsetWithStagingVersion :one
+SELECT
+  t.*,
+  s.id as staging_id,
+  s.slug as staging_slug
+FROM toolsets t
+LEFT JOIN toolsets s ON s.parent_toolset_id = t.id AND s.deleted IS FALSE
+WHERE t.slug = @slug
+  AND t.project_id = @project_id
+  AND t.deleted IS FALSE;
+
+-- name: UpdateToolsetEditingMode :one
+UPDATE toolsets
+SET
+    editing_mode = @editing_mode
+  , updated_at = clock_timestamp()
+WHERE slug = @slug
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: UpdateToolsetCurrentRelease :one
+UPDATE toolsets
+SET
+    current_release_id = @current_release_id
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: GetToolsetByID :one
+SELECT *
+FROM toolsets
+WHERE id = @id
+  AND deleted IS FALSE;

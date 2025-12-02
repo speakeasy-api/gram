@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 90568ae9eeeb69be1d568608418c418f
+  docChecksum: c7e81abe23af407608c51d6b037b928c
   docVersion: 0.0.1
   speakeasyVersion: 1.641.1
   generationVersion: 2.730.5
-  releaseVersion: 0.18.1
-  configChecksum: c36684f886420c38fb40d9cae1f700c7
+  releaseVersion: 0.18.3
+  configChecksum: a6ea2b290f568173aff20c87e8387aa4
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -61,6 +61,7 @@ generatedFiles:
   - docs/models/components/createprompttemplateformengine.md
   - docs/models/components/createprompttemplateformkind.md
   - docs/models/components/createprompttemplateresult.md
+  - docs/models/components/createreleaserequestbody.md
   - docs/models/components/createtoolsetrequestbody.md
   - docs/models/components/creditusageresponsebody.md
   - docs/models/components/customdomain.md
@@ -108,6 +109,7 @@ generatedFiles:
   - docs/models/components/listpackagesresult.md
   - docs/models/components/listprojectsresult.md
   - docs/models/components/listprompttemplatesresult.md
+  - docs/models/components/listreleasesresult.md
   - docs/models/components/listresourcesresult.md
   - docs/models/components/listtoollogresponse.md
   - docs/models/components/listtoolsetsresult.md
@@ -115,6 +117,7 @@ generatedFiles:
   - docs/models/components/listvariationsresult.md
   - docs/models/components/listversionsresult.md
   - docs/models/components/mcpmetadata.md
+  - docs/models/components/mode.md
   - docs/models/components/notmodified.md
   - docs/models/components/oauthproxyprovider.md
   - docs/models/components/oauthproxyserver.md
@@ -142,6 +145,7 @@ generatedFiles:
   - docs/models/components/resource.md
   - docs/models/components/resourceentry.md
   - docs/models/components/responsefilter.md
+  - docs/models/components/rollbacktoreleaserequestbody.md
   - docs/models/components/securityvariable.md
   - docs/models/components/servervariable.md
   - docs/models/components/setmcpmetadatarequestbody.md
@@ -153,6 +157,7 @@ generatedFiles:
   - docs/models/components/sourceenvironmentlink.md
   - docs/models/components/sourceenvironmentlinksourcekind.md
   - docs/models/components/sourcekind.md
+  - docs/models/components/switcheditingmoderequestbody.md
   - docs/models/components/tierlimits.md
   - docs/models/components/tool.md
   - docs/models/components/toolentry.md
@@ -160,6 +165,7 @@ generatedFiles:
   - docs/models/components/toolset.md
   - docs/models/components/toolsetentry.md
   - docs/models/components/toolsetenvironmentlink.md
+  - docs/models/components/toolsetrelease.md
   - docs/models/components/tooltype.md
   - docs/models/components/toolvariation.md
   - docs/models/components/type.md
@@ -217,6 +223,14 @@ generatedFiles:
   - docs/models/operations/createpackagesecurityoption2.md
   - docs/models/operations/createprojectrequest.md
   - docs/models/operations/createprojectsecurity.md
+  - docs/models/operations/createreleaserequest.md
+  - docs/models/operations/createreleasesecurity.md
+  - docs/models/operations/createreleasesecurityoption1.md
+  - docs/models/operations/createreleasesecurityoption2.md
+  - docs/models/operations/createstagingversionrequest.md
+  - docs/models/operations/createstagingversionsecurity.md
+  - docs/models/operations/createstagingversionsecurityoption1.md
+  - docs/models/operations/createstagingversionsecurityoption2.md
   - docs/models/operations/createtemplaterequest.md
   - docs/models/operations/createtemplatesecurity.md
   - docs/models/operations/createtemplatesecurityoption1.md
@@ -250,6 +264,10 @@ generatedFiles:
   - docs/models/operations/deletetoolsetsecurityoption1.md
   - docs/models/operations/deletetoolsetsecurityoption2.md
   - docs/models/operations/direction.md
+  - docs/models/operations/discardstagingversionrequest.md
+  - docs/models/operations/discardstagingversionsecurity.md
+  - docs/models/operations/discardstagingversionsecurityoption1.md
+  - docs/models/operations/discardstagingversionsecurityoption2.md
   - docs/models/operations/evolvedeploymentrequest.md
   - docs/models/operations/evolvedeploymentsecurity.md
   - docs/models/operations/evolvedeploymentsecurityoption1.md
@@ -272,18 +290,35 @@ generatedFiles:
   - docs/models/operations/getinstancesecurity.md
   - docs/models/operations/getinstancesecurityoption1.md
   - docs/models/operations/getinstancesecurityoption2.md
+  - docs/models/operations/getinstancesecurityoption3.md
   - docs/models/operations/getlatestdeploymentrequest.md
   - docs/models/operations/getlatestdeploymentsecurity.md
   - docs/models/operations/getlatestdeploymentsecurityoption1.md
   - docs/models/operations/getlatestdeploymentsecurityoption2.md
+  - docs/models/operations/getlatestreleaserequest.md
+  - docs/models/operations/getlatestreleasesecurity.md
+  - docs/models/operations/getlatestreleasesecurityoption1.md
+  - docs/models/operations/getlatestreleasesecurityoption2.md
   - docs/models/operations/getmcpmetadatarequest.md
   - docs/models/operations/getmcpmetadatasecurity.md
   - docs/models/operations/getperiodusagerequest.md
   - docs/models/operations/getperiodusagesecurity.md
+  - docs/models/operations/getreleasebynumberrequest.md
+  - docs/models/operations/getreleasebynumbersecurity.md
+  - docs/models/operations/getreleasebynumbersecurityoption1.md
+  - docs/models/operations/getreleasebynumbersecurityoption2.md
+  - docs/models/operations/getreleaserequest.md
+  - docs/models/operations/getreleasesecurity.md
+  - docs/models/operations/getreleasesecurityoption1.md
+  - docs/models/operations/getreleasesecurityoption2.md
   - docs/models/operations/getslackconnectionrequest.md
   - docs/models/operations/getslackconnectionsecurity.md
   - docs/models/operations/getsourceenvironmentrequest.md
   - docs/models/operations/getsourceenvironmentsecurity.md
+  - docs/models/operations/getstagingversionrequest.md
+  - docs/models/operations/getstagingversionsecurity.md
+  - docs/models/operations/getstagingversionsecurityoption1.md
+  - docs/models/operations/getstagingversionsecurityoption2.md
   - docs/models/operations/gettemplaterequest.md
   - docs/models/operations/gettemplatesecurity.md
   - docs/models/operations/gettemplatesecurityoption1.md
@@ -323,6 +358,10 @@ generatedFiles:
   - docs/models/operations/listpackagessecurityoption2.md
   - docs/models/operations/listprojectsrequest.md
   - docs/models/operations/listprojectssecurity.md
+  - docs/models/operations/listreleasesrequest.md
+  - docs/models/operations/listreleasessecurity.md
+  - docs/models/operations/listreleasessecurityoption1.md
+  - docs/models/operations/listreleasessecurityoption2.md
   - docs/models/operations/listresourcesrequest.md
   - docs/models/operations/listresourcessecurity.md
   - docs/models/operations/listtemplatesrequest.md
@@ -377,6 +416,10 @@ generatedFiles:
   - docs/models/operations/rendertemplatesecurityoption3.md
   - docs/models/operations/revokeapikeyrequest.md
   - docs/models/operations/revokeapikeysecurity.md
+  - docs/models/operations/rollbacktoreleaserequest.md
+  - docs/models/operations/rollbacktoreleasesecurity.md
+  - docs/models/operations/rollbacktoreleasesecurityoption1.md
+  - docs/models/operations/rollbacktoreleasesecurityoption2.md
   - docs/models/operations/servefunctionrequest.md
   - docs/models/operations/servefunctionresponse.md
   - docs/models/operations/servefunctionsecurity.md
@@ -411,6 +454,10 @@ generatedFiles:
   - docs/models/operations/switchauthscopesrequest.md
   - docs/models/operations/switchauthscopesresponse.md
   - docs/models/operations/switchauthscopessecurity.md
+  - docs/models/operations/switcheditingmoderequest.md
+  - docs/models/operations/switcheditingmodesecurity.md
+  - docs/models/operations/switcheditingmodesecurityoption1.md
+  - docs/models/operations/switcheditingmodesecurityoption2.md
   - docs/models/operations/tooltype.md
   - docs/models/operations/updateenvironmentrequest.md
   - docs/models/operations/updateenvironmentsecurity.md
@@ -461,6 +508,7 @@ generatedFiles:
   - docs/sdks/mcpmetadata/README.md
   - docs/sdks/packages/README.md
   - docs/sdks/projects/README.md
+  - docs/sdks/releases/README.md
   - docs/sdks/resources/README.md
   - docs/sdks/slack/README.md
   - docs/sdks/templates/README.md
@@ -532,6 +580,12 @@ generatedFiles:
   - src/funcs/projectsCreate.ts
   - src/funcs/projectsList.ts
   - src/funcs/projectsSetLogo.ts
+  - src/funcs/releasesCreate.ts
+  - src/funcs/releasesGet.ts
+  - src/funcs/releasesGetByNumber.ts
+  - src/funcs/releasesGetLatest.ts
+  - src/funcs/releasesList.ts
+  - src/funcs/releasesRollback.ts
   - src/funcs/resourcesList.ts
   - src/funcs/slackDeleteSlackConnection.ts
   - src/funcs/slackGetSlackConnection.ts
@@ -550,10 +604,14 @@ generatedFiles:
   - src/funcs/toolsetsCheckMCPSlugAvailability.ts
   - src/funcs/toolsetsCloneBySlug.ts
   - src/funcs/toolsetsCreate.ts
+  - src/funcs/toolsetsCreateStaging.ts
   - src/funcs/toolsetsDeleteBySlug.ts
+  - src/funcs/toolsetsDiscardStaging.ts
   - src/funcs/toolsetsGetBySlug.ts
+  - src/funcs/toolsetsGetStaging.ts
   - src/funcs/toolsetsList.ts
   - src/funcs/toolsetsRemoveOAuthServer.ts
+  - src/funcs/toolsetsSwitchEditingMode.ts
   - src/funcs/toolsetsUpdateBySlug.ts
   - src/funcs/usageCreateCheckout.ts
   - src/funcs/usageCreateCustomerSession.ts
@@ -603,6 +661,7 @@ generatedFiles:
   - src/models/components/createprojectresult.ts
   - src/models/components/createprompttemplateform.ts
   - src/models/components/createprompttemplateresult.ts
+  - src/models/components/createreleaserequestbody.ts
   - src/models/components/createtoolsetrequestbody.ts
   - src/models/components/creditusageresponsebody.ts
   - src/models/components/customdomain.ts
@@ -648,6 +707,7 @@ generatedFiles:
   - src/models/components/listpackagesresult.ts
   - src/models/components/listprojectsresult.ts
   - src/models/components/listprompttemplatesresult.ts
+  - src/models/components/listreleasesresult.ts
   - src/models/components/listresourcesresult.ts
   - src/models/components/listtoollogresponse.ts
   - src/models/components/listtoolsetsresult.ts
@@ -679,6 +739,7 @@ generatedFiles:
   - src/models/components/resource.ts
   - src/models/components/resourceentry.ts
   - src/models/components/responsefilter.ts
+  - src/models/components/rollbacktoreleaserequestbody.ts
   - src/models/components/securityvariable.ts
   - src/models/components/servervariable.ts
   - src/models/components/setmcpmetadatarequestbody.ts
@@ -688,12 +749,14 @@ generatedFiles:
   - src/models/components/setsourceenvironmentlinkrequestbody.ts
   - src/models/components/settoolsetenvironmentlinkrequestbody.ts
   - src/models/components/sourceenvironmentlink.ts
+  - src/models/components/switcheditingmoderequestbody.ts
   - src/models/components/tierlimits.ts
   - src/models/components/tool.ts
   - src/models/components/toolentry.ts
   - src/models/components/toolset.ts
   - src/models/components/toolsetentry.ts
   - src/models/components/toolsetenvironmentlink.ts
+  - src/models/components/toolsetrelease.ts
   - src/models/components/toolvariation.ts
   - src/models/components/updateenvironmentrequestbody.ts
   - src/models/components/updatepackageform.ts
@@ -730,6 +793,8 @@ generatedFiles:
   - src/models/operations/createenvironment.ts
   - src/models/operations/createpackage.ts
   - src/models/operations/createproject.ts
+  - src/models/operations/createrelease.ts
+  - src/models/operations/createstagingversion.ts
   - src/models/operations/createtemplate.ts
   - src/models/operations/createtoolset.ts
   - src/models/operations/creditusage.ts
@@ -741,6 +806,7 @@ generatedFiles:
   - src/models/operations/deletetemplate.ts
   - src/models/operations/deletetoolset.ts
   - src/models/operations/deletetoolsetenvironmentlink.ts
+  - src/models/operations/discardstagingversion.ts
   - src/models/operations/evolvedeployment.ts
   - src/models/operations/getactivedeployment.ts
   - src/models/operations/getdeployment.ts
@@ -748,10 +814,14 @@ generatedFiles:
   - src/models/operations/getdomain.ts
   - src/models/operations/getinstance.ts
   - src/models/operations/getlatestdeployment.ts
+  - src/models/operations/getlatestrelease.ts
   - src/models/operations/getmcpmetadata.ts
   - src/models/operations/getperiodusage.ts
+  - src/models/operations/getrelease.ts
+  - src/models/operations/getreleasebynumber.ts
   - src/models/operations/getslackconnection.ts
   - src/models/operations/getsourceenvironment.ts
+  - src/models/operations/getstagingversion.ts
   - src/models/operations/gettemplate.ts
   - src/models/operations/gettoolset.ts
   - src/models/operations/gettoolsetenvironment.ts
@@ -766,6 +836,7 @@ generatedFiles:
   - src/models/operations/listintegrations.ts
   - src/models/operations/listpackages.ts
   - src/models/operations/listprojects.ts
+  - src/models/operations/listreleases.ts
   - src/models/operations/listresources.ts
   - src/models/operations/listtemplates.ts
   - src/models/operations/listtoollogs.ts
@@ -782,6 +853,7 @@ generatedFiles:
   - src/models/operations/rendertemplate.ts
   - src/models/operations/rendertemplatebyid.ts
   - src/models/operations/revokeapikey.ts
+  - src/models/operations/rollbacktorelease.ts
   - src/models/operations/servefunction.ts
   - src/models/operations/serveimage.ts
   - src/models/operations/serveopenapiv3.ts
@@ -794,6 +866,7 @@ generatedFiles:
   - src/models/operations/slackcallback.ts
   - src/models/operations/slacklogin.ts
   - src/models/operations/switchauthscopes.ts
+  - src/models/operations/switcheditingmode.ts
   - src/models/operations/updateenvironment.ts
   - src/models/operations/updatepackage.ts
   - src/models/operations/updateslackconnection.ts
@@ -817,6 +890,8 @@ generatedFiles:
   - src/react-query/createEnvironment.ts
   - src/react-query/createPackage.ts
   - src/react-query/createProject.ts
+  - src/react-query/createRelease.ts
+  - src/react-query/createStagingVersion.ts
   - src/react-query/createTemplate.ts
   - src/react-query/createToolset.ts
   - src/react-query/deleteDomain.ts
@@ -829,6 +904,7 @@ generatedFiles:
   - src/react-query/deleteToolsetEnvironmentLink.ts
   - src/react-query/deployment.ts
   - src/react-query/deploymentLogs.ts
+  - src/react-query/discardStagingVersion.ts
   - src/react-query/evolveDeployment.ts
   - src/react-query/featuresSet.ts
   - src/react-query/getCreditUsage.ts
@@ -852,6 +928,7 @@ generatedFiles:
   - src/react-query/listIntegrations.ts
   - src/react-query/listPackages.ts
   - src/react-query/listProjects.ts
+  - src/react-query/listReleases.ts
   - src/react-query/listResources.ts
   - src/react-query/listToolLogs.ts
   - src/react-query/listTools.ts
@@ -864,10 +941,14 @@ generatedFiles:
   - src/react-query/redeployDeployment.ts
   - src/react-query/register.ts
   - src/react-query/registerDomain.ts
+  - src/react-query/releasesGet.ts
+  - src/react-query/releasesGetByNumber.ts
+  - src/react-query/releasesGetLatest.ts
   - src/react-query/removeOAuthServer.ts
   - src/react-query/renderTemplate.ts
   - src/react-query/renderTemplateByID.ts
   - src/react-query/revokeAPIKey.ts
+  - src/react-query/rollbackToRelease.ts
   - src/react-query/serveFunction.ts
   - src/react-query/serveImage.ts
   - src/react-query/serveOpenAPIv3.ts
@@ -875,6 +956,8 @@ generatedFiles:
   - src/react-query/setProjectLogo.ts
   - src/react-query/setSourceEnvironmentLink.ts
   - src/react-query/setToolsetEnvironmentLink.ts
+  - src/react-query/stagingVersion.ts
+  - src/react-query/switchEditingMode.ts
   - src/react-query/switchScopes.ts
   - src/react-query/template.ts
   - src/react-query/templates.ts
@@ -904,6 +987,7 @@ generatedFiles:
   - src/sdk/mcpmetadata.ts
   - src/sdk/packages.ts
   - src/sdk/projects.ts
+  - src/sdk/releases.ts
   - src/sdk/resources.ts
   - src/sdk/sdk.ts
   - src/sdk/slack.ts
@@ -1424,7 +1508,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-03-22T17:12:26.250Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "tools": [{}], "toolset_version": 740618, "updated_at": "2024-05-10T06:01:51.541Z"}
+          application/json: {"account_type": "<value>", "created_at": "2025-03-22T17:12:26.250Z", "editing_mode": "<value>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "tools": [{}], "toolset_version": 740618, "updated_at": "2024-05-10T06:01:51.541Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1446,7 +1530,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 157800, "updated_at": "2025-12-20T03:22:44.412Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "editing_mode": "<value>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 157800, "updated_at": "2025-12-20T03:22:44.412Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1469,7 +1553,7 @@ examples:
         application/json: {}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "description": "mushy comparison messy lady fly", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2023-07-28T22:54:49.336Z"}], "resource_urns": ["<value 1>", "<value 2>", "<value 3>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [{}], "toolset_version": 873620, "updated_at": "2025-08-07T19:20:12.233Z"}
+          application/json: {"account_type": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "editing_mode": "<value>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "description": "mushy comparison messy lady fly", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2023-07-28T22:54:49.336Z"}], "resource_urns": ["<value 1>", "<value 2>", "<value 3>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [{}], "toolset_version": 873620, "updated_at": "2025-08-07T19:20:12.233Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1603,7 +1687,7 @@ examples:
         application/json: {"external_oauth_server": {"metadata": "<value>", "slug": "<value>"}}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-08-31T03:23:36.997Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 220932, "updated_at": "2025-03-28T09:33:33.851Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-08-31T03:23:36.997Z", "editing_mode": "<value>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 220932, "updated_at": "2025-03-28T09:33:33.851Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1627,7 +1711,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-08-30T05:28:04.458Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 220098, "updated_at": "2023-10-21T14:21:06.001Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-08-30T05:28:04.458Z", "editing_mode": "<value>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 220098, "updated_at": "2023-10-21T14:21:06.001Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1730,7 +1814,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-07-27T03:45:28.599Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2024-10-23T10:29:38.107Z", "description": "chap whoa gee lightly devastation vivacious about t-shirt", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2024-11-26T08:12:18.787Z"}], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>"], "tools": [], "toolset_version": 189011, "updated_at": "2024-04-29T05:29:07.967Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-07-27T03:45:28.599Z", "editing_mode": "<value>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2024-10-23T10:29:38.107Z", "description": "chap whoa gee lightly devastation vivacious about t-shirt", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2024-11-26T08:12:18.787Z"}], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>"], "tools": [], "toolset_version": 189011, "updated_at": "2024-04-29T05:29:07.967Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1868,5 +1952,121 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  createRelease:
+    speakeasy-default-create-release:
+      requestBody:
+        application/json: {"toolset_slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-05-30T05:58:24.519Z", "id": "<id>", "release_number": 718523, "released_by_user_id": "<id>", "toolset_id": "<id>", "toolset_version_id": "<id>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getRelease:
+    speakeasy-default-get-release:
+      parameters:
+        query:
+          release_id: "<id>"
+      responses:
+        "200":
+          application/json: {"created_at": "2025-08-23T19:06:24.274Z", "id": "<id>", "release_number": 961202, "released_by_user_id": "<id>", "toolset_id": "<id>", "toolset_version_id": "<id>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getReleaseByNumber:
+    speakeasy-default-get-release-by-number:
+      parameters:
+        query:
+          toolset_slug: "<value>"
+          release_number: 501371
+      responses:
+        "200":
+          application/json: {"created_at": "2023-07-02T16:49:21.210Z", "id": "<id>", "release_number": 133510, "released_by_user_id": "<id>", "toolset_id": "<id>", "toolset_version_id": "<id>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getLatestRelease:
+    speakeasy-default-get-latest-release:
+      parameters:
+        query:
+          toolset_slug: "<value>"
+      responses:
+        "200":
+          application/json: {"created_at": "2024-06-23T00:37:00.585Z", "id": "<id>", "release_number": 65955, "released_by_user_id": "<id>", "toolset_id": "<id>", "toolset_version_id": "<id>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listReleases:
+    speakeasy-default-list-releases:
+      parameters:
+        query:
+          toolset_slug: "<value>"
+      responses:
+        "200":
+          application/json: {"releases": [], "total": 149613}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  rollbackToRelease:
+    speakeasy-default-rollback-to-release:
+      requestBody:
+        application/json: {"release_number": 629770, "toolset_slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2023-09-30T23:27:36.720Z", "editing_mode": "<value>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>", "<value 3>"], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [], "toolset_version": 337130, "updated_at": "2025-11-10T09:41:11.338Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  createStagingVersion:
+    speakeasy-default-create-staging-version:
+      parameters:
+        query:
+          slug: "<value>"
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2025-12-23T05:55:08.711Z", "editing_mode": "<value>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "tools": [], "toolset_version": 826097, "updated_at": "2024-10-22T12:04:31.438Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  discardStagingVersion:
+    speakeasy-default-discard-staging-version:
+      parameters:
+        query:
+          slug: "<value>"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getStagingVersion:
+    speakeasy-default-get-staging-version:
+      parameters:
+        query:
+          slug: "<value>"
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2024-02-15T12:14:48.981Z", "editing_mode": "<value>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2023-05-04T10:41:16.100Z", "description": "colorize obtrude for", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>"], "updated_at": "2025-02-12T05:45:11.901Z"}], "resource_urns": ["<value 1>", "<value 2>"], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [{}], "toolset_version": 892050, "updated_at": "2025-12-20T07:46:45.384Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  switchEditingMode:
+    speakeasy-default-switch-editing-mode:
+      requestBody:
+        application/json: {"mode": "iteration", "slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2023-02-22T22:27:28.555Z", "editing_mode": "<value>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>", "<value 3>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>"], "tools": [], "toolset_version": 247041, "updated_at": "2025-12-14T17:49:39.264Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

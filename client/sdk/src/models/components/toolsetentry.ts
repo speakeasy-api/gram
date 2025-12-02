@@ -62,6 +62,10 @@ export type ToolsetEntry = {
    */
   description?: string | undefined;
   /**
+   * The editing mode for this toolset: 'iteration' (direct edits) or 'staging' (explicit releases)
+   */
+  editingMode: string;
+  /**
    * The function environment variables that are relevant to the toolset
    */
   functionEnvironmentVariables?: Array<FunctionEnvironmentVariable> | undefined;
@@ -89,6 +93,10 @@ export type ToolsetEntry = {
    * The organization ID this toolset belongs to
    */
   organizationId: string;
+  /**
+   * The ID of the parent toolset if this is a staging toolset
+   */
+  parentToolsetId?: string | undefined;
   /**
    * The project ID this toolset belongs to
    */
@@ -145,6 +153,7 @@ export const ToolsetEntry$inboundSchema: z.ZodType<
   custom_domain_id: z.string().optional(),
   default_environment_slug: z.string().optional(),
   description: z.string().optional(),
+  editing_mode: z.string(),
   function_environment_variables: z.array(
     FunctionEnvironmentVariable$inboundSchema,
   ).optional(),
@@ -154,6 +163,7 @@ export const ToolsetEntry$inboundSchema: z.ZodType<
   mcp_slug: z.string().optional(),
   name: z.string(),
   organization_id: z.string(),
+  parent_toolset_id: z.string().optional(),
   project_id: z.string(),
   prompt_templates: z.array(PromptTemplateEntry$inboundSchema),
   resource_urns: z.array(z.string()),
@@ -170,11 +180,13 @@ export const ToolsetEntry$inboundSchema: z.ZodType<
     "created_at": "createdAt",
     "custom_domain_id": "customDomainId",
     "default_environment_slug": "defaultEnvironmentSlug",
+    "editing_mode": "editingMode",
     "function_environment_variables": "functionEnvironmentVariables",
     "mcp_enabled": "mcpEnabled",
     "mcp_is_public": "mcpIsPublic",
     "mcp_slug": "mcpSlug",
     "organization_id": "organizationId",
+    "parent_toolset_id": "parentToolsetId",
     "project_id": "projectId",
     "prompt_templates": "promptTemplates",
     "resource_urns": "resourceUrns",
@@ -192,6 +204,7 @@ export type ToolsetEntry$Outbound = {
   custom_domain_id?: string | undefined;
   default_environment_slug?: string | undefined;
   description?: string | undefined;
+  editing_mode: string;
   function_environment_variables?:
     | Array<FunctionEnvironmentVariable$Outbound>
     | undefined;
@@ -201,6 +214,7 @@ export type ToolsetEntry$Outbound = {
   mcp_slug?: string | undefined;
   name: string;
   organization_id: string;
+  parent_toolset_id?: string | undefined;
   project_id: string;
   prompt_templates: Array<PromptTemplateEntry$Outbound>;
   resource_urns: Array<string>;
@@ -224,6 +238,7 @@ export const ToolsetEntry$outboundSchema: z.ZodType<
   customDomainId: z.string().optional(),
   defaultEnvironmentSlug: z.string().optional(),
   description: z.string().optional(),
+  editingMode: z.string(),
   functionEnvironmentVariables: z.array(
     FunctionEnvironmentVariable$outboundSchema,
   ).optional(),
@@ -233,6 +248,7 @@ export const ToolsetEntry$outboundSchema: z.ZodType<
   mcpSlug: z.string().optional(),
   name: z.string(),
   organizationId: z.string(),
+  parentToolsetId: z.string().optional(),
   projectId: z.string(),
   promptTemplates: z.array(PromptTemplateEntry$outboundSchema),
   resourceUrns: z.array(z.string()),
@@ -249,11 +265,13 @@ export const ToolsetEntry$outboundSchema: z.ZodType<
     createdAt: "created_at",
     customDomainId: "custom_domain_id",
     defaultEnvironmentSlug: "default_environment_slug",
+    editingMode: "editing_mode",
     functionEnvironmentVariables: "function_environment_variables",
     mcpEnabled: "mcp_enabled",
     mcpIsPublic: "mcp_is_public",
     mcpSlug: "mcp_slug",
     organizationId: "organization_id",
+    parentToolsetId: "parent_toolset_id",
     projectId: "project_id",
     promptTemplates: "prompt_templates",
     resourceUrns: "resource_urns",

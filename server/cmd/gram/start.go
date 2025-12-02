@@ -54,6 +54,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/projects"
+	"github.com/speakeasy-api/gram/server/internal/releases"
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/templates"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -541,6 +542,7 @@ func newStartCommand() *cli.Command {
 			packages.Attach(mux, packages.NewService(logger, db, sessionManager))
 			productfeatures.Attach(mux, productfeatures.NewService(logger, db, sessionManager, redisClient, openRouterKeyRefresher))
 			toolsets.Attach(mux, toolsetsSvc)
+			releases.Attach(mux, releases.NewAPIService(logger, db, sessionManager))
 			integrations.Attach(mux, integrations.NewService(logger, db, sessionManager))
 			templates.Attach(mux, templates.NewService(logger, db, sessionManager, toolsetsSvc))
 			assets.Attach(mux, assets.NewService(logger, db, sessionManager, assetStorage))

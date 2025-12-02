@@ -12,6 +12,8 @@ import { useToolset } from "@/hooks/toolTypes";
 import { Toolset } from "@/lib/toolTypes";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useCallback } from "react";
+import { EditingModeSwitcher } from "./EditingModeSwitcher";
+import { StagingBadge } from "./StagingBadge";
 
 export const ToolsetHeader = ({
   toolsetSlug,
@@ -45,19 +47,31 @@ export const ToolsetHeader = ({
   return (
     <Stack gap={2} className="mb-4">
       <Stack direction="horizontal" justify="space-between" className="h-10">
-        <CopyableSlug slug={toolset?.slug || ""} hidden={false}>
-          <EditableText
-            value={toolset?.name}
-            onSubmit={(newValue) => updateToolset({ name: newValue })}
-            label={"Toolset Name"}
-            description={`Update the name of toolset '${toolset?.name}'`}
-          >
-            <Heading variant="h2" className="normal-case">
-              {toolset?.name}
-            </Heading>
-          </EditableText>
-        </CopyableSlug>
-        {actions}
+        <Stack direction="horizontal" gap={2} align="center">
+          <CopyableSlug slug={toolset?.slug || ""} hidden={false}>
+            <EditableText
+              value={toolset?.name}
+              onSubmit={(newValue) => updateToolset({ name: newValue })}
+              label={"Toolset Name"}
+              description={`Update the name of toolset '${toolset?.name}'`}
+            >
+              <Heading variant="h2" className="normal-case">
+                {toolset?.name}
+              </Heading>
+            </EditableText>
+          </CopyableSlug>
+          <StagingBadge visible={toolset?.editingMode === "staging"} />
+        </Stack>
+        <Stack direction="horizontal" gap={2} align="center">
+          {toolset && (
+            <EditingModeSwitcher
+              toolsetSlug={toolset.slug}
+              currentMode={toolset.editingMode}
+              onModeChanged={refetch}
+            />
+          )}
+          {actions}
+        </Stack>
       </Stack>
       <div className="flex flex-col gap-4 @2xl:flex-row @2xl:justify-between @2xl:gap-6">
         <EditableText

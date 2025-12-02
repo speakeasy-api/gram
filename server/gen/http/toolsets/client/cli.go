@@ -25,7 +25,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"plr\",\n      \"description\": \"Nulla facere excepturi fugiat quo et officia.\",\n      \"name\": \"Non ut quae dignissimos iste.\",\n      \"resource_urns\": [\n         \"Velit iste reiciendis dolores.\",\n         \"Quia molestiae rerum porro.\",\n         \"Est enim occaecati.\"\n      ],\n      \"tool_urns\": [\n         \"Quis autem minima perferendis minus.\",\n         \"Quod ea dolores.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"65k\",\n      \"description\": \"Eum id et est tempore.\",\n      \"name\": \"Illo et.\",\n      \"resource_urns\": [\n         \"Neque qui est qui eaque.\",\n         \"Pariatur nisi dolorem perspiciatis.\",\n         \"Animi et quaerat.\"\n      ],\n      \"tool_urns\": [\n         \"Qui ut omnis consequuntur.\",\n         \"Et consequatur id perferendis temporibus qui molestiae.\",\n         \"Laudantium sequi accusamus est aliquam.\",\n         \"Tenetur quod.\"\n      ]\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
@@ -121,7 +121,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"Et nostrum.\",\n      \"default_environment_slug\": \"ikr\",\n      \"description\": \"Ipsa laboriosam.\",\n      \"mcp_enabled\": false,\n      \"mcp_is_public\": true,\n      \"mcp_slug\": \"m4a\",\n      \"name\": \"Est dolores odit dolor corrupti.\",\n      \"prompt_template_names\": [\n         \"Tempore et qui.\",\n         \"Error repellat fugit ducimus et.\"\n      ],\n      \"resource_urns\": [\n         \"Dolorem et dolorum.\",\n         \"Quisquam quo.\",\n         \"Recusandae voluptatum aut sit sed repudiandae.\"\n      ],\n      \"tool_selection_mode\": \"Velit fugit quaerat ea repellendus.\",\n      \"tool_urns\": [\n         \"Assumenda dolorem omnis ut.\",\n         \"Et impedit.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"Ea error alias sit.\",\n      \"default_environment_slug\": \"e98\",\n      \"description\": \"Et voluptas debitis.\",\n      \"mcp_enabled\": true,\n      \"mcp_is_public\": true,\n      \"mcp_slug\": \"v0k\",\n      \"name\": \"Qui blanditiis beatae numquam.\",\n      \"prompt_template_names\": [\n         \"Harum laborum iste vel qui illum illo.\",\n         \"In animi.\",\n         \"Quia itaque et.\",\n         \"In harum veritatis nesciunt.\"\n      ],\n      \"resource_urns\": [\n         \"Sint vero dolorum rem consequatur omnis.\",\n         \"Optio doloribus.\",\n         \"Sunt id facilis dicta.\"\n      ],\n      \"tool_selection_mode\": \"Est quaerat eaque dolor optio qui omnis.\",\n      \"tool_urns\": [\n         \"Sed nemo sit in magnam.\",\n         \"Perspiciatis sed earum ut eos quibusdam qui.\"\n      ]\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
@@ -390,7 +390,7 @@ func BuildAddExternalOAuthServerPayload(toolsetsAddExternalOAuthServerBody strin
 	{
 		err = json.Unmarshal([]byte(toolsetsAddExternalOAuthServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_oauth_server\": {\n         \"metadata\": \"Vero magnam voluptas velit nisi omnis.\",\n         \"slug\": \"fyo\"\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_oauth_server\": {\n         \"metadata\": \"Consequatur enim id vero provident facilis.\",\n         \"slug\": \"03n\"\n      }\n   }'")
 		}
 		if body.ExternalOauthServer == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("external_oauth_server", "body"))
@@ -480,6 +480,182 @@ func BuildRemoveOAuthServerPayload(toolsetsRemoveOAuthServerSlug string, toolset
 	}
 	v := &toolsets.RemoveOAuthServerPayload{}
 	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCreateStagingVersionPayload builds the payload for the toolsets
+// createStagingVersion endpoint from CLI flags.
+func BuildCreateStagingVersionPayload(toolsetsCreateStagingVersionSlug string, toolsetsCreateStagingVersionSessionToken string, toolsetsCreateStagingVersionApikeyToken string, toolsetsCreateStagingVersionProjectSlugInput string) (*toolsets.CreateStagingVersionPayload, error) {
+	var err error
+	var slug string
+	{
+		slug = toolsetsCreateStagingVersionSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if toolsetsCreateStagingVersionSessionToken != "" {
+			sessionToken = &toolsetsCreateStagingVersionSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if toolsetsCreateStagingVersionApikeyToken != "" {
+			apikeyToken = &toolsetsCreateStagingVersionApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if toolsetsCreateStagingVersionProjectSlugInput != "" {
+			projectSlugInput = &toolsetsCreateStagingVersionProjectSlugInput
+		}
+	}
+	v := &toolsets.CreateStagingVersionPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetStagingVersionPayload builds the payload for the toolsets
+// getStagingVersion endpoint from CLI flags.
+func BuildGetStagingVersionPayload(toolsetsGetStagingVersionSlug string, toolsetsGetStagingVersionSessionToken string, toolsetsGetStagingVersionApikeyToken string, toolsetsGetStagingVersionProjectSlugInput string) (*toolsets.GetStagingVersionPayload, error) {
+	var err error
+	var slug string
+	{
+		slug = toolsetsGetStagingVersionSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if toolsetsGetStagingVersionSessionToken != "" {
+			sessionToken = &toolsetsGetStagingVersionSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if toolsetsGetStagingVersionApikeyToken != "" {
+			apikeyToken = &toolsetsGetStagingVersionApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if toolsetsGetStagingVersionProjectSlugInput != "" {
+			projectSlugInput = &toolsetsGetStagingVersionProjectSlugInput
+		}
+	}
+	v := &toolsets.GetStagingVersionPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDiscardStagingVersionPayload builds the payload for the toolsets
+// discardStagingVersion endpoint from CLI flags.
+func BuildDiscardStagingVersionPayload(toolsetsDiscardStagingVersionSlug string, toolsetsDiscardStagingVersionSessionToken string, toolsetsDiscardStagingVersionApikeyToken string, toolsetsDiscardStagingVersionProjectSlugInput string) (*toolsets.DiscardStagingVersionPayload, error) {
+	var err error
+	var slug string
+	{
+		slug = toolsetsDiscardStagingVersionSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if toolsetsDiscardStagingVersionSessionToken != "" {
+			sessionToken = &toolsetsDiscardStagingVersionSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if toolsetsDiscardStagingVersionApikeyToken != "" {
+			apikeyToken = &toolsetsDiscardStagingVersionApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if toolsetsDiscardStagingVersionProjectSlugInput != "" {
+			projectSlugInput = &toolsetsDiscardStagingVersionProjectSlugInput
+		}
+	}
+	v := &toolsets.DiscardStagingVersionPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSwitchEditingModePayload builds the payload for the toolsets
+// switchEditingMode endpoint from CLI flags.
+func BuildSwitchEditingModePayload(toolsetsSwitchEditingModeBody string, toolsetsSwitchEditingModeSessionToken string, toolsetsSwitchEditingModeApikeyToken string, toolsetsSwitchEditingModeProjectSlugInput string) (*toolsets.SwitchEditingModePayload, error) {
+	var err error
+	var body SwitchEditingModeRequestBody
+	{
+		err = json.Unmarshal([]byte(toolsetsSwitchEditingModeBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mode\": \"staging\",\n      \"slug\": \"6lk\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 40, false))
+		}
+		if !(body.Mode == "iteration" || body.Mode == "staging") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", body.Mode, []any{"iteration", "staging"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if toolsetsSwitchEditingModeSessionToken != "" {
+			sessionToken = &toolsetsSwitchEditingModeSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if toolsetsSwitchEditingModeApikeyToken != "" {
+			apikeyToken = &toolsetsSwitchEditingModeApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if toolsetsSwitchEditingModeProjectSlugInput != "" {
+			projectSlugInput = &toolsetsSwitchEditingModeProjectSlugInput
+		}
+	}
+	v := &toolsets.SwitchEditingModePayload{
+		Slug: types.Slug(body.Slug),
+		Mode: body.Mode,
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

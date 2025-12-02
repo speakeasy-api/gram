@@ -124,6 +124,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		DefaultEnvironmentSlug: conv.PtrToPGText(nil),
 		McpSlug:                conv.ToPGText(mcpSlug),
 		McpEnabled:             enabledServerCount == 0, // we automatically enable the first available toolset in an organization as an MCP server
+		ParentToolsetID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false}, // Regular toolsets have no parent
 	}
 
 	if payload.DefaultEnvironmentSlug != nil {
@@ -412,6 +413,7 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		DefaultEnvironmentSlug: originalToolset.DefaultEnvironmentSlug,
 		McpSlug:                conv.ToPGText(mcpSlug),
 		McpEnabled:             false, // Don't auto-enable MCP for cloned toolsets
+		ParentToolsetID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false}, // Cloned toolsets are independent
 	}
 
 	// Try to create the cloned toolset, handling name conflicts
@@ -809,4 +811,62 @@ func (s *Service) InvalidateCacheByTool(ctx context.Context, toolURN urn.Tool, p
 	}
 
 	return nil
+}
+
+// CreateStagingVersion creates a staging version of a toolset
+func (s *Service) CreateStagingVersion(ctx context.Context, payload *gen.CreateStagingVersionPayload) (*types.Toolset, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	stagingToolset, err := s.createStagingVersion(ctx, *authCtx.ProjectID, string(payload.Slug))
+	if err != nil {
+		return nil, err // Already logged in service
+	}
+
+	// Get full toolset details using mv.DescribeToolset
+	return mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(stagingToolset.Slug), &s.toolsetCache)
+}
+
+// GetStagingVersion retrieves the staging version of a toolset
+func (s *Service) GetStagingVersion(ctx context.Context, payload *gen.GetStagingVersionPayload) (*types.Toolset, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	stagingToolset, err := s.getStagingVersion(ctx, *authCtx.ProjectID, string(payload.Slug))
+	if err != nil {
+		return nil, err // Already logged in service
+	}
+
+	// Get full toolset details
+	return mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(stagingToolset.Slug), &s.toolsetCache)
+}
+
+// DiscardStagingVersion discards the staging version of a toolset
+func (s *Service) DiscardStagingVersion(ctx context.Context, payload *gen.DiscardStagingVersionPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	return s.discardStagingVersion(ctx, *authCtx.ProjectID, string(payload.Slug))
+}
+
+// SwitchEditingMode switches a toolset between iteration and staging modes
+func (s *Service) SwitchEditingMode(ctx context.Context, payload *gen.SwitchEditingModePayload) (*types.Toolset, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	_, err := s.switchEditingMode(ctx, *authCtx.ProjectID, string(payload.Slug), payload.Mode)
+	if err != nil {
+		return nil, err // Already logged in service
+	}
+
+	// Get updated toolset details
+	return mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(string(payload.Slug)), &s.toolsetCache)
 }

@@ -47,7 +47,7 @@ WITH global_group AS (
   ORDER BY project_tool_variations.id DESC
   LIMIT 1
 )
-SELECT id, group_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, created_at, updated_at, deleted_at, deleted
+SELECT id, group_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, predecessor_id, version, created_at, updated_at, deleted_at, deleted
 FROM tool_variations
 WHERE
   group_id = (SELECT id FROM global_group)
@@ -81,6 +81,8 @@ func (q *Queries) FindGlobalVariationsByToolURNs(ctx context.Context, arg FindGl
 			&i.Description,
 			&i.Tags,
 			&i.Summarizer,
+			&i.PredecessorID,
+			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -94,6 +96,122 @@ func (q *Queries) FindGlobalVariationsByToolURNs(ctx context.Context, arg FindGl
 		return nil, err
 	}
 	return items, nil
+}
+
+const getLatestToolVariationByURN = `-- name: GetLatestToolVariationByURN :one
+SELECT id, group_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, predecessor_id, version, created_at, updated_at, deleted_at, deleted
+FROM tool_variations
+WHERE group_id = $1
+  AND src_tool_urn = $2
+  AND deleted IS FALSE
+ORDER BY version DESC
+LIMIT 1
+`
+
+type GetLatestToolVariationByURNParams struct {
+	GroupID    uuid.UUID
+	SrcToolUrn urn.Tool
+}
+
+func (q *Queries) GetLatestToolVariationByURN(ctx context.Context, arg GetLatestToolVariationByURNParams) (ToolVariation, error) {
+	row := q.db.QueryRow(ctx, getLatestToolVariationByURN, arg.GroupID, arg.SrcToolUrn)
+	var i ToolVariation
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.SrcToolUrn,
+		&i.SrcToolName,
+		&i.Confirm,
+		&i.ConfirmPrompt,
+		&i.Name,
+		&i.Summary,
+		&i.Description,
+		&i.Tags,
+		&i.Summarizer,
+		&i.PredecessorID,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getToolVariationByID = `-- name: GetToolVariationByID :one
+
+SELECT id, group_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, predecessor_id, version, created_at, updated_at, deleted_at, deleted
+FROM tool_variations
+WHERE id = $1
+  AND deleted IS FALSE
+`
+
+// ==============================================================================
+// Variation Versioning Queries
+// ==============================================================================
+func (q *Queries) GetToolVariationByID(ctx context.Context, id uuid.UUID) (ToolVariation, error) {
+	row := q.db.QueryRow(ctx, getToolVariationByID, id)
+	var i ToolVariation
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.SrcToolUrn,
+		&i.SrcToolName,
+		&i.Confirm,
+		&i.ConfirmPrompt,
+		&i.Name,
+		&i.Summary,
+		&i.Description,
+		&i.Tags,
+		&i.Summarizer,
+		&i.PredecessorID,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getToolVariationByURN = `-- name: GetToolVariationByURN :one
+SELECT id, group_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, predecessor_id, version, created_at, updated_at, deleted_at, deleted
+FROM tool_variations
+WHERE group_id = $1
+  AND src_tool_urn = $2
+  AND deleted IS FALSE
+ORDER BY version DESC
+LIMIT 1
+`
+
+type GetToolVariationByURNParams struct {
+	GroupID    uuid.UUID
+	SrcToolUrn urn.Tool
+}
+
+func (q *Queries) GetToolVariationByURN(ctx context.Context, arg GetToolVariationByURNParams) (ToolVariation, error) {
+	row := q.db.QueryRow(ctx, getToolVariationByURN, arg.GroupID, arg.SrcToolUrn)
+	var i ToolVariation
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.SrcToolUrn,
+		&i.SrcToolName,
+		&i.Confirm,
+		&i.ConfirmPrompt,
+		&i.Name,
+		&i.Summary,
+		&i.Description,
+		&i.Tags,
+		&i.Summarizer,
+		&i.PredecessorID,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const initGlobalToolVariationsGroup = `-- name: InitGlobalToolVariationsGroup :one
@@ -129,8 +247,54 @@ func (q *Queries) InitGlobalToolVariationsGroup(ctx context.Context, arg InitGlo
 	return id, err
 }
 
+const listCurrentVariationsInGroup = `-- name: ListCurrentVariationsInGroup :many
+SELECT DISTINCT ON (src_tool_urn) id, group_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, predecessor_id, version, created_at, updated_at, deleted_at, deleted
+FROM tool_variations
+WHERE group_id = $1
+  AND deleted IS FALSE
+ORDER BY src_tool_urn, version DESC
+`
+
+func (q *Queries) ListCurrentVariationsInGroup(ctx context.Context, groupID uuid.UUID) ([]ToolVariation, error) {
+	rows, err := q.db.Query(ctx, listCurrentVariationsInGroup, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ToolVariation
+	for rows.Next() {
+		var i ToolVariation
+		if err := rows.Scan(
+			&i.ID,
+			&i.GroupID,
+			&i.SrcToolUrn,
+			&i.SrcToolName,
+			&i.Confirm,
+			&i.ConfirmPrompt,
+			&i.Name,
+			&i.Summary,
+			&i.Description,
+			&i.Tags,
+			&i.Summarizer,
+			&i.PredecessorID,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listGlobalToolVariations = `-- name: ListGlobalToolVariations :many
-SELECT tool_variations.id, tool_variations.group_id, tool_variations.src_tool_urn, tool_variations.src_tool_name, tool_variations.confirm, tool_variations.confirm_prompt, tool_variations.name, tool_variations.summary, tool_variations.description, tool_variations.tags, tool_variations.summarizer, tool_variations.created_at, tool_variations.updated_at, tool_variations.deleted_at, tool_variations.deleted
+SELECT tool_variations.id, tool_variations.group_id, tool_variations.src_tool_urn, tool_variations.src_tool_name, tool_variations.confirm, tool_variations.confirm_prompt, tool_variations.name, tool_variations.summary, tool_variations.description, tool_variations.tags, tool_variations.summarizer, tool_variations.predecessor_id, tool_variations.version, tool_variations.created_at, tool_variations.updated_at, tool_variations.deleted_at, tool_variations.deleted
 FROM tool_variations
 INNER JOIN tool_variations_groups
   ON tool_variations.group_id = tool_variations_groups.id
@@ -167,10 +331,64 @@ func (q *Queries) ListGlobalToolVariations(ctx context.Context, projectID uuid.U
 			&i.ToolVariation.Description,
 			&i.ToolVariation.Tags,
 			&i.ToolVariation.Summarizer,
+			&i.ToolVariation.PredecessorID,
+			&i.ToolVariation.Version,
 			&i.ToolVariation.CreatedAt,
 			&i.ToolVariation.UpdatedAt,
 			&i.ToolVariation.DeletedAt,
 			&i.ToolVariation.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listToolVariationVersions = `-- name: ListToolVariationVersions :many
+SELECT id, group_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, predecessor_id, version, created_at, updated_at, deleted_at, deleted
+FROM tool_variations
+WHERE group_id = $1
+  AND src_tool_urn = $2
+  AND deleted IS FALSE
+ORDER BY version DESC
+`
+
+type ListToolVariationVersionsParams struct {
+	GroupID    uuid.UUID
+	SrcToolUrn urn.Tool
+}
+
+func (q *Queries) ListToolVariationVersions(ctx context.Context, arg ListToolVariationVersionsParams) ([]ToolVariation, error) {
+	rows, err := q.db.Query(ctx, listToolVariationVersions, arg.GroupID, arg.SrcToolUrn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ToolVariation
+	for rows.Next() {
+		var i ToolVariation
+		if err := rows.Scan(
+			&i.ID,
+			&i.GroupID,
+			&i.SrcToolUrn,
+			&i.SrcToolName,
+			&i.Confirm,
+			&i.ConfirmPrompt,
+			&i.Name,
+			&i.Summary,
+			&i.Description,
+			&i.Tags,
+			&i.Summarizer,
+			&i.PredecessorID,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
 		); err != nil {
 			return nil, err
 		}
@@ -228,7 +446,7 @@ INSERT INTO tool_variations (
   tags = EXCLUDED.tags,
   summarizer = EXCLUDED.summarizer,
   updated_at = clock_timestamp()
-RETURNING id, group_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, created_at, updated_at, deleted_at, deleted
+RETURNING id, group_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, predecessor_id, version, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertToolVariationParams struct {
@@ -270,6 +488,8 @@ func (q *Queries) UpsertToolVariation(ctx context.Context, arg UpsertToolVariati
 		&i.Description,
 		&i.Tags,
 		&i.Summarizer,
+		&i.PredecessorID,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

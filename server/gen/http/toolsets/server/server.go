@@ -29,6 +29,10 @@ type Server struct {
 	CloneToolset             http.Handler
 	AddExternalOAuthServer   http.Handler
 	RemoveOAuthServer        http.Handler
+	CreateStagingVersion     http.Handler
+	GetStagingVersion        http.Handler
+	DiscardStagingVersion    http.Handler
+	SwitchEditingMode        http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -67,6 +71,10 @@ func New(
 			{"CloneToolset", "POST", "/rpc/toolsets.clone"},
 			{"AddExternalOAuthServer", "POST", "/rpc/toolsets.addExternalOAuthServer"},
 			{"RemoveOAuthServer", "POST", "/rpc/toolsets.removeOAuthServer"},
+			{"CreateStagingVersion", "POST", "/rpc/toolsets.createStaging"},
+			{"GetStagingVersion", "GET", "/rpc/toolsets.getStaging"},
+			{"DiscardStagingVersion", "DELETE", "/rpc/toolsets.discardStaging"},
+			{"SwitchEditingMode", "POST", "/rpc/toolsets.switchEditingMode"},
 		},
 		CreateToolset:            NewCreateToolsetHandler(e.CreateToolset, mux, decoder, encoder, errhandler, formatter),
 		ListToolsets:             NewListToolsetsHandler(e.ListToolsets, mux, decoder, encoder, errhandler, formatter),
@@ -77,6 +85,10 @@ func New(
 		CloneToolset:             NewCloneToolsetHandler(e.CloneToolset, mux, decoder, encoder, errhandler, formatter),
 		AddExternalOAuthServer:   NewAddExternalOAuthServerHandler(e.AddExternalOAuthServer, mux, decoder, encoder, errhandler, formatter),
 		RemoveOAuthServer:        NewRemoveOAuthServerHandler(e.RemoveOAuthServer, mux, decoder, encoder, errhandler, formatter),
+		CreateStagingVersion:     NewCreateStagingVersionHandler(e.CreateStagingVersion, mux, decoder, encoder, errhandler, formatter),
+		GetStagingVersion:        NewGetStagingVersionHandler(e.GetStagingVersion, mux, decoder, encoder, errhandler, formatter),
+		DiscardStagingVersion:    NewDiscardStagingVersionHandler(e.DiscardStagingVersion, mux, decoder, encoder, errhandler, formatter),
+		SwitchEditingMode:        NewSwitchEditingModeHandler(e.SwitchEditingMode, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -94,6 +106,10 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CloneToolset = m(s.CloneToolset)
 	s.AddExternalOAuthServer = m(s.AddExternalOAuthServer)
 	s.RemoveOAuthServer = m(s.RemoveOAuthServer)
+	s.CreateStagingVersion = m(s.CreateStagingVersion)
+	s.GetStagingVersion = m(s.GetStagingVersion)
+	s.DiscardStagingVersion = m(s.DiscardStagingVersion)
+	s.SwitchEditingMode = m(s.SwitchEditingMode)
 }
 
 // MethodNames returns the methods served.
@@ -110,6 +126,10 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCloneToolsetHandler(mux, h.CloneToolset)
 	MountAddExternalOAuthServerHandler(mux, h.AddExternalOAuthServer)
 	MountRemoveOAuthServerHandler(mux, h.RemoveOAuthServer)
+	MountCreateStagingVersionHandler(mux, h.CreateStagingVersion)
+	MountGetStagingVersionHandler(mux, h.GetStagingVersion)
+	MountDiscardStagingVersionHandler(mux, h.DiscardStagingVersion)
+	MountSwitchEditingModeHandler(mux, h.SwitchEditingMode)
 }
 
 // Mount configures the mux to serve the toolsets endpoints.
@@ -572,6 +592,218 @@ func NewRemoveOAuthServerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "removeOAuthServer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateStagingVersionHandler configures the mux to serve the "toolsets"
+// service "createStagingVersion" endpoint.
+func MountCreateStagingVersionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/toolsets.createStaging", otelhttp.WithRouteTag("/rpc/toolsets.createStaging", f).ServeHTTP)
+}
+
+// NewCreateStagingVersionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "toolsets" service "createStagingVersion" endpoint.
+func NewCreateStagingVersionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateStagingVersionRequest(mux, decoder)
+		encodeResponse = EncodeCreateStagingVersionResponse(encoder)
+		encodeError    = EncodeCreateStagingVersionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createStagingVersion")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetStagingVersionHandler configures the mux to serve the "toolsets"
+// service "getStagingVersion" endpoint.
+func MountGetStagingVersionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/toolsets.getStaging", otelhttp.WithRouteTag("/rpc/toolsets.getStaging", f).ServeHTTP)
+}
+
+// NewGetStagingVersionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "toolsets" service "getStagingVersion" endpoint.
+func NewGetStagingVersionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetStagingVersionRequest(mux, decoder)
+		encodeResponse = EncodeGetStagingVersionResponse(encoder)
+		encodeError    = EncodeGetStagingVersionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getStagingVersion")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDiscardStagingVersionHandler configures the mux to serve the "toolsets"
+// service "discardStagingVersion" endpoint.
+func MountDiscardStagingVersionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/toolsets.discardStaging", otelhttp.WithRouteTag("/rpc/toolsets.discardStaging", f).ServeHTTP)
+}
+
+// NewDiscardStagingVersionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "toolsets" service "discardStagingVersion" endpoint.
+func NewDiscardStagingVersionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDiscardStagingVersionRequest(mux, decoder)
+		encodeResponse = EncodeDiscardStagingVersionResponse(encoder)
+		encodeError    = EncodeDiscardStagingVersionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "discardStagingVersion")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSwitchEditingModeHandler configures the mux to serve the "toolsets"
+// service "switchEditingMode" endpoint.
+func MountSwitchEditingModeHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/toolsets.switchEditingMode", otelhttp.WithRouteTag("/rpc/toolsets.switchEditingMode", f).ServeHTTP)
+}
+
+// NewSwitchEditingModeHandler creates a HTTP handler which loads the HTTP
+// request and calls the "toolsets" service "switchEditingMode" endpoint.
+func NewSwitchEditingModeHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSwitchEditingModeRequest(mux, decoder)
+		encodeResponse = EncodeSwitchEditingModeResponse(encoder)
+		encodeError    = EncodeSwitchEditingModeError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "switchEditingMode")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
 		payload, err := decodeRequest(r)
 		if err != nil {

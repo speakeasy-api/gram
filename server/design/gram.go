@@ -18,6 +18,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/packages"
 	_ "github.com/speakeasy-api/gram/server/design/productfeatures"
 	_ "github.com/speakeasy-api/gram/server/design/projects"
+	_ "github.com/speakeasy-api/gram/server/design/releases"
 	_ "github.com/speakeasy-api/gram/server/design/resources"
 	_ "github.com/speakeasy-api/gram/server/design/slack"
 	_ "github.com/speakeasy-api/gram/server/design/templates"

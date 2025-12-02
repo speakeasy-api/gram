@@ -2178,6 +2178,960 @@ func DecodeRemoveOAuthServerResponse(decoder func(*http.Response) goahttp.Decode
 	}
 }
 
+// BuildCreateStagingVersionRequest instantiates a HTTP request object with
+// method and path set to call the "toolsets" service "createStagingVersion"
+// endpoint
+func (c *Client) BuildCreateStagingVersionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateStagingVersionToolsetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "createStagingVersion", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateStagingVersionRequest returns an encoder for requests sent to
+// the toolsets createStagingVersion server.
+func EncodeCreateStagingVersionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.CreateStagingVersionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "createStagingVersion", "*toolsets.CreateStagingVersionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeCreateStagingVersionResponse returns a decoder for responses returned
+// by the toolsets createStagingVersion endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeCreateStagingVersionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateStagingVersionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateStagingVersionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "createStagingVersion", err)
+			}
+			err = ValidateCreateStagingVersionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "createStagingVersion", err)
+			}
+			res := NewCreateStagingVersionToolsetOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateStagingVersionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "createStagingVersion", err)
+			}
+			err = ValidateCreateStagingVersionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "createStagingVersion", err)
+			}
+			return nil, NewCreateStagingVersionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateStagingVersionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "createStagingVersion", err)
+			}
+			err = ValidateCreateStagingVersionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "createStagingVersion", err)
+			}
+			return nil, NewCreateStagingVersionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateStagingVersionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "createStagingVersion", err)
+			}
+			err = ValidateCreateStagingVersionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "createStagingVersion", err)
+			}
+			return nil, NewCreateStagingVersionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateStagingVersionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "createStagingVersion", err)
+			}
+			err = ValidateCreateStagingVersionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "createStagingVersion", err)
+			}
+			return nil, NewCreateStagingVersionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateStagingVersionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "createStagingVersion", err)
+			}
+			err = ValidateCreateStagingVersionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "createStagingVersion", err)
+			}
+			return nil, NewCreateStagingVersionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateStagingVersionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "createStagingVersion", err)
+			}
+			err = ValidateCreateStagingVersionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "createStagingVersion", err)
+			}
+			return nil, NewCreateStagingVersionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateStagingVersionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "createStagingVersion", err)
+			}
+			err = ValidateCreateStagingVersionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "createStagingVersion", err)
+			}
+			return nil, NewCreateStagingVersionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateStagingVersionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "createStagingVersion", err)
+				}
+				err = ValidateCreateStagingVersionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "createStagingVersion", err)
+				}
+				return nil, NewCreateStagingVersionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateStagingVersionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "createStagingVersion", err)
+				}
+				err = ValidateCreateStagingVersionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "createStagingVersion", err)
+				}
+				return nil, NewCreateStagingVersionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "createStagingVersion", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateStagingVersionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "createStagingVersion", err)
+			}
+			err = ValidateCreateStagingVersionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "createStagingVersion", err)
+			}
+			return nil, NewCreateStagingVersionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "createStagingVersion", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetStagingVersionRequest instantiates a HTTP request object with method
+// and path set to call the "toolsets" service "getStagingVersion" endpoint
+func (c *Client) BuildGetStagingVersionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetStagingVersionToolsetsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "getStagingVersion", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetStagingVersionRequest returns an encoder for requests sent to the
+// toolsets getStagingVersion server.
+func EncodeGetStagingVersionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.GetStagingVersionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "getStagingVersion", "*toolsets.GetStagingVersionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetStagingVersionResponse returns a decoder for responses returned by
+// the toolsets getStagingVersion endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetStagingVersionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetStagingVersionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetStagingVersionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getStagingVersion", err)
+			}
+			err = ValidateGetStagingVersionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getStagingVersion", err)
+			}
+			res := NewGetStagingVersionToolsetOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetStagingVersionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getStagingVersion", err)
+			}
+			err = ValidateGetStagingVersionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getStagingVersion", err)
+			}
+			return nil, NewGetStagingVersionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetStagingVersionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getStagingVersion", err)
+			}
+			err = ValidateGetStagingVersionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getStagingVersion", err)
+			}
+			return nil, NewGetStagingVersionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetStagingVersionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getStagingVersion", err)
+			}
+			err = ValidateGetStagingVersionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getStagingVersion", err)
+			}
+			return nil, NewGetStagingVersionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetStagingVersionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getStagingVersion", err)
+			}
+			err = ValidateGetStagingVersionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getStagingVersion", err)
+			}
+			return nil, NewGetStagingVersionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetStagingVersionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getStagingVersion", err)
+			}
+			err = ValidateGetStagingVersionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getStagingVersion", err)
+			}
+			return nil, NewGetStagingVersionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetStagingVersionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getStagingVersion", err)
+			}
+			err = ValidateGetStagingVersionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getStagingVersion", err)
+			}
+			return nil, NewGetStagingVersionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetStagingVersionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getStagingVersion", err)
+			}
+			err = ValidateGetStagingVersionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getStagingVersion", err)
+			}
+			return nil, NewGetStagingVersionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetStagingVersionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "getStagingVersion", err)
+				}
+				err = ValidateGetStagingVersionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "getStagingVersion", err)
+				}
+				return nil, NewGetStagingVersionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetStagingVersionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "getStagingVersion", err)
+				}
+				err = ValidateGetStagingVersionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "getStagingVersion", err)
+				}
+				return nil, NewGetStagingVersionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "getStagingVersion", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetStagingVersionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getStagingVersion", err)
+			}
+			err = ValidateGetStagingVersionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getStagingVersion", err)
+			}
+			return nil, NewGetStagingVersionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "getStagingVersion", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDiscardStagingVersionRequest instantiates a HTTP request object with
+// method and path set to call the "toolsets" service "discardStagingVersion"
+// endpoint
+func (c *Client) BuildDiscardStagingVersionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DiscardStagingVersionToolsetsPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "discardStagingVersion", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDiscardStagingVersionRequest returns an encoder for requests sent to
+// the toolsets discardStagingVersion server.
+func EncodeDiscardStagingVersionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.DiscardStagingVersionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "discardStagingVersion", "*toolsets.DiscardStagingVersionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDiscardStagingVersionResponse returns a decoder for responses returned
+// by the toolsets discardStagingVersion endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeDiscardStagingVersionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDiscardStagingVersionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DiscardStagingVersionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "discardStagingVersion", err)
+			}
+			err = ValidateDiscardStagingVersionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "discardStagingVersion", err)
+			}
+			return nil, NewDiscardStagingVersionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DiscardStagingVersionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "discardStagingVersion", err)
+			}
+			err = ValidateDiscardStagingVersionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "discardStagingVersion", err)
+			}
+			return nil, NewDiscardStagingVersionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DiscardStagingVersionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "discardStagingVersion", err)
+			}
+			err = ValidateDiscardStagingVersionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "discardStagingVersion", err)
+			}
+			return nil, NewDiscardStagingVersionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DiscardStagingVersionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "discardStagingVersion", err)
+			}
+			err = ValidateDiscardStagingVersionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "discardStagingVersion", err)
+			}
+			return nil, NewDiscardStagingVersionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DiscardStagingVersionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "discardStagingVersion", err)
+			}
+			err = ValidateDiscardStagingVersionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "discardStagingVersion", err)
+			}
+			return nil, NewDiscardStagingVersionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DiscardStagingVersionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "discardStagingVersion", err)
+			}
+			err = ValidateDiscardStagingVersionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "discardStagingVersion", err)
+			}
+			return nil, NewDiscardStagingVersionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DiscardStagingVersionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "discardStagingVersion", err)
+			}
+			err = ValidateDiscardStagingVersionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "discardStagingVersion", err)
+			}
+			return nil, NewDiscardStagingVersionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DiscardStagingVersionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "discardStagingVersion", err)
+				}
+				err = ValidateDiscardStagingVersionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "discardStagingVersion", err)
+				}
+				return nil, NewDiscardStagingVersionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DiscardStagingVersionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "discardStagingVersion", err)
+				}
+				err = ValidateDiscardStagingVersionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "discardStagingVersion", err)
+				}
+				return nil, NewDiscardStagingVersionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "discardStagingVersion", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DiscardStagingVersionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "discardStagingVersion", err)
+			}
+			err = ValidateDiscardStagingVersionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "discardStagingVersion", err)
+			}
+			return nil, NewDiscardStagingVersionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "discardStagingVersion", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSwitchEditingModeRequest instantiates a HTTP request object with method
+// and path set to call the "toolsets" service "switchEditingMode" endpoint
+func (c *Client) BuildSwitchEditingModeRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SwitchEditingModeToolsetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "switchEditingMode", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSwitchEditingModeRequest returns an encoder for requests sent to the
+// toolsets switchEditingMode server.
+func EncodeSwitchEditingModeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.SwitchEditingModePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "switchEditingMode", "*toolsets.SwitchEditingModePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewSwitchEditingModeRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("toolsets", "switchEditingMode", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSwitchEditingModeResponse returns a decoder for responses returned by
+// the toolsets switchEditingMode endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeSwitchEditingModeResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSwitchEditingModeResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SwitchEditingModeResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "switchEditingMode", err)
+			}
+			err = ValidateSwitchEditingModeResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "switchEditingMode", err)
+			}
+			res := NewSwitchEditingModeToolsetOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SwitchEditingModeUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "switchEditingMode", err)
+			}
+			err = ValidateSwitchEditingModeUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "switchEditingMode", err)
+			}
+			return nil, NewSwitchEditingModeUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SwitchEditingModeForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "switchEditingMode", err)
+			}
+			err = ValidateSwitchEditingModeForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "switchEditingMode", err)
+			}
+			return nil, NewSwitchEditingModeForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SwitchEditingModeBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "switchEditingMode", err)
+			}
+			err = ValidateSwitchEditingModeBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "switchEditingMode", err)
+			}
+			return nil, NewSwitchEditingModeBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SwitchEditingModeNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "switchEditingMode", err)
+			}
+			err = ValidateSwitchEditingModeNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "switchEditingMode", err)
+			}
+			return nil, NewSwitchEditingModeNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SwitchEditingModeConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "switchEditingMode", err)
+			}
+			err = ValidateSwitchEditingModeConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "switchEditingMode", err)
+			}
+			return nil, NewSwitchEditingModeConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SwitchEditingModeUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "switchEditingMode", err)
+			}
+			err = ValidateSwitchEditingModeUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "switchEditingMode", err)
+			}
+			return nil, NewSwitchEditingModeUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SwitchEditingModeInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "switchEditingMode", err)
+			}
+			err = ValidateSwitchEditingModeInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "switchEditingMode", err)
+			}
+			return nil, NewSwitchEditingModeInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SwitchEditingModeInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "switchEditingMode", err)
+				}
+				err = ValidateSwitchEditingModeInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "switchEditingMode", err)
+				}
+				return nil, NewSwitchEditingModeInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SwitchEditingModeUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "switchEditingMode", err)
+				}
+				err = ValidateSwitchEditingModeUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "switchEditingMode", err)
+				}
+				return nil, NewSwitchEditingModeUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "switchEditingMode", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SwitchEditingModeGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "switchEditingMode", err)
+			}
+			err = ValidateSwitchEditingModeGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "switchEditingMode", err)
+			}
+			return nil, NewSwitchEditingModeGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "switchEditingMode", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalSecurityVariableResponseBodyToTypesSecurityVariable builds a value
 // of type *types.SecurityVariable from a value of type
 // *SecurityVariableResponseBody.
@@ -2599,6 +3553,8 @@ func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryRespons
 		McpEnabled:        v.McpEnabled,
 		ToolSelectionMode: *v.ToolSelectionMode,
 		CustomDomainID:    v.CustomDomainID,
+		EditingMode:       *v.EditingMode,
+		ParentToolsetID:   v.ParentToolsetID,
 		CreatedAt:         *v.CreatedAt,
 		UpdatedAt:         *v.UpdatedAt,
 	}

@@ -45,6 +45,12 @@ type Toolset struct {
 	CustomDomainID         uuid.NullUUID
 	ExternalOauthServerID  uuid.NullUUID
 	OauthProxyServerID     uuid.NullUUID
+	ParentToolsetID        uuid.NullUUID
+	EditingMode            string
+	CurrentReleaseID       uuid.NullUUID
+	PredecessorID          uuid.NullUUID
+	Version                int64
+	HistoryID              uuid.UUID
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz

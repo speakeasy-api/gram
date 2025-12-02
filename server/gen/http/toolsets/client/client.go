@@ -53,6 +53,22 @@ type Client struct {
 	// removeOAuthServer endpoint.
 	RemoveOAuthServerDoer goahttp.Doer
 
+	// CreateStagingVersion Doer is the HTTP client used to make requests to the
+	// createStagingVersion endpoint.
+	CreateStagingVersionDoer goahttp.Doer
+
+	// GetStagingVersion Doer is the HTTP client used to make requests to the
+	// getStagingVersion endpoint.
+	GetStagingVersionDoer goahttp.Doer
+
+	// DiscardStagingVersion Doer is the HTTP client used to make requests to the
+	// discardStagingVersion endpoint.
+	DiscardStagingVersionDoer goahttp.Doer
+
+	// SwitchEditingMode Doer is the HTTP client used to make requests to the
+	// switchEditingMode endpoint.
+	SwitchEditingModeDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -82,6 +98,10 @@ func NewClient(
 		CloneToolsetDoer:             doer,
 		AddExternalOAuthServerDoer:   doer,
 		RemoveOAuthServerDoer:        doer,
+		CreateStagingVersionDoer:     doer,
+		GetStagingVersionDoer:        doer,
+		DiscardStagingVersionDoer:    doer,
+		SwitchEditingModeDoer:        doer,
 		RestoreResponseBody:          restoreBody,
 		scheme:                       scheme,
 		host:                         host,
@@ -301,6 +321,102 @@ func (c *Client) RemoveOAuthServer() goa.Endpoint {
 		resp, err := c.RemoveOAuthServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("toolsets", "removeOAuthServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateStagingVersion returns an endpoint that makes HTTP requests to the
+// toolsets service createStagingVersion server.
+func (c *Client) CreateStagingVersion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateStagingVersionRequest(c.encoder)
+		decodeResponse = DecodeCreateStagingVersionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateStagingVersionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateStagingVersionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "createStagingVersion", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetStagingVersion returns an endpoint that makes HTTP requests to the
+// toolsets service getStagingVersion server.
+func (c *Client) GetStagingVersion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetStagingVersionRequest(c.encoder)
+		decodeResponse = DecodeGetStagingVersionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetStagingVersionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetStagingVersionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "getStagingVersion", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DiscardStagingVersion returns an endpoint that makes HTTP requests to the
+// toolsets service discardStagingVersion server.
+func (c *Client) DiscardStagingVersion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDiscardStagingVersionRequest(c.encoder)
+		decodeResponse = DecodeDiscardStagingVersionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDiscardStagingVersionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DiscardStagingVersionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "discardStagingVersion", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SwitchEditingMode returns an endpoint that makes HTTP requests to the
+// toolsets service switchEditingMode server.
+func (c *Client) SwitchEditingMode() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSwitchEditingModeRequest(c.encoder)
+		decodeResponse = DecodeSwitchEditingModeResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSwitchEditingModeRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SwitchEditingModeDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "switchEditingMode", err)
 		}
 		return decodeResponse(resp)
 	}

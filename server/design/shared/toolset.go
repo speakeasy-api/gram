@@ -62,6 +62,8 @@ var Toolset = Type("Toolset", func() {
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
 	Attribute("external_oauth_server", ExternalOAuthServer, "The external OAuth server details")
 	Attribute("oauth_proxy_server", OAuthProxyServer, "The OAuth proxy server details")
+	Attribute("editing_mode", String, "The editing mode for this toolset: 'iteration' (direct edits) or 'staging' (explicit releases)")
+	Attribute("parent_toolset_id", String, "The ID of the parent toolset if this is a staging toolset")
 	Attribute("created_at", String, func() {
 		Description("When the toolset was created.")
 		Format(FormatDateTime)
@@ -70,7 +72,7 @@ var Toolset = Type("Toolset", func() {
 		Description("When the toolset was last updated.")
 		Format(FormatDateTime)
 	})
-	Required("id", "project_id", "organization_id", "account_type", "name", "slug", "tools", "tool_selection_mode", "toolset_version", "prompt_templates", "tool_urns", "resources", "resource_urns", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "account_type", "name", "slug", "tools", "tool_selection_mode", "toolset_version", "prompt_templates", "tool_urns", "resources", "resource_urns", "editing_mode", "created_at", "updated_at")
 })
 
 var ToolsetEntry = Type("ToolsetEntry", func() {
@@ -97,6 +99,8 @@ var ToolsetEntry = Type("ToolsetEntry", func() {
 	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
 	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
+	Attribute("editing_mode", String, "The editing mode for this toolset: 'iteration' (direct edits) or 'staging' (explicit releases)")
+	Attribute("parent_toolset_id", String, "The ID of the parent toolset if this is a staging toolset")
 	Attribute("created_at", String, func() {
 		Description("When the toolset was created.")
 		Format(FormatDateTime)
@@ -105,7 +109,7 @@ var ToolsetEntry = Type("ToolsetEntry", func() {
 		Description("When the toolset was last updated.")
 		Format(FormatDateTime)
 	})
-	Required("id", "project_id", "organization_id", "name", "slug", "tools", "tool_selection_mode", "prompt_templates", "tool_urns", "resources", "resource_urns", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "name", "slug", "tools", "tool_selection_mode", "prompt_templates", "tool_urns", "resources", "resource_urns", "editing_mode", "created_at", "updated_at")
 })
 
 var ExternalOAuthServer = Type("ExternalOAuthServer", func() {

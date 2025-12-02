@@ -65,6 +65,15 @@ type AddExternalOAuthServerRequestBody struct {
 	ExternalOauthServer *ExternalOAuthServerFormRequestBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 }
 
+// SwitchEditingModeRequestBody is the type of the "toolsets" service
+// "switchEditingMode" endpoint HTTP request body.
+type SwitchEditingModeRequestBody struct {
+	// The slug of the toolset
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The editing mode: 'iteration' or 'staging'
+	Mode *string `form:"mode,omitempty" json:"mode,omitempty" xml:"mode,omitempty"`
+}
+
 // CreateToolsetResponseBody is the type of the "toolsets" service
 // "createToolset" endpoint HTTP response body.
 type CreateToolsetResponseBody struct {
@@ -117,6 +126,11 @@ type CreateToolsetResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// The editing mode for this toolset: 'iteration' (direct edits) or 'staging'
+	// (explicit releases)
+	EditingMode string `form:"editing_mode" json:"editing_mode" xml:"editing_mode"`
+	// The ID of the parent toolset if this is a staging toolset
+	ParentToolsetID *string `form:"parent_toolset_id,omitempty" json:"parent_toolset_id,omitempty" xml:"parent_toolset_id,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -182,6 +196,11 @@ type UpdateToolsetResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// The editing mode for this toolset: 'iteration' (direct edits) or 'staging'
+	// (explicit releases)
+	EditingMode string `form:"editing_mode" json:"editing_mode" xml:"editing_mode"`
+	// The ID of the parent toolset if this is a staging toolset
+	ParentToolsetID *string `form:"parent_toolset_id,omitempty" json:"parent_toolset_id,omitempty" xml:"parent_toolset_id,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -240,6 +259,11 @@ type GetToolsetResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// The editing mode for this toolset: 'iteration' (direct edits) or 'staging'
+	// (explicit releases)
+	EditingMode string `form:"editing_mode" json:"editing_mode" xml:"editing_mode"`
+	// The ID of the parent toolset if this is a staging toolset
+	ParentToolsetID *string `form:"parent_toolset_id,omitempty" json:"parent_toolset_id,omitempty" xml:"parent_toolset_id,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -298,6 +322,11 @@ type CloneToolsetResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// The editing mode for this toolset: 'iteration' (direct edits) or 'staging'
+	// (explicit releases)
+	EditingMode string `form:"editing_mode" json:"editing_mode" xml:"editing_mode"`
+	// The ID of the parent toolset if this is a staging toolset
+	ParentToolsetID *string `form:"parent_toolset_id,omitempty" json:"parent_toolset_id,omitempty" xml:"parent_toolset_id,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -356,6 +385,11 @@ type AddExternalOAuthServerResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// The editing mode for this toolset: 'iteration' (direct edits) or 'staging'
+	// (explicit releases)
+	EditingMode string `form:"editing_mode" json:"editing_mode" xml:"editing_mode"`
+	// The ID of the parent toolset if this is a staging toolset
+	ParentToolsetID *string `form:"parent_toolset_id,omitempty" json:"parent_toolset_id,omitempty" xml:"parent_toolset_id,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -414,6 +448,200 @@ type RemoveOAuthServerResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// The editing mode for this toolset: 'iteration' (direct edits) or 'staging'
+	// (explicit releases)
+	EditingMode string `form:"editing_mode" json:"editing_mode" xml:"editing_mode"`
+	// The ID of the parent toolset if this is a staging toolset
+	ParentToolsetID *string `form:"parent_toolset_id,omitempty" json:"parent_toolset_id,omitempty" xml:"parent_toolset_id,omitempty"`
+	// When the toolset was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the toolset was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// CreateStagingVersionResponseBody is the type of the "toolsets" service
+// "createStagingVersion" endpoint HTTP response body.
+type CreateStagingVersionResponseBody struct {
+	// The ID of the toolset
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this toolset belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The organization ID this toolset belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The account type of the organization
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// The name of the toolset
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Description of the toolset
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// The tool URNs in this toolset
+	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
+	// The resources in this toolset
+	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
+	// The resource URNs in this toolset
+	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// The ID of the custom domain to use for the toolset
+	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// The editing mode for this toolset: 'iteration' (direct edits) or 'staging'
+	// (explicit releases)
+	EditingMode string `form:"editing_mode" json:"editing_mode" xml:"editing_mode"`
+	// The ID of the parent toolset if this is a staging toolset
+	ParentToolsetID *string `form:"parent_toolset_id,omitempty" json:"parent_toolset_id,omitempty" xml:"parent_toolset_id,omitempty"`
+	// When the toolset was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the toolset was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// GetStagingVersionResponseBody is the type of the "toolsets" service
+// "getStagingVersion" endpoint HTTP response body.
+type GetStagingVersionResponseBody struct {
+	// The ID of the toolset
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this toolset belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The organization ID this toolset belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The account type of the organization
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// The name of the toolset
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Description of the toolset
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// The tool URNs in this toolset
+	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
+	// The resources in this toolset
+	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
+	// The resource URNs in this toolset
+	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// The ID of the custom domain to use for the toolset
+	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// The editing mode for this toolset: 'iteration' (direct edits) or 'staging'
+	// (explicit releases)
+	EditingMode string `form:"editing_mode" json:"editing_mode" xml:"editing_mode"`
+	// The ID of the parent toolset if this is a staging toolset
+	ParentToolsetID *string `form:"parent_toolset_id,omitempty" json:"parent_toolset_id,omitempty" xml:"parent_toolset_id,omitempty"`
+	// When the toolset was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the toolset was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// SwitchEditingModeResponseBody is the type of the "toolsets" service
+// "switchEditingMode" endpoint HTTP response body.
+type SwitchEditingModeResponseBody struct {
+	// The ID of the toolset
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this toolset belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The organization ID this toolset belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The account type of the organization
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// The name of the toolset
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Description of the toolset
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// The tool URNs in this toolset
+	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
+	// The resources in this toolset
+	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
+	// The resource URNs in this toolset
+	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// The ID of the custom domain to use for the toolset
+	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// The editing mode for this toolset: 'iteration' (direct edits) or 'staging'
+	// (explicit releases)
+	EditingMode string `form:"editing_mode" json:"editing_mode" xml:"editing_mode"`
+	// The ID of the parent toolset if this is a staging toolset
+	ParentToolsetID *string `form:"parent_toolset_id,omitempty" json:"parent_toolset_id,omitempty" xml:"parent_toolset_id,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -2077,6 +2305,758 @@ type RemoveOAuthServerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateStagingVersionUnauthorizedResponseBody is the type of the "toolsets"
+// service "createStagingVersion" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateStagingVersionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStagingVersionForbiddenResponseBody is the type of the "toolsets"
+// service "createStagingVersion" endpoint HTTP response body for the
+// "forbidden" error.
+type CreateStagingVersionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStagingVersionBadRequestResponseBody is the type of the "toolsets"
+// service "createStagingVersion" endpoint HTTP response body for the
+// "bad_request" error.
+type CreateStagingVersionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStagingVersionNotFoundResponseBody is the type of the "toolsets"
+// service "createStagingVersion" endpoint HTTP response body for the
+// "not_found" error.
+type CreateStagingVersionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStagingVersionConflictResponseBody is the type of the "toolsets"
+// service "createStagingVersion" endpoint HTTP response body for the
+// "conflict" error.
+type CreateStagingVersionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStagingVersionUnsupportedMediaResponseBody is the type of the
+// "toolsets" service "createStagingVersion" endpoint HTTP response body for
+// the "unsupported_media" error.
+type CreateStagingVersionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStagingVersionInvalidResponseBody is the type of the "toolsets"
+// service "createStagingVersion" endpoint HTTP response body for the "invalid"
+// error.
+type CreateStagingVersionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStagingVersionInvariantViolationResponseBody is the type of the
+// "toolsets" service "createStagingVersion" endpoint HTTP response body for
+// the "invariant_violation" error.
+type CreateStagingVersionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStagingVersionUnexpectedResponseBody is the type of the "toolsets"
+// service "createStagingVersion" endpoint HTTP response body for the
+// "unexpected" error.
+type CreateStagingVersionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStagingVersionGatewayErrorResponseBody is the type of the "toolsets"
+// service "createStagingVersion" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateStagingVersionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStagingVersionUnauthorizedResponseBody is the type of the "toolsets"
+// service "getStagingVersion" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetStagingVersionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStagingVersionForbiddenResponseBody is the type of the "toolsets" service
+// "getStagingVersion" endpoint HTTP response body for the "forbidden" error.
+type GetStagingVersionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStagingVersionBadRequestResponseBody is the type of the "toolsets"
+// service "getStagingVersion" endpoint HTTP response body for the
+// "bad_request" error.
+type GetStagingVersionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStagingVersionNotFoundResponseBody is the type of the "toolsets" service
+// "getStagingVersion" endpoint HTTP response body for the "not_found" error.
+type GetStagingVersionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStagingVersionConflictResponseBody is the type of the "toolsets" service
+// "getStagingVersion" endpoint HTTP response body for the "conflict" error.
+type GetStagingVersionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStagingVersionUnsupportedMediaResponseBody is the type of the "toolsets"
+// service "getStagingVersion" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetStagingVersionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStagingVersionInvalidResponseBody is the type of the "toolsets" service
+// "getStagingVersion" endpoint HTTP response body for the "invalid" error.
+type GetStagingVersionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStagingVersionInvariantViolationResponseBody is the type of the
+// "toolsets" service "getStagingVersion" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetStagingVersionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStagingVersionUnexpectedResponseBody is the type of the "toolsets"
+// service "getStagingVersion" endpoint HTTP response body for the "unexpected"
+// error.
+type GetStagingVersionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStagingVersionGatewayErrorResponseBody is the type of the "toolsets"
+// service "getStagingVersion" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetStagingVersionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardStagingVersionUnauthorizedResponseBody is the type of the "toolsets"
+// service "discardStagingVersion" endpoint HTTP response body for the
+// "unauthorized" error.
+type DiscardStagingVersionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardStagingVersionForbiddenResponseBody is the type of the "toolsets"
+// service "discardStagingVersion" endpoint HTTP response body for the
+// "forbidden" error.
+type DiscardStagingVersionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardStagingVersionBadRequestResponseBody is the type of the "toolsets"
+// service "discardStagingVersion" endpoint HTTP response body for the
+// "bad_request" error.
+type DiscardStagingVersionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardStagingVersionNotFoundResponseBody is the type of the "toolsets"
+// service "discardStagingVersion" endpoint HTTP response body for the
+// "not_found" error.
+type DiscardStagingVersionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardStagingVersionConflictResponseBody is the type of the "toolsets"
+// service "discardStagingVersion" endpoint HTTP response body for the
+// "conflict" error.
+type DiscardStagingVersionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardStagingVersionUnsupportedMediaResponseBody is the type of the
+// "toolsets" service "discardStagingVersion" endpoint HTTP response body for
+// the "unsupported_media" error.
+type DiscardStagingVersionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardStagingVersionInvalidResponseBody is the type of the "toolsets"
+// service "discardStagingVersion" endpoint HTTP response body for the
+// "invalid" error.
+type DiscardStagingVersionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardStagingVersionInvariantViolationResponseBody is the type of the
+// "toolsets" service "discardStagingVersion" endpoint HTTP response body for
+// the "invariant_violation" error.
+type DiscardStagingVersionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardStagingVersionUnexpectedResponseBody is the type of the "toolsets"
+// service "discardStagingVersion" endpoint HTTP response body for the
+// "unexpected" error.
+type DiscardStagingVersionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardStagingVersionGatewayErrorResponseBody is the type of the "toolsets"
+// service "discardStagingVersion" endpoint HTTP response body for the
+// "gateway_error" error.
+type DiscardStagingVersionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SwitchEditingModeUnauthorizedResponseBody is the type of the "toolsets"
+// service "switchEditingMode" endpoint HTTP response body for the
+// "unauthorized" error.
+type SwitchEditingModeUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SwitchEditingModeForbiddenResponseBody is the type of the "toolsets" service
+// "switchEditingMode" endpoint HTTP response body for the "forbidden" error.
+type SwitchEditingModeForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SwitchEditingModeBadRequestResponseBody is the type of the "toolsets"
+// service "switchEditingMode" endpoint HTTP response body for the
+// "bad_request" error.
+type SwitchEditingModeBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SwitchEditingModeNotFoundResponseBody is the type of the "toolsets" service
+// "switchEditingMode" endpoint HTTP response body for the "not_found" error.
+type SwitchEditingModeNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SwitchEditingModeConflictResponseBody is the type of the "toolsets" service
+// "switchEditingMode" endpoint HTTP response body for the "conflict" error.
+type SwitchEditingModeConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SwitchEditingModeUnsupportedMediaResponseBody is the type of the "toolsets"
+// service "switchEditingMode" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SwitchEditingModeUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SwitchEditingModeInvalidResponseBody is the type of the "toolsets" service
+// "switchEditingMode" endpoint HTTP response body for the "invalid" error.
+type SwitchEditingModeInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SwitchEditingModeInvariantViolationResponseBody is the type of the
+// "toolsets" service "switchEditingMode" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SwitchEditingModeInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SwitchEditingModeUnexpectedResponseBody is the type of the "toolsets"
+// service "switchEditingMode" endpoint HTTP response body for the "unexpected"
+// error.
+type SwitchEditingModeUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SwitchEditingModeGatewayErrorResponseBody is the type of the "toolsets"
+// service "switchEditingMode" endpoint HTTP response body for the
+// "gateway_error" error.
+type SwitchEditingModeGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SecurityVariableResponseBody is used to define fields on response body types.
 type SecurityVariableResponseBody struct {
 	// The type of security
@@ -2474,6 +3454,11 @@ type ToolsetEntryResponseBody struct {
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The editing mode for this toolset: 'iteration' (direct edits) or 'staging'
+	// (explicit releases)
+	EditingMode string `form:"editing_mode" json:"editing_mode" xml:"editing_mode"`
+	// The ID of the parent toolset if this is a staging toolset
+	ParentToolsetID *string `form:"parent_toolset_id,omitempty" json:"parent_toolset_id,omitempty" xml:"parent_toolset_id,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -2540,6 +3525,8 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		EditingMode:       res.EditingMode,
+		ParentToolsetID:   res.ParentToolsetID,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -2649,6 +3636,8 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		EditingMode:       res.EditingMode,
+		ParentToolsetID:   res.ParentToolsetID,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -2743,6 +3732,8 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		EditingMode:       res.EditingMode,
+		ParentToolsetID:   res.ParentToolsetID,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -2837,6 +3828,8 @@ func NewCloneToolsetResponseBody(res *types.Toolset) *CloneToolsetResponseBody {
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		EditingMode:       res.EditingMode,
+		ParentToolsetID:   res.ParentToolsetID,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -2931,6 +3924,8 @@ func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuth
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		EditingMode:       res.EditingMode,
+		ParentToolsetID:   res.ParentToolsetID,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -3025,6 +4020,296 @@ func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResp
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		EditingMode:       res.EditingMode,
+		ParentToolsetID:   res.ParentToolsetID,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
+	}
+	if res.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
+		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if res.McpSlug != nil {
+		mcpSlug := string(*res.McpSlug)
+		body.McpSlug = &mcpSlug
+	}
+	if res.SecurityVariables != nil {
+		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
+		for i, val := range res.SecurityVariables {
+			body.SecurityVariables[i] = marshalTypesSecurityVariableToSecurityVariableResponseBody(val)
+		}
+	}
+	if res.ServerVariables != nil {
+		body.ServerVariables = make([]*ServerVariableResponseBody, len(res.ServerVariables))
+		for i, val := range res.ServerVariables {
+			body.ServerVariables[i] = marshalTypesServerVariableToServerVariableResponseBody(val)
+		}
+	}
+	if res.FunctionEnvironmentVariables != nil {
+		body.FunctionEnvironmentVariables = make([]*FunctionEnvironmentVariableResponseBody, len(res.FunctionEnvironmentVariables))
+		for i, val := range res.FunctionEnvironmentVariables {
+			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
+		}
+	}
+	if res.Tools != nil {
+		body.Tools = make([]*ToolResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			body.Tools[i] = marshalTypesToolToToolResponseBody(val)
+		}
+	} else {
+		body.Tools = []*ToolResponseBody{}
+	}
+	if res.ToolUrns != nil {
+		body.ToolUrns = make([]string, len(res.ToolUrns))
+		for i, val := range res.ToolUrns {
+			body.ToolUrns[i] = val
+		}
+	} else {
+		body.ToolUrns = []string{}
+	}
+	if res.Resources != nil {
+		body.Resources = make([]*ResourceResponseBody, len(res.Resources))
+		for i, val := range res.Resources {
+			body.Resources[i] = marshalTypesResourceToResourceResponseBody(val)
+		}
+	} else {
+		body.Resources = []*ResourceResponseBody{}
+	}
+	if res.ResourceUrns != nil {
+		body.ResourceUrns = make([]string, len(res.ResourceUrns))
+		for i, val := range res.ResourceUrns {
+			body.ResourceUrns[i] = val
+		}
+	} else {
+		body.ResourceUrns = []string{}
+	}
+	if res.PromptTemplates != nil {
+		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
+		for i, val := range res.PromptTemplates {
+			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+		}
+	} else {
+		body.PromptTemplates = []*PromptTemplateResponseBody{}
+	}
+	if res.ExternalOauthServer != nil {
+		body.ExternalOauthServer = marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody(res.ExternalOauthServer)
+	}
+	if res.OauthProxyServer != nil {
+		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	return body
+}
+
+// NewCreateStagingVersionResponseBody builds the HTTP response body from the
+// result of the "createStagingVersion" endpoint of the "toolsets" service.
+func NewCreateStagingVersionResponseBody(res *types.Toolset) *CreateStagingVersionResponseBody {
+	body := &CreateStagingVersionResponseBody{
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		OrganizationID:    res.OrganizationID,
+		AccountType:       res.AccountType,
+		Name:              res.Name,
+		Slug:              string(res.Slug),
+		Description:       res.Description,
+		ToolsetVersion:    res.ToolsetVersion,
+		McpIsPublic:       res.McpIsPublic,
+		McpEnabled:        res.McpEnabled,
+		ToolSelectionMode: res.ToolSelectionMode,
+		CustomDomainID:    res.CustomDomainID,
+		EditingMode:       res.EditingMode,
+		ParentToolsetID:   res.ParentToolsetID,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
+	}
+	if res.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
+		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if res.McpSlug != nil {
+		mcpSlug := string(*res.McpSlug)
+		body.McpSlug = &mcpSlug
+	}
+	if res.SecurityVariables != nil {
+		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
+		for i, val := range res.SecurityVariables {
+			body.SecurityVariables[i] = marshalTypesSecurityVariableToSecurityVariableResponseBody(val)
+		}
+	}
+	if res.ServerVariables != nil {
+		body.ServerVariables = make([]*ServerVariableResponseBody, len(res.ServerVariables))
+		for i, val := range res.ServerVariables {
+			body.ServerVariables[i] = marshalTypesServerVariableToServerVariableResponseBody(val)
+		}
+	}
+	if res.FunctionEnvironmentVariables != nil {
+		body.FunctionEnvironmentVariables = make([]*FunctionEnvironmentVariableResponseBody, len(res.FunctionEnvironmentVariables))
+		for i, val := range res.FunctionEnvironmentVariables {
+			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
+		}
+	}
+	if res.Tools != nil {
+		body.Tools = make([]*ToolResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			body.Tools[i] = marshalTypesToolToToolResponseBody(val)
+		}
+	} else {
+		body.Tools = []*ToolResponseBody{}
+	}
+	if res.ToolUrns != nil {
+		body.ToolUrns = make([]string, len(res.ToolUrns))
+		for i, val := range res.ToolUrns {
+			body.ToolUrns[i] = val
+		}
+	} else {
+		body.ToolUrns = []string{}
+	}
+	if res.Resources != nil {
+		body.Resources = make([]*ResourceResponseBody, len(res.Resources))
+		for i, val := range res.Resources {
+			body.Resources[i] = marshalTypesResourceToResourceResponseBody(val)
+		}
+	} else {
+		body.Resources = []*ResourceResponseBody{}
+	}
+	if res.ResourceUrns != nil {
+		body.ResourceUrns = make([]string, len(res.ResourceUrns))
+		for i, val := range res.ResourceUrns {
+			body.ResourceUrns[i] = val
+		}
+	} else {
+		body.ResourceUrns = []string{}
+	}
+	if res.PromptTemplates != nil {
+		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
+		for i, val := range res.PromptTemplates {
+			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+		}
+	} else {
+		body.PromptTemplates = []*PromptTemplateResponseBody{}
+	}
+	if res.ExternalOauthServer != nil {
+		body.ExternalOauthServer = marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody(res.ExternalOauthServer)
+	}
+	if res.OauthProxyServer != nil {
+		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	return body
+}
+
+// NewGetStagingVersionResponseBody builds the HTTP response body from the
+// result of the "getStagingVersion" endpoint of the "toolsets" service.
+func NewGetStagingVersionResponseBody(res *types.Toolset) *GetStagingVersionResponseBody {
+	body := &GetStagingVersionResponseBody{
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		OrganizationID:    res.OrganizationID,
+		AccountType:       res.AccountType,
+		Name:              res.Name,
+		Slug:              string(res.Slug),
+		Description:       res.Description,
+		ToolsetVersion:    res.ToolsetVersion,
+		McpIsPublic:       res.McpIsPublic,
+		McpEnabled:        res.McpEnabled,
+		ToolSelectionMode: res.ToolSelectionMode,
+		CustomDomainID:    res.CustomDomainID,
+		EditingMode:       res.EditingMode,
+		ParentToolsetID:   res.ParentToolsetID,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
+	}
+	if res.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
+		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if res.McpSlug != nil {
+		mcpSlug := string(*res.McpSlug)
+		body.McpSlug = &mcpSlug
+	}
+	if res.SecurityVariables != nil {
+		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
+		for i, val := range res.SecurityVariables {
+			body.SecurityVariables[i] = marshalTypesSecurityVariableToSecurityVariableResponseBody(val)
+		}
+	}
+	if res.ServerVariables != nil {
+		body.ServerVariables = make([]*ServerVariableResponseBody, len(res.ServerVariables))
+		for i, val := range res.ServerVariables {
+			body.ServerVariables[i] = marshalTypesServerVariableToServerVariableResponseBody(val)
+		}
+	}
+	if res.FunctionEnvironmentVariables != nil {
+		body.FunctionEnvironmentVariables = make([]*FunctionEnvironmentVariableResponseBody, len(res.FunctionEnvironmentVariables))
+		for i, val := range res.FunctionEnvironmentVariables {
+			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
+		}
+	}
+	if res.Tools != nil {
+		body.Tools = make([]*ToolResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			body.Tools[i] = marshalTypesToolToToolResponseBody(val)
+		}
+	} else {
+		body.Tools = []*ToolResponseBody{}
+	}
+	if res.ToolUrns != nil {
+		body.ToolUrns = make([]string, len(res.ToolUrns))
+		for i, val := range res.ToolUrns {
+			body.ToolUrns[i] = val
+		}
+	} else {
+		body.ToolUrns = []string{}
+	}
+	if res.Resources != nil {
+		body.Resources = make([]*ResourceResponseBody, len(res.Resources))
+		for i, val := range res.Resources {
+			body.Resources[i] = marshalTypesResourceToResourceResponseBody(val)
+		}
+	} else {
+		body.Resources = []*ResourceResponseBody{}
+	}
+	if res.ResourceUrns != nil {
+		body.ResourceUrns = make([]string, len(res.ResourceUrns))
+		for i, val := range res.ResourceUrns {
+			body.ResourceUrns[i] = val
+		}
+	} else {
+		body.ResourceUrns = []string{}
+	}
+	if res.PromptTemplates != nil {
+		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
+		for i, val := range res.PromptTemplates {
+			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+		}
+	} else {
+		body.PromptTemplates = []*PromptTemplateResponseBody{}
+	}
+	if res.ExternalOauthServer != nil {
+		body.ExternalOauthServer = marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody(res.ExternalOauthServer)
+	}
+	if res.OauthProxyServer != nil {
+		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	return body
+}
+
+// NewSwitchEditingModeResponseBody builds the HTTP response body from the
+// result of the "switchEditingMode" endpoint of the "toolsets" service.
+func NewSwitchEditingModeResponseBody(res *types.Toolset) *SwitchEditingModeResponseBody {
+	body := &SwitchEditingModeResponseBody{
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		OrganizationID:    res.OrganizationID,
+		AccountType:       res.AccountType,
+		Name:              res.Name,
+		Slug:              string(res.Slug),
+		Description:       res.Description,
+		ToolsetVersion:    res.ToolsetVersion,
+		McpIsPublic:       res.McpIsPublic,
+		McpEnabled:        res.McpEnabled,
+		ToolSelectionMode: res.ToolSelectionMode,
+		CustomDomainID:    res.CustomDomainID,
+		EditingMode:       res.EditingMode,
+		ParentToolsetID:   res.ParentToolsetID,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -4389,6 +5674,598 @@ func NewRemoveOAuthServerGatewayErrorResponseBody(res *goa.ServiceError) *Remove
 	return body
 }
 
+// NewCreateStagingVersionUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "createStagingVersion" endpoint of the
+// "toolsets" service.
+func NewCreateStagingVersionUnauthorizedResponseBody(res *goa.ServiceError) *CreateStagingVersionUnauthorizedResponseBody {
+	body := &CreateStagingVersionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStagingVersionForbiddenResponseBody builds the HTTP response body
+// from the result of the "createStagingVersion" endpoint of the "toolsets"
+// service.
+func NewCreateStagingVersionForbiddenResponseBody(res *goa.ServiceError) *CreateStagingVersionForbiddenResponseBody {
+	body := &CreateStagingVersionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStagingVersionBadRequestResponseBody builds the HTTP response body
+// from the result of the "createStagingVersion" endpoint of the "toolsets"
+// service.
+func NewCreateStagingVersionBadRequestResponseBody(res *goa.ServiceError) *CreateStagingVersionBadRequestResponseBody {
+	body := &CreateStagingVersionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStagingVersionNotFoundResponseBody builds the HTTP response body
+// from the result of the "createStagingVersion" endpoint of the "toolsets"
+// service.
+func NewCreateStagingVersionNotFoundResponseBody(res *goa.ServiceError) *CreateStagingVersionNotFoundResponseBody {
+	body := &CreateStagingVersionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStagingVersionConflictResponseBody builds the HTTP response body
+// from the result of the "createStagingVersion" endpoint of the "toolsets"
+// service.
+func NewCreateStagingVersionConflictResponseBody(res *goa.ServiceError) *CreateStagingVersionConflictResponseBody {
+	body := &CreateStagingVersionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStagingVersionUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createStagingVersion" endpoint of the
+// "toolsets" service.
+func NewCreateStagingVersionUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateStagingVersionUnsupportedMediaResponseBody {
+	body := &CreateStagingVersionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStagingVersionInvalidResponseBody builds the HTTP response body
+// from the result of the "createStagingVersion" endpoint of the "toolsets"
+// service.
+func NewCreateStagingVersionInvalidResponseBody(res *goa.ServiceError) *CreateStagingVersionInvalidResponseBody {
+	body := &CreateStagingVersionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStagingVersionInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "createStagingVersion" endpoint of the
+// "toolsets" service.
+func NewCreateStagingVersionInvariantViolationResponseBody(res *goa.ServiceError) *CreateStagingVersionInvariantViolationResponseBody {
+	body := &CreateStagingVersionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStagingVersionUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createStagingVersion" endpoint of the "toolsets"
+// service.
+func NewCreateStagingVersionUnexpectedResponseBody(res *goa.ServiceError) *CreateStagingVersionUnexpectedResponseBody {
+	body := &CreateStagingVersionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStagingVersionGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "createStagingVersion" endpoint of the
+// "toolsets" service.
+func NewCreateStagingVersionGatewayErrorResponseBody(res *goa.ServiceError) *CreateStagingVersionGatewayErrorResponseBody {
+	body := &CreateStagingVersionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStagingVersionUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getStagingVersion" endpoint of the "toolsets"
+// service.
+func NewGetStagingVersionUnauthorizedResponseBody(res *goa.ServiceError) *GetStagingVersionUnauthorizedResponseBody {
+	body := &GetStagingVersionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStagingVersionForbiddenResponseBody builds the HTTP response body from
+// the result of the "getStagingVersion" endpoint of the "toolsets" service.
+func NewGetStagingVersionForbiddenResponseBody(res *goa.ServiceError) *GetStagingVersionForbiddenResponseBody {
+	body := &GetStagingVersionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStagingVersionBadRequestResponseBody builds the HTTP response body
+// from the result of the "getStagingVersion" endpoint of the "toolsets"
+// service.
+func NewGetStagingVersionBadRequestResponseBody(res *goa.ServiceError) *GetStagingVersionBadRequestResponseBody {
+	body := &GetStagingVersionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStagingVersionNotFoundResponseBody builds the HTTP response body from
+// the result of the "getStagingVersion" endpoint of the "toolsets" service.
+func NewGetStagingVersionNotFoundResponseBody(res *goa.ServiceError) *GetStagingVersionNotFoundResponseBody {
+	body := &GetStagingVersionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStagingVersionConflictResponseBody builds the HTTP response body from
+// the result of the "getStagingVersion" endpoint of the "toolsets" service.
+func NewGetStagingVersionConflictResponseBody(res *goa.ServiceError) *GetStagingVersionConflictResponseBody {
+	body := &GetStagingVersionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStagingVersionUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getStagingVersion" endpoint of the "toolsets"
+// service.
+func NewGetStagingVersionUnsupportedMediaResponseBody(res *goa.ServiceError) *GetStagingVersionUnsupportedMediaResponseBody {
+	body := &GetStagingVersionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStagingVersionInvalidResponseBody builds the HTTP response body from
+// the result of the "getStagingVersion" endpoint of the "toolsets" service.
+func NewGetStagingVersionInvalidResponseBody(res *goa.ServiceError) *GetStagingVersionInvalidResponseBody {
+	body := &GetStagingVersionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStagingVersionInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getStagingVersion" endpoint of the "toolsets"
+// service.
+func NewGetStagingVersionInvariantViolationResponseBody(res *goa.ServiceError) *GetStagingVersionInvariantViolationResponseBody {
+	body := &GetStagingVersionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStagingVersionUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getStagingVersion" endpoint of the "toolsets"
+// service.
+func NewGetStagingVersionUnexpectedResponseBody(res *goa.ServiceError) *GetStagingVersionUnexpectedResponseBody {
+	body := &GetStagingVersionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStagingVersionGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getStagingVersion" endpoint of the "toolsets"
+// service.
+func NewGetStagingVersionGatewayErrorResponseBody(res *goa.ServiceError) *GetStagingVersionGatewayErrorResponseBody {
+	body := &GetStagingVersionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardStagingVersionUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "discardStagingVersion" endpoint of the
+// "toolsets" service.
+func NewDiscardStagingVersionUnauthorizedResponseBody(res *goa.ServiceError) *DiscardStagingVersionUnauthorizedResponseBody {
+	body := &DiscardStagingVersionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardStagingVersionForbiddenResponseBody builds the HTTP response body
+// from the result of the "discardStagingVersion" endpoint of the "toolsets"
+// service.
+func NewDiscardStagingVersionForbiddenResponseBody(res *goa.ServiceError) *DiscardStagingVersionForbiddenResponseBody {
+	body := &DiscardStagingVersionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardStagingVersionBadRequestResponseBody builds the HTTP response body
+// from the result of the "discardStagingVersion" endpoint of the "toolsets"
+// service.
+func NewDiscardStagingVersionBadRequestResponseBody(res *goa.ServiceError) *DiscardStagingVersionBadRequestResponseBody {
+	body := &DiscardStagingVersionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardStagingVersionNotFoundResponseBody builds the HTTP response body
+// from the result of the "discardStagingVersion" endpoint of the "toolsets"
+// service.
+func NewDiscardStagingVersionNotFoundResponseBody(res *goa.ServiceError) *DiscardStagingVersionNotFoundResponseBody {
+	body := &DiscardStagingVersionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardStagingVersionConflictResponseBody builds the HTTP response body
+// from the result of the "discardStagingVersion" endpoint of the "toolsets"
+// service.
+func NewDiscardStagingVersionConflictResponseBody(res *goa.ServiceError) *DiscardStagingVersionConflictResponseBody {
+	body := &DiscardStagingVersionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardStagingVersionUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "discardStagingVersion" endpoint of the
+// "toolsets" service.
+func NewDiscardStagingVersionUnsupportedMediaResponseBody(res *goa.ServiceError) *DiscardStagingVersionUnsupportedMediaResponseBody {
+	body := &DiscardStagingVersionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardStagingVersionInvalidResponseBody builds the HTTP response body
+// from the result of the "discardStagingVersion" endpoint of the "toolsets"
+// service.
+func NewDiscardStagingVersionInvalidResponseBody(res *goa.ServiceError) *DiscardStagingVersionInvalidResponseBody {
+	body := &DiscardStagingVersionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardStagingVersionInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "discardStagingVersion" endpoint of the
+// "toolsets" service.
+func NewDiscardStagingVersionInvariantViolationResponseBody(res *goa.ServiceError) *DiscardStagingVersionInvariantViolationResponseBody {
+	body := &DiscardStagingVersionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardStagingVersionUnexpectedResponseBody builds the HTTP response body
+// from the result of the "discardStagingVersion" endpoint of the "toolsets"
+// service.
+func NewDiscardStagingVersionUnexpectedResponseBody(res *goa.ServiceError) *DiscardStagingVersionUnexpectedResponseBody {
+	body := &DiscardStagingVersionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardStagingVersionGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "discardStagingVersion" endpoint of the
+// "toolsets" service.
+func NewDiscardStagingVersionGatewayErrorResponseBody(res *goa.ServiceError) *DiscardStagingVersionGatewayErrorResponseBody {
+	body := &DiscardStagingVersionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSwitchEditingModeUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "switchEditingMode" endpoint of the "toolsets"
+// service.
+func NewSwitchEditingModeUnauthorizedResponseBody(res *goa.ServiceError) *SwitchEditingModeUnauthorizedResponseBody {
+	body := &SwitchEditingModeUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSwitchEditingModeForbiddenResponseBody builds the HTTP response body from
+// the result of the "switchEditingMode" endpoint of the "toolsets" service.
+func NewSwitchEditingModeForbiddenResponseBody(res *goa.ServiceError) *SwitchEditingModeForbiddenResponseBody {
+	body := &SwitchEditingModeForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSwitchEditingModeBadRequestResponseBody builds the HTTP response body
+// from the result of the "switchEditingMode" endpoint of the "toolsets"
+// service.
+func NewSwitchEditingModeBadRequestResponseBody(res *goa.ServiceError) *SwitchEditingModeBadRequestResponseBody {
+	body := &SwitchEditingModeBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSwitchEditingModeNotFoundResponseBody builds the HTTP response body from
+// the result of the "switchEditingMode" endpoint of the "toolsets" service.
+func NewSwitchEditingModeNotFoundResponseBody(res *goa.ServiceError) *SwitchEditingModeNotFoundResponseBody {
+	body := &SwitchEditingModeNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSwitchEditingModeConflictResponseBody builds the HTTP response body from
+// the result of the "switchEditingMode" endpoint of the "toolsets" service.
+func NewSwitchEditingModeConflictResponseBody(res *goa.ServiceError) *SwitchEditingModeConflictResponseBody {
+	body := &SwitchEditingModeConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSwitchEditingModeUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "switchEditingMode" endpoint of the "toolsets"
+// service.
+func NewSwitchEditingModeUnsupportedMediaResponseBody(res *goa.ServiceError) *SwitchEditingModeUnsupportedMediaResponseBody {
+	body := &SwitchEditingModeUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSwitchEditingModeInvalidResponseBody builds the HTTP response body from
+// the result of the "switchEditingMode" endpoint of the "toolsets" service.
+func NewSwitchEditingModeInvalidResponseBody(res *goa.ServiceError) *SwitchEditingModeInvalidResponseBody {
+	body := &SwitchEditingModeInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSwitchEditingModeInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "switchEditingMode" endpoint of the "toolsets"
+// service.
+func NewSwitchEditingModeInvariantViolationResponseBody(res *goa.ServiceError) *SwitchEditingModeInvariantViolationResponseBody {
+	body := &SwitchEditingModeInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSwitchEditingModeUnexpectedResponseBody builds the HTTP response body
+// from the result of the "switchEditingMode" endpoint of the "toolsets"
+// service.
+func NewSwitchEditingModeUnexpectedResponseBody(res *goa.ServiceError) *SwitchEditingModeUnexpectedResponseBody {
+	body := &SwitchEditingModeUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSwitchEditingModeGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "switchEditingMode" endpoint of the "toolsets"
+// service.
+func NewSwitchEditingModeGatewayErrorResponseBody(res *goa.ServiceError) *SwitchEditingModeGatewayErrorResponseBody {
+	body := &SwitchEditingModeGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateToolsetPayload builds a toolsets service createToolset endpoint
 // payload.
 func NewCreateToolsetPayload(body *CreateToolsetRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.CreateToolsetPayload {
@@ -4547,6 +6424,56 @@ func NewRemoveOAuthServerPayload(slug string, sessionToken *string, apikeyToken 
 	return v
 }
 
+// NewCreateStagingVersionPayload builds a toolsets service
+// createStagingVersion endpoint payload.
+func NewCreateStagingVersionPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.CreateStagingVersionPayload {
+	v := &toolsets.CreateStagingVersionPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetStagingVersionPayload builds a toolsets service getStagingVersion
+// endpoint payload.
+func NewGetStagingVersionPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.GetStagingVersionPayload {
+	v := &toolsets.GetStagingVersionPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewDiscardStagingVersionPayload builds a toolsets service
+// discardStagingVersion endpoint payload.
+func NewDiscardStagingVersionPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.DiscardStagingVersionPayload {
+	v := &toolsets.DiscardStagingVersionPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewSwitchEditingModePayload builds a toolsets service switchEditingMode
+// endpoint payload.
+func NewSwitchEditingModePayload(body *SwitchEditingModeRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.SwitchEditingModePayload {
+	v := &toolsets.SwitchEditingModePayload{
+		Slug: types.Slug(*body.Slug),
+		Mode: *body.Mode,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // ValidateCreateToolsetRequestBody runs the validations defined on
 // CreateToolsetRequestBody
 func ValidateCreateToolsetRequestBody(body *CreateToolsetRequestBody) (err error) {
@@ -4595,6 +6522,31 @@ func ValidateAddExternalOAuthServerRequestBody(body *AddExternalOAuthServerReque
 	if body.ExternalOauthServer != nil {
 		if err2 := ValidateExternalOAuthServerFormRequestBody(body.ExternalOauthServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateSwitchEditingModeRequestBody runs the validations defined on
+// SwitchEditingModeRequestBody
+func ValidateSwitchEditingModeRequestBody(body *SwitchEditingModeRequestBody) (err error) {
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Mode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
+	}
+	if body.Mode != nil {
+		if !(*body.Mode == "iteration" || *body.Mode == "staging") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"iteration", "staging"}))
 		}
 	}
 	return
