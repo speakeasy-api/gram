@@ -9,10 +9,7 @@ import {
 } from "@speakeasy-api/moonshine";
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import {
-  fetchChangelog,
-  type ChangelogEntry
-} from "@/services/changelog";
+import { fetchChangelog, type ChangelogEntry } from "@/services/changelog";
 
 export function ChangelogModal({ onClose }: { onClose?: () => void }) {
   const { close } = useModal();
@@ -86,7 +83,10 @@ export function ChangelogModal({ onClose }: { onClose?: () => void }) {
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center py-12">
-            <Icon name="circle-alert" className="size-12 text-muted-foreground mb-3" />
+            <Icon
+              name="circle-alert"
+              className="size-12 text-muted-foreground mb-3"
+            />
             <Text className="text-muted-foreground">{error}</Text>
             <Button variant="tertiary" onClick={loadChangelog} className="mt-3">
               <Icon name="refresh-cw" className="size-4" />
@@ -115,9 +115,7 @@ export function ChangelogModal({ onClose }: { onClose?: () => void }) {
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <Icon name="sparkles" className="size-5 text-brand-500" />
-                  <Heading className="text-lg font-semibold">
-                    Features
-                  </Heading>
+                  <Heading className="text-lg font-semibold">Features</Heading>
                 </div>
                 <ul className="space-y-2">
                   {entry.features.map((feature, idx) => (
@@ -154,9 +152,7 @@ export function ChangelogModal({ onClose }: { onClose?: () => void }) {
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <Icon name="wrench" className="size-5 text-orange-500" />
-                  <Heading className="text-lg font-semibold">
-                    Bug Fixes
-                  </Heading>
+                  <Heading className="text-lg font-semibold">Bug Fixes</Heading>
                 </div>
                 <ul className="space-y-2">
                   {entry.bugFixes.map((fix, idx) => (
@@ -195,13 +191,22 @@ export function ChangelogModal({ onClose }: { onClose?: () => void }) {
       <div className="flex items-center justify-between mt-6 pt-6 border-t border-neutral-200 dark:border-neutral-800">
         <Button
           variant="tertiary"
-          onClick={() => window.open(changelogUrl || "https://www.speakeasy.com/changelog/gram", "_blank")}
+          onClick={() =>
+            window.open(
+              changelogUrl || "https://www.speakeasy.com/changelog/gram",
+              "_blank",
+            )
+          }
           className="text-base px-4 py-2"
         >
           <Icon name="external-link" className="size-4" />
           View all releases
         </Button>
-        <Button onClick={handleClose} variant="brand" className="px-6 py-2 text-base">
+        <Button
+          onClick={handleClose}
+          variant="brand"
+          className="px-6 py-2 text-base"
+        >
           Got it
         </Button>
       </div>

@@ -25,7 +25,8 @@ const LATEST_GRAM_VERSION: ChangelogEntry = {
   version: "v0.12.1",
   title: "Source details page",
   date: "2025-12-02",
-  description: "Introduces a new page for each source added to a project. The source page provides details on the source, which toolsets use it, and the ability to attach an environment to a source.",
+  description:
+    "Introduces a new page for each source added to a project. The source page provides details on the source, which toolsets use it, and the ability to attach an environment to a source.",
   features: [
     {
       description: "Openrouter Automatic Key Refresh",
