@@ -1,4 +1,4 @@
-speakeasyVersion: 1.665.1
+speakeasyVersion: 1.668.0
 sources:
     Gram-Internal:
         sourceNamespace: gram-api-description
@@ -11,17 +11,10 @@ targets:
     gram-internal:
         source: Gram-Internal
         sourceNamespace: gram-api-description
-<<<<<<< HEAD
         sourceRevisionDigest: sha256:18741b23e778193976879634c664c88b8f44d50b8a3b37528a1502a53365252a
         sourceBlobDigest: sha256:4fc8a76256bf9758cdce8a703a44f0de8debed518eb46df6df5af81c1929855f
         codeSamplesNamespace: gram-api-description-typescript-code-samples
-        codeSamplesRevisionDigest: sha256:1449739e396291859aedc332ee5084a36adc9c0451f1df02dab6b55bb781e2fe
-=======
-        sourceRevisionDigest: sha256:26bd2f4fb7f26d7f9edd4a560503190000567f6cd79b2abec3b191bb5a0e8eb4
-        sourceBlobDigest: sha256:c38f79c4da06d34b4775b594805a7035c93fb5eb89935ed4d54da8a28c47d392
-        codeSamplesNamespace: gram-api-description-typescript-code-samples
-        codeSamplesRevisionDigest: sha256:efa542ec091cc8ab7bd4ae1c6c065672e0e210b732afad6fe57758ba36aa1fd5
->>>>>>> parent of b75ffa195 (feat: upgrade to ai sdk 5 (#476))
+        codeSamplesRevisionDigest: sha256:c3dabcfb16877a5ab918c9c4392422c17bfc974952bc032530232aad378db197
 workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: pinned

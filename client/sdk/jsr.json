@@ -2,11 +2,7 @@
 
 {
   "name": "@gram/client",
-<<<<<<< HEAD
-  "version": "0.21.3",
-=======
-  "version": "0.21.1",
->>>>>>> parent of b75ffa195 (feat: upgrade to ai sdk 5 (#476))
+  "version": "0.21.4",
   "exports": {
     ".": "./src/index.ts",    
     "./models/errors": "./src/models/errors/index.ts",    
