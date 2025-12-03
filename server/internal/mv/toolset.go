@@ -666,6 +666,7 @@ func readToolsetTools(
 					return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal meta tags").Log(ctx, logger)
 				}
 			}
+
 			functionTool := &types.FunctionToolDefinition{
 				ID:            def.FunctionToolDefinition.ID.String(),
 				ToolUrn:       def.FunctionToolDefinition.ToolUrn.String(),
@@ -858,6 +859,9 @@ func extractFunctionEnvVars(ctx context.Context, logger *slog.Logger, variableDa
 		}
 	}
 
+	j, _ := json.Marshal(authInputData)
+	println("\n\n\n\nauthInputData: ", string(j))
+
 	if authInputData != nil {
 		var authInputs *authInputManifest
 		if err := json.Unmarshal(authInputData, &authInputs); err != nil {
@@ -960,20 +964,20 @@ func dedupeFunctionEnvVars(vars []*types.FunctionEnvironmentVariable) []*types.F
 		return vars
 	}
 
-	seen := make(map[string]bool, len(vars))
-	var deduped []*types.FunctionEnvironmentVariable
+	deduped := make(map[string]*types.FunctionEnvironmentVariable)
 	for _, envVar := range vars {
 		if envVar == nil {
 			continue
 		}
-		if _, exists := seen[envVar.Name]; exists {
-			continue
+		if _, exists := deduped[envVar.Name]; exists {
+			if envVar.AuthInputType == nil {
+				continue // skip if the variable is not an auth input, thus prioritizing non-auth inputs (ultimately the result will still be deduplicated by name)
+			}
 		}
-		seen[envVar.Name] = true
-		deduped = append(deduped, envVar)
+		deduped[envVar.Name] = envVar
 	}
 
-	return deduped
+	return slices.Collect(maps.Values(deduped))
 }
 
 const defaultPromptTemplateKind = "prompt"
