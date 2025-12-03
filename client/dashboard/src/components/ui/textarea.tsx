@@ -14,6 +14,11 @@ export function TextArea({
   rows = 3,
   required,
   defaultValue,
+  onKeyDown,
+  onCompositionStart,
+  onCompositionEnd,
+  onPaste,
+  ...rest
 }: {
   id?: string;
   name?: string;
@@ -25,6 +30,10 @@ export function TextArea({
   rows?: number;
   required?: boolean;
   defaultValue?: string | undefined;
+  onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement>;
+  onCompositionStart?: React.CompositionEventHandler<HTMLTextAreaElement>;
+  onCompositionEnd?: React.CompositionEventHandler<HTMLTextAreaElement>;
+  onPaste?: React.ClipboardEventHandler<HTMLTextAreaElement>;
 }) {
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     onChange?.(e.target.value);
@@ -42,6 +51,11 @@ export function TextArea({
       rows={rows}
       required={required}
       defaultValue={defaultValue}
+      onKeyDown={onKeyDown}
+      onCompositionStart={onCompositionStart}
+      onCompositionEnd={onCompositionEnd}
+      onPaste={onPaste}
+      {...rest}
     />
   );
 }

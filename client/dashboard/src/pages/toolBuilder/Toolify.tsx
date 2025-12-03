@@ -88,7 +88,8 @@ export const ToolifyDialog = ({
     setInProgress(true);
 
     const res = await generateObject({
-      model,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      model: model as any,
       mode: "json",
       prompt: `
       You are a composite tool builder. You are given a purpose for a tool and a list of available tools.
