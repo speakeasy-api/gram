@@ -201,6 +201,18 @@ func (p *Client) TrackModelUsage(ctx context.Context, event billing.ModelUsageEv
 		"chat_id": {
 			Str: &event.ChatID,
 		},
+		"native_tokens_cached": {
+			Integer: &event.NativeTokensCached,
+		},
+		"native_tokens_reasoning": {
+			Integer: &event.NativeTokensReasoning,
+		},
+		"cache_discount": {
+			Number: &event.CacheDiscount,
+		},
+		"upstream_inference_cost": {
+			Number: &event.UpstreamInferenceCost,
+		},
 	}
 
 	if event.Cost != nil {

@@ -11,15 +11,13 @@ import (
 	"math"
 	"net/http"
 	"slices"
-	"strconv"
 
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/inv"
-	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -72,8 +70,7 @@ type Provisioner interface {
 	ProvisionAPIKey(ctx context.Context, orgID string) (string, error)
 	RefreshAPIKeyLimit(ctx context.Context, orgID string, limit *int) (int, error)
 	GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error)
-	GetModelPricing(ctx context.Context, id string) (*mv.ModelPricing, error)
-	FetchAndCacheModelPricing(ctx context.Context) error
+	TriggerModelUsageTracking(ctx context.Context, generationID string, orgID string, projectID string, source billing.ModelUsageSource, chatID string) error
 }
 
 type KeyRefresher interface {
@@ -81,28 +78,28 @@ type KeyRefresher interface {
 }
 
 type OpenRouter struct {
-	provisioningKey   string
-	env               string
-	logger            *slog.Logger
-	repo              *repo.Queries
-	orgRepo           *orgRepo.Queries
-	orClient          *http.Client
-	refresher         KeyRefresher
-	featureClient     *productfeatures.Client
-	modelPricingCache cache.TypedCacheObject[mv.ModelPricing]
+	provisioningKey string
+	env             string
+	logger          *slog.Logger
+	repo            *repo.Queries
+	orgRepo         *orgRepo.Queries
+	orClient        *http.Client
+	refresher       KeyRefresher
+	featureClient   *productfeatures.Client
+	tracking        billing.Tracker
 }
 
-func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, cacheImpl cache.Cache) *OpenRouter {
+func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, tracking billing.Tracker) *OpenRouter {
 	return &OpenRouter{
-		provisioningKey:   provisioningKey,
-		env:               env,
-		logger:            logger,
-		repo:              repo.New(db),
-		orgRepo:           orgRepo.New(db),
-		orClient:          retryablehttp.NewClient().StandardClient(),
-		refresher:         refresher,
-		featureClient:     featureClient,
-		modelPricingCache: cache.NewTypedObjectCache[mv.ModelPricing](logger.With(attr.SlogCacheNamespace("model_pricing")), cacheImpl, cache.SuffixNone),
+		provisioningKey: provisioningKey,
+		env:             env,
+		logger:          logger,
+		repo:            repo.New(db),
+		orgRepo:         orgRepo.New(db),
+		orClient:        retryablehttp.NewClient().StandardClient(),
+		refresher:       refresher,
+		featureClient:   featureClient,
+		tracking:        tracking,
 	}
 }
 
@@ -201,6 +198,23 @@ type keyUsageResponse struct {
 		Limit        *float64 `json:"limit"`
 		UsageMonthly *float64 `json:"usage_monthly"`
 	} `json:"data"`
+}
+
+type generationData struct {
+	ID                    string  `json:"id"`
+	TotalCost             float64 `json:"total_cost"`
+	CacheDiscount         float64 `json:"cache_discount"`
+	UpstreamInferenceCost float64 `json:"upstream_inference_cost"`
+	Model                 string  `json:"model"`
+	TokensPrompt          int     `json:"tokens_prompt"`
+	TokensCompletion      int     `json:"tokens_completion"`
+	NativeTokensReasoning int     `json:"native_tokens_reasoning"`
+	NativeTokensCached    int     `json:"native_tokens_cached"`
+	APIType               string  `json:"api_type"`
+}
+
+type generationResponse struct {
+	Data generationData `json:"data"`
 }
 
 func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error) {
@@ -387,44 +401,29 @@ func (o *OpenRouter) updateOpenRouterAPIKeyLimit(ctx context.Context, keyHash st
 	return &response, nil
 }
 
-// modelPricingResponse represents pricing information from the OpenRouter API response
-type modelPricingResponse struct {
-	Prompt     string `json:"prompt"`
-	Completion string `json:"completion"`
-	Request    string `json:"request"`
-	Image      string `json:"image"`
-}
-
-// ModelInfo represents information about an OpenRouter model
-type ModelInfo struct {
-	ID            string               `json:"id"`
-	Name          string               `json:"name"`
-	Pricing       modelPricingResponse `json:"pricing"`
-	ContextLength int                  `json:"context_length"`
-	Created       int64                `json:"created"`
-}
-
-// ModelsResponse represents the response from OpenRouter /v1/models endpoint
-type ModelsResponse struct {
-	Data []ModelInfo `json:"data"`
-}
-
-// FetchAndCacheModelPricing fetches model pricing data from OpenRouter API and stores it in Redis cache.
-// Each model's pricing is stored with a key based on its canonical slug.
-func (o *OpenRouter) FetchAndCacheModelPricing(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", OpenRouterBaseURL+"/v1/models", nil)
+func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID string, orgID string) (*generationResponse, error) {
+	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
 	if err != nil {
-		o.logger.ErrorContext(ctx, "failed to create openrouter models HTTP request", attr.SlogError(err))
-		return fmt.Errorf("failed to create models request: %w", err)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get openrouter API key").Log(ctx, o.logger)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+o.provisioningKey)
+	req, err := http.NewRequestWithContext(ctx, "GET", OpenRouterBaseURL+"/v1/generation", nil)
+	if err != nil {
+		o.logger.ErrorContext(ctx, "failed to create openrouter generation HTTP request", attr.SlogError(err))
+		return nil, fmt.Errorf("failed to create generation request: %w", err)
+	}
+
+	q := req.URL.Query()
+	q.Set("id", generationID)
+	req.URL.RawQuery = q.Encode()
+
+	req.Header.Set("Authorization", "Bearer "+key.Key)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := o.orClient.Do(req)
 	if err != nil {
-		o.logger.ErrorContext(ctx, "failed to send HTTP request to fetch models", attr.SlogError(err))
-		return fmt.Errorf("failed to send models request: %w", err)
+		o.logger.ErrorContext(ctx, "failed to send HTTP request to fetch generation", attr.SlogError(err))
+		return nil, fmt.Errorf("failed to send generation request: %w", err)
 	}
 
 	defer o11y.NoLogDefer(func() error {
@@ -432,116 +431,53 @@ func (o *OpenRouter) FetchAndCacheModelPricing(ctx context.Context) error {
 	})
 
 	if resp.StatusCode != http.StatusOK {
-		o.logger.ErrorContext(ctx, "failed to fetch models from OpenRouter")
-		return fmt.Errorf("failed to fetch models from OpenRouter: %s", resp.Status)
+		o.logger.ErrorContext(ctx, "failed to fetch generation from OpenRouter", attr.SlogHTTPResponseStatusCode(resp.StatusCode))
+		return nil, fmt.Errorf("failed to fetch generation from OpenRouter: %s", resp.Status)
 	}
 
-	var modelsResp ModelsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
-		o.logger.ErrorContext(ctx, "failed to decode models response", attr.SlogError(err))
-		return fmt.Errorf("failed to decode models response: %w", err)
+	var genResp generationResponse
+	if err := json.NewDecoder(resp.Body).Decode(&genResp); err != nil {
+		o.logger.ErrorContext(ctx, "failed to decode generation response", attr.SlogError(err))
+		return nil, fmt.Errorf("failed to decode generation response: %w", err)
 	}
 
-	// Cache pricing data for each model using canonical slug as key
-	for _, model := range modelsResp.Data {
-		if model.ID == "" {
-			o.logger.WarnContext(ctx, "skipping model with empty id")
-			continue
-		}
+	return &genResp, nil
+}
 
-		pricing := mv.ModelPricing{
-			ID:         model.ID,
-			Prompt:     model.Pricing.Prompt,
-			Completion: model.Pricing.Completion,
-			Request:    model.Pricing.Request,
-			Image:      model.Pricing.Image,
-		}
-
-		if err := o.modelPricingCache.Store(ctx, pricing); err != nil {
-			o.logger.ErrorContext(ctx, "failed to cache model pricing",
-				attr.SlogError(err))
-			// Continue caching other models even if one fails
-			continue
-		}
-
-		o.logger.DebugContext(ctx, "cached model pricing")
+// TriggerModelUsageTracking fetches generation details from OpenRouter and tracks model usage.
+func (o *OpenRouter) TriggerModelUsageTracking(ctx context.Context, generationID string, orgID string, projectID string, source billing.ModelUsageSource, chatID string) error {
+	genResp, err := o.getGenerationDetails(ctx, generationID, orgID)
+	if err != nil {
+		return err
 	}
 
-	o.logger.InfoContext(ctx, "successfully fetched and cached model pricing")
+	var cost *float64
+	if genResp.Data.TotalCost > 0 {
+		cost = &genResp.Data.TotalCost
+	} else {
+		o.logger.ErrorContext(ctx, "no cost found in generation response",
+			attr.SlogError(fmt.Errorf("total_cost is %f", genResp.Data.TotalCost)),
+			attr.SlogOrganizationID(orgID),
+		)
+	}
+
+	event := billing.ModelUsageEvent{
+		OrganizationID:        orgID,
+		ProjectID:             projectID,
+		Source:                source,
+		ChatID:                chatID,
+		Model:                 genResp.Data.Model,
+		InputTokens:           int64(genResp.Data.TokensPrompt),
+		OutputTokens:          int64(genResp.Data.TokensCompletion),
+		TotalTokens:           int64(genResp.Data.TokensPrompt + genResp.Data.TokensCompletion),
+		Cost:                  cost,
+		NativeTokensCached:    int64(genResp.Data.NativeTokensCached),
+		NativeTokensReasoning: int64(genResp.Data.NativeTokensReasoning),
+		CacheDiscount:         genResp.Data.CacheDiscount,
+		UpstreamInferenceCost: genResp.Data.UpstreamInferenceCost,
+	}
+
+	o.tracking.TrackModelUsage(ctx, event)
 
 	return nil
-}
-
-// GetModelPricing retrieves pricing data for a model from Redis cache using its canonical slug.
-// Returns an error if the pricing data is not found in cache or if cache is not configured.
-func (o *OpenRouter) GetModelPricing(ctx context.Context, id string) (*mv.ModelPricing, error) {
-	if id == "" {
-		return nil, errors.New("model id is required")
-	}
-
-	cacheKey := mv.ModelPricingCacheKey(id)
-	pricing, err := o.modelPricingCache.Get(ctx, cacheKey)
-	if err != nil {
-		o.logger.DebugContext(ctx, "model pricing not found in cache",
-			attr.SlogError(err))
-		return nil, fmt.Errorf("model pricing not found for id %s: %w", id, err)
-	}
-
-	return &pricing, nil
-}
-
-// CalculateModelCost calculates the cost in dollars based on model pricing and token usage.
-// Returns nil if pricing is unavailable or cannot be parsed.
-func CalculateModelCost(ctx context.Context, openRouter Provisioner, logger *slog.Logger, model string, inputTokens, outputTokens int64) *float64 {
-	if model == "" || inputTokens == 0 && outputTokens == 0 {
-		return nil
-	}
-
-	pricing, err := openRouter.GetModelPricing(ctx, model)
-	if err != nil {
-		logger.ErrorContext(ctx, "model pricing not available, skipping cost calculation",
-			attr.SlogError(err))
-		return nil
-	}
-
-	var cost float64
-
-	// Parse prompt pricing (per token)
-	if pricing.Prompt != "" && inputTokens > 0 {
-		promptPrice, err := strconv.ParseFloat(pricing.Prompt, 64)
-		if err != nil {
-			logger.ErrorContext(ctx, "failed to parse prompt pricing",
-				attr.SlogError(err))
-		} else {
-			cost += promptPrice * float64(inputTokens)
-		}
-	}
-
-	// Parse completion pricing (per token)
-	if pricing.Completion != "" && outputTokens > 0 {
-		completionPrice, err := strconv.ParseFloat(pricing.Completion, 64)
-		if err != nil {
-			logger.ErrorContext(ctx, "failed to parse completion pricing",
-				attr.SlogError(err))
-		} else {
-			cost += completionPrice * float64(outputTokens)
-		}
-	}
-
-	// Add request pricing if present (per request, not per token)
-	if pricing.Request != "" {
-		requestPrice, err := strconv.ParseFloat(pricing.Request, 64)
-		if err != nil {
-			logger.ErrorContext(ctx, "failed to parse request pricing",
-				attr.SlogError(err))
-		} else {
-			cost += requestPrice
-		}
-	}
-
-	if cost == 0 {
-		return nil
-	}
-
-	return &cost
 }

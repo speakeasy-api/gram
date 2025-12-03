@@ -275,6 +275,10 @@ func (s *StubClient) TrackModelUsage(ctx context.Context, event ModelUsageEvent)
 	usage.OutputTokens += event.OutputTokens
 	usage.Cost = event.Cost
 	usage.CallCount += 1
+	usage.NativeTokensCached += event.NativeTokensCached
+	usage.NativeTokensReasoning += event.NativeTokensReasoning
+	usage.CacheDiscount += event.CacheDiscount
+	usage.UpstreamInferenceCost += event.UpstreamInferenceCost
 
 	if err := s.writeModelUsage(ctx, event.OrganizationID, usage); err != nil {
 		span.SetStatus(codes.Error, err.Error())
@@ -381,11 +385,15 @@ func (s *StubClient) writePeriodUsage(ctx context.Context, orgID string, pu *gen
 }
 
 type modelUsage struct {
-	InputTokens  int64    `json:"input_tokens"`
-	OutputTokens int64    `json:"output_tokens"`
-	TotalTokens  int64    `json:"total_tokens"`
-	CallCount    int64    `json:"call_count"`
-	Cost         *float64 `json:"cost"`
+	InputTokens            int64    `json:"input_tokens"`
+	OutputTokens           int64    `json:"output_tokens"`
+	TotalTokens            int64    `json:"total_tokens"`
+	CallCount              int64    `json:"call_count"`
+	Cost                   *float64 `json:"cost"`
+	NativeTokensCached     int64    `json:"native_tokens_cached"`
+	NativeTokensReasoning  int64    `json:"native_tokens_reasoning"`
+	CacheDiscount          float64  `json:"cache_discount"`
+	UpstreamInferenceCost   float64  `json:"upstream_inference_cost"`
 }
 
 func (s *StubClient) readModelUsage(orgID string) (*modelUsage, error) {
@@ -395,11 +403,15 @@ func (s *StubClient) readModelUsage(orgID string) (*modelUsage, error) {
 	}
 
 	zero := &modelUsage{
-		InputTokens:  0,
-		OutputTokens: 0,
-		TotalTokens:  0,
-		CallCount:    0,
-		Cost:         nil,
+		InputTokens:           0,
+		OutputTokens:          0,
+		TotalTokens:            0,
+		CallCount:              0,
+		Cost:                   nil,
+		NativeTokensCached:    0,
+		NativeTokensReasoning:  0,
+		CacheDiscount:          0,
+		UpstreamInferenceCost:  0,
 	}
 
 	usagefile := filepath.Join(datadir, fmt.Sprintf("modelusage-%s.local.json", orgID))
