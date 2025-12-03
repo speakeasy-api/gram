@@ -2,6 +2,7 @@
 INSERT INTO assets (
     name
   , url
+  , tigris_url
   , project_id
   , sha256
   , kind
@@ -10,6 +11,7 @@ INSERT INTO assets (
 ) VALUES (
     @name
   , @url
+  , @tigris_url
   , @project_id
   , @sha256
   , @kind

@@ -1,9 +1,16 @@
 package auth
 
-const KeySecurityScheme = "apikey"
-const APIKeyHeader = "Gram-Key"
-const SessionSecurityScheme = "session"
-const SessionHeader = "Gram-Session"
-const SessionCookie = "gram_session"
-const ProjectSlugSecuritySchema = "project_slug"
-const ProjectHeader = "Gram-Project"
+const (
+	KeySecurityScheme = "apikey"
+	APIKeyHeader      = "Gram-Key"
+
+	FunctionTokenSecurityScheme = "function_token"
+	FunctionTokenHeader         = "Authorization"
+
+	SessionSecurityScheme = "session"
+	SessionHeader         = "Gram-Session"
+	SessionCookie         = "gram_session"
+
+	ProjectSlugSecuritySchema = "project_slug"
+	ProjectHeader             = "Gram-Project"
+)

@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -25,7 +26,7 @@ func TestService_ServeImage_Success(t *testing.T) {
 	filename := "test-asset.png"
 
 	// Setup storage with test content first
-	writer, uri, err := ti.storage.Write(ctx, filename, strings.NewReader(testContent), contentType)
+	writer, uri, err := ti.storage.Write(ctx, filename, contentType)
 	require.NoError(t, err)
 
 	_, err = io.Copy(writer, strings.NewReader(testContent))
@@ -38,6 +39,7 @@ func TestService_ServeImage_Success(t *testing.T) {
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          filename,
 		Url:           uri.String(),
+		TigrisUrl:     conv.ToPGTextEmpty(""),
 		ProjectID:     projectID,
 		Sha256:        "abc123",
 		Kind:          "image",
@@ -108,6 +110,7 @@ func TestService_ServeImage_FileNotInStorage(t *testing.T) {
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          "missing-image.png",
 		Url:           "file://missing-asset.png",
+		TigrisUrl:     conv.ToPGTextEmpty(""),
 		ProjectID:     projectID,
 		Sha256:        "abc123",
 		Kind:          "image",
@@ -136,6 +139,7 @@ func TestService_ServeImage_InvalidAssetURL(t *testing.T) {
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          "invalid-url.png",
 		Url:           "invalid-url",
+		TigrisUrl:     conv.ToPGTextEmpty(""),
 		ProjectID:     projectID,
 		Sha256:        "abc123",
 		Kind:          "image",

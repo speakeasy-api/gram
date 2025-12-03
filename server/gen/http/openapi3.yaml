@@ -10767,6 +10767,14 @@ components:
                     $ref: '#/components/schemas/PromptTemplate'
             required:
                 - template
+        GetSignedAssetURLResult:
+            type: object
+            properties:
+                url:
+                    type: string
+                    description: The signed URL to access the asset
+            required:
+                - url
         GetSlackConnectionResult:
             type: object
             properties:
@@ -13160,6 +13168,10 @@ components:
             description: key based auth.
             name: Gram-Key
             in: header
+        function_token_header_Authorization:
+            type: http
+            description: Gram Functions token based auth.
+            scheme: bearer
         project_slug_header_Gram-Project:
             type: apiKey
             description: project slug header auth.
@@ -13190,6 +13202,8 @@ tags:
       description: Manage custom domains for gram.
     - name: environments
       description: Managing toolset environments.
+    - name: functions
+      description: Endpoints for working with functions.
     - name: instances
       description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
     - name: integrations

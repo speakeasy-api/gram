@@ -205,6 +205,48 @@ func newAssetStorage(ctx context.Context, logger *slog.Logger, opts assetStorage
 	}
 }
 
+type tigrisOptions struct {
+	backend  string
+	assetURI string
+}
+
+func newTigris(ctx context.Context, logger *slog.Logger, opts tigrisOptions) (*assets.FlyTigrisStore, func(context.Context) error, error) {
+	shutdown := func(ctx context.Context) error { return nil }
+	switch opts.backend {
+	case "fs":
+		rootPath := filepath.Clean(opts.assetURI)
+		if err := os.MkdirAll(rootPath, 0750); err != nil && !errors.Is(err, fs.ErrExist) {
+			return nil, shutdown, fmt.Errorf("create assets directory: %w", err)
+		}
+
+		root, err := os.OpenRoot(rootPath)
+		if err != nil {
+			return nil, shutdown, fmt.Errorf("open fs assets root: %w", err)
+		}
+
+		shutdown = func(context.Context) error {
+			return root.Close()
+		}
+
+		store := assets.NewFSBlobStore(logger, root)
+
+		return assets.NewFlyTigrisStore(store), shutdown, nil
+	case "tigris":
+		store, err := assets.NewS3BlobStore(ctx, logger, opts.assetURI, assets.S3BlobStoreOptions{
+			BaseEndpoint: "https://t3.storage.dev",
+			Region:       "auto",
+			UsePathStyle: false,
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("create tigris blob store: %w", err)
+		}
+
+		return assets.NewFlyTigrisStore(store, assets.WithTigrisPresignHost("fly.storage.tigris.dev")), shutdown, nil
+	default:
+		return nil, shutdown, fmt.Errorf("invalid assets backend: %s", opts.backend)
+	}
+}
+
 type redisClientOptions struct {
 	redisAddr     string
 	redisPassword string

@@ -234,6 +234,31 @@ func (q *Queries) GetFlyAppsToReap(ctx context.Context, arg GetFlyAppsToReapPara
 	return items, nil
 }
 
+const getFunctionTigrisURL = `-- name: GetFunctionTigrisURL :one
+SELECT tigris_url
+FROM deployments_functions df
+INNER JOIN assets a ON a.id = df.asset_id
+WHERE
+  a.project_id = $1
+  AND df.deployment_id = $2
+  AND df.id = $3
+  AND a.tigris_url IS NOT NULL
+  AND a.deleted IS FALSE
+`
+
+type GetFunctionTigrisURLParams struct {
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+	FunctionID   uuid.UUID
+}
+
+func (q *Queries) GetFunctionTigrisURL(ctx context.Context, arg GetFunctionTigrisURLParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getFunctionTigrisURL, arg.ProjectID, arg.DeploymentID, arg.FunctionID)
+	var tigris_url pgtype.Text
+	err := row.Scan(&tigris_url)
+	return tigris_url, err
+}
+
 const getFunctionsRunnerVersion = `-- name: GetFunctionsRunnerVersion :one
 WITH project_preference AS (
   SELECT p.functions_runner_version as v

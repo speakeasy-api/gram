@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/sdk/client"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -69,6 +70,7 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 
 	enc := testenv.NewEncryptionClient(t)
 	funcs := testenv.NewFunctionsTestOrchestrator(t)
+	tigris := assets.NewFlyTigrisStore(assetstest.NewTestBlobStore(t))
 
 	f := &feature.InMemory{}
 
@@ -94,7 +96,7 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
 	svc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthog)
-	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage)
+	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage, tigris)
 	packagesSvc := packages.NewService(logger, conn, sessionManager)
 
 	return ctx, &testInstance{

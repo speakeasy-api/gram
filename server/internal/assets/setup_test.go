@@ -69,10 +69,11 @@ func newTestAssetsService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	storage := assetstest.NewTestBlobStore(t)
+	tigrisStore := assets.NewFlyTigrisStore(assetstest.NewTestBlobStore(t))
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := assets.NewService(logger, conn, sessionManager, storage)
+	svc := assets.NewService(logger, conn, sessionManager, storage, tigrisStore)
 	repository := repo.New(conn)
 
 	return ctx, &testInstance{

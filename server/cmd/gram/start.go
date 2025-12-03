@@ -174,6 +174,24 @@ func newStartCommand() *cli.Command {
 			Required: true,
 		},
 		&cli.StringFlag{
+			Name:     "tigris-backend",
+			Usage:    "The backend to use for storing function assets externally",
+			EnvVars:  []string{"GRAM_FUNCTIONS_TIGRIS_BACKEND"},
+			Required: true,
+			Action: func(c *cli.Context, val string) error {
+				if val != "fs" && val != "s3" {
+					return fmt.Errorf("invalid tigris backend: %s", val)
+				}
+				return nil
+			},
+		},
+		&cli.StringFlag{
+			Name:     "tigris-uri",
+			Usage:    "The location of the tigris backend to connect to",
+			EnvVars:  []string{"GRAM_FUNCTIONS_TIGRIS_URI"},
+			Required: true,
+		},
+		&cli.StringFlag{
 			Name:    "redis-cache-addr",
 			Usage:   "Address of the redis cache server",
 			EnvVars: []string{"GRAM_REDIS_CACHE_ADDR"},
@@ -384,6 +402,15 @@ func newStartCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
+			tigrisStore, shutdown, err := newTigris(ctx, logger, tigrisOptions{
+				backend:  c.String("tigris-backend"),
+				assetURI: c.String("tigris-uri"),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to initialize tigris store: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
 			redisClient, err := newRedisClient(ctx, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
 				redisPassword: c.String("redis-cache-password"),
@@ -547,7 +574,7 @@ func newStartCommand() *cli.Command {
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, db, sessionManager))
 			templates.Attach(mux, templates.NewService(logger, db, sessionManager, toolsetsSvc))
-			assets.Attach(mux, assets.NewService(logger, db, sessionManager, assetStorage))
+			assets.Attach(mux, assets.NewService(logger, db, sessionManager, assetStorage, tigrisStore))
 			deployments.Attach(mux, deployments.NewService(logger, tracerProvider, db, temporalClient, sessionManager, assetStorage, posthogClient))
 			keys.Attach(mux, keys.NewService(logger, db, sessionManager, c.String("environment")))
 			environments.Attach(mux, environments.NewService(logger, db, sessionManager, encryptionClient))

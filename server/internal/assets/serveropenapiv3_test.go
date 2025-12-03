@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -30,7 +31,7 @@ func TestService_ServeOpenAPIv3_Success(t *testing.T) {
 	filename := "test-openapi.yaml"
 
 	// Setup storage with test content first
-	writer, uri, err := ti.storage.Write(ctx, filename, strings.NewReader(testContent), contentType)
+	writer, uri, err := ti.storage.Write(ctx, filename, contentType)
 	require.NoError(t, err)
 
 	_, err = io.Copy(writer, strings.NewReader(testContent))
@@ -43,6 +44,7 @@ func TestService_ServeOpenAPIv3_Success(t *testing.T) {
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          filename,
 		Url:           uri.String(),
+		TigrisUrl:     conv.ToPGTextEmpty(""),
 		ProjectID:     projectID,
 		Sha256:        "abc123",
 		Kind:          "openapiv3",
@@ -177,6 +179,7 @@ func TestService_ServeOpenAPIv3_WrongProject(t *testing.T) {
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          "test-openapi.yaml",
 		Url:           "file://test-openapi.yaml",
+		TigrisUrl:     conv.ToPGTextEmpty(""),
 		ProjectID:     differentProjectID,
 		Sha256:        "abc123",
 		Kind:          "openapiv3",
@@ -211,6 +214,7 @@ func TestService_ServeOpenAPIv3_FileNotInStorage(t *testing.T) {
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          "missing-openapi.yaml",
 		Url:           "file://missing-asset.yaml",
+		TigrisUrl:     conv.ToPGTextEmpty(""),
 		ProjectID:     projectID,
 		Sha256:        "abc123",
 		Kind:          "openapiv3",
@@ -245,6 +249,7 @@ func TestService_ServeOpenAPIv3_InvalidAssetURL(t *testing.T) {
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          "invalid-url.yaml",
 		Url:           "ht\ttp://invalid-url",
+		TigrisUrl:     conv.ToPGTextEmpty(""),
 		ProjectID:     projectID,
 		Sha256:        "abc123",
 		Kind:          "openapiv3",
@@ -280,7 +285,7 @@ func TestService_ServeOpenAPIv3_JSONContent(t *testing.T) {
 	filename := "test-openapi.json"
 
 	// Setup storage with test content first
-	writer, uri, err := ti.storage.Write(ctx, filename, strings.NewReader(testContent), contentType)
+	writer, uri, err := ti.storage.Write(ctx, filename, contentType)
 	require.NoError(t, err)
 
 	_, err = io.Copy(writer, strings.NewReader(testContent))
@@ -293,6 +298,7 @@ func TestService_ServeOpenAPIv3_JSONContent(t *testing.T) {
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          filename,
 		Url:           uri.String(),
+		TigrisUrl:     conv.ToPGTextEmpty(""),
 		ProjectID:     projectID,
 		Sha256:        "def456",
 		Kind:          "openapiv3",
@@ -353,7 +359,7 @@ func TestService_ServeOpenAPIv3_CrossProjectAccess(t *testing.T) {
 	filename := "project1-openapi.yaml"
 
 	// Ceates an asset in first project
-	writer, uri, err := ti.storage.Write(ctx1, filename, strings.NewReader(testContent), contentType)
+	writer, uri, err := ti.storage.Write(ctx1, filename, contentType)
 	require.NoError(t, err)
 
 	_, err = io.Copy(writer, strings.NewReader(testContent))
@@ -365,6 +371,7 @@ func TestService_ServeOpenAPIv3_CrossProjectAccess(t *testing.T) {
 	asset, err := ti.repo.CreateAsset(ctx1, repo.CreateAssetParams{
 		Name:          filename,
 		Url:           uri.String(),
+		TigrisUrl:     conv.ToPGTextEmpty(""),
 		ProjectID:     project1ID,
 		Sha256:        "project1hash",
 		Kind:          "openapiv3",

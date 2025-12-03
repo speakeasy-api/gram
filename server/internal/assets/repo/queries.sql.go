@@ -16,6 +16,7 @@ const createAsset = `-- name: CreateAsset :one
 INSERT INTO assets (
     name
   , url
+  , tigris_url
   , project_id
   , sha256
   , kind
@@ -29,17 +30,19 @@ INSERT INTO assets (
   , $5
   , $6
   , $7
+  , $8
 )
 ON CONFLICT (project_id, sha256) DO UPDATE SET
     deleted_at = NULL,
     url = $2,
     updated_at = clock_timestamp()
-RETURNING id, project_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, url, tigris_url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateAssetParams struct {
 	Name          string
 	Url           string
+	TigrisUrl     pgtype.Text
 	ProjectID     uuid.UUID
 	Sha256        string
 	Kind          string
@@ -51,6 +54,7 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset
 	row := q.db.QueryRow(ctx, createAsset,
 		arg.Name,
 		arg.Url,
+		arg.TigrisUrl,
 		arg.ProjectID,
 		arg.Sha256,
 		arg.Kind,
@@ -63,6 +67,7 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset
 		&i.ProjectID,
 		&i.Name,
 		&i.Url,
+		&i.TigrisUrl,
 		&i.Kind,
 		&i.ContentType,
 		&i.ContentLength,
@@ -202,7 +207,7 @@ func (q *Queries) GetOpenAPIv3AssetURL(ctx context.Context, arg GetOpenAPIv3Asse
 }
 
 const getProjectAsset = `-- name: GetProjectAsset :one
-SELECT id, project_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1 AND id = $2
+SELECT id, project_id, name, url, tigris_url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1 AND id = $2
 `
 
 type GetProjectAssetParams struct {
@@ -218,6 +223,7 @@ func (q *Queries) GetProjectAsset(ctx context.Context, arg GetProjectAssetParams
 		&i.ProjectID,
 		&i.Name,
 		&i.Url,
+		&i.TigrisUrl,
 		&i.Kind,
 		&i.ContentType,
 		&i.ContentLength,
@@ -231,7 +237,7 @@ func (q *Queries) GetProjectAsset(ctx context.Context, arg GetProjectAssetParams
 }
 
 const getProjectAssetBySHA256 = `-- name: GetProjectAssetBySHA256 :one
-SELECT id, project_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1 AND sha256 = $2
+SELECT id, project_id, name, url, tigris_url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1 AND sha256 = $2
 `
 
 type GetProjectAssetBySHA256Params struct {
@@ -247,6 +253,7 @@ func (q *Queries) GetProjectAssetBySHA256(ctx context.Context, arg GetProjectAss
 		&i.ProjectID,
 		&i.Name,
 		&i.Url,
+		&i.TigrisUrl,
 		&i.Kind,
 		&i.ContentType,
 		&i.ContentLength,
@@ -260,7 +267,7 @@ func (q *Queries) GetProjectAssetBySHA256(ctx context.Context, arg GetProjectAss
 }
 
 const listAssets = `-- name: ListAssets :many
-SELECT id, project_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1
+SELECT id, project_id, name, url, tigris_url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1
 `
 
 func (q *Queries) ListAssets(ctx context.Context, projectID uuid.UUID) ([]Asset, error) {
@@ -277,6 +284,7 @@ func (q *Queries) ListAssets(ctx context.Context, projectID uuid.UUID) ([]Asset,
 			&i.ProjectID,
 			&i.Name,
 			&i.Url,
+			&i.TigrisUrl,
 			&i.Kind,
 			&i.ContentType,
 			&i.ContentLength,
