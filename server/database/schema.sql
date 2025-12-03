@@ -1060,3 +1060,21 @@ CREATE TABLE IF NOT EXISTS agent_executions (
 CREATE INDEX IF NOT EXISTS agent_executions_project_id_started_at_idx
 ON agent_executions (project_id, started_at)
 WHERE deleted IS FALSE;
+
+-- External MCP registries (e.g., mcp.run, self-hosted)
+CREATE TABLE IF NOT EXISTS mcp_registries (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+  url TEXT NOT NULL CHECK (url <> '' AND CHAR_LENGTH(url) <= 500),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT mcp_registries_pkey PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_registries_url_key
+ON mcp_registries (url)
+WHERE deleted IS FALSE;
