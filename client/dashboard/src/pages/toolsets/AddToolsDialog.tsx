@@ -26,8 +26,10 @@ function getToolSource(
     if (tool.deploymentId) return tool.deploymentId;
     return "custom";
   } else if (tool.type === "function") {
-    if (tool.functionId && functionIdToName) {
-      return functionIdToName[tool.functionId];
+    const sourceName =
+      functionIdToName?.[tool.functionId] || functionIdToName?.[tool.assetId];
+    if (sourceName) {
+      return sourceName;
     }
     return "Functions";
   }
@@ -79,6 +81,7 @@ export function AddToolsDialog({
     return deployment?.deployment?.functionsAssets?.reduce(
       (acc, asset) => {
         acc[asset.id] = asset.name;
+        acc[asset.assetId] = asset.name;
         return acc;
       },
       {} as Record<string, string>,
