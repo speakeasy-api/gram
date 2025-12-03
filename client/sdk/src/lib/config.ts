@@ -59,7 +59,13 @@ export function serverURLFromOptions(options: SDKOptions): URL | null {
 export const SDK_METADATA = {
   language: "typescript",
   openapiDocVersion: "0.0.1",
+<<<<<<< HEAD
   sdkVersion: "0.21.3",
   genVersion: "2.763.2",
   userAgent: "speakeasy-sdk/typescript 0.21.3 2.763.2 0.0.1 @gram/client",
+=======
+  sdkVersion: "0.21.1",
+  genVersion: "2.767.2",
+  userAgent: "speakeasy-sdk/typescript 0.21.1 2.767.2 0.0.1 @gram/client",
+>>>>>>> parent of b75ffa195 (feat: upgrade to ai sdk 5 (#476))
 } as const;
