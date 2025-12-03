@@ -1,10 +1,10 @@
 import { useRegisterChatTelemetry, useTelemetry } from "@/contexts/Telemetry";
-import { UIMessage } from "ai";
+import { Message, UIMessage } from "ai";
 import { createContext, useContext, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { v7 as uuidv7 } from "uuid";
 
-type AppendFn = (message: { content: string }) => void;
+type AppendFn = (message: Message) => void;
 
 const ChatContext = createContext<{
   id: string;

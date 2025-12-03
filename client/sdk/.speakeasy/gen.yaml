@@ -29,7 +29,7 @@ generation:
     generateNewTests: false
     skipResponseBodyAssertions: false
 typescript:
-  version: 0.21.3
+  version: 0.21.4
   acceptHeaderEnum: true
   additionalDependencies:
     dependencies: {}
@@ -47,7 +47,7 @@ typescript:
   clientServerStatusCodesAsErrors: true
   compileCommand:
     - ./scripts/compile.sh
-  constFieldsAlwaysOptional: true
+  constFieldsAlwaysOptional: false
   defaultErrorName: APIError
   enableCustomCodeRegions: false
   enableMCPServer: false
@@ -80,6 +80,7 @@ typescript:
   multipartArrayFormat: legacy
   outputModelSuffix: output
   packageName: '@gram/client'
+  preApplyUnionDiscriminators: true
   responseFormat: flat
   sseFlatResponse: false
   templateVersion: v2
