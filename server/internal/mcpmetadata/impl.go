@@ -80,6 +80,18 @@ type securityInput struct {
 	Sensitive   bool
 }
 
+type CursorConfig struct {
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers"`
+}
+
+type VSCodeConfig struct {
+	Name    string            `json:"name"`
+	Type    string            `json:"type"`
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers"`
+}
+
 type jsonSnippetData struct {
 	MCPName        string
 	MCPSlug        string
@@ -239,19 +251,19 @@ func toMcpMetadata(record repo.McpMetadatum) *types.McpMetadata {
 }
 
 func buildCursorInstallURL(toolsetName, mcpURL string, inputs []securityInput) (string, error) {
-	config := map[string]any{
-		"url":     mcpURL,
-		"headers": map[string]string{},
+	config := CursorConfig{
+		URL:     mcpURL,
+		Headers: map[string]string{},
 	}
 
 	for _, input := range inputs {
 		headerKey := templatefuncs.AsHTTPHeader(input.SystemName)
-		config["headers"].(map[string]string)[headerKey] = fmt.Sprintf("{{%s}}", input.DisplayName)
+		config.Headers[headerKey] = fmt.Sprintf("{{%s}}", input.DisplayName)
 	}
 
 	configBytes, err := json.Marshal(config)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to marshal config: %w", err)
 	}
 
 	u := &url.URL{
@@ -267,21 +279,21 @@ func buildCursorInstallURL(toolsetName, mcpURL string, inputs []securityInput) (
 }
 
 func buildVSCodeInstallURL(toolsetName, mcpURL string, inputs []securityInput) (string, error) {
-	config := map[string]any{
-		"name":    toolsetName,
-		"type":    "http",
-		"url":     mcpURL,
-		"headers": map[string]string{},
+	config := VSCodeConfig{
+		Name:    toolsetName,
+		Type:    "http",
+		URL:     mcpURL,
+		Headers: map[string]string{},
 	}
 
 	for _, input := range inputs {
 		headerKey := templatefuncs.AsHTTPHeader(input.SystemName)
-		config["headers"].(map[string]string)[headerKey] = fmt.Sprintf("your-%s-value", input.DisplayName)
+		config.Headers[headerKey] = fmt.Sprintf("your-%s-value", input.DisplayName)
 	}
 
 	configBytes, err := json.Marshal(config)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to marshal config: %w", err)
 	}
 
 	u := &url.URL{
@@ -421,8 +433,8 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	data := hostedPageData{
 		jsonSnippetData:   configSnippetData,
 		MCPConfig:         configSnippet.String(),
-		CursorInstallLink: template.URL(cursorURL),
-		VSCodeInstallLink: template.URL(vsCodeURL),
+		CursorInstallLink: template.URL(cursorURL), // nolint:gosec // This is internally generated
+		VSCodeInstallLink: template.URL(vsCodeURL), // nolint:gosec // This is internally generated
 		OrganizationName:  organization.Name,
 		SiteURL:           s.siteURL.String(),
 		LogoAssetURL:      logoAssetURL,
