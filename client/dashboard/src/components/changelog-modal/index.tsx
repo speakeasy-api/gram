@@ -8,8 +8,8 @@ import {
   Icon,
 } from "@speakeasy-api/moonshine";
 import { useEffect, useState } from "react";
-import { format } from "date-fns";
 import { fetchChangelog, type ChangelogEntry } from "@/services/changelog";
+import { GramLogo } from "@/components/gram-logo";
 
 export function ChangelogModal({ onClose }: { onClose?: () => void }) {
   const { close } = useModal();
@@ -49,7 +49,7 @@ export function ChangelogModal({ onClose }: { onClose?: () => void }) {
       <div className="mb-6">
         <div className="flex items-center gap-4">
           <div className="p-3 rounded-xl bg-gradient-to-br from-brand-500/10 to-brand-600/10 border border-brand-500/20">
-            <Icon name="rocket" className="size-8 text-brand-500" />
+            <GramLogo variant="icon" className="size-8" />
           </div>
           <div className="flex-1">
             <Heading className="flex items-center gap-3 text-xl">
@@ -102,11 +102,8 @@ export function ChangelogModal({ onClose }: { onClose?: () => void }) {
                   {entry.title}
                 </Heading>
               </div>
-              <Text className="text-base text-muted-foreground leading-relaxed mb-2">
+              <Text className="text-base text-muted-foreground leading-relaxed">
                 {entry.description}
-              </Text>
-              <Text className="text-sm text-muted-foreground/60">
-                Released {format(new Date(entry.date), "MMMM d, yyyy")}
               </Text>
             </div>
 
@@ -135,11 +132,6 @@ export function ChangelogModal({ onClose }: { onClose?: () => void }) {
                             </a>
                           )}
                         </Text>
-                        {feature.author && (
-                          <Text className="text-sm text-muted-foreground/60 mt-0.5">
-                            by @{feature.author}
-                          </Text>
-                        )}
                       </div>
                     </li>
                   ))}
@@ -151,7 +143,7 @@ export function ChangelogModal({ onClose }: { onClose?: () => void }) {
             {entry.bugFixes.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
-                  <Icon name="wrench" className="size-5 text-orange-500" />
+                  <Icon name="wrench" className="size-5 text-warning" />
                   <Heading className="text-lg font-semibold">Bug Fixes</Heading>
                 </div>
                 <ul className="space-y-2">
@@ -172,11 +164,6 @@ export function ChangelogModal({ onClose }: { onClose?: () => void }) {
                             </a>
                           )}
                         </Text>
-                        {fix.author && (
-                          <Text className="text-sm text-muted-foreground/60 mt-0.5">
-                            by @{fix.author}
-                          </Text>
-                        )}
                       </div>
                     </li>
                   ))}
@@ -188,7 +175,7 @@ export function ChangelogModal({ onClose }: { onClose?: () => void }) {
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between mt-6 pt-6 border-t border-neutral-200 dark:border-neutral-800">
+      <div className="flex items-center justify-between mt-6 pt-6 border-t border-neutral-softest">
         <Button
           variant="tertiary"
           onClick={() =>
