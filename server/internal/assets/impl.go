@@ -440,7 +440,15 @@ func (s *Service) downloadPendingAsset(ctx context.Context, reader io.Reader, pa
 	}
 
 	if params.contentLength > params.maxLength {
-		return nil, oops.E(oops.CodeBadRequest, nil, "content length exceeds 8 MiB limit")
+		sizeMB := float64(params.contentLength) / (1024 * 1024)
+		limitMB := float64(params.maxLength) / (1024 * 1024)
+		return nil, oops.E(
+			oops.CodeBadRequest,
+			nil,
+			"File too large: %.2f MB exceeds the %d MB upload limit",
+			sizeMB,
+			int(limitMB),
+		)
 	}
 
 	f, err := os.CreateTemp("", "asset-*")

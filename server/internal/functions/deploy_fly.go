@@ -762,6 +762,7 @@ func (f *FlyRunner) serializeAssets(
 	logger *slog.Logger,
 	assets []RunnerAsset,
 ) ([]*fly.File, error) {
+	const maxSize = 1 * 1024 * 1024 // 1 MiB
 	total := 0
 
 	files := make([]*fly.File, 0, len(assets))
@@ -780,8 +781,18 @@ func (f *FlyRunner) serializeAssets(
 		encoded := base64.StdEncoding.EncodeToString(data)
 		total += len(data)
 
-		if total > 1*1024*1024 {
-			return nil, oops.E(oops.CodeInvalid, nil, "total function assets size exceeds 1MiB limit").Log(ctx, logger)
+		if total > maxSize {
+			sizeMB := float64(total) / (1024 * 1024)
+			limitMB := float64(maxSize) / (1024 * 1024)
+			return nil, oops.E(
+				oops.CodeInvalid,
+				nil,
+				"Function bundle too large: %.2f MB exceeds the %d MB limit. "+
+					"Consider reducing function dependencies, splitting into smaller functions, "+
+					"or removing unused packages from your function code.",
+				sizeMB,
+				int(limitMB),
+			).Log(ctx, logger)
 		}
 
 		files = append(files, &fly.File{
