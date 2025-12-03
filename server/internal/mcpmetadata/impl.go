@@ -63,9 +63,6 @@ type Service struct {
 //go:embed config_snippet.json.tmpl
 var configSnippetTmplData string
 
-//go:embed cursor_snippet.json.tmpl
-var cursorSnippetTmplData string
-
 //go:embed hosted_page.html.tmpl
 var hostedPageTmplData string
 
@@ -241,6 +238,59 @@ func toMcpMetadata(record repo.McpMetadatum) *types.McpMetadata {
 	return metadata
 }
 
+func buildCursorInstallURL(toolsetName, mcpURL string, inputs []securityInput) (string, error) {
+	config := map[string]any{
+		"url":     mcpURL,
+		"headers": map[string]string{},
+	}
+
+	for _, input := range inputs {
+		headerKey := templatefuncs.AsHTTPHeader(input.SystemName)
+		config["headers"].(map[string]string)[headerKey] = fmt.Sprintf("{{%s}}", input.DisplayName)
+	}
+
+	configBytes, err := json.Marshal(config)
+	if err != nil {
+		return "", err
+	}
+
+	u := &url.URL{
+		Scheme: "cursor",
+		Host:   "anysphere.cursor-deeplink",
+		Path:   "/mcp/install",
+		RawQuery: url.Values{
+			"name":   {toolsetName},
+			"config": {base64.StdEncoding.EncodeToString(configBytes)},
+		}.Encode(),
+	}
+	return u.String(), nil
+}
+
+func buildVSCodeInstallURL(toolsetName, mcpURL string, inputs []securityInput) (string, error) {
+	config := map[string]any{
+		"name":    toolsetName,
+		"type":    "http",
+		"url":     mcpURL,
+		"headers": map[string]string{},
+	}
+
+	for _, input := range inputs {
+		headerKey := templatefuncs.AsHTTPHeader(input.SystemName)
+		config["headers"].(map[string]string)[headerKey] = fmt.Sprintf("your-%s-value", input.DisplayName)
+	}
+
+	configBytes, err := json.Marshal(config)
+	if err != nil {
+		return "", err
+	}
+
+	u := &url.URL{
+		Scheme: "vscode",
+		Opaque: "mcp/install?" + url.QueryEscape(string(configBytes)),
+	}
+	return u.String(), nil
+}
+
 func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	defer o11y.LogDefer(ctx, s.logger, func() error {
@@ -358,60 +408,21 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeUnexpected, err, "failed to execute config snippet template").Log(ctx, s.logger)
 	}
 
-	cursorConfig := map[string]any{
-		"url":     MCPURL,
-		"headers": map[string]string{},
-	}
-
-	vsCodeConfig := map[string]any{
-		"name":    toolset.Name,
-		"type":    "http",
-		"url":     MCPURL,
-		"headers": map[string]string{},
-	}
-
-	for _, input := range securityInputs {
-		headerKey := templatefuncs.AsHTTPHeader(input.SystemName)
-		cursorConfig["headers"].(map[string]string)[headerKey] = fmt.Sprintf(
-			"{{%s}}",
-			input.DisplayName,
-		)
-		vsCodeConfig["headers"].(map[string]string)[headerKey] = fmt.Sprintf(
-			"your-%s-value",
-			input.DisplayName,
-		)
-	}
-
-	cursorConfigBytes, err := json.Marshal(cursorConfig)
+	cursorURL, err := buildCursorInstallURL(toolset.Name, MCPURL, securityInputs)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to marshal cursor config").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to build cursor install URL").Log(ctx, s.logger)
 	}
 
-	cursorURL := url.URL{
-		Scheme: "cursor",
-		Host:   "anysphere.cursor-deeplink",
-		Path:   "/mcp/install",
-		RawQuery: url.Values{
-			"name":   {toolset.Name},
-			"config": {base64.StdEncoding.EncodeToString(cursorConfigBytes)},
-		}.Encode(),
-	}
-
-	vsCodeConfigBytes, err := json.Marshal(vsCodeConfig)
+	vsCodeURL, err := buildVSCodeInstallURL(toolset.Name, MCPURL, securityInputs)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to marshal VSCode config").Log(ctx, s.logger)
-	}
-
-	vsCodeURL := url.URL{
-		Scheme: "vscode",
-		Opaque: "mcp/install?" + url.QueryEscape(string(vsCodeConfigBytes)),
+		return oops.E(oops.CodeUnexpected, err, "failed to build vscode install URL").Log(ctx, s.logger)
 	}
 
 	data := hostedPageData{
 		jsonSnippetData:   configSnippetData,
 		MCPConfig:         configSnippet.String(),
-		CursorInstallLink: template.URL(cursorURL.String()),
-		VSCodeInstallLink: template.URL(vsCodeURL.String()),
+		CursorInstallLink: template.URL(cursorURL),
+		VSCodeInstallLink: template.URL(vsCodeURL),
 		OrganizationName:  organization.Name,
 		SiteURL:           s.siteURL.String(),
 		LogoAssetURL:      logoAssetURL,

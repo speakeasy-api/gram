@@ -1,9 +1,0 @@
-{
-  "url": "{{ .MCPURL }}"{{- if (gt (len .SecurityInputs) 0) }},
-  "headers": {
-    {{- range $i, $input := .SecurityInputs }}{{- if $i }},{{ end }}
-    "{{ $input.SystemName | asHTTPHeader }}": "${{ "{" }}{{ $input.DisplayName | asPosixName }}{{ "}" }}"
-    {{- end }}
-  }
-  {{- end }}
-}
