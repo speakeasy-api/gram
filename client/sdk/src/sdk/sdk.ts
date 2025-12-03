@@ -3,6 +3,7 @@
  */
 
 import { ClientSDK } from "../lib/sdks.js";
+import { Agents } from "./agents.js";
 import { Assets } from "./assets.js";
 import { Auth } from "./auth.js";
 import { Chat } from "./chat.js";
@@ -29,6 +30,11 @@ export class Gram extends ClientSDK {
   private _slack?: Slack;
   get slack(): Slack {
     return (this._slack ??= new Slack(this._options));
+  }
+
+  private _agents?: Agents;
+  get agents(): Agents {
+    return (this._agents ??= new Agents(this._options));
   }
 
   private _assets?: Assets;

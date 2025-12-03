@@ -106,7 +106,7 @@ paths:
     /rpc/agents.response:
         delete:
             description: Deletes any response associated with a given agent run.
-            operationId: getAgentResponse
+            operationId: deleteAgentResponse
             parameters:
                 - allowEmptyValue: true
                   description: The ID of the response to retrieve
@@ -193,7 +193,7 @@ paths:
             summary: deleteResponse agents
             tags:
                 - agents
-            x-speakeasy-name-override: get
+            x-speakeasy-name-override: delete
         get:
             description: Get the status of an async agent response by its ID.
             operationId: getAgentResponse
