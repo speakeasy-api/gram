@@ -433,8 +433,8 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	data := hostedPageData{
 		jsonSnippetData:   configSnippetData,
 		MCPConfig:         configSnippet.String(),
-		CursorInstallLink: template.URL(cursorURL), // nolint:gosec // This is internally generated
-		VSCodeInstallLink: template.URL(vsCodeURL), // nolint:gosec // This is internally generated
+		CursorInstallLink: template.URL(cursorURL), //nolint:gosec // This is internally generated
+		VSCodeInstallLink: template.URL(vsCodeURL), //nolint:gosec // This is internally generated
 		OrganizationName:  organization.Name,
 		SiteURL:           s.siteURL.String(),
 		LogoAssetURL:      logoAssetURL,
