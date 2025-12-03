@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -433,8 +434,8 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	data := hostedPageData{
 		jsonSnippetData:   configSnippetData,
 		MCPConfig:         configSnippet.String(),
-		CursorInstallLink: template.URL(cursorURL), // #nosec G203 // This is internally generated
-		VSCodeInstallLink: template.URL(vsCodeURL), // #nosec G203 // This is internally generated
+		CursorInstallLink: template.URL(html.EscapeString(cursorURL)),
+		VSCodeInstallLink: template.URL(html.EscapeString(vsCodeURL)),
 		OrganizationName:  organization.Name,
 		SiteURL:           s.siteURL.String(),
 		LogoAssetURL:      logoAssetURL,
