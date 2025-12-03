@@ -357,3 +357,30 @@ func (s *Workflow) Poll(ctx context.Context) *Workflow {
 		}
 	}
 }
+
+func (s *Workflow) FetchLastDeploymentError(ctx context.Context) *Workflow {
+	if s.Deployment == nil {
+		return s
+	}
+
+	logsResult, err := s.DeploymentsClient.GetDeploymentLogs(
+		ctx,
+		s.Params.APIKey,
+		s.Params.ProjectSlug,
+		s.Deployment.ID,
+	)
+	if err != nil {
+		s.Logger.WarnContext(ctx, "Failed to fetch deployment logs", slog.String("error", err.Error()))
+		return s
+	}
+
+	for i := len(logsResult.Events) - 1; i >= 0; i-- {
+		event := logsResult.Events[i]
+		if event.Event == "error" || event.Event == "failed" {
+			s.Err = fmt.Errorf("%s", event.Message)
+			return s
+		}
+	}
+
+	return s
+}
