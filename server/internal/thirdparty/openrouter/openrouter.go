@@ -11,6 +11,7 @@ import (
 	"math"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -401,16 +402,16 @@ func (o *OpenRouter) updateOpenRouterAPIKeyLimit(ctx context.Context, keyHash st
 	return &response, nil
 }
 
-func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID string, orgID string) (*generationResponse, error) {
+func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID string, orgID string) (*generationResponse, int, error) {
 	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get openrouter API key").Log(ctx, o.logger)
+		return nil, 0, oops.E(oops.CodeUnexpected, err, "failed to get openrouter API key").Log(ctx, o.logger)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", OpenRouterBaseURL+"/v1/generation", nil)
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to create openrouter generation HTTP request", attr.SlogError(err))
-		return nil, fmt.Errorf("failed to create generation request: %w", err)
+		return nil, 0, fmt.Errorf("failed to create generation request: %w", err)
 	}
 
 	q := req.URL.Query()
@@ -423,7 +424,7 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 	resp, err := o.orClient.Do(req)
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to send HTTP request to fetch generation", attr.SlogError(err))
-		return nil, fmt.Errorf("failed to send generation request: %w", err)
+		return nil, 0, fmt.Errorf("failed to send generation request: %w", err)
 	}
 
 	defer o11y.NoLogDefer(func() error {
@@ -432,21 +433,49 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 
 	if resp.StatusCode != http.StatusOK {
 		o.logger.ErrorContext(ctx, "failed to fetch generation from OpenRouter", attr.SlogHTTPResponseStatusCode(resp.StatusCode))
-		return nil, fmt.Errorf("failed to fetch generation from OpenRouter: %s", resp.Status)
+		return nil, resp.StatusCode, fmt.Errorf("failed to fetch generation from OpenRouter: %s", resp.Status)
 	}
 
 	var genResp generationResponse
 	if err := json.NewDecoder(resp.Body).Decode(&genResp); err != nil {
 		o.logger.ErrorContext(ctx, "failed to decode generation response", attr.SlogError(err))
-		return nil, fmt.Errorf("failed to decode generation response: %w", err)
+		return nil, resp.StatusCode, fmt.Errorf("failed to decode generation response: %w", err)
 	}
 
-	return &genResp, nil
+	return &genResp, resp.StatusCode, nil
 }
 
 // TriggerModelUsageTracking fetches generation details from OpenRouter and tracks model usage.
 func (o *OpenRouter) TriggerModelUsageTracking(ctx context.Context, generationID string, orgID string, projectID string, source billing.ModelUsageSource, chatID string) error {
-	genResp, err := o.getGenerationDetails(ctx, generationID, orgID)
+	var genResp *generationResponse
+	var statusCode int
+	var err error
+
+	// Retry up to 3 times with backoff for 404s (generation may not be immediately available)
+	for attempt := 0; attempt < 3; attempt++ {
+		genResp, statusCode, err = o.getGenerationDetails(ctx, generationID, orgID)
+		if err == nil {
+			break
+		}
+
+		// The generation is typically not available synchrously with the chat completion but it quite quickly
+		// Temporal could just hadnle the reliability here, but given we don't want to move this action completely to temporal right now
+		// This default simple retry backoff will be effective enough
+		if statusCode == http.StatusNotFound {
+			backoffs := []time.Duration{250 * time.Millisecond, 500 * time.Millisecond, time.Second}
+			backoff := backoffs[attempt]
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(backoff):
+				continue
+			}
+		}
+
+		// Not a 404, don't retry
+		return err
+	}
+
 	if err != nil {
 		return err
 	}
@@ -476,6 +505,21 @@ func (o *OpenRouter) TriggerModelUsageTracking(ctx context.Context, generationID
 		CacheDiscount:         genResp.Data.CacheDiscount,
 		UpstreamInferenceCost: genResp.Data.UpstreamInferenceCost,
 	}
+
+	fmt.Printf("EVENT: org=%s project=%s chat=%s model=%s input=%d output=%d total=%d cached=%d reasoning=%d cost=%v cache_discount=%.4f upstream_cost=%.6f\n",
+		event.OrganizationID,
+		event.ProjectID,
+		event.ChatID,
+		event.Model,
+		event.InputTokens,
+		event.OutputTokens,
+		event.TotalTokens,
+		event.NativeTokensCached,
+		event.NativeTokensReasoning,
+		event.Cost,
+		event.CacheDiscount,
+		event.UpstreamInferenceCost,
+	)
 
 	o.tracking.TrackModelUsage(ctx, event)
 

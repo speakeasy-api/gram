@@ -557,6 +557,8 @@ func (r *responseCaptor) processLine(line string) {
 			return
 		}
 
+		fmt.Println("DATA", data)
+
 		// Parse the chunk as JSON
 		var chunk openrouter.StreamingChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err == nil {

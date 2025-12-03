@@ -201,10 +201,12 @@ func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string
 	}
 
 	// Track model usage for billing
-	err = c.openRouter.TriggerModelUsageTracking(ctx, chatResp.ID, orgID, projectID, billing.ModelUsageSourceAgents, "")
-	if err != nil {
-		c.logger.ErrorContext(ctx, "failed to trigger model usage tracking", attr.SlogError(err))
-	}
+	go func() {
+		err = c.openRouter.TriggerModelUsageTracking(context.WithoutCancel(ctx), chatResp.ID, orgID, projectID, billing.ModelUsageSourceAgents, "")
+		if err != nil {
+			c.logger.ErrorContext(ctx, "failed to trigger model usage tracking", attr.SlogError(err))
+		}
+	}()
 
 	msg := chatResp.Choices[0].Message
 	return &msg, nil
