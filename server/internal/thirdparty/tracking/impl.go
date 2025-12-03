@@ -30,15 +30,19 @@ func (c *Composite) TrackModelUsage(ctx context.Context, event billing.ModelUsag
 	c.polar.TrackModelUsage(ctx, event)
 
 	properties := map[string]any{
-		"organization_id":      event.OrganizationID,
-		"model":                event.Model,
-		"source":               string(event.Source),
-		"input_tokens":         event.InputTokens,
-		"output_tokens":        event.OutputTokens,
-		"total_tokens":         event.TotalTokens,
-		"project_id":           event.ProjectID,
-		"chat_id":              event.ChatID,
-		"disable_notification": true,
+		"organization_id":         event.OrganizationID,
+		"model":                   event.Model,
+		"source":                  string(event.Source),
+		"input_tokens":            event.InputTokens,
+		"output_tokens":           event.OutputTokens,
+		"total_tokens":            event.TotalTokens,
+		"project_id":              event.ProjectID,
+		"chat_id":                 event.ChatID,
+		"native_tokens_cached":    event.NativeTokensCached,
+		"native_tokens_reasoning": event.NativeTokensReasoning,
+		"cache_discount":          event.CacheDiscount,
+		"upstream_inference_cost": event.UpstreamInferenceCost,
+		"disable_notification":    true,
 	}
 	if event.Cost != nil {
 		properties["cost"] = *event.Cost

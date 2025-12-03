@@ -20,15 +20,19 @@ const (
 )
 
 type ModelUsageEvent struct {
-	OrganizationID string
-	ProjectID      string
-	Source         ModelUsageSource
-	ChatID         string
-	Model          string
-	InputTokens    int64
-	OutputTokens   int64
-	TotalTokens    int64
-	Cost           *float64 // Cost in dollars, nil if pricing unavailable
+	OrganizationID        string
+	ProjectID             string
+	Source                ModelUsageSource
+	ChatID                string
+	Model                 string
+	InputTokens           int64
+	OutputTokens          int64
+	TotalTokens           int64
+	Cost                  *float64 // Cost in dollars, nil if pricing unavailable
+	NativeTokensCached    int64
+	NativeTokensReasoning int64
+	CacheDiscount         float64
+	UpstreamInferenceCost float64
 }
 
 type ToolCallUsageEvent struct {

@@ -337,11 +337,16 @@ func newWorkerCommand() *cli.Command {
 
 			productFeatures := productfeatures.NewClient(logger, db, redisClient)
 
+			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, posthogClient, c)
+			if err != nil {
+				return fmt.Errorf("failed to create billing provider: %w", err)
+			}
+
 			var openRouter openrouter.Provisioner
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{Temporal: temporalClient}, productFeatures, cache.NewRedisCacheAdapter(redisClient))
+				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{Temporal: temporalClient}, productFeatures, billingTracker)
 			}
 
 			guardianPolicy := guardian.NewDefaultPolicy()
@@ -362,12 +367,7 @@ func newWorkerCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 
-			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, posthogClient, c)
-			if err != nil {
-				return fmt.Errorf("failed to create billing provider: %w", err)
-			}
-
-			baseChatClient := openrouter.NewChatClient(logger, openRouter, billingTracker)
+			baseChatClient := openrouter.NewChatClient(logger, openRouter)
 			ragService := rag.NewToolsetVectorStore(tracerProvider, db, baseChatClient)
 			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator)
 

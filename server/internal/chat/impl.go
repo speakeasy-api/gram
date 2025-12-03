@@ -50,10 +50,9 @@ type Service struct {
 	logger         *slog.Logger
 	sessions       *sessions.Manager
 	proxyTransport http.RoundTripper
-	tracker        billing.Tracker
 }
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, openRouter openrouter.Provisioner, tracking billing.Tracker) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, openRouter openrouter.Provisioner) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
@@ -64,7 +63,6 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		tracer:         otel.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
 		openRouter:     openRouter,
 		proxyTransport: cleanhttp.DefaultPooledTransport(),
-		tracker:        tracking,
 	}
 }
 
@@ -295,7 +293,6 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		// Create a custom response writer to capture the response
 		respCaptor = &responseCaptor{
 			ResponseWriter:       w,
-			Tracker:              s.tracker,
 			logger:               s.logger,
 			ctx:                  ctx,
 			isStreaming:          isStreaming,
@@ -316,8 +313,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 				CompletionTokens: 0,
 				TotalTokens:      0,
 			},
-			usageSet:   false,
-			openRouter: s.openRouter,
+			usageSet: false,
 		}
 	}
 
@@ -358,8 +354,33 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		return nil
 	}
 
-	// Serve the proxy through our custom writer
+	// Defer executes when HandleCompletion returns, which happens after proxy.ServeHTTP completes
+	// (whether normally or due to client disconnection)
+	defer func() {
+		if respCaptorWithTracking, ok := respCaptor.(*responseCaptor); ok && respCaptorWithTracking.messageID != "" {
+			go func() {
+				ctx := context.WithoutCancel(ctx)
+				if err := s.openRouter.TriggerModelUsageTracking(
+					ctx,
+					respCaptorWithTracking.messageID,
+					orgID,
+					authCtx.ProjectID.String(),
+					billing.ModelUsageSourceChat,
+					respCaptorWithTracking.chatID.String(),
+				); err != nil {
+					s.logger.ErrorContext(ctx, "failed to track model usage",
+						attr.SlogError(err),
+						attr.SlogOrganizationID(orgID),
+					)
+				}
+			}()
+		} else {
+			s.logger.ErrorContext(ctx, "failed to track model usage", attr.SlogError(errors.New("no message ID")))
+		}
+	}()
+
 	proxy.ServeHTTP(respCaptor, r)
+
 	return nil
 }
 
@@ -441,7 +462,6 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 // responseCaptor captures and logs response data
 type responseCaptor struct {
 	http.ResponseWriter
-	billing.Tracker
 	//nolint:containedctx // responseCaptor needs to implement io.Writer so its methods cannot accept a context
 	ctx                  context.Context
 	logger               *slog.Logger
@@ -460,7 +480,6 @@ type responseCaptor struct {
 	toolCallID           string
 	accumulatedToolCalls map[int]openrouter.ToolCall // Map of index to accumulated tool call data
 	usage                openrouter.Usage
-	openRouter           openrouter.Provisioner
 }
 
 func (r *responseCaptor) WriteHeader(statusCode int) {
@@ -496,20 +515,6 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 				r.logger.ErrorContext(r.ctx, "failed to marshal tool calls", attr.SlogError(err))
 			}
 		}
-
-		cost := openrouter.CalculateModelCost(r.ctx, r.openRouter, r.logger, r.model, int64(r.usage.PromptTokens), int64(r.usage.CompletionTokens))
-
-		go r.TrackModelUsage(context.WithoutCancel(r.ctx), billing.ModelUsageEvent{
-			OrganizationID: r.orgID,
-			ProjectID:      r.projectID.String(),
-			Model:          r.model,
-			Source:         billing.ModelUsageSourceChat, // currently the only source
-			InputTokens:    int64(r.usage.PromptTokens),
-			OutputTokens:   int64(r.usage.CompletionTokens),
-			TotalTokens:    int64(r.usage.TotalTokens),
-			ChatID:         r.chatID.String(),
-			Cost:           cost,
-		})
 
 		// TODO batch insert the messages
 		_, err := r.repo.CreateChatMessage(r.ctx, []repo.CreateChatMessageParams{{
@@ -555,7 +560,10 @@ func (r *responseCaptor) processLine(line string) {
 		// Parse the chunk as JSON
 		var chunk openrouter.StreamingChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err == nil {
-			r.messageID = chunk.ID
+			// Capture ID from the first chunk only
+			if r.messageID == "" && chunk.ID != "" {
+				r.messageID = chunk.ID
+			}
 			r.model = chunk.Model
 
 			if chunk.Usage != nil {

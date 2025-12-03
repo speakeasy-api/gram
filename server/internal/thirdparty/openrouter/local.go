@@ -2,9 +2,8 @@ package openrouter
 
 import (
 	"context"
-	"errors"
 
-	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 )
 
 type Development struct {
@@ -27,11 +26,7 @@ func (o *Development) GetCreditsUsed(ctx context.Context, orgID string) (float64
 	return 12.5, 10, nil // arbitrary local numbers
 }
 
-func (o *Development) GetModelPricing(ctx context.Context, id string) (*mv.ModelPricing, error) {
-	// Development mode doesn't have access to cached pricing
-	return nil, errors.New("model pricing not available in development mode")
-}
-
-func (o *Development) FetchAndCacheModelPricing(ctx context.Context) error {
+func (o *Development) TriggerModelUsageTracking(ctx context.Context, generationID string, orgID string, projectID string, source billing.ModelUsageSource, chatID string) error {
+	// Development mode doesn't track model usage
 	return nil
 }

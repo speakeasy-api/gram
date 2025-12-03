@@ -17,22 +17,20 @@ import (
 )
 
 type ChatClient struct {
-	openRouter     Provisioner
-	chatClient     *http.Client
-	logger         *slog.Logger
-	billingTracker billing.Tracker
+	openRouter Provisioner
+	chatClient *http.Client
+	logger     *slog.Logger
 }
 
 const (
 	DefaultChatModel = "openai/gpt-4o"
 )
 
-func NewChatClient(logger *slog.Logger, openRouter Provisioner, billingTracker billing.Tracker) *ChatClient {
+func NewChatClient(logger *slog.Logger, openRouter Provisioner) *ChatClient {
 	return &ChatClient{
-		openRouter:     openRouter,
-		chatClient:     cleanhttp.DefaultPooledClient(),
-		logger:         logger,
-		billingTracker: billingTracker,
+		openRouter: openRouter,
+		chatClient: cleanhttp.DefaultPooledClient(),
+		logger:     logger,
 	}
 }
 
@@ -203,22 +201,12 @@ func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string
 	}
 
 	// Track model usage for billing
-	if chatResp.Usage != nil {
-		cost := CalculateModelCost(ctx, c.openRouter, c.logger, modelToUse, int64(chatResp.Usage.PromptTokens), int64(chatResp.Usage.CompletionTokens))
-		go c.billingTracker.TrackModelUsage(context.WithoutCancel(ctx), billing.ModelUsageEvent{
-			OrganizationID: orgID,
-			ProjectID:      projectID,
-			Model:          modelToUse,
-			Source:         billing.ModelUsageSourceAgents,
-			InputTokens:    int64(chatResp.Usage.PromptTokens),
-			OutputTokens:   int64(chatResp.Usage.CompletionTokens),
-			TotalTokens:    int64(chatResp.Usage.TotalTokens),
-			Cost:           cost,
-			ChatID:         "",
-		})
-	} else {
-		c.logger.WarnContext(ctx, "no usage data in OpenRouter response")
-	}
+	go func() {
+		err = c.openRouter.TriggerModelUsageTracking(context.WithoutCancel(ctx), chatResp.ID, orgID, projectID, billing.ModelUsageSourceAgents, "")
+		if err != nil {
+			c.logger.ErrorContext(ctx, "failed to trigger model usage tracking", attr.SlogError(err))
+		}
+	}()
 
 	msg := chatResp.Choices[0].Message
 	return &msg, nil

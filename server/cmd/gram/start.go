@@ -458,7 +458,7 @@ func newStartCommand() *cli.Command {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
 				openRouterKeyRefresher = &background.OpenRouterKeyRefresher{Temporal: temporalClient}
-				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{Temporal: temporalClient}, productFeatures, cache.NewRedisCacheAdapter(redisClient))
+				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{Temporal: temporalClient}, productFeatures, billingTracker)
 			}
 
 			{
@@ -512,7 +512,7 @@ func newStartCommand() *cli.Command {
 			runnerVersion := functions.RunnerVersion(conv.Default(strings.TrimPrefix(c.String("functions-runner-version"), "sha-"), GitSHA))
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
-			baseChatClient := openrouter.NewChatClient(logger, openRouter, billingTracker)
+			baseChatClient := openrouter.NewChatClient(logger, openRouter)
 
 			tcm, shutdown, err := newToolMetricsClient(ctx, logger, c, tracerProvider, productFeatures)
 			if err != nil {
@@ -559,7 +559,7 @@ func newStartCommand() *cli.Command {
 			mcpMetadataService := mcpmetadata.NewService(logger, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, oauthService, billingTracker, billingRepo, tcm, ragService, temporalClient), mcpMetadataService)
-			chat.Attach(mux, chat.NewService(logger, db, sessionManager, openRouter, billingTracker))
+			chat.Attach(mux, chat.NewService(logger, db, sessionManager, openRouter))
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
 					GramServerURL:      c.String("server-url"),
