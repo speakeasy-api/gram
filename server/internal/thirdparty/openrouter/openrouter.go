@@ -451,8 +451,8 @@ func (o *OpenRouter) TriggerModelUsageTracking(ctx context.Context, generationID
 	var statusCode int
 	var err error
 
-	// The generation is typically not available synchronously with the chat completion but arrives quite quickly.
-	// Temporal could handle the reliability here, but given we don't want to move this action completely to temporal right now,
+	// The generation is typically not available synchronously with the chat completion but becomes available quickly.
+	// Temporal could handle reliability here, but given we don't want to move this action to temporal right now,
 	// this simple retry backoff will be effective enough.
 	backoffs := []time.Duration{250 * time.Millisecond, 500 * time.Millisecond, time.Second}
 	for attempt := range backoffs {
@@ -504,21 +504,6 @@ func (o *OpenRouter) TriggerModelUsageTracking(ctx context.Context, generationID
 		CacheDiscount:         genResp.Data.CacheDiscount,
 		UpstreamInferenceCost: genResp.Data.UpstreamInferenceCost,
 	}
-
-	fmt.Printf("EVENT: org=%s project=%s chat=%s model=%s input=%d output=%d total=%d cached=%d reasoning=%d cost=%v cache_discount=%.4f upstream_cost=%.6f\n",
-		event.OrganizationID,
-		event.ProjectID,
-		event.ChatID,
-		event.Model,
-		event.InputTokens,
-		event.OutputTokens,
-		event.TotalTokens,
-		event.NativeTokensCached,
-		event.NativeTokensReasoning,
-		event.Cost,
-		event.CacheDiscount,
-		event.UpstreamInferenceCost,
-	)
 
 	o.tracking.TrackModelUsage(ctx, event)
 
