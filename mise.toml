@@ -144,3 +144,6 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 # GRAM_FUNCTIONS_FLYIO_ORG = "unset"
 ## Default region for deploying fly.io apps
 # GRAM_FUNCTIONS_FLYIO_REGION = "sjc"
+
+LOCAL_MCP_REGISTRY_PORT = "9847"
+LOCAL_MCP_REGISTRY_URL = "http://localhost:{{env.LOCAL_MCP_REGISTRY_PORT}}"
