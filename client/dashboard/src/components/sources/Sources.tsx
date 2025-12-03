@@ -99,27 +99,31 @@ export default function Sources() {
       return [];
     }
 
-    const openApiSources = deployment.openapiv3Assets.map((deploymentAsset) => {
-      const asset = assets.assets.find((a) => a.id === deploymentAsset.assetId);
-      if (!asset) {
-        throw new Error(`Asset ${deploymentAsset.assetId} not found`);
-      }
-      return {
-        ...asset,
-        deploymentAssetId: deploymentAsset.id,
-        name: deploymentAsset.name,
-        slug: deploymentAsset.slug,
-        type: "openapi" as const,
-      };
-    });
+    const openApiSources = deployment.openapiv3Assets
+      .map((deploymentAsset) => {
+        const asset = assets.assets.find((a) => a.id === deploymentAsset.assetId);
+        if (!asset) {
+          console.error(`Asset ${deploymentAsset.assetId} not found`);
+          return null;
+        }
+        return {
+          ...asset,
+          deploymentAssetId: deploymentAsset.id,
+          name: deploymentAsset.name,
+          slug: deploymentAsset.slug,
+          type: "openapi" as const,
+        };
+      })
+      .filter((source): source is NamedAsset => source !== null);
 
-    const functionSources = (deployment.functionsAssets ?? []).map(
-      (deploymentAsset) => {
+    const functionSources = (deployment.functionsAssets ?? [])
+      .map((deploymentAsset) => {
         const asset = assets.assets.find(
           (a) => a.id === deploymentAsset.assetId,
         );
         if (!asset) {
-          throw new Error(`Asset ${deploymentAsset.assetId} not found`);
+          console.error(`Asset ${deploymentAsset.assetId} not found`);
+          return null;
         }
         return {
           ...asset,
@@ -128,8 +132,8 @@ export default function Sources() {
           slug: deploymentAsset.slug,
           type: "function" as const,
         };
-      },
-    );
+      })
+      .filter((source): source is NamedAsset => source !== null);
 
     return [...openApiSources, ...functionSources];
   }, [deployment, assets]);
