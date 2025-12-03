@@ -19,10 +19,12 @@ import {
   AlertTriangleIcon,
   ChartNoAxesCombinedIcon,
   MinusIcon,
+  Sparkles,
   TestTube2Icon,
 } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
+import { ChangelogModal } from "./changelog-modal";
 import { FeatureRequestModal } from "./FeatureRequestModal";
 import { GramLogo } from "./gram-logo";
 import { ProjectMenu } from "./project-menu";
@@ -33,18 +35,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const [metricsModalOpen, setMetricsModalOpen] = React.useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const [changelogModalOpen, setChangelogModalOpen] = useState(false);
 
   const topNavGroups = {
     create: [routes.toolsets, routes.customTools, routes.prompts],
     consume: [routes.playground, routes.mcp, routes.environments],
   };
 
-  const bottomNav = [
-    routes.deployments,
-    routes.billing,
-    routes.settings,
-    routes.docs,
-  ];
+  const bottomNav = [routes.deployments, routes.billing, routes.settings];
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -92,7 +90,23 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarGroup>
         <SidebarGroup className="mt-auto">
           <SidebarGroupContent>
-            <NavMenu items={bottomNav} />
+            <NavMenu items={bottomNav}>
+              <SidebarMenuItem>
+                <NavButton
+                  title="What's new"
+                  Icon={Sparkles}
+                  onClick={() => setChangelogModalOpen(true)}
+                />
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <NavButton
+                  title="Docs"
+                  Icon={routes.docs.Icon}
+                  href={routes.docs.href()}
+                  active={routes.docs.active}
+                />
+              </SidebarMenuItem>
+            </NavMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
@@ -116,6 +130,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         actionType="logs_page_access"
         icon={TestTube2Icon}
         accountUpgrade={true}
+      />
+      <ChangelogModal
+        open={changelogModalOpen}
+        onOpenChange={setChangelogModalOpen}
       />
     </Sidebar>
   );
