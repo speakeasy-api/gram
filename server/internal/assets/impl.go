@@ -53,7 +53,6 @@ type Service struct {
 	db      *pgxpool.Pool
 	auth    *auth.Auth
 	storage BlobStore
-	tigris  *FlyTigrisStore
 
 	projects *projectsRepo.Queries
 	repo     *repo.Queries
@@ -62,7 +61,7 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, storage BlobStore, tigrisStore *FlyTigrisStore) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, storage BlobStore) *Service {
 	logger = logger.With(attr.SlogComponent("assets"))
 
 	return &Service{
@@ -73,7 +72,6 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		storage:  storage,
 		projects: projectsRepo.New(db),
 		repo:     repo.New(db),
-		tigris:   tigrisStore,
 	}
 }
 
@@ -226,7 +224,6 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 		ProjectID:     *authCtx.ProjectID,
 		Sha256:        result.hash,
 		Kind:          "image",
-		TigrisUrl:     conv.ToPGTextEmpty(""),
 		ContentType:   inContentType,
 		ContentLength: payload.ContentLength,
 	})
@@ -299,23 +296,6 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 	}
 
 	filename := fmt.Sprintf("functions-%s%s", result.hash, ext)
-
-	tigrisURI, err := s.uploadTigrisAsset(ctx, &uploadTigrisAssetParams{
-		projectID:     *authCtx.ProjectID,
-		filename:      filename,
-		contentType:   mimeType,
-		contentLength: payload.ContentLength,
-		file:          result.file,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = result.file.Seek(0, io.SeekStart)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("seek to start: %w", err), "error reading file")
-	}
-
 	uri, err := s.uploadAsset(ctx, &uploadAssetParams{
 		projectID:     *authCtx.ProjectID,
 		filename:      filename,
@@ -330,7 +310,6 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 	asset, err := s.repo.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          filename,
 		Url:           uri.String(),
-		TigrisUrl:     conv.ToPGTextEmpty(tigrisURI.String()),
 		ProjectID:     *authCtx.ProjectID,
 		Sha256:        result.hash,
 		Kind:          "functions",
@@ -416,7 +395,6 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	asset, err := s.repo.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          filename,
 		Url:           uri.String(),
-		TigrisUrl:     conv.ToPGTextEmpty(""),
 		ProjectID:     *authCtx.ProjectID,
 		Sha256:        result.hash,
 		Kind:          "openapiv3",
@@ -559,7 +537,7 @@ type uploadAssetParams struct {
 
 func (s *Service) uploadAsset(ctx context.Context, params *uploadAssetParams) (*url.URL, error) {
 	projectID := params.projectID
-	dst, uri, err := s.storage.Write(ctx, path.Join(projectID.String(), params.filename), params.contentType)
+	dst, uri, err := s.storage.Write(ctx, path.Join(projectID.String(), params.filename), params.contentType, params.contentLength)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("write to blob storage: %w", err), "error writing document")
 	}
@@ -580,42 +558,6 @@ func (s *Service) uploadAsset(ctx context.Context, params *uploadAssetParams) (*
 
 	if err := dst.Close(); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("finalize blob storage: %w", err), "error uploading document")
-	}
-
-	return uri, nil
-}
-
-type uploadTigrisAssetParams struct {
-	projectID     uuid.UUID
-	filename      string
-	contentType   string
-	contentLength int64
-	file          *os.File
-}
-
-func (s *Service) uploadTigrisAsset(ctx context.Context, params *uploadTigrisAssetParams) (*url.URL, error) {
-	projectID := params.projectID
-	dst, uri, err := s.tigris.Write(ctx, path.Join(projectID.String(), params.filename), params.contentType)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("write to tigris blob storage: %w", err), "error writing document")
-	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
-		if err := dst.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
-			return fmt.Errorf("close tigris blob storage: %w", err)
-		}
-		return nil
-	})
-
-	n, err := io.CopyBuffer(dst, params.file, make([]byte, 4096))
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("copy to tigris blob storage: %w", err), "error uploading document")
-	}
-	if n != params.contentLength {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("expected %d bytes, wrote %d", params.contentLength, n), "error uploading document")
-	}
-
-	if err := dst.Close(); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("finalize tigris blob storage: %w", err), "error uploading document")
 	}
 
 	return uri, nil

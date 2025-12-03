@@ -10,6 +10,7 @@ package server
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 
@@ -35,13 +36,33 @@ func EncodeGetSignedAssetURLResponse(encoder func(context.Context, http.Response
 func DecodeGetSignedAssetURLRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*functions.GetSignedAssetURLPayload, error) {
 	return func(r *http.Request) (*functions.GetSignedAssetURLPayload, error) {
 		var (
+			body GetSignedAssetURLRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return nil, gerr
+			}
+			return nil, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateGetSignedAssetURLRequestBody(&body)
+		if err != nil {
+			return nil, err
+		}
+
+		var (
 			functionToken *string
 		)
 		functionTokenRaw := r.Header.Get("Authorization")
 		if functionTokenRaw != "" {
 			functionToken = &functionTokenRaw
 		}
-		payload := NewGetSignedAssetURLPayload(functionToken)
+		payload := NewGetSignedAssetURLPayload(&body, functionToken)
 		if payload.FunctionToken != nil {
 			if strings.Contains(*payload.FunctionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

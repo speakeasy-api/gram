@@ -5924,7 +5924,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/SetProjectLogoForm'
+                            $ref: '#/components/schemas/GetSignedAssetURLForm'
                 required: true
             responses:
                 "200":
@@ -10767,6 +10767,14 @@ components:
                     $ref: '#/components/schemas/PromptTemplate'
             required:
                 - template
+        GetSignedAssetURLForm:
+            type: object
+            properties:
+                asset_id:
+                    type: string
+                    description: The ID of the function asset
+            required:
+                - asset_id
         GetSignedAssetURLResult:
             type: object
             properties:

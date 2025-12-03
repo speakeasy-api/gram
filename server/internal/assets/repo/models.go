@@ -14,7 +14,6 @@ type Asset struct {
 	ProjectID     uuid.UUID
 	Name          string
 	Url           string
-	TigrisUrl     pgtype.Text
 	Kind          string
 	ContentType   string
 	ContentLength int64

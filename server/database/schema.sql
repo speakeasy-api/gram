@@ -130,7 +130,6 @@ CREATE TABLE IF NOT EXISTS assets (
 
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
   url TEXT NOT NULL,
-  tigris_url TEXT,
   kind TEXT NOT NULL,
   content_type TEXT NOT NULL,
   content_length BIGINT NOT NULL,

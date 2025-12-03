@@ -46,6 +46,8 @@ var MethodNames = [1]string{"getSignedAssetURL"}
 // getSignedAssetURL method.
 type GetSignedAssetURLPayload struct {
 	FunctionToken *string
+	// The ID of the function asset
+	AssetID string
 }
 
 // GetSignedAssetURLResult is the result type of the functions service

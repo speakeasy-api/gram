@@ -352,7 +352,7 @@ func newWorkerCommand() *cli.Command {
 				}
 			}
 
-			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, db, assetStorage, encryptionClient)
+			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(ctx, c, logger, tracerProvider, db, assetStorage, encryptionClient)
 			if err != nil {
 				return fmt.Errorf("failed to create functions orchestrator: %w", err)
 			}

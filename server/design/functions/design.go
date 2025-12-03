@@ -17,6 +17,8 @@ var _ = Service("functions", func() {
 
 		Payload(func() {
 			security.FunctionTokenPayload()
+
+			Extend(GetSignedAssetURLForm)
 		})
 
 		Result(GetSignedAssetURLResult)
@@ -29,6 +31,12 @@ var _ = Service("functions", func() {
 
 		Meta("openapi:generate", "false")
 	})
+})
+
+var GetSignedAssetURLForm = Type("GetSignedAssetURLForm", func() {
+	Attribute("asset_id", String, "The ID of the function asset")
+
+	Required("asset_id")
 })
 
 var GetSignedAssetURLResult = Type("GetSignedAssetURLResult", func() {

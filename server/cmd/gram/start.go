@@ -402,15 +402,6 @@ func newStartCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			tigrisStore, shutdown, err := newTigris(ctx, logger, tigrisOptions{
-				backend:  c.String("tigris-backend"),
-				assetURI: c.String("tigris-uri"),
-			})
-			if err != nil {
-				return fmt.Errorf("failed to initialize tigris store: %w", err)
-			}
-			shutdownFuncs = append(shutdownFuncs, shutdown)
-
 			redisClient, err := newRedisClient(ctx, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
 				redisPassword: c.String("redis-cache-password"),
@@ -531,7 +522,7 @@ func newStartCommand() *cli.Command {
 				}
 			}
 
-			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, db, assetStorage, encryptionClient)
+			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(ctx, c, logger, tracerProvider, db, assetStorage, encryptionClient)
 			if err != nil {
 				return fmt.Errorf("failed to create functions orchestrator: %w", err)
 			}
@@ -574,7 +565,7 @@ func newStartCommand() *cli.Command {
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, db, sessionManager))
 			templates.Attach(mux, templates.NewService(logger, db, sessionManager, toolsetsSvc))
-			assets.Attach(mux, assets.NewService(logger, db, sessionManager, assetStorage, tigrisStore))
+			assets.Attach(mux, assets.NewService(logger, db, sessionManager, assetStorage))
 			deployments.Attach(mux, deployments.NewService(logger, tracerProvider, db, temporalClient, sessionManager, assetStorage, posthogClient))
 			keys.Attach(mux, keys.NewService(logger, db, sessionManager, c.String("environment")))
 			environments.Attach(mux, environments.NewService(logger, db, sessionManager, encryptionClient))

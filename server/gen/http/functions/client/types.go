@@ -12,6 +12,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// GetSignedAssetURLRequestBody is the type of the "functions" service
+// "getSignedAssetURL" endpoint HTTP request body.
+type GetSignedAssetURLRequestBody struct {
+	// The ID of the function asset
+	AssetID string `form:"asset_id" json:"asset_id" xml:"asset_id"`
+}
+
 // GetSignedAssetURLResponseBody is the type of the "functions" service
 // "getSignedAssetURL" endpoint HTTP response body.
 type GetSignedAssetURLResponseBody struct {
@@ -204,6 +211,15 @@ type GetSignedAssetURLGatewayErrorResponseBody struct {
 	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
 	// Is the error a server-side fault?
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// NewGetSignedAssetURLRequestBody builds the HTTP request body from the
+// payload of the "getSignedAssetURL" endpoint of the "functions" service.
+func NewGetSignedAssetURLRequestBody(p *functions.GetSignedAssetURLPayload) *GetSignedAssetURLRequestBody {
+	body := &GetSignedAssetURLRequestBody{
+		AssetID: p.AssetID,
+	}
+	return body
 }
 
 // NewGetSignedAssetURLResultOK builds a "functions" service

@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -68,11 +69,21 @@ func (s *Service) GetSignedAssetURL(ctx context.Context, p *gen.GetSignedAssetUR
 		attr.SlogDeploymentFunctionsID(authCtx.functionID.String()),
 	)
 
+	assetID, err := uuid.Parse(p.AssetID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid asset id").Log(ctx, logger)
+	}
+
+	if assetID == uuid.Nil {
+		return nil, oops.E(oops.CodeInvalid, nil, "asset id cannot be nil").Log(ctx, logger)
+	}
+
 	fr := repo.New(s.db)
-	tu, err := fr.GetFunctionTigrisURL(ctx, repo.GetFunctionTigrisURLParams{
+	tu, err := fr.GetFunctionAssetURL(ctx, repo.GetFunctionAssetURLParams{
 		ProjectID:    authCtx.projectID,
 		DeploymentID: authCtx.deploymentID,
 		FunctionID:   authCtx.functionID,
+		AssetID:      assetID,
 	})
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
@@ -81,7 +92,7 @@ func (s *Service) GetSignedAssetURL(ctx context.Context, p *gen.GetSignedAssetUR
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get function asset url").Log(ctx, logger)
 	}
 
-	parsed, err := url.Parse(tu.String)
+	parsed, err := url.Parse(tu)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse function asset url").Log(ctx, logger)
 	}

@@ -12,6 +12,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// GetSignedAssetURLRequestBody is the type of the "functions" service
+// "getSignedAssetURL" endpoint HTTP request body.
+type GetSignedAssetURLRequestBody struct {
+	// The ID of the function asset
+	AssetID *string `form:"asset_id,omitempty" json:"asset_id,omitempty" xml:"asset_id,omitempty"`
+}
+
 // GetSignedAssetURLResponseBody is the type of the "functions" service
 // "getSignedAssetURL" endpoint HTTP response body.
 type GetSignedAssetURLResponseBody struct {
@@ -363,9 +370,20 @@ func NewGetSignedAssetURLGatewayErrorResponseBody(res *goa.ServiceError) *GetSig
 
 // NewGetSignedAssetURLPayload builds a functions service getSignedAssetURL
 // endpoint payload.
-func NewGetSignedAssetURLPayload(functionToken *string) *functions.GetSignedAssetURLPayload {
-	v := &functions.GetSignedAssetURLPayload{}
+func NewGetSignedAssetURLPayload(body *GetSignedAssetURLRequestBody, functionToken *string) *functions.GetSignedAssetURLPayload {
+	v := &functions.GetSignedAssetURLPayload{
+		AssetID: *body.AssetID,
+	}
 	v.FunctionToken = functionToken
 
 	return v
+}
+
+// ValidateGetSignedAssetURLRequestBody runs the validations defined on
+// GetSignedAssetURLRequestBody
+func ValidateGetSignedAssetURLRequestBody(body *GetSignedAssetURLRequestBody) (err error) {
+	if body.AssetID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("asset_id", "body"))
+	}
+	return
 }

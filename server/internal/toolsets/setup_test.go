@@ -81,7 +81,6 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 
 	// Create a test blob store for testing
 	assetStorage := assetstest.NewTestBlobStore(t)
-	tigrisStore := assets.NewFlyTigrisStore(assetstest.NewTestBlobStore(t))
 
 	enc := testenv.NewEncryptionClient(t)
 	funcs := testenv.NewFunctionsTestOrchestrator(t)
@@ -111,7 +110,7 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 
 	svc := toolsets.NewService(logger, conn, sessionManager, nil)
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthog)
-	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage, tigrisStore)
+	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage)
 	packagesSvc := packages.NewService(logger, conn, sessionManager)
 
 	return ctx, &testInstance{

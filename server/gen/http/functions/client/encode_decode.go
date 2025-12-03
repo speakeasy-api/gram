@@ -50,6 +50,10 @@ func EncodeGetSignedAssetURLRequest(encoder func(*http.Request) goahttp.Encoder)
 				req.Header.Set("Authorization", head)
 			}
 		}
+		body := NewGetSignedAssetURLRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("functions", "getSignedAssetURL", err)
+		}
 		return nil
 	}
 }

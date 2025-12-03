@@ -2,7 +2,6 @@
 INSERT INTO assets (
     name
   , url
-  , tigris_url
   , project_id
   , sha256
   , kind
@@ -11,7 +10,6 @@ INSERT INTO assets (
 ) VALUES (
     @name
   , @url
-  , @tigris_url
   , @project_id
   , @sha256
   , @kind
@@ -51,7 +49,7 @@ WHERE
 SELECT * FROM assets WHERE project_id = @project_id;
 
 -- name: GetAssetURLs :many
-SELECT id, url, sha256
+SELECT id, url, sha256, content_type, content_length
 FROM assets
 WHERE project_id = @project_id
   AND id = ANY(@ids::uuid[])

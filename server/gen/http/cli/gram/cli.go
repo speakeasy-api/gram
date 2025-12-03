@@ -321,6 +321,7 @@ func ParseEndpoint(
 		functionsFlags = flag.NewFlagSet("functions", flag.ContinueOnError)
 
 		functionsGetSignedAssetURLFlags             = flag.NewFlagSet("get-signed-asset-url", flag.ExitOnError)
+		functionsGetSignedAssetURLBodyFlag          = functionsGetSignedAssetURLFlags.String("body", "REQUIRED", "")
 		functionsGetSignedAssetURLFunctionTokenFlag = functionsGetSignedAssetURLFlags.String("function-token", "", "")
 
 		instancesFlags = flag.NewFlagSet("instances", flag.ContinueOnError)
@@ -1413,7 +1414,7 @@ func ParseEndpoint(
 			switch epn {
 			case "get-signed-asset-url":
 				endpoint = c.GetSignedAssetURL()
-				data, err = functionsc.BuildGetSignedAssetURLPayload(*functionsGetSignedAssetURLFunctionTokenFlag)
+				data, err = functionsc.BuildGetSignedAssetURLPayload(*functionsGetSignedAssetURLBodyFlag, *functionsGetSignedAssetURLFunctionTokenFlag)
 			}
 		case "instances":
 			c := instancesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2672,6 +2673,7 @@ func functionsUsage() {
 func functionsGetSignedAssetURLUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] functions get-signed-asset-url", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -function-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -2680,11 +2682,12 @@ func functionsGetSignedAssetURLUsage() {
 	fmt.Fprintln(os.Stderr, `Get the signed asset URL for a function`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -function-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "functions get-signed-asset-url --function-token \"Fugiat totam eum aperiam enim quia non.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "functions get-signed-asset-url --body '{\n      \"asset_id\": \"Fugiat totam eum aperiam enim quia non.\"\n   }' --function-token \"Culpa accusantium esse.\"")
 }
 
 // instancesUsage displays the usage of the instances command and its
@@ -2721,7 +2724,7 @@ func instancesGetInstanceUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "instances get-instance --toolset-slug \"11e\" --environment-slug \"viz\" --session-token \"Dicta minima quis atque similique ullam.\" --project-slug-input \"Rerum quas consequatur sed sint.\" --apikey-token \"Perferendis qui qui autem ut quos similique.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "instances get-instance --toolset-slug \"viz\" --environment-slug \"ohg\" --session-token \"Similique ullam sit rerum quas.\" --project-slug-input \"Sed sint.\" --apikey-token \"Perferendis qui qui autem ut quos similique.\"")
 }
 
 // integrationsUsage displays the usage of the integrations command and its

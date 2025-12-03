@@ -136,7 +136,6 @@ func TestService_SetMcpMetadata(t *testing.T) {
 		asset, err := assetsRepo.CreateAsset(ctx, assets_repo.CreateAssetParams{
 			Name:          "test-logo.png",
 			Url:           "https://example.com/logo.png",
-			TigrisUrl:     conv.ToPGTextEmpty(""),
 			ProjectID:     *authCtx.ProjectID,
 			Sha256:        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 			Kind:          "image",

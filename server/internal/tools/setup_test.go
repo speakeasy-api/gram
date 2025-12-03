@@ -16,7 +16,6 @@ import (
 
 	agen "github.com/speakeasy-api/gram/server/gen/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets"
-	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -91,7 +90,6 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 
 	enc := testenv.NewEncryptionClient(t)
 	funcs := testenv.NewFunctionsTestOrchestrator(t)
-	tigrisStore := assets.NewFlyTigrisStore(assetstest.NewTestBlobStore(t))
 
 	f := &feature.InMemory{}
 
@@ -106,7 +104,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 
 	toolsSvc := tools.NewService(logger, conn, sessionManager)
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthog)
-	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage, tigrisStore)
+	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage)
 	packagesSvc := packages.NewService(logger, conn, sessionManager)
 	toolsetsSvc := toolsets.NewService(logger, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient))
 	templatesSvc := templates.NewService(logger, conn, sessionManager, toolsetsSvc)

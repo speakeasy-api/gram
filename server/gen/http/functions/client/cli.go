@@ -8,19 +8,32 @@
 package client
 
 import (
+	"encoding/json"
+	"fmt"
+
 	functions "github.com/speakeasy-api/gram/server/gen/functions"
 )
 
 // BuildGetSignedAssetURLPayload builds the payload for the functions
 // getSignedAssetURL endpoint from CLI flags.
-func BuildGetSignedAssetURLPayload(functionsGetSignedAssetURLFunctionToken string) (*functions.GetSignedAssetURLPayload, error) {
+func BuildGetSignedAssetURLPayload(functionsGetSignedAssetURLBody string, functionsGetSignedAssetURLFunctionToken string) (*functions.GetSignedAssetURLPayload, error) {
+	var err error
+	var body GetSignedAssetURLRequestBody
+	{
+		err = json.Unmarshal([]byte(functionsGetSignedAssetURLBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"Fugiat totam eum aperiam enim quia non.\"\n   }'")
+		}
+	}
 	var functionToken *string
 	{
 		if functionsGetSignedAssetURLFunctionToken != "" {
 			functionToken = &functionsGetSignedAssetURLFunctionToken
 		}
 	}
-	v := &functions.GetSignedAssetURLPayload{}
+	v := &functions.GetSignedAssetURLPayload{
+		AssetID: body.AssetID,
+	}
 	v.FunctionToken = functionToken
 
 	return v, nil

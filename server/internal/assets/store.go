@@ -24,6 +24,7 @@ import (
 	"github.com/aws/smithy-go"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -36,7 +37,7 @@ type BlobStore interface {
 	Exists(ctx context.Context, objectURL *url.URL) (bool, error)
 	Read(ctx context.Context, objectURL *url.URL) (rdr io.ReadCloser, err error)
 	ReadAt(ctx context.Context, objectURL *url.URL) (rdr ReaderAtCloser, size int64, err error)
-	Write(ctx context.Context, objectPath string, contentType string) (io.WriteCloser, *url.URL, error)
+	Write(ctx context.Context, objectPath string, contentType string, contentLength int64) (io.WriteCloser, *url.URL, error)
 	PresignRead(ctx context.Context, objectPath string, ttl time.Duration) (*url.URL, error)
 }
 
@@ -126,7 +127,7 @@ func (fbs *FSBlobStore) ReadAt(ctx context.Context, u *url.URL) (ReaderAtCloser,
 	return f, stat.Size(), nil
 }
 
-func (fbs *FSBlobStore) Write(ctx context.Context, pathname string, contentType string) (io.WriteCloser, *url.URL, error) {
+func (fbs *FSBlobStore) Write(ctx context.Context, pathname string, contentType string, contentLength int64) (io.WriteCloser, *url.URL, error) {
 	fbs.mut.Lock()
 	defer fbs.mut.Unlock()
 
@@ -290,7 +291,7 @@ func (gbs *GCSBlobStore) ReadAt(ctx context.Context, u *url.URL) (ReaderAtCloser
 	}, attrs.Size, nil
 }
 
-func (gbs *GCSBlobStore) Write(ctx context.Context, subpath string, contentType string) (io.WriteCloser, *url.URL, error) {
+func (gbs *GCSBlobStore) Write(ctx context.Context, subpath string, contentType string, contentLength int64) (io.WriteCloser, *url.URL, error) {
 	uri, err := gbs.getBucketURI(subpath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("generate asset path: %w", err)
@@ -517,7 +518,7 @@ func (sbs *S3BlobStore) ReadAt(ctx context.Context, u *url.URL) (ReaderAtCloser,
 	}, aws.ToInt64(headResult.ContentLength), nil
 }
 
-func (sbs *S3BlobStore) Write(ctx context.Context, subpath string, contentType string) (io.WriteCloser, *url.URL, error) {
+func (sbs *S3BlobStore) Write(ctx context.Context, subpath string, contentType string, contentLength int64) (io.WriteCloser, *url.URL, error) {
 	uri, err := sbs.getBucketURI(subpath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("generate asset path: %w", err)
@@ -532,10 +533,11 @@ func (sbs *S3BlobStore) Write(ctx context.Context, subpath string, contentType s
 			}
 		}()
 		_, err := sbs.client.PutObject(ctx, &s3.PutObjectInput{
-			Bucket:      aws.String(sbs.bucket),
-			Key:         aws.String(strings.TrimPrefix(uri.Path, "/")),
-			Body:        pr,
-			ContentType: aws.String(contentType),
+			Bucket:        aws.String(sbs.bucket),
+			Key:           aws.String(strings.TrimPrefix(uri.Path, "/")),
+			Body:          pr,
+			ContentType:   aws.String(contentType),
+			ContentLength: conv.Ptr(contentLength),
 		})
 		if err != nil {
 			sbs.logger.ErrorContext(ctx, "failed to put object to s3", attr.SlogError(err))

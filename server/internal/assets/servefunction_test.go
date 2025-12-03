@@ -11,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -31,7 +30,7 @@ func TestService_ServeFunction_Success(t *testing.T) {
 	filename := "test-functions.zip"
 
 	// Setup storage with test content first
-	writer, uri, err := ti.storage.Write(ctx, filename, contentType)
+	writer, uri, err := ti.storage.Write(ctx, filename, contentType, contentLength)
 	require.NoError(t, err)
 
 	_, err = io.Copy(writer, strings.NewReader(testContent))
@@ -44,7 +43,6 @@ func TestService_ServeFunction_Success(t *testing.T) {
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          filename,
 		Url:           uri.String(),
-		TigrisUrl:     conv.ToPGTextEmpty(""),
 		ProjectID:     projectID,
 		Sha256:        "abc123",
 		Kind:          "functions",
@@ -179,7 +177,6 @@ func TestService_ServeFunction_WrongProject(t *testing.T) {
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          "test-functions.zip",
 		Url:           "file://test-functions.zip",
-		TigrisUrl:     conv.ToPGTextEmpty(""),
 		ProjectID:     differentProjectID,
 		Sha256:        "abc123",
 		Kind:          "functions",
@@ -214,7 +211,6 @@ func TestService_ServeFunction_FileNotInStorage(t *testing.T) {
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          "missing-functions.zip",
 		Url:           "file://missing-asset.zip",
-		TigrisUrl:     conv.ToPGTextEmpty(""),
 		ProjectID:     projectID,
 		Sha256:        "abc123",
 		Kind:          "functions",
@@ -249,7 +245,6 @@ func TestService_ServeFunction_InvalidAssetURL(t *testing.T) {
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          "invalid-url.zip",
 		Url:           "ht\\ttp://invalid-url",
-		TigrisUrl:     conv.ToPGTextEmpty(""),
 		ProjectID:     projectID,
 		Sha256:        "abc123",
 		Kind:          "functions",
@@ -298,7 +293,7 @@ func TestService_ServeFunction_CrossProjectAccess(t *testing.T) {
 	filename := "project1-functions.zip"
 
 	// Creates an asset in first project
-	writer, uri, err := ti.storage.Write(ctx1, filename, contentType)
+	writer, uri, err := ti.storage.Write(ctx1, filename, contentType, contentLength)
 	require.NoError(t, err)
 
 	_, err = io.Copy(writer, strings.NewReader(testContent))
@@ -310,7 +305,6 @@ func TestService_ServeFunction_CrossProjectAccess(t *testing.T) {
 	asset, err := ti.repo.CreateAsset(ctx1, repo.CreateAssetParams{
 		Name:          filename,
 		Url:           uri.String(),
-		TigrisUrl:     conv.ToPGTextEmpty(""),
 		ProjectID:     project1ID,
 		Sha256:        "project1hash",
 		Kind:          "functions",
