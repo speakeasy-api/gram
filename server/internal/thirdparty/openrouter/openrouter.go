@@ -451,28 +451,27 @@ func (o *OpenRouter) TriggerModelUsageTracking(ctx context.Context, generationID
 	var statusCode int
 	var err error
 
-	// Retry up to 3 times with backoff for 404s (generation may not be immediately available)
-	for attempt := 0; attempt < 3; attempt++ {
+	// The generation is typically not available synchronously with the chat completion but arrives quite quickly.
+	// Temporal could handle the reliability here, but given we don't want to move this action completely to temporal right now,
+	// this simple retry backoff will be effective enough.
+	backoffs := []time.Duration{250 * time.Millisecond, 500 * time.Millisecond, time.Second}
+	for attempt := range backoffs {
 		genResp, statusCode, err = o.getGenerationDetails(ctx, generationID, orgID)
 		if err == nil {
 			break
 		}
 
-		// The generation is typically not available synchrously with the chat completion but it quite quickly
-		// Temporal could just hadnle the reliability here, but given we don't want to move this action completely to temporal right now
-		// This default simple retry backoff will be effective enough
-		if statusCode == http.StatusNotFound {
-			backoffs := []time.Duration{250 * time.Millisecond, 500 * time.Millisecond, time.Second}
-			backoff := backoffs[attempt]
+		// Retry on 404 (generation not found yet)
+		if statusCode == http.StatusNotFound && attempt < len(backoffs)-1 {
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(backoff):
+				return fmt.Errorf("context cancelled while fetching generation details: %w", ctx.Err())
+			case <-time.After(backoffs[attempt]):
 				continue
 			}
 		}
 
-		// Not a 404, don't retry
+		// Not a 404 or last attempt, don't retry
 		return err
 	}
 
