@@ -335,6 +335,16 @@ type McpMetadatum struct {
 	UpdatedAt                pgtype.Timestamptz
 }
 
+type McpRegistry struct {
+	ID        uuid.UUID
+	Name      string
+	Url       string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+	DeletedAt pgtype.Timestamptz
+	Deleted   bool
+}
+
 type OauthProxyClientInfo struct {
 	McpSlug                 string
 	ClientID                string
