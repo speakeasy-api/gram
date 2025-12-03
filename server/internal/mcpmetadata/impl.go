@@ -5,6 +5,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -93,14 +94,15 @@ type jsonSnippetData struct {
 
 type hostedPageData struct {
 	jsonSnippetData
-	MCPConfig           string
-	MCPConfigURIEncoded string
-	OrganizationName    string
-	SiteURL             string
-	LogoAssetURL        string
-	DocsURL             string
-	Instructions        string
-	IsPublic            bool
+	MCPConfig         string
+	CursorInstallLink template.URL
+	VSCodeInstallLink template.URL
+	OrganizationName  string
+	SiteURL           string
+	LogoAssetURL      string
+	DocsURL           string
+	Instructions      string
+	IsPublic          bool
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -356,26 +358,66 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeUnexpected, err, "failed to execute config snippet template").Log(ctx, s.logger)
 	}
 
-	cursorSnippetTmpl, err := template.New("cursor_snippet").Funcs(templatefuncs.FuncMap()).Parse(cursorSnippetTmplData)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to parse cursor snippet template").Log(ctx, s.logger)
+	cursorConfig := map[string]any{
+		"url":     MCPURL,
+		"headers": map[string]string{},
 	}
 
-	var cursorSnippet bytes.Buffer
-	if err := cursorSnippetTmpl.Execute(&cursorSnippet, configSnippetData); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to execute cursor snippet template").Log(ctx, s.logger)
+	vsCodeConfig := map[string]any{
+		"name":    toolset.Name,
+		"type":    "http",
+		"url":     MCPURL,
+		"headers": map[string]string{},
+	}
+
+	for _, input := range securityInputs {
+		headerKey := templatefuncs.AsHTTPHeader(input.SystemName)
+		cursorConfig["headers"].(map[string]string)[headerKey] = fmt.Sprintf(
+			"{{%s}}",
+			input.DisplayName,
+		)
+		vsCodeConfig["headers"].(map[string]string)[headerKey] = fmt.Sprintf(
+			"your-%s-value",
+			input.DisplayName,
+		)
+	}
+
+	cursorConfigBytes, err := json.Marshal(cursorConfig)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to marshal cursor config").Log(ctx, s.logger)
+	}
+
+	cursorURL := url.URL{
+		Scheme: "cursor",
+		Host:   "anysphere.cursor-deeplink",
+		Path:   "/mcp/install",
+		RawQuery: url.Values{
+			"name":   {toolset.Name},
+			"config": {base64.StdEncoding.EncodeToString(cursorConfigBytes)},
+		}.Encode(),
+	}
+
+	vsCodeConfigBytes, err := json.Marshal(vsCodeConfig)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to marshal VSCode config").Log(ctx, s.logger)
+	}
+
+	vsCodeURL := url.URL{
+		Scheme: "vscode",
+		Opaque: "mcp/install?" + url.QueryEscape(string(vsCodeConfigBytes)),
 	}
 
 	data := hostedPageData{
-		jsonSnippetData:     configSnippetData,
-		MCPConfig:           configSnippet.String(),
-		MCPConfigURIEncoded: url.QueryEscape(base64.StdEncoding.EncodeToString(cursorSnippet.Bytes())),
-		OrganizationName:    organization.Name,
-		SiteURL:             s.siteURL.String(),
-		LogoAssetURL:        logoAssetURL,
-		DocsURL:             docsURL,
-		Instructions:        instructions,
-		IsPublic:            toolset.McpIsPublic,
+		jsonSnippetData:   configSnippetData,
+		MCPConfig:         configSnippet.String(),
+		CursorInstallLink: template.URL(cursorURL.String()),
+		VSCodeInstallLink: template.URL(vsCodeURL.String()),
+		OrganizationName:  organization.Name,
+		SiteURL:           s.siteURL.String(),
+		LogoAssetURL:      logoAssetURL,
+		DocsURL:           docsURL,
+		Instructions:      instructions,
+		IsPublic:          toolset.McpIsPublic,
 	}
 
 	hostedPageTmpl, err := template.New("hosted_page").Funcs(templatefuncs.FuncMap()).Parse(hostedPageTmplData)
