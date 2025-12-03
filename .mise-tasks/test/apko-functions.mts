@@ -133,6 +133,7 @@ export GRAM_FUNCTION_AUTH_SECRET="dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM="
 export GRAM_PROJECT_ID="019b0849-297e-7d12-85d8-feceb2bee6ef"
 export GRAM_DEPLOYMENT_ID="019b0849-7c1f-7b5c-8326-da62cb20aabd"
 export GRAM_FUNCTION_ID="019b0849-a74f-7945-9ce1-1f0323b379da"
+export GRAM_SERVER_URL="https://localhost:8080"
 gram-runner -init -language $RUNNER_LANGUAGE
 echo ==START==
 ${script}
