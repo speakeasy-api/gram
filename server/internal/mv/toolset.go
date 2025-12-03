@@ -859,9 +859,6 @@ func extractFunctionEnvVars(ctx context.Context, logger *slog.Logger, variableDa
 		}
 	}
 
-	j, _ := json.Marshal(authInputData)
-	println("\n\n\n\nauthInputData: ", string(j))
-
 	if authInputData != nil {
 		var authInputs *authInputManifest
 		if err := json.Unmarshal(authInputData, &authInputs); err != nil {
