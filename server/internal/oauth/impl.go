@@ -97,6 +97,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 	// OAuth 2.1 Token Endpoint
 	o11y.AttachHandler(mux, "POST", "/oauth/{mcpSlug}/token", func(w http.ResponseWriter, r *http.Request) {
+		println("\n\n\n\nhandleToken request: ", r.URL.String())
 		oops.ErrHandle(service.logger, service.handleToken).ServeHTTP(w, r)
 	})
 }
@@ -572,11 +573,14 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to create authorization grant", attr.SlogError(err))
 
+		println("\n\n\n\n\n\n\ngrant error: ", err.Error())
 		// Build error response
 		errorURL, _ := s.grantManager.BuildErrorResponse(ctx, authReq.RedirectURI, "server_error", "Failed to create authorization grant", authReq.State)
 		http.Redirect(w, r, errorURL, http.StatusFound)
 		return nil
 	}
+
+	println("\n\n\ngrant code: ", grant.Code)
 
 	s.logger.InfoContext(ctx, "authorization grant created after external provider callback",
 		attr.SlogOAuthClientID(authReq.ClientID),
