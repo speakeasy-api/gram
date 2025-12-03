@@ -12,9 +12,11 @@ import { Type } from "./ui/type";
 export function NavMenu({
   items,
   className,
+  children,
 }: {
   items: AppRoute[];
   className?: string;
+  children?: React.ReactNode;
 }) {
   return (
     <SidebarMenu className={className}>
@@ -23,6 +25,7 @@ export function NavMenu({
           <NavMenuButton item={item} />
         </SidebarMenuItem>
       ))}
+      {children}
     </SidebarMenu>
   );
 }
