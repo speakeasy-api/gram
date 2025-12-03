@@ -431,11 +431,21 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeUnexpected, err, "failed to build vscode install URL").Log(ctx, s.logger)
 	}
 
+	safeVsCodeURL, err := safeTemplateURL(vsCodeURL, "vscode")
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to sanitize vscode install URL").Log(ctx, s.logger)
+	}
+
+	safeCursorURL, err := safeTemplateURL(cursorURL, "cursor")
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to sanitize cursor install URL").Log(ctx, s.logger)
+	}
+
 	data := hostedPageData{
 		jsonSnippetData:   configSnippetData,
 		MCPConfig:         configSnippet.String(),
-		CursorInstallLink: template.URL(html.EscapeString(cursorURL)),
-		VSCodeInstallLink: template.URL(html.EscapeString(vsCodeURL)),
+		CursorInstallLink: safeCursorURL,
+		VSCodeInstallLink: safeVsCodeURL,
 		OrganizationName:  organization.Name,
 		SiteURL:           s.siteURL.String(),
 		LogoAssetURL:      logoAssetURL,
@@ -463,6 +473,42 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	}
 
 	return nil
+}
+
+// Ensure that the provided rawURL uses the allowedScheme. allowedScheme may
+// not be a dangerous scheme (eg: "javascript"). The returned URL is also
+// HTML-escaped.
+func safeTemplateURL(rawURL string, allowedScheme string) (template.URL, error) {
+	dangerousUrlSchemes := []string{"javascript", "data", "vbscript", "file", "about", "blob"}
+
+	for _, dangerousScheme := range dangerousUrlSchemes {
+		if strings.HasPrefix(strings.ToLower(rawURL), dangerousScheme+":") {
+			return template.URL(""), oops.E(
+				oops.CodeBadRequest,
+				nil,
+				fmt.Sprintf("%s scheme is not allowed", dangerousScheme),
+			).Log(context.Background(), nil)
+		}
+	}
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return template.URL(""), oops.E(
+			oops.CodeBadRequest,
+			err,
+			"invalid URL",
+		).Log(context.Background(), nil)
+	}
+
+	if u.Scheme != allowedScheme {
+		return template.URL(""), oops.E(
+			oops.CodeBadRequest,
+			nil,
+			fmt.Sprintf("invalid URL scheme: %s", u.Scheme),
+		).Log(context.Background(), nil)
+	}
+
+	return template.URL(html.EscapeString(u.String())), nil
 }
 
 func (s *Service) resolveMCPURLFromContext(ctx context.Context, toolset toolsets_repo.Toolset, serverUrl string) (string, error) {
