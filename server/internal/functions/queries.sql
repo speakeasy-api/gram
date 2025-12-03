@@ -145,3 +145,14 @@ WHERE
   AND reaped_at IS NULL
 ORDER BY created_at DESC
 LIMIT 1;
+
+-- name: GetFunctionAssetURL :one
+SELECT a.url
+FROM deployments_functions df
+INNER JOIN assets a ON df.asset_id = a.id
+WHERE
+  a.project_id = @project_id
+  AND df.deployment_id = @deployment_id
+  AND df.id = @function_id
+  AND a.id = @asset_id
+  AND a.deleted IS FALSE;

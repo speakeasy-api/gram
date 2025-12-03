@@ -41,6 +41,24 @@ var functionsFlags = []cli.Flag{
 		Required: false,
 	},
 	&cli.StringFlag{
+		Name:     "functions-tigris-bucket-uri",
+		Usage:    "The URI of the Tigris bucket to use for storing function artifacts.",
+		EnvVars:  []string{"GRAM_FUNCTIONS_TIGRIS_BUCKET_URI"},
+		Required: false,
+	},
+	&cli.StringFlag{
+		Name:     "functions-tigris-access-key",
+		Usage:    "The access key for the Tigris bucket.",
+		EnvVars:  []string{"GRAM_FUNCTIONS_TIGRIS_ACCESS_KEY"},
+		Required: false,
+	},
+	&cli.StringFlag{
+		Name:     "functions-tigris-secret-key",
+		Usage:    "The secret key for the Tigris bucket.",
+		EnvVars:  []string{"GRAM_FUNCTIONS_TIGRIS_SECRET_KEY"},
+		Required: false,
+	},
+	&cli.StringFlag{
 		Name:     "functions-local-runner-root",
 		Usage:    "Path to the functions package containing the entrypoints for various runtimes.",
 		EnvVars:  []string{"GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT"},

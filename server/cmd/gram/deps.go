@@ -384,6 +384,7 @@ func newBillingProvider(
 }
 
 func newFunctionOrchestrator(
+	ctx context.Context,
 	c *cli.Context,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
@@ -419,6 +420,9 @@ func newFunctionOrchestrator(
 		ociImage := c.String("functions-runner-oci-image")
 		defaultOrg := c.String("functions-flyio-org")
 		defaultRegion := c.String("functions-flyio-region")
+		tigrisBucketURI := c.String("functions-tigris-bucket-uri")
+		tigrisKey := c.String("functions-tigris-key")
+		tigrisSecret := c.String("functions-tigris-secret")
 
 		if err := inv.Check(
 			"flyio flags",
@@ -426,6 +430,9 @@ func newFunctionOrchestrator(
 			"oci image is set", ociImage != "",
 			"default org is set", defaultOrg != "",
 			"default region is set", defaultRegion != "",
+			"tigris bucket uri is set", tigrisBucketURI != "",
+			"tigris key is set", tigrisKey != "",
+			"tigris secret is set", tigrisSecret != "",
 		); err != nil {
 			return nil, nilShutdown, fmt.Errorf("invalid configuration for functions: %w", err)
 		}
@@ -436,11 +443,25 @@ func newFunctionOrchestrator(
 			return nil, nilShutdown, fmt.Errorf("create functions image selector: %w", err)
 		}
 
+		store, err := assets.NewS3BlobStore(ctx, logger, tigrisBucketURI, assets.S3BlobStoreOptions{
+			BaseEndpoint: "https://t3.storage.dev",
+			Region:       "auto",
+			UsePathStyle: false,
+			AccessKey:    tigrisKey,
+			AccessSecret: tigrisSecret,
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("create tigris blob store: %w", err)
+		}
+
+		tigrisStore := assets.NewFlyTigrisStore(store, assets.WithTigrisPresignHost("fly.storage.tigris.dev"))
+
 		return functions.NewFlyRunner(
 			logger,
 			tracerProvider,
 			db,
 			assetStore,
+			tigrisStore,
 			imgSelector,
 			enc,
 			functions.FlyRunnerOptions{

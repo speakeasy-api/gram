@@ -174,6 +174,24 @@ func newStartCommand() *cli.Command {
 			Required: true,
 		},
 		&cli.StringFlag{
+			Name:     "tigris-backend",
+			Usage:    "The backend to use for storing function assets externally",
+			EnvVars:  []string{"GRAM_FUNCTIONS_TIGRIS_BACKEND"},
+			Required: true,
+			Action: func(c *cli.Context, val string) error {
+				if val != "fs" && val != "s3" {
+					return fmt.Errorf("invalid tigris backend: %s", val)
+				}
+				return nil
+			},
+		},
+		&cli.StringFlag{
+			Name:     "tigris-uri",
+			Usage:    "The location of the tigris backend to connect to",
+			EnvVars:  []string{"GRAM_FUNCTIONS_TIGRIS_URI"},
+			Required: true,
+		},
+		&cli.StringFlag{
 			Name:    "redis-cache-addr",
 			Usage:   "Address of the redis cache server",
 			EnvVars: []string{"GRAM_REDIS_CACHE_ADDR"},
@@ -504,7 +522,7 @@ func newStartCommand() *cli.Command {
 				}
 			}
 
-			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, db, assetStorage, encryptionClient)
+			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(ctx, c, logger, tracerProvider, db, assetStorage, encryptionClient)
 			if err != nil {
 				return fmt.Errorf("failed to create functions orchestrator: %w", err)
 			}

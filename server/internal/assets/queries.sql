@@ -49,7 +49,7 @@ WHERE
 SELECT * FROM assets WHERE project_id = @project_id;
 
 -- name: GetAssetURLs :many
-SELECT id, url, sha256
+SELECT id, url, sha256, content_type, content_length
 FROM assets
 WHERE project_id = @project_id
   AND id = ANY(@ids::uuid[])

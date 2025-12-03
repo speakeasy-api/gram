@@ -30,7 +30,7 @@ func TestService_ServeOpenAPIv3_Success(t *testing.T) {
 	filename := "test-openapi.yaml"
 
 	// Setup storage with test content first
-	writer, uri, err := ti.storage.Write(ctx, filename, strings.NewReader(testContent), contentType)
+	writer, uri, err := ti.storage.Write(ctx, filename, contentType, contentLength)
 	require.NoError(t, err)
 
 	_, err = io.Copy(writer, strings.NewReader(testContent))
@@ -280,7 +280,7 @@ func TestService_ServeOpenAPIv3_JSONContent(t *testing.T) {
 	filename := "test-openapi.json"
 
 	// Setup storage with test content first
-	writer, uri, err := ti.storage.Write(ctx, filename, strings.NewReader(testContent), contentType)
+	writer, uri, err := ti.storage.Write(ctx, filename, contentType, contentLength)
 	require.NoError(t, err)
 
 	_, err = io.Copy(writer, strings.NewReader(testContent))
@@ -353,7 +353,7 @@ func TestService_ServeOpenAPIv3_CrossProjectAccess(t *testing.T) {
 	filename := "project1-openapi.yaml"
 
 	// Ceates an asset in first project
-	writer, uri, err := ti.storage.Write(ctx1, filename, strings.NewReader(testContent), contentType)
+	writer, uri, err := ti.storage.Write(ctx1, filename, contentType, contentLength)
 	require.NoError(t, err)
 
 	_, err = io.Copy(writer, strings.NewReader(testContent))

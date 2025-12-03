@@ -60,6 +60,7 @@ type FlyRunner struct {
 	tracer          trace.Tracer
 	db              *pgxpool.Pool
 	assetStorage    assets.BlobStore
+	tigris          *assets.FlyTigrisStore
 	client          *fly.Client
 	tokens          *tokens.Tokens
 	machinesAPIBase string
@@ -81,6 +82,7 @@ func NewFlyRunner(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	assetStorage assets.BlobStore,
+	tigrisStorage *assets.FlyTigrisStore,
 	imageSelector ImageSelector,
 	encryption *encryption.Client,
 	o FlyRunnerOptions,
@@ -762,7 +764,20 @@ func (f *FlyRunner) serializeAssets(
 	logger *slog.Logger,
 	assets []RunnerAsset,
 ) ([]*fly.File, error) {
-	total := 0
+	total := int64(0)
+	useTigris := false
+	for _, asset := range assets {
+		total += asset.ContentLength
+		if total >= 700*1024 {
+			useTigris = true
+			break
+		}
+	}
+
+	if useTigris {
+		logger.InfoContext(ctx, "total function assets greater than 700KiB")
+		logger.InfoContext(ctx, "copying function assets to blob storage")
+	}
 
 	files := make([]*fly.File, 0, len(assets))
 	for _, asset := range assets {
@@ -770,25 +785,38 @@ func (f *FlyRunner) serializeAssets(
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch function asset").Log(ctx, logger)
 		}
-		defer o11y.LogDefer(ctx, f.logger, func() error { return rdr.Close() })
+		defer o11y.LogDefer(ctx, f.logger, func() error { return oops.Prefix(rdr.Close(), "close function asset reader") })
 
-		data, err := io.ReadAll(rdr)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to read function asset").Log(ctx, logger)
+		if useTigris {
+			wr, _, err := f.tigris.Write(ctx, asset.AssetURL.Path, "", asset.ContentLength)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to create writer for function asset").Log(ctx, logger)
+			}
+			defer o11y.LogDefer(ctx, f.logger, func() error { return oops.Prefix(wr.Close(), "close function asset tigris writer") })
+
+			if _, err := io.Copy(wr, rdr); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to copy function asset to blob storage").Log(ctx, logger)
+			}
+
+			encoded := base64.StdEncoding.EncodeToString([]byte(asset.AssetID.String()))
+			files = append(files, &fly.File{
+				Mode:      conv.Default(asset.Mode, 0444),
+				GuestPath: fmt.Sprintf("%s.presign", asset.GuestPath),
+				RawValue:  &encoded,
+			})
+		} else {
+			data, err := io.ReadAll(rdr)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to read function asset").Log(ctx, logger)
+			}
+
+			encoded := base64.StdEncoding.EncodeToString(data)
+			files = append(files, &fly.File{
+				Mode:      conv.Default(asset.Mode, 0444),
+				GuestPath: asset.GuestPath,
+				RawValue:  &encoded,
+			})
 		}
-
-		encoded := base64.StdEncoding.EncodeToString(data)
-		total += len(data)
-
-		if total > 1*1024*1024 {
-			return nil, oops.E(oops.CodeInvalid, nil, "total function assets size exceeds 1MiB limit").Log(ctx, logger)
-		}
-
-		files = append(files, &fly.File{
-			Mode:      conv.Default(asset.Mode, 0444),
-			GuestPath: asset.GuestPath,
-			RawValue:  &encoded,
-		})
 	}
 
 	return files, nil

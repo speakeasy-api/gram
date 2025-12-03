@@ -51,6 +51,8 @@ async function run() {
     - A Fly.io account (https://fly.io)
     - A Fly.io organization-scoped token (https://fly.io/tokens/create)
     - A Fly.io app hosting the the Gram Functions runner images
+    - A Tigris bucket associated with the Fly.io organization
+    - A Tigris access key and secret with permissions to access the bucket (https://console.tigris.dev)
 `.slice(1, -1),
     "Pre-requisites",
   );
@@ -69,8 +71,11 @@ async function run() {
     process.exit(0);
   }
 
-  const token = await password({
+  const initialToken =
+    process.env["GRAM_FUNCTIONS_FLYIO_API_TOKEN"] || undefined;
+  const token = await text({
     message: "💬 Enter your Fly.io organization-scoped token",
+    initialValue: initialToken,
     validate: (value) => {
       if (!value?.startsWith("FlyV1 ")) {
         return "Invalid Fly.io token. It should start with 'FlyV1 ...'.";
@@ -82,18 +87,57 @@ async function run() {
     process.exit(0);
   }
 
+  const initialOrg = process.env["GRAM_FUNCTIONS_FLYIO_ORG"] || undefined;
   const org = await text({
     message: "💬 Enter your Fly.io organization name",
+    initialValue: initialOrg,
   });
   if (isCancel(org)) {
     cancel("Operation cancelled.");
     process.exit(0);
   }
 
+  const initialApp =
+    process.env["GRAM_FUNCTIONS_RUNNER_OCI_IMAGE"]?.split("/")[1] || undefined;
   const app = await text({
     message: "💬 Enter your Fly.io app name for Gram Functions runner images",
+    initialValue: initialApp,
   });
   if (isCancel(app)) {
+    cancel("Operation cancelled.");
+    process.exit(0);
+  }
+
+  const initialTigrisBucket =
+    process.env["GRAM_FUNCTIONS_TIGRIS_BUCKET_URI"]?.slice("s3://".length) ||
+    undefined;
+  const bucket = await text({
+    message: "💬 Enter your Tigris bucket name for Gram Functions",
+    initialValue: initialTigrisBucket,
+  });
+  if (isCancel(bucket)) {
+    cancel("Operation cancelled.");
+    process.exit(0);
+  }
+
+  const initialTigrisKey =
+    process.env["GRAM_FUNCTIONS_TIGRIS_KEY"] || undefined;
+  const tigrisKey = await text({
+    message: `💬 Enter your Tigris access key for ${bucket}`,
+    initialValue: initialTigrisKey,
+  });
+  if (isCancel(tigrisKey)) {
+    cancel("Operation cancelled.");
+    process.exit(0);
+  }
+
+  const initialTigrisSecret =
+    process.env["GRAM_FUNCTIONS_TIGRIS_SECRET"] || undefined;
+  const tigrisSecret = await text({
+    message: `💬 Enter your Tigris secret key for ${bucket}`,
+    initialValue: initialTigrisSecret,
+  });
+  if (isCancel(tigrisSecret)) {
     cancel("Operation cancelled.");
     process.exit(0);
   }
@@ -105,6 +149,9 @@ async function run() {
     `GRAM_FUNCTIONS_RUNNER_OCI_IMAGE=registry.fly.io/${app}`,
     `GRAM_FUNCTIONS_RUNNER_VERSION=main`,
     `GRAM_FUNCTIONS_FLYIO_REGION=us`,
+    `GRAM_FUNCTIONS_TIGRIS_BUCKET_URI=s3://${bucket}`,
+    `GRAM_FUNCTIONS_TIGRIS_KEY=${tigrisKey}`,
+    `GRAM_FUNCTIONS_TIGRIS_SECRET=${tigrisSecret}`,
   ];
 
   await $`mise set --file mise.local.toml ${args}`;
