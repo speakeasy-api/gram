@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 824011ee00f5d0bdb04997d159c37917
+  docChecksum: d0eaea59b027698a28040185e8c50264
   docVersion: 0.0.1
   speakeasyVersion: 1.661.1
   generationVersion: 2.763.2
-  releaseVersion: 0.21.2
-  configChecksum: 764c45e3c82b7e30ef40d0a03b1c6580
+  releaseVersion: 0.21.3
+  configChecksum: d71af0ffc68f831eeaceb0651e05a293
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -43,6 +43,12 @@ generatedFiles:
   - docs/models/components/addoauthproxyserverrequestbody.md
   - docs/models/components/addopenapiv3deploymentassetform.md
   - docs/models/components/addpackageform.md
+  - docs/models/components/agentresponseoutput.md
+  - docs/models/components/agentresponserequest.md
+  - docs/models/components/agentresponsetext.md
+  - docs/models/components/agentsubagent.md
+  - docs/models/components/agenttextformat.md
+  - docs/models/components/agenttoolset.md
   - docs/models/components/asset.md
   - docs/models/components/canonicaltoolattributes.md
   - docs/models/components/chat.md
@@ -156,6 +162,7 @@ generatedFiles:
   - docs/models/components/sourceenvironmentlink.md
   - docs/models/components/sourceenvironmentlinksourcekind.md
   - docs/models/components/sourcekind.md
+  - docs/models/components/status.md
   - docs/models/components/tierlimits.md
   - docs/models/components/tool.md
   - docs/models/components/toolentry.md
@@ -206,6 +213,8 @@ generatedFiles:
   - docs/models/operations/clonetoolsetsecurity.md
   - docs/models/operations/clonetoolsetsecurityoption1.md
   - docs/models/operations/clonetoolsetsecurityoption2.md
+  - docs/models/operations/createagentresponserequest.md
+  - docs/models/operations/createagentresponsesecurity.md
   - docs/models/operations/createapikeyrequest.md
   - docs/models/operations/createapikeysecurity.md
   - docs/models/operations/createcheckoutrequest.md
@@ -234,6 +243,8 @@ generatedFiles:
   - docs/models/operations/createtoolsetsecurityoption2.md
   - docs/models/operations/creditusagerequest.md
   - docs/models/operations/creditusagesecurity.md
+  - docs/models/operations/deleteagentresponserequest.md
+  - docs/models/operations/deleteagentresponsesecurity.md
   - docs/models/operations/deletedomainrequest.md
   - docs/models/operations/deletedomainsecurity.md
   - docs/models/operations/deleteenvironmentrequest.md
@@ -265,6 +276,8 @@ generatedFiles:
   - docs/models/operations/getactivedeploymentsecurity.md
   - docs/models/operations/getactivedeploymentsecurityoption1.md
   - docs/models/operations/getactivedeploymentsecurityoption2.md
+  - docs/models/operations/getagentresponserequest.md
+  - docs/models/operations/getagentresponsesecurity.md
   - docs/models/operations/getdeploymentlogsrequest.md
   - docs/models/operations/getdeploymentlogssecurity.md
   - docs/models/operations/getdeploymentlogssecurityoption1.md
@@ -455,6 +468,7 @@ generatedFiles:
   - docs/models/operations/upsertglobalvariationsecurityoption2.md
   - docs/models/operations/validateapikeyrequest.md
   - docs/models/operations/validateapikeysecurity.md
+  - docs/sdks/agents/README.md
   - docs/sdks/assets/README.md
   - docs/sdks/auth/README.md
   - docs/sdks/chat/README.md
@@ -484,6 +498,9 @@ generatedFiles:
   - jsr.json
   - package.json
   - src/core.ts
+  - src/funcs/agentsCreate.ts
+  - src/funcs/agentsDelete.ts
+  - src/funcs/agentsGet.ts
   - src/funcs/assetsListAssets.ts
   - src/funcs/assetsServeFunction.ts
   - src/funcs/assetsServeImage.ts
@@ -597,6 +614,12 @@ generatedFiles:
   - src/models/components/addoauthproxyserverrequestbody.ts
   - src/models/components/addopenapiv3deploymentassetform.ts
   - src/models/components/addpackageform.ts
+  - src/models/components/agentresponseoutput.ts
+  - src/models/components/agentresponserequest.ts
+  - src/models/components/agentresponsetext.ts
+  - src/models/components/agentsubagent.ts
+  - src/models/components/agenttextformat.ts
+  - src/models/components/agenttoolset.ts
   - src/models/components/asset.ts
   - src/models/components/canonicaltoolattributes.ts
   - src/models/components/chat.ts
@@ -736,6 +759,7 @@ generatedFiles:
   - src/models/operations/authlogin.ts
   - src/models/operations/checkmcpslugavailability.ts
   - src/models/operations/clonetoolset.ts
+  - src/models/operations/createagentresponse.ts
   - src/models/operations/createapikey.ts
   - src/models/operations/createcheckout.ts
   - src/models/operations/createcustomersession.ts
@@ -746,6 +770,7 @@ generatedFiles:
   - src/models/operations/createtemplate.ts
   - src/models/operations/createtoolset.ts
   - src/models/operations/creditusage.ts
+  - src/models/operations/deleteagentresponse.ts
   - src/models/operations/deletedomain.ts
   - src/models/operations/deleteenvironment.ts
   - src/models/operations/deleteglobalvariation.ts
@@ -756,6 +781,7 @@ generatedFiles:
   - src/models/operations/deletetoolsetenvironmentlink.ts
   - src/models/operations/evolvedeployment.ts
   - src/models/operations/getactivedeployment.ts
+  - src/models/operations/getagentresponse.ts
   - src/models/operations/getdeployment.ts
   - src/models/operations/getdeploymentlogs.ts
   - src/models/operations/getdomain.ts
@@ -822,6 +848,9 @@ generatedFiles:
   - src/react-query/activeDeployment.ts
   - src/react-query/addExternalOAuthServer.ts
   - src/react-query/addOAuthProxyServer.ts
+  - src/react-query/agentsCreate.ts
+  - src/react-query/agentsDelete.ts
+  - src/react-query/agentsGet.ts
   - src/react-query/checkMCPSlugAvailability.ts
   - src/react-query/cloneToolset.ts
   - src/react-query/createAPIKey.ts
@@ -903,6 +932,7 @@ generatedFiles:
   - src/react-query/uploadOpenAPIv3.ts
   - src/react-query/upsertGlobalVariation.ts
   - src/react-query/validateAPIKey.ts
+  - src/sdk/agents.ts
   - src/sdk/assets.ts
   - src/sdk/auth.ts
   - src/sdk/chat.ts
@@ -1897,5 +1927,38 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  deleteAgentResponse:
+    speakeasy-default-delete-agent-response:
+      parameters:
+        query:
+          response_id: "<id>"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getAgentResponse:
+    speakeasy-default-get-agent-response:
+      parameters:
+        query:
+          response_id: "<id>"
+      responses:
+        "200":
+          application/json: {"created_at": 430110, "id": "<id>", "model": "LeBaron", "object": "<value>", "output": ["<value 1>"], "result": "<value>", "status": "in_progress", "temperature": 5364.39, "text": {"format": {"type": "<value>"}}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  createAgentResponse:
+    speakeasy-default-create-agent-response:
+      requestBody:
+        application/json: {"input": "<value>", "model": "Wrangler"}
+      responses:
+        "200":
+          application/json: {"created_at": 851599, "id": "<id>", "model": "Sentra", "object": "<value>", "output": ["<value 1>", "<value 2>"], "result": "<value>", "status": "failed", "temperature": 3010.1, "text": {"format": {"type": "<value>"}}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}

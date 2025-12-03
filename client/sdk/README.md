@@ -122,6 +122,12 @@ run();
 <details open>
 <summary>Available methods</summary>
 
+### [agents](docs/sdks/agents/README.md)
+
+* [delete](docs/sdks/agents/README.md#delete) - deleteResponse agents
+* [get](docs/sdks/agents/README.md#get) - getResponse agents
+* [create](docs/sdks/agents/README.md#create) - createResponse agents
+
 ### [assets](docs/sdks/assets/README.md)
 
 * [listAssets](docs/sdks/assets/README.md#listassets) - listAssets assets
@@ -290,6 +296,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 
 <summary>Available standalone functions</summary>
 
+- [`agentsCreate`](docs/sdks/agents/README.md#create) - createResponse agents
+- [`agentsDelete`](docs/sdks/agents/README.md#delete) - deleteResponse agents
+- [`agentsGet`](docs/sdks/agents/README.md#get) - getResponse agents
 - [`assetsListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
 - [`assetsServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 - [`assetsServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
@@ -406,6 +415,9 @@ To learn about this feature and how to get started, check
 - [`useActiveDeployment`](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 - [`useAddExternalOAuthServerMutation`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 - [`useAddOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
+- [`useAgentsCreateMutation`](docs/sdks/agents/README.md#create) - createResponse agents
+- [`useAgentsDeleteMutation`](docs/sdks/agents/README.md#delete) - deleteResponse agents
+- [`useAgentsGet`](docs/sdks/agents/README.md#get) - getResponse agents
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 - [`useCloneToolsetMutation`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys

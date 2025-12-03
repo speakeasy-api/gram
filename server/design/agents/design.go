@@ -77,8 +77,8 @@ var _ = Service("agents", func() {
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "getAgentResponse")
-		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:operationId", "deleteAgentResponse")
+		Meta("openapi:extension:x-speakeasy-name-override", "delete")
 	})
 })
 

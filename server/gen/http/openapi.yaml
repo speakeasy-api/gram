@@ -335,7 +335,7 @@ paths:
             summary: deleteResponse agents
             tags:
                 - agents
-            x-speakeasy-name-override: get
+            x-speakeasy-name-override: delete
     /rpc/assets.list:
         get:
             description: |-
