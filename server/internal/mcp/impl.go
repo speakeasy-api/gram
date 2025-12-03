@@ -369,8 +369,6 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	case toolset.McpIsPublic && toolset.OauthProxyServerID.Valid:
 		println("\n\n\n\ntoken: ", token)
 		token, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
-		println("\n\n\n\nerr: ", err.Error())
-		println("\n\n\n\ntoken response is nil: ", token == nil)
 		if err != nil {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
 			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
