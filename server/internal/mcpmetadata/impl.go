@@ -81,16 +81,15 @@ type securityInput struct {
 	Sensitive   bool
 }
 
-type CursorConfig struct {
-	URL     string            `json:"url"`
+type IDEInstallLinkConfig struct {
+	// Required for vscode, cursor
+	URL string `json:"url"`
+	// Applicable for vscode, cursor
 	Headers map[string]string `json:"headers"`
-}
-
-type VSCodeConfig struct {
-	Name    string            `json:"name"`
-	Type    string            `json:"type"`
-	URL     string            `json:"url"`
-	Headers map[string]string `json:"headers"`
+	// Required for vscode
+	Name string `json:"name"`
+	// Required for vscode ("http" only)
+	Type string `json:"type"`
 }
 
 type jsonSnippetData struct {
@@ -252,7 +251,7 @@ func toMcpMetadata(record repo.McpMetadatum) *types.McpMetadata {
 }
 
 func buildCursorInstallURL(toolsetName, mcpURL string, inputs []securityInput) (string, error) {
-	config := CursorConfig{
+	config := IDEInstallLinkConfig{
 		URL:     mcpURL,
 		Headers: map[string]string{},
 	}
@@ -280,7 +279,7 @@ func buildCursorInstallURL(toolsetName, mcpURL string, inputs []securityInput) (
 }
 
 func buildVSCodeInstallURL(toolsetName, mcpURL string, inputs []securityInput) (string, error) {
-	config := VSCodeConfig{
+	config := IDEInstallLinkConfig{
 		Name:    toolsetName,
 		Type:    "http",
 		URL:     mcpURL,
@@ -479,14 +478,15 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 // not be a dangerous scheme (eg: "javascript"). The returned URL is also
 // HTML-escaped.
 func safeTemplateURL(rawURL string, allowedScheme string) (template.URL, error) {
-	dangerousUrlSchemes := []string{"javascript", "data", "vbscript", "file", "about", "blob"}
+	dangerousURLSchemes := []string{"javascript", "data", "vbscript", "file", "about", "blob"}
 
-	for _, dangerousScheme := range dangerousUrlSchemes {
+	for _, dangerousScheme := range dangerousURLSchemes {
 		if strings.HasPrefix(strings.ToLower(rawURL), dangerousScheme+":") {
 			return template.URL(""), oops.E(
 				oops.CodeBadRequest,
 				nil,
-				fmt.Sprintf("%s scheme is not allowed", dangerousScheme),
+				"%s scheme is not allowed",
+				dangerousScheme,
 			).Log(context.Background(), nil)
 		}
 	}
@@ -504,11 +504,12 @@ func safeTemplateURL(rawURL string, allowedScheme string) (template.URL, error) 
 		return template.URL(""), oops.E(
 			oops.CodeBadRequest,
 			nil,
-			fmt.Sprintf("invalid URL scheme: %s", u.Scheme),
+			"invalid URL scheme: %s",
+			u.Scheme,
 		).Log(context.Background(), nil)
 	}
 
-	return template.URL(html.EscapeString(u.String())), nil
+	return template.URL(html.EscapeString(u.String())), nil // #nosec G203 // This has been checked and escaped
 }
 
 func (s *Service) resolveMCPURLFromContext(ctx context.Context, toolset toolsets_repo.Toolset, serverUrl string) (string, error) {
