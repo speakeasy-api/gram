@@ -13808,6 +13808,8 @@ tags:
       description: Manage custom domains for gram.
     - name: environments
       description: Managing toolset environments.
+    - name: mcpRegistries
+      description: External MCP registry operations
     - name: functions
       description: Endpoints for working with functions.
     - name: instances
@@ -13818,8 +13820,6 @@ tags:
       description: Managing system api keys.
     - name: mcpMetadata
       description: Manages metadata for the MCP install page shown to users.
-    - name: mcpRegistries
-      description: External MCP registry operations
     - name: packages
       description: Manages packages in Gram.
     - name: features
