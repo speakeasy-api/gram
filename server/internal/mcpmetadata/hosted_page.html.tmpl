@@ -801,124 +801,6 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
         </ol>
       </div>
     </template>
-    <!-- WINDSURF INSTALL -->
-    <template class="install-target-template" data-install-target="windsurf">
-      <div class="modal-content">
-        <h1>Instructions</h1>
-        <ol>
-          <li class="instruction-item">
-            Open Windsurf and navigate to the Cascade panel
-          </li>
-          <li class="instruction-item">
-            Click "<svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              class="lucide lucide-package-icon lucide-package"
-            >
-              <path
-                d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"
-              />
-              <path d="M12 22V12" />
-              <polyline points="3.29 7 12 12 20.71 7" />
-              <path d="m7.5 4.27 9 5.15" /></svg
-            >"
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              class="lucide lucide-arrow-right-icon lucide-arrow-right"
-            >
-              <path d="M5 12h14" />
-              <path d="m12 5 7 7-7 7" />
-            </svg>
-            "<svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              class="lucide lucide-settings2-icon lucide-settings-2"
-            >
-              <path d="M14 17H5" />
-              <path d="M19 7h-9" />
-              <circle cx="17" cy="17" r="3" />
-              <circle cx="7" cy="7" r="3" /></svg
-            >" in order to open your mcp_config.json
-          </li>
-          <li>
-            Add this configuration to your mcp_config.json (don't forget to add
-            your values for any environment variables):
-            <div class="card code-container">
-              <button class="copy-button waiting">
-                <svg
-                  class="icon icon-copy"
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                >
-                  <use href="#icon-copy"></use>
-                </svg>
-                <svg
-                  class="icon icon-copy-success"
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                >
-                  <use href="#icon-copy-check"></use>
-                </svg>
-              </button>
-              <code class="code-snippet language-json">{
-  "mcpServers": {
-    "{{ .MCPSlug }}": {{ indent 4 .MCPConfig -}}
-  }
-}</code>
-            </div>
-          </li>
-          <li class="instruction-item">
-            Back in the Manage plugins tab, click
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              class="lucide lucide-refresh-cw-icon lucide-refresh-cw"
-            >
-              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-              <path d="M21 3v5h-5" />
-              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-              <path d="M8 16H3v5" />
-            </svg>
-            to connect
-          </li>
-          <li class="instruction-item">
-            Verify installation by checking for "1 available MCP server" in the
-            MCP toolbar and a green dot next to the server name
-          </li>
-        </ol>
-      </div>
-    </template>
     <template class="install-target-template" data-install-target="gemini-cli">
       <div class="modal-content">
         <h1>Instructions</h1>
@@ -1022,8 +904,8 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
           {{- if .SecurityInputs }}
           <li class="instruction-item">
             (optional) If you would rather use variables from your system's
-            environment, remove the <code>http_headers</code> key from the config
-            above and set these replace it with the following configuration:
+            environment, replace the <code>http_headers</code> key from the config
+            above with the <code>env_http_headers</code> key as shown below:
             <div class="card code-container">
               <button class="copy-button waiting">
                 <svg
@@ -1103,7 +985,7 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
                 <div class="popover-menu hidden">
                   <a
                     class="popover-button install-link"
-                    href="cursor://anysphere.cursor-deeplink/mcp/install?name={{ .MCPName }}&config={{ .MCPConfigURIEncoded }}"
+                    href="{{ .CursorInstallLink }}"
                     data-install-target="cursor"
                   >
                     Cursor
@@ -1122,6 +1004,13 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
                   >
                     Claude Desktop
                   </button>
+                  <a
+                    class="popover-button install-link"
+                    href="{{ .VSCodeInstallLink }}"
+                    data-install-target="vscode"
+                  >
+                    VS Code
+                  </a>
                   <button
                     class="popover-button"
                     data-install-method="modal"
@@ -1155,7 +1044,7 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
             <a
               tabindex="0"
               class="card install-target install-link"
-              href="cursor://anysphere.cursor-deeplink/mcp/install?name={{ .MCPName }}&config={{ .MCPConfigURIEncoded }}"
+              href="{{ .CursorInstallLink }}"
             >
               <div class="target">
                 <img src="https://cursor.com/assets/images/logo.svg" />
@@ -1206,28 +1095,144 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
                 <span>Claude Desktop</span>
               </div>
             </div>
-            <div
+            <a
               tabindex="0"
-              class="card install-target"
-              data-install-method="modal"
-              data-install-target="windsurf"
+              class="card install-target install-link"
+              href="{{ .VSCodeInstallLink }}"
             >
               <div class="target">
                 <svg
-                  width="1024"
-                  height="1024"
-                  viewBox="0 0 1024 1024"
+                  width="100"
+                  height="100"
+                  viewBox="0 0 100 100"
                   fill="none"
                   xmlns="http://www.w3.org/2000/svg"
                 >
-                  <path
-                    d="M897.246 286.869H889.819C850.735 286.808 819.017 318.46 819.017 357.539V515.589C819.017 547.15 792.93 572.716 761.882 572.716C743.436 572.716 725.02 563.433 714.093 547.85L552.673 317.304C539.28 298.16 517.486 286.747 493.895 286.747C457.094 286.747 423.976 318.034 423.976 356.657V515.619C423.976 547.181 398.103 572.746 366.842 572.746C348.335 572.746 329.949 563.463 319.021 547.881L138.395 289.882C134.316 284.038 125.154 286.93 125.154 294.052V431.892C125.154 438.862 127.285 445.619 131.272 451.34L309.037 705.2C319.539 720.204 335.033 731.344 352.9 735.392C397.616 745.557 438.77 711.135 438.77 667.278V508.406C438.77 476.845 464.339 451.279 495.904 451.279H495.995C515.02 451.279 532.857 460.562 543.785 476.145L705.235 706.661C718.659 725.835 739.327 737.218 763.983 737.218C801.606 737.218 833.841 705.9 833.841 667.308V508.376C833.841 476.815 859.41 451.249 890.975 451.249H897.276C901.233 451.249 904.43 448.053 904.43 444.097V294.021C904.43 290.065 901.233 286.869 897.276 286.869H897.246Z"
-                    fill="#0B100F"
-                  />
+                  <mask
+                    id="mask0"
+                    mask-type="alpha"
+                    maskUnits="userSpaceOnUse"
+                    x="0"
+                    y="0"
+                    width="100"
+                    height="100"
+                  >
+                    <path
+                      fill-rule="evenodd"
+                      clip-rule="evenodd"
+                      d="M70.9119 99.3171C72.4869 99.9307 74.2828 99.8914 75.8725 99.1264L96.4608 89.2197C98.6242 88.1787 100 85.9892 100 83.5872V16.4133C100 14.0113 98.6243 11.8218 96.4609 10.7808L75.8725 0.873756C73.7862 -0.130129 71.3446 0.11576 69.5135 1.44695C69.252 1.63711 69.0028 1.84943 68.769 2.08341L29.3551 38.0415L12.1872 25.0096C10.589 23.7965 8.35363 23.8959 6.86933 25.2461L1.36303 30.2549C-0.452552 31.9064 -0.454633 34.7627 1.35853 36.417L16.2471 50.0001L1.35853 63.5832C-0.454633 65.2374 -0.452552 68.0938 1.36303 69.7453L6.86933 74.7541C8.35363 76.1043 10.589 76.2037 12.1872 74.9905L29.3551 61.9587L68.769 97.9167C69.3925 98.5406 70.1246 99.0104 70.9119 99.3171ZM75.0152 27.2989L45.1091 50.0001L75.0152 72.7012V27.2989Z"
+                      fill="white"
+                    />
+                  </mask>
+                  <g mask="url(#mask0)">
+                    <path
+                      d="M96.4614 10.7962L75.8569 0.875542C73.4719 -0.272773 70.6217 0.211611 68.75 2.08333L1.29858 63.5832C-0.515693 65.2373 -0.513607 68.0937 1.30308 69.7452L6.81272 74.754C8.29793 76.1042 10.5347 76.2036 12.1338 74.9905L93.3609 13.3699C96.086 11.3026 100 13.2462 100 16.6667V16.4275C100 14.0265 98.6246 11.8378 96.4614 10.7962Z"
+                      fill="#0065A9"
+                    />
+                    <g filter="url(#filter0_d)">
+                      <path
+                        d="M96.4614 89.2038L75.8569 99.1245C73.4719 100.273 70.6217 99.7884 68.75 97.9167L1.29858 36.4169C-0.515693 34.7627 -0.513607 31.9063 1.30308 30.2548L6.81272 25.246C8.29793 23.8958 10.5347 23.7964 12.1338 25.0095L93.3609 86.6301C96.086 88.6974 100 86.7538 100 83.3334V83.5726C100 85.9735 98.6246 88.1622 96.4614 89.2038Z"
+                        fill="#007ACC"
+                      />
+                    </g>
+                    <g filter="url(#filter1_d)">
+                      <path
+                        d="M75.8578 99.1263C73.4721 100.274 70.6219 99.7885 68.75 97.9166C71.0564 100.223 75 98.5895 75 95.3278V4.67213C75 1.41039 71.0564 -0.223106 68.75 2.08329C70.6219 0.211402 73.4721 -0.273666 75.8578 0.873633L96.4587 10.7807C98.6234 11.8217 100 14.0112 100 16.4132V83.5871C100 85.9891 98.6234 88.1786 96.4586 89.2196L75.8578 99.1263Z"
+                        fill="#1F9CF0"
+                      />
+                    </g>
+                    <g style="mix-blend-mode: overlay" opacity="0.25">
+                      <path
+                        fill-rule="evenodd"
+                        clip-rule="evenodd"
+                        d="M70.8511 99.3171C72.4261 99.9306 74.2221 99.8913 75.8117 99.1264L96.4 89.2197C98.5634 88.1787 99.9392 85.9892 99.9392 83.5871V16.4133C99.9392 14.0112 98.5635 11.8217 96.4001 10.7807L75.8117 0.873695C73.7255 -0.13019 71.2838 0.115699 69.4527 1.44688C69.1912 1.63705 68.942 1.84937 68.7082 2.08335L29.2943 38.0414L12.1264 25.0096C10.5283 23.7964 8.29285 23.8959 6.80855 25.246L1.30225 30.2548C-0.513334 31.9064 -0.515415 34.7627 1.29775 36.4169L16.1863 50L1.29775 63.5832C-0.515415 65.2374 -0.513334 68.0937 1.30225 69.7452L6.80855 74.754C8.29285 76.1042 10.5283 76.2036 12.1264 74.9905L29.2943 61.9586L68.7082 97.9167C69.3317 98.5405 70.0638 99.0104 70.8511 99.3171ZM74.9544 27.2989L45.0483 50L74.9544 72.7012V27.2989Z"
+                        fill="url(#paint0_linear)"
+                      />
+                    </g>
+                  </g>
+                  <defs>
+                    <filter
+                      id="filter0_d"
+                      x="-8.39411"
+                      y="15.8291"
+                      width="116.727"
+                      height="92.2456"
+                      filterUnits="userSpaceOnUse"
+                      color-interpolation-filters="sRGB"
+                    >
+                      <feFlood flood-opacity="0" result="BackgroundImageFix" />
+                      <feColorMatrix
+                        in="SourceAlpha"
+                        type="matrix"
+                        values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0"
+                      />
+                      <feOffset />
+                      <feGaussianBlur stdDeviation="4.16667" />
+                      <feColorMatrix
+                        type="matrix"
+                        values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0"
+                      />
+                      <feBlend
+                        mode="overlay"
+                        in2="BackgroundImageFix"
+                        result="effect1_dropShadow"
+                      />
+                      <feBlend
+                        mode="normal"
+                        in="SourceGraphic"
+                        in2="effect1_dropShadow"
+                        result="shape"
+                      />
+                    </filter>
+                    <filter
+                      id="filter1_d"
+                      x="60.4167"
+                      y="-8.07558"
+                      width="47.9167"
+                      height="116.151"
+                      filterUnits="userSpaceOnUse"
+                      color-interpolation-filters="sRGB"
+                    >
+                      <feFlood flood-opacity="0" result="BackgroundImageFix" />
+                      <feColorMatrix
+                        in="SourceAlpha"
+                        type="matrix"
+                        values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0"
+                      />
+                      <feOffset />
+                      <feGaussianBlur stdDeviation="4.16667" />
+                      <feColorMatrix
+                        type="matrix"
+                        values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0"
+                      />
+                      <feBlend
+                        mode="overlay"
+                        in2="BackgroundImageFix"
+                        result="effect1_dropShadow"
+                      />
+                      <feBlend
+                        mode="normal"
+                        in="SourceGraphic"
+                        in2="effect1_dropShadow"
+                        result="shape"
+                      />
+                    </filter>
+                    <linearGradient
+                      id="paint0_linear"
+                      x1="49.9392"
+                      y1="0.257812"
+                      x2="49.9392"
+                      y2="99.7423"
+                      gradientUnits="userSpaceOnUse"
+                    >
+                      <stop stop-color="white" />
+                      <stop offset="1" stop-color="white" stop-opacity="0" />
+                    </linearGradient>
+                  </defs>
                 </svg>
-                <span>Windsurf</span>
+                <span>VS Code</span>
               </div>
-            </div>
+            </a>
             <div
               tabindex="0"
               class="card install-target"

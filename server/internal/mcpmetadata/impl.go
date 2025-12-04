@@ -5,6 +5,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -62,9 +63,6 @@ type Service struct {
 //go:embed config_snippet.json.tmpl
 var configSnippetTmplData string
 
-//go:embed cursor_snippet.json.tmpl
-var cursorSnippetTmplData string
-
 //go:embed hosted_page.html.tmpl
 var hostedPageTmplData string
 
@@ -82,6 +80,17 @@ type securityInput struct {
 	Sensitive   bool
 }
 
+type IDEInstallLinkConfig struct {
+	// Required for vscode, cursor
+	URL string `json:"url"`
+	// Applicable for vscode, cursor
+	Headers map[string]string `json:"headers"`
+	// Required for vscode
+	Name *string `json:"name,omitempty"`
+	// Required for vscode ("http" only)
+	Type *string `json:"type,omitempty"`
+}
+
 type jsonSnippetData struct {
 	MCPName        string
 	MCPSlug        string
@@ -93,14 +102,15 @@ type jsonSnippetData struct {
 
 type hostedPageData struct {
 	jsonSnippetData
-	MCPConfig           string
-	MCPConfigURIEncoded string
-	OrganizationName    string
-	SiteURL             string
-	LogoAssetURL        string
-	DocsURL             string
-	Instructions        string
-	IsPublic            bool
+	MCPConfig         string
+	CursorInstallLink template.URL
+	VSCodeInstallLink template.URL
+	OrganizationName  string
+	SiteURL           string
+	LogoAssetURL      string
+	DocsURL           string
+	Instructions      string
+	IsPublic          bool
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -239,6 +249,61 @@ func toMcpMetadata(record repo.McpMetadatum) *types.McpMetadata {
 	return metadata
 }
 
+func buildCursorInstallURL(toolsetName, mcpURL string, inputs []securityInput) (string, error) {
+	config := IDEInstallLinkConfig{
+		URL:     mcpURL,
+		Headers: map[string]string{},
+		Name:    nil,
+		Type:    nil,
+	}
+
+	for _, input := range inputs {
+		headerKey := templatefuncs.AsHTTPHeader(input.SystemName)
+		config.Headers[headerKey] = fmt.Sprintf("{{%s}}", input.DisplayName)
+	}
+
+	configBytes, err := json.Marshal(config)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	u := &url.URL{
+		Scheme: "cursor",
+		Host:   "anysphere.cursor-deeplink",
+		Path:   "/mcp/install",
+		RawQuery: url.Values{
+			"name":   {toolsetName},
+			"config": {base64.StdEncoding.EncodeToString(configBytes)},
+		}.Encode(),
+	}
+	return u.String(), nil
+}
+
+func buildVSCodeInstallURL(toolsetName, mcpURL string, inputs []securityInput) (string, error) {
+	config := IDEInstallLinkConfig{
+		Name:    &toolsetName,
+		Type:    conv.Ptr("http"),
+		URL:     mcpURL,
+		Headers: map[string]string{},
+	}
+
+	for _, input := range inputs {
+		headerKey := templatefuncs.AsHTTPHeader(input.SystemName)
+		config.Headers[headerKey] = fmt.Sprintf("your-%s-value", input.DisplayName)
+	}
+
+	configBytes, err := json.Marshal(config)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	u := &url.URL{
+		Scheme: "vscode",
+		Opaque: "mcp/install?" + url.QueryEscape(string(configBytes)),
+	}
+	return u.String(), nil
+}
+
 func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	defer o11y.LogDefer(ctx, s.logger, func() error {
@@ -356,26 +421,37 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeUnexpected, err, "failed to execute config snippet template").Log(ctx, s.logger)
 	}
 
-	cursorSnippetTmpl, err := template.New("cursor_snippet").Funcs(templatefuncs.FuncMap()).Parse(cursorSnippetTmplData)
+	cursorURL, err := buildCursorInstallURL(toolset.Name, MCPURL, securityInputs)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to parse cursor snippet template").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to build cursor install URL").Log(ctx, s.logger)
 	}
 
-	var cursorSnippet bytes.Buffer
-	if err := cursorSnippetTmpl.Execute(&cursorSnippet, configSnippetData); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to execute cursor snippet template").Log(ctx, s.logger)
+	vsCodeURL, err := buildVSCodeInstallURL(toolset.Name, MCPURL, securityInputs)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to build vscode install URL").Log(ctx, s.logger)
+	}
+
+	safeVsCodeURL, err := safeTemplateURL(vsCodeURL, "vscode")
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to sanitize vscode install URL").Log(ctx, s.logger)
+	}
+
+	safeCursorURL, err := safeTemplateURL(cursorURL, "cursor")
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to sanitize cursor install URL").Log(ctx, s.logger)
 	}
 
 	data := hostedPageData{
-		jsonSnippetData:     configSnippetData,
-		MCPConfig:           configSnippet.String(),
-		MCPConfigURIEncoded: url.QueryEscape(base64.StdEncoding.EncodeToString(cursorSnippet.Bytes())),
-		OrganizationName:    organization.Name,
-		SiteURL:             s.siteURL.String(),
-		LogoAssetURL:        logoAssetURL,
-		DocsURL:             docsURL,
-		Instructions:        instructions,
-		IsPublic:            toolset.McpIsPublic,
+		jsonSnippetData:   configSnippetData,
+		MCPConfig:         configSnippet.String(),
+		CursorInstallLink: safeCursorURL,
+		VSCodeInstallLink: safeVsCodeURL,
+		OrganizationName:  organization.Name,
+		SiteURL:           s.siteURL.String(),
+		LogoAssetURL:      logoAssetURL,
+		DocsURL:           docsURL,
+		Instructions:      instructions,
+		IsPublic:          toolset.McpIsPublic,
 	}
 
 	hostedPageTmpl, err := template.New("hosted_page").Funcs(templatefuncs.FuncMap()).Parse(hostedPageTmplData)
@@ -397,6 +473,44 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	}
 
 	return nil
+}
+
+// Ensure that the provided rawURL uses the allowedScheme. allowedScheme may
+// not be a dangerous scheme (eg: "javascript"). The returned URL is also
+// HTML-escaped.
+func safeTemplateURL(rawURL string, allowedScheme string) (template.URL, error) {
+	dangerousURLSchemes := []string{"javascript", "data", "vbscript", "file", "about", "blob"}
+
+	for _, dangerousScheme := range dangerousURLSchemes {
+		if strings.HasPrefix(strings.ToLower(rawURL), dangerousScheme+":") {
+			return template.URL(""), oops.E(
+				oops.CodeBadRequest,
+				nil,
+				"%s scheme is not allowed",
+				dangerousScheme,
+			).Log(context.Background(), nil)
+		}
+	}
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return template.URL(""), oops.E(
+			oops.CodeBadRequest,
+			err,
+			"invalid URL",
+		).Log(context.Background(), nil)
+	}
+
+	if u.Scheme != allowedScheme {
+		return template.URL(""), oops.E(
+			oops.CodeBadRequest,
+			nil,
+			"invalid URL scheme: %s",
+			u.Scheme,
+		).Log(context.Background(), nil)
+	}
+
+	return template.URL(u.String()), nil // #nosec G203 // This has been checked and escaped
 }
 
 func (s *Service) resolveMCPURLFromContext(ctx context.Context, toolset toolsets_repo.Toolset, serverUrl string) (string, error) {
