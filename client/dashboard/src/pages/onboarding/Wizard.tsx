@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { SkeletonParagraph } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
-import { FullWidthUpload } from "@/components/upload";
+import { OpenApiSourceInput } from "@/components/OpenApiSourceInput";
 import { AsciiVideo, useWebGLStore } from "@/components/webgl";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -640,12 +640,7 @@ const UploadStep = ({
       )}
     </Stack>
   ) : (
-    <FullWidthUpload
-      label={<span className="text-body-sm">Drop your OpenAPI spec here</span>}
-      onUpload={handleSpecUpload}
-      allowedExtensions={["yaml", "yml", "json"]}
-      className="max-w-full"
-    />
+    <OpenApiSourceInput onUpload={handleSpecUpload} className="max-w-full" />
   );
 
   const onContinue = async () => {
