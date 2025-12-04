@@ -52,6 +52,7 @@ export * from "./listdeployments.js";
 export * from "./listenvironments.js";
 export * from "./listglobalvariations.js";
 export * from "./listintegrations.js";
+export * from "./listmcpcatalog.js";
 export * from "./listpackages.js";
 export * from "./listprojects.js";
 export * from "./listresources.js";
