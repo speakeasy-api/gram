@@ -87,9 +87,9 @@ type IDEInstallLinkConfig struct {
 	// Applicable for vscode, cursor
 	Headers map[string]string `json:"headers"`
 	// Required for vscode
-	Name string `json:"name"`
+	Name *string `json:"name"`
 	// Required for vscode ("http" only)
-	Type string `json:"type"`
+	Type *string `json:"type"`
 }
 
 type jsonSnippetData struct {
@@ -254,6 +254,8 @@ func buildCursorInstallURL(toolsetName, mcpURL string, inputs []securityInput) (
 	config := IDEInstallLinkConfig{
 		URL:     mcpURL,
 		Headers: map[string]string{},
+		Name:    nil,
+		Type:    nil,
 	}
 
 	for _, input := range inputs {
@@ -280,8 +282,8 @@ func buildCursorInstallURL(toolsetName, mcpURL string, inputs []securityInput) (
 
 func buildVSCodeInstallURL(toolsetName, mcpURL string, inputs []securityInput) (string, error) {
 	config := IDEInstallLinkConfig{
-		Name:    toolsetName,
-		Type:    "http",
+		Name:    &toolsetName,
+		Type:    conv.Ptr("http"),
 		URL:     mcpURL,
 		Headers: map[string]string{},
 	}
