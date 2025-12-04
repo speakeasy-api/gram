@@ -181,6 +181,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
+	temporalWorker.RegisterActivity(activities.FallbackModelUsageTracking)
 	// Agent runner related activities
 	temporalWorker.RegisterActivity(activities.PreprocessAgentsInput)
 	temporalWorker.RegisterActivity(activities.ExecuteToolCall)
@@ -195,6 +196,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
+	temporalWorker.RegisterWorkflow(FallbackModelUsageTrackingWorkflow)
 	// Agent runner related workflows
 	temporalWorker.RegisterWorkflow(AgentsResponseWorkflow)
 	temporalWorker.RegisterWorkflow(SubAgentWorkflow)

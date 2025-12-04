@@ -28,6 +28,10 @@ import (
 
 const OpenRouterBaseURL = "https://openrouter.ai/api"
 
+// ErrGenerationNotFound is returned when the generation details are not found after retries.
+// This typically means the generation data hasn't propagated yet and may be available later.
+var ErrGenerationNotFound = errors.New("generation not found")
+
 // Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
 // This list can stay sufficiently robust, we should just need to allow list a model before it goes through us
 var allowList = map[string]bool{
@@ -410,7 +414,6 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 
 	req, err := http.NewRequestWithContext(ctx, "GET", OpenRouterBaseURL+"/v1/generation", nil)
 	if err != nil {
-		o.logger.ErrorContext(ctx, "failed to create openrouter generation HTTP request", attr.SlogError(err))
 		return nil, 0, fmt.Errorf("failed to create generation request: %w", err)
 	}
 
@@ -423,7 +426,6 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 
 	resp, err := o.orClient.Do(req)
 	if err != nil {
-		o.logger.ErrorContext(ctx, "failed to send HTTP request to fetch generation", attr.SlogError(err))
 		return nil, 0, fmt.Errorf("failed to send generation request: %w", err)
 	}
 
@@ -432,13 +434,11 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 	})
 
 	if resp.StatusCode != http.StatusOK {
-		o.logger.ErrorContext(ctx, "failed to fetch generation from OpenRouter", attr.SlogHTTPResponseStatusCode(resp.StatusCode))
 		return nil, resp.StatusCode, fmt.Errorf("failed to fetch generation from OpenRouter: %s", resp.Status)
 	}
 
 	var genResp generationResponse
 	if err := json.NewDecoder(resp.Body).Decode(&genResp); err != nil {
-		o.logger.ErrorContext(ctx, "failed to decode generation response", attr.SlogError(err))
 		return nil, resp.StatusCode, fmt.Errorf("failed to decode generation response: %w", err)
 	}
 
@@ -471,11 +471,16 @@ func (o *OpenRouter) TriggerModelUsageTracking(ctx context.Context, generationID
 			}
 		}
 
-		// Not a 404 or last attempt, don't retry
+		if statusCode == http.StatusNotFound {
+			return fmt.Errorf("%w: %s", ErrGenerationNotFound, err.Error())
+		}
 		return err
 	}
 
 	if err != nil {
+		if statusCode == http.StatusNotFound {
+			return fmt.Errorf("%w: %s", ErrGenerationNotFound, err.Error())
+		}
 		return err
 	}
 
