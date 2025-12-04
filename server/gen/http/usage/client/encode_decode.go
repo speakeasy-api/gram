@@ -935,7 +935,6 @@ func unmarshalTierLimitsResponseBodyToUsageTierLimits(v *TierLimitsResponseBody)
 		IncludedCredits:            *v.IncludedCredits,
 		PricePerAdditionalToolCall: *v.PricePerAdditionalToolCall,
 		PricePerAdditionalServer:   *v.PricePerAdditionalServer,
-		PricePerAdditionalCredit:   *v.PricePerAdditionalCredit,
 	}
 	res.FeatureBullets = make([]string, len(v.FeatureBullets))
 	for i, val := range v.FeatureBullets {

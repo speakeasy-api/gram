@@ -60,10 +60,13 @@ func IsModelAllowed(model string) bool {
 	return allowList[model]
 }
 
+// default credit limits per acccount type
+// this can always be customized per org in the DB
+// or via running OpenrouterKeyRefreshWorkflow {OrgID: "abc123", Limit: new_monthly_limit} in temporal directly
 var creditsAccountTypeMap = map[string]int{
 	"free":       5,
-	"pro":        25,
-	"enterprise": 50,
+	"pro":        100,
+	"enterprise": 100,
 	"":           5, // safety default
 }
 
@@ -119,7 +122,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 			return "", oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
 		}
 
-		creditAmount := o.getLimitForOrg(ctx, org)
+		creditAmount := o.getLimitForOrg(org)
 
 		keyResponse, err := o.createOpenRouterAPIKey(ctx, orgID, org.Slug, creditAmount)
 		if err != nil {
@@ -177,7 +180,7 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, limit
 	if limit != nil {
 		keyLimit = *limit
 	} else {
-		keyLimit = o.getLimitForOrg(ctx, org)
+		keyLimit = o.getLimitForOrg(org)
 	}
 
 	keyResponse, err := o.updateOpenRouterAPIKeyLimit(ctx, key.KeyHash, keyLimit)
@@ -227,7 +230,7 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64,
 	if err != nil {
 		return 0, 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
 	}
-	limit := o.getLimitForOrg(ctx, org)
+	limit := o.getLimitForOrg(org)
 
 	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
 	if err != nil {
@@ -271,22 +274,9 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64,
 	return creditsUsed, limit, nil
 }
 
-func (o *OpenRouter) getLimitForOrg(ctx context.Context, org orgRepo.OrganizationMetadatum) int {
+func (o *OpenRouter) getLimitForOrg(org orgRepo.OrganizationMetadatum) int {
 	if slices.Contains(specialLimitOrgs, org.ID) {
 		return 500
-	}
-
-	chatEnabled, err := o.featureClient.IsFeatureEnabled(ctx, org.ID, productfeatures.FeatureChat)
-	if err != nil {
-		o.logger.WarnContext(ctx, "failed to check chat feature status, using default limit",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(org.ID),
-		)
-	}
-
-	// when we provide billable chat/agent usage we need to make sure the openrouter key being has enough credits to cover the usage
-	if chatEnabled && slices.Contains([]string{"pro", "enterprise"}, org.GramAccountType) {
-		return 500 // this upper bound max will likely eventually be user configurable
 	}
 
 	return creditsAccountTypeMap[org.GramAccountType]

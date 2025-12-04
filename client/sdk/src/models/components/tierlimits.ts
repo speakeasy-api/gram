@@ -38,10 +38,6 @@ export type TierLimits = {
    */
   includedToolCalls: number;
   /**
-   * The price per additional credit
-   */
-  pricePerAdditionalCredit: number;
-  /**
    * The price per additional server
    */
   pricePerAdditionalServer: number;
@@ -64,7 +60,6 @@ export const TierLimits$inboundSchema: z.ZodType<
   included_credits: z.number().int(),
   included_servers: z.number().int(),
   included_tool_calls: z.number().int(),
-  price_per_additional_credit: z.number(),
   price_per_additional_server: z.number(),
   price_per_additional_tool_call: z.number(),
 }).transform((v) => {
@@ -76,7 +71,6 @@ export const TierLimits$inboundSchema: z.ZodType<
     "included_credits": "includedCredits",
     "included_servers": "includedServers",
     "included_tool_calls": "includedToolCalls",
-    "price_per_additional_credit": "pricePerAdditionalCredit",
     "price_per_additional_server": "pricePerAdditionalServer",
     "price_per_additional_tool_call": "pricePerAdditionalToolCall",
   });

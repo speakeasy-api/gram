@@ -157,7 +157,6 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 			PricePerAdditionalToolCall: 0,
 			PricePerAdditionalServer:   0,
 			IncludedCredits:            25,
-			PricePerAdditionalCredit:   1,
 			FeatureBullets: []string{
 				"Custom tool creation",
 				"Hosted server deployments",
@@ -168,7 +167,7 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 			IncludedBullets: []string{
 				"3 MCP servers (public or private)",
 				"10000 tool calls / month",
-				"$25 in chat based credits",
+				"25 chat based credits / month",
 				"Slack community support",
 			},
 			AddOnBullets: []string{},
@@ -180,7 +179,6 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 			PricePerAdditionalToolCall: 0.00001,
 			PricePerAdditionalServer:   0.5,
 			IncludedCredits:            25,
-			PricePerAdditionalCredit:   1,
 			FeatureBullets: []string{
 				"Custom domain",
 				"Register your own OAuth server",
@@ -189,13 +187,13 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 			IncludedBullets: []string{
 				"50 MCP servers (public or private)",
 				"100000000 tool calls / month",
-				"$25 in chat based credits",
+				"25 chat based credits / month",
 				"Email support",
 			},
 			AddOnBullets: []string{
 				"$0.50 / month / additional MCP server",
 				"$0.05 / month / additional 5000 tool calls",
-				"$1 / month / 1 playground credit",
+				"$11 per 10 additional chat based credits",
 			},
 		},
 		Enterprise: &gen.TierLimits{
@@ -205,7 +203,6 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 			PricePerAdditionalToolCall: 0,
 			PricePerAdditionalServer:   0,
 			IncludedCredits:            0,
-			PricePerAdditionalCredit:   0,
 			FeatureBullets: []string{
 				"Oauth 2.1 proxy support",
 				"SSO",
@@ -385,15 +382,15 @@ func (s *StubClient) writePeriodUsage(ctx context.Context, orgID string, pu *gen
 }
 
 type modelUsage struct {
-	InputTokens            int64    `json:"input_tokens"`
-	OutputTokens           int64    `json:"output_tokens"`
-	TotalTokens            int64    `json:"total_tokens"`
-	CallCount              int64    `json:"call_count"`
-	Cost                   *float64 `json:"cost"`
-	NativeTokensCached     int64    `json:"native_tokens_cached"`
-	NativeTokensReasoning  int64    `json:"native_tokens_reasoning"`
-	CacheDiscount          float64  `json:"cache_discount"`
-	UpstreamInferenceCost   float64  `json:"upstream_inference_cost"`
+	InputTokens           int64    `json:"input_tokens"`
+	OutputTokens          int64    `json:"output_tokens"`
+	TotalTokens           int64    `json:"total_tokens"`
+	CallCount             int64    `json:"call_count"`
+	Cost                  *float64 `json:"cost"`
+	NativeTokensCached    int64    `json:"native_tokens_cached"`
+	NativeTokensReasoning int64    `json:"native_tokens_reasoning"`
+	CacheDiscount         float64  `json:"cache_discount"`
+	UpstreamInferenceCost float64  `json:"upstream_inference_cost"`
 }
 
 func (s *StubClient) readModelUsage(orgID string) (*modelUsage, error) {
@@ -405,13 +402,13 @@ func (s *StubClient) readModelUsage(orgID string) (*modelUsage, error) {
 	zero := &modelUsage{
 		InputTokens:           0,
 		OutputTokens:          0,
-		TotalTokens:            0,
-		CallCount:              0,
-		Cost:                   nil,
+		TotalTokens:           0,
+		CallCount:             0,
+		Cost:                  nil,
 		NativeTokensCached:    0,
-		NativeTokensReasoning:  0,
-		CacheDiscount:          0,
-		UpstreamInferenceCost:  0,
+		NativeTokensReasoning: 0,
+		CacheDiscount:         0,
+		UpstreamInferenceCost: 0,
 	}
 
 	usagefile := filepath.Join(datadir, fmt.Sprintf("modelusage-%s.local.json", orgID))
