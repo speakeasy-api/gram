@@ -143,7 +143,9 @@ export default function Sources() {
           onOpenChange={(open) => !open && closeDialog()}
         >
           <Dialog.Content className="max-w-2xl!">
-            {dialogState.type === "add-source" && <AddSourceDialogContent />}
+            {dialogState.type === "add-source" && (
+              <AddSourceDialogContent onCompletion={closeDialog} />
+            )}
           </Dialog.Content>
         </Dialog>
       </>
@@ -228,7 +230,9 @@ export default function Sources() {
                   : "max-w-2xl!"
               }
             >
-              {dialogState.type === "add-source" && <AddSourceDialogContent />}
+              {dialogState.type === "add-source" && (
+                <AddSourceDialogContent onCompletion={closeDialog} />
+              )}
               {dialogState.type === "remove-source" && (
                 <RemoveSourceDialogContent
                   asset={dialogState.asset}

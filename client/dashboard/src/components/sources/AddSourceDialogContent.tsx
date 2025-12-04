@@ -14,7 +14,13 @@ import { Button, Dialog } from "@speakeasy-api/moonshine";
 import { ArrowRightIcon, RefreshCcwIcon } from "lucide-react";
 import React from "react";
 
-export default function AddSourceDialogContent() {
+interface AddSourceDialogContentProps {
+  onCompletion?: () => void;
+}
+
+export default function AddSourceDialogContent({
+  onCompletion,
+}: AddSourceDialogContentProps) {
   const telemetry = useTelemetry();
   const isFunctionsEnabled =
     telemetry.isFeatureEnabled("gram-functions") ?? false;
@@ -119,13 +125,13 @@ export default function AddSourceDialogContent() {
         </UploadAssetStepper.Frame>
       )}
       <Dialog.Footer>
-        <FooterActions />
+        <FooterActions onCompletion={onCompletion} />
       </Dialog.Footer>
     </UploadAssetStepper.Provider>
   );
 }
 
-function FooterActions() {
+function FooterActions({ onCompletion }: { onCompletion?: () => void }) {
   const stepper = useStepper();
   const routes = useRoutes();
 
@@ -138,6 +144,7 @@ function FooterActions() {
     assetsList.refetch();
     latestDeployment.refetch();
     routes.toolsets.goTo();
+    onCompletion?.();
   };
 
   const deploymentId = stepper.meta.current.deployment?.id;
