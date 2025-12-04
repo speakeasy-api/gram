@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -34,13 +35,14 @@ import (
 )
 
 type Service struct {
-	logger       *slog.Logger
-	tracer       trace.Tracer
-	meter        metric.Meter
-	db           *pgxpool.Pool
-	toolsetsRepo *toolsets_repo.Queries
-	environments *environments.EnvironmentEntries
-	serverURL    *url.URL
+	logger            *slog.Logger
+	tracer            trace.Tracer
+	meter             metric.Meter
+	db                *pgxpool.Pool
+	toolsetsRepo      *toolsets_repo.Queries
+	customDomainsRepo *customdomains_repo.Queries
+	environments      *environments.EnvironmentEntries
+	serverURL         *url.URL
 
 	clientRegistration *ClientRegistrationService
 	grantManager       *GrantManager
@@ -61,13 +63,14 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 	tokenService := NewTokenService(cacheImpl, clientRegistration, grantManager, pkceService, logger, enc)
 
 	return &Service{
-		logger:       logger,
-		tracer:       tracer,
-		meter:        meter,
-		db:           db,
-		toolsetsRepo: toolsets_repo.New(db),
-		environments: env,
-		serverURL:    serverURL,
+		logger:            logger,
+		tracer:            tracer,
+		meter:             meter,
+		db:                db,
+		toolsetsRepo:      toolsets_repo.New(db),
+		customDomainsRepo: customdomains_repo.New(db),
+		environments:      env,
+		serverURL:         serverURL,
 
 		// OAuth 2.1 components
 		clientRegistration: clientRegistration,
@@ -91,7 +94,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	})
 
 	// OAuth 2.1 Authorization Callback
-	o11y.AttachHandler(mux, "GET", "/oauth/{mcpSlug}/callback", func(w http.ResponseWriter, r *http.Request) {
+	o11y.AttachHandler(mux, "GET", "/oauth/callback", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.handleAuthorizationCallback).ServeHTTP(w, r)
 	})
 
@@ -101,40 +104,56 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	})
 }
 
-// buildFullMcpSlug builds the full MCP slug with domain prefix
-func (s *Service) buildFullMcpSlug(ctx context.Context, mcpSlug string) string {
-	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
-		return fmt.Sprintf("https://%s", domainCtx.Domain) + "/mcp/" + mcpSlug
-	}
-
-	return s.serverURL.String() + "/mcp/" + mcpSlug
-}
-
-// loadToolsetFromMcpSlug loads a toolset from the MCP slug
-func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *customdomains.Context, error) {
+// loadToolsetFromCurrentURLContext loads a toolset from the MCP slug and returns the full MCP URL
+func (s *Service) loadToolsetFromCurrentURLContext(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, string, error) {
 	var toolset toolsets_repo.Toolset
 	var toolsetErr error
-	var customDomainCtx *customdomains.Context
+	var mcpURL string
 
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
 			McpSlug:        conv.ToPGText(mcpSlug),
 			CustomDomainID: uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true},
 		})
-		customDomainCtx = domainCtx
+		mcpURL = fmt.Sprintf("https://%s/mcp/%s", domainCtx.Domain, mcpSlug)
 	} else {
 		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
+		mcpURL = s.serverURL.String() + "/mcp/" + mcpSlug
 	}
 
 	if toolsetErr != nil {
-		return nil, nil, oops.E(oops.CodeNotFound, toolsetErr, "mcp server not found").Log(ctx, s.logger)
+		return nil, "", oops.E(oops.CodeNotFound, toolsetErr, "mcp server not found").Log(ctx, s.logger)
 	}
 
 	if !toolset.McpIsPublic {
-		return nil, nil, oops.E(oops.CodeNotFound, nil, "mcp server not found").Log(ctx, s.logger)
+		return nil, "", oops.E(oops.CodeNotFound, nil, "mcp server not found").Log(ctx, s.logger)
 	}
 
-	return &toolset, customDomainCtx, nil
+	return &toolset, mcpURL, nil
+}
+
+func (s *Service) loadToolsetForProjectAndMCPSlug(ctx context.Context, projectID uuid.UUID, mcpSlug string) (*toolsets_repo.Toolset, string, error) {
+	toolset, err := s.toolsetsRepo.GetToolsetByMCPSlugAndProject(ctx, toolsets_repo.GetToolsetByMCPSlugAndProjectParams{
+		ProjectID: projectID,
+		McpSlug:   conv.ToPGText(mcpSlug),
+	})
+	if err != nil {
+		return nil, "", oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+	}
+
+	// Build the MCP URL - check if toolset has a custom domain
+	var mcpURL string
+	if toolset.CustomDomainID.Valid {
+		domain, err := s.customDomainsRepo.GetCustomDomainByID(ctx, toolset.CustomDomainID.UUID)
+		if err != nil {
+			return nil, "", oops.E(oops.CodeNotFound, err, "custom domain not found").Log(ctx, s.logger)
+		}
+		mcpURL = fmt.Sprintf("https://%s/mcp/%s", domain.Domain, mcpSlug)
+	} else {
+		mcpURL = s.serverURL.String() + "/mcp/" + mcpSlug
+	}
+
+	return &toolset, mcpURL, nil
 }
 
 // handleAuthorize handles OAuth 2.1 authorization requests
@@ -148,13 +167,10 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	// Load toolset from MCP slug
-	toolset, _, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
+	toolset, fullMCPURL, err := s.loadToolsetFromCurrentURLContext(ctx, mcpSlug)
 	if err != nil {
 		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
 	}
-
-	// Build full MCP slug with domain prefix
-	fullMCPURL := s.buildFullMcpSlug(ctx, mcpSlug)
 
 	// Parse authorization request
 	req := &AuthorizationRequest{
@@ -237,6 +253,8 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		"state":                 req.State,
 		"code_challenge":        req.CodeChallenge,
 		"code_challenge_method": req.CodeChallengeMethod,
+		"mcp_slug":              toolset.McpSlug.String,
+		"project_id":            toolset.ProjectID.String(),
 	}
 
 	oauthReqInfoJSON, err := json.Marshal(oauthReqInfo)
@@ -244,7 +262,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		return oops.E(oops.CodeBadRequest, err, "failed to encode OAuth request info").Log(ctx, s.logger)
 	}
 
-	callbackURL := fmt.Sprintf("%s/oauth/%s/callback", s.serverURL.String(), mcpSlug)
+	callbackURL := fmt.Sprintf("%s/oauth/callback", s.serverURL.String())
 
 	authURL, err := url.Parse(provider.AuthorizationEndpoint)
 	if err != nil {
@@ -289,12 +307,10 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
 	}
 
-	toolset, _, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
+	toolset, fullMCPURL, err := s.loadToolsetFromCurrentURLContext(ctx, mcpSlug)
 	if err != nil {
 		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
 	}
-
-	fullMCPURL := s.buildFullMcpSlug(ctx, mcpSlug)
 
 	if err := r.ParseForm(); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to parse form data").Log(ctx, s.logger)
@@ -344,12 +360,10 @@ func (s *Service) handleClientRegistration(w http.ResponseWriter, r *http.Reques
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
 	}
 
-	_, _, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
+	_, fullMcpURL, err := s.loadToolsetFromCurrentURLContext(ctx, mcpSlug)
 	if err != nil {
 		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
 	}
-
-	fullMcpURL := s.buildFullMcpSlug(ctx, mcpSlug)
 
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -382,23 +396,6 @@ func (s *Service) handleClientRegistration(w http.ResponseWriter, r *http.Reques
 func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
-	mcpSlug := chi.URLParam(r, "mcpSlug")
-	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
-	}
-
-	toolset, _, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
-	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
-	}
-
-	fullMCPURL := s.buildFullMcpSlug(ctx, mcpSlug)
-
-	externalCode := r.URL.Query().Get("code")
-	if externalCode == "" {
-		return oops.E(oops.CodeBadRequest, nil, "code is required").Log(ctx, s.logger)
-	}
-
 	stateParam := r.URL.Query().Get("state")
 	if stateParam == "" {
 		return oops.E(oops.CodeBadRequest, nil, "state is required").Log(ctx, s.logger)
@@ -407,6 +404,27 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 	var oauthReqInfo map[string]string
 	if err := json.Unmarshal([]byte(stateParam), &oauthReqInfo); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to decode OAuth request info from state").Log(ctx, s.logger)
+	}
+
+	mcpSlug := oauthReqInfo["mcp_slug"]
+	projectIDStr := oauthReqInfo["project_id"]
+	if mcpSlug == "" || projectIDStr == "" {
+		return oops.E(oops.CodeBadRequest, nil, "mcp slug and project id is required in context").Log(ctx, s.logger)
+	}
+
+	projectID, err := uuid.Parse(projectIDStr)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid project id").Log(ctx, s.logger)
+	}
+
+	toolset, fullMCPURL, err := s.loadToolsetForProjectAndMCPSlug(ctx, projectID, mcpSlug)
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+	}
+
+	externalCode := r.URL.Query().Get("code")
+	if externalCode == "" {
+		return oops.E(oops.CodeBadRequest, nil, "code is required").Log(ctx, s.logger)
 	}
 
 	// Get OAuth proxy providers for this toolset

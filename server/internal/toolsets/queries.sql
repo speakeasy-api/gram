@@ -3,6 +3,11 @@ SELECT *
 FROM toolsets
 WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
 
+-- name: GetToolsetByMCPSlugAndProject :one
+SELECT *
+FROM toolsets
+WHERE mcp_slug = @mcp_slug AND project_id = @project_id AND deleted IS FALSE;
+
 -- name: CreateToolset :one
 INSERT INTO toolsets (
     organization_id
