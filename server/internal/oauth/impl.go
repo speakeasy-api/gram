@@ -133,7 +133,7 @@ func (s *Service) loadToolsetFromCurrentURLContext(ctx context.Context, mcpSlug 
 }
 
 func (s *Service) loadToolsetForProjectAndMCPSlug(ctx context.Context, projectID uuid.UUID, mcpSlug string) (*toolsets_repo.Toolset, string, error) {
-	toolset, err := s.toolsetsRepo.GetToolsetByMCPSlugAndProject(ctx, toolsets_repo.GetToolsetByMCPSlugAndProjectParams{
+	toolset, err := s.toolsetsRepo.GetToolsetByMCPSlug(ctx, toolsets_repo.GetToolsetByMCPSlugParams{
 		ProjectID: projectID,
 		McpSlug:   conv.ToPGText(mcpSlug),
 	})
@@ -141,18 +141,14 @@ func (s *Service) loadToolsetForProjectAndMCPSlug(ctx context.Context, projectID
 		return nil, "", oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
 	}
 
-	// Build the MCP URL - check if toolset has a custom domain
-	var mcpURL string
+	mcpURL := fmt.Sprintf("%s/mcp/%s", s.serverURL.String(), mcpSlug)
 	if toolset.CustomDomainID.Valid {
 		domain, err := s.customDomainsRepo.GetCustomDomainByID(ctx, toolset.CustomDomainID.UUID)
 		if err != nil {
 			return nil, "", oops.E(oops.CodeNotFound, err, "custom domain not found").Log(ctx, s.logger)
 		}
 		mcpURL = fmt.Sprintf("https://%s/mcp/%s", domain.Domain, mcpSlug)
-	} else {
-		mcpURL = s.serverURL.String() + "/mcp/" + mcpSlug
 	}
-
 	return &toolset, mcpURL, nil
 }
 
