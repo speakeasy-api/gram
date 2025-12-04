@@ -48,11 +48,11 @@ async function run() {
   note(
     `
 👀 To deploy Gram Functions to Fly.io, you'll need:
-    - A Fly.io account (https://fly.io)
-    - A Fly.io organization-scoped token (https://fly.io/tokens/create)
-    - A Fly.io app hosting the the Gram Functions runner images
-    - A Tigris bucket associated with the Fly.io organization
-    - A Tigris access key and secret with permissions to access the bucket (https://console.tigris.dev)
+    🎈 A Fly.io account (https://fly.io)
+    🎈 A Fly.io organization-scoped token (https://fly.io/tokens/create)
+    🎈 A Fly.io app hosting the the Gram Functions runner images
+    🐅 A Tigris bucket associated with the Fly.io organization
+    🐅 A Tigris access key and secret with permissions to access the bucket (https://console.tigris.dev)
 `.slice(1, -1),
     "Pre-requisites",
   );
@@ -73,10 +73,16 @@ async function run() {
 
   const initialToken =
     process.env["GRAM_FUNCTIONS_FLYIO_API_TOKEN"] || undefined;
-  const token = await text({
-    message: "💬 Enter your Fly.io organization-scoped token",
-    initialValue: initialToken,
+  let tokenMessage = "🎈 Enter your Fly.io organization-scoped token";
+  if (initialToken) {
+    tokenMessage += " (leave blank to keep existing)";
+  }
+  let token = await password({
+    message: tokenMessage,
     validate: (value) => {
+      if (!value && initialToken) {
+        return;
+      }
       if (!value?.startsWith("FlyV1 ")) {
         return "Invalid Fly.io token. It should start with 'FlyV1 ...'.";
       }
@@ -86,10 +92,13 @@ async function run() {
     cancel("Operation cancelled.");
     process.exit(0);
   }
+  if (!token && initialToken) {
+    token = initialToken;
+  }
 
   const initialOrg = process.env["GRAM_FUNCTIONS_FLYIO_ORG"] || undefined;
   const org = await text({
-    message: "💬 Enter your Fly.io organization name",
+    message: "🎈 Enter your Fly.io organization name",
     initialValue: initialOrg,
   });
   if (isCancel(org)) {
@@ -100,7 +109,7 @@ async function run() {
   const initialApp =
     process.env["GRAM_FUNCTIONS_RUNNER_OCI_IMAGE"]?.split("/")[1] || undefined;
   const app = await text({
-    message: "💬 Enter your Fly.io app name for Gram Functions runner images",
+    message: "🎈 Enter your Fly.io app name for Gram Functions runner images",
     initialValue: initialApp,
   });
   if (isCancel(app)) {
@@ -112,7 +121,7 @@ async function run() {
     process.env["GRAM_FUNCTIONS_TIGRIS_BUCKET_URI"]?.slice("s3://".length) ||
     undefined;
   const bucket = await text({
-    message: "💬 Enter your Tigris bucket name for Gram Functions",
+    message: "🐅 Enter your Tigris bucket name for Gram Functions",
     initialValue: initialTigrisBucket,
   });
   if (isCancel(bucket)) {
@@ -123,8 +132,13 @@ async function run() {
   const initialTigrisKey =
     process.env["GRAM_FUNCTIONS_TIGRIS_KEY"] || undefined;
   const tigrisKey = await text({
-    message: `💬 Enter your Tigris access key for ${bucket}`,
+    message: `🐅 Enter your Tigris access key for ${bucket}`,
     initialValue: initialTigrisKey,
+    validate: (value) => {
+      if (!value?.startsWith("tid_")) {
+        return "Invalid Tigris access key. It should start with 'tid_'.";
+      }
+    },
   });
   if (isCancel(tigrisKey)) {
     cancel("Operation cancelled.");
@@ -133,13 +147,27 @@ async function run() {
 
   const initialTigrisSecret =
     process.env["GRAM_FUNCTIONS_TIGRIS_SECRET"] || undefined;
-  const tigrisSecret = await text({
-    message: `💬 Enter your Tigris secret key for ${bucket}`,
-    initialValue: initialTigrisSecret,
+  let tigrisSecretMessage = `🐅 Enter your Tigris secret key for ${bucket}`;
+  if (initialTigrisSecret) {
+    tigrisSecretMessage += " (leave blank to keep existing)";
+  }
+  let tigrisSecret = await password({
+    message: tigrisSecretMessage,
+    validate: (value) => {
+      if (!value && initialToken) {
+        return;
+      }
+      if (!value?.startsWith("tsec_")) {
+        return "Invalid Tigris secret key. It should start with 'tsec_'.";
+      }
+    },
   });
   if (isCancel(tigrisSecret)) {
     cancel("Operation cancelled.");
     process.exit(0);
+  }
+  if (!tigrisSecret && initialTigrisSecret) {
+    tigrisSecret = initialTigrisSecret;
   }
 
   const args = [

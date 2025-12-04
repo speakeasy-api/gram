@@ -48,7 +48,7 @@ WHERE
 -- name: ListAssets :many
 SELECT * FROM assets WHERE project_id = @project_id;
 
--- name: GetAssetURLs :many
+-- name: GetAssetsByID :many
 SELECT id, url, sha256, content_type, content_length
 FROM assets
 WHERE project_id = @project_id

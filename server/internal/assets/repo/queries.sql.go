@@ -75,7 +75,7 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset
 	return i, err
 }
 
-const getAssetURLs = `-- name: GetAssetURLs :many
+const getAssetsByID = `-- name: GetAssetsByID :many
 SELECT id, url, sha256, content_type, content_length
 FROM assets
 WHERE project_id = $1
@@ -83,12 +83,12 @@ WHERE project_id = $1
   AND deleted IS FALSE
 `
 
-type GetAssetURLsParams struct {
+type GetAssetsByIDParams struct {
 	ProjectID uuid.UUID
 	Ids       []uuid.UUID
 }
 
-type GetAssetURLsRow struct {
+type GetAssetsByIDRow struct {
 	ID            uuid.UUID
 	Url           string
 	Sha256        string
@@ -96,15 +96,15 @@ type GetAssetURLsRow struct {
 	ContentLength int64
 }
 
-func (q *Queries) GetAssetURLs(ctx context.Context, arg GetAssetURLsParams) ([]GetAssetURLsRow, error) {
-	rows, err := q.db.Query(ctx, getAssetURLs, arg.ProjectID, arg.Ids)
+func (q *Queries) GetAssetsByID(ctx context.Context, arg GetAssetsByIDParams) ([]GetAssetsByIDRow, error) {
+	rows, err := q.db.Query(ctx, getAssetsByID, arg.ProjectID, arg.Ids)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetAssetURLsRow
+	var items []GetAssetsByIDRow
 	for rows.Next() {
-		var i GetAssetURLsRow
+		var i GetAssetsByIDRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Url,

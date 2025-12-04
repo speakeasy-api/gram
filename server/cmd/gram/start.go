@@ -174,24 +174,6 @@ func newStartCommand() *cli.Command {
 			Required: true,
 		},
 		&cli.StringFlag{
-			Name:     "tigris-backend",
-			Usage:    "The backend to use for storing function assets externally",
-			EnvVars:  []string{"GRAM_FUNCTIONS_TIGRIS_BACKEND"},
-			Required: true,
-			Action: func(c *cli.Context, val string) error {
-				if val != "fs" && val != "s3" {
-					return fmt.Errorf("invalid tigris backend: %s", val)
-				}
-				return nil
-			},
-		},
-		&cli.StringFlag{
-			Name:     "tigris-uri",
-			Usage:    "The location of the tigris backend to connect to",
-			EnvVars:  []string{"GRAM_FUNCTIONS_TIGRIS_URI"},
-			Required: true,
-		},
-		&cli.StringFlag{
 			Name:    "redis-cache-addr",
 			Usage:   "Address of the redis cache server",
 			EnvVars: []string{"GRAM_REDIS_CACHE_ADDR"},
@@ -522,7 +504,13 @@ func newStartCommand() *cli.Command {
 				}
 			}
 
-			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(ctx, c, logger, tracerProvider, db, assetStorage, encryptionClient)
+			tigrisStore, shutdown, err := newFlyTigrisStore(ctx, c, logger)
+			if err != nil {
+				return fmt.Errorf("failed to create flytigris asset store: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(ctx, c, logger, tracerProvider, db, assetStorage, tigrisStore, encryptionClient)
 			if err != nil {
 				return fmt.Errorf("failed to create functions orchestrator: %w", err)
 			}
@@ -590,6 +578,7 @@ func newStartCommand() *cli.Command {
 			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
 			usage.Attach(mux, usage.NewService(logger, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter))
 			logs.Attach(mux, logs.NewService(logger, db, sessionManager, tcm))
+			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, tigrisStore))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

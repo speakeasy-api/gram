@@ -102,7 +102,7 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 		creds[row.FunctionID] = row
 	}
 
-	urlrows, err := arepo.GetAssetURLs(ctx, assetsrepo.GetAssetURLsParams{
+	urlrows, err := arepo.GetAssetsByID(ctx, assetsrepo.GetAssetsByIDParams{
 		ProjectID: args.ProjectID,
 		Ids:       assetids,
 	})
@@ -110,7 +110,7 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 		return oops.E(oops.CodeUnexpected, err, "error reading function asset URLs").Log(ctx, d.logger)
 	}
 
-	assetURLs := make(map[uuid.UUID]assetsrepo.GetAssetURLsRow, len(urlrows))
+	assetURLs := make(map[uuid.UUID]assetsrepo.GetAssetsByIDRow, len(urlrows))
 	for _, row := range urlrows {
 		assetURLs[row.ID] = row
 	}
@@ -184,7 +184,7 @@ func (d *DeployFunctionRunners) preflightFunction(
 	args DeployFunctionRunnersRequest,
 	fnc repo.DeploymentsFunction,
 	credentials map[uuid.UUID]repo.GetFunctionCredentialsBatchRow,
-	fncAssets map[uuid.UUID]assetsrepo.GetAssetURLsRow,
+	fncAssets map[uuid.UUID]assetsrepo.GetAssetsByIDRow,
 ) (deployFunctionRunnerTask, error) {
 	var empty deployFunctionRunnerTask
 

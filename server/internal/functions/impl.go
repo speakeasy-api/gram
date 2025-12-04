@@ -24,22 +24,23 @@ import (
 )
 
 type Service struct {
-	db     *pgxpool.Pool
-	tracer trace.Tracer
-	logger *slog.Logger
-	tigris *assets.FlyTigrisStore
+	db          *pgxpool.Pool
+	tracer      trace.Tracer
+	logger      *slog.Logger
+	tigrisStore *assets.FlyTigrisStore
 }
 
 var _ gen.Auther = (*Service)(nil)
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, tigrisStore *assets.FlyTigrisStore) *Service {
 	logger = logger.With(attr.SlogComponent("functions"))
 
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/functions"),
-		logger: logger,
-		db:     db,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/functions"),
+		logger:      logger,
+		db:          db,
+		tigrisStore: tigrisStore,
 	}
 }
 
@@ -97,7 +98,7 @@ func (s *Service) GetSignedAssetURL(ctx context.Context, p *gen.GetSignedAssetUR
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse function asset url").Log(ctx, logger)
 	}
 
-	signed, err := s.tigris.PresignRead(ctx, parsed.Path, 10*time.Minute)
+	signed, err := s.tigrisStore.PresignRead(ctx, parsed.Path, 10*time.Minute)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to presign function asset url").Log(ctx, logger)
 	}

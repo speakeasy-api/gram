@@ -383,6 +383,65 @@ func newBillingProvider(
 	}
 }
 
+func newFlyTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*assets.FlyTigrisStore, func(context.Context) error, error) {
+	nilShutdown := func(context.Context) error { return nil }
+
+	switch provider := c.String("functions-provider"); provider {
+	case "local":
+		tmpDir, err := os.MkdirTemp("", "gram-tigris-")
+		if err != nil {
+			return nil, nilShutdown, fmt.Errorf("create temp dir for mock tigris store: %w", err)
+		}
+
+		root, err := os.OpenRoot(tmpDir)
+		if err != nil {
+			return nil, nilShutdown, fmt.Errorf("open temp dir for mock tigris store: %w", err)
+		}
+
+		shutdown := func(ctx context.Context) error {
+			if err := root.Close(); err != nil {
+				return fmt.Errorf("close temp dir for mock tigris store: %w", err)
+			}
+			if err := os.RemoveAll(tmpDir); err != nil {
+				return fmt.Errorf("remove temp dir for mock tigris store: %w", err)
+			}
+			return nil
+		}
+
+		store := assets.NewFSBlobStore(logger, root)
+
+		return assets.NewFlyTigrisStore(store), shutdown, nil
+	case "flyio":
+		tigrisBucketURI := c.String("functions-tigris-bucket-uri")
+		tigrisKey := c.String("functions-tigris-key")
+		tigrisSecret := c.String("functions-tigris-secret")
+
+		if err := inv.Check(
+			"tigris flags",
+			"tigris bucket uri is set", tigrisBucketURI != "",
+			"tigris key is set", tigrisKey != "",
+			"tigris secret is set", tigrisSecret != "",
+		); err != nil {
+			return nil, nilShutdown, fmt.Errorf("invalid configuration for tigris: %w", err)
+		}
+
+		store, err := assets.NewS3BlobStore(ctx, logger, tigrisBucketURI, assets.S3BlobStoreOptions{
+			BaseEndpoint: "https://t3.storage.dev",
+			Region:       "auto",
+			UsePathStyle: false,
+			AccessKey:    tigrisKey,
+			AccessSecret: tigrisSecret,
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("create tigris blob store: %w", err)
+		}
+
+		return assets.NewFlyTigrisStore(store, assets.WithTigrisPresignHost("fly.storage.tigris.dev")), nilShutdown, nil
+	default:
+		return nil, nilShutdown, fmt.Errorf("unrecognized functions provider: %s", provider)
+	}
+}
+
 func newFunctionOrchestrator(
 	ctx context.Context,
 	c *cli.Context,
@@ -390,6 +449,7 @@ func newFunctionOrchestrator(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	assetStore assets.BlobStore,
+	tigrisStore *assets.FlyTigrisStore,
 	enc *encryption.Client,
 ) (functions.Orchestrator, func(context.Context) error, error) {
 	nilShutdown := func(context.Context) error { return nil }
@@ -442,19 +502,6 @@ func newFunctionOrchestrator(
 		if err != nil {
 			return nil, nilShutdown, fmt.Errorf("create functions image selector: %w", err)
 		}
-
-		store, err := assets.NewS3BlobStore(ctx, logger, tigrisBucketURI, assets.S3BlobStoreOptions{
-			BaseEndpoint: "https://t3.storage.dev",
-			Region:       "auto",
-			UsePathStyle: false,
-			AccessKey:    tigrisKey,
-			AccessSecret: tigrisSecret,
-		})
-		if err != nil {
-			return nil, nil, fmt.Errorf("create tigris blob store: %w", err)
-		}
-
-		tigrisStore := assets.NewFlyTigrisStore(store, assets.WithTigrisPresignHost("fly.storage.tigris.dev"))
 
 		return functions.NewFlyRunner(
 			logger,
