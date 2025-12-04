@@ -51,30 +51,38 @@ export default function NameDeploymentStep() {
 
   if (step.isCurrentStep && step.state === "idle") {
     return (
-      <Stack gap={2}>
-        <Stack
-          direction={"horizontal"}
-          gap={2}
-          className="max-w-sm z-10 items-center"
-        >
-          <Input
-            value={value}
-            onChange={handleValueChange}
-            placeholder="My API"
-            className="h-9 py-0"
-          />
-          <Button
-            variant="brand"
-            onClick={() => handleNameAsset()}
-            disabled={validation !== null}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleNameAsset();
+        }}
+      >
+        <Stack gap={2}>
+          <Stack
+            direction={"horizontal"}
+            gap={2}
+            className="max-w-sm z-10 items-center"
           >
-            CONTINUE
-          </Button>
+            <Input
+              value={value}
+              onChange={handleValueChange}
+              placeholder="My API"
+              className="h-9 py-0"
+              autoFocus
+            />
+            <Button
+              type="submit"
+              variant="brand"
+              disabled={validation !== null}
+            >
+              CONTINUE
+            </Button>
+          </Stack>
+          {validation !== null && (
+            <span className="text-destructive">{validation}</span>
+          )}
         </Stack>
-        {validation !== null && (
-          <span className="text-destructive">{validation}</span>
-        )}
-      </Stack>
+      </form>
     );
   } else if (step.state === "completed") {
     return <Type>✓ Source named "{stepper.meta.current.assetName}"</Type>;
