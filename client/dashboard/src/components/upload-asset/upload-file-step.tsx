@@ -1,8 +1,8 @@
 import { useProject, useSession } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
 import { Stack } from "@speakeasy-api/moonshine";
+import { OpenApiSourceInput } from "../OpenApiSourceInput";
 import { Type } from "../ui/type";
-import { FullWidthUpload } from "../upload";
 import { useStep } from "./step";
 import { useStepper } from "./stepper";
 
@@ -59,11 +59,6 @@ export default function UploadFileStep() {
       </Stack>
     );
   } else {
-    return (
-      <FullWidthUpload
-        onUpload={handleUpload}
-        allowedExtensions={["yaml", "yml", "json"]}
-      />
-    );
+    return <OpenApiSourceInput onUpload={handleUpload} />;
   }
 }

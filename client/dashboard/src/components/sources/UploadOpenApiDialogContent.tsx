@@ -1,5 +1,5 @@
+import { OpenApiSourceInput } from "@/components/OpenApiSourceInput";
 import { Spinner } from "@/components/ui/spinner";
-import { FullWidthUpload } from "@/components/upload";
 import { useUploadOpenAPISteps } from "@/pages/onboarding/UploadOpenAPI";
 import { UploadedDocument } from "@/pages/onboarding/Wizard";
 import { Button, Dialog } from "@speakeasy-api/moonshine";
@@ -49,10 +49,7 @@ export function UploadOpenApiDialogContent({
         </Dialog.Description>
       </Dialog.Header>
       {!file ? (
-        <FullWidthUpload
-          onUpload={handleSpecUpload}
-          allowedExtensions={["yaml", "yml", "json"]}
-        />
+        <OpenApiSourceInput onUpload={handleSpecUpload} />
       ) : (
         <UploadedDocument
           file={file}
