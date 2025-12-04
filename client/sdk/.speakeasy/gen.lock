@@ -1,17 +1,17 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 1e8f0b5bbd04889b6a5802bd74c6c1f1
+  docChecksum: 214507bc55e894bb11bfd6f3fc9b6b91
   docVersion: 0.0.1
-  speakeasyVersion: 1.668.0
-  generationVersion: 2.770.0
-  releaseVersion: 0.21.5
-  configChecksum: 2af941b0ece7531615032ce19e783735
+  speakeasyVersion: 1.661.1
+  generationVersion: 2.763.2
+  releaseVersion: 0.21.7
+  configChecksum: 934ebfc4783e148d1ef190915b5e8433
 features:
   typescript:
     additionalDependencies: 0.1.0
     constsAndDefaults: 0.1.12
-    core: 3.26.14
+    core: 3.26.10
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
     downloadStreams: 0.1.1
@@ -25,7 +25,7 @@ features:
     reactQueryHooks: 0.2.3
     responseFormat: 0.2.3
     retries: 2.83.0
-    sdkHooks: 0.4.0
+    sdkHooks: 0.3.0
 generatedFiles:
   - .devcontainer/README.md
   - .devcontainer/devcontainer.json
@@ -83,6 +83,7 @@ generatedFiles:
   - docs/models/components/environmententryinput.md
   - docs/models/components/evolveform.md
   - docs/models/components/evolveresult.md
+  - docs/models/components/externalmcpserver.md
   - docs/models/components/externaloauthserver.md
   - docs/models/components/externaloauthserverform.md
   - docs/models/components/featurename.md
@@ -107,6 +108,7 @@ generatedFiles:
   - docs/models/components/key.md
   - docs/models/components/kind.md
   - docs/models/components/listassetsresult.md
+  - docs/models/components/listcatalogresponsebody.md
   - docs/models/components/listchatsresult.md
   - docs/models/components/listdeploymentresult.md
   - docs/models/components/listenvironmentsresult.md
@@ -338,6 +340,8 @@ generatedFiles:
   - docs/models/operations/listglobalvariationssecurityoption2.md
   - docs/models/operations/listintegrationsrequest.md
   - docs/models/operations/listintegrationssecurity.md
+  - docs/models/operations/listmcpcatalogrequest.md
+  - docs/models/operations/listmcpcatalogsecurity.md
   - docs/models/operations/listpackagesrequest.md
   - docs/models/operations/listpackagessecurity.md
   - docs/models/operations/listpackagessecurityoption1.md
@@ -481,6 +485,7 @@ generatedFiles:
   - docs/sdks/keys/README.md
   - docs/sdks/logs/README.md
   - docs/sdks/mcpmetadata/README.md
+  - docs/sdks/mcpregistries/README.md
   - docs/sdks/packages/README.md
   - docs/sdks/projects/README.md
   - docs/sdks/resources/README.md
@@ -549,6 +554,7 @@ generatedFiles:
   - src/funcs/logsList.ts
   - src/funcs/mcpMetadataGet.ts
   - src/funcs/mcpMetadataSet.ts
+  - src/funcs/mcpRegistriesListCatalog.ts
   - src/funcs/packagesCreate.ts
   - src/funcs/packagesList.ts
   - src/funcs/packagesListVersions.ts
@@ -650,6 +656,7 @@ generatedFiles:
   - src/models/components/environmententryinput.ts
   - src/models/components/evolveform.ts
   - src/models/components/evolveresult.ts
+  - src/models/components/externalmcpserver.ts
   - src/models/components/externaloauthserver.ts
   - src/models/components/externaloauthserverform.ts
   - src/models/components/functionenvironmentvariable.ts
@@ -673,6 +680,7 @@ generatedFiles:
   - src/models/components/integrationversion.ts
   - src/models/components/key.ts
   - src/models/components/listassetsresult.ts
+  - src/models/components/listcatalogresponsebody.ts
   - src/models/components/listchatsresult.ts
   - src/models/components/listdeploymentresult.ts
   - src/models/components/listenvironmentsresult.ts
@@ -803,6 +811,7 @@ generatedFiles:
   - src/models/operations/listenvironments.ts
   - src/models/operations/listglobalvariations.ts
   - src/models/operations/listintegrations.ts
+  - src/models/operations/listmcpcatalog.ts
   - src/models/operations/listpackages.ts
   - src/models/operations/listprojects.ts
   - src/models/operations/listresources.ts
@@ -893,6 +902,7 @@ generatedFiles:
   - src/react-query/listDeployments.ts
   - src/react-query/listEnvironments.ts
   - src/react-query/listIntegrations.ts
+  - src/react-query/listMcpCatalog.ts
   - src/react-query/listPackages.ts
   - src/react-query/listProjects.ts
   - src/react-query/listResources.ts
@@ -946,6 +956,7 @@ generatedFiles:
   - src/sdk/keys.ts
   - src/sdk/logs.ts
   - src/sdk/mcpmetadata.ts
+  - src/sdk/mcpregistries.ts
   - src/sdk/packages.ts
   - src/sdk/projects.ts
   - src/sdk/resources.ts
@@ -1960,5 +1971,14 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listMcpCatalog:
+    speakeasy-default-list-mcp-catalog:
+      responses:
+        "200":
+          application/json: {"servers": [{"description": "yearly excitedly regal what knowledgeably unaccountably consequently dreamily unfortunately officially", "name": "io.modelcontextprotocol.anonymous/exa", "registry_id": "186ea49e-b6b2-476a-b0f6-c6f5e3421165", "version": "1.0.0"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
