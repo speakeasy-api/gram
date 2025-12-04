@@ -1,4 +1,5 @@
 import { GettingStartedInstructions } from "@/components/functions/GettingStartedInstructions";
+import ImportMCPTabContent from "@/components/sources/ImportMCPTabContent";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DeployStep from "@/components/upload-asset/deploy-step";
 import NameDeploymentStep from "@/components/upload-asset/name-deployment-step";
@@ -24,29 +25,44 @@ export default function AddSourceDialogContent({
   const telemetry = useTelemetry();
   const isFunctionsEnabled =
     telemetry.isFeatureEnabled("gram-functions") ?? false;
-  const [activeTab, setActiveTab] = React.useState<"openapi" | "functions">(
-    "openapi",
-  );
+  const isExternalMCPEnabled =
+    telemetry.isFeatureEnabled("external-mcp-catalog") ?? false;
+  const [activeTab, setActiveTab] = React.useState<
+    "openapi" | "functions" | "import-mcp"
+  >("openapi");
 
   return (
     <UploadAssetStepper.Provider step={1}>
       <Dialog.Header>
         <Dialog.Title>Add Source</Dialog.Title>
         <Dialog.Description>
-          {isFunctionsEnabled
-            ? "Upload an OpenAPI document or add Gram Functions to create tools"
+          {isFunctionsEnabled || isExternalMCPEnabled
+            ? "Upload an OpenAPI document, add Gram Functions, or import an MCP server"
             : "Upload an OpenAPI document to create tools"}
         </Dialog.Description>
       </Dialog.Header>
-      {isFunctionsEnabled ? (
+      {isFunctionsEnabled || isExternalMCPEnabled ? (
         <Tabs
           value={activeTab}
-          onValueChange={(v) => setActiveTab(v as "openapi" | "functions")}
+          onValueChange={(v) =>
+            setActiveTab(v as "openapi" | "functions" | "import-mcp")
+          }
           className="px-6"
         >
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList
+            className={`grid w-full ${
+              isFunctionsEnabled && isExternalMCPEnabled
+                ? "grid-cols-3"
+                : "grid-cols-2"
+            }`}
+          >
             <TabsTrigger value="openapi">OpenAPI</TabsTrigger>
-            <TabsTrigger value="functions">Functions</TabsTrigger>
+            {isFunctionsEnabled && (
+              <TabsTrigger value="functions">Functions</TabsTrigger>
+            )}
+            {isExternalMCPEnabled && (
+              <TabsTrigger value="import-mcp">Import MCP</TabsTrigger>
+            )}
           </TabsList>
           <TabsContent value="openapi" className="mt-0">
             <UploadAssetStepper.Frame className="p-8">
@@ -84,9 +100,16 @@ export default function AddSourceDialogContent({
               </UploadAssetStep>
             </UploadAssetStepper.Frame>
           </TabsContent>
-          <TabsContent value="functions" className="mt-0">
-            <GettingStartedInstructions />
-          </TabsContent>
+          {isFunctionsEnabled && (
+            <TabsContent value="functions" className="mt-0">
+              <GettingStartedInstructions />
+            </TabsContent>
+          )}
+          {isExternalMCPEnabled && (
+            <TabsContent value="import-mcp" className="mt-0">
+              <ImportMCPTabContent />
+            </TabsContent>
+          )}
         </Tabs>
       ) : (
         <UploadAssetStepper.Frame className="p-8">
