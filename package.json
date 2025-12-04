@@ -27,6 +27,9 @@
     "zx": "^8.8.5"
   },
   "pnpm": {
-    "overrides": {}
+    "overrides": {},
+    "patchedDependencies": {
+      "zod@3.25.76": "patches/zod@3.25.76.patch"
+    }
   }
 }
