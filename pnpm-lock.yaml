@@ -259,7 +259,7 @@ importers:
         specifier: ^1.1.2
         version: 1.1.2(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       zod:
-        specifier: ^3.20.0
+        specifier: 3.25.76
         version: 3.25.76(patch_hash=cba2b93eddc7a07a4ed221c3b3e8156ed9b4e3a4d8d4a91e013830785273923e)
       zustand:
         specifier: ^5.0.4
