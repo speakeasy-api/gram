@@ -1,5 +1,14 @@
 # dashboard
 
+## 0.21.1
+
+### Patch Changes
+
+- 59f21eb: fix: AddSourceDialog continue button not closing dialog when clicked
+- 5f6d646: Allow uploading OpenAPI specs via remote url
+- Updated dependencies [949787b]
+  - @gram/client@0.21.6
+
 ## 0.21.0
 
 ### Minor Changes
