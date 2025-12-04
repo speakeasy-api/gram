@@ -13,7 +13,7 @@ pnpm install
 pnpm build
 ```
 
-Next, `cd` into the `pizzaz_node_server/mcp-server` directory and run:
+Next, `cd` into the `pizzaz_node_server/pizza-app-gram` directory and run:
 
 ```bash
 pnpm i @gram-ai/functions
@@ -22,7 +22,9 @@ pnpm run inline:app
 
 ## Deploying to Gram
 
-Once the MCP server is built, it can be deployed to Gram via Gram functions.
+Any typescript-based MCP server, once built, can be deployed to Gram via Gram
+functions. Deploy this MCP server to Gram by running the following commands
+from `pizzaz_node_server/pizza-app-gram`:
 
 ```bash
 pnpm build
