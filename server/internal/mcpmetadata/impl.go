@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -87,9 +86,9 @@ type IDEInstallLinkConfig struct {
 	// Applicable for vscode, cursor
 	Headers map[string]string `json:"headers"`
 	// Required for vscode
-	Name *string `json:"name"`
+	Name *string `json:"name,omitempty"`
 	// Required for vscode ("http" only)
-	Type *string `json:"type"`
+	Type *string `json:"type,omitempty"`
 }
 
 type jsonSnippetData struct {
@@ -511,7 +510,7 @@ func safeTemplateURL(rawURL string, allowedScheme string) (template.URL, error) 
 		).Log(context.Background(), nil)
 	}
 
-	return template.URL(html.EscapeString(u.String())), nil // #nosec G203 // This has been checked and escaped
+	return template.URL(u.String()), nil // #nosec G203 // This has been checked and escaped
 }
 
 func (s *Service) resolveMCPURLFromContext(ctx context.Context, toolset toolsets_repo.Toolset, serverUrl string) (string, error) {
