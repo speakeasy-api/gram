@@ -410,7 +410,6 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 
 	req, err := http.NewRequestWithContext(ctx, "GET", OpenRouterBaseURL+"/v1/generation", nil)
 	if err != nil {
-		o.logger.ErrorContext(ctx, "failed to create openrouter generation HTTP request", attr.SlogError(err))
 		return nil, 0, fmt.Errorf("failed to create generation request: %w", err)
 	}
 
@@ -423,7 +422,6 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 
 	resp, err := o.orClient.Do(req)
 	if err != nil {
-		o.logger.ErrorContext(ctx, "failed to send HTTP request to fetch generation", attr.SlogError(err))
 		return nil, 0, fmt.Errorf("failed to send generation request: %w", err)
 	}
 
@@ -432,13 +430,11 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 	})
 
 	if resp.StatusCode != http.StatusOK {
-		o.logger.ErrorContext(ctx, "failed to fetch generation from OpenRouter", attr.SlogHTTPResponseStatusCode(resp.StatusCode))
 		return nil, resp.StatusCode, fmt.Errorf("failed to fetch generation from OpenRouter: %s", resp.Status)
 	}
 
 	var genResp generationResponse
 	if err := json.NewDecoder(resp.Body).Decode(&genResp); err != nil {
-		o.logger.ErrorContext(ctx, "failed to decode generation response", attr.SlogError(err))
 		return nil, resp.StatusCode, fmt.Errorf("failed to decode generation response: %w", err)
 	}
 

@@ -559,7 +559,7 @@ func newStartCommand() *cli.Command {
 			mcpMetadataService := mcpmetadata.NewService(logger, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, oauthService, billingTracker, billingRepo, tcm, ragService, temporalClient), mcpMetadataService)
-			chat.Attach(mux, chat.NewService(logger, db, sessionManager, openRouter))
+			chat.Attach(mux, chat.NewService(logger, db, sessionManager, openRouter, &background.FallbackModelUsageTracker{Temporal: temporalClient}))
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
 					GramServerURL:      c.String("server-url"),

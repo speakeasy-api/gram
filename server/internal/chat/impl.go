@@ -42,27 +42,34 @@ import (
 
 var _ gen.Service = (*Service)(nil)
 
-type Service struct {
-	auth           *auth.Auth
-	repo           *repo.Queries
-	tracer         trace.Tracer
-	openRouter     openrouter.Provisioner
-	logger         *slog.Logger
-	sessions       *sessions.Manager
-	proxyTransport http.RoundTripper
+// FallbackModelUsageTracker schedules fallback model usage tracking when the inline call fails.
+type FallbackModelUsageTracker interface {
+	ScheduleFallbackModelUsageTracking(ctx context.Context, generationID, orgID, projectID string, source billing.ModelUsageSource, chatID string) error
 }
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, openRouter openrouter.Provisioner) *Service {
+type Service struct {
+	auth                 *auth.Auth
+	repo                 *repo.Queries
+	tracer               trace.Tracer
+	openRouter           openrouter.Provisioner
+	logger               *slog.Logger
+	sessions             *sessions.Manager
+	proxyTransport       http.RoundTripper
+	fallbackUsageTracker FallbackModelUsageTracker
+}
+
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, openRouter openrouter.Provisioner, fallbackUsageTracker FallbackModelUsageTracker) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
-		auth:           auth.New(logger, db, sessions),
-		sessions:       sessions,
-		logger:         logger,
-		repo:           repo.New(db),
-		tracer:         otel.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
-		openRouter:     openRouter,
-		proxyTransport: cleanhttp.DefaultPooledTransport(),
+		auth:                 auth.New(logger, db, sessions),
+		sessions:             sessions,
+		logger:               logger,
+		repo:                 repo.New(db),
+		tracer:               otel.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
+		openRouter:           openRouter,
+		proxyTransport:       cleanhttp.DefaultPooledTransport(),
+		fallbackUsageTracker: fallbackUsageTracker,
 	}
 }
 
@@ -359,19 +366,34 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	defer func() {
 		if respCaptorWithTracking, ok := respCaptor.(*responseCaptor); ok && respCaptorWithTracking.messageID != "" {
 			go func() {
-				ctx := context.WithoutCancel(ctx)
 				if err := s.openRouter.TriggerModelUsageTracking(
-					ctx,
+					context.WithoutCancel(ctx),
 					respCaptorWithTracking.messageID,
 					orgID,
 					authCtx.ProjectID.String(),
 					billing.ModelUsageSourceChat,
 					respCaptorWithTracking.chatID.String(),
 				); err != nil {
-					s.logger.ErrorContext(ctx, "failed to track model usage",
+					s.logger.WarnContext(ctx, "inline model usage tracking failed, scheduling fallback",
 						attr.SlogError(err),
 						attr.SlogOrganizationID(orgID),
 					)
+					// Schedule fallback via Temporal workflow
+					if s.fallbackUsageTracker != nil {
+						if scheduleErr := s.fallbackUsageTracker.ScheduleFallbackModelUsageTracking(
+							context.WithoutCancel(ctx),
+							respCaptorWithTracking.messageID,
+							orgID,
+							authCtx.ProjectID.String(),
+							billing.ModelUsageSourceChat,
+							respCaptorWithTracking.chatID.String(),
+						); scheduleErr != nil {
+							s.logger.ErrorContext(ctx, "failed to schedule fallback model usage tracking",
+								attr.SlogError(scheduleErr),
+								attr.SlogOrganizationID(orgID),
+							)
+						}
+					}
 				}
 			}()
 		} else {
