@@ -352,7 +352,13 @@ func newWorkerCommand() *cli.Command {
 				}
 			}
 
-			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(ctx, c, logger, tracerProvider, db, assetStorage, encryptionClient)
+			tigrisStore, shutdown, err := newFlyTigrisStore(ctx, c, logger)
+			if err != nil {
+				return fmt.Errorf("failed to create flytigris asset store: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, db, assetStorage, tigrisStore, encryptionClient)
 			if err != nil {
 				return fmt.Errorf("failed to create functions orchestrator: %w", err)
 			}

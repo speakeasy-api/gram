@@ -59,8 +59,8 @@ type FlyRunner struct {
 	logger          *slog.Logger
 	tracer          trace.Tracer
 	db              *pgxpool.Pool
-	assetStorage    assets.BlobStore
-	tigris          *assets.FlyTigrisStore
+	assetStore      assets.BlobStore
+	tigrisStore     *assets.FlyTigrisStore
 	client          *fly.Client
 	tokens          *tokens.Tokens
 	machinesAPIBase string
@@ -82,7 +82,7 @@ func NewFlyRunner(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	assetStorage assets.BlobStore,
-	tigrisStorage *assets.FlyTigrisStore,
+	tigrisStore *assets.FlyTigrisStore,
 	imageSelector ImageSelector,
 	encryption *encryption.Client,
 	o FlyRunnerOptions,
@@ -121,7 +121,8 @@ func NewFlyRunner(
 		logger:          logger.With(attr.SlogComponent("flyio-orchestrator")),
 		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/functions"),
 		db:              db,
-		assetStorage:    assetStorage,
+		assetStore:      assetStorage,
+		tigrisStore:     tigrisStore,
 		client:          c,
 		tokens:          o.FlyTokens,
 		machinesAPIBase: machinesAPIBase,
@@ -781,14 +782,14 @@ func (f *FlyRunner) serializeAssets(
 
 	files := make([]*fly.File, 0, len(assets))
 	for _, asset := range assets {
-		rdr, err := f.assetStorage.Read(ctx, asset.AssetURL)
+		rdr, err := f.assetStore.Read(ctx, asset.AssetURL)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch function asset").Log(ctx, logger)
 		}
 		defer o11y.LogDefer(ctx, f.logger, func() error { return oops.Prefix(rdr.Close(), "close function asset reader") })
 
 		if useTigris {
-			wr, _, err := f.tigris.Write(ctx, asset.AssetURL.Path, "", asset.ContentLength)
+			wr, _, err := f.tigrisStore.Write(ctx, asset.AssetURL.Path, "", asset.ContentLength)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to create writer for function asset").Log(ctx, logger)
 			}

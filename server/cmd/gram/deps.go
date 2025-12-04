@@ -443,7 +443,6 @@ func newFlyTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger)
 }
 
 func newFunctionOrchestrator(
-	ctx context.Context,
 	c *cli.Context,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
