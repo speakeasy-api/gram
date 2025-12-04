@@ -12,6 +12,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// FetchOpenAPIv3FromURLRequestBody is the type of the "assets" service
+// "fetchOpenAPIv3FromURL" endpoint HTTP request body.
+type FetchOpenAPIv3FromURLRequestBody struct {
+	// The URL to fetch the OpenAPI document from
+	URL string `form:"url" json:"url" xml:"url"`
+}
+
 // UploadImageResponseBody is the type of the "assets" service "uploadImage"
 // endpoint HTTP response body.
 type UploadImageResponseBody struct {
@@ -29,6 +36,13 @@ type UploadFunctionsResponseBody struct {
 // UploadOpenAPIv3ResponseBody is the type of the "assets" service
 // "uploadOpenAPIv3" endpoint HTTP response body.
 type UploadOpenAPIv3ResponseBody struct {
+	// The asset entry that was created in Gram
+	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
+}
+
+// FetchOpenAPIv3FromURLResponseBody is the type of the "assets" service
+// "fetchOpenAPIv3FromURL" endpoint HTTP response body.
+type FetchOpenAPIv3FromURLResponseBody struct {
 	// The asset entry that was created in Gram
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
 }
@@ -765,6 +779,195 @@ type UploadOpenAPIv3GatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// FetchOpenAPIv3FromURLUnauthorizedResponseBody is the type of the "assets"
+// service "fetchOpenAPIv3FromURL" endpoint HTTP response body for the
+// "unauthorized" error.
+type FetchOpenAPIv3FromURLUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// FetchOpenAPIv3FromURLForbiddenResponseBody is the type of the "assets"
+// service "fetchOpenAPIv3FromURL" endpoint HTTP response body for the
+// "forbidden" error.
+type FetchOpenAPIv3FromURLForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// FetchOpenAPIv3FromURLBadRequestResponseBody is the type of the "assets"
+// service "fetchOpenAPIv3FromURL" endpoint HTTP response body for the
+// "bad_request" error.
+type FetchOpenAPIv3FromURLBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// FetchOpenAPIv3FromURLNotFoundResponseBody is the type of the "assets"
+// service "fetchOpenAPIv3FromURL" endpoint HTTP response body for the
+// "not_found" error.
+type FetchOpenAPIv3FromURLNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// FetchOpenAPIv3FromURLConflictResponseBody is the type of the "assets"
+// service "fetchOpenAPIv3FromURL" endpoint HTTP response body for the
+// "conflict" error.
+type FetchOpenAPIv3FromURLConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// FetchOpenAPIv3FromURLUnsupportedMediaResponseBody is the type of the
+// "assets" service "fetchOpenAPIv3FromURL" endpoint HTTP response body for the
+// "unsupported_media" error.
+type FetchOpenAPIv3FromURLUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// FetchOpenAPIv3FromURLInvalidResponseBody is the type of the "assets" service
+// "fetchOpenAPIv3FromURL" endpoint HTTP response body for the "invalid" error.
+type FetchOpenAPIv3FromURLInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// FetchOpenAPIv3FromURLInvariantViolationResponseBody is the type of the
+// "assets" service "fetchOpenAPIv3FromURL" endpoint HTTP response body for the
+// "invariant_violation" error.
+type FetchOpenAPIv3FromURLInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// FetchOpenAPIv3FromURLUnexpectedResponseBody is the type of the "assets"
+// service "fetchOpenAPIv3FromURL" endpoint HTTP response body for the
+// "unexpected" error.
+type FetchOpenAPIv3FromURLUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// FetchOpenAPIv3FromURLGatewayErrorResponseBody is the type of the "assets"
+// service "fetchOpenAPIv3FromURL" endpoint HTTP response body for the
+// "gateway_error" error.
+type FetchOpenAPIv3FromURLGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ServeOpenAPIv3UnauthorizedResponseBody is the type of the "assets" service
 // "serveOpenAPIv3" endpoint HTTP response body for the "unauthorized" error.
 type ServeOpenAPIv3UnauthorizedResponseBody struct {
@@ -1324,6 +1527,15 @@ type AssetResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// The last update date of the asset.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// NewFetchOpenAPIv3FromURLRequestBody builds the HTTP request body from the
+// payload of the "fetchOpenAPIv3FromURL" endpoint of the "assets" service.
+func NewFetchOpenAPIv3FromURLRequestBody(p *assets.FetchOpenAPIv3FromURLForm) *FetchOpenAPIv3FromURLRequestBody {
+	body := &FetchOpenAPIv3FromURLRequestBody{
+		URL: p.URL,
+	}
+	return body
 }
 
 // NewServeImageResultOK builds a "assets" service "serveImage" endpoint result
@@ -1965,6 +2177,165 @@ func NewUploadOpenAPIv3GatewayError(body *UploadOpenAPIv3GatewayErrorResponseBod
 	return v
 }
 
+// NewFetchOpenAPIv3FromURLUploadOpenAPIv3ResultOK builds a "assets" service
+// "fetchOpenAPIv3FromURL" endpoint result from a HTTP "OK" response.
+func NewFetchOpenAPIv3FromURLUploadOpenAPIv3ResultOK(body *FetchOpenAPIv3FromURLResponseBody) *assets.UploadOpenAPIv3Result {
+	v := &assets.UploadOpenAPIv3Result{}
+	v.Asset = unmarshalAssetResponseBodyToAssetsAsset(body.Asset)
+
+	return v
+}
+
+// NewFetchOpenAPIv3FromURLUnauthorized builds a assets service
+// fetchOpenAPIv3FromURL endpoint unauthorized error.
+func NewFetchOpenAPIv3FromURLUnauthorized(body *FetchOpenAPIv3FromURLUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewFetchOpenAPIv3FromURLForbidden builds a assets service
+// fetchOpenAPIv3FromURL endpoint forbidden error.
+func NewFetchOpenAPIv3FromURLForbidden(body *FetchOpenAPIv3FromURLForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewFetchOpenAPIv3FromURLBadRequest builds a assets service
+// fetchOpenAPIv3FromURL endpoint bad_request error.
+func NewFetchOpenAPIv3FromURLBadRequest(body *FetchOpenAPIv3FromURLBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewFetchOpenAPIv3FromURLNotFound builds a assets service
+// fetchOpenAPIv3FromURL endpoint not_found error.
+func NewFetchOpenAPIv3FromURLNotFound(body *FetchOpenAPIv3FromURLNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewFetchOpenAPIv3FromURLConflict builds a assets service
+// fetchOpenAPIv3FromURL endpoint conflict error.
+func NewFetchOpenAPIv3FromURLConflict(body *FetchOpenAPIv3FromURLConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewFetchOpenAPIv3FromURLUnsupportedMedia builds a assets service
+// fetchOpenAPIv3FromURL endpoint unsupported_media error.
+func NewFetchOpenAPIv3FromURLUnsupportedMedia(body *FetchOpenAPIv3FromURLUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewFetchOpenAPIv3FromURLInvalid builds a assets service
+// fetchOpenAPIv3FromURL endpoint invalid error.
+func NewFetchOpenAPIv3FromURLInvalid(body *FetchOpenAPIv3FromURLInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewFetchOpenAPIv3FromURLInvariantViolation builds a assets service
+// fetchOpenAPIv3FromURL endpoint invariant_violation error.
+func NewFetchOpenAPIv3FromURLInvariantViolation(body *FetchOpenAPIv3FromURLInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewFetchOpenAPIv3FromURLUnexpected builds a assets service
+// fetchOpenAPIv3FromURL endpoint unexpected error.
+func NewFetchOpenAPIv3FromURLUnexpected(body *FetchOpenAPIv3FromURLUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewFetchOpenAPIv3FromURLGatewayError builds a assets service
+// fetchOpenAPIv3FromURL endpoint gateway_error error.
+func NewFetchOpenAPIv3FromURLGatewayError(body *FetchOpenAPIv3FromURLGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewServeOpenAPIv3ResultOK builds a "assets" service "serveOpenAPIv3"
 // endpoint result from a HTTP "OK" response.
 func NewServeOpenAPIv3ResultOK(contentType string, contentLength int64, lastModified string) *assets.ServeOpenAPIv3Result {
@@ -2484,6 +2855,20 @@ func ValidateUploadFunctionsResponseBody(body *UploadFunctionsResponseBody) (err
 // ValidateUploadOpenAPIv3ResponseBody runs the validations defined on
 // UploadOpenAPIv3ResponseBody
 func ValidateUploadOpenAPIv3ResponseBody(body *UploadOpenAPIv3ResponseBody) (err error) {
+	if body.Asset == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("asset", "body"))
+	}
+	if body.Asset != nil {
+		if err2 := ValidateAssetResponseBody(body.Asset); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateFetchOpenAPIv3FromURLResponseBody runs the validations defined on
+// FetchOpenAPIv3FromURLResponseBody
+func ValidateFetchOpenAPIv3FromURLResponseBody(body *FetchOpenAPIv3FromURLResponseBody) (err error) {
 	if body.Asset == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("asset", "body"))
 	}
@@ -3450,6 +3835,247 @@ func ValidateUploadOpenAPIv3UnexpectedResponseBody(body *UploadOpenAPIv3Unexpect
 // ValidateUploadOpenAPIv3GatewayErrorResponseBody runs the validations defined
 // on uploadOpenAPIv3_gateway_error_response_body
 func ValidateUploadOpenAPIv3GatewayErrorResponseBody(body *UploadOpenAPIv3GatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchOpenAPIv3FromURLUnauthorizedResponseBody runs the validations
+// defined on fetchOpenAPIv3FromURL_unauthorized_response_body
+func ValidateFetchOpenAPIv3FromURLUnauthorizedResponseBody(body *FetchOpenAPIv3FromURLUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchOpenAPIv3FromURLForbiddenResponseBody runs the validations
+// defined on fetchOpenAPIv3FromURL_forbidden_response_body
+func ValidateFetchOpenAPIv3FromURLForbiddenResponseBody(body *FetchOpenAPIv3FromURLForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchOpenAPIv3FromURLBadRequestResponseBody runs the validations
+// defined on fetchOpenAPIv3FromURL_bad_request_response_body
+func ValidateFetchOpenAPIv3FromURLBadRequestResponseBody(body *FetchOpenAPIv3FromURLBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchOpenAPIv3FromURLNotFoundResponseBody runs the validations
+// defined on fetchOpenAPIv3FromURL_not_found_response_body
+func ValidateFetchOpenAPIv3FromURLNotFoundResponseBody(body *FetchOpenAPIv3FromURLNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchOpenAPIv3FromURLConflictResponseBody runs the validations
+// defined on fetchOpenAPIv3FromURL_conflict_response_body
+func ValidateFetchOpenAPIv3FromURLConflictResponseBody(body *FetchOpenAPIv3FromURLConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchOpenAPIv3FromURLUnsupportedMediaResponseBody runs the
+// validations defined on fetchOpenAPIv3FromURL_unsupported_media_response_body
+func ValidateFetchOpenAPIv3FromURLUnsupportedMediaResponseBody(body *FetchOpenAPIv3FromURLUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchOpenAPIv3FromURLInvalidResponseBody runs the validations
+// defined on fetchOpenAPIv3FromURL_invalid_response_body
+func ValidateFetchOpenAPIv3FromURLInvalidResponseBody(body *FetchOpenAPIv3FromURLInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchOpenAPIv3FromURLInvariantViolationResponseBody runs the
+// validations defined on
+// fetchOpenAPIv3FromURL_invariant_violation_response_body
+func ValidateFetchOpenAPIv3FromURLInvariantViolationResponseBody(body *FetchOpenAPIv3FromURLInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchOpenAPIv3FromURLUnexpectedResponseBody runs the validations
+// defined on fetchOpenAPIv3FromURL_unexpected_response_body
+func ValidateFetchOpenAPIv3FromURLUnexpectedResponseBody(body *FetchOpenAPIv3FromURLUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchOpenAPIv3FromURLGatewayErrorResponseBody runs the validations
+// defined on fetchOpenAPIv3FromURL_gateway_error_response_body
+func ValidateFetchOpenAPIv3FromURLGatewayErrorResponseBody(body *FetchOpenAPIv3FromURLGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

@@ -16,25 +16,27 @@ import (
 
 // Client is the "assets" service client.
 type Client struct {
-	ServeImageEndpoint      goa.Endpoint
-	UploadImageEndpoint     goa.Endpoint
-	UploadFunctionsEndpoint goa.Endpoint
-	UploadOpenAPIv3Endpoint goa.Endpoint
-	ServeOpenAPIv3Endpoint  goa.Endpoint
-	ServeFunctionEndpoint   goa.Endpoint
-	ListAssetsEndpoint      goa.Endpoint
+	ServeImageEndpoint            goa.Endpoint
+	UploadImageEndpoint           goa.Endpoint
+	UploadFunctionsEndpoint       goa.Endpoint
+	UploadOpenAPIv3Endpoint       goa.Endpoint
+	FetchOpenAPIv3FromURLEndpoint goa.Endpoint
+	ServeOpenAPIv3Endpoint        goa.Endpoint
+	ServeFunctionEndpoint         goa.Endpoint
+	ListAssetsEndpoint            goa.Endpoint
 }
 
 // NewClient initializes a "assets" service client given the endpoints.
-func NewClient(serveImage, uploadImage, uploadFunctions, uploadOpenAPIv3, serveOpenAPIv3, serveFunction, listAssets goa.Endpoint) *Client {
+func NewClient(serveImage, uploadImage, uploadFunctions, uploadOpenAPIv3, fetchOpenAPIv3FromURL, serveOpenAPIv3, serveFunction, listAssets goa.Endpoint) *Client {
 	return &Client{
-		ServeImageEndpoint:      serveImage,
-		UploadImageEndpoint:     uploadImage,
-		UploadFunctionsEndpoint: uploadFunctions,
-		UploadOpenAPIv3Endpoint: uploadOpenAPIv3,
-		ServeOpenAPIv3Endpoint:  serveOpenAPIv3,
-		ServeFunctionEndpoint:   serveFunction,
-		ListAssetsEndpoint:      listAssets,
+		ServeImageEndpoint:            serveImage,
+		UploadImageEndpoint:           uploadImage,
+		UploadFunctionsEndpoint:       uploadFunctions,
+		UploadOpenAPIv3Endpoint:       uploadOpenAPIv3,
+		FetchOpenAPIv3FromURLEndpoint: fetchOpenAPIv3FromURL,
+		ServeOpenAPIv3Endpoint:        serveOpenAPIv3,
+		ServeFunctionEndpoint:         serveFunction,
+		ListAssetsEndpoint:            listAssets,
 	}
 }
 
@@ -121,6 +123,29 @@ func (c *Client) UploadFunctions(ctx context.Context, p *UploadFunctionsForm, re
 func (c *Client) UploadOpenAPIv3(ctx context.Context, p *UploadOpenAPIv3Form, req io.ReadCloser) (res *UploadOpenAPIv3Result, err error) {
 	var ires any
 	ires, err = c.UploadOpenAPIv3Endpoint(ctx, &UploadOpenAPIv3RequestData{Payload: p, Body: req})
+	if err != nil {
+		return
+	}
+	return ires.(*UploadOpenAPIv3Result), nil
+}
+
+// FetchOpenAPIv3FromURL calls the "fetchOpenAPIv3FromURL" endpoint of the
+// "assets" service.
+// FetchOpenAPIv3FromURL may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) FetchOpenAPIv3FromURL(ctx context.Context, p *FetchOpenAPIv3FromURLForm) (res *UploadOpenAPIv3Result, err error) {
+	var ires any
+	ires, err = c.FetchOpenAPIv3FromURLEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

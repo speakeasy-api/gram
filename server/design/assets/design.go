@@ -111,6 +111,25 @@ var _ = Service("assets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UploadOpenAPIv3"}`)
 	})
 
+	Method("fetchOpenAPIv3FromURL", func() {
+		Description("Fetch an OpenAPI v3 document from a URL and upload it to Gram.")
+
+		Payload(FetchOpenAPIv3FromURLForm)
+
+		Result(UploadOpenAPIv3Result)
+
+		HTTP(func() {
+			POST("/rpc/assets.fetchOpenAPIv3FromURL")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			security.SessionHeader()
+		})
+
+		Meta("openapi:operationId", "fetchOpenAPIv3FromURL")
+		Meta("openapi:extension:x-speakeasy-name-override", "fetchOpenAPIv3FromURL")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "FetchOpenAPIv3FromURL"}`)
+	})
+
 	Method("serveOpenAPIv3", func() {
 		Description("Serve an OpenAPIv3 asset from Gram.")
 
@@ -224,6 +243,15 @@ var UploadOpenAPIv3Form = Type("UploadOpenAPIv3Form", func() {
 
 	Attribute("content_type", String)
 	Attribute("content_length", Int64)
+})
+
+var FetchOpenAPIv3FromURLForm = Type("FetchOpenAPIv3FromURLForm", func() {
+	Required("url")
+	security.ByKeyPayload()
+	security.SessionPayload()
+	security.ProjectPayload()
+
+	Attribute("url", String, "The URL to fetch the OpenAPI document from")
 })
 
 var UploadOpenAPIv3Result = Type("UploadOpenAPIv3Result", func() {

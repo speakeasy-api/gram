@@ -380,6 +380,110 @@ paths:
             tags:
                 - agents
             x-speakeasy-name-override: create
+    /rpc/assets.fetchOpenAPIv3FromURL:
+        post:
+            description: Fetch an OpenAPI v3 document from a URL and upload it to Gram.
+            operationId: fetchOpenAPIv3FromURL
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/FetchOpenAPIv3FromURLForm2'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UploadOpenAPIv3Result'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: fetchOpenAPIv3FromURL assets
+            tags:
+                - assets
+            x-speakeasy-name-override: fetchOpenAPIv3FromURL
+            x-speakeasy-react-hook:
+                name: FetchOpenAPIv3FromURL
     /rpc/assets.list:
         get:
             description: List all assets for a project.
@@ -10391,6 +10495,28 @@ components:
             required:
                 - slug
                 - metadata
+        FetchOpenAPIv3FromURLForm:
+            type: object
+            properties:
+                apikey_token:
+                    type: string
+                project_slug_input:
+                    type: string
+                session_token:
+                    type: string
+                url:
+                    type: string
+                    description: The URL to fetch the OpenAPI document from
+            required:
+                - url
+        FetchOpenAPIv3FromURLForm2:
+            type: object
+            properties:
+                url:
+                    type: string
+                    description: The URL to fetch the OpenAPI document from
+            required:
+                - url
         FunctionEnvironmentVariable:
             type: object
             properties:

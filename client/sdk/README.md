@@ -130,6 +130,7 @@ run();
 
 ### [assets](docs/sdks/assets/README.md)
 
+* [fetchOpenAPIv3FromURL](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 * [listAssets](docs/sdks/assets/README.md#listassets) - listAssets assets
 * [serveFunction](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 * [serveImage](docs/sdks/assets/README.md#serveimage) - serveImage assets
@@ -299,6 +300,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`agentsCreate`](docs/sdks/agents/README.md#create) - createResponse agents
 - [`agentsDelete`](docs/sdks/agents/README.md#delete) - deleteResponse agents
 - [`agentsGet`](docs/sdks/agents/README.md#get) - getResponse agents
+- [`assetsFetchOpenAPIv3FromURL`](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 - [`assetsListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
 - [`assetsServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 - [`assetsServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
@@ -441,6 +443,7 @@ To learn about this feature and how to get started, check
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`useFeaturesSetMutation`](docs/sdks/features/README.md#set) - setProductFeature features
+- [`useFetchOpenAPIv3FromURLMutation`](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 - [`useGetCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 - [`useGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
 - [`useGetMcpMetadata`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata

@@ -46,6 +46,7 @@ export * from "./evolveform.js";
 export * from "./evolveresult.js";
 export * from "./externaloauthserver.js";
 export * from "./externaloauthserverform.js";
+export * from "./fetchopenapiv3fromurlform2.js";
 export * from "./functionenvironmentvariable.js";
 export * from "./functionresourcedefinition.js";
 export * from "./functiontooldefinition.js";

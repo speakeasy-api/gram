@@ -8,6 +8,7 @@
 package client
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -149,6 +150,45 @@ func BuildUploadOpenAPIv3Payload(assetsUploadOpenAPIv3ContentType string, assets
 	v := &assets.UploadOpenAPIv3Form{}
 	v.ContentType = contentType
 	v.ContentLength = contentLength
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildFetchOpenAPIv3FromURLPayload builds the payload for the assets
+// fetchOpenAPIv3FromURL endpoint from CLI flags.
+func BuildFetchOpenAPIv3FromURLPayload(assetsFetchOpenAPIv3FromURLBody string, assetsFetchOpenAPIv3FromURLApikeyToken string, assetsFetchOpenAPIv3FromURLProjectSlugInput string, assetsFetchOpenAPIv3FromURLSessionToken string) (*assets.FetchOpenAPIv3FromURLForm, error) {
+	var err error
+	var body FetchOpenAPIv3FromURLRequestBody
+	{
+		err = json.Unmarshal([]byte(assetsFetchOpenAPIv3FromURLBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"url\": \"Sed neque consequuntur officia quis.\"\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if assetsFetchOpenAPIv3FromURLApikeyToken != "" {
+			apikeyToken = &assetsFetchOpenAPIv3FromURLApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assetsFetchOpenAPIv3FromURLProjectSlugInput != "" {
+			projectSlugInput = &assetsFetchOpenAPIv3FromURLProjectSlugInput
+		}
+	}
+	var sessionToken *string
+	{
+		if assetsFetchOpenAPIv3FromURLSessionToken != "" {
+			sessionToken = &assetsFetchOpenAPIv3FromURLSessionToken
+		}
+	}
+	v := &assets.FetchOpenAPIv3FromURLForm{
+		URL: body.URL,
+	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.SessionToken = sessionToken

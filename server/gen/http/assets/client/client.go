@@ -34,6 +34,10 @@ type Client struct {
 	// uploadOpenAPIv3 endpoint.
 	UploadOpenAPIv3Doer goahttp.Doer
 
+	// FetchOpenAPIv3FromURL Doer is the HTTP client used to make requests to the
+	// fetchOpenAPIv3FromURL endpoint.
+	FetchOpenAPIv3FromURLDoer goahttp.Doer
+
 	// ServeOpenAPIv3 Doer is the HTTP client used to make requests to the
 	// serveOpenAPIv3 endpoint.
 	ServeOpenAPIv3Doer goahttp.Doer
@@ -66,18 +70,19 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ServeImageDoer:      doer,
-		UploadImageDoer:     doer,
-		UploadFunctionsDoer: doer,
-		UploadOpenAPIv3Doer: doer,
-		ServeOpenAPIv3Doer:  doer,
-		ServeFunctionDoer:   doer,
-		ListAssetsDoer:      doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		ServeImageDoer:            doer,
+		UploadImageDoer:           doer,
+		UploadFunctionsDoer:       doer,
+		UploadOpenAPIv3Doer:       doer,
+		FetchOpenAPIv3FromURLDoer: doer,
+		ServeOpenAPIv3Doer:        doer,
+		ServeFunctionDoer:         doer,
+		ListAssetsDoer:            doer,
+		RestoreResponseBody:       restoreBody,
+		scheme:                    scheme,
+		host:                      host,
+		decoder:                   dec,
+		encoder:                   enc,
 	}
 }
 
@@ -177,6 +182,30 @@ func (c *Client) UploadOpenAPIv3() goa.Endpoint {
 		resp, err := c.UploadOpenAPIv3Doer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("assets", "uploadOpenAPIv3", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// FetchOpenAPIv3FromURL returns an endpoint that makes HTTP requests to the
+// assets service fetchOpenAPIv3FromURL server.
+func (c *Client) FetchOpenAPIv3FromURL() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeFetchOpenAPIv3FromURLRequest(c.encoder)
+		decodeResponse = DecodeFetchOpenAPIv3FromURLResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildFetchOpenAPIv3FromURLRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.FetchOpenAPIv3FromURLDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assets", "fetchOpenAPIv3FromURL", err)
 		}
 		return decodeResponse(resp)
 	}

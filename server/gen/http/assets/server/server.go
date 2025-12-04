@@ -21,14 +21,15 @@ import (
 
 // Server lists the assets service endpoint HTTP handlers.
 type Server struct {
-	Mounts          []*MountPoint
-	ServeImage      http.Handler
-	UploadImage     http.Handler
-	UploadFunctions http.Handler
-	UploadOpenAPIv3 http.Handler
-	ServeOpenAPIv3  http.Handler
-	ServeFunction   http.Handler
-	ListAssets      http.Handler
+	Mounts                []*MountPoint
+	ServeImage            http.Handler
+	UploadImage           http.Handler
+	UploadFunctions       http.Handler
+	UploadOpenAPIv3       http.Handler
+	FetchOpenAPIv3FromURL http.Handler
+	ServeOpenAPIv3        http.Handler
+	ServeFunction         http.Handler
+	ListAssets            http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -62,17 +63,19 @@ func New(
 			{"UploadImage", "POST", "/rpc/assets.uploadImage"},
 			{"UploadFunctions", "POST", "/rpc/assets.uploadFunctions"},
 			{"UploadOpenAPIv3", "POST", "/rpc/assets.uploadOpenAPIv3"},
+			{"FetchOpenAPIv3FromURL", "POST", "/rpc/assets.fetchOpenAPIv3FromURL"},
 			{"ServeOpenAPIv3", "GET", "/rpc/assets.serveOpenAPIv3"},
 			{"ServeFunction", "GET", "/rpc/assets.serveFunction"},
 			{"ListAssets", "GET", "/rpc/assets.list"},
 		},
-		ServeImage:      NewServeImageHandler(e.ServeImage, mux, decoder, encoder, errhandler, formatter),
-		UploadImage:     NewUploadImageHandler(e.UploadImage, mux, decoder, encoder, errhandler, formatter),
-		UploadFunctions: NewUploadFunctionsHandler(e.UploadFunctions, mux, decoder, encoder, errhandler, formatter),
-		UploadOpenAPIv3: NewUploadOpenAPIv3Handler(e.UploadOpenAPIv3, mux, decoder, encoder, errhandler, formatter),
-		ServeOpenAPIv3:  NewServeOpenAPIv3Handler(e.ServeOpenAPIv3, mux, decoder, encoder, errhandler, formatter),
-		ServeFunction:   NewServeFunctionHandler(e.ServeFunction, mux, decoder, encoder, errhandler, formatter),
-		ListAssets:      NewListAssetsHandler(e.ListAssets, mux, decoder, encoder, errhandler, formatter),
+		ServeImage:            NewServeImageHandler(e.ServeImage, mux, decoder, encoder, errhandler, formatter),
+		UploadImage:           NewUploadImageHandler(e.UploadImage, mux, decoder, encoder, errhandler, formatter),
+		UploadFunctions:       NewUploadFunctionsHandler(e.UploadFunctions, mux, decoder, encoder, errhandler, formatter),
+		UploadOpenAPIv3:       NewUploadOpenAPIv3Handler(e.UploadOpenAPIv3, mux, decoder, encoder, errhandler, formatter),
+		FetchOpenAPIv3FromURL: NewFetchOpenAPIv3FromURLHandler(e.FetchOpenAPIv3FromURL, mux, decoder, encoder, errhandler, formatter),
+		ServeOpenAPIv3:        NewServeOpenAPIv3Handler(e.ServeOpenAPIv3, mux, decoder, encoder, errhandler, formatter),
+		ServeFunction:         NewServeFunctionHandler(e.ServeFunction, mux, decoder, encoder, errhandler, formatter),
+		ListAssets:            NewListAssetsHandler(e.ListAssets, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -85,6 +88,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UploadImage = m(s.UploadImage)
 	s.UploadFunctions = m(s.UploadFunctions)
 	s.UploadOpenAPIv3 = m(s.UploadOpenAPIv3)
+	s.FetchOpenAPIv3FromURL = m(s.FetchOpenAPIv3FromURL)
 	s.ServeOpenAPIv3 = m(s.ServeOpenAPIv3)
 	s.ServeFunction = m(s.ServeFunction)
 	s.ListAssets = m(s.ListAssets)
@@ -99,6 +103,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUploadImageHandler(mux, h.UploadImage)
 	MountUploadFunctionsHandler(mux, h.UploadFunctions)
 	MountUploadOpenAPIv3Handler(mux, h.UploadOpenAPIv3)
+	MountFetchOpenAPIv3FromURLHandler(mux, h.FetchOpenAPIv3FromURL)
 	MountServeOpenAPIv3Handler(mux, h.ServeOpenAPIv3)
 	MountServeFunctionHandler(mux, h.ServeFunction)
 	MountListAssetsHandler(mux, h.ListAssets)
@@ -345,6 +350,59 @@ func NewUploadOpenAPIv3Handler(
 		}
 		data := &assets.UploadOpenAPIv3RequestData{Payload: payload, Body: r.Body}
 		res, err := endpoint(ctx, data)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountFetchOpenAPIv3FromURLHandler configures the mux to serve the "assets"
+// service "fetchOpenAPIv3FromURL" endpoint.
+func MountFetchOpenAPIv3FromURLHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/assets.fetchOpenAPIv3FromURL", otelhttp.WithRouteTag("/rpc/assets.fetchOpenAPIv3FromURL", f).ServeHTTP)
+}
+
+// NewFetchOpenAPIv3FromURLHandler creates a HTTP handler which loads the HTTP
+// request and calls the "assets" service "fetchOpenAPIv3FromURL" endpoint.
+func NewFetchOpenAPIv3FromURLHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeFetchOpenAPIv3FromURLRequest(mux, decoder)
+		encodeResponse = EncodeFetchOpenAPIv3FromURLResponse(encoder)
+		encodeError    = EncodeFetchOpenAPIv3FromURLError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "fetchOpenAPIv3FromURL")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "assets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
 		if err != nil {
 			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
 				errhandler(ctx, w, err)

@@ -34,6 +34,7 @@ export * from "./deployment.js";
 export * from "./deploymentLogs.js";
 export * from "./evolveDeployment.js";
 export * from "./featuresSet.js";
+export * from "./fetchOpenAPIv3FromURL.js";
 export * from "./getCreditUsage.js";
 export * from "./getDomain.js";
 export * from "./getMcpMetadata.js";

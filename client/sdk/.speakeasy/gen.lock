@@ -1,17 +1,17 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 1e8f0b5bbd04889b6a5802bd74c6c1f1
+  docChecksum: f7ffd1b19ece3b5e8f460bbfaefda070
   docVersion: 0.0.1
-  speakeasyVersion: 1.668.0
-  generationVersion: 2.770.0
-  releaseVersion: 0.21.5
-  configChecksum: 2af941b0ece7531615032ce19e783735
+  speakeasyVersion: 1.661.1
+  generationVersion: 2.763.2
+  releaseVersion: 0.21.10
+  configChecksum: cba80f51d54cc5a0c2b1a1ba44550ed9
 features:
   typescript:
     additionalDependencies: 0.1.0
     constsAndDefaults: 0.1.12
-    core: 3.26.14
+    core: 3.26.10
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
     downloadStreams: 0.1.1
@@ -25,7 +25,7 @@ features:
     reactQueryHooks: 0.2.3
     responseFormat: 0.2.3
     retries: 2.83.0
-    sdkHooks: 0.4.0
+    sdkHooks: 0.3.0
 generatedFiles:
   - .devcontainer/README.md
   - .devcontainer/devcontainer.json
@@ -86,6 +86,7 @@ generatedFiles:
   - docs/models/components/externaloauthserver.md
   - docs/models/components/externaloauthserverform.md
   - docs/models/components/featurename.md
+  - docs/models/components/fetchopenapiv3fromurlform2.md
   - docs/models/components/functionenvironmentvariable.md
   - docs/models/components/functionresourcedefinition.md
   - docs/models/components/functiontooldefinition.md
@@ -272,6 +273,10 @@ generatedFiles:
   - docs/models/operations/evolvedeploymentsecurity.md
   - docs/models/operations/evolvedeploymentsecurityoption1.md
   - docs/models/operations/evolvedeploymentsecurityoption2.md
+  - docs/models/operations/fetchopenapiv3fromurlrequest.md
+  - docs/models/operations/fetchopenapiv3fromurlsecurity.md
+  - docs/models/operations/fetchopenapiv3fromurlsecurityoption1.md
+  - docs/models/operations/fetchopenapiv3fromurlsecurityoption2.md
   - docs/models/operations/getactivedeploymentrequest.md
   - docs/models/operations/getactivedeploymentsecurity.md
   - docs/models/operations/getactivedeploymentsecurityoption1.md
@@ -501,6 +506,7 @@ generatedFiles:
   - src/funcs/agentsCreate.ts
   - src/funcs/agentsDelete.ts
   - src/funcs/agentsGet.ts
+  - src/funcs/assetsFetchOpenAPIv3FromURL.ts
   - src/funcs/assetsListAssets.ts
   - src/funcs/assetsServeFunction.ts
   - src/funcs/assetsServeImage.ts
@@ -652,6 +658,7 @@ generatedFiles:
   - src/models/components/evolveresult.ts
   - src/models/components/externaloauthserver.ts
   - src/models/components/externaloauthserverform.ts
+  - src/models/components/fetchopenapiv3fromurlform2.ts
   - src/models/components/functionenvironmentvariable.ts
   - src/models/components/functionresourcedefinition.ts
   - src/models/components/functiontooldefinition.ts
@@ -780,6 +787,7 @@ generatedFiles:
   - src/models/operations/deletetoolset.ts
   - src/models/operations/deletetoolsetenvironmentlink.ts
   - src/models/operations/evolvedeployment.ts
+  - src/models/operations/fetchopenapiv3fromurl.ts
   - src/models/operations/getactivedeployment.ts
   - src/models/operations/getagentresponse.ts
   - src/models/operations/getdeployment.ts
@@ -874,6 +882,7 @@ generatedFiles:
   - src/react-query/deploymentLogs.ts
   - src/react-query/evolveDeployment.ts
   - src/react-query/featuresSet.ts
+  - src/react-query/fetchOpenAPIv3FromURL.ts
   - src/react-query/getCreditUsage.ts
   - src/react-query/getDomain.ts
   - src/react-query/getMcpMetadata.ts
@@ -1960,5 +1969,27 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  fetchOpenAPIv3FromURL:
+    speakeasy-default-fetch-open-AP-iv3-from-URL:
+      requestBody:
+        application/json: {"url": "https://ordinary-mainstream.net"}
+      responses:
+        "200":
+          application/json: {"asset": {"content_length": 413943, "content_type": "<value>", "created_at": "2024-04-11T22:45:32.153Z", "id": "<id>", "kind": "unknown", "sha256": "<value>", "updated_at": "2023-01-10T08:53:44.886Z"}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  fetchOpenAPIFromURL:
+    speakeasy-default-fetch-open-API-from-URL:
+      requestBody:
+        application/json: {"url": "https://exalted-doing.name"}
+      responses:
+        "200":
+          application/json: {"asset": {"content_length": 428299, "content_type": "<value>", "created_at": "2024-05-23T17:56:25.450Z", "id": "<id>", "kind": "unknown", "sha256": "<value>", "updated_at": "2024-05-15T04:38:58.550Z"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
