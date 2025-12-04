@@ -48,7 +48,7 @@ Contains the main application code for the Gram server:
   - `mv/`: Re-usable model views for representing Gram API resources.
   - `oops/`: Error handling utilities to be used across Gram service implementation files.
   - `openapi/`: OpenAPI parsing package used to generate tools as part of the Gram deployments service.
-  - `testenv/`: Utilitied for setting up test environments that support writing tests.
+  - `testenv/`: Utilities for setting up test environments that support writing tests.
   - `**/queries.sql`: SQL queries used by various services. After editing these files run mise tasks to generate Go code.
   - `**/impl.go`: The implementation of the service logic for each service.
 - `cmd/`: CLI commands for running the server and Temporal worker.
@@ -104,6 +104,12 @@ You are an expert AI programming assistant specializing in building APIs with Go
 - When writing assertions, use `github.com/stretchr/testify/require` exclusively.
 
 ## React & Frontend Coding Guidelines
+
+### General Guidelines
+
+- Use the `pnpm` package manager
+- When interacting with the server, prefer the `@gram/sdk` package (sourced from workspace at `./client/sdk`)
+- For data fetching and server state, use `@tanstack/react-query` instead of manual `useEffect`/`useState` patterns
 
 ### Styling and Design System
 
