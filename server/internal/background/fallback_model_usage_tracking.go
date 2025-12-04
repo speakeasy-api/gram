@@ -60,7 +60,7 @@ func FallbackModelUsageTrackingWorkflow(ctx workflow.Context, params FallbackMod
 	})
 
 	var a *Activities
-	return workflow.ExecuteActivity(
+	err := workflow.ExecuteActivity(
 		ctx,
 		a.FallbackModelUsageTracking,
 		activities.FallbackModelUsageTrackingArgs{
@@ -71,4 +71,8 @@ func FallbackModelUsageTrackingWorkflow(ctx workflow.Context, params FallbackMod
 			ChatID:       params.ChatID,
 		},
 	).Get(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to track model usage in workflow: %w", err)
+	}
+	return nil
 }

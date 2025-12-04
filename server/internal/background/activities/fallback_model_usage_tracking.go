@@ -31,7 +31,7 @@ type FallbackModelUsageTrackingArgs struct {
 
 func (f *FallbackModelUsageTracking) Do(ctx context.Context, args FallbackModelUsageTrackingArgs) error {
 	if err := f.openRouter.TriggerModelUsageTracking(ctx, args.GenerationID, args.OrgID, args.ProjectID, args.Source, args.ChatID); err != nil {
-		return fmt.Errorf("failed to trigger model usage tracking: %w", err)
+		return fmt.Errorf("model usage tracking failed: %w", err)
 	}
 	return nil
 }
