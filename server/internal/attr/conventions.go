@@ -704,3 +704,6 @@ func ClickhouseQueryDurationMs(v float64) attribute.KeyValue {
 func SlogClickhouseQueryDurationMs(v float64) slog.Attr {
 	return slog.Float64(string(ClickhouseQueryDurationMsKey), v)
 }
+
+func SlogURL(v string) slog.Attr        { return slog.String("url", v) }
+func SlogRegistryID(v string) slog.Attr { return slog.String("registry_id", v) }
