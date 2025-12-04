@@ -181,7 +181,12 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				logger.InfoContext(ctx, "Deployment succeeded", slogID, slog.String("logs_url", deploymentLogsURL))
 				return nil
 			case "failed":
-				logger.ErrorContext(ctx, "Deployment failed", slogID, slog.String("logs_url", deploymentLogsURL))
+				result.FetchLastDeploymentError(ctx)
+				if result.Err != nil {
+					logger.ErrorContext(ctx, "Deployment failed", slogID, slog.String("error", result.Err.Error()), slog.String("logs_url", deploymentLogsURL))
+				} else {
+					logger.ErrorContext(ctx, "Deployment failed", slogID, slog.String("logs_url", deploymentLogsURL))
+				}
 				return fmt.Errorf("deployment failed")
 			default:
 				logger.InfoContext(

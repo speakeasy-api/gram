@@ -204,3 +204,24 @@ func (c *DeploymentsClient) Evolve(
 
 	return result, nil
 }
+
+func (c *DeploymentsClient) GetDeploymentLogs(
+	ctx context.Context,
+	apiKey secret.Secret,
+	projectSlug string,
+	deploymentID string,
+) (*deployments.GetDeploymentLogsResult, error) {
+	key := apiKey.Reveal()
+	result, err := c.client.GetDeploymentLogs(ctx, &deployments.GetDeploymentLogsPayload{
+		ApikeyToken:      &key,
+		ProjectSlugInput: &projectSlug,
+		DeploymentID:     deploymentID,
+		SessionToken:     nil,
+		Cursor:           nil,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("api error: %w", err)
+	}
+
+	return result, nil
+}
