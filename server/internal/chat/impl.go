@@ -374,25 +374,32 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 					billing.ModelUsageSourceChat,
 					respCaptorWithTracking.chatID.String(),
 				); err != nil {
-					s.logger.WarnContext(ctx, "inline model usage tracking failed, scheduling fallback",
-						attr.SlogError(err),
-						attr.SlogOrganizationID(orgID),
-					)
-					// Schedule fallback via Temporal workflow
-					if s.fallbackUsageTracker != nil {
-						if scheduleErr := s.fallbackUsageTracker.ScheduleFallbackModelUsageTracking(
-							context.WithoutCancel(ctx),
-							respCaptorWithTracking.messageID,
-							orgID,
-							authCtx.ProjectID.String(),
-							billing.ModelUsageSourceChat,
-							respCaptorWithTracking.chatID.String(),
-						); scheduleErr != nil {
-							s.logger.ErrorContext(ctx, "failed to schedule fallback model usage tracking",
-								attr.SlogError(scheduleErr),
-								attr.SlogOrganizationID(orgID),
-							)
+					// Only schedule fallback for 404 errors (generation not found yet)
+					if errors.Is(err, openrouter.ErrGenerationNotFound) {
+						s.logger.WarnContext(ctx, "generation not found, scheduling fallback tracking",
+							attr.SlogError(err),
+							attr.SlogOrganizationID(orgID),
+						)
+						if s.fallbackUsageTracker != nil {
+							if scheduleErr := s.fallbackUsageTracker.ScheduleFallbackModelUsageTracking(
+								context.WithoutCancel(ctx),
+								respCaptorWithTracking.messageID,
+								orgID,
+								authCtx.ProjectID.String(),
+								billing.ModelUsageSourceChat,
+								respCaptorWithTracking.chatID.String(),
+							); scheduleErr != nil {
+								s.logger.ErrorContext(ctx, "failed to schedule fallback model usage tracking",
+									attr.SlogError(scheduleErr),
+									attr.SlogOrganizationID(orgID),
+								)
+							}
 						}
+					} else {
+						s.logger.ErrorContext(ctx, "failed to track model usage",
+							attr.SlogError(err),
+							attr.SlogOrganizationID(orgID),
+						)
 					}
 				}
 			}()

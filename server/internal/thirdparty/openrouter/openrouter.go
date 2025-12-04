@@ -28,6 +28,10 @@ import (
 
 const OpenRouterBaseURL = "https://openrouter.ai/api"
 
+// ErrGenerationNotFound is returned when the generation details are not found after retries.
+// This typically means the generation data hasn't propagated yet and may be available later.
+var ErrGenerationNotFound = errors.New("generation not found")
+
 // Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
 // This list can stay sufficiently robust, we should just need to allow list a model before it goes through us
 var allowList = map[string]bool{
@@ -467,11 +471,16 @@ func (o *OpenRouter) TriggerModelUsageTracking(ctx context.Context, generationID
 			}
 		}
 
-		// Not a 404 or last attempt, don't retry
+		if statusCode == http.StatusNotFound {
+			return fmt.Errorf("%w: %s", ErrGenerationNotFound, err.Error())
+		}
 		return err
 	}
 
 	if err != nil {
+		if statusCode == http.StatusNotFound {
+			return fmt.Errorf("%w: %s", ErrGenerationNotFound, err.Error())
+		}
 		return err
 	}
 
