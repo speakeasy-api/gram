@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.21.6
+
+### Patch Changes
+
+- 949787b: update chat credit billing
+
 ## 0.21.2
 
 ### Patch Changes
