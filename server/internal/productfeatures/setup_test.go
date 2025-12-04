@@ -66,7 +66,7 @@ func newTestProductFeaturesService(t *testing.T) (context.Context, *testInstance
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := productfeatures.NewService(logger, conn, sessionManager, redisClient, nil)
+	svc := productfeatures.NewService(logger, conn, sessionManager, redisClient)
 
 	return ctx, &testInstance{
 		service:        svc,

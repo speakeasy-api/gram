@@ -453,11 +453,9 @@ func newStartCommand() *cli.Command {
 			productFeatures := productfeatures.NewClient(logger, db, redisClient)
 
 			var openRouter openrouter.Provisioner
-			var openRouterKeyRefresher productfeatures.OpenRouterKeyRefresher
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouterKeyRefresher = &background.OpenRouterKeyRefresher{Temporal: temporalClient}
 				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{Temporal: temporalClient}, productFeatures, billingTracker)
 			}
 
@@ -543,7 +541,7 @@ func newStartCommand() *cli.Command {
 			}))
 			projects.Attach(mux, projects.NewService(logger, db, sessionManager))
 			packages.Attach(mux, packages.NewService(logger, db, sessionManager))
-			productfeatures.Attach(mux, productfeatures.NewService(logger, db, sessionManager, redisClient, openRouterKeyRefresher))
+			productfeatures.Attach(mux, productfeatures.NewService(logger, db, sessionManager, redisClient))
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, db, sessionManager))
 			templates.Attach(mux, templates.NewService(logger, db, sessionManager, toolsetsSvc))

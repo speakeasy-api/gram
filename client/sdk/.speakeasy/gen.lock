@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: d0eaea59b027698a28040185e8c50264
+  docChecksum: 1e8f0b5bbd04889b6a5802bd74c6c1f1
   docVersion: 0.0.1
   speakeasyVersion: 1.668.0
   generationVersion: 2.770.0
-  releaseVersion: 0.21.4
-  configChecksum: 8500c058d585ed656f10198d22c0d951
+  releaseVersion: 0.21.5
+  configChecksum: 2af941b0ece7531615032ce19e783735
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -1708,7 +1708,7 @@ examples:
     speakeasy-default-get-usage-tiers:
       responses:
         "200":
-          application/json: {"enterprise": {"base_price": 6666.51, "feature_bullets": ["<value 1>", "<value 2>"], "included_bullets": ["<value 1>", "<value 2>", "<value 3>"], "included_credits": 306325, "included_servers": 306325, "included_tool_calls": 30279, "price_per_additional_credit": 302.79, "price_per_additional_server": 7563.66, "price_per_additional_tool_call": 7355.72}, "free": {"base_price": 7355.72, "feature_bullets": ["<value 1>", "<value 2>", "<value 3>"], "included_bullets": ["<value 1>", "<value 2>"], "included_credits": 180790, "included_servers": 180790, "included_tool_calls": 683591, "price_per_additional_credit": 6835.91, "price_per_additional_server": 678.32, "price_per_additional_tool_call": 7255.78}, "pro": {"base_price": 6835.91, "feature_bullets": [], "included_bullets": ["<value 1>", "<value 2>"], "included_credits": 820340, "included_servers": 725578, "included_tool_calls": 820340, "price_per_additional_credit": 2910.95, "price_per_additional_server": 2910.95, "price_per_additional_tool_call": 6893.04}}
+          application/json: {"enterprise": {"base_price": 6666.51, "feature_bullets": ["<value 1>", "<value 2>"], "included_bullets": ["<value 1>", "<value 2>", "<value 3>"], "included_credits": 306325, "included_servers": 306325, "included_tool_calls": 30279, "price_per_additional_server": 7563.66, "price_per_additional_tool_call": 7355.72}, "free": {"base_price": 7355.72, "feature_bullets": ["<value 1>", "<value 2>", "<value 3>"], "included_bullets": ["<value 1>", "<value 2>"], "included_credits": 180790, "included_servers": 180790, "included_tool_calls": 683591, "price_per_additional_server": 678.32, "price_per_additional_tool_call": 7255.78}, "pro": {"base_price": 6835.91, "feature_bullets": [], "included_bullets": ["<value 1>", "<value 2>"], "included_credits": 820340, "included_servers": 725578, "included_tool_calls": 820340, "price_per_additional_server": 2910.95, "price_per_additional_tool_call": 6893.04}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

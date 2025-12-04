@@ -97,8 +97,6 @@ type TierLimits struct {
 	PricePerAdditionalToolCall float64
 	// The price per additional server
 	PricePerAdditionalServer float64
-	// The price per additional credit
-	PricePerAdditionalCredit float64
 	// Key feature bullets of the tier
 	FeatureBullets []string
 	// Included items bullets of the tier

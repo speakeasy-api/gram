@@ -12452,10 +12452,6 @@ components:
           type: integer
           description: The number of tool calls included in the tier
           format: int64
-        price_per_additional_credit:
-          type: number
-          description: The price per additional credit
-          format: double
         price_per_additional_server:
           type: number
           description: The price per additional server
@@ -12471,7 +12467,6 @@ components:
         - included_credits
         - price_per_additional_tool_call
         - price_per_additional_server
-        - price_per_additional_credit
         - feature_bullets
         - included_bullets
     Tool:

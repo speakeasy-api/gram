@@ -751,7 +751,6 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 	// Credits are hard-coded for now; keep bullets in sync dynamically
 	freeIncludedCredits := 5
 	proIncludedCredits := 25
-	creditPrice := 1.0
 	additionalToolCallsBlock := 5000
 
 	for _, price := range proTierProduct.Prices {
@@ -797,7 +796,6 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			IncludedCredits:            freeIncludedCredits, // Hard coded for now. TODO: Move to Polar
 			PricePerAdditionalToolCall: 0,
 			PricePerAdditionalServer:   0,
-			PricePerAdditionalCredit:   creditPrice, // Hard coded for now. TODO: Move to Polar
 			FeatureBullets: []string{
 				"Custom tool creation",
 				"Hosted server deployments",
@@ -808,7 +806,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			IncludedBullets: []string{
 				fmt.Sprintf("%d MCP %s (public or private)", freeTierLimits.Servers, conv.Ternary(freeTierLimits.Servers == 1, "server", "servers")),
 				fmt.Sprintf("%d tool calls / month", freeTierLimits.ToolCalls),
-				fmt.Sprintf("$%d in chat based credits", freeIncludedCredits),
+				fmt.Sprintf("%d chat based credits / month", freeIncludedCredits),
 				"Slack community support",
 			},
 			AddOnBullets: []string{},
@@ -820,7 +818,6 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			IncludedCredits:            proIncludedCredits, // Hard coded for now. TODO: Move to Polar
 			PricePerAdditionalToolCall: toolCallPrice,
 			PricePerAdditionalServer:   mcpServerPrice,
-			PricePerAdditionalCredit:   creditPrice, // Hard coded for now. TODO: Move to Polar
 			FeatureBullets: []string{
 				"Custom domain",
 				"Register your own OAuth server",
@@ -829,13 +826,13 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			IncludedBullets: []string{
 				fmt.Sprintf("%d MCP %s (public or private)", proTierLimits.Servers, conv.Ternary(proTierLimits.Servers == 1, "server", "servers")),
 				fmt.Sprintf("%d tool calls / month", proTierLimits.ToolCalls),
-				fmt.Sprintf("$%d in chat based credits", proIncludedCredits),
+				fmt.Sprintf("%d chat based credits / month", proIncludedCredits),
 				"Email support",
 			},
 			AddOnBullets: []string{
 				fmt.Sprintf("%s / month / additional MCP server", formatPrice(mcpServerPrice)),
 				fmt.Sprintf("%s / month / additional %d tool calls", formatPrice(toolCallPrice*float64(additionalToolCallsBlock)), additionalToolCallsBlock),
-				fmt.Sprintf("%s / month / 1 playground credit", formatPrice(creditPrice)),
+				"$11 per 10 additional chat based credits", // 1.10 per credit in polar, but this is how we want to label from a marketing perspective
 			},
 		},
 		Enterprise: &gen.TierLimits{
@@ -845,7 +842,6 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			IncludedCredits:            0,
 			PricePerAdditionalToolCall: 0,
 			PricePerAdditionalServer:   0,
-			PricePerAdditionalCredit:   0,
 			FeatureBullets: []string{
 				"Oauth 2.1 proxy support",
 				"SSO",

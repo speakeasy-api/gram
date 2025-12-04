@@ -11,7 +11,6 @@ type Feature string
 
 const (
 	FeatureLogs Feature = "logs"
-	FeatureChat Feature = "chat"
 )
 
 type FeatureCache struct {

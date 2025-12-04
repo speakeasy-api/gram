@@ -787,8 +787,6 @@ type TierLimitsResponseBody struct {
 	PricePerAdditionalToolCall *float64 `form:"price_per_additional_tool_call,omitempty" json:"price_per_additional_tool_call,omitempty" xml:"price_per_additional_tool_call,omitempty"`
 	// The price per additional server
 	PricePerAdditionalServer *float64 `form:"price_per_additional_server,omitempty" json:"price_per_additional_server,omitempty" xml:"price_per_additional_server,omitempty"`
-	// The price per additional credit
-	PricePerAdditionalCredit *float64 `form:"price_per_additional_credit,omitempty" json:"price_per_additional_credit,omitempty" xml:"price_per_additional_credit,omitempty"`
 	// Key feature bullets of the tier
 	FeatureBullets []string `form:"feature_bullets,omitempty" json:"feature_bullets,omitempty" xml:"feature_bullets,omitempty"`
 	// Included items bullets of the tier
@@ -2454,9 +2452,6 @@ func ValidateTierLimitsResponseBody(body *TierLimitsResponseBody) (err error) {
 	}
 	if body.PricePerAdditionalServer == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("price_per_additional_server", "body"))
-	}
-	if body.PricePerAdditionalCredit == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("price_per_additional_credit", "body"))
 	}
 	if body.FeatureBullets == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("feature_bullets", "body"))

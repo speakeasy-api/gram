@@ -24,12 +24,11 @@ var TierLimits = Type("TierLimits", func() {
 	Attribute("included_credits", Int, "The number of credits included in the tier for playground and other dashboard activities")
 	Attribute("price_per_additional_tool_call", Float64, "The price per additional tool call")
 	Attribute("price_per_additional_server", Float64, "The price per additional server")
-	Attribute("price_per_additional_credit", Float64, "The price per additional credit")
 	Attribute("feature_bullets", ArrayOf(String), "Key feature bullets of the tier")
 	Attribute("included_bullets", ArrayOf(String), "Included items bullets of the tier")
 	Attribute("add_on_bullets", ArrayOf(String), "Add-on items bullets of the tier (optional)")
 
-	Required("base_price", "included_tool_calls", "included_servers", "included_credits", "price_per_additional_tool_call", "price_per_additional_server", "price_per_additional_credit", "feature_bullets", "included_bullets")
+	Required("base_price", "included_tool_calls", "included_servers", "included_credits", "price_per_additional_tool_call", "price_per_additional_server", "feature_bullets", "included_bullets")
 })
 
 var UsageTiers = Type("UsageTiers", func() {

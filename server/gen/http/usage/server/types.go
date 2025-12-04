@@ -787,8 +787,6 @@ type TierLimitsResponseBody struct {
 	PricePerAdditionalToolCall float64 `form:"price_per_additional_tool_call" json:"price_per_additional_tool_call" xml:"price_per_additional_tool_call"`
 	// The price per additional server
 	PricePerAdditionalServer float64 `form:"price_per_additional_server" json:"price_per_additional_server" xml:"price_per_additional_server"`
-	// The price per additional credit
-	PricePerAdditionalCredit float64 `form:"price_per_additional_credit" json:"price_per_additional_credit" xml:"price_per_additional_credit"`
 	// Key feature bullets of the tier
 	FeatureBullets []string `form:"feature_bullets" json:"feature_bullets" xml:"feature_bullets"`
 	// Included items bullets of the tier
