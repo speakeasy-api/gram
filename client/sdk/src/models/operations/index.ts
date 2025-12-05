@@ -29,6 +29,7 @@ export * from "./deletetemplate.js";
 export * from "./deletetoolset.js";
 export * from "./deletetoolsetenvironmentlink.js";
 export * from "./evolvedeployment.js";
+export * from "./fetchopenapiv3fromurl.js";
 export * from "./getactivedeployment.js";
 export * from "./getagentresponse.js";
 export * from "./getdeployment.js";

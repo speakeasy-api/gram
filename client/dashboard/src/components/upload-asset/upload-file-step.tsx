@@ -5,6 +5,7 @@ import { OpenApiSourceInput } from "../OpenApiSourceInput";
 import { Type } from "../ui/type";
 import { useStep } from "./step";
 import { useStepper } from "./stepper";
+import type { UploadOpenAPIv3Result } from "@gram/client/models/components";
 
 export default function UploadFileStep() {
   const project = useProject();
@@ -52,6 +53,15 @@ export default function UploadFileStep() {
     step.setState("completed");
   }
 
+  function handleUrlUpload(result: UploadOpenAPIv3Result) {
+    stepper.meta.current.uploadResult = result;
+    stepper.meta.current.file = new File([], "My API", {
+      type: result.asset?.contentType ?? "application/yaml",
+    });
+    stepper.next();
+    step.setState("completed");
+  }
+
   if (stepper.meta.current.file) {
     return (
       <Stack direction={"horizontal"} gap={2} align={"center"}>
@@ -59,6 +69,11 @@ export default function UploadFileStep() {
       </Stack>
     );
   } else {
-    return <OpenApiSourceInput onUpload={handleUpload} />;
+    return (
+      <OpenApiSourceInput
+        onUpload={handleUpload}
+        onUrlUpload={handleUrlUpload}
+      />
+    );
   }
 }

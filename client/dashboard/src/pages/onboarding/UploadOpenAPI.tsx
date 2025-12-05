@@ -216,6 +216,22 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
     }
   };
 
+  const handleUrlUpload = (result: UploadOpenAPIv3Result) => {
+    setAsset(result);
+    setFile(
+      new File([], "My API", {
+        type: result.asset?.contentType ?? "application/yaml",
+      }),
+    );
+    telemetry.capture("onboarding_event", {
+      action: "spec_uploaded",
+      source: "url",
+    });
+    if (!apiName) {
+      setApiName("My API");
+    }
+  };
+
   const createDeployment = async (documentSlug?: string, forceNew = false) => {
     if (!asset || !apiName) {
       throw new Error("Asset or file not found");
@@ -307,6 +323,7 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
   return {
     apiNameError,
     handleSpecUpload,
+    handleUrlUpload,
     undoSpecUpload,
     apiName,
     setApiName,

@@ -6,45 +6,48 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FullWidthUpload } from "@/components/upload";
 import { Spinner } from "@/components/ui/spinner";
 import { useMutation } from "@tanstack/react-query";
+import { useSdkClient } from "@/contexts/Sdk";
+import { UploadOpenAPIv3Result } from "@gram/client/models/components";
 
 interface OpenApiSourceInputProps {
   onUpload: (file: File) => void;
+  onUrlUpload?: (result: UploadOpenAPIv3Result) => void;
   className?: string;
-}
-
-async function fetchOpenApiFromUrl(url: string): Promise<File> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch: ${response.status}`);
-  }
-
-  const blob = await response.blob();
-  const filename = url.split("/").pop() || "openapi.yaml";
-  const contentType = blob.type || "application/yaml";
-  return new File([blob], filename, { type: contentType });
 }
 
 export function OpenApiSourceInput({
   onUpload,
+  onUrlUpload,
   className,
 }: OpenApiSourceInputProps) {
   const [url, setUrl] = useState("");
+  const client = useSdkClient();
 
   const fetchMutation = useMutation({
-    mutationFn: fetchOpenApiFromUrl,
-    onSuccess: (file) => {
-      onUpload(file);
+    mutationFn: async (urlToFetch: string) => {
+      const result = await client.assets.fetchOpenAPIv3FromURL({
+        fetchOpenAPIv3FromURLForm2: {
+          url: urlToFetch,
+        },
+      });
+      return result;
+    },
+    onSuccess: (result) => {
+      if (onUrlUpload) {
+        onUrlUpload(result);
+      } else {
+        // Fallback: create a placeholder file for compatibility
+        const filename = url.split("/").pop() || "openapi.yaml";
+        const placeholderFile = new File([], filename, {
+          type: "application/yaml",
+        });
+        onUpload(placeholderFile);
+      }
     },
     onError: (error) => {
-      if (error instanceof TypeError && error.message === "Failed to fetch") {
-        toast.error(
-          "Unable to fetch from this URL. The server may not allow cross-origin requests. Try downloading the file and uploading it instead.",
-        );
-      } else {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to fetch URL",
-        );
-      }
+      toast.error(
+        error instanceof Error ? error.message : "Failed to fetch URL",
+      );
     },
   });
 

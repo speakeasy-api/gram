@@ -597,6 +597,7 @@ const UploadStep = ({
   const {
     file,
     handleSpecUpload,
+    handleUrlUpload,
     createDeployment,
     apiName,
     setApiName,
@@ -640,7 +641,11 @@ const UploadStep = ({
       )}
     </Stack>
   ) : (
-    <OpenApiSourceInput onUpload={handleSpecUpload} className="max-w-full" />
+    <OpenApiSourceInput
+      onUpload={handleSpecUpload}
+      onUrlUpload={handleUrlUpload}
+      className="max-w-full"
+    />
   );
 
   const onContinue = async () => {

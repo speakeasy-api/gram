@@ -17,13 +17,14 @@ import (
 
 // Endpoints wraps the "assets" service endpoints.
 type Endpoints struct {
-	ServeImage      goa.Endpoint
-	UploadImage     goa.Endpoint
-	UploadFunctions goa.Endpoint
-	UploadOpenAPIv3 goa.Endpoint
-	ServeOpenAPIv3  goa.Endpoint
-	ServeFunction   goa.Endpoint
-	ListAssets      goa.Endpoint
+	ServeImage            goa.Endpoint
+	UploadImage           goa.Endpoint
+	UploadFunctions       goa.Endpoint
+	UploadOpenAPIv3       goa.Endpoint
+	FetchOpenAPIv3FromURL goa.Endpoint
+	ServeOpenAPIv3        goa.Endpoint
+	ServeFunction         goa.Endpoint
+	ListAssets            goa.Endpoint
 }
 
 // ServeImageResponseData holds both the result and the HTTP response body
@@ -85,13 +86,14 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ServeImage:      NewServeImageEndpoint(s),
-		UploadImage:     NewUploadImageEndpoint(s, a.APIKeyAuth),
-		UploadFunctions: NewUploadFunctionsEndpoint(s, a.APIKeyAuth),
-		UploadOpenAPIv3: NewUploadOpenAPIv3Endpoint(s, a.APIKeyAuth),
-		ServeOpenAPIv3:  NewServeOpenAPIv3Endpoint(s, a.APIKeyAuth),
-		ServeFunction:   NewServeFunctionEndpoint(s, a.APIKeyAuth),
-		ListAssets:      NewListAssetsEndpoint(s, a.APIKeyAuth),
+		ServeImage:            NewServeImageEndpoint(s),
+		UploadImage:           NewUploadImageEndpoint(s, a.APIKeyAuth),
+		UploadFunctions:       NewUploadFunctionsEndpoint(s, a.APIKeyAuth),
+		UploadOpenAPIv3:       NewUploadOpenAPIv3Endpoint(s, a.APIKeyAuth),
+		FetchOpenAPIv3FromURL: NewFetchOpenAPIv3FromURLEndpoint(s, a.APIKeyAuth),
+		ServeOpenAPIv3:        NewServeOpenAPIv3Endpoint(s, a.APIKeyAuth),
+		ServeFunction:         NewServeFunctionEndpoint(s, a.APIKeyAuth),
+		ListAssets:            NewListAssetsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -101,6 +103,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UploadImage = m(e.UploadImage)
 	e.UploadFunctions = m(e.UploadFunctions)
 	e.UploadOpenAPIv3 = m(e.UploadOpenAPIv3)
+	e.FetchOpenAPIv3FromURL = m(e.FetchOpenAPIv3FromURL)
 	e.ServeOpenAPIv3 = m(e.ServeOpenAPIv3)
 	e.ServeFunction = m(e.ServeFunction)
 	e.ListAssets = m(e.ListAssets)
@@ -293,6 +296,65 @@ func NewUploadOpenAPIv3Endpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.UploadOpenAPIv3(ctx, ep.Payload, ep.Body)
+	}
+}
+
+// NewFetchOpenAPIv3FromURLEndpoint returns an endpoint function that calls the
+// method "fetchOpenAPIv3FromURL" of service "assets".
+func NewFetchOpenAPIv3FromURLEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*FetchOpenAPIv3FromURLForm)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.FetchOpenAPIv3FromURL(ctx, p)
 	}
 }
 

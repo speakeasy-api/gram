@@ -29,6 +29,8 @@ type Service interface {
 	UploadFunctions(context.Context, *UploadFunctionsForm, io.ReadCloser) (res *UploadFunctionsResult, err error)
 	// Upload an OpenAPI v3 document to Gram.
 	UploadOpenAPIv3(context.Context, *UploadOpenAPIv3Form, io.ReadCloser) (res *UploadOpenAPIv3Result, err error)
+	// Fetch an OpenAPI v3 document from a URL and upload it to Gram.
+	FetchOpenAPIv3FromURL(context.Context, *FetchOpenAPIv3FromURLForm) (res *UploadOpenAPIv3Result, err error)
 	// Serve an OpenAPIv3 asset from Gram.
 
 	// If body implements [io.WriterTo], that implementation will be used instead.
@@ -65,7 +67,7 @@ const ServiceName = "assets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"serveImage", "uploadImage", "uploadFunctions", "uploadOpenAPIv3", "serveOpenAPIv3", "serveFunction", "listAssets"}
+var MethodNames = [8]string{"serveImage", "uploadImage", "uploadFunctions", "uploadOpenAPIv3", "fetchOpenAPIv3FromURL", "serveOpenAPIv3", "serveFunction", "listAssets"}
 
 type Asset struct {
 	// The ID of the asset
@@ -81,6 +83,16 @@ type Asset struct {
 	CreatedAt string
 	// The last update date of the asset.
 	UpdatedAt string
+}
+
+// FetchOpenAPIv3FromURLForm is the payload type of the assets service
+// fetchOpenAPIv3FromURL method.
+type FetchOpenAPIv3FromURLForm struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The URL to fetch the OpenAPI document from
+	URL string
 }
 
 // ListAssetsPayload is the payload type of the assets service listAssets

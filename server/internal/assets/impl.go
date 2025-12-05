@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"mime"
+	"net/http"
 	"net/url"
 	"os"
 	"path"
@@ -680,6 +681,161 @@ func (s *Service) ServeOpenAPIv3(ctx context.Context, payload *gen.ServeOpenAPIv
 		ContentLength: row.ContentLength,
 		LastModified:  row.UpdatedAt.Time.Format(time.RFC1123),
 	}, body, nil
+}
+
+func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchOpenAPIv3FromURLForm) (*gen.UploadOpenAPIv3Result, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Validate URL
+	parsedURL, err := url.Parse(payload.URL)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("parse url: %w", err), "invalid URL")
+	}
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "URL must use http or https scheme")
+	}
+
+	// Fetch the OpenAPI spec from the URL
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, payload.URL, nil)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create request: %w", err), "error fetching URL")
+	}
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("fetch url: %w", err), "error fetching URL")
+	}
+	defer o11y.LogDefer(ctx, s.logger, func() error {
+		return resp.Body.Close()
+	})
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, oops.E(oops.CodeBadRequest, nil, "failed to fetch URL: received status %d", resp.StatusCode)
+	}
+
+	// Determine content type from response or URL
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		// Infer from URL extension
+		ext := strings.ToLower(path.Ext(parsedURL.Path))
+		switch ext {
+		case ".yaml", ".yml":
+			contentType = "application/yaml"
+		case ".json":
+			contentType = "application/json"
+		default:
+			contentType = "application/yaml"
+		}
+	}
+
+	// Parse media type to get just the mime type without parameters
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		mediaType = contentType
+	}
+
+	// Validate content type is an allowed OpenAPI format
+	allowedContentTypes := []string{
+		"application/yaml",
+		"application/x-yaml",
+		"text/yaml",
+		"text/x-yaml",
+		"application/json",
+		"text/json",
+	}
+	if !slices.Contains(allowedContentTypes, mediaType) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported content type: %s. Expected YAML or JSON", mediaType)
+	}
+
+	contentLength := resp.ContentLength
+	if contentLength <= 0 {
+		contentLength = MaxFileSizeOpenAPI
+	}
+	if contentLength > MaxFileSizeOpenAPI {
+		return nil, oops.E(oops.CodeBadRequest, nil, "content length exceeds 10 MiB limit")
+	}
+
+	result, err := s.downloadPendingAsset(ctx, resp.Body, &downloadPendingAssetParams{
+		maxLength:     MaxFileSizeOpenAPI,
+		contentLength: contentLength,
+		contentType:   mediaType,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer o11y.LogDefer(ctx, s.logger, func() error {
+		return result.cleanup()
+	})
+
+	// Get actual file size
+	fileInfo, err := result.file.Stat()
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("stat temp file: %w", err), "error reading file")
+	}
+	actualContentLength := fileInfo.Size()
+
+	existing, err := s.findExistingAsset(ctx, &findAssetParams{
+		projectID: *authCtx.ProjectID,
+		hash:      result.hash,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return &gen.UploadOpenAPIv3Result{Asset: existing}, nil
+	}
+
+	mimeType, ext, err := sniffMimeType(sniffMimeTypeParams{
+		contentLength: actualContentLength,
+		inputMimeType: mediaType,
+		allowedTypes:  []string{"application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml", "application/json", "text/json"},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	filename := fmt.Sprintf("openapi-%s%s", result.hash, ext)
+	uri, err := s.uploadAsset(ctx, &uploadAssetParams{
+		projectID:     *authCtx.ProjectID,
+		filename:      filename,
+		contentType:   mimeType,
+		contentLength: actualContentLength,
+		file:          result.file,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	asset, err := s.repo.CreateAsset(ctx, repo.CreateAssetParams{
+		Name:          filename,
+		Url:           uri.String(),
+		ProjectID:     *authCtx.ProjectID,
+		Sha256:        result.hash,
+		Kind:          "openapiv3",
+		ContentType:   mediaType,
+		ContentLength: actualContentLength,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info")
+	}
+
+	return &gen.UploadOpenAPIv3Result{
+		Asset: &gen.Asset{
+			ID:            asset.ID.String(),
+			Kind:          asset.Kind,
+			Sha256:        asset.Sha256,
+			ContentType:   asset.ContentType,
+			ContentLength: asset.ContentLength,
+			CreatedAt:     asset.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:     asset.UpdatedAt.Time.Format(time.RFC3339),
+		},
+	}, nil
 }
 
 func (s *Service) ServeFunction(ctx context.Context, payload *gen.ServeFunctionForm) (*gen.ServeFunctionResult, io.ReadCloser, error) {

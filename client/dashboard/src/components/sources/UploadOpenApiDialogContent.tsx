@@ -17,8 +17,13 @@ export function UploadOpenApiDialogContent({
   onClose,
   onSuccess,
 }: UploadOpenApiDialogContentProps) {
-  const { handleSpecUpload, createDeployment, file, undoSpecUpload } =
-    useUploadOpenAPISteps();
+  const {
+    handleSpecUpload,
+    handleUrlUpload,
+    createDeployment,
+    file,
+    undoSpecUpload,
+  } = useUploadOpenAPISteps();
   const [isDeploying, setIsDeploying] = React.useState(false);
 
   const deploySpecUpdate = async () => {
@@ -49,7 +54,10 @@ export function UploadOpenApiDialogContent({
         </Dialog.Description>
       </Dialog.Header>
       {!file ? (
-        <OpenApiSourceInput onUpload={handleSpecUpload} />
+        <OpenApiSourceInput
+          onUpload={handleSpecUpload}
+          onUrlUpload={handleUrlUpload}
+        />
       ) : (
         <UploadedDocument
           file={file}
