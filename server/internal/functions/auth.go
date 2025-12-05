@@ -51,7 +51,7 @@ type ReadResourcePayload struct {
 	Environment map[string]string `json:"environment,omitempty,omitzero"`
 }
 
-func jwtAuth(ctx context.Context, logger *slog.Logger, db deprepo.DBTX, token string, scheme *security.JWTScheme) (context.Context, error) {
+func jwtAuth(ctx context.Context, logger *slog.Logger, db deprepo.DBTX, enc *encryption.Client, token string, scheme *security.JWTScheme) (context.Context, error) {
 	logger = logger.With(attr.SlogComponent("functions-auth"))
 
 	if scheme == nil || scheme.Name != auth.FunctionTokenSecurityScheme {
@@ -82,7 +82,12 @@ func jwtAuth(ctx context.Context, logger *slog.Logger, db deprepo.DBTX, token st
 			return nil, fmt.Errorf("function credentials not found")
 		}
 
-		return rows[0].EncryptionKey.Reveal(), nil
+		unsealed, err := enc.Decrypt(string(rows[0].EncryptionKey.Reveal()))
+		if err != nil {
+			return nil, fmt.Errorf("unseal function encryption key: %w", err)
+		}
+
+		return []byte(unsealed), nil
 	}, jwt.WithExpirationRequired(), jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 	if err != nil {
 		err = fmt.Errorf("parse runner jwt: %w", err)

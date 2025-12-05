@@ -221,14 +221,11 @@ func resolveLazyFile(ctx context.Context, logger *slog.Logger, ident auth.Runner
 		}
 		return "", fmt.Errorf("file does not exist: %s: %w", lazy, rootCause)
 	case err != nil:
-		return "", fmt.Errorf("stat %s: %w", lazy, err)
-	default:
-		if stat.IsDir() {
-			return "", fmt.Errorf("path is a directory: %s", filename)
-		}
-		if len(assetID) == 0 {
-			return "", fmt.Errorf("read asset id %s: empty file", lazy)
-		}
+		return "", fmt.Errorf("read %s: %w", lazy, err)
+	}
+
+	if len(assetID) == 0 {
+		return "", fmt.Errorf("read asset id %s: empty file", lazy)
 	}
 
 	token, err := auth.NewServerJWT(ident, jwt.MapClaims{})

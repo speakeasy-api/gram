@@ -578,7 +578,7 @@ func newStartCommand() *cli.Command {
 			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
 			usage.Attach(mux, usage.NewService(logger, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter))
 			logs.Attach(mux, logs.NewService(logger, db, sessionManager, tcm))
-			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, tigrisStore))
+			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

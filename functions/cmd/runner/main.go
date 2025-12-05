@@ -93,7 +93,7 @@ func run(ctx context.Context, logger *slog.Logger, ident auth.RunnerIdentity) er
 		return fmt.Errorf("invalid arguments: %w", err)
 	}
 
-	serverClient, err := newServerClient(ident)
+	serverClient, err := newServerClient()
 	if err != nil {
 		return fmt.Errorf("create server client: %w", err)
 	}
@@ -204,14 +204,6 @@ func sanitizeArgs() (*runnerArgs, error) {
 		return nil, fmt.Errorf("codePath is required")
 	}
 
-	codeStat, err := os.Stat(*codePath)
-	if err != nil {
-		return nil, fmt.Errorf("stat: %s: %w", *codePath, err)
-	}
-	if !codeStat.Mode().IsRegular() {
-		return nil, fmt.Errorf("stat: %s: not a regular file", *codePath)
-	}
-
 	if workDir == nil || *workDir == "" {
 		return nil, fmt.Errorf("workDir is required")
 	}
@@ -286,8 +278,8 @@ func identityFromEnv() (auth.RunnerIdentity, error) {
 
 func enrichLogger(logger *slog.Logger, ident auth.RunnerIdentity) *slog.Logger {
 	attrs := make([]any, 0, 5)
-	attrs = append(attrs, attr.ServiceName("runner"))
-	attrs = append(attrs, attr.ServiceVersion(ident.Version))
+	attrs = append(attrs, attr.SlogServiceName("runner"))
+	attrs = append(attrs, attr.SlogServiceVersion(ident.Version))
 	attrs = append(attrs, attr.SlogProjectID(ident.ProjectID))
 	attrs = append(attrs, attr.SlogDeploymentID(ident.DeploymentID))
 	attrs = append(attrs, attr.SlogFunctionID(ident.FunctionID))
@@ -295,8 +287,8 @@ func enrichLogger(logger *slog.Logger, ident auth.RunnerIdentity) *slog.Logger {
 	return logger.With(attrs...)
 }
 
-func newServerClient(ident auth.RunnerIdentity) (*funcclient.Client, error) {
-	su := os.Getenv("GRAM_FUNCTION_SERVER_URL")
+func newServerClient() (*funcclient.Client, error) {
+	su := os.Getenv("GRAM_SERVER_URL")
 	if su == "" {
 		return nil, fmt.Errorf("GRAM_SERVER_URL is required")
 	}

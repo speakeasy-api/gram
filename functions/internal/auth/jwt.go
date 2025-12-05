@@ -2,6 +2,7 @@ package auth
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -13,6 +14,7 @@ func NewServerJWT(ident RunnerIdentity, claims jwt.MapClaims) (string, error) {
 		clone[k] = v
 	}
 	clone["sub"] = sub
+	clone["exp"] = time.Now().Add(10 * time.Minute).Unix()
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, clone)
 	tokenString, err := token.SignedString(ident.AuthSecret.Reveal())

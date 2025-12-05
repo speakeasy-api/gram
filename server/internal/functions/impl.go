@@ -18,28 +18,31 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/functions/server"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/functions/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 type Service struct {
-	db          *pgxpool.Pool
 	tracer      trace.Tracer
 	logger      *slog.Logger
+	db          *pgxpool.Pool
+	enc         *encryption.Client
 	tigrisStore *assets.FlyTigrisStore
 }
 
 var _ gen.Auther = (*Service)(nil)
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, tigrisStore *assets.FlyTigrisStore) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, enc *encryption.Client, tigrisStore *assets.FlyTigrisStore) *Service {
 	logger = logger.With(attr.SlogComponent("functions"))
 
 	return &Service{
 		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/functions"),
 		logger:      logger,
 		db:          db,
+		enc:         enc,
 		tigrisStore: tigrisStore,
 	}
 }
@@ -55,7 +58,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) JWTAuth(ctx context.Context, token string, scheme *security.JWTScheme) (context.Context, error) {
-	return jwtAuth(ctx, s.logger, s.db, token, scheme)
+	return jwtAuth(ctx, s.logger, s.db, s.enc, token, scheme)
 }
 
 func (s *Service) GetSignedAssetURL(ctx context.Context, p *gen.GetSignedAssetURLPayload) (*gen.GetSignedAssetURLResult, error) {

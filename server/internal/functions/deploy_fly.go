@@ -122,6 +122,7 @@ func NewFlyRunner(
 	return &FlyRunner{
 		logger:          logger.With(attr.SlogComponent("flyio-orchestrator")),
 		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/functions"),
+		serverURL:       serverURL,
 		db:              db,
 		assetStore:      assetStorage,
 		tigrisStore:     tigrisStore,
@@ -805,7 +806,7 @@ func (f *FlyRunner) serializeAssets(
 			encoded := base64.StdEncoding.EncodeToString([]byte(asset.AssetID.String()))
 			files = append(files, &fly.File{
 				Mode:      conv.Default(asset.Mode, 0444),
-				GuestPath: fmt.Sprintf("%s.presign", asset.GuestPath),
+				GuestPath: fmt.Sprintf("%s.lazy", asset.GuestPath),
 				RawValue:  &encoded,
 			})
 		} else {
