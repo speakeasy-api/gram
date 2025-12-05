@@ -794,7 +794,7 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 	mimeType, ext, err := sniffMimeType(sniffMimeTypeParams{
 		contentLength: actualContentLength,
 		inputMimeType: mediaType,
-		allowedTypes:  []string{"application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml", "application/json", "text/json"},
+		allowedTypes:  []string{"application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml", "application/json", "text/json", "text/plain"},
 	})
 	if err != nil {
 		return nil, err
