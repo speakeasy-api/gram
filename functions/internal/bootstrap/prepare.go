@@ -7,9 +7,15 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/hashicorp/go-cleanhttp"
+	funcclient "github.com/speakeasy-api/gram/server/gen/functions"
+
+	"github.com/speakeasy-api/gram/functions/internal/auth"
 	"github.com/speakeasy-api/gram/functions/internal/javascript"
 	"github.com/speakeasy-api/gram/functions/internal/o11y"
 	"github.com/speakeasy-api/gram/functions/internal/python"
@@ -31,22 +37,35 @@ func ResolveProgram(language string, workDir string) (string, []string, error) {
 	}
 }
 
-func InitializeMachine(ctx context.Context, logger *slog.Logger, language string, codePath string, workDir string) (command string, args []string, err error) {
-	if !filepath.IsAbs(workDir) {
+type InitializeMachineConfig struct {
+	Ident        auth.RunnerIdentity
+	ServerClient *funcclient.Client
+	Language     string
+	CodePath     string
+	WorkDir      string
+}
+
+func InitializeMachine(ctx context.Context, logger *slog.Logger, config InitializeMachineConfig) (command string, args []string, err error) {
+	if !filepath.IsAbs(config.WorkDir) {
 		return "", nil, fmt.Errorf("work dir path is not absolute")
 	}
 
-	if err := unzipCode(ctx, logger, codePath, workDir); err != nil {
+	codePath, err := resolveLazyFile(ctx, logger, config.Ident, config.ServerClient, config.CodePath)
+	if err != nil {
+		return "", nil, fmt.Errorf("resolve lazy file: %w", err)
+	}
+
+	if err := unzipCode(ctx, logger, codePath, config.WorkDir); err != nil {
 		return "", nil, fmt.Errorf("unzip code: %w", err)
 	}
 
-	command, args, err = prepareProgram(workDir, language)
+	command, args, err = prepareProgram(config.WorkDir, config.Language)
 	if err != nil {
 		return "", nil, fmt.Errorf("prepare program: %w", err)
 	}
 
 	// #nosec G302 -- workDir is a directory and needs to be executable to enter it.
-	if err := os.Chmod(workDir, 0555); err != nil {
+	if err := os.Chmod(config.WorkDir, 0555); err != nil {
 		return "", nil, fmt.Errorf("chmod work dir: %w", err)
 	}
 
@@ -175,4 +194,86 @@ func prepareProgram(workDir string, language string) (string, []string, error) {
 	default:
 		return "", nil, fmt.Errorf("unsupported language: %s", language)
 	}
+}
+
+func resolveLazyFile(ctx context.Context, logger *slog.Logger, ident auth.RunnerIdentity, serverClient *funcclient.Client, filename string) (string, error) {
+	var rootCause error
+	stat, err := os.Stat(filename)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		rootCause = err
+		// fall through to check for .lazy file
+	case err != nil:
+		return "", fmt.Errorf("stat %s: %w", filename, err)
+	default:
+		if stat.IsDir() {
+			return "", fmt.Errorf("path is a directory: %s", filename)
+		}
+		return filename, nil
+	}
+
+	lazy := filename + ".lazy"
+	assetID, err := os.ReadFile(lazy)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		if rootCause != nil {
+			return "", fmt.Errorf("file does not exist: %s: %w", filename, rootCause)
+		}
+		return "", fmt.Errorf("file does not exist: %s: %w", lazy, rootCause)
+	case err != nil:
+		return "", fmt.Errorf("stat %s: %w", lazy, err)
+	default:
+		if stat.IsDir() {
+			return "", fmt.Errorf("path is a directory: %s", filename)
+		}
+		if len(assetID) == 0 {
+			return "", fmt.Errorf("read asset id %s: empty file", lazy)
+		}
+	}
+
+	token, err := auth.NewServerJWT(ident, jwt.MapClaims{})
+	if err != nil {
+		return "", fmt.Errorf("create server jwt: %w", err)
+	}
+
+	pres, err := serverClient.GetSignedAssetURL(ctx, &funcclient.GetSignedAssetURLPayload{
+		FunctionToken: &token,
+		AssetID:       string(assetID),
+	})
+	if err != nil {
+		return "", fmt.Errorf("get signed asset url %s: %w", assetID, err)
+	}
+
+	res, err := cleanhttp.DefaultClient().Get(pres.URL)
+	if err != nil {
+		return "", fmt.Errorf("download asset %s: %w", assetID, err)
+	}
+	defer o11y.LogDefer(ctx, logger, func() error {
+		if err := res.Body.Close(); err != nil {
+			return fmt.Errorf("close asset %s response body: %w", assetID, err)
+		}
+		return nil
+	})
+
+	if res.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected response code %s: %s", assetID, res.Status)
+	}
+
+	outFile, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0444)
+	if err != nil {
+		return "", fmt.Errorf("create target file %s: %w", filename, err)
+	}
+	defer o11y.LogDefer(ctx, logger, func() error {
+		if err := outFile.Close(); err != nil {
+			return fmt.Errorf("close %s: %w", filename, err)
+		}
+		return nil
+	})
+
+	_, err = io.Copy(outFile, res.Body)
+	if err != nil {
+		return "", fmt.Errorf("write asset to file %s: %w", filename, err)
+	}
+
+	return filename, nil
 }

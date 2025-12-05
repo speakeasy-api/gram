@@ -3,6 +3,7 @@ package auth_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -19,7 +20,10 @@ import (
 func newEncryptionClient(t *testing.T) *encryption.Client {
 	t.Helper()
 
-	enc, err := encryption.New("dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=")
+	key, err := base64.StdEncoding.DecodeString("dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=")
+	require.NoError(t, err)
+
+	enc, err := encryption.New(key)
 	require.NoError(t, err)
 	return enc
 }

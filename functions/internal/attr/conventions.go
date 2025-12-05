@@ -10,6 +10,9 @@ import (
 type Key = attribute.Key
 
 const (
+	ServiceNameKey    = semconv.ServiceNameKey
+	ServiceVersionKey = semconv.ServiceVersionKey
+
 	DeviceKey              = semconv.SystemDeviceKey
 	ExceptionStacktraceKey = semconv.ExceptionStacktraceKey
 	ErrorMessageKey        = semconv.ErrorMessageKey
@@ -32,6 +35,14 @@ const (
 	DataDogTraceIDKey = attribute.Key("dd.trace_id")
 	DataDogSpanIDKey  = attribute.Key("dd.span_id")
 )
+
+func ServiceName(v string) attribute.KeyValue { return ServiceNameKey.String(v) }
+func SlogServiceName(v string) slog.Attr      { return slog.String(string(ServiceNameKey), v) }
+
+func ServiceVersion(v string) attribute.KeyValue { return ServiceVersionKey.String(v) }
+func SlogServiceVersion(v string) slog.Attr {
+	return slog.String(string(ServiceVersionKey), v)
+}
 
 func Device(v string) attribute.KeyValue { return DeviceKey.String(v) }
 func SlogDevice(v string) slog.Attr      { return slog.String(string(DeviceKey), v) }
