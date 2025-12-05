@@ -58,6 +58,7 @@ type FlyRunnerOptions struct {
 type FlyRunner struct {
 	logger          *slog.Logger
 	tracer          trace.Tracer
+	serverURL       *url.URL
 	db              *pgxpool.Pool
 	assetStore      assets.BlobStore
 	tigrisStore     *assets.FlyTigrisStore
@@ -80,6 +81,7 @@ var _ interface {
 func NewFlyRunner(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	serverURL *url.URL,
 	db *pgxpool.Pool,
 	assetStorage assets.BlobStore,
 	tigrisStore *assets.FlyTigrisStore,
@@ -621,6 +623,7 @@ func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, file
 	return &fly.MachineConfig{
 		Image: image,
 		Env: map[string]string{
+			"GRAM_SERVER_URL":    f.serverURL.String(),
 			"GRAM_DEPLOYMENT_ID": req.DeploymentID.String(),
 			"GRAM_FUNCTION_ID":   req.FunctionID.String(),
 			"GRAM_PROJECT_ID":    req.ProjectID.String(),

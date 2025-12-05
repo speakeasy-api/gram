@@ -41,6 +41,12 @@ func newWorkerCommand() *cli.Command {
 
 	flags := []cli.Flag{
 		&cli.StringFlag{
+			Name:     "server-url",
+			Usage:    "The public URL of the server",
+			EnvVars:  []string{"GRAM_SERVER_URL"},
+			Required: true,
+		},
+		&cli.StringFlag{
 			Name:     "environment",
 			Usage:    "The current server environment", // local, dev, prod
 			Required: true,

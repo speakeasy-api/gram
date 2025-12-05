@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -475,6 +476,7 @@ func newFunctionOrchestrator(
 
 		return functions.NewLocalRunner(codeRoot), shutdown, nil
 	case "flyio":
+		surl := c.String("server-url")
 		tokenstr := c.String("functions-flyio-api-token")
 		ociImage := c.String("functions-runner-oci-image")
 		defaultOrg := c.String("functions-flyio-org")
@@ -482,12 +484,18 @@ func newFunctionOrchestrator(
 
 		if err := inv.Check(
 			"flyio flags",
+			"server url must be set", surl != "",
 			"token must be set", tokenstr != "",
 			"oci image must be set", ociImage != "",
 			"default org must be set", defaultOrg != "",
 			"default region must be set", defaultRegion != "",
 		); err != nil {
 			return nil, nilShutdown, fmt.Errorf("invalid configuration for functions: %w", err)
+		}
+
+		serverURL, err := url.Parse(surl)
+		if err != nil {
+			return nil, nilShutdown, fmt.Errorf("invalid server url: %w", err)
 		}
 
 		tpl := fmt.Sprintf("%s:{{.Version}}-{{.Runtime.OCITag}}", ociImage)
@@ -499,6 +507,7 @@ func newFunctionOrchestrator(
 		return functions.NewFlyRunner(
 			logger,
 			tracerProvider,
+			serverURL,
 			db,
 			assetStore,
 			tigrisStore,
