@@ -250,9 +250,6 @@ func (s *Service) GetResponse(ctx context.Context, payload *agents.GetResponsePa
 		if err != nil {
 			return nil, oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
 		}
-		if workflowResult.OrgID == "" {
-			return nil, oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
-		}
 
 		if workflowResult.OrgID != authCtx.ActiveOrganizationID {
 			return nil, oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
