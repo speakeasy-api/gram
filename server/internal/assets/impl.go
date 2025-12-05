@@ -721,7 +721,7 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 
 	// Determine content type from response or URL
 	contentType := resp.Header.Get("Content-Type")
-	if contentType == "" {
+	if contentType == "" || contentType == "text/plain" {
 		// Infer from URL extension
 		ext := strings.ToLower(path.Ext(parsedURL.Path))
 		switch ext {
@@ -748,7 +748,6 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 		"text/x-yaml",
 		"application/json",
 		"text/json",
-		"text/plain",
 	}
 	if !slices.Contains(allowedContentTypes, mediaType) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported content type: %s. Expected YAML or JSON", mediaType)
@@ -795,7 +794,7 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 	mimeType, ext, err := sniffMimeType(sniffMimeTypeParams{
 		contentLength: actualContentLength,
 		inputMimeType: mediaType,
-		allowedTypes:  []string{"application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml", "application/json", "text/json", "text/plain"},
+		allowedTypes:  []string{"application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml", "application/json", "text/json"},
 	})
 	if err != nil {
 		return nil, err
