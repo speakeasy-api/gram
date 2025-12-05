@@ -748,6 +748,7 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 		"text/x-yaml",
 		"application/json",
 		"text/json",
+		"text/plain",
 	}
 	if !slices.Contains(allowedContentTypes, mediaType) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported content type: %s. Expected YAML or JSON", mediaType)
