@@ -470,7 +470,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		return oops.E(oops.CodeUnexpected, nil, "OAuth provider client_secret not configured").Log(ctx, s.logger)
 	}
 
-	callbackURL := fmt.Sprintf("%s/oauth/%s/callback", s.serverURL.String(), mcpSlug)
+	callbackURL := fmt.Sprintf("%s/oauth/callback", s.serverURL.String())
 
 	tokenURL := provider.TokenEndpoint
 	tokenData := url.Values{}
