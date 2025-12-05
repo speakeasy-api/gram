@@ -367,6 +367,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			Token:        token,
 		})
 	case toolset.McpIsPublic && toolset.OauthProxyServerID.Valid:
+		println("\n\n\n\ntoken: ", token)
 		token, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
 		if err != nil {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
