@@ -740,6 +740,19 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 		mediaType = contentType
 	}
 
+	// Validate content type is an allowed OpenAPI format
+	allowedContentTypes := []string{
+		"application/yaml",
+		"application/x-yaml",
+		"text/yaml",
+		"text/x-yaml",
+		"application/json",
+		"text/json",
+	}
+	if !slices.Contains(allowedContentTypes, mediaType) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported content type: %s. Expected YAML or JSON", mediaType)
+	}
+
 	contentLength := resp.ContentLength
 	if contentLength <= 0 {
 		contentLength = MaxFileSizeOpenAPI
