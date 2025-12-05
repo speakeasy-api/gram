@@ -1,0 +1,15 @@
+diff --git a/v4/core/core.js b/v4/core/core.js
+index 700d5bc39411b49413a0c871dbe435af72a375dd..96ce3102b5a58ee7d216ca6c6d67816b5ea1b25b 100644
+--- a/v4/core/core.js
++++ b/v4/core/core.js
+@@ -53,7 +53,9 @@ export class $ZodAsyncError extends Error {
+         super(`Encountered Promise during synchronous parse. Use .parseAsync() instead.`);
+     }
+ }
+-export const globalConfig = {};
++export const globalConfig = {
++    jitless: true,
++};
+ export function config(newConfig) {
+     if (newConfig)
+         Object.assign(globalConfig, newConfig);
