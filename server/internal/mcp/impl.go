@@ -221,6 +221,8 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 
 // handleWellKnownMetadata handles OAuth 2.1 authorization server metadata discovery
 func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *http.Request) error {
+	// This is where the .well-known/oauth-authorization-server file is created
+	// For an oauth proxy nothing should really need to change here just fyi
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
@@ -284,6 +286,8 @@ func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *h
 }
 
 func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) error {
+	// This is where the .well-known/oauth-protected-resource file is created
+	// For an oauth proxy nothing should really need to change here just fyi
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
@@ -389,8 +393,30 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 				Scopes:         []string{},
 			}
 			ctx, err = s.auth.Authorize(ctx, token, &sc)
+			// something like
 			if err != nil {
-				return oops.E(oops.CodeUnauthorized, err, "failed to authorize with API key").Log(ctx, s.logger)
+				if toolset.OauthProxyServerID.Valid {
+					token, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
+					if err != nil {
+						return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
+					}
+					// check token has access to org
+					userInfo, err := s.sessions.GetUserInfoFromSpeakeasy(ctx, token)
+					if err != nil {
+						return oops.E(oops.CodeUnauthorized, err, "failed to get user info from token").Log(ctx, s.logger)
+					}
+					hasOrgAccess := false
+					for _, org := range userInfo.Organizations {
+						if org.ID == toolset.OrganizationID {
+							hasOrgAccess = true
+						}
+					}
+					if !hasOrgAccess {
+						return oops.E(oops.CodeUnauthorized, nil, "unauthorized").Log(ctx, s.logger)
+					}
+				} else {
+					return oops.E(oops.CodeUnauthorized, err, "failed to authorize with API key").Log(ctx, s.logger)
+				}
 			}
 		}
 	}

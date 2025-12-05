@@ -215,6 +215,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	// TODO: Eventually support multiple providers
 	provider := providers[0]
 
+	// This all will not be relevant for the integration pathway. Only relevant for custom providers
 	var secrets map[string]string
 	if err := json.Unmarshal(provider.Secrets, &secrets); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "OAuth provider secrets invalid").Log(ctx, s.logger)
@@ -239,6 +240,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	if clientID == "" {
 		return oops.E(oops.CodeUnexpected, nil, "OAuth provider client_id not configured").Log(ctx, s.logger)
 	}
+	// end not relevant
 
 	// Prepare OAuth request info to encode in state parameter
 	oauthReqInfo := map[string]string{
@@ -260,7 +262,21 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 
 	callbackURL := fmt.Sprintf("%s/oauth/callback", s.serverURL.String())
 
-	authURL, err := url.Parse(provider.AuthorizationEndpoint)
+	var authURL string
+	// This is where we need to diver gracefully somehow
+	switch integration {
+	case "gram":
+		// something like
+		values := url.Values{}
+		values.Add("return_url", callbackURL)
+		values.Add("state", string(oauthReqInfoJSON))
+
+		authURL = s.cfg.SpeakeasyServerAddress + "/v1/speakeasy_provider/login?" + values.Encode()
+	default:
+		// existing custom provider logic
+	}
+
+	authURL, err = url.Parse(provider.AuthorizationEndpoint)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to parse OAuth authorization URL").Log(ctx, s.logger)
 	}
@@ -296,6 +312,7 @@ func (s *Service) validateAuthorizationRequest(ctx context.Context, req *Authori
 
 // handleToken handles OAuth 2.1 token requests
 func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
+	// this is where the mcp client asks for its proxy token. Remember we don't really need to change anything here
 	ctx := r.Context()
 
 	mcpSlug := chi.URLParam(r, "mcpSlug")
@@ -349,6 +366,7 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 
 // handleClientRegistration handles OAuth 2.1 dynamic client registration
 func (s *Service) handleClientRegistration(w http.ResponseWriter, r *http.Request) error {
+	// This is client registration of the oauth proxy. Remember we don't really need to change anything here
 	ctx := r.Context()
 
 	mcpSlug := chi.URLParam(r, "mcpSlug")
@@ -437,6 +455,43 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 
 	// TODO: Eventually support multiple providers
 	provider := providers[0]
+
+	// the goal here is to get an access token. But the way we are getting an access token below is more specific to oauth2
+	// gram auth would look more like this
+	switch integration {
+	case "gram":
+		idToken, err := s.sessions.ExchangeTokenFromSpeakeasy(ctx, externalCode)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "failed to exchange authorization code for token", attr.SlogOAuthProvider(provider.Slug), attr.SlogError(err))
+			errorURL, buildErr := s.grantManager.BuildErrorResponse(ctx, oauthReqInfo["redirect_uri"], "server_error", "Failed to exchange authorization code for token", oauthReqInfo["state"])
+			if buildErr != nil {
+				s.logger.ErrorContext(ctx, "failed to build error response URL", attr.SlogError(buildErr))
+				return oops.E(oops.CodeUnexpected, buildErr, "failed to build error response").Log(ctx, s.logger)
+			}
+			http.Redirect(w, r, errorURL, http.StatusFound)
+			return nil
+		}
+
+		userInfo, err := s.sessions.GetUserInfoFromSpeakeasy(ctx, idToken)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "failed to get user info from token", attr.SlogOAuthProvider(provider.Slug), attr.SlogError(err))
+			errorURL, buildErr := s.grantManager.BuildErrorResponse(ctx, oauthReqInfo["redirect_uri"], "server_error", "Failed to get user information", oauthReqInfo["state"])
+			if buildErr != nil {
+				s.logger.ErrorContext(ctx, "failed to build error response URL", attr.SlogError(buildErr))
+				return oops.E(oops.CodeUnexpected, buildErr, "failed to build error response").Log(ctx, s.logger)
+			}
+			http.Redirect(w, r, errorURL, http.StatusFound)
+			return nil
+		}
+		hasOrgAccess := false
+		for _, org := range userInfo.Organizations {
+			if org.ID == toolset.OrganizationID {
+				hasOrgAccess = true
+			}
+		}
+	default:
+		// existing custom provider logic
+	}
 
 	var secrets map[string]string
 	if err := json.Unmarshal(provider.Secrets, &secrets); err != nil {
@@ -581,6 +636,10 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		CodeChallengeMethod: oauthReqInfo["code_challenge_method"],
 		Nonce:               "", // Nonce is not preserved in state for this flow
 	}
+
+	// this is sort of where we join back up
+	// the result of gram auth really needs to just be the accessToken (idToken) and expiresAt
+	// provider.SecurityKeyNames empty
 
 	grant, err := s.grantManager.CreateAuthorizationGrant(ctx, authReq, fullMCPURL, toolset.ID, accessToken, expiresAt, provider.SecurityKeyNames)
 	if err != nil {
