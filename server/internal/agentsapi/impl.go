@@ -157,6 +157,10 @@ func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResp
 		return nil, oops.E(oops.CodeUnexpected, err, "workflow execution failed").Log(ctx, s.logger)
 	}
 
+	if workflowResult.OrgID != authCtx.ActiveOrganizationID {
+		return nil, oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
+	}
+
 	if !shouldStore {
 		// Delete the workflow execution to remove history
 		go func() {
@@ -231,63 +235,33 @@ func (s *Service) GetResponse(ctx context.Context, payload *agents.GetResponsePa
 		var workflowResult agentspkg.AgentsResponseWorkflowResult
 		err = workflowRun.Get(ctx, &workflowResult)
 		if err != nil {
-			errMsg := err.Error()
-			response = &agents.AgentResponseOutput{
-				ID:                 responseID,
-				Object:             "response",
-				CreatedAt:          time.Now().Unix(),
-				Status:             "failed",
-				Error:              &errMsg,
-				Instructions:       nil,
-				Model:              "",
-				Output:             []any{},
-				PreviousResponseID: nil,
-				Temperature:        0,
-				Text: &agents.AgentResponseText{
-					Format: &agents.AgentTextFormat{Type: "text"},
-				},
-				Result: errMsg,
-			}
-		} else {
-			// Verify org_id matches
-			if workflowResult.OrgID != authCtx.ActiveOrganizationID {
-				return nil, oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
-			}
-			response = toHTTPResponse(workflowResult.ResponseOutput)
+			return nil, oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
 		}
+
+		if workflowResult.OrgID != authCtx.ActiveOrganizationID {
+			return nil, oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
+		}
+		response = toHTTPResponse(workflowResult.ResponseOutput)
 	default:
 		// Workflow failed, cancelled, or terminated - try to get result for any available data
 		workflowRun := s.temporalClient.GetWorkflow(ctx, responseID, "")
 		var workflowResult agentspkg.AgentsResponseWorkflowResult
 		err = workflowRun.Get(ctx, &workflowResult)
+		if err != nil {
+			return nil, oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
+		}
+		if workflowResult.OrgID == "" {
+			return nil, oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
+		}
+
+		if workflowResult.OrgID != authCtx.ActiveOrganizationID {
+			return nil, oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
+		}
 
 		errMsg := fmt.Sprintf("workflow in unexpected state: %v", workflowStatus)
-		if err == nil && workflowResult.OrgID != "" {
-			// Verify org_id matches
-			if workflowResult.OrgID != authCtx.ActiveOrganizationID {
-				return nil, oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
-			}
-			response = toHTTPResponse(workflowResult.ResponseOutput)
-			response.Status = "failed"
-			response.Error = &errMsg
-		} else {
-			response = &agents.AgentResponseOutput{
-				ID:                 responseID,
-				Object:             "response",
-				CreatedAt:          time.Now().Unix(),
-				Status:             "failed",
-				Error:              &errMsg,
-				Instructions:       nil,
-				Model:              "",
-				Output:             []any{},
-				PreviousResponseID: nil,
-				Temperature:        0,
-				Text: &agents.AgentResponseText{
-					Format: &agents.AgentTextFormat{Type: "text"},
-				},
-				Result: "",
-			}
-		}
+		response = toHTTPResponse(workflowResult.ResponseOutput)
+		response.Status = "failed"
+		response.Error = &errMsg
 	}
 
 	return response, nil
