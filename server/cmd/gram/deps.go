@@ -418,9 +418,9 @@ func newFlyTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger)
 
 		if err := inv.Check(
 			"tigris flags",
-			"tigris bucket uri is set", tigrisBucketURI != "",
-			"tigris key is set", tigrisKey != "",
-			"tigris secret is set", tigrisSecret != "",
+			"tigris bucket uri must be set", tigrisBucketURI != "",
+			"tigris key must be set", tigrisKey != "",
+			"tigris secret must be set", tigrisSecret != "",
 		); err != nil {
 			return nil, nilShutdown, fmt.Errorf("invalid configuration for tigris: %w", err)
 		}
@@ -436,7 +436,7 @@ func newFlyTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger)
 			return nil, nil, fmt.Errorf("create tigris blob store: %w", err)
 		}
 
-		return assets.NewFlyTigrisStore(store, assets.WithTigrisPresignHost("fly.storage.tigris.dev")), nilShutdown, nil
+		return assets.NewFlyTigrisStore(store), nilShutdown, nil
 	default:
 		return nil, nilShutdown, fmt.Errorf("unrecognized functions provider: %s", provider)
 	}
@@ -479,19 +479,13 @@ func newFunctionOrchestrator(
 		ociImage := c.String("functions-runner-oci-image")
 		defaultOrg := c.String("functions-flyio-org")
 		defaultRegion := c.String("functions-flyio-region")
-		tigrisBucketURI := c.String("functions-tigris-bucket-uri")
-		tigrisKey := c.String("functions-tigris-key")
-		tigrisSecret := c.String("functions-tigris-secret")
 
 		if err := inv.Check(
 			"flyio flags",
-			"token is set", tokenstr != "",
-			"oci image is set", ociImage != "",
-			"default org is set", defaultOrg != "",
-			"default region is set", defaultRegion != "",
-			"tigris bucket uri is set", tigrisBucketURI != "",
-			"tigris key is set", tigrisKey != "",
-			"tigris secret is set", tigrisSecret != "",
+			"token must be set", tokenstr != "",
+			"oci image must be set", ociImage != "",
+			"default org must be set", defaultOrg != "",
+			"default region must be set", defaultRegion != "",
 		); err != nil {
 			return nil, nilShutdown, fmt.Errorf("invalid configuration for functions: %w", err)
 		}

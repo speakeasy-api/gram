@@ -637,40 +637,10 @@ func isS3NotFoundError(err error) bool {
 
 type FlyTigrisStore struct {
 	BlobStore
-
-	presignHost string
 }
 
-type FlyTigrisStoreOption func(*FlyTigrisStore)
-
-func WithTigrisPresignHost(host string) FlyTigrisStoreOption {
-	return func(fts *FlyTigrisStore) {
-		fts.presignHost = host
+func NewFlyTigrisStore(blobStore BlobStore) *FlyTigrisStore {
+	return &FlyTigrisStore{
+		BlobStore: blobStore,
 	}
-}
-
-func NewFlyTigrisStore(blobStore BlobStore, opts ...FlyTigrisStoreOption) *FlyTigrisStore {
-	fts := &FlyTigrisStore{
-		BlobStore:   blobStore,
-		presignHost: "",
-	}
-
-	for _, opt := range opts {
-		opt(fts)
-	}
-
-	return fts
-}
-
-func (fts *FlyTigrisStore) PresignRead(ctx context.Context, subpath string, ttl time.Duration) (*url.URL, error) {
-	u, err := fts.BlobStore.PresignRead(ctx, subpath, ttl)
-	if err != nil {
-		return nil, fmt.Errorf("create presigned s3 url: %w", err)
-	}
-
-	if fts.presignHost != "" {
-		u.Host = fts.presignHost
-	}
-
-	return u, nil
 }
