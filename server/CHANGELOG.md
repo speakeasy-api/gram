@@ -1,5 +1,19 @@
 # server
 
+## 0.12.2
+
+### Patch Changes
+
+- 24ea062: Updates to openrouter billing tracking
+- 949787b: update chat credit billing
+- c530931: Adds server-side check on number of enabled MCP server by account type
+- ed8c67a: fix: context cancellation for tracking model usage
+- c1ebf7f: openrouter keys no longer need to be deleted and manually refreshed. We will utilize the new limit_refresh "monthly" setting for keys
+- 664f5fd: feat: fallback temporal workflow for openrouter usage
+- 3019ccb: Update Codex CLI installation instructions to use http instead of stdio w/ mcp-remote.
+- 80e114e: static oauth callback in oauth proxy
+- eab4b38: Remove Windsurf installation instructions and add VSCode install link
+
 ## 0.12.1
 
 ### Patch Changes

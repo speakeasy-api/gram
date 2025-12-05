@@ -16,7 +16,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useIsAdmin, useProject, useSession } from "@/contexts/Auth";
+import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools, useToolset } from "@/hooks/toolTypes";
@@ -866,7 +866,6 @@ function OAuthTabModal({
   const [metadataJson, setMetadataJson] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
   const telemetry = useTelemetry();
-  const isAdmin = useIsAdmin();
 
   // OAuth Proxy form state
   const [proxySlug, setProxySlug] = useState("");
@@ -884,17 +883,6 @@ function OAuthTabModal({
   const hasMultipleOAuth2AuthCode =
     toolset.oauthEnablementMetadata?.oauth2SecurityCount > 1;
   const queryClient = useQueryClient();
-
-  const handleBookMeeting = () => {
-    telemetry.capture("feature_requested", {
-      action: "mcp_oauth_integration",
-      toolset_slug: toolsetSlug,
-    });
-    window.open(
-      "https://calendly.com/d/ctgg-5dv-3kw/intro-to-gram-call",
-      "_blank",
-    );
-  };
 
   const addExternalOAuthMutation = useAddExternalOAuthServerMutation({
     onSuccess: () => {
@@ -1134,127 +1122,107 @@ function OAuthTabModal({
               value="proxy"
               className="space-y-4 overflow-auto max-h-[60vh]"
             >
-              {isAdmin ? (
-                <div>
-                  <Type className="font-medium mb-2">
-                    OAuth Proxy Server Configuration
-                  </Type>
-                  <Type muted small className="mb-4">
-                    Configure an OAuth proxy server to handle OAuth
-                    authentication for APIs that don't natively support MCP
-                    OAuth requirements.
-                  </Type>
+              <div>
+                <Type className="font-medium mb-2">
+                  OAuth Proxy Server Configuration
+                </Type>
+                <Type muted small className="mb-4">
+                  ONLY USE FOR INTERNAL SERVERS. Configure an OAuth proxy server
+                  to handle OAuth authentication for APIs that don't natively
+                  support MCP OAuth requirements. Getting proxy settings correct
+                  can be tricky. Need help?{" "}
+                  <Link
+                    external
+                    to="https://calendly.com/d/ctgg-5dv-3kw/intro-to-gram-call"
+                  >
+                    Book a meeting
+                  </Link>
+                </Type>
 
-                  {proxyError && (
-                    <Type className="!text-red-500 text-sm mb-4">
-                      {proxyError}
+                {proxyError && (
+                  <Type className="!text-red-500 text-sm mb-4">
+                    {proxyError}
+                  </Type>
+                )}
+
+                <Stack gap={4}>
+                  <div>
+                    <Type className="font-medium mb-2">
+                      OAuth Proxy Server Slug
                     </Type>
-                  )}
-
-                  <Stack gap={4}>
-                    <div>
-                      <Type className="font-medium mb-2">
-                        OAuth Proxy Server Slug
-                      </Type>
-                      <Input
-                        placeholder="my-oauth-proxy"
-                        value={proxySlug}
-                        onChange={setProxySlug}
-                        maxLength={40}
-                      />
-                    </div>
-
-                    <div>
-                      <Type className="font-medium mb-2">
-                        Authorization Endpoint
-                      </Type>
-                      <Input
-                        placeholder="https://provider.com/oauth/authorize"
-                        value={proxyAuthorizationEndpoint}
-                        onChange={setProxyAuthorizationEndpoint}
-                      />
-                    </div>
-
-                    <div>
-                      <Type className="font-medium mb-2">Token Endpoint</Type>
-                      <Input
-                        placeholder="https://provider.com/oauth/token"
-                        value={proxyTokenEndpoint}
-                        onChange={setProxyTokenEndpoint}
-                      />
-                    </div>
-
-                    <div>
-                      <Type className="font-medium mb-2">
-                        Scopes (comma-separated)
-                      </Type>
-                      <Input
-                        placeholder="read, write, openid"
-                        value={proxyScopes}
-                        onChange={setProxyScopes}
-                      />
-                    </div>
-
-                    <div>
-                      <Type className="font-medium mb-2">
-                        Token Endpoint Auth Method
-                      </Type>
-                      <select
-                        className="w-full border rounded px-3 py-2 bg-background"
-                        value={proxyTokenAuthMethod}
-                        onChange={(e) =>
-                          setProxyTokenAuthMethod(e.target.value)
-                        }
-                      >
-                        <option value="client_secret_post">
-                          client_secret_post
-                        </option>
-                        <option value="client_secret_basic">
-                          client_secret_basic
-                        </option>
-                        <option value="none">none</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <Type className="font-medium mb-2">Environment</Type>
-                      <EnvironmentDropdown
-                        selectedEnvironment={proxyEnvironmentSlug}
-                        setSelectedEnvironment={setProxyEnvironmentSlug}
-                        tooltip="Select environment for OAuth credentials"
-                        className="w-full max-w-full"
-                      />
-                      <Type muted small className="mt-1">
-                        The environment where OAuth client credentials will be
-                        stored.
-                      </Type>
-                    </div>
-                  </Stack>
-                </div>
-              ) : (
-                <div>
-                  <Type className="font-medium mb-2">OAuth Proxy</Type>
-                  <Type muted small>
-                    Gram can help you get started with an OAuth proxy when you
-                    don't fit the very specific MCP OAuth requirements. Book a
-                    meeting and we'll help you get started.
-                  </Type>
-                  <div className="mt-6 flex gap-3 justify-end items-center">
-                    <Button
-                      variant="secondary"
-                      onClick={() =>
-                        window.open(
-                          "https://docs.getgram.ai/host-mcp/adding-oauth#oauth-proxy",
-                          "_blank",
-                        )
-                      }
-                    >
-                      View Docs
-                    </Button>
-                    <Button onClick={handleBookMeeting}>Book Meeting</Button>
+                    <Input
+                      placeholder="my-oauth-proxy"
+                      value={proxySlug}
+                      onChange={setProxySlug}
+                      maxLength={40}
+                    />
                   </div>
-                </div>
-              )}
+
+                  <div>
+                    <Type className="font-medium mb-2">
+                      Authorization Endpoint
+                    </Type>
+                    <Input
+                      placeholder="https://provider.com/oauth/authorize"
+                      value={proxyAuthorizationEndpoint}
+                      onChange={setProxyAuthorizationEndpoint}
+                    />
+                  </div>
+
+                  <div>
+                    <Type className="font-medium mb-2">Token Endpoint</Type>
+                    <Input
+                      placeholder="https://provider.com/oauth/token"
+                      value={proxyTokenEndpoint}
+                      onChange={setProxyTokenEndpoint}
+                    />
+                  </div>
+
+                  <div>
+                    <Type className="font-medium mb-2">
+                      Scopes (comma-separated)
+                    </Type>
+                    <Input
+                      placeholder="read, write, openid"
+                      value={proxyScopes}
+                      onChange={setProxyScopes}
+                    />
+                  </div>
+
+                  <div>
+                    <Type className="font-medium mb-2">
+                      Token Endpoint Auth Method
+                    </Type>
+                    <select
+                      className="w-full border rounded px-3 py-2 bg-background"
+                      value={proxyTokenAuthMethod}
+                      onChange={(e) => setProxyTokenAuthMethod(e.target.value)}
+                    >
+                      <option value="client_secret_post">
+                        client_secret_post
+                      </option>
+                      <option value="client_secret_basic">
+                        client_secret_basic
+                      </option>
+                      <option value="none">none</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <Type className="font-medium mb-2">Environment</Type>
+                    <EnvironmentDropdown
+                      selectedEnvironment={proxyEnvironmentSlug}
+                      setSelectedEnvironment={setProxyEnvironmentSlug}
+                      tooltip="Select environment for OAuth credentials"
+                      className="w-full max-w-full"
+                    />
+                    <Type muted small className="mt-1">
+                      The environment where OAuth client credentials will be
+                      stored.
+                    </Type>
+                  </div>
+                </Stack>
+              </div>
             </TabsContent>
           </Tabs>
 
@@ -1274,7 +1242,7 @@ function OAuthTabModal({
                   : "Configure External OAuth"}
               </Button>
             )}
-            {activeTab === "proxy" && isAdmin && (
+            {activeTab === "proxy" && (
               <Button
                 onClick={handleProxySubmit}
                 disabled={
