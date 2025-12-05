@@ -74,7 +74,7 @@ export function MCPDetailPage() {
   // We won't really care about availableOAuthAuthCode
   // Separately if !mcpIsPublic we will want to show some button like "Connect Gram OAuth" with a helpful tooltip
   // That will attach the oauth proxy to that server
-  // If the mcp goes not public, we probably need to make sure we remove the oauth proxy
+  // If the mcp goes not public, we probably need to make sure we remove the oauth proxy by calling that relevant endpoint
 
   return (
     <Stack>

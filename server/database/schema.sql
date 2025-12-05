@@ -546,7 +546,8 @@ ON external_oauth_server_metadata (project_id, slug)
 WHERE deleted IS FALSE;
 
 -- OAuth Proxy Servers - collection of OAuth proxy configurations
--- this will be the tricky part. How do you define the data model here simply?
+-- this will be the tricky part and the part I have not thought through as much as implementation.
+-- How do you define the data model well here?
 -- what is a non custom proxy provider? But instead a set integration "gram oauth"
 -- I would start by keeping it simple
 CREATE TABLE IF NOT EXISTS oauth_proxy_servers (
