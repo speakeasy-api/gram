@@ -1,4 +1,4 @@
-package mcpregistries
+package externalmcp
 
 import (
 	"github.com/speakeasy-api/gram/server/design/security"
