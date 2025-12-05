@@ -1127,10 +1127,10 @@ function OAuthTabModal({
                   OAuth Proxy Server Configuration
                 </Type>
                 <Type muted small className="mb-4">
-                  ONLY USE FOR INTERNAL SERVERS. Configure an OAuth
-                  proxy server to handle OAuth authentication for APIs that
-                  don't natively support MCP OAuth requirements.
-                  Getting proxy settings correct can be tricky. Need help?{" "}
+                  ONLY USE FOR INTERNAL SERVERS. Configure an OAuth proxy server
+                  to handle OAuth authentication for APIs that don't natively
+                  support MCP OAuth requirements. Getting proxy settings correct
+                  can be tricky. Need help?{" "}
                   <Link
                     external
                     to="https://calendly.com/d/ctgg-5dv-3kw/intro-to-gram-call"
