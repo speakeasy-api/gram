@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS tool_logs (
     source LowCardinality(String),
 
     raw_log String CODEC(ZSTD),
-    function_log Nullable(String) CODEC(ZSTD),
+    message Nullable(String) CODEC(ZSTD),
+    attributes JSON CODEC(ZSTD),
 
     project_id UUID,
     deployment_id UUID,
@@ -54,15 +55,16 @@ TTL timestamp + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Stores logs from Gram function executions';
 
-ALTER TABLE tool_logs COMMENT COLUMN timestamp 'Timestamp at which log was generated (from the server)';
-ALTER TABLE tool_logs COMMENT COLUMN instance 'Name of the machine instance that generated the log (e.g. snowy-water-123)';
-ALTER TABLE tool_logs COMMENT COLUMN level 'Log level (from the server)';
-ALTER TABLE tool_logs COMMENT COLUMN source 'The log source (server or user)';
-ALTER TABLE tool_logs COMMENT COLUMN raw_log 'Full log sent by the server (wraps function logs)';
-ALTER TABLE tool_logs COMMENT COLUMN function_log 'Log output by the function (will be empty for server-only logs)';
-ALTER TABLE tool_logs COMMENT COLUMN project_id 'ID of the project where the gram function ran';
-ALTER TABLE tool_logs COMMENT COLUMN deployment_id 'Deployment ID associated with the gram function run';
-ALTER TABLE tool_logs COMMENT COLUMN function_id 'ID of the gram function';
+ALTER TABLE tool_logs COMMENT COLUMN timestamp 'Timestamp at which log was generated.';
+ALTER TABLE tool_logs COMMENT COLUMN instance 'Name of the machine instance that generated the log (e.g. snowy-water-123).';
+ALTER TABLE tool_logs COMMENT COLUMN level 'Log level.';
+ALTER TABLE tool_logs COMMENT COLUMN source 'The log source (server or user).';
+ALTER TABLE tool_logs COMMENT COLUMN raw_log 'Full log sent by the server (function logs are wrapped by this log).';
+ALTER TABLE tool_logs COMMENT COLUMN message 'The message output from the function log.';
+ALTER TABLE tool_logs COMMENT COLUMN attributes 'The log attributes (extra fields from structured json logs).';
+ALTER TABLE tool_logs COMMENT COLUMN project_id 'ID of the project where the gram function ran.';
+ALTER TABLE tool_logs COMMENT COLUMN deployment_id 'Deployment ID associated with the gram function run.';
+ALTER TABLE tool_logs COMMENT COLUMN function_id 'ID of the gram function.';
 
 CREATE INDEX IF NOT EXISTS idx_project_id ON tool_logs (project_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_deployment_id ON tool_logs (deployment_id) TYPE bloom_filter(0.01) GRANULARITY 1;
