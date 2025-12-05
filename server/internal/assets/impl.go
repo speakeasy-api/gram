@@ -721,7 +721,7 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 
 	// Determine content type from response or URL
 	contentType := resp.Header.Get("Content-Type")
-	if contentType == "" || contentType == "text/plain" {
+	if contentType == "" || strings.HasPrefix(contentType, "text/plain") {
 		// Infer from URL extension
 		ext := strings.ToLower(path.Ext(parsedURL.Path))
 		switch ext {
