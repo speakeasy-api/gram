@@ -1,5 +1,18 @@
 # server
 
+## 0.13.0
+
+### Minor Changes
+
+- 1c836a2: Proxy remote file uploads through gram server
+
+### Patch Changes
+
+- 7bf206e: In a case where an MCP server is being used as a private server and it has a default environment attached. If that environment has a certain variable that's also being passed through directly on use. We should always prioritize the one that is passed through directly on use.
+- f29d111: allowed types text/plain
+- 25912d8: fix: small custom oauth fixes"
+- 5d5fe0b: fix: nullable chat id model billing
+
 ## 0.12.2
 
 ### Patch Changes
