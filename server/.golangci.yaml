@@ -116,6 +116,8 @@ linters:
         - '^github\.com/superfly/fly-go.*'
         - '^github\.com/speakeasy-api/gram/server/gen/types\.Tool$'
         - '^github\.com/ClickHouse/clickhouse-go/v2\.Options$'
+        - '^github\.com/aws/aws-sdk-go-v2/.*'
+        - '^cloud\.google\.com/go/storage\..*'
     exhaustive:
       check:
         - switch
