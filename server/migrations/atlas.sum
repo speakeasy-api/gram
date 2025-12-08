@@ -1,4 +1,4 @@
-h1:AJ7aQqZIcGgewUmN5QncCJkrlkyWmDjEeD0h8+Wli+E=
+h1:EjhB4E996pJlUKO6QO2lalqjbP03NxSL8w4htf4RwNo=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -77,3 +77,4 @@ h1:AJ7aQqZIcGgewUmN5QncCJkrlkyWmDjEeD0h8+Wli+E=
 20251126021621_add-auth-input-to-function-resource.sql h1:2vSYx5xIklau99YBK1h/Ipb0dAmR+KUqJlJlwEY5qRc=
 20251128143912_add-instructions-to-mcp-metadata.sql h1:WgeMPuB4wXz1c4mhf4+ZoTwtPfZ0NkTQBTXW3s4L8CE=
 20251202182959_agent-execution-table.sql h1:q2PyP6iOoBAkQC0pgAFPre5+Amk3Kal7Mc2Twbni0gg=
+20251208165035_static-oauth-proxy-providers.sql h1:zujMl7j65KUuVit7bS6766+uKR83F76NK9eHW8zBT1U=

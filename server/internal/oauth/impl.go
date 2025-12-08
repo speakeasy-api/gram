@@ -260,7 +260,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 
 	callbackURL := fmt.Sprintf("%s/oauth/callback", s.serverURL.String())
 
-	authURL, err := url.Parse(provider.AuthorizationEndpoint)
+	authURL, err := url.Parse(provider.AuthorizationEndpoint.String)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to parse OAuth authorization URL").Log(ctx, s.logger)
 	}
@@ -472,7 +472,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 
 	callbackURL := fmt.Sprintf("%s/oauth/callback", s.serverURL.String())
 
-	tokenURL := provider.TokenEndpoint
+	tokenURL := provider.TokenEndpoint.String
 	tokenData := url.Values{}
 	tokenData.Set("grant_type", "authorization_code")
 	tokenData.Set("redirect_uri", callbackURL)
