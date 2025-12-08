@@ -522,8 +522,8 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		if !hasOrgAccess {
 			s.logger.WarnContext(ctx, "user does not have access to organization",
 				attr.SlogOAuthProvider(provider.Slug),
-				slog.String("user_id", userInfo.UserID),
-				slog.String("org_id", toolset.OrganizationID))
+				attr.SlogUserID(userInfo.UserID),
+				attr.SlogOrganizationID(toolset.OrganizationID))
 
 			errorURL, buildErr := s.grantManager.BuildErrorResponse(
 				ctx,

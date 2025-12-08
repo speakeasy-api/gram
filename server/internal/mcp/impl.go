@@ -155,6 +155,7 @@ func NewService(
 		tcm:               tcm,
 		vectorToolStore:   vectorToolStore,
 		temporal:          temporal,
+		sessions:          sessions,
 	}
 }
 
