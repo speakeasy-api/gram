@@ -1,0 +1,2 @@
+-- Modify "oauth_proxy_providers" table
+ALTER TABLE "oauth_proxy_providers" ADD CONSTRAINT "custom_provider_endpoints" CHECK (((provider_type <> 'custom'::text) AND (authorization_endpoint IS NOT NULL) AND (token_endpoint IS NOT NULL)) OR (provider_type = 'gram'::text)), ADD CONSTRAINT "oauth_proxy_providers_provider_type_check" CHECK (provider_type = ANY (ARRAY['custom'::text, 'gram'::text])), ALTER COLUMN "authorization_endpoint" DROP NOT NULL, ALTER COLUMN "token_endpoint" DROP NOT NULL, ADD COLUMN "provider_type" text NOT NULL;
