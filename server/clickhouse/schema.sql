@@ -1,6 +1,6 @@
 create table if not exists http_requests_raw
 (
-    id                  UUID DEFAULT generateUUIDv7(),
+    id                  UUID DEFAULT generateUUIDv7() COMMENT 'this is an ID',
     ts                  DateTime64(3, 'UTC'),
     organization_id     UUID,
     project_id          UUID,
@@ -30,41 +30,31 @@ create table if not exists http_requests_raw
       SETTINGS index_granularity = 8192
       COMMENT 'Stores raw HTTP tool call requests and responses';
 
+
 CREATE INDEX IF NOT EXISTS idx_tool_type ON http_requests_raw (tool_type) TYPE set (0) GRANULARITY 4;
 CREATE INDEX IF NOT EXISTS idx_status_code ON http_requests_raw (status_code) TYPE set (100) GRANULARITY 4;
 CREATE INDEX IF NOT EXISTS idx_tool_urn_exact ON http_requests_raw (tool_urn) TYPE bloom_filter(0.01) GRANULARITY 4;
 CREATE INDEX IF NOT EXISTS idx_tool_urn_substring ON http_requests_raw (tool_urn) TYPE ngrambf_v1(4, 30720, 3, 0) GRANULARITY 4;
 
 CREATE TABLE IF NOT EXISTS tool_logs (
-    timestamp DateTime64(3, 'UTC') CODEC(Delta, ZSTD),
-    instance String CODEC(ZSTD),
-    level LowCardinality(String),
-    source LowCardinality(String),
+    timestamp DateTime64(3, 'UTC') COMMENT 'Timestamp at which log was generated.' CODEC(Delta, ZSTD),
+    instance String COMMENT 'Name of the machine instance that generated the log (e.g. snowy-water-123).' CODEC(ZSTD),
+    level LowCardinality(String) COMMENT 'Log level.',
+    source LowCardinality(String) COMMENT 'The log source (server or user).',
 
-    raw_log String CODEC(ZSTD),
-    message Nullable(String) CODEC(ZSTD),
-    attributes JSON CODEC(ZSTD),
+    raw_log String COMMENT 'Full log as sent by the server (function logs are wrapped by this log).' CODEC(ZSTD),
+    message Nullable(String) COMMENT 'The message output from the function log.' CODEC(ZSTD),
+    attributes JSON COMMENT 'The log attributes (extra fields from structured json logs).' CODEC(ZSTD),
 
-    project_id UUID,
-    deployment_id UUID,
-    function_id UUID
+    project_id UUID COMMENT 'ID of the project where the gram function ran.',
+    deployment_id UUID COMMENT 'Deployment ID associated with the gram function run.',
+    function_id UUID COMMENT 'ID of the gram function.'
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(timestamp)
 ORDER BY (project_id, timestamp, instance)
 TTL timestamp + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Stores logs from Gram function executions';
-
-ALTER TABLE tool_logs COMMENT COLUMN timestamp 'Timestamp at which log was generated.';
-ALTER TABLE tool_logs COMMENT COLUMN instance 'Name of the machine instance that generated the log (e.g. snowy-water-123).';
-ALTER TABLE tool_logs COMMENT COLUMN level 'Log level.';
-ALTER TABLE tool_logs COMMENT COLUMN source 'The log source (server or user).';
-ALTER TABLE tool_logs COMMENT COLUMN raw_log 'Full log sent by the server (function logs are wrapped by this log).';
-ALTER TABLE tool_logs COMMENT COLUMN message 'The message output from the function log.';
-ALTER TABLE tool_logs COMMENT COLUMN attributes 'The log attributes (extra fields from structured json logs).';
-ALTER TABLE tool_logs COMMENT COLUMN project_id 'ID of the project where the gram function ran.';
-ALTER TABLE tool_logs COMMENT COLUMN deployment_id 'Deployment ID associated with the gram function run.';
-ALTER TABLE tool_logs COMMENT COLUMN function_id 'ID of the gram function.';
 
 CREATE INDEX IF NOT EXISTS idx_project_id ON tool_logs (project_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_deployment_id ON tool_logs (deployment_id) TYPE bloom_filter(0.01) GRANULARITY 1;
