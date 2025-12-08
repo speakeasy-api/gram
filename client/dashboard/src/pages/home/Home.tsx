@@ -166,7 +166,7 @@ function HomeContent() {
   const [searchParams] = useSearchParams();
   const linkedFrom = searchParams.get(LINKED_FROM_PARAM);
 
-  // Handle CLI redirect in effect
+  // If we arrived here from the CLI and the user has no toolsets, redirect to the onboarding page.
   useEffect(() => {
     if (linkedFrom === "cli" && toolsets?.toolsets?.length === 0) {
       const params = new URLSearchParams();
