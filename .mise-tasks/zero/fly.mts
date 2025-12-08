@@ -49,7 +49,7 @@ async function run() {
     `
 👀 To deploy Gram Functions to Fly.io, you'll need:
     🎈 A Fly.io account (https://fly.io)
-    🎈 A Fly.io organization-scoped token (https://fly.io/tokens/create)
+    🎈 A Fly.io organization-scoped token (https://fly.io/tokens/create or \`fly tokens create org --name <name>\`)
     🎈 A Fly.io app hosting the the Gram Functions runner images
     🐅 A Tigris bucket associated with the Fly.io organization
     🐅 A Tigris access key and secret with permissions to access the bucket (https://console.tigris.dev)
