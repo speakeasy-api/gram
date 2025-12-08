@@ -11,7 +11,11 @@ import {
 import { getServerURL } from "@/lib/utils";
 import { useChat } from "@ai-sdk/react";
 import { useInstance } from "@gram/client/react-query/index.js";
-import { jsonSchema, UIMessage } from "ai";
+import {
+  jsonSchema,
+  UIMessage,
+  lastAssistantMessageIsCompleteWithToolCalls,
+} from "ai";
 import { CustomChatTransport } from "@/lib/CustomChatTransport";
 
 type CoreTool = {
@@ -423,6 +427,8 @@ function ChatInner({
     id: `${chat.id}-${model}`,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     transport: transport as any,
+    // Automatically continue conversation when all tool calls are complete
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onError: (error) => {
       console.error("Chat error:", error.message, error.stack);
       if (error.message.trim() !== "An error occurred.") {
