@@ -1,5 +1,4 @@
-ALTER TABLE `http_requests_raw` COMMENT COLUMN `id` 'this is an ID';
--- Create "tool_logs" table
+-- create "tool_logs" table
 CREATE TABLE `tool_logs` (
   `timestamp` DateTime64(3, 'UTC') COMMENT 'Timestamp at which log was generated.' CODEC(Delta(8), ZSTD(1)),
   `instance` String COMMENT 'Name of the machine instance that generated the log (e.g. snowy-water-123).' CODEC(ZSTD(1)),

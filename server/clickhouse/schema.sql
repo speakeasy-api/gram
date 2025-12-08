@@ -1,6 +1,6 @@
 create table if not exists http_requests_raw
 (
-    id                  UUID DEFAULT generateUUIDv7() COMMENT 'this is an ID',
+    id                  UUID DEFAULT generateUUIDv7(),
     ts                  DateTime64(3, 'UTC'),
     organization_id     UUID,
     project_id          UUID,
