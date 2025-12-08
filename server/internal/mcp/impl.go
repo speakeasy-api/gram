@@ -709,7 +709,6 @@ func parseMcpSessionID(headers http.Header) string {
 }
 
 func (s *Service) authenticateToken(ctx context.Context, token string) (context.Context, error) {
-	// Try consumer scope first
 	sc := security.APIKeyScheme{
 		Name:           auth.KeySecurityScheme,
 		RequiredScopes: []string{"consumer"},
@@ -720,7 +719,6 @@ func (s *Service) authenticateToken(ctx context.Context, token string) (context.
 		return ctx, nil
 	}
 
-	// If consumer scope fails, try chat scope
 	sc = security.APIKeyScheme{
 		Name:           auth.KeySecurityScheme,
 		RequiredScopes: []string{"chat"},
