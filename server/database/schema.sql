@@ -570,10 +570,13 @@ CREATE TABLE IF NOT EXISTS oauth_proxy_providers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   oauth_proxy_server_id uuid NOT NULL,
-
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
-  authorization_endpoint TEXT NOT NULL,
-  token_endpoint TEXT NOT NULL,
+
+  -- provider type: 'custom', 'gram', etc.
+  provider_type TEXT NOT NULL DEFAULT 'custom',
+
+  authorization_endpoint TEXT,
+  token_endpoint TEXT,
   registration_endpoint TEXT,
 
   -- OAuth server capabilities

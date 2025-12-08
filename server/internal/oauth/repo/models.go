@@ -25,8 +25,9 @@ type OauthProxyProvider struct {
 	ProjectID                         uuid.UUID
 	OauthProxyServerID                uuid.UUID
 	Slug                              string
-	AuthorizationEndpoint             string
-	TokenEndpoint                     string
+	ProviderType                      string
+	AuthorizationEndpoint             pgtype.Text
+	TokenEndpoint                     pgtype.Text
 	RegistrationEndpoint              pgtype.Text
 	ScopesSupported                   []string
 	ResponseTypesSupported            []string
