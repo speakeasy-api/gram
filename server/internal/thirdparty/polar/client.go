@@ -198,9 +198,6 @@ func (p *Client) TrackModelUsage(ctx context.Context, event billing.ModelUsageEv
 		"source": {
 			Str: &source,
 		},
-		"chat_id": {
-			Str: &event.ChatID,
-		},
 		"native_tokens_cached": {
 			Integer: &event.NativeTokensCached,
 		},
@@ -213,6 +210,12 @@ func (p *Client) TrackModelUsage(ctx context.Context, event billing.ModelUsageEv
 		"upstream_inference_cost": {
 			Number: &event.UpstreamInferenceCost,
 		},
+	}
+
+	if event.ChatID != "" {
+		metadata["chat_id"] = polarComponents.EventMetadataInput{
+			Str: &event.ChatID,
+		}
 	}
 
 	if event.Cost != nil {

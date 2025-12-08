@@ -13,7 +13,6 @@ import {
   useTelemetry,
 } from "@/contexts/Telemetry";
 import { useToolset } from "@/hooks/toolTypes";
-import { useApiError } from "@/hooks/useApiError";
 import { Tool, useGroupedTools } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -40,13 +39,13 @@ import { ToolsetAuthAlert } from "./ToolsetAuthAlert";
 import { ToolsetEmptyState } from "./ToolsetEmptyState";
 import { ToolsetHeader } from "./ToolsetHeader";
 import { useToolsets } from "./Toolsets";
+import { handleAPIError } from "@/lib/errors";
 
 export function useDeleteToolset({
   onSuccess,
 }: { onSuccess?: () => void } = {}) {
   const toolsets = useToolsets();
   const telemetry = useTelemetry();
-  const { handleApiError } = useApiError();
 
   const mutation = useDeleteToolsetMutation({
     onSuccess: async () => {
@@ -57,7 +56,7 @@ export function useDeleteToolset({
       onSuccess?.();
     },
     onError: (error) => {
-      handleApiError(error, "Failed to delete toolset");
+      handleAPIError(error, "Failed to delete toolset");
     },
   });
 
@@ -82,8 +81,6 @@ export function useCloneToolset({
   const toolsets = useToolsets();
   const telemetry = useTelemetry();
   const routes = useRoutes();
-  const { handleApiError } = useApiError();
-
   const mutation = useCloneToolsetMutation({
     onSuccess: async (data) => {
       telemetry.capture("toolset_event", {
@@ -96,7 +93,7 @@ export function useCloneToolset({
       onSuccess?.();
     },
     onError: (error) => {
-      handleApiError(error, "Failed to clone toolset");
+      handleAPIError(error, "Failed to clone toolset");
     },
   });
 
@@ -251,7 +248,6 @@ export function ToolsetView({
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const client = useSdkClient();
-  const { handleApiError } = useApiError();
   const { data: toolset, refetch } = useToolset(toolsetSlug);
   const { addActions, removeActions } = useCommandPalette();
   const location = useLocation();
@@ -431,7 +427,7 @@ export function ToolsetView({
               action: "tools_removal_failed",
               error: error.message,
             });
-            handleApiError(error, "Failed to remove tools");
+            handleAPIError(error, "Failed to remove tools");
           },
         },
       );

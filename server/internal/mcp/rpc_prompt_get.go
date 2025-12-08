@@ -60,6 +60,7 @@ func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		Text:     promptData,
 		MimeType: nil,
 		Data:     nil,
+		Meta:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal content chunk").Log(ctx, logger)

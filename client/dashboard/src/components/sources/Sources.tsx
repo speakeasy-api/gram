@@ -12,17 +12,17 @@ import {
   useListTools,
 } from "@gram/client/react-query/index.js";
 // import { Dialog } from "@/components/ui/dialog";
-import { Button, Icon, Dialog } from "@speakeasy-api/moonshine";
+import { Button, Dialog, Icon } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { create } from "zustand";
 import AddSourceDialogContent from "./AddSourceDialogContent";
+import { AttachEnvironmentDialogContent } from "./AttachEnvironmentDialogContent";
 import { RemoveSourceDialogContent } from "./RemoveSourceDialogContent";
 import { NamedAsset, SourceCard } from "./SourceCard";
 import { SourcesEmptyState } from "./SourcesEmptyState";
 import { UploadOpenApiDialogContent } from "./UploadOpenApiDialogContent";
-import { AttachEnvironmentDialogContent } from "./AttachEnvironmentDialogContent";
 import { ViewAssetDialogContent } from "./ViewAssetDialogContent";
 
 type DialogState =
@@ -99,37 +99,43 @@ export default function Sources() {
       return [];
     }
 
-    const openApiSources = deployment.openapiv3Assets.map((deploymentAsset) => {
-      const asset = assets.assets.find((a) => a.id === deploymentAsset.assetId);
-      if (!asset) {
-        throw new Error(`Asset ${deploymentAsset.assetId} not found`);
-      }
-      return {
-        ...asset,
-        deploymentAssetId: deploymentAsset.id,
-        name: deploymentAsset.name,
-        slug: deploymentAsset.slug,
-        type: "openapi" as const,
-      };
-    });
-
-    const functionSources = (deployment.functionsAssets ?? []).map(
-      (deploymentAsset) => {
+    const openApiSources = deployment.openapiv3Assets
+      .map((deploymentAsset) => {
         const asset = assets.assets.find(
           (a) => a.id === deploymentAsset.assetId,
         );
         if (!asset) {
-          throw new Error(`Asset ${deploymentAsset.assetId} not found`);
+          console.error(`Asset ${deploymentAsset.assetId} not found`);
+          return null;
         }
         return {
           ...asset,
           deploymentAssetId: deploymentAsset.id,
           name: deploymentAsset.name,
           slug: deploymentAsset.slug,
-          type: "function" as const,
+          type: "openapi",
         };
-      },
-    );
+      })
+      .filter((source): source is NamedAsset => source !== null);
+
+    const functionSources = (deployment.functionsAssets ?? [])
+      .map((deploymentAsset) => {
+        const asset = assets.assets.find(
+          (a) => a.id === deploymentAsset.assetId,
+        );
+        if (!asset) {
+          console.error(`Asset ${deploymentAsset.assetId} not found`);
+          return null;
+        }
+        return {
+          ...asset,
+          deploymentAssetId: deploymentAsset.id,
+          name: deploymentAsset.name,
+          slug: deploymentAsset.slug,
+          type: "function",
+        };
+      })
+      .filter((source): source is NamedAsset => source !== null);
 
     return [...openApiSources, ...functionSources];
   }, [deployment, assets]);
@@ -139,13 +145,11 @@ export default function Sources() {
       <>
         <SourcesEmptyState onNewUpload={openAddSource} />
         <Dialog
-          open={dialogState.type !== "closed"}
+          open={dialogState.type === "add-source"}
           onOpenChange={(open) => !open && closeDialog()}
         >
           <Dialog.Content className="max-w-2xl!">
-            {dialogState.type === "add-source" && (
-              <AddSourceDialogContent onCompletion={closeDialog} />
-            )}
+            <AddSourceDialogContent onCompletion={closeDialog} />
           </Dialog.Content>
         </Dialog>
       </>

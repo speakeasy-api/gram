@@ -1,5 +1,11 @@
 # function-runners
 
+## 0.2.3
+
+### Patch Changes
+
+- fe594aa: Using ctx.fail() in Gram Functions will now produce more human-readable errors in MCP clients
+
 ## 0.2.2
 
 ### Patch Changes

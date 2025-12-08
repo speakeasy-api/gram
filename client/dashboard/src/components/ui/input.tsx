@@ -48,12 +48,14 @@ function Input({
     v(props.value?.toString() ?? ""),
   );
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => {
     if (e.key === "Enter" && onEnter) {
       onEnter();
     }
     // Call the original onKeyDown if it exists
-    props.onKeyDown?.(e);
+    props.onKeyDown?.(e as React.KeyboardEvent<HTMLInputElement>);
   };
 
   const onChange = (value: string) => {
@@ -79,15 +81,24 @@ function Input({
     }
   }, [requiredPrefix]);
 
+  const {
+    onKeyDown: _,
+    onCompositionStart: __,
+    onCompositionEnd: ___,
+    onPaste: ____,
+    ...restProps
+  } = props;
   const input =
     lines && lines > 1 ? (
       <TextArea
         data-slot="input"
         className={cn(className)}
-        onKeyDown={handleKeyDown}
+        onKeyDown={
+          handleKeyDown as React.KeyboardEventHandler<HTMLTextAreaElement>
+        }
         onChange={onChange}
         rows={lines}
-        {...props}
+        {...restProps}
         defaultValue={
           typeof props.defaultValue === "string"
             ? props.defaultValue

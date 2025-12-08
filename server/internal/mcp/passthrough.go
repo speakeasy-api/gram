@@ -6,7 +6,7 @@ func isMCPPassthrough(meta map[string]any) bool {
 	if meta == nil {
 		return false
 	}
-	if kind, ok := meta["gram.ai/kind"].(string); ok && kind == "mcp-passthrough" {
+	if kind, ok := meta[MetaGramKind].(string); ok && kind == "mcp-passthrough" {
 		return true
 	}
 

@@ -1,5 +1,11 @@
 # cli
 
+## 0.15.0
+
+### Minor Changes
+
+- 1c836a2: Proxy remote file uploads through gram server
+
 ## 0.14.0
 
 ### Minor Changes

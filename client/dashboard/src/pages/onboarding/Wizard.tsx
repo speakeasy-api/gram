@@ -16,7 +16,6 @@ import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools } from "@/hooks/toolTypes";
-import { useApiError } from "@/hooks/useApiError";
 import { slugify } from "@/lib/constants";
 import { filterHttpTools, useGroupedHttpTools } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
@@ -50,6 +49,7 @@ import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
 import { DeploymentLogs, useUploadOpenAPISteps } from "./UploadOpenAPI";
 import { CodeBlock } from "@/components/code";
+import { handleAPIError } from "@/lib/errors";
 
 type OnboardingPath = "openapi" | "cli";
 type OnboardingStep = "choice" | "upload" | "cli-setup" | "toolset" | "mcp";
@@ -707,7 +707,6 @@ const ToolsetStep = ({
 }) => {
   const client = useSdkClient();
   const { data: tools, isLoading: toolsLoading } = useListTools();
-  const { handleApiError } = useApiError();
   const [createError, setCreateError] = useState<string | null>(null);
 
   const onContinue = async () => {
@@ -735,7 +734,7 @@ const ToolsetStep = ({
       const errorMessage =
         error instanceof Error ? error.message : "Failed to create toolset";
       setCreateError(errorMessage);
-      handleApiError(error, "Failed to create toolset");
+      handleAPIError(error, "Failed to create toolset");
     }
   };
 
@@ -826,7 +825,6 @@ const McpStep = ({
   const client = useSdkClient();
   const routes = useRoutes();
   const org = useOrganization();
-  const { handleApiError } = useApiError();
   const [updateError, setUpdateError] = useState<string | null>(null);
 
   const slugError = useMcpSlugValidation(mcpSlug);
@@ -861,7 +859,7 @@ const McpStep = ({
       const errorMessage =
         error instanceof Error ? error.message : "Failed to setup MCP server";
       setUpdateError(errorMessage);
-      handleApiError(error, "Failed to setup MCP server");
+      handleAPIError(error, "Failed to setup MCP server");
     }
   };
 

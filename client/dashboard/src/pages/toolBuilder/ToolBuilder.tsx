@@ -23,7 +23,6 @@ import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useToolset } from "@/hooks/toolTypes";
-import { useApiError } from "@/hooks/useApiError";
 import { MUSTACHE_VAR_REGEX, slugify, TOOL_NAME_REGEX } from "@/lib/constants";
 import { Tool, useGroupedTools } from "@/lib/toolTypes";
 import { capitalize, cn } from "@/lib/utils";
@@ -51,6 +50,7 @@ import { ChatProvider, useChatContext } from "../playground/ChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
 import { useToolifyContext } from "./Toolify";
+import { handleAPIError } from "@/lib/errors";
 
 type Input = {
   name: string;
@@ -184,7 +184,6 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   const client = useSdkClient();
   const routes = useRoutes();
   const telemetry = useTelemetry();
-  const { handleApiError } = useApiError();
 
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
@@ -380,7 +379,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
       invalidateAllTemplates(queryClient);
     },
     onError: (error) => {
-      handleApiError(error, "Failed to update tool");
+      handleAPIError(error, "Failed to update tool");
     },
   });
 
@@ -464,7 +463,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
 
           toast.success("Tool saved successfully");
         } catch (error) {
-          handleApiError(error, "Failed to save tool");
+          handleAPIError(error, "Failed to save tool");
         }
       }}
     >
@@ -904,8 +903,12 @@ const customToolSystemPrompt = [
   {
     id: "1",
     role: "system" as const,
-    content:
-      "Use this chat to test out the custom tool the user has built. You should faithfuly execute the plan it sets out to achieve the specified purpose.",
+    parts: [
+      {
+        type: "text" as const,
+        text: "Use this chat to test out the custom tool the user has built. You should faithfuly execute the plan it sets out to achieve the specified purpose.",
+      },
+    ],
   },
 ];
 
@@ -989,8 +992,6 @@ function ChatPanel(props: {
         const renderedPrompt = renderResult.prompt || "";
 
         chat.appendMessage({
-          id: uuidv7(),
-          role: "user",
           content: `\`\`\`xml\n${renderedPrompt}\n\`\`\``,
         });
       }}

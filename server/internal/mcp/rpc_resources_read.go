@@ -169,7 +169,7 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	}()
 
 	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), gateway.ToolCallEnv{
-		UserConfig: gateway.CIEnvFrom(userConfig),
+		UserConfig: userConfig,
 		SystemEnv:  gateway.CIEnvFrom(systemConfig),
 	}, plan, toolCallLogger)
 	if err != nil {

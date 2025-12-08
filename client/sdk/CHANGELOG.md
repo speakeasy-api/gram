@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.22.0
+
+### Minor Changes
+
+- 1c836a2: Proxy remote file uploads through gram server
+
 ## 0.21.6
 
 ### Patch Changes

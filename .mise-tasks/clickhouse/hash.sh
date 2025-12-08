@@ -4,6 +4,10 @@
 
 set -e
 
-exec atlas migrate hash \
+atlas migrate hash \
   --dir file://clickhouse/migrations \
+  --config file://atlas.hcl
+
+exec atlas migrate hash \
+  --dir file://clickhouse/local/golang_migrate?format=golang-migrate \
   --config file://atlas.hcl

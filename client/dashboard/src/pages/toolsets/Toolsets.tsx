@@ -2,7 +2,6 @@ import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { ServerCard } from "@/components/server-card";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useApiError } from "@/hooks/useApiError";
 import { useRoutes } from "@/routes";
 import {
   useCreateToolsetMutation,
@@ -15,6 +14,7 @@ import { Outlet } from "react-router";
 import Sources, { useDeploymentIsEmpty } from "@/components/sources/Sources";
 import { useCloneToolset } from "./Toolset";
 import { ToolsetsEmptyState } from "./ToolsetsEmptyState";
+import { handleAPIError } from "@/lib/errors";
 
 export function useToolsets() {
   const { data: toolsets, refetch, isLoading } = useListToolsets();
@@ -30,7 +30,6 @@ export default function Toolsets() {
 
   const routes = useRoutes();
   const telemetry = useTelemetry();
-  const { handleApiError } = useApiError();
 
   const [toolsetName, setToolsetName] = useState("");
   const createToolsetMutation = useCreateToolsetMutation({
@@ -42,7 +41,7 @@ export default function Toolsets() {
       routes.toolsets.toolset.goTo(data.slug);
     },
     onError: (error) => {
-      handleApiError(error, "Failed to create toolset");
+      handleAPIError(error, "Failed to create toolset");
     },
   });
 

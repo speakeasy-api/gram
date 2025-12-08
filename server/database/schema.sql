@@ -572,7 +572,8 @@ CREATE TABLE IF NOT EXISTS oauth_proxy_providers (
   oauth_proxy_server_id uuid NOT NULL,
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
 
-  provider_type TEXT NOT NULL CHECK (provider_type IN ('custom', 'gram')),
+  -- provider type: 'custom', 'gram', etc.
+  provider_type TEXT NOT NULL DEFAULT 'custom',
 
   authorization_endpoint TEXT,
   token_endpoint TEXT,
