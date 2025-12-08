@@ -570,10 +570,12 @@ CREATE TABLE IF NOT EXISTS oauth_proxy_providers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   oauth_proxy_server_id uuid NOT NULL,
-
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
-  authorization_endpoint TEXT NOT NULL,
-  token_endpoint TEXT NOT NULL,
+
+  provider_type TEXT NOT NULL CHECK (provider_type IN ('custom', 'gram')),
+
+  authorization_endpoint TEXT,
+  token_endpoint TEXT,
   registration_endpoint TEXT,
 
   -- OAuth server capabilities
@@ -590,6 +592,12 @@ CREATE TABLE IF NOT EXISTS oauth_proxy_providers (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT custom_provider_endpoints CHECK (
+    (provider_type = 'custom' AND authorization_endpoint IS NOT NULL AND token_endpoint IS NOT NULL)
+    OR
+    (provider_type = 'gram')
+  ),
 
   CONSTRAINT oauth_proxy_providers_pkey PRIMARY KEY (id),
   CONSTRAINT oauth_proxy_providers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,

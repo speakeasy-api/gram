@@ -74,6 +74,7 @@ type Service struct {
 	tcm               tm.ToolMetricsProvider
 	vectorToolStore   *rag.ToolsetVectorStore
 	temporal          temporal_client.Client
+	sessions          *sessions.Manager
 }
 
 type oauthTokenInputs struct {
@@ -381,16 +382,43 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			})
 		}
 	default:
-		if token != "" {
-			// see if we are authenticated with our own key
-			sc := security.APIKeyScheme{
-				Name:           auth.KeySecurityScheme,
-				RequiredScopes: []string{"consumer"},
-				Scopes:         []string{},
-			}
-			ctx, err = s.auth.Authorize(ctx, token, &sc)
-			if err != nil {
+		if token == "" {
+			break
+		}
+
+		// see if we are authenticated with our own key
+		sc := security.APIKeyScheme{
+			Name:           auth.KeySecurityScheme,
+			RequiredScopes: []string{"consumer"},
+			Scopes:         []string{},
+		}
+
+		ctx, err = s.auth.Authorize(ctx, token, &sc)
+		if err != nil {
+			if !toolset.OauthProxyServerID.Valid {
 				return oops.E(oops.CodeUnauthorized, err, "failed to authorize with API key").Log(ctx, s.logger)
+			}
+
+			token, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
+			if err != nil {
+				return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
+			}
+
+			userInfo, err := s.sessions.GetUserInfoFromSpeakeasy(ctx, token.AccessToken)
+			if err != nil {
+				return oops.E(oops.CodeUnauthorized, err, "failed to get user info from access token").Log(ctx, s.logger)
+			}
+
+			hasOrgAccess := false
+			for _, org := range userInfo.Organizations {
+				if org.ID == toolset.OrganizationID {
+					hasOrgAccess = true
+					break
+				}
+			}
+
+			if !hasOrgAccess {
+				return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 			}
 		}
 	}
