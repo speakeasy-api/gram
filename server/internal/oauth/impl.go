@@ -58,7 +58,7 @@ type Service struct {
 	sessions           *sessions.Manager
 }
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, serverURL *url.URL, cacheImpl cache.Cache, enc *encryption.Client, env *environments.EnvironmentEntries, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, serverURL *url.URL, cacheImpl cache.Cache, enc *encryption.Client, env *environments.EnvironmentEntries, sessions *sessions.Manager, cfg *Configurations) *Service {
 	logger = logger.With(attr.SlogComponent("oauth"))
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/oauth")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/oauth")
@@ -86,6 +86,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		oauthRepo:          repo.New(db),
 		enc:                enc,
 		sessions:           sessions,
+		cfg:                cfg,
 	}
 }
 
@@ -222,30 +223,33 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	// TODO: Eventually support multiple providers
 	provider := providers[0]
 
-	// !TODO: Can this be skipped for non-custom providers?
-	var secrets map[string]string
-	if err := json.Unmarshal(provider.Secrets, &secrets); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "OAuth provider secrets invalid").Log(ctx, s.logger)
-	}
+	var clientID string
 
-	clientID := secrets["client_id"]
-
-	// Fallback to environment if client_id is missing and environment is specified
-	if clientID == "" && secrets["environment_slug"] != "" {
-		envMap, err := s.environments.Load(ctx, toolset.ProjectID, gateway.Slug(secrets["environment_slug"]))
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, s.logger)
+	if provider.ProviderType == "custom" {
+		var secrets map[string]string
+		if err := json.Unmarshal(provider.Secrets, &secrets); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "OAuth provider secrets invalid").Log(ctx, s.logger)
 		}
 
-		for k, v := range envMap {
-			if strings.ToLower(k) == "client_id" {
-				clientID = v
+		clientID = secrets["client_id"]
+
+		// Fallback to environment if client_id is missing and environment is specified
+		if clientID == "" && secrets["environment_slug"] != "" {
+			envMap, err := s.environments.Load(ctx, toolset.ProjectID, gateway.Slug(secrets["environment_slug"]))
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, s.logger)
+			}
+
+			for k, v := range envMap {
+				if strings.ToLower(k) == "client_id" {
+					clientID = v
+				}
 			}
 		}
-	}
 
-	if clientID == "" {
-		return oops.E(oops.CodeUnexpected, nil, "OAuth provider client_id not configured").Log(ctx, s.logger)
+		if clientID == "" {
+			return oops.E(oops.CodeUnexpected, nil, "OAuth provider client_id not configured").Log(ctx, s.logger)
+		}
 	}
 
 	// Prepare OAuth request info to encode in state parameter
@@ -289,7 +293,23 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	var authURL *url.URL
-	authURL.RawQuery = urlParams.Encode()
+
+	switch provider.ProviderType {
+	case "gram":
+		gramAuthURL := fmt.Sprintf("%s/v1/speakeasy_provider/login?%s",
+			s.cfg.SpeakeasyServerAddress,
+			urlParams.Encode())
+		authURL, err = url.Parse(gramAuthURL)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to parse gram OAuth URL").Log(ctx, s.logger)
+		}
+	default:
+		authURL, err = url.Parse(provider.AuthorizationEndpoint.String)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to parse OAuth authorization URL").Log(ctx, s.logger)
+		}
+		authURL.RawQuery = urlParams.Encode()
+	}
 
 	s.logger.InfoContext(ctx, "redirecting to OAuth authorization",
 		attr.SlogOAuthProvider(provider.Slug),

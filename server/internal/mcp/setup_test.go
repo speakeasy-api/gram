@@ -95,7 +95,9 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	guardianPolicy := guardian.NewDefaultPolicy()
-	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env)
+	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager, &oauth.Configurations{
+		SpeakeasyServerAddress: "http://localhost:8080",
+	})
 	billingStub := billing.NewStubClient(logger, tracerProvider)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
 	chatClient := openrouter.NewChatClient(logger, devProvisioner)
