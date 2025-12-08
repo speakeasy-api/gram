@@ -5,7 +5,6 @@ import { Card, Cards } from "@/components/ui/card";
 import { UpdatedAt } from "@/components/updated-at";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useApiError } from "@/hooks/useApiError";
 import { useRoutes } from "@/routes";
 import { Environment } from "@gram/client/models/components/environment.js";
 import {
@@ -16,6 +15,7 @@ import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Outlet } from "react-router";
 import { Button } from "@speakeasy-api/moonshine";
+import { handleAPIError } from "@/lib/errors";
 export function EnvironmentsRoot() {
   return <Outlet />;
 }
@@ -35,7 +35,6 @@ export default function Environments() {
   const session = useSession();
   const routes = useRoutes();
   const telemetry = useTelemetry();
-  const { handleApiError } = useApiError();
 
   const [createEnvironmentDialogOpen, setCreateEnvironmentDialogOpen] =
     useState(false);
@@ -50,7 +49,7 @@ export default function Environments() {
       routes.environments.environment.goTo(data.slug);
     },
     onError: (error) => {
-      handleApiError(error, "Failed to create environment");
+      handleAPIError(error, "Failed to create environment");
       telemetry.capture("environment_event", {
         action: "environment_creation_failed",
         error: error.message,
