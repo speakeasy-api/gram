@@ -455,6 +455,9 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 			Text:     string(body),
 			MimeType: nil,
 			Data:     nil,
+			Meta: map[string]any{
+				MetaGramMimeType: mt,
+			},
 		})
 		if err != nil {
 			return nil, fmt.Errorf("serialize text content: %w", err)
@@ -468,6 +471,7 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 			Data:     encoded,
 			MimeType: &mt,
 			Text:     nil,
+			Meta:     nil,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("serialize image content: %w", err)
@@ -481,6 +485,7 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 			Data:     encoded,
 			MimeType: &mt,
 			Text:     nil,
+			Meta:     nil,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("serialize audio content: %w", err)
@@ -493,10 +498,11 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 }
 
 type contentChunk[T any, D any] struct {
-	Type     string  `json:"type"`
-	MimeType *string `json:"mimeType,omitempty"`
-	Text     T       `json:"text,omitempty"`
-	Data     D       `json:"data,omitempty"`
+	Type     string         `json:"type"`
+	MimeType *string        `json:"mimeType,omitempty"`
+	Text     T              `json:"text,omitempty"`
+	Data     D              `json:"data,omitempty"`
+	Meta     map[string]any `json:"_meta,omitempty,omitzero"`
 }
 
 type toolCallResult struct {

@@ -10,6 +10,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
+const (
+	MetaGramKind     = "gram.ai/kind"
+	MetaGramMimeType = "getgram.ai/mime-type"
+)
+
 type errorCode int
 
 const (
