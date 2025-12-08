@@ -709,6 +709,8 @@ func parseMcpSessionID(headers http.Header) string {
 }
 
 func (s *Service) authenticateToken(ctx context.Context, token string) (context.Context, error) {
+	// This just follows Goa's implementation of checking multiple key scopes as a union
+	// Adding both scopes to the same RequiredScopes [] implies both scopes being required
 	sc := security.APIKeyScheme{
 		Name:           auth.KeySecurityScheme,
 		RequiredScopes: []string{"consumer"},
