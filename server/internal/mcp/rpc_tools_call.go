@@ -72,7 +72,7 @@ func handleToolsCall(
 
 	projectID := mv.ProjectID(payload.projectID)
 
-	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache)
+	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +305,17 @@ func resolveUserConfiguration(
 		}
 	}
 
+	var serverURLOverrideVariable string
+	if plan.HTTP != nil && plan.HTTP.ServerEnvVar != "" {
+		serverURLOverrideVariable = plan.HTTP.ServerEnvVar
+	}
+
 	for k, v := range payload.mcpEnvVariables {
+		// If we are using a stored environment we want to avoid allowing the end user to override the server URL
+		// TODO: Figure out a better way to centralize this across all applied environments
+		if payload.environment != "" && payload.authenticated && k == serverURLOverrideVariable {
+			continue
+		}
 		userConfig.Set(k, v)
 	}
 

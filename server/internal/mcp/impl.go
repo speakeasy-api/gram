@@ -382,15 +382,9 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		}
 	default:
 		if token != "" {
-			// see if we are authenticated with our own key
-			sc := security.APIKeyScheme{
-				Name:           auth.KeySecurityScheme,
-				RequiredScopes: []string{"consumer"},
-				Scopes:         []string{},
-			}
-			ctx, err = s.auth.Authorize(ctx, token, &sc)
+			ctx, err = s.authenticateToken(ctx, token)
 			if err != nil {
-				return oops.E(oops.CodeUnauthorized, err, "failed to authorize with API key").Log(ctx, s.logger)
+				return err
 			}
 		}
 	}
@@ -712,4 +706,32 @@ func parseMcpSessionID(headers http.Header) string {
 		session = uuid.New().String()
 	}
 	return session
+}
+
+// authenticateToken authenticates a token with either "consumer" or "chat" scope.
+// It tries "consumer" first, then "chat" if that fails.
+func (s *Service) authenticateToken(ctx context.Context, token string) (context.Context, error) {
+	// Try consumer scope first
+	sc := security.APIKeyScheme{
+		Name:           auth.KeySecurityScheme,
+		RequiredScopes: []string{"consumer"},
+		Scopes:         []string{},
+	}
+	ctx, err := s.auth.Authorize(ctx, token, &sc)
+	if err == nil {
+		return ctx, nil
+	}
+
+	// If consumer scope fails, try chat scope
+	sc = security.APIKeyScheme{
+		Name:           auth.KeySecurityScheme,
+		RequiredScopes: []string{"chat"},
+		Scopes:         []string{},
+	}
+	ctx, err = s.auth.Authorize(ctx, token, &sc)
+	if err != nil {
+		return ctx, oops.E(oops.CodeUnauthorized, err, "failed to authorize with API key (requires consumer or chat scope)").Log(ctx, s.logger)
+	}
+
+	return ctx, nil
 }
