@@ -538,7 +538,7 @@ type uploadAssetParams struct {
 
 func (s *Service) uploadAsset(ctx context.Context, params *uploadAssetParams) (*url.URL, error) {
 	projectID := params.projectID
-	dst, uri, err := s.storage.Write(ctx, path.Join(projectID.String(), params.filename), params.file, params.contentType)
+	dst, uri, err := s.storage.Write(ctx, path.Join(projectID.String(), params.filename), params.contentType, params.contentLength)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("write to blob storage: %w", err), "error writing document")
 	}

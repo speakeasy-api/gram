@@ -25,7 +25,7 @@ func TestService_ServeImage_Success(t *testing.T) {
 	filename := "test-asset.png"
 
 	// Setup storage with test content first
-	writer, uri, err := ti.storage.Write(ctx, filename, strings.NewReader(testContent), contentType)
+	writer, uri, err := ti.storage.Write(ctx, filename, contentType, contentLength)
 	require.NoError(t, err)
 
 	_, err = io.Copy(writer, strings.NewReader(testContent))
