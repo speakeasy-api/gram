@@ -154,13 +154,18 @@ function ChatInner({
 
   const chat = useChatContext();
   const { setMessages } = chat;
-  const { chatHistory: _chatHistory } = useChatHistory(chat.id);
+  const { chatHistory, isLoading: isChatHistoryLoading } = useChatHistory(
+    chat.id,
+  );
 
   const [displayOnlyMessages, setDisplayOnlyMessages] = useState<UIMessage[]>(
     [],
   );
   const [_mentionedToolIds, setMentionedToolIds] = useState<string[]>([]);
   const [_inputText, setInputText] = useState("");
+
+  // Track which chat ID we've loaded messages for to prevent re-loading
+  const loadedChatIdRef = useRef<string | null>(null);
 
   // Feature flag for experimental tool tagging syntax
   const isToolTaggingEnabled = telemetry.isFeatureEnabled(
@@ -412,6 +417,7 @@ function ChatInner({
     status,
     sendMessage,
     addToolResult,
+    setMessages: setUseChatMessages,
   } = useChat({
     // Include model in the chat ID to force a fresh session when switching models
     id: `${chat.id}-${model}`,
@@ -457,6 +463,23 @@ function ChatInner({
       }
     },
   });
+
+  // Load chat history when available (AI SDK 5 workaround)
+  // Bridge between React Query (server state) and AI SDK (local state)
+  const currentChatId = `${chat.id}-${model}`;
+  useEffect(() => {
+    // Only load once per chat ID after React Query finishes loading
+    if (loadedChatIdRef.current !== currentChatId && !isChatHistoryLoading) {
+      loadedChatIdRef.current = currentChatId;
+
+      // Priority: loaded chat history > programmatically provided initial messages
+      const initialMessagesInner =
+        chatHistory.length > 0 ? chatHistory : _initialMessages;
+      if (initialMessagesInner && initialMessagesInner.length > 0) {
+        setUseChatMessages(initialMessagesInner);
+      }
+    }
+  }, [currentChatId, isChatHistoryLoading]);
 
   const handleSend = useCallback(
     async (msg: string) => {
