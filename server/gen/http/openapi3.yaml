@@ -8180,6 +8180,8 @@ paths:
                   session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
             summary: getToolset toolsets
             tags:
                 - toolsets
@@ -8276,6 +8278,8 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
             summary: listToolsets toolsets
