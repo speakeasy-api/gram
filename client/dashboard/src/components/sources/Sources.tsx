@@ -145,13 +145,11 @@ export default function Sources() {
       <>
         <SourcesEmptyState onNewUpload={openAddSource} />
         <Dialog
-          open={dialogState.type !== "closed"}
+          open={dialogState.type === "add-source"}
           onOpenChange={(open) => !open && closeDialog()}
         >
           <Dialog.Content className="max-w-2xl!">
-            {dialogState.type === "add-source" && (
-              <AddSourceDialogContent onCompletion={closeDialog} />
-            )}
+            <AddSourceDialogContent onCompletion={closeDialog} />
           </Dialog.Content>
         </Dialog>
       </>
