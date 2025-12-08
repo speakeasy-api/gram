@@ -154,8 +154,9 @@ function ChatInner({
 
   const chat = useChatContext();
   const { setMessages } = chat;
-  const { chatHistory, isLoading: isChatHistoryLoading } =
-    useChatHistory(chat.id);
+  const { chatHistory, isLoading: isChatHistoryLoading } = useChatHistory(
+    chat.id,
+  );
 
   const [displayOnlyMessages, setDisplayOnlyMessages] = useState<UIMessage[]>(
     [],
@@ -468,10 +469,7 @@ function ChatInner({
   const currentChatId = `${chat.id}-${model}`;
   useEffect(() => {
     // Only load once per chat ID after React Query finishes loading
-    if (
-      loadedChatIdRef.current !== currentChatId &&
-      !isChatHistoryLoading
-    ) {
+    if (loadedChatIdRef.current !== currentChatId && !isChatHistoryLoading) {
       loadedChatIdRef.current = currentChatId;
 
       // Priority: loaded chat history > programmatically provided initial messages
@@ -481,7 +479,6 @@ function ChatInner({
         setUseChatMessages(initialMessagesInner);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentChatId, isChatHistoryLoading]);
 
   const handleSend = useCallback(
