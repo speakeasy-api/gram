@@ -288,11 +288,6 @@ func resolveUserConfiguration(
 	plan *gateway.ToolCallPlan,
 ) (*gateway.CaseInsensitiveEnv, error) {
 	userConfig := gateway.NewCaseInsensitiveEnv()
-	var serverURLOverrideVariable string
-	var storedEnvApplied bool
-	if plan.HTTP != nil && plan.HTTP.ServerEnvVar != "" {
-		serverURLOverrideVariable = plan.HTTP.ServerEnvVar
-	}
 
 	// IMPORTANT: we must only attach gram environments to authenticated payloads. Gram environments contain
 	// secrets owned by Gram projects and should not be usable by public clients
@@ -306,16 +301,11 @@ func resolveUserConfiguration(
 		}
 
 		for k, v := range storedEnvVars {
-			storedEnvApplied = true
 			userConfig.Set(k, v)
 		}
 	}
 
 	for k, v := range payload.mcpEnvVariables {
-		// If we are using a stored environment we want to avoid allowing the end user to override the server URL
-		if storedEnvApplied && k == serverURLOverrideVariable {
-			continue
-		}
 		userConfig.Set(k, v)
 	}
 
