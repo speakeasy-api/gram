@@ -471,6 +471,7 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 			Data:     encoded,
 			MimeType: &mt,
 			Text:     nil,
+			Meta:     nil,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("serialize image content: %w", err)
@@ -484,6 +485,7 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 			Data:     encoded,
 			MimeType: &mt,
 			Text:     nil,
+			Meta:     nil,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("serialize audio content: %w", err)
