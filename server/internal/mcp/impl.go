@@ -708,8 +708,6 @@ func parseMcpSessionID(headers http.Header) string {
 	return session
 }
 
-// authenticateToken authenticates a token with either "consumer" or "chat" scope.
-// It tries "consumer" first, then "chat" if that fails.
 func (s *Service) authenticateToken(ctx context.Context, token string) (context.Context, error) {
 	// Try consumer scope first
 	sc := security.APIKeyScheme{
