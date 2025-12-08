@@ -191,8 +191,53 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const isLoading = status === "pending";
 
   useIdentifyUserForTelemetry(session?.user);
-
   usePylonInAppChat(session?.user);
+
+  // Handle initial navigation
+  useEffect(() => {
+    if (!session?.session || !session.activeOrganizationId) {
+      return;
+    }
+
+    const redirectParam = searchParams.get("redirect");
+    if (redirectParam) {
+      navigate(redirectParam, { replace: true });
+      return;
+    }
+
+    if (session.organization && !projectSlug) {
+      // if we're logged in but the URL doesn't have a project slug, redirect to
+      // the default project
+      let preferredProject = localStorage.getItem(PREFERRED_PROJECT_KEY);
+
+      if (
+        !preferredProject ||
+        !session.organization.projects.find((p) => p.slug === preferredProject)
+      ) {
+        preferredProject = session.organization.projects[0]!.slug;
+      }
+
+      const paramsToForward = [LINKED_FROM_PARAM];
+      const forwardParams = new URLSearchParams();
+      paramsToForward.forEach((param) => {
+        const value = searchParams.get(param);
+        if (value !== null) {
+          forwardParams.set(param, value);
+        }
+      });
+      const paramsToForwardString = forwardParams.toString();
+
+      navigate(
+        `/${session.organization.slug}/${preferredProject}?${paramsToForwardString}`,
+      );
+      return;
+    }
+
+    if (session.organization.slug !== orgSlug) {
+      // make sure we don't direct to an org we aren't authenticated with
+      navigate(`/${session.organization.slug}/${projectSlug}`);
+    }
+  }, [session, projectSlug, orgSlug, searchParams, navigate]);
 
   // you need something like this so you don't redirect with empty session too soon
   // isLoading is not synchronized with the session data actually being populated, so we need to wait for the session to actually finish loading
@@ -215,39 +260,6 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
         {children}
       </SessionContext.Provider>
     );
-  }
-
-  const redirectParam = searchParams.get("redirect");
-  if (redirectParam) {
-    navigate(redirectParam, { replace: true });
-  } else if (session.organization && !projectSlug) {
-    // if we're logged in but the URL doesn't have a project slug, redirect to
-    // the default project
-    let preferredProject = localStorage.getItem(PREFERRED_PROJECT_KEY);
-
-    if (
-      !preferredProject ||
-      !session.organization.projects.find((p) => p.slug === preferredProject)
-    ) {
-      preferredProject = session.organization.projects[0]!.slug;
-    }
-
-    const paramsToForward = [LINKED_FROM_PARAM];
-    const forwardParams = new URLSearchParams();
-    paramsToForward.forEach((param) => {
-      const value = searchParams.get(param);
-      if (value !== null) {
-        forwardParams.set(param, value);
-      }
-    });
-    const paramsToForwardString = forwardParams.toString();
-
-    navigate(
-      `/${session.organization.slug}/${preferredProject}?${paramsToForwardString}`,
-    );
-  } else if (session.organization.slug !== orgSlug) {
-    // make sure we don't direct to an org we aren't authenticated with
-    navigate(`/${session.organization.slug}/${projectSlug}`);
   }
 
   return (
