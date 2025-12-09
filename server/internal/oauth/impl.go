@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/providers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -56,6 +57,8 @@ type Service struct {
 	enc                *encryption.Client
 	cfg                *Configurations
 	sessions           *sessions.Manager
+	gramProvider       *providers.GramProvider
+	customProvider     *providers.CustomProvider
 }
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, serverURL *url.URL, cacheImpl cache.Cache, enc *encryption.Client, env *environments.EnvironmentEntries, sessions *sessions.Manager, cfg *Configurations) *Service {
@@ -67,6 +70,10 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 	pkceService := NewPKCEService(logger)
 	grantManager := NewGrantManager(cacheImpl, clientRegistration, pkceService, logger, enc)
 	tokenService := NewTokenService(cacheImpl, clientRegistration, grantManager, pkceService, logger, enc)
+
+	// Initialize OAuth providers
+	gramProvider := providers.NewGramProvider(logger, sessions)
+	customProvider := providers.NewCustomProvider(logger, env)
 
 	return &Service{
 		logger:            logger,
@@ -87,6 +94,10 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		enc:                enc,
 		sessions:           sessions,
 		cfg:                cfg,
+
+		// OAuth providers
+		gramProvider:   gramProvider,
+		customProvider: customProvider,
 	}
 }
 
@@ -209,19 +220,19 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	// Get OAuth proxy providers for this toolset
-	providers, err := s.oauthRepo.ListOAuthProxyProvidersByServer(ctx, repo.ListOAuthProxyProvidersByServerParams{
+	availableProviders, err := s.oauthRepo.ListOAuthProxyProvidersByServer(ctx, repo.ListOAuthProxyProvidersByServerParams{
 		OauthProxyServerID: toolset.OauthProxyServerID.UUID,
 		ProjectID:          toolset.ProjectID,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "OAuth providers not configured").Log(ctx, s.logger)
 	}
-	if len(providers) == 0 {
+	if len(availableProviders) == 0 {
 		return oops.E(oops.CodeUnexpected, nil, "OAuth providers not configured").Log(ctx, s.logger)
 	}
 
 	// TODO: Eventually support multiple providers
-	provider := providers[0]
+	provider := availableProviders[0]
 
 	var clientID string
 
@@ -273,41 +284,40 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 
 	callbackURL := fmt.Sprintf("%s/oauth/callback", s.serverURL.String())
 
-	urlParams := url.Values{}
-	urlParams.Add("state", string(oauthReqInfoJSON))
-
-	switch provider.ProviderType {
-	case "gram":
-		urlParams.Add("return_url", callbackURL)
-	default:
-		urlParams.Set("client_id", clientID)
-		urlParams.Set("redirect_uri", callbackURL)
-		urlParams.Set("response_type", "code")
-	}
-
-	// We will recommend the provider configuration, fallback to request scope
-	if len(provider.ScopesSupported) > 0 {
-		urlParams.Set("scope", strings.Join(provider.ScopesSupported, " "))
-	} else {
-		urlParams.Set("scope", req.Scope)
-	}
-
 	var authURL *url.URL
 
 	switch provider.ProviderType {
 	case "gram":
-		gramAuthURL := fmt.Sprintf("%s/v1/speakeasy_provider/login?%s",
-			s.cfg.SpeakeasyServerAddress,
-			urlParams.Encode())
-		authURL, err = url.Parse(gramAuthURL)
+		authURL, err = s.gramProvider.BuildAuthorizationURL(ctx, providers.AuthURLParams{
+			CallbackURL:         callbackURL,
+			Scope:               req.Scope,
+			State:               string(oauthReqInfoJSON),
+			ScopesSupported:     provider.ScopesSupported,
+			SpeakeasyServerAddr: s.cfg.SpeakeasyServerAddress,
+		})
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to parse gram OAuth URL").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to build gram OAuth URL").Log(ctx, s.logger)
 		}
 	default:
+		// For custom providers, build the URL directly
 		authURL, err = url.Parse(provider.AuthorizationEndpoint.String)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to parse OAuth authorization URL").Log(ctx, s.logger)
 		}
+
+		urlParams := url.Values{}
+		urlParams.Set("client_id", clientID)
+		urlParams.Set("redirect_uri", callbackURL)
+		urlParams.Set("response_type", "code")
+		urlParams.Add("state", string(oauthReqInfoJSON))
+
+		// We will recommend the provider configuration, fallback to request scope
+		if len(provider.ScopesSupported) > 0 {
+			urlParams.Set("scope", strings.Join(provider.ScopesSupported, " "))
+		} else {
+			urlParams.Set("scope", req.Scope)
+		}
+
 		authURL.RawQuery = urlParams.Encode()
 	}
 
@@ -455,120 +465,63 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 	}
 
 	// Get OAuth proxy providers for this toolset
-	providers, err := s.oauthRepo.ListOAuthProxyProvidersByServer(ctx, repo.ListOAuthProxyProvidersByServerParams{
+	availableProviders, err := s.oauthRepo.ListOAuthProxyProvidersByServer(ctx, repo.ListOAuthProxyProvidersByServerParams{
 		OauthProxyServerID: toolset.OauthProxyServerID.UUID,
 		ProjectID:          toolset.ProjectID,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "OAuth providers not configured").Log(ctx, s.logger)
 	}
-	if len(providers) == 0 {
+	if len(availableProviders) == 0 {
 		return oops.E(oops.CodeUnexpected, nil, "OAuth providers not configured").Log(ctx, s.logger)
 	}
 
 	// TODO: Eventually support multiple providers
-	provider := providers[0]
+	provider := availableProviders[0]
 
 	// Provider-specific token exchange
 	var accessToken string
 	var expiresAt *time.Time
 
+	var oauthProvider providers.Provider
 	switch provider.ProviderType {
 	case "gram":
-		idToken, err := s.sessions.ExchangeTokenFromSpeakeasy(ctx, externalCode)
-		if err != nil {
-			s.logger.ErrorContext(ctx, "failed to exchange code for token from oauth gram provider", attr.SlogOAuthProvider(provider.Slug), attr.SlogError(err))
-			errorURL, buildErr := s.grantManager.BuildErrorResponse(ctx, oauthReqInfo["redirect_uri"], "server_error", "Failed to exchange authorization code for token", oauthReqInfo["state"])
-			if buildErr != nil {
-				s.logger.ErrorContext(ctx, "failed to build error response URL", attr.SlogError(buildErr))
-				return oops.E(oops.CodeUnexpected, buildErr, "failed to build error response").Log(ctx, s.logger)
-			}
-			http.Redirect(w, r, errorURL, http.StatusFound)
-			return nil
-		}
-
-		userInfo, err := s.sessions.GetUserInfoFromSpeakeasy(ctx, idToken)
-		if err != nil {
-			s.logger.ErrorContext(
-				ctx,
-				"failed to get user info from oauth gram provider",
-				attr.SlogOAuthProvider(provider.Slug),
-				attr.SlogError(err),
-			)
-			errorURL, buildErr := s.grantManager.BuildErrorResponse(
-				ctx,
-				oauthReqInfo["redirect_uri"],
-				"server_error",
-				"Failed to retrieve user info",
-				oauthReqInfo["state"],
-			)
-			if buildErr != nil {
-				s.logger.ErrorContext(ctx, "failed to build error response URL", attr.SlogError(buildErr))
-				return oops.E(oops.CodeUnexpected, buildErr, "failed to build error response").Log(ctx, s.logger)
-			}
-			http.Redirect(w, r, errorURL, http.StatusFound)
-			return nil
-		}
-
-		// Check if user has access to the organization
-		hasOrgAccess := false
-		for _, org := range userInfo.Organizations {
-			if org.ID == toolset.OrganizationID {
-				hasOrgAccess = true
-				break
-			}
-		}
-
-		if !hasOrgAccess {
-			s.logger.WarnContext(ctx, "user does not have access to organization",
-				attr.SlogOAuthProvider(provider.Slug),
-				attr.SlogUserID(userInfo.UserID),
-				attr.SlogOrganizationID(toolset.OrganizationID))
-
-			errorURL, buildErr := s.grantManager.BuildErrorResponse(
-				ctx,
-				oauthReqInfo["redirect_uri"],
-				"access_denied",
-				"User does not have access to the requested organization",
-				oauthReqInfo["state"],
-			)
-			if buildErr != nil {
-				s.logger.ErrorContext(ctx, "failed to build error response URL", attr.SlogError(buildErr))
-				return oops.E(oops.CodeUnexpected, buildErr, "failed to build error response").Log(ctx, s.logger)
-			}
-			http.Redirect(w, r, errorURL, http.StatusFound)
-			return nil
-		}
-
-		// Use idToken as access token for gram providers
-		accessToken = idToken
-		expiresAt = nil
-
-	default: // custom provider
-		var err error
-		accessToken, expiresAt, err = s.handleCustomProviderCallback(
-			ctx,
-			provider,
-			toolset,
-			externalCode,
-		)
-		if err != nil {
-			s.logger.ErrorContext(ctx, "custom provider token exchange failed", attr.SlogOAuthProvider(provider.Slug), attr.SlogError(err))
-			errorURL, buildErr := s.grantManager.BuildErrorResponse(
-				ctx,
-				oauthReqInfo["redirect_uri"],
-				"server_error",
-				"Failed to exchange authorization code",
-				oauthReqInfo["state"],
-			)
-			if buildErr != nil {
-				s.logger.ErrorContext(ctx, "failed to build error response URL", attr.SlogError(buildErr))
-				return oops.E(oops.CodeUnexpected, buildErr, "failed to build error response").Log(ctx, s.logger)
-			}
-			http.Redirect(w, r, errorURL, http.StatusFound)
-			return nil
-		}
+		oauthProvider = s.gramProvider
+	default:
+		oauthProvider = s.customProvider
 	}
+
+	result, err := oauthProvider.ExchangeToken(ctx, externalCode, provider, toolset, s.serverURL)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "provider token exchange failed",
+			attr.SlogOAuthProvider(provider.Slug),
+			attr.SlogError(err))
+
+		// Determine error code based on error type
+		errorCode := "server_error"
+		errorDescription := "Failed to exchange authorization code"
+		if providers.IsAccessDeniedError(err) {
+			errorCode = "access_denied"
+			errorDescription = "User does not have access to the requested organization"
+		}
+
+		errorURL, buildErr := s.grantManager.BuildErrorResponse(
+			ctx,
+			oauthReqInfo["redirect_uri"],
+			errorCode,
+			errorDescription,
+			oauthReqInfo["state"],
+		)
+		if buildErr != nil {
+			s.logger.ErrorContext(ctx, "failed to build error response URL", attr.SlogError(buildErr))
+			return oops.E(oops.CodeUnexpected, buildErr, "failed to build error response").Log(ctx, s.logger)
+		}
+		http.Redirect(w, r, errorURL, http.StatusFound)
+		return nil
+	}
+
+	accessToken = result.AccessToken
+	expiresAt = result.ExpiresAt
 
 	// Reconstruct the original authorization request from decoded state
 	authReq := &AuthorizationRequest{
@@ -647,140 +600,6 @@ func (s *Service) parseBasicAuth(authHeader string) (string, string, bool) {
 	return parts[0], parts[1], true
 }
 
-// handleCustomProviderCallback handles token exchange for custom OAuth providers
-func (s *Service) handleCustomProviderCallback(
-	ctx context.Context,
-	provider repo.OauthProxyProvider,
-	toolset *toolsets_repo.Toolset,
-	externalCode string,
-) (accessToken string, expiresAt *time.Time, err error) {
-	var secrets map[string]string
-	if err := json.Unmarshal(provider.Secrets, &secrets); err != nil {
-		s.logger.ErrorContext(ctx, "OAuth provider secrets invalid", attr.SlogOAuthProvider(provider.Slug), attr.SlogError(err))
-		return "", nil, fmt.Errorf("OAuth provider secrets invalid: %w", err)
-	}
-
-	clientID := secrets["client_id"]
-	clientSecret := secrets["client_secret"]
-
-	// Fallback to environment if credentials are missing and environment is specified
-	if (clientID == "" || clientSecret == "") && secrets["environment_slug"] != "" {
-		envMap, err := s.environments.Load(ctx, toolset.ProjectID, gateway.Slug(secrets["environment_slug"]))
-		if err != nil {
-			s.logger.ErrorContext(ctx, "failed to load environment", attr.SlogOAuthProvider(provider.Slug), attr.SlogError(err))
-			return "", nil, fmt.Errorf("failed to load environment: %w", err)
-		}
-
-		for k, v := range envMap {
-			if clientID == "" && strings.ToLower(k) == "client_id" {
-				clientID = v
-			}
-			if clientSecret == "" && strings.ToLower(k) == "client_secret" {
-				clientSecret = v
-			}
-		}
-	}
-
-	if clientID == "" {
-		s.logger.ErrorContext(ctx, "OAuth provider client_id not configured", attr.SlogOAuthProvider(provider.Slug))
-		return "", nil, fmt.Errorf("OAuth provider client_id not configured")
-	}
-	if clientSecret == "" {
-		s.logger.ErrorContext(ctx, "OAuth provider client_secret not configured", attr.SlogOAuthProvider(provider.Slug))
-		return "", nil, fmt.Errorf("OAuth provider client_secret not configured")
-	}
-
-	callbackURL := fmt.Sprintf("%s/oauth/callback", s.serverURL.String())
-
-	tokenURL := provider.TokenEndpoint
-	tokenData := url.Values{}
-	tokenData.Set("grant_type", "authorization_code")
-	tokenData.Set("redirect_uri", callbackURL)
-	tokenData.Set("code", externalCode)
-
-	// Determine authentication method based on provider configuration
-	// Default to client_secret_post (form body) if TokenEndpointAuthMethodsSupported is empty
-	useBasicAuth := false
-	if len(provider.TokenEndpointAuthMethodsSupported) > 0 {
-		// Check if provider supports client_secret_basic
-		for _, method := range provider.TokenEndpointAuthMethodsSupported {
-			if method == "client_secret_basic" {
-				useBasicAuth = true
-				break
-			}
-		}
-	}
-
-	// For Post Auth, client credentials go in form body
-	if !useBasicAuth {
-		tokenData.Set("client_id", clientID)
-		tokenData.Set("client_secret", clientSecret)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL.String, strings.NewReader(tokenData.Encode()))
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to create token request", attr.SlogOAuthProvider(provider.Slug), attr.SlogError(err))
-		return "", nil, fmt.Errorf("failed to create token request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	if useBasicAuth {
-		req.SetBasicAuth(clientID, clientSecret)
-	}
-
-	tokenResp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to exchange code for token", attr.SlogOAuthProvider(provider.Slug), attr.SlogError(err))
-		return "", nil, fmt.Errorf("failed to exchange code for token: %w", err)
-	}
-	defer func() {
-		if err := tokenResp.Body.Close(); err != nil {
-			s.logger.ErrorContext(ctx, "failed to close response body", attr.SlogError(err))
-		}
-	}()
-
-	if tokenResp.StatusCode != http.StatusOK {
-		s.logger.ErrorContext(ctx, "OAuth token exchange failed", attr.SlogOAuthProvider(provider.Slug), attr.SlogHTTPResponseStatusCode(tokenResp.StatusCode))
-		return "", nil, fmt.Errorf("token exchange failed with status %d", tokenResp.StatusCode)
-	}
-
-	tokenRespBody, err := io.ReadAll(tokenResp.Body)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to read OAuth token response", attr.SlogOAuthProvider(provider.Slug), attr.SlogError(err))
-		return "", nil, fmt.Errorf("failed to read OAuth token response: %w", err)
-	}
-
-	var oauthTokenResp map[string]interface{}
-	if err := json.Unmarshal(tokenRespBody, &oauthTokenResp); err != nil {
-		s.logger.ErrorContext(ctx, "failed to parse OAuth token response", attr.SlogOAuthProvider(provider.Slug), attr.SlogError(err))
-		return "", nil, fmt.Errorf("failed to parse OAuth token response: %w", err)
-	}
-
-	// Technically the OAuth spec does expect snake_case field names in the response but we will be generous to mistakes and try with camelCase
-	accessToken, ok := oauthTokenResp["access_token"].(string)
-	if !ok {
-		// Retry with camelCase field name
-		accessToken, ok = oauthTokenResp["accessToken"].(string)
-		if !ok {
-			s.logger.ErrorContext(ctx, "missing access_token in OAuth response", attr.SlogOAuthProvider(provider.Slug))
-			return "", nil, fmt.Errorf("missing access_token in OAuth response")
-		}
-	}
-
-	if expiresInFloat, ok := oauthTokenResp["expires_in"].(float64); ok {
-		expiryTime := time.Now().Add(time.Duration(expiresInFloat) * time.Second)
-		expiresAt = &expiryTime
-	}
-	if expiresAt == nil {
-		if expiresInFloat, ok := oauthTokenResp["expiresIn"].(float64); ok {
-			// Retry with camelCase field name
-			expiryTime := time.Now().Add(time.Duration(expiresInFloat) * time.Second)
-			expiresAt = &expiryTime
-		}
-	}
-
-	return accessToken, expiresAt, nil
-}
 
 // ValidateAccessToken validates an OAuth access token
 func (s *Service) ValidateAccessToken(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*Token, error) {

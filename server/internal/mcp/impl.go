@@ -20,7 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/rag"
-	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
+	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -383,43 +383,35 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			})
 		}
 	default:
-		if token == "" {
-			break
-		}
-
-		// see if we are authenticated with our own key
-		sc := security.APIKeyScheme{
-			Name:           auth.KeySecurityScheme,
-			RequiredScopes: []string{"consumer"},
-			Scopes:         []string{},
-		}
-
-		ctx, err = s.auth.Authorize(ctx, token, &sc)
-		if err != nil {
-			if !toolset.OauthProxyServerID.Valid {
-				return oops.E(oops.CodeUnauthorized, err, "failed to authorize with API key").Log(ctx, s.logger)
-			}
-
-			token, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
+		if token != "" {
+			ctx, err = s.authenticateToken(ctx, token)
 			if err != nil {
-				return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
+				return err
 			}
 
-			userInfo, err := s.sessions.GetUserInfoFromSpeakeasy(ctx, token.AccessToken)
-			if err != nil {
-				return oops.E(oops.CodeUnauthorized, err, "failed to get user info from access token").Log(ctx, s.logger)
-			}
-
-			hasOrgAccess := false
-			for _, org := range userInfo.Organizations {
-				if org.ID == toolset.OrganizationID {
-					hasOrgAccess = true
-					break
+			// If toolset has OAuth proxy server, validate OAuth token and check org access
+			if toolset.OauthProxyServerID.Valid {
+				oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
+				if err != nil {
+					return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
 				}
-			}
 
-			if !hasOrgAccess {
-				return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+				userInfo, err := s.sessions.GetUserInfoFromSpeakeasy(ctx, oauthToken.AccessToken)
+				if err != nil {
+					return oops.E(oops.CodeUnauthorized, err, "failed to get user info from access token").Log(ctx, s.logger)
+				}
+
+				hasOrgAccess := false
+				for _, org := range userInfo.Organizations {
+					if org.ID == toolset.OrganizationID {
+						hasOrgAccess = true
+						break
+					}
+				}
+
+				if !hasOrgAccess {
+					return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+				}
 			}
 		}
 	}
@@ -741,4 +733,30 @@ func parseMcpSessionID(headers http.Header) string {
 		session = uuid.New().String()
 	}
 	return session
+}
+
+func (s *Service) authenticateToken(ctx context.Context, token string) (context.Context, error) {
+	// This just follows Goa's implementation of checking multiple key scopes as a union
+	// Adding both scopes to the same RequiredScopes [] implies both scopes being required
+	sc := security.APIKeyScheme{
+		Name:           auth.KeySecurityScheme,
+		RequiredScopes: []string{"consumer"},
+		Scopes:         []string{},
+	}
+	ctx, err := s.auth.Authorize(ctx, token, &sc)
+	if err == nil {
+		return ctx, nil
+	}
+
+	sc = security.APIKeyScheme{
+		Name:           auth.KeySecurityScheme,
+		RequiredScopes: []string{"chat"},
+		Scopes:         []string{},
+	}
+	ctx, err = s.auth.Authorize(ctx, token, &sc)
+	if err != nil {
+		return ctx, oops.E(oops.CodeUnauthorized, err, "failed to authorize with API key (requires consumer or chat scope)").Log(ctx, s.logger)
+	}
+
+	return ctx, nil
 }

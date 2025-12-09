@@ -17,7 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	logsvc "github.com/speakeasy-api/gram/server/internal/logs"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
 var (
@@ -45,7 +45,7 @@ func TestMain(m *testing.M) {
 type testInstance struct {
 	service        *logsvc.Service
 	conn           *pgxpool.Pool
-	chClient       *toolmetrics.Queries
+	chClient       *telemetry.Queries
 	sessionManager *sessions.Manager
 }
 
@@ -74,7 +74,7 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 
 	tracerProvider := testenv.NewTracerProvider(t)
 
-	chClient := toolmetrics.New(logger, tracerProvider, chConn, func(context.Context, string) (bool, error) {
+	chClient := telemetry.New(logger, tracerProvider, chConn, func(context.Context, string) (bool, error) {
 		return true, nil
 	})
 
