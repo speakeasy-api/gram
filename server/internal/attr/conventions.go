@@ -704,3 +704,17 @@ func ClickhouseQueryDurationMs(v float64) attribute.KeyValue {
 func SlogClickhouseQueryDurationMs(v float64) slog.Attr {
 	return slog.Float64(string(ClickhouseQueryDurationMsKey), v)
 }
+
+// External MCP registry attributes
+func SlogURL(v string) slog.Attr         { return slog.String("url", v) }
+func SlogRegistryID(v string) slog.Attr  { return slog.String("registry_id", v) }
+func SlogTenantID(v string) slog.Attr    { return slog.String("tenant_id", v) }
+func SlogStatusCode(v int) slog.Attr     { return slog.Int("status_code", v) }
+func SlogContentType(v string) slog.Attr { return slog.String("content_type", v) }
+func SlogBody(v string) slog.Attr        { return slog.String("body", v) }
+func SlogBodyLen(v int) slog.Attr        { return slog.Int("body_len", v) }
+func SlogBodyPreview(v string) slog.Attr { return slog.String("body_preview", v) }
+func SlogServerCount(v int) slog.Attr    { return slog.Int("server_count", v) }
+func SlogExternalMCPID(v string) slog.Attr   { return slog.String("external_mcp_id", v) }
+func SlogExternalMCPSlug(v string) slog.Attr { return slog.String("external_mcp_slug", v) }
+func SlogExternalMCPName(v string) slog.Attr { return slog.String("external_mcp_name", v) }

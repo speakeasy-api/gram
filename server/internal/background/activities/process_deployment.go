@@ -400,13 +400,13 @@ func (p *ProcessDeployment) doExternalMCPs(
 		logger := p.logger.With(
 			attr.SlogDeploymentID(deploymentID.String()),
 			attr.SlogProjectID(projectID.String()),
-			slog.String("external_mcp_id", mcp.ID.String()),
-			slog.String("external_mcp_slug", mcp.Slug),
+			attr.SlogExternalMCPID(mcp.ID.String()),
+			attr.SlogExternalMCPSlug(mcp.Slug),
 		)
 
 		logger.InfoContext(ctx, "processing external mcp",
-			slog.String("name", mcp.Name),
-			slog.String("registry_id", mcp.RegistryID.String()),
+			attr.SlogExternalMCPName(mcp.Name),
+			attr.SlogRegistryID(mcp.RegistryID.String()),
 		)
 
 		// External MCPs don't create tool definitions at deployment time.

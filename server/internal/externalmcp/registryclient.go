@@ -12,19 +12,22 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 // RegistryClient handles communication with external MCP registries.
 type RegistryClient struct {
 	httpClient *http.Client
+	logger     *slog.Logger
 }
 
 // NewRegistryClient creates a new registry client.
-func NewRegistryClient() *RegistryClient {
+func NewRegistryClient(logger *slog.Logger) *RegistryClient {
 	return &RegistryClient{
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		logger: logger,
 	}
 }
 
@@ -79,9 +82,9 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 		reqURL += fmt.Sprintf("&cursor=%s", *params.Cursor)
 	}
 
-	slog.InfoContext(ctx, "fetching servers from registry",
-		slog.String("url", reqURL),
-		slog.String("registry_id", registry.ID.String()),
+	c.logger.InfoContext(ctx, "fetching servers from registry",
+		attr.SlogURL(reqURL),
+		attr.SlogRegistryID(registry.ID.String()),
 	)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
@@ -91,30 +94,30 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 
 	if tenantID := os.Getenv("PULSE_REGISTRY_TENANT"); tenantID != "" {
 		req.Header.Set("X-Tenant-ID", tenantID)
-		slog.InfoContext(ctx, "set X-Tenant-ID header", slog.String("tenant_id", tenantID))
+		c.logger.InfoContext(ctx, "set X-Tenant-ID header", attr.SlogTenantID(tenantID))
 	}
 	if apiKey := os.Getenv("PULSE_REGISTRY_KEY"); apiKey != "" {
 		req.Header.Set("X-Api-Key", apiKey)
-		slog.InfoContext(ctx, "set X-Api-Key header", slog.String("api_key_len", fmt.Sprintf("%d", len(apiKey))))
+		c.logger.InfoContext(ctx, "set X-Api-Key header", attr.SlogValueInt(len(apiKey)))
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		slog.ErrorContext(ctx, "registry request failed", slog.String("error", err.Error()))
+		c.logger.ErrorContext(ctx, "registry request failed", attr.SlogError(err))
 		return nil, fmt.Errorf("failed to fetch from registry: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
-	slog.InfoContext(ctx, "registry response received",
-		slog.Int("status_code", resp.StatusCode),
-		slog.String("content_type", resp.Header.Get("Content-Type")),
+	c.logger.InfoContext(ctx, "registry response received",
+		attr.SlogStatusCode(resp.StatusCode),
+		attr.SlogContentType(resp.Header.Get("Content-Type")),
 	)
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		slog.ErrorContext(ctx, "registry returned non-OK status",
-			slog.Int("status_code", resp.StatusCode),
-			slog.String("body", string(body)),
+		c.logger.ErrorContext(ctx, "registry returned non-OK status",
+			attr.SlogStatusCode(resp.StatusCode),
+			attr.SlogBody(string(body)),
 		)
 		return nil, fmt.Errorf("registry returned status %d", resp.StatusCode)
 	}
@@ -124,37 +127,39 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	slog.InfoContext(ctx, "registry response body",
-		slog.Int("body_len", len(body)),
-		slog.String("body_preview", string(body[:min(500, len(body))]),
-	))
+	c.logger.InfoContext(ctx, "registry response body",
+		attr.SlogBodyLen(len(body)),
+		attr.SlogBodyPreview(string(body[:min(500, len(body))])),
+	)
 
 	var listResp listResponse
 	if err := json.Unmarshal(body, &listResp); err != nil {
-		slog.ErrorContext(ctx, "failed to decode registry response",
-			slog.String("error", err.Error()),
-			slog.String("body", string(body)),
+		c.logger.ErrorContext(ctx, "failed to decode registry response",
+			attr.SlogError(err),
+			attr.SlogBody(string(body)),
 		)
 		return nil, fmt.Errorf("failed to decode registry response: %w", err)
 	}
 
-	slog.InfoContext(ctx, "parsed registry response",
-		slog.Int("server_count", len(listResp.Servers)),
+	c.logger.InfoContext(ctx, "parsed registry response",
+		attr.SlogServerCount(len(listResp.Servers)),
 	)
 
 	registryID := registry.ID.String()
 	servers := make([]*types.ExternalMCPServer, 0, len(listResp.Servers))
 	for _, s := range listResp.Servers {
+		var iconURL *string
+		if len(s.Server.Icons) > 0 {
+			iconURL = &s.Server.Icons[0].URL
+		}
+
 		server := &types.ExternalMCPServer{
 			Name:        s.Server.Name,
 			Version:     s.Server.Version,
 			Description: s.Server.Description,
 			RegistryID:  registryID,
 			Title:       s.Server.Title,
-		}
-
-		if len(s.Server.Icons) > 0 {
-			server.IconURL = &s.Server.Icons[0].URL
+			IconURL:     iconURL,
 		}
 
 		servers = append(servers, server)

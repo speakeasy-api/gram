@@ -44,7 +44,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		db:             db,
 		repo:           repo.New(db),
 		auth:           auth.New(logger, db, sessions),
-		registryClient: NewRegistryClient(),
+		registryClient: NewRegistryClient(logger),
 	}
 }
 
@@ -99,9 +99,9 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 		})
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to fetch servers from registry",
-				slog.String("registry_id", registry.ID.String()),
-				slog.String("registry_url", registry.Url),
-				slog.String("error", err.Error()),
+				attr.SlogRegistryID(registry.ID.String()),
+				attr.SlogURL(registry.Url),
+				attr.SlogError(err),
 			)
 			continue
 		}
@@ -114,7 +114,8 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 	}
 
 	return &gen.ListCatalogResult{
-		Servers: allServers,
+		Servers:    allServers,
+		NextCursor: nil, // Pagination not implemented in v0
 	}, nil
 }
 

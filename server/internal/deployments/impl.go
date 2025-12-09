@@ -133,6 +133,7 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 		Openapiv3ToolCount: dep.Openapiv3ToolCount,
 		FunctionsToolCount: dep.FunctionsToolCount,
 		FunctionsAssets:    dep.FunctionsAssets,
+		ExternalMcps:       dep.ExternalMcps,
 	}, nil
 }
 
