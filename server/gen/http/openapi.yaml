@@ -6667,12 +6667,6 @@ paths:
 
                 **Required security scopes for project_slug**:
                   * `producer`
-
-                **Required security scopes for apikey**:
-                  * `chat`
-
-                **Required security scopes for project_slug**:
-                  * `chat`
             operationId: toolsets#getToolset
             parameters:
                 - description: A short url-friendly label that uniquely identifies a resource.
@@ -6760,8 +6754,6 @@ paths:
                   session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: getToolset toolsets
             tags:
                 - toolsets
@@ -6778,12 +6770,6 @@ paths:
 
                 **Required security scopes for project_slug**:
                   * `producer`
-
-                **Required security scopes for apikey**:
-                  * `chat`
-
-                **Required security scopes for project_slug**:
-                  * `chat`
             operationId: toolsets#listToolsets
             parameters:
                 - description: Session header
@@ -6849,8 +6835,6 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
             summary: listToolsets toolsets
