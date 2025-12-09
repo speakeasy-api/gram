@@ -594,12 +594,6 @@ CREATE TABLE IF NOT EXISTS oauth_proxy_providers (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT custom_provider_endpoints CHECK (
-    (provider_type = 'custom' AND authorization_endpoint IS NOT NULL AND token_endpoint IS NOT NULL)
-    OR
-    (provider_type = 'gram')
-  ),
-
   CONSTRAINT oauth_proxy_providers_pkey PRIMARY KEY (id),
   CONSTRAINT oauth_proxy_providers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT oauth_proxy_providers_oauth_proxy_server_id_fkey FOREIGN KEY (oauth_proxy_server_id) REFERENCES oauth_proxy_servers (id) ON DELETE CASCADE
