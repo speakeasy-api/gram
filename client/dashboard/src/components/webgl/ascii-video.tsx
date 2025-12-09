@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { WebGLVideo } from "./components/webgl-video";
+import { useWebGLStore } from "./store";
 
 export interface AsciiVideoProps {
   videoSrc: string;
@@ -22,6 +23,13 @@ export function AsciiVideo({
   flipX = false,
   flipY = false,
 }: AsciiVideoProps) {
+  const isWebGLAvailable = useWebGLStore((state) => state.isWebGLAvailable);
+
+  // Gracefully skip rendering if WebGL is not available
+  if (!isWebGLAvailable) {
+    return null;
+  }
+
   return (
     <WebGLVideo
       textureUrl={videoSrc}
