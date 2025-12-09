@@ -73,8 +73,13 @@ type GetInstanceResult struct {
 	ServerVariables []*types.ServerVariable
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*types.FunctionEnvironmentVariable
-	// The environment
-	Environment *types.Environment
+	// The MCP servers that are relevant to the toolset
+	McpServers []*InstanceMcpServer
+}
+
+type InstanceMcpServer struct {
+	// The address of the MCP server
+	URL string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

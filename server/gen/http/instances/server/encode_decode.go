@@ -10,6 +10,7 @@ package server
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"unicode/utf8"
@@ -37,33 +38,38 @@ func EncodeGetInstanceResponse(encoder func(context.Context, http.ResponseWriter
 func DecodeGetInstanceRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*instances.GetInstanceForm, error) {
 	return func(r *http.Request) (*instances.GetInstanceForm, error) {
 		var (
+			body GetInstanceRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return nil, gerr
+			}
+			return nil, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateGetInstanceRequestBody(&body)
+		if err != nil {
+			return nil, err
+		}
+
+		var (
 			toolsetSlug      string
-			environmentSlug  *string
 			sessionToken     *string
 			projectSlugInput *string
 			apikeyToken      *string
-			err              error
 		)
-		qp := r.URL.Query()
-		toolsetSlug = qp.Get("toolset_slug")
+		toolsetSlug = r.URL.Query().Get("toolset_slug")
 		if toolsetSlug == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("toolset_slug", "query string"))
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("toolset_slug", toolsetSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(toolsetSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("toolset_slug", toolsetSlug, utf8.RuneCountInString(toolsetSlug), 40, false))
-		}
-		environmentSlugRaw := qp.Get("environment_slug")
-		if environmentSlugRaw != "" {
-			environmentSlug = &environmentSlugRaw
-		}
-		if environmentSlug != nil {
-			err = goa.MergeErrors(err, goa.ValidatePattern("environment_slug", *environmentSlug, "^[a-z0-9_-]{1,128}$"))
-		}
-		if environmentSlug != nil {
-			if utf8.RuneCountInString(*environmentSlug) > 40 {
-				err = goa.MergeErrors(err, goa.InvalidLengthError("environment_slug", *environmentSlug, utf8.RuneCountInString(*environmentSlug), 40, false))
-			}
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -80,7 +86,7 @@ func DecodeGetInstanceRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		if err != nil {
 			return nil, err
 		}
-		payload := NewGetInstanceForm(toolsetSlug, environmentSlug, sessionToken, projectSlugInput, apikeyToken)
+		payload := NewGetInstanceForm(&body, toolsetSlug, sessionToken, projectSlugInput, apikeyToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -569,44 +575,12 @@ func marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableRespons
 	return res
 }
 
-// marshalTypesEnvironmentToEnvironmentResponseBody builds a value of type
-// *EnvironmentResponseBody from a value of type *types.Environment.
-func marshalTypesEnvironmentToEnvironmentResponseBody(v *types.Environment) *EnvironmentResponseBody {
-	res := &EnvironmentResponseBody{
-		ID:             v.ID,
-		OrganizationID: v.OrganizationID,
-		ProjectID:      v.ProjectID,
-		Name:           v.Name,
-		Slug:           string(v.Slug),
-		Description:    v.Description,
-		CreatedAt:      v.CreatedAt,
-		UpdatedAt:      v.UpdatedAt,
-	}
-	if v.Entries != nil {
-		res.Entries = make([]*EnvironmentEntryResponseBody, len(v.Entries))
-		for i, val := range v.Entries {
-			if val == nil {
-				res.Entries[i] = nil
-				continue
-			}
-			res.Entries[i] = marshalTypesEnvironmentEntryToEnvironmentEntryResponseBody(val)
-		}
-	} else {
-		res.Entries = []*EnvironmentEntryResponseBody{}
-	}
-
-	return res
-}
-
-// marshalTypesEnvironmentEntryToEnvironmentEntryResponseBody builds a value of
-// type *EnvironmentEntryResponseBody from a value of type
-// *types.EnvironmentEntry.
-func marshalTypesEnvironmentEntryToEnvironmentEntryResponseBody(v *types.EnvironmentEntry) *EnvironmentEntryResponseBody {
-	res := &EnvironmentEntryResponseBody{
-		Name:      v.Name,
-		Value:     v.Value,
-		CreatedAt: v.CreatedAt,
-		UpdatedAt: v.UpdatedAt,
+// marshalInstancesInstanceMcpServerToInstanceMcpServerResponseBody builds a
+// value of type *InstanceMcpServerResponseBody from a value of type
+// *instances.InstanceMcpServer.
+func marshalInstancesInstanceMcpServerToInstanceMcpServerResponseBody(v *instances.InstanceMcpServer) *InstanceMcpServerResponseBody {
+	res := &InstanceMcpServerResponseBody{
+		URL: v.URL,
 	}
 
 	return res

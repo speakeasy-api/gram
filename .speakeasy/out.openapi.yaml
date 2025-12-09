@@ -4199,15 +4199,6 @@ paths:
             pattern: ^[a-z0-9_-]{1,128}$
             type: string
         - allowEmptyValue: true
-          description: The slug of the environment to load
-          in: query
-          name: environment_slug
-          schema:
-            description: A short url-friendly label that uniquely identifies a resource.
-            maxLength: 40
-            pattern: ^[a-z0-9_-]{1,128}$
-            type: string
-        - allowEmptyValue: true
           description: Session header
           in: header
           name: Gram-Session
@@ -4228,6 +4219,12 @@ paths:
           schema:
             description: API Key header
             type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetInstanceForm2'
+        required: true
       responses:
         "200":
           content:
@@ -8256,6 +8253,8 @@ paths:
           session_header_Gram-Session: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - {}
       summary: getToolset toolsets
       tags:
@@ -8353,6 +8352,8 @@ paths:
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
@@ -10908,19 +10909,30 @@ components:
           maxLength: 40
       required:
         - toolset_slug
+    GetInstanceForm2:
+      type: object
+      properties:
+        environment_slug:
+          type: string
+          description: The slug of the environment to load
+          pattern: ^[a-z0-9_-]{1,128}$
+          maxLength: 40
     GetInstanceResult:
       type: object
       properties:
         description:
           type: string
           description: The description of the toolset
-        environment:
-          $ref: '#/components/schemas/Environment'
         function_environment_variables:
           type: array
           items:
             $ref: '#/components/schemas/FunctionEnvironmentVariable'
           description: The function environment variables that are relevant to the toolset
+        mcp_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/InstanceMcpServer'
+          description: The MCP servers that are relevant to the toolset
         name:
           type: string
           description: The name of the toolset
@@ -10947,7 +10959,7 @@ components:
       required:
         - name
         - tools
-        - environment
+        - mcp_servers
     GetIntegrationForm:
       type: object
       properties:
@@ -11235,6 +11247,14 @@ components:
         - active_organization_id
         - organizations
         - gram_account_type
+    InstanceMcpServer:
+      type: object
+      properties:
+        url:
+          type: string
+          description: The address of the MCP server
+      required:
+        - url
     Integration:
       type: object
       properties:

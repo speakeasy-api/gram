@@ -8,10 +8,19 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	instances "github.com/speakeasy-api/gram/server/gen/instances"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// GetInstanceRequestBody is the type of the "instances" service "getInstance"
+// endpoint HTTP request body.
+type GetInstanceRequestBody struct {
+	// The slug of the environment to load
+	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
+}
 
 // GetInstanceResponseBody is the type of the "instances" service "getInstance"
 // endpoint HTTP response body.
@@ -30,8 +39,8 @@ type GetInstanceResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The environment
-	Environment *EnvironmentResponseBody `form:"environment" json:"environment" xml:"environment"`
+	// The MCP servers that are relevant to the toolset
+	McpServers []*InstanceMcpServerResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
 }
 
 // GetInstanceUnauthorizedResponseBody is the type of the "instances" service
@@ -475,38 +484,11 @@ type FunctionEnvironmentVariableResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 }
 
-// EnvironmentResponseBody is used to define fields on response body types.
-type EnvironmentResponseBody struct {
-	// The ID of the environment
-	ID string `form:"id" json:"id" xml:"id"`
-	// The organization ID this environment belongs to
-	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// The project ID this environment belongs to
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The name of the environment
-	Name string `form:"name" json:"name" xml:"name"`
-	// The slug identifier for the environment
-	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// The description of the environment
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// List of environment entries
-	Entries []*EnvironmentEntryResponseBody `form:"entries" json:"entries" xml:"entries"`
-	// The creation date of the environment
-	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// When the environment was last updated
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-}
-
-// EnvironmentEntryResponseBody is used to define fields on response body types.
-type EnvironmentEntryResponseBody struct {
-	// The name of the environment variable
-	Name string `form:"name" json:"name" xml:"name"`
-	// Redacted values of the environment variable
-	Value string `form:"value" json:"value" xml:"value"`
-	// The creation date of the environment entry
-	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// When the environment entry was last updated
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+// InstanceMcpServerResponseBody is used to define fields on response body
+// types.
+type InstanceMcpServerResponseBody struct {
+	// The address of the MCP server
+	URL string `form:"url" json:"url" xml:"url"`
 }
 
 // NewGetInstanceResponseBody builds the HTTP response body from the result of
@@ -568,8 +550,17 @@ func NewGetInstanceResponseBody(res *instances.GetInstanceResult) *GetInstanceRe
 			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
 		}
 	}
-	if res.Environment != nil {
-		body.Environment = marshalTypesEnvironmentToEnvironmentResponseBody(res.Environment)
+	if res.McpServers != nil {
+		body.McpServers = make([]*InstanceMcpServerResponseBody, len(res.McpServers))
+		for i, val := range res.McpServers {
+			if val == nil {
+				body.McpServers[i] = nil
+				continue
+			}
+			body.McpServers[i] = marshalInstancesInstanceMcpServerToInstanceMcpServerResponseBody(val)
+		}
+	} else {
+		body.McpServers = []*InstanceMcpServerResponseBody{}
 	}
 	return body
 }
@@ -715,16 +706,30 @@ func NewGetInstanceGatewayErrorResponseBody(res *goa.ServiceError) *GetInstanceG
 }
 
 // NewGetInstanceForm builds a instances service getInstance endpoint payload.
-func NewGetInstanceForm(toolsetSlug string, environmentSlug *string, sessionToken *string, projectSlugInput *string, apikeyToken *string) *instances.GetInstanceForm {
+func NewGetInstanceForm(body *GetInstanceRequestBody, toolsetSlug string, sessionToken *string, projectSlugInput *string, apikeyToken *string) *instances.GetInstanceForm {
 	v := &instances.GetInstanceForm{}
-	v.ToolsetSlug = types.Slug(toolsetSlug)
-	if environmentSlug != nil {
-		tmpenvironmentSlug := types.Slug(*environmentSlug)
-		v.EnvironmentSlug = &tmpenvironmentSlug
+	if body.EnvironmentSlug != nil {
+		environmentSlug := types.Slug(*body.EnvironmentSlug)
+		v.EnvironmentSlug = &environmentSlug
 	}
+	v.ToolsetSlug = types.Slug(toolsetSlug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ApikeyToken = apikeyToken
 
 	return v
+}
+
+// ValidateGetInstanceRequestBody runs the validations defined on
+// GetInstanceRequestBody
+func ValidateGetInstanceRequestBody(body *GetInstanceRequestBody) (err error) {
+	if body.EnvironmentSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.environment_slug", *body.EnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.EnvironmentSlug != nil {
+		if utf8.RuneCountInString(*body.EnvironmentSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.environment_slug", *body.EnvironmentSlug, utf8.RuneCountInString(*body.EnvironmentSlug), 40, false))
+		}
+	}
+	return
 }
