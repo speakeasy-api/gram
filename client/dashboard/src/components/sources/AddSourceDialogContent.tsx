@@ -107,7 +107,7 @@ export default function AddSourceDialogContent({
           )}
           {isExternalMCPEnabled && (
             <TabsContent value="import-mcp" className="mt-0">
-              <ImportMCPTabContent />
+              <ImportMCPTabContent onSuccess={onCompletion} />
             </TabsContent>
           )}
         </Tabs>

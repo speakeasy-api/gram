@@ -115,7 +115,7 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 	{
 		err = json.Unmarshal([]byte(deploymentsCreateDeploymentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Autem aut quo cupiditate sit.\",\n      \"functions\": [\n         {\n            \"asset_id\": \"Sit nam voluptate quis excepturi facere et.\",\n            \"name\": \"Dolores molestiae omnis at.\",\n            \"runtime\": \"Quidem asperiores et amet.\",\n            \"slug\": \"ind\"\n         },\n         {\n            \"asset_id\": \"Sit nam voluptate quis excepturi facere et.\",\n            \"name\": \"Dolores molestiae omnis at.\",\n            \"runtime\": \"Quidem asperiores et amet.\",\n            \"slug\": \"ind\"\n         },\n         {\n            \"asset_id\": \"Sit nam voluptate quis excepturi facere et.\",\n            \"name\": \"Dolores molestiae omnis at.\",\n            \"runtime\": \"Quidem asperiores et amet.\",\n            \"slug\": \"ind\"\n         },\n         {\n            \"asset_id\": \"Sit nam voluptate quis excepturi facere et.\",\n            \"name\": \"Dolores molestiae omnis at.\",\n            \"runtime\": \"Quidem asperiores et amet.\",\n            \"slug\": \"ind\"\n         }\n      ],\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"non_blocking\": false,\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"Velit neque qui ratione.\",\n            \"name\": \"Assumenda et consequatur et.\",\n            \"slug\": \"qv5\"\n         },\n         {\n            \"asset_id\": \"Velit neque qui ratione.\",\n            \"name\": \"Assumenda et consequatur et.\",\n            \"slug\": \"qv5\"\n         },\n         {\n            \"asset_id\": \"Velit neque qui ratione.\",\n            \"name\": \"Assumenda et consequatur et.\",\n            \"slug\": \"qv5\"\n         }\n      ],\n      \"packages\": [\n         {\n            \"name\": \"Et delectus voluptatem nemo veniam doloribus officia.\",\n            \"version\": \"Veritatis facilis asperiores et.\"\n         },\n         {\n            \"name\": \"Et delectus voluptatem nemo veniam doloribus officia.\",\n            \"version\": \"Veritatis facilis asperiores et.\"\n         },\n         {\n            \"name\": \"Et delectus voluptatem nemo veniam doloribus officia.\",\n            \"version\": \"Veritatis facilis asperiores et.\"\n         },\n         {\n            \"name\": \"Et delectus voluptatem nemo veniam doloribus officia.\",\n            \"version\": \"Veritatis facilis asperiores et.\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_mcps\": [\n         {\n            \"name\": \"ai.exa/exa\",\n            \"registry_id\": \"4583cab3-3d5a-4df4-ba39-a71f555aa8e7\",\n            \"slug\": \"mg9\"\n         },\n         {\n            \"name\": \"ai.exa/exa\",\n            \"registry_id\": \"4583cab3-3d5a-4df4-ba39-a71f555aa8e7\",\n            \"slug\": \"mg9\"\n         },\n         {\n            \"name\": \"ai.exa/exa\",\n            \"registry_id\": \"4583cab3-3d5a-4df4-ba39-a71f555aa8e7\",\n            \"slug\": \"mg9\"\n         }\n      ],\n      \"external_url\": \"Sed aut voluptas.\",\n      \"functions\": [\n         {\n            \"asset_id\": \"Numquam quam doloribus iste maxime molestiae.\",\n            \"name\": \"Dicta fuga optio perferendis inventore corporis et.\",\n            \"runtime\": \"Expedita quis dolore.\",\n            \"slug\": \"e4q\"\n         },\n         {\n            \"asset_id\": \"Numquam quam doloribus iste maxime molestiae.\",\n            \"name\": \"Dicta fuga optio perferendis inventore corporis et.\",\n            \"runtime\": \"Expedita quis dolore.\",\n            \"slug\": \"e4q\"\n         }\n      ],\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"non_blocking\": false,\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"Fuga suscipit.\",\n            \"name\": \"Ipsa dolor dolorem.\",\n            \"slug\": \"zic\"\n         },\n         {\n            \"asset_id\": \"Fuga suscipit.\",\n            \"name\": \"Ipsa dolor dolorem.\",\n            \"slug\": \"zic\"\n         }\n      ],\n      \"packages\": [\n         {\n            \"name\": \"Maiores et eum laboriosam.\",\n            \"version\": \"Magnam eius perferendis veniam.\"\n         },\n         {\n            \"name\": \"Maiores et eum laboriosam.\",\n            \"version\": \"Magnam eius perferendis veniam.\"\n         }\n      ]\n   }'")
 		}
 		for _, e := range body.Openapiv3Assets {
 			if e != nil {
@@ -127,6 +127,13 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 		for _, e := range body.Functions {
 			if e != nil {
 				if err2 := ValidateAddFunctionsFormRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		for _, e := range body.ExternalMcps {
+			if e != nil {
+				if err2 := ValidateAddExternalMCPFormRequestBody(e); err2 != nil {
 					err = goa.MergeErrors(err, err2)
 				}
 			}
@@ -195,6 +202,16 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 			v.Packages[i] = marshalAddDeploymentPackageFormRequestBodyToDeploymentsAddDeploymentPackageForm(val)
 		}
 	}
+	if body.ExternalMcps != nil {
+		v.ExternalMcps = make([]*deployments.AddExternalMCPForm, len(body.ExternalMcps))
+		for i, val := range body.ExternalMcps {
+			if val == nil {
+				v.ExternalMcps[i] = nil
+				continue
+			}
+			v.ExternalMcps[i] = marshalAddExternalMCPFormRequestBodyToDeploymentsAddExternalMCPForm(val)
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -211,7 +228,7 @@ func BuildEvolvePayload(deploymentsEvolveBody string, deploymentsEvolveApikeyTok
 	{
 		err = json.Unmarshal([]byte(deploymentsEvolveBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Et aut porro doloribus voluptate.\",\n      \"exclude_functions\": [\n         \"Voluptas corporis.\",\n         \"Neque ut dolorem perferendis optio autem.\",\n         \"Rem explicabo sed.\"\n      ],\n      \"exclude_openapiv3_assets\": [\n         \"Facilis minima consectetur.\",\n         \"Distinctio saepe.\"\n      ],\n      \"exclude_packages\": [\n         \"Consequatur odio velit qui.\",\n         \"Aut libero magni dolorem cupiditate ipsam consectetur.\"\n      ],\n      \"non_blocking\": false,\n      \"upsert_functions\": [\n         {\n            \"asset_id\": \"Sit nam voluptate quis excepturi facere et.\",\n            \"name\": \"Dolores molestiae omnis at.\",\n            \"runtime\": \"Quidem asperiores et amet.\",\n            \"slug\": \"ind\"\n         },\n         {\n            \"asset_id\": \"Sit nam voluptate quis excepturi facere et.\",\n            \"name\": \"Dolores molestiae omnis at.\",\n            \"runtime\": \"Quidem asperiores et amet.\",\n            \"slug\": \"ind\"\n         },\n         {\n            \"asset_id\": \"Sit nam voluptate quis excepturi facere et.\",\n            \"name\": \"Dolores molestiae omnis at.\",\n            \"runtime\": \"Quidem asperiores et amet.\",\n            \"slug\": \"ind\"\n         }\n      ],\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"Velit neque qui ratione.\",\n            \"name\": \"Assumenda et consequatur et.\",\n            \"slug\": \"qv5\"\n         },\n         {\n            \"asset_id\": \"Velit neque qui ratione.\",\n            \"name\": \"Assumenda et consequatur et.\",\n            \"slug\": \"qv5\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"Dolore corporis distinctio maiores et eum laboriosam.\",\n            \"version\": \"Magnam eius perferendis veniam.\"\n         },\n         {\n            \"name\": \"Dolore corporis distinctio maiores et eum laboriosam.\",\n            \"version\": \"Magnam eius perferendis veniam.\"\n         },\n         {\n            \"name\": \"Dolore corporis distinctio maiores et eum laboriosam.\",\n            \"version\": \"Magnam eius perferendis veniam.\"\n         },\n         {\n            \"name\": \"Dolore corporis distinctio maiores et eum laboriosam.\",\n            \"version\": \"Magnam eius perferendis veniam.\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Eligendi numquam ut debitis quis.\",\n      \"exclude_external_mcps\": [\n         \"Inventore eos.\",\n         \"Consequatur quisquam.\",\n         \"Molestias repudiandae.\",\n         \"Sunt molestias non facilis qui maiores iste.\"\n      ],\n      \"exclude_functions\": [\n         \"Cupiditate commodi.\",\n         \"Ipsum quae culpa.\",\n         \"Sint necessitatibus sapiente quisquam quia dolor nostrum.\"\n      ],\n      \"exclude_openapiv3_assets\": [\n         \"Aut minima debitis.\",\n         \"Similique eaque fuga sed.\",\n         \"Ipsum molestiae exercitationem.\"\n      ],\n      \"exclude_packages\": [\n         \"Sunt aliquam illum sed molestiae enim.\",\n         \"Eligendi esse tempora temporibus ad consequatur aperiam.\"\n      ],\n      \"non_blocking\": false,\n      \"upsert_external_mcps\": [\n         {\n            \"name\": \"ai.exa/exa\",\n            \"registry_id\": \"4583cab3-3d5a-4df4-ba39-a71f555aa8e7\",\n            \"slug\": \"mg9\"\n         },\n         {\n            \"name\": \"ai.exa/exa\",\n            \"registry_id\": \"4583cab3-3d5a-4df4-ba39-a71f555aa8e7\",\n            \"slug\": \"mg9\"\n         },\n         {\n            \"name\": \"ai.exa/exa\",\n            \"registry_id\": \"4583cab3-3d5a-4df4-ba39-a71f555aa8e7\",\n            \"slug\": \"mg9\"\n         }\n      ],\n      \"upsert_functions\": [\n         {\n            \"asset_id\": \"Numquam quam doloribus iste maxime molestiae.\",\n            \"name\": \"Dicta fuga optio perferendis inventore corporis et.\",\n            \"runtime\": \"Expedita quis dolore.\",\n            \"slug\": \"e4q\"\n         },\n         {\n            \"asset_id\": \"Numquam quam doloribus iste maxime molestiae.\",\n            \"name\": \"Dicta fuga optio perferendis inventore corporis et.\",\n            \"runtime\": \"Expedita quis dolore.\",\n            \"slug\": \"e4q\"\n         }\n      ],\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"Fuga suscipit.\",\n            \"name\": \"Ipsa dolor dolorem.\",\n            \"slug\": \"zic\"\n         },\n         {\n            \"asset_id\": \"Fuga suscipit.\",\n            \"name\": \"Ipsa dolor dolorem.\",\n            \"slug\": \"zic\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"Optio voluptatem voluptatibus laborum voluptates nulla.\",\n            \"version\": \"Qui veritatis delectus dignissimos dolores delectus.\"\n         },\n         {\n            \"name\": \"Optio voluptatem voluptatibus laborum voluptates nulla.\",\n            \"version\": \"Qui veritatis delectus dignissimos dolores delectus.\"\n         },\n         {\n            \"name\": \"Optio voluptatem voluptatibus laborum voluptates nulla.\",\n            \"version\": \"Qui veritatis delectus dignissimos dolores delectus.\"\n         },\n         {\n            \"name\": \"Optio voluptatem voluptatibus laborum voluptates nulla.\",\n            \"version\": \"Qui veritatis delectus dignissimos dolores delectus.\"\n         }\n      ]\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -266,6 +283,16 @@ func BuildEvolvePayload(deploymentsEvolveBody string, deploymentsEvolveApikeyTok
 			v.UpsertFunctions[i] = marshalAddFunctionsFormRequestBodyToDeploymentsAddFunctionsForm(val)
 		}
 	}
+	if body.UpsertExternalMcps != nil {
+		v.UpsertExternalMcps = make([]*deployments.AddExternalMCPForm, len(body.UpsertExternalMcps))
+		for i, val := range body.UpsertExternalMcps {
+			if val == nil {
+				v.UpsertExternalMcps[i] = nil
+				continue
+			}
+			v.UpsertExternalMcps[i] = marshalAddExternalMCPFormRequestBodyToDeploymentsAddExternalMCPForm(val)
+		}
+	}
 	if body.ExcludeOpenapiv3Assets != nil {
 		v.ExcludeOpenapiv3Assets = make([]string, len(body.ExcludeOpenapiv3Assets))
 		for i, val := range body.ExcludeOpenapiv3Assets {
@@ -284,6 +311,12 @@ func BuildEvolvePayload(deploymentsEvolveBody string, deploymentsEvolveApikeyTok
 			v.ExcludeFunctions[i] = val
 		}
 	}
+	if body.ExcludeExternalMcps != nil {
+		v.ExcludeExternalMcps = make([]string, len(body.ExcludeExternalMcps))
+		for i, val := range body.ExcludeExternalMcps {
+			v.ExcludeExternalMcps[i] = val
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -299,7 +332,7 @@ func BuildRedeployPayload(deploymentsRedeployBody string, deploymentsRedeployApi
 	{
 		err = json.Unmarshal([]byte(deploymentsRedeployBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Laudantium commodi inventore a nobis impedit.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Debitis cumque.\"\n   }'")
 		}
 	}
 	var apikeyToken *string

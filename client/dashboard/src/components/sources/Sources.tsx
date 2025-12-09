@@ -68,7 +68,8 @@ export function useDeploymentIsEmpty() {
     !deployment ||
     (deployment.openapiv3Assets.length === 0 &&
       (deployment.functionsAssets?.length ?? 0) === 0 &&
-      deployment.packages.length === 0)
+      deployment.packages.length === 0 &&
+      (deployment.externalMcps?.length ?? 0) === 0)
   );
 }
 
@@ -131,7 +132,18 @@ export default function Sources() {
       },
     );
 
-    return [...openApiSources, ...functionSources];
+    const externalMcpSources = (deployment.externalMcps ?? []).map(
+      (externalMcp) => ({
+        id: externalMcp.id,
+        deploymentAssetId: externalMcp.id,
+        name: externalMcp.name,
+        slug: externalMcp.slug,
+        type: "externalmcp" as const,
+        registryId: externalMcp.registryId,
+      }),
+    );
+
+    return [...openApiSources, ...functionSources, ...externalMcpSources];
   }, [deployment, assets]);
 
   if (!isLoading && deploymentIsEmpty) {
@@ -160,7 +172,7 @@ export default function Sources() {
 
   const removeSource = async (
     assetId: string,
-    type: "openapi" | "function",
+    type: "openapi" | "function" | "externalmcp",
   ) => {
     try {
       await client.deployments.evolveDeployment({
@@ -168,20 +180,30 @@ export default function Sources() {
           deploymentId: deployment?.id,
           ...(type === "openapi"
             ? { excludeOpenapiv3Assets: [assetId] }
-            : { excludeFunctions: [assetId] }),
+            : type === "function"
+              ? { excludeFunctions: [assetId] }
+              : { excludeExternalMcps: [assetId] }),
         },
       });
 
       await Promise.all([refetch(), refetchAssets()]);
 
-      toast.success(
-        `${type === "openapi" ? "API" : "Function"} source deleted successfully`,
-      );
+      const typeLabel =
+        type === "openapi"
+          ? "API"
+          : type === "function"
+            ? "Function"
+            : "External MCP";
+      toast.success(`${typeLabel} source deleted successfully`);
     } catch (error) {
       console.error(`Failed to delete ${type} source:`, error);
-      toast.error(
-        `Failed to delete ${type === "openapi" ? "API" : "function"} source. Please try again.`,
-      );
+      const typeLabel =
+        type === "openapi"
+          ? "API"
+          : type === "function"
+            ? "function"
+            : "external MCP";
+      toast.error(`Failed to delete ${typeLabel} source. Please try again.`);
     }
   };
 

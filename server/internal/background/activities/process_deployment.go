@@ -96,6 +96,10 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		return err
 	}
 
+	if err := p.doExternalMCPs(ctx, projectID, deploymentID); err != nil {
+		return err
+	}
+
 	err = workers.Wait()
 	if errors.Is(err, oops.ErrPermanent) {
 		return temporal.NewApplicationErrorWithOptions("openapiv3 document was not processed successfully", "openapi_doc_error", temporal.ApplicationErrorOptions{
@@ -150,11 +154,23 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		})
 	}
 
+	// Get external MCPs to check if deployment has any
+	externalMCPs, err := p.repo.ListDeploymentExternalMCPs(ctx, deploymentID)
+	if err != nil {
+		err = oops.E(oops.CodeUnexpected, err, "failed to read list of external mcps in deployment").Log(ctx, p.logger)
+		return temporal.NewApplicationErrorWithOptions("deployment external mcps could not be verified", "deployment_error", temporal.ApplicationErrorOptions{
+			NonRetryable: true,
+			Cause:        err,
+		})
+	}
+
 	// If there were documents to process in this deployment but no tools were created then we consider this a failure.
+	// External MCPs don't produce tools at deployment time - they're expanded at runtime.
 	expectsTools := len(deployment.Openapiv3Assets) > 0 || len(deployment.FunctionsAssets) > 0
 	hasTools := len(tools) > 0 || len(functionTools) > 0
 	hasResources := len(functionResources) > 0
-	if expectsTools && !hasTools && !hasResources {
+	hasExternalMCPs := len(externalMCPs) > 0
+	if expectsTools && !hasTools && !hasResources && !hasExternalMCPs {
 		err = oops.E(oops.CodeUnexpected, err, "no tools were created for deployment").Log(ctx, p.logger)
 		return temporal.NewApplicationErrorWithOptions("empty deployment was not expected", "deployment_error", temporal.ApplicationErrorOptions{
 			NonRetryable: true,
@@ -365,6 +381,37 @@ func (p *ProcessDeployment) doFunctions(
 
 			return err
 		})
+	}
+
+	return nil
+}
+
+func (p *ProcessDeployment) doExternalMCPs(
+	ctx context.Context,
+	projectID uuid.UUID,
+	deploymentID uuid.UUID,
+) error {
+	externalMCPs, err := p.repo.ListDeploymentExternalMCPs(ctx, deploymentID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error listing external mcps for deployment").Log(ctx, p.logger)
+	}
+
+	for _, mcp := range externalMCPs {
+		logger := p.logger.With(
+			attr.SlogDeploymentID(deploymentID.String()),
+			attr.SlogProjectID(projectID.String()),
+			slog.String("external_mcp_id", mcp.ID.String()),
+			slog.String("external_mcp_slug", mcp.Slug),
+		)
+
+		logger.InfoContext(ctx, "processing external mcp",
+			slog.String("name", mcp.Name),
+			slog.String("registry_id", mcp.RegistryID.String()),
+		)
+
+		// External MCPs don't create tool definitions at deployment time.
+		// Their tools are discovered dynamically at runtime (Slice 3).
+		// For now, we just log that the external MCP was processed.
 	}
 
 	return nil

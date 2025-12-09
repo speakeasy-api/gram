@@ -3,6 +3,7 @@
  */
 
 export * from "./adddeploymentpackageform.js";
+export * from "./addexternalmcpform.js";
 export * from "./addexternaloauthserverrequestbody.js";
 export * from "./addfunctionsform.js";
 export * from "./addoauthproxyserverrequestbody.js";
@@ -35,6 +36,7 @@ export * from "./creditusageresponsebody.js";
 export * from "./customdomain.js";
 export * from "./deleteglobaltoolvariationresult.js";
 export * from "./deployment.js";
+export * from "./deploymentexternalmcp.js";
 export * from "./deploymentfunctions.js";
 export * from "./deploymentlogevent.js";
 export * from "./deploymentpackage.js";

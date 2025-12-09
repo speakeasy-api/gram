@@ -286,6 +286,7 @@ var CreateDeploymentForm = Type("CreateDeploymentForm", func() {
 	Attribute("openapiv3_assets", ArrayOf(AddOpenAPIv3DeploymentAssetForm))
 	Attribute("functions", ArrayOf(AddFunctionsForm))
 	Attribute("packages", ArrayOf(AddDeploymentPackageForm))
+	Attribute("external_mcps", ArrayOf(AddExternalMCPForm))
 })
 
 var AddOpenAPIv3DeploymentAssetForm = Type("AddOpenAPIv3DeploymentAssetForm", func() {
@@ -338,6 +339,23 @@ var AddDeploymentPackageForm = Type("AddDeploymentPackageForm", func() {
 	})
 	Attribute("version", String, func() {
 		Description("The version of the package.")
+	})
+})
+
+var AddExternalMCPForm = Type("AddExternalMCPForm", func() {
+	Required("registry_id", "name", "slug")
+
+	Attribute("registry_id", String, func() {
+		Description("The ID of the MCP registry the server is from.")
+		Format(FormatUUID)
+	})
+	Attribute("name", String, func() {
+		Description("The reverse-DNS name of the external MCP server (e.g., 'ai.exa/exa').")
+		Example("ai.exa/exa")
+	})
+	Attribute("slug", shared.Slug, func() {
+		Description("A URL-friendly identifier used for tool prefixing (e.g., 'exa').")
+		Example("exa")
 	})
 })
 
@@ -404,9 +422,11 @@ var EvolveForm = Type("EvolveForm", func() {
 	Attribute("upsert_openapiv3_assets", ArrayOf(AddOpenAPIv3DeploymentAssetForm), "The OpenAPI 3.x documents to upsert in the new deployment.")
 	Attribute("upsert_packages", ArrayOf(AddPackageForm), "The packages to upsert in the new deployment.")
 	Attribute("upsert_functions", ArrayOf(AddFunctionsForm), "The tool functions to upsert in the new deployment.")
+	Attribute("upsert_external_mcps", ArrayOf(AddExternalMCPForm), "The external MCP servers to upsert in the new deployment.")
 	Attribute("exclude_openapiv3_assets", ArrayOf(String), "The OpenAPI 3.x documents, identified by slug, to exclude from the new deployment when cloning a previous deployment.")
 	Attribute("exclude_packages", ArrayOf(String), "The packages to exclude from the new deployment when cloning a previous deployment.")
 	Attribute("exclude_functions", ArrayOf(String), "The functions, identified by slug, to exclude from the new deployment when cloning a previous deployment.")
+	Attribute("exclude_external_mcps", ArrayOf(String), "The external MCP servers, identified by slug, to exclude from the new deployment when cloning a previous deployment.")
 })
 
 var EvolveResult = Type("EvolveResult", func() {

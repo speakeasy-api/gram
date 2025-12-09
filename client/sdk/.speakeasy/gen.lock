@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 214507bc55e894bb11bfd6f3fc9b6b91
+  docChecksum: b9e0f5ff2a64727b51be3194e3341895
   docVersion: 0.0.1
   speakeasyVersion: 1.661.1
   generationVersion: 2.763.2
-  releaseVersion: 0.21.7
-  configChecksum: 934ebfc4783e148d1ef190915b5e8433
+  releaseVersion: 0.21.9
+  configChecksum: 4cefc9f8cc8eaa71a52f7fabf31c92c7
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -38,6 +38,7 @@ generatedFiles:
   - USAGE.md
   - docs/lib/utils/retryconfig.md
   - docs/models/components/adddeploymentpackageform.md
+  - docs/models/components/addexternalmcpform.md
   - docs/models/components/addexternaloauthserverrequestbody.md
   - docs/models/components/addfunctionsform.md
   - docs/models/components/addoauthproxyserverrequestbody.md
@@ -73,6 +74,7 @@ generatedFiles:
   - docs/models/components/customdomain.md
   - docs/models/components/deleteglobaltoolvariationresult.md
   - docs/models/components/deployment.md
+  - docs/models/components/deploymentexternalmcp.md
   - docs/models/components/deploymentfunctions.md
   - docs/models/components/deploymentlogevent.md
   - docs/models/components/deploymentpackage.md
@@ -615,6 +617,7 @@ generatedFiles:
   - src/lib/security.ts
   - src/lib/url.ts
   - src/models/components/adddeploymentpackageform.ts
+  - src/models/components/addexternalmcpform.ts
   - src/models/components/addexternaloauthserverrequestbody.ts
   - src/models/components/addfunctionsform.ts
   - src/models/components/addoauthproxyserverrequestbody.ts
@@ -647,6 +650,7 @@ generatedFiles:
   - src/models/components/customdomain.ts
   - src/models/components/deleteglobaltoolvariationresult.ts
   - src/models/components/deployment.ts
+  - src/models/components/deploymentexternalmcp.ts
   - src/models/components/deploymentfunctions.ts
   - src/models/components/deploymentlogevent.ts
   - src/models/components/deploymentpackage.ts
@@ -1144,7 +1148,7 @@ examples:
         header:
           Idempotency-Key: "01jqq0ajmb4qh9eppz48dejr2m"
       requestBody:
-        application/json: {"external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "non_blocking": false}
+        application/json: {"external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "external_mcps": [{"name": "ai.exa/exa", "registry_id": "0a3c30db-c529-4810-ad7a-28eff64064bb", "slug": "<value>"}], "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "non_blocking": false}
       responses:
         "200":
           application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2023-01-07T04:35:31.471Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "functions_tool_count": 5649, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "openapiv3_tool_count": 5649, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
@@ -1155,7 +1159,7 @@ examples:
   evolveDeployment:
     speakeasy-default-evolve-deployment:
       requestBody:
-        application/json: {"non_blocking": false}
+        application/json: {"non_blocking": false, "upsert_external_mcps": [{"name": "ai.exa/exa", "registry_id": "fb7378d0-8d03-460e-bcd1-36af78f7025c", "slug": "<value>"}]}
       responses:
         "200":
           application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2025-12-06T08:41:21.182Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "functions_tool_count": 976608, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "openapiv3_tool_count": 976608, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}

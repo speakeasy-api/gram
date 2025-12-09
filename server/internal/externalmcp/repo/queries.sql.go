@@ -12,6 +12,94 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createDeploymentExternalMCP = `-- name: CreateDeploymentExternalMCP :one
+INSERT INTO deployments_external_mcps (deployment_id, registry_id, name, slug)
+VALUES ($1, $2, $3, $4)
+RETURNING id, deployment_id, registry_id, name, slug, created_at, updated_at
+`
+
+type CreateDeploymentExternalMCPParams struct {
+	DeploymentID uuid.UUID
+	RegistryID   uuid.UUID
+	Name         string
+	Slug         string
+}
+
+type CreateDeploymentExternalMCPRow struct {
+	ID           uuid.UUID
+	DeploymentID uuid.UUID
+	RegistryID   uuid.UUID
+	Name         string
+	Slug         string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) CreateDeploymentExternalMCP(ctx context.Context, arg CreateDeploymentExternalMCPParams) (CreateDeploymentExternalMCPRow, error) {
+	row := q.db.QueryRow(ctx, createDeploymentExternalMCP,
+		arg.DeploymentID,
+		arg.RegistryID,
+		arg.Name,
+		arg.Slug,
+	)
+	var i CreateDeploymentExternalMCPRow
+	err := row.Scan(
+		&i.ID,
+		&i.DeploymentID,
+		&i.RegistryID,
+		&i.Name,
+		&i.Slug,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listDeploymentExternalMCPs = `-- name: ListDeploymentExternalMCPs :many
+SELECT id, deployment_id, registry_id, name, slug, created_at, updated_at
+FROM deployments_external_mcps
+WHERE deployment_id = $1 AND deleted IS FALSE
+ORDER BY created_at ASC
+`
+
+type ListDeploymentExternalMCPsRow struct {
+	ID           uuid.UUID
+	DeploymentID uuid.UUID
+	RegistryID   uuid.UUID
+	Name         string
+	Slug         string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) ListDeploymentExternalMCPs(ctx context.Context, deploymentID uuid.UUID) ([]ListDeploymentExternalMCPsRow, error) {
+	rows, err := q.db.Query(ctx, listDeploymentExternalMCPs, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDeploymentExternalMCPsRow
+	for rows.Next() {
+		var i ListDeploymentExternalMCPsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeploymentID,
+			&i.RegistryID,
+			&i.Name,
+			&i.Slug,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMCPRegistries = `-- name: ListMCPRegistries :many
 SELECT id, name, url, created_at, updated_at
 FROM mcp_registries

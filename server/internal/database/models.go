@@ -137,6 +137,18 @@ type DeploymentStatus struct {
 	UpdatedAt    pgtype.Timestamptz
 }
 
+type DeploymentsExternalMcp struct {
+	ID           uuid.UUID
+	DeploymentID uuid.UUID
+	RegistryID   uuid.UUID
+	Name         string
+	Slug         string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
+}
+
 type DeploymentsFunction struct {
 	ID            uuid.UUID
 	DeploymentID  uuid.UUID
@@ -181,6 +193,16 @@ type EnvironmentEntry struct {
 	EnvironmentID uuid.UUID
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
+}
+
+type ExternalMcpToolDefinition struct {
+	ID            uuid.UUID
+	ExternalMcpID uuid.UUID
+	ToolUrn       string
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	DeletedAt     pgtype.Timestamptz
+	Deleted       bool
 }
 
 type ExternalOauthServerMetadatum struct {
