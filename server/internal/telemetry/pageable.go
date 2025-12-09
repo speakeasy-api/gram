@@ -1,4 +1,4 @@
-package toolmetrics
+package telemetry
 
 type Pagination struct {
 	PerPage    int           `json:"per_page" validate:"required,gte=1,lte=100"`

@@ -1,4 +1,4 @@
-package toolmetrics
+package telemetry
 
 import (
 	"fmt"
