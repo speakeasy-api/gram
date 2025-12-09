@@ -8,19 +8,10 @@
 package server
 
 import (
-	"unicode/utf8"
-
 	instances "github.com/speakeasy-api/gram/server/gen/instances"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
-
-// GetInstanceRequestBody is the type of the "instances" service "getInstance"
-// endpoint HTTP request body.
-type GetInstanceRequestBody struct {
-	// The slug of the environment to load
-	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
-}
 
 // GetInstanceResponseBody is the type of the "instances" service "getInstance"
 // endpoint HTTP response body.
@@ -706,30 +697,12 @@ func NewGetInstanceGatewayErrorResponseBody(res *goa.ServiceError) *GetInstanceG
 }
 
 // NewGetInstanceForm builds a instances service getInstance endpoint payload.
-func NewGetInstanceForm(body *GetInstanceRequestBody, toolsetSlug string, sessionToken *string, projectSlugInput *string, apikeyToken *string) *instances.GetInstanceForm {
+func NewGetInstanceForm(toolsetSlug string, sessionToken *string, projectSlugInput *string, apikeyToken *string) *instances.GetInstanceForm {
 	v := &instances.GetInstanceForm{}
-	if body.EnvironmentSlug != nil {
-		environmentSlug := types.Slug(*body.EnvironmentSlug)
-		v.EnvironmentSlug = &environmentSlug
-	}
 	v.ToolsetSlug = types.Slug(toolsetSlug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ApikeyToken = apikeyToken
 
 	return v
-}
-
-// ValidateGetInstanceRequestBody runs the validations defined on
-// GetInstanceRequestBody
-func ValidateGetInstanceRequestBody(body *GetInstanceRequestBody) (err error) {
-	if body.EnvironmentSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.environment_slug", *body.EnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
-	}
-	if body.EnvironmentSlug != nil {
-		if utf8.RuneCountInString(*body.EnvironmentSlug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.environment_slug", *body.EnvironmentSlug, utf8.RuneCountInString(*body.EnvironmentSlug), 40, false))
-		}
-	}
-	return
 }

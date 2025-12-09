@@ -8,8 +8,6 @@
 package client
 
 import (
-	"encoding/json"
-	"fmt"
 	"unicode/utf8"
 
 	instances "github.com/speakeasy-api/gram/server/gen/instances"
@@ -19,26 +17,8 @@ import (
 
 // BuildGetInstancePayload builds the payload for the instances getInstance
 // endpoint from CLI flags.
-func BuildGetInstancePayload(instancesGetInstanceBody string, instancesGetInstanceToolsetSlug string, instancesGetInstanceSessionToken string, instancesGetInstanceProjectSlugInput string, instancesGetInstanceApikeyToken string) (*instances.GetInstanceForm, error) {
+func BuildGetInstancePayload(instancesGetInstanceToolsetSlug string, instancesGetInstanceSessionToken string, instancesGetInstanceProjectSlugInput string, instancesGetInstanceApikeyToken string) (*instances.GetInstanceForm, error) {
 	var err error
-	var body GetInstanceRequestBody
-	{
-		err = json.Unmarshal([]byte(instancesGetInstanceBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_slug\": \"wtw\"\n   }'")
-		}
-		if body.EnvironmentSlug != nil {
-			err = goa.MergeErrors(err, goa.ValidatePattern("body.environment_slug", *body.EnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
-		}
-		if body.EnvironmentSlug != nil {
-			if utf8.RuneCountInString(*body.EnvironmentSlug) > 40 {
-				err = goa.MergeErrors(err, goa.InvalidLengthError("body.environment_slug", *body.EnvironmentSlug, utf8.RuneCountInString(*body.EnvironmentSlug), 40, false))
-			}
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
 	var toolsetSlug string
 	{
 		toolsetSlug = instancesGetInstanceToolsetSlug
@@ -69,10 +49,6 @@ func BuildGetInstancePayload(instancesGetInstanceBody string, instancesGetInstan
 		}
 	}
 	v := &instances.GetInstanceForm{}
-	if body.EnvironmentSlug != nil {
-		environmentSlug := types.Slug(*body.EnvironmentSlug)
-		v.EnvironmentSlug = &environmentSlug
-	}
 	v.ToolsetSlug = types.Slug(toolsetSlug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

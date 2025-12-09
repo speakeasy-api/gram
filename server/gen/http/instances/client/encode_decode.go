@@ -57,10 +57,6 @@ func EncodeGetInstanceRequest(encoder func(*http.Request) goahttp.Encoder) func(
 		values := req.URL.Query()
 		values.Add("toolset_slug", string(p.ToolsetSlug))
 		req.URL.RawQuery = values.Encode()
-		body := NewGetInstanceRequestBody(p)
-		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("instances", "getInstance", err)
-		}
 		return nil
 	}
 }

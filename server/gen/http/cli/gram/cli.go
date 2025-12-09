@@ -325,7 +325,6 @@ func ParseEndpoint(
 		instancesFlags = flag.NewFlagSet("instances", flag.ContinueOnError)
 
 		instancesGetInstanceFlags                = flag.NewFlagSet("get-instance", flag.ExitOnError)
-		instancesGetInstanceBodyFlag             = instancesGetInstanceFlags.String("body", "REQUIRED", "")
 		instancesGetInstanceToolsetSlugFlag      = instancesGetInstanceFlags.String("toolset-slug", "REQUIRED", "")
 		instancesGetInstanceSessionTokenFlag     = instancesGetInstanceFlags.String("session-token", "", "")
 		instancesGetInstanceProjectSlugInputFlag = instancesGetInstanceFlags.String("project-slug-input", "", "")
@@ -1407,7 +1406,7 @@ func ParseEndpoint(
 			switch epn {
 			case "get-instance":
 				endpoint = c.GetInstance()
-				data, err = instancesc.BuildGetInstancePayload(*instancesGetInstanceBodyFlag, *instancesGetInstanceToolsetSlugFlag, *instancesGetInstanceSessionTokenFlag, *instancesGetInstanceProjectSlugInputFlag, *instancesGetInstanceApikeyTokenFlag)
+				data, err = instancesc.BuildGetInstancePayload(*instancesGetInstanceToolsetSlugFlag, *instancesGetInstanceSessionTokenFlag, *instancesGetInstanceProjectSlugInputFlag, *instancesGetInstanceApikeyTokenFlag)
 			}
 		case "integrations":
 			c := integrationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2684,7 +2683,6 @@ func instancesUsage() {
 func instancesGetInstanceUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] instances get-instance", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -toolset-slug STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -2696,7 +2694,6 @@ func instancesGetInstanceUsage() {
 	fmt.Fprintln(os.Stderr, `Load all relevant data for an instance of a toolset and environment`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -toolset-slug STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
@@ -2704,7 +2701,7 @@ func instancesGetInstanceUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "instances get-instance --body '{\n      \"environment_slug\": \"wtw\"\n   }' --toolset-slug \"gbv\" --session-token \"Ut omnis earum fugit consequatur.\" --project-slug-input \"Autem qui aspernatur rerum natus optio mollitia.\" --apikey-token \"At et eligendi natus architecto.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "instances get-instance --toolset-slug \"wtw\" --session-token \"Aliquam qui vitae adipisci ut.\" --project-slug-input \"Earum fugit consequatur eum autem qui aspernatur.\" --apikey-token \"Natus optio mollitia adipisci at et.\"")
 }
 
 // integrationsUsage displays the usage of the integrations command and its

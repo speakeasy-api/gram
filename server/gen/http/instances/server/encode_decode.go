@@ -10,7 +10,6 @@ package server
 import (
 	"context"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 	"unicode/utf8"
@@ -38,30 +37,11 @@ func EncodeGetInstanceResponse(encoder func(context.Context, http.ResponseWriter
 func DecodeGetInstanceRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*instances.GetInstanceForm, error) {
 	return func(r *http.Request) (*instances.GetInstanceForm, error) {
 		var (
-			body GetInstanceRequestBody
-			err  error
-		)
-		err = decoder(r).Decode(&body)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil, goa.MissingPayloadError()
-			}
-			var gerr *goa.ServiceError
-			if errors.As(err, &gerr) {
-				return nil, gerr
-			}
-			return nil, goa.DecodePayloadError(err.Error())
-		}
-		err = ValidateGetInstanceRequestBody(&body)
-		if err != nil {
-			return nil, err
-		}
-
-		var (
 			toolsetSlug      string
 			sessionToken     *string
 			projectSlugInput *string
 			apikeyToken      *string
+			err              error
 		)
 		toolsetSlug = r.URL.Query().Get("toolset_slug")
 		if toolsetSlug == "" {
@@ -86,7 +66,7 @@ func DecodeGetInstanceRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		if err != nil {
 			return nil, err
 		}
-		payload := NewGetInstanceForm(&body, toolsetSlug, sessionToken, projectSlugInput, apikeyToken)
+		payload := NewGetInstanceForm(toolsetSlug, sessionToken, projectSlugInput, apikeyToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

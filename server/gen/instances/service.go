@@ -52,8 +52,6 @@ type GetInstanceForm struct {
 	ProjectSlugInput *string
 	// The slug of the toolset to load
 	ToolsetSlug types.Slug
-	// The slug of the environment to load
-	EnvironmentSlug *types.Slug
 }
 
 // GetInstanceResult is the result type of the instances service getInstance

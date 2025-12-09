@@ -45,7 +45,6 @@ var GetInstanceForm = Type("GetInstanceForm", func() {
 	security.ByKeyPayload()
 	security.ProjectPayload()
 	Attribute("toolset_slug", shared.Slug, "The slug of the toolset to load")
-	Attribute("environment_slug", shared.Slug, "The slug of the environment to load")
 	Required("toolset_slug")
 })
 

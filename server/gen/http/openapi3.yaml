@@ -4180,12 +4180,6 @@ paths:
                   schema:
                     description: API Key header
                     type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/GetInstanceForm2'
-                required: true
             responses:
                 "200":
                     content:
@@ -10806,11 +10800,6 @@ components:
             properties:
                 apikey_token:
                     type: string
-                environment_slug:
-                    type: string
-                    description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9_-]{1,128}$
-                    maxLength: 40
                 project_slug_input:
                     type: string
                 session_token:
@@ -10822,14 +10811,6 @@ components:
                     maxLength: 40
             required:
                 - toolset_slug
-        GetInstanceForm2:
-            type: object
-            properties:
-                environment_slug:
-                    type: string
-                    description: The slug of the environment to load
-                    pattern: ^[a-z0-9_-]{1,128}$
-                    maxLength: 40
         GetInstanceResult:
             type: object
             properties:

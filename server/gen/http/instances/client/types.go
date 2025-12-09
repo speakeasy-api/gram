@@ -13,13 +13,6 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// GetInstanceRequestBody is the type of the "instances" service "getInstance"
-// endpoint HTTP request body.
-type GetInstanceRequestBody struct {
-	// The slug of the environment to load
-	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
-}
-
 // GetInstanceResponseBody is the type of the "instances" service "getInstance"
 // endpoint HTTP response body.
 type GetInstanceResponseBody struct {
@@ -487,17 +480,6 @@ type FunctionEnvironmentVariableResponseBody struct {
 type InstanceMcpServerResponseBody struct {
 	// The address of the MCP server
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
-}
-
-// NewGetInstanceRequestBody builds the HTTP request body from the payload of
-// the "getInstance" endpoint of the "instances" service.
-func NewGetInstanceRequestBody(p *instances.GetInstanceForm) *GetInstanceRequestBody {
-	body := &GetInstanceRequestBody{}
-	if p.EnvironmentSlug != nil {
-		environmentSlug := string(*p.EnvironmentSlug)
-		body.EnvironmentSlug = &environmentSlug
-	}
-	return body
 }
 
 // NewGetInstanceResultOK builds a "instances" service "getInstance" endpoint
