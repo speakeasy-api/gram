@@ -43,29 +43,13 @@ function Test-CommandExists {
 }
 
 function Get-SystemArchitecture {
-    if ($IsWindows) {
-        $arch = [System.Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE")
-        switch ($arch) {
-            "AMD64" { return "amd64" }
-            "ARM64" { return "arm64" }
-            "x86" { return "386" }
-            default {
-                Write-ErrorMsg "Unsupported architecture: $arch"
-            }
-        }
-    }
-    else {
-        # Use uname on Linux/macOS
-        $arch = uname -m
-        switch ($arch) {
-            "x86_64" { return "amd64" }
-            "aarch64" { return "arm64" }
-            "arm64" { return "arm64" }
-            "i386" { return "386" }
-            "i686" { return "386" }
-            default {
-                Write-ErrorMsg "Unsupported architecture: $arch"
-            }
+    $arch = [System.Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE")
+    switch ($arch) {
+        "AMD64" { return "amd64" }
+        "ARM64" { return "arm64" }
+        "x86" { return "386" }
+        default {
+            Write-ErrorMsg "Unsupported architecture: $arch"
         }
     }
 }
@@ -168,15 +152,11 @@ function Install-Binary {
 function Main {
     Write-Info "Installing Gram CLI..."
 
-    # Detect system
-    $os = if ($IsWindows) { "windows" }
-          elseif ($IsLinux) { "linux" }
-          elseif ($IsMacOS) { "darwin" }
-          else { Write-ErrorMsg "Unsupported operating system" }
+    # This script is Windows-only
+    $os = "windows"
 
     $arch = Get-SystemArchitecture
 
-    Write-Info "Detected OS: $os"
     Write-Info "Detected architecture: $arch"
 
     # Get latest tag (name@version)
@@ -215,37 +195,29 @@ function Main {
             Write-ErrorMsg "Failed to extract archive: $_"
         }
 
-        # Determine install location and binary name based on OS
-        if ($IsWindows) {
-            $installDir = Join-Path $env:LOCALAPPDATA "Programs\gram"
-            $binaryName = "gram.exe"
-        }
-        else {
-            $installDir = "/usr/local/bin"
-            $binaryName = "gram"
-        }
+        # Determine install location and binary name (Windows-only)
+        $installDir = Join-Path $env:LOCALAPPDATA "Programs\gram"
+        $binaryName = "gram.exe"
 
         $binaryPath = Join-Path $tmpDir $binaryName
 
         # Install binary
         Install-Binary -BinaryPath $binaryPath -InstallDir $installDir
 
-        # Add to PATH if not already present (Windows only)
-        if ($IsWindows) {
-            $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
-            if ($userPath -notlike "*$installDir*") {
-                Write-Info "Adding $installDir to user PATH..."
-                [System.Environment]::SetEnvironmentVariable(
-                    "Path",
-                    "$userPath;$installDir",
-                    "User"
-                )
-                Write-Warning "Please restart your terminal for PATH changes to take effect"
-            }
-
-            # Reload PATH for verification on Windows
-            $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+        # Add to PATH if not already present
+        $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+        if ($userPath -notlike "*$installDir*") {
+            Write-Info "Adding $installDir to user PATH..."
+            [System.Environment]::SetEnvironmentVariable(
+                "Path",
+                "$userPath;$installDir",
+                "User"
+            )
+            Write-Warning "Please restart your terminal for PATH changes to take effect"
         }
+
+        # Reload PATH for verification
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
         # Verify installation
         if (Test-CommandExists "gram") {
@@ -259,12 +231,7 @@ function Main {
         else {
             Write-Host ""
             Write-Host "Note: " -ForegroundColor Yellow -NoNewline
-            if ($IsWindows) {
-                Write-Host "Please restart your terminal for the installation to take effect."
-            }
-            else {
-                Write-Host "You may need to add $installDir to your PATH."
-            }
+            Write-Host "Please restart your terminal for the installation to take effect."
             Write-Host "Then run 'gram --help' to get started."
         }
     }
