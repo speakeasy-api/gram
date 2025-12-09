@@ -182,7 +182,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 };
 
 const AuthHandler = ({ children }: { children: React.ReactNode }) => {
-  const navigate = useNavigate();
   const { orgSlug, projectSlug } = useSlugs();
   const [searchParams] = useSearchParams();
 
