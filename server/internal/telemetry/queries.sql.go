@@ -335,7 +335,8 @@ func (q *Queries) ListToolLogs(ctx context.Context, arg ListToolLogsParams) (*To
 	if err != nil {
 		return nil, fmt.Errorf("query tool logs: %w", err)
 	}
-	defer rows.Close()
+
+	defer o11y.LogDefer(ctx, q.logger, func() error { return rows.Close() })
 
 	var results []ToolLog
 	for rows.Next() {

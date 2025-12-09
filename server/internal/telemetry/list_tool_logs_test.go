@@ -120,6 +120,7 @@ func TestListToolLogs(t *testing.T) {
 				Limit:     10,
 			},
 			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
 				require.Len(t, result.Logs, 4)
@@ -139,6 +140,7 @@ func TestListToolLogs(t *testing.T) {
 				Limit:        10,
 			},
 			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
 				require.Len(t, result.Logs, 3)
@@ -156,6 +158,7 @@ func TestListToolLogs(t *testing.T) {
 				Limit:      10,
 			},
 			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
 				require.Len(t, result.Logs, 3)
@@ -173,6 +176,7 @@ func TestListToolLogs(t *testing.T) {
 				Limit:     10,
 			},
 			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
 				require.Len(t, result.Logs, 1)
@@ -191,6 +195,7 @@ func TestListToolLogs(t *testing.T) {
 				Limit:     10,
 			},
 			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
 				require.Len(t, result.Logs, 2)
@@ -211,6 +216,7 @@ func TestListToolLogs(t *testing.T) {
 				Limit:     10,
 			},
 			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
 				require.Len(t, result.Logs, 2)
@@ -230,6 +236,7 @@ func TestListToolLogs(t *testing.T) {
 				Limit:     3,
 			},
 			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
 				require.Len(t, result.Logs, 2)
@@ -249,6 +256,7 @@ func TestListToolLogs(t *testing.T) {
 				Limit:     10,
 			},
 			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
 				require.Len(t, result.Logs, 4)
@@ -269,6 +277,7 @@ func TestListToolLogs(t *testing.T) {
 				Limit:     10,
 			},
 			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
 				require.Len(t, result.Logs, 4)
@@ -289,6 +298,7 @@ func TestListToolLogs(t *testing.T) {
 				Limit:     10,
 			},
 			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
 				require.Len(t, result.Logs, 2)
@@ -308,6 +318,7 @@ func TestListToolLogs(t *testing.T) {
 				Limit:        10,
 			},
 			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
 				require.Len(t, result.Logs, 2)
@@ -317,6 +328,7 @@ func TestListToolLogs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := queries.ListToolLogs(ctx, tt.params)
 			tt.assert(t, result, err)
 		})
