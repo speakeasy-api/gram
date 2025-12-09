@@ -383,6 +383,65 @@ func newBillingProvider(
 	}
 }
 
+func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*assets.TigrisStore, func(context.Context) error, error) {
+	nilShutdown := func(context.Context) error { return nil }
+
+	switch provider := c.String("functions-provider"); provider {
+	case "local":
+		tmpDir, err := os.MkdirTemp("", "gram-tigris-")
+		if err != nil {
+			return nil, nilShutdown, fmt.Errorf("create temp dir for mock tigris store: %w", err)
+		}
+
+		root, err := os.OpenRoot(tmpDir)
+		if err != nil {
+			return nil, nilShutdown, fmt.Errorf("open temp dir for mock tigris store: %w", err)
+		}
+
+		shutdown := func(ctx context.Context) error {
+			if err := root.Close(); err != nil {
+				return fmt.Errorf("close temp dir for mock tigris store: %w", err)
+			}
+			if err := os.RemoveAll(tmpDir); err != nil {
+				return fmt.Errorf("remove temp dir for mock tigris store: %w", err)
+			}
+			return nil
+		}
+
+		store := assets.NewFSBlobStore(logger, root)
+
+		return assets.NewTigrisStore(store), shutdown, nil
+	case "flyio":
+		tigrisBucketURI := c.String("functions-tigris-bucket-uri")
+		tigrisKey := c.String("functions-tigris-key")
+		tigrisSecret := c.String("functions-tigris-secret")
+
+		if err := inv.Check(
+			"tigris flags",
+			"tigris bucket uri must be set", tigrisBucketURI != "",
+			"tigris key must be set", tigrisKey != "",
+			"tigris secret must be set", tigrisSecret != "",
+		); err != nil {
+			return nil, nilShutdown, fmt.Errorf("invalid configuration for tigris: %w", err)
+		}
+
+		store, err := assets.NewS3BlobStore(ctx, logger, tigrisBucketURI, assets.S3BlobStoreOptions{
+			BaseEndpoint: "https://t3.storage.dev",
+			Region:       "auto",
+			UsePathStyle: false,
+			AccessKey:    tigrisKey,
+			AccessSecret: tigrisSecret,
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("create tigris blob store: %w", err)
+		}
+
+		return assets.NewTigrisStore(store), nilShutdown, nil
+	default:
+		return nil, nilShutdown, fmt.Errorf("unrecognized functions provider: %s", provider)
+	}
+}
+
 func newFunctionOrchestrator(
 	c *cli.Context,
 	logger *slog.Logger,
