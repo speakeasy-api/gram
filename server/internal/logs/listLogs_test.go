@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/gen/logs"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/stretchr/testify/require"
 )
 
@@ -193,7 +193,7 @@ func TestListLogs_TimeRangeFilter(t *testing.T) {
 		id, err := fromTimeV7(baseTime.Add(time.Duration(i) * time.Minute))
 		require.NoError(t, err)
 
-		err = ti.chClient.Log(ctx, toolmetrics.ToolHTTPRequest{
+		err = ti.chClient.Log(ctx, telemetry.ToolHTTPRequest{
 			ID:                id.String(),
 			Ts:                baseTime.Add(time.Duration(i) * time.Minute),
 			OrganizationID:    orgID,
@@ -201,7 +201,7 @@ func TestListLogs_TimeRangeFilter(t *testing.T) {
 			DeploymentID:      deploymentID,
 			ToolID:            toolID,
 			ToolURN:           "urn:tool:test",
-			ToolType:          toolmetrics.ToolTypeHTTP,
+			ToolType:          telemetry.ToolTypeHTTP,
 			TraceID:           id.String()[:32],
 			SpanID:            id.String()[:16],
 			HTTPMethod:        "GET",
@@ -324,7 +324,7 @@ func TestListLogs_VerifyLogFields(t *testing.T) {
 	baseTime := time.Unix(id.Time().UnixTime()).
 		UTC().Add(-10 * time.Minute)
 
-	err = ti.chClient.Log(ctx, toolmetrics.ToolHTTPRequest{
+	err = ti.chClient.Log(ctx, telemetry.ToolHTTPRequest{
 		ID:                id.String(),
 		Ts:                baseTime,
 		OrganizationID:    orgID,
@@ -332,7 +332,7 @@ func TestListLogs_VerifyLogFields(t *testing.T) {
 		DeploymentID:      deploymentID,
 		ToolID:            toolID,
 		ToolURN:           toolURN,
-		ToolType:          toolmetrics.ToolTypeHTTP,
+		ToolType:          telemetry.ToolTypeHTTP,
 		TraceID:           traceID,
 		SpanID:            spanID,
 		HTTPMethod:        "POST",
@@ -408,7 +408,7 @@ func insertTestLogs(t *testing.T, ctx context.Context, ti *testInstance, project
 		id, err := fromTimeV7(baseTime.Add(time.Duration(i) * time.Minute))
 		require.NoError(t, err)
 
-		err = ti.chClient.Log(ctx, toolmetrics.ToolHTTPRequest{
+		err = ti.chClient.Log(ctx, telemetry.ToolHTTPRequest{
 			ID:                id.String(),
 			Ts:                baseTime.Add(time.Duration(i) * time.Minute),
 			OrganizationID:    orgID,
@@ -416,7 +416,7 @@ func insertTestLogs(t *testing.T, ctx context.Context, ti *testInstance, project
 			DeploymentID:      deploymentID,
 			ToolID:            toolID,
 			ToolURN:           "urn:tool:test",
-			ToolType:          toolmetrics.ToolTypeHTTP,
+			ToolType:          telemetry.ToolTypeHTTP,
 			TraceID:           id.String()[:32],
 			SpanID:            id.String()[:16],
 			HTTPMethod:        "GET",
