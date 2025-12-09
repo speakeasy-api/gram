@@ -86,11 +86,12 @@ export const CodeBlock = ({
   const mounted = useRef(false);
 
   useEffect(() => {
+    mounted.current = true;
+
     highlightCode(code, language, showLineNumbers).then(([light, dark]) => {
-      if (!mounted.current) {
+      if (mounted.current) {
         setHtml(light);
         setDarkHtml(dark);
-        mounted.current = true;
       }
     });
 
