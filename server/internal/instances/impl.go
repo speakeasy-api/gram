@@ -135,10 +135,6 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		return nil, err
 	}
 
-	if toolset.DefaultEnvironmentSlug == nil && payload.EnvironmentSlug == nil {
-		return nil, oops.E(oops.CodeInvalid, nil, "environment is required").Log(ctx, s.logger)
-	}
-
 	promptTemplates := make([]*types.PromptTemplate, len(toolset.PromptTemplates))
 	for i, template := range toolset.PromptTemplates {
 		promptTemplates[i] = &types.PromptTemplate{
