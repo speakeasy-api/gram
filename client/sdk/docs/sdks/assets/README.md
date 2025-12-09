@@ -1,5 +1,4 @@
 # Assets
-(*assets*)
 
 ## Overview
 

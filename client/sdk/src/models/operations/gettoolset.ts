@@ -15,9 +15,15 @@ export type GetToolsetSecurityOption2 = {
   projectSlugHeaderGramProject: string;
 };
 
+export type GetToolsetSecurityOption3 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
 export type GetToolsetSecurity = {
   option1?: GetToolsetSecurityOption1 | undefined;
   option2?: GetToolsetSecurityOption2 | undefined;
+  option3?: GetToolsetSecurityOption3 | undefined;
 };
 
 export type GetToolsetRequest = {
@@ -98,9 +104,39 @@ export function getToolsetSecurityOption2ToJSON(
 }
 
 /** @internal */
+export type GetToolsetSecurityOption3$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const GetToolsetSecurityOption3$outboundSchema: z.ZodType<
+  GetToolsetSecurityOption3$Outbound,
+  z.ZodTypeDef,
+  GetToolsetSecurityOption3
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+export function getToolsetSecurityOption3ToJSON(
+  getToolsetSecurityOption3: GetToolsetSecurityOption3,
+): string {
+  return JSON.stringify(
+    GetToolsetSecurityOption3$outboundSchema.parse(getToolsetSecurityOption3),
+  );
+}
+
+/** @internal */
 export type GetToolsetSecurity$Outbound = {
   Option1?: GetToolsetSecurityOption1$Outbound | undefined;
   Option2?: GetToolsetSecurityOption2$Outbound | undefined;
+  Option3?: GetToolsetSecurityOption3$Outbound | undefined;
 };
 
 /** @internal */
@@ -111,10 +147,12 @@ export const GetToolsetSecurity$outboundSchema: z.ZodType<
 > = z.object({
   option1: z.lazy(() => GetToolsetSecurityOption1$outboundSchema).optional(),
   option2: z.lazy(() => GetToolsetSecurityOption2$outboundSchema).optional(),
+  option3: z.lazy(() => GetToolsetSecurityOption3$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
     option1: "Option1",
     option2: "Option2",
+    option3: "Option3",
   });
 });
 

@@ -1,5 +1,4 @@
 # Resources
-(*resources*)
 
 ## Overview
 
