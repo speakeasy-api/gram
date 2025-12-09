@@ -56,9 +56,6 @@ func EncodeGetInstanceRequest(encoder func(*http.Request) goahttp.Encoder) func(
 		}
 		values := req.URL.Query()
 		values.Add("toolset_slug", string(p.ToolsetSlug))
-		if p.EnvironmentSlug != nil {
-			values.Add("environment_slug", string(*p.EnvironmentSlug))
-		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -545,40 +542,12 @@ func unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentV
 	return res
 }
 
-// unmarshalEnvironmentResponseBodyToTypesEnvironment builds a value of type
-// *types.Environment from a value of type *EnvironmentResponseBody.
-func unmarshalEnvironmentResponseBodyToTypesEnvironment(v *EnvironmentResponseBody) *types.Environment {
-	res := &types.Environment{
-		ID:             *v.ID,
-		OrganizationID: *v.OrganizationID,
-		ProjectID:      *v.ProjectID,
-		Name:           *v.Name,
-		Slug:           types.Slug(*v.Slug),
-		Description:    v.Description,
-		CreatedAt:      *v.CreatedAt,
-		UpdatedAt:      *v.UpdatedAt,
-	}
-	res.Entries = make([]*types.EnvironmentEntry, len(v.Entries))
-	for i, val := range v.Entries {
-		if val == nil {
-			res.Entries[i] = nil
-			continue
-		}
-		res.Entries[i] = unmarshalEnvironmentEntryResponseBodyToTypesEnvironmentEntry(val)
-	}
-
-	return res
-}
-
-// unmarshalEnvironmentEntryResponseBodyToTypesEnvironmentEntry builds a value
-// of type *types.EnvironmentEntry from a value of type
-// *EnvironmentEntryResponseBody.
-func unmarshalEnvironmentEntryResponseBodyToTypesEnvironmentEntry(v *EnvironmentEntryResponseBody) *types.EnvironmentEntry {
-	res := &types.EnvironmentEntry{
-		Name:      *v.Name,
-		Value:     *v.Value,
-		CreatedAt: *v.CreatedAt,
-		UpdatedAt: *v.UpdatedAt,
+// unmarshalInstanceMcpServerResponseBodyToInstancesInstanceMcpServer builds a
+// value of type *instances.InstanceMcpServer from a value of type
+// *InstanceMcpServerResponseBody.
+func unmarshalInstanceMcpServerResponseBodyToInstancesInstanceMcpServer(v *InstanceMcpServerResponseBody) *instances.InstanceMcpServer {
+	res := &instances.InstanceMcpServer{
+		URL: *v.URL,
 	}
 
 	return res

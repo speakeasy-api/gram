@@ -1,5 +1,4 @@
 # Slack
-(*slack*)
 
 ## Overview
 

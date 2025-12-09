@@ -95,7 +95,6 @@ async function $do(
   const path = pathToFunc("/rpc/instances.get")();
 
   const query = encodeFormQuery({
-    "environment_slug": payload.environment_slug,
     "toolset_slug": payload.toolset_slug,
   });
 
