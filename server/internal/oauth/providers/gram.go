@@ -32,12 +32,13 @@ func (p *GramProvider) BuildAuthorizationURL(ctx context.Context, params AuthURL
 	urlParams.Add("return_url", params.CallbackURL)
 	urlParams.Add("state", params.State)
 
+	// !TODO: Check why these are empty
 	// Set scope from provider configuration or request
-	if len(params.ScopesSupported) > 0 {
-		// Gram provider doesn't use scopes in the same way, but we'll include it if specified
-	} else if params.Scope != "" {
-		// Include scope if provided in request
-	}
+	// if len(params.ScopesSupported) > 0 {
+	// Gram provider doesn't use scopes in the same way, but we'll include it if specified
+	// } else if params.Scope != "" {
+	// Include scope if provided in request
+	// }
 
 	gramAuthURL := fmt.Sprintf("%s/v1/speakeasy_provider/login?%s",
 		params.SpeakeasyServerAddr,

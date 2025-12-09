@@ -294,6 +294,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 			State:               string(oauthReqInfoJSON),
 			ScopesSupported:     provider.ScopesSupported,
 			SpeakeasyServerAddr: s.cfg.SpeakeasyServerAddress,
+			ClientID:            "",
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to build gram OAuth URL").Log(ctx, s.logger)
@@ -599,7 +600,6 @@ func (s *Service) parseBasicAuth(authHeader string) (string, string, bool) {
 
 	return parts[0], parts[1], true
 }
-
 
 // ValidateAccessToken validates an OAuth access token
 func (s *Service) ValidateAccessToken(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*Token, error) {
