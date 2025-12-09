@@ -36,6 +36,7 @@ CREATE INDEX IF NOT EXISTS idx_tool_urn_exact ON http_requests_raw (tool_urn) TY
 CREATE INDEX IF NOT EXISTS idx_tool_urn_substring ON http_requests_raw (tool_urn) TYPE ngrambf_v1(4, 30720, 3, 0) GRANULARITY 4;
 
 CREATE TABLE IF NOT EXISTS tool_logs (
+    id UUID DEFAULT generateUUIDv7() COMMENT 'Unique identifier for the log entry.',
     timestamp DateTime64(3, 'UTC') COMMENT 'Timestamp at which log was generated.' CODEC(Delta, ZSTD),
     instance String COMMENT 'Name of the machine instance that generated the log (e.g. snowy-water-123).' CODEC(ZSTD),
     level LowCardinality(String) COMMENT 'Log level.',
