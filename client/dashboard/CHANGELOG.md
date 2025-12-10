@@ -1,5 +1,19 @@
 # dashboard
 
+## 0.22.1
+
+### Patch Changes
+
+- a5d6df2: fix playground tool parameters not rendering on initial load and add horizontal scroll to responses
+- 013d15d: Restore chat history loading in playground after v5 AI SDK upgrade
+- 2667ecf: Fixed radix warning about Dialog.Content not having a Dialog.Title child.
+- 90a3b7b: Allow instances.get to return mcp server representations of a toolset. Remove unneeded environment for instances get
+- c8a0376: - fix SSE streaming response truncation due to chunk boundary misalignment
+  - `addToolResult()` was called following tool execution, the AI SDK v5 wasn't automatically triggering a follow-up LLM request with the tool results. This is a known limitation with custom transports (vercel/ai#9178).
+- 1a63676: Replace Shiki with Monaco Editor for viewing large inline specs
+- e9988d8: Ensure stable QueryClient is used for lifetime of web app especially during
+  development mode hot reloads.
+
 ## 0.22.0
 
 ### Minor Changes
