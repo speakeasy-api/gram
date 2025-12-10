@@ -10,10 +10,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/hashicorp/go-cleanhttp"
 
+	"github.com/speakeasy-api/gram/functions/internal/attr"
 	"github.com/speakeasy-api/gram/functions/internal/auth"
 	"github.com/speakeasy-api/gram/functions/internal/javascript"
 	"github.com/speakeasy-api/gram/functions/internal/o11y"
@@ -206,7 +208,7 @@ func prepareProgram(workDir string, language string) (string, []string, error) {
 // found, it reads the asset ID from the .lazy file, fetches the asset from
 // the server using a pre-signed URL to a blob store, writes it to the original
 // filename, and returns the filename.
-func resolveLazyFile(ctx context.Context, logger *slog.Logger, ident auth.RunnerIdentity, serverClient *funcclient.Client, filename string) (string, error) {
+func resolveLazyFile(ctx context.Context, logger *slog.Logger, ident auth.RunnerIdentity, serverClient *funcclient.Client, filename string) (dstfile string, err error) {
 	var rootCause error
 	stat, err := os.Stat(filename)
 	switch {
@@ -240,11 +242,14 @@ func resolveLazyFile(ctx context.Context, logger *slog.Logger, ident auth.Runner
 		return "", fmt.Errorf("read asset id %s: empty file", lazy)
 	}
 
+	logger = logger.With(attr.SlogAssetID(string(assetID)))
+
 	token, err := auth.NewServerJWT(ident, jwt.MapClaims{})
 	if err != nil {
 		return "", fmt.Errorf("create server jwt: %w", err)
 	}
 
+	apistart := time.Now()
 	pres, err := serverClient.GetSignedAssetURL(ctx, &funcclient.GetSignedAssetURLPayload{
 		FunctionToken: &token,
 		AssetID:       string(assetID),
@@ -252,7 +257,10 @@ func resolveLazyFile(ctx context.Context, logger *slog.Logger, ident auth.Runner
 	if err != nil {
 		return "", fmt.Errorf("get signed asset url %s: %w", assetID, err)
 	}
+	apielapsed := time.Since(apistart)
+	logger.InfoContext(ctx, "fetched signed asset URL", attr.SlogDuration(apielapsed))
 
+	blobstart := time.Now()
 	res, err := cleanhttp.DefaultClient().Get(pres.URL)
 	if err != nil {
 		return "", fmt.Errorf("download asset %s: %w", assetID, err)
@@ -285,6 +293,9 @@ func resolveLazyFile(ctx context.Context, logger *slog.Logger, ident auth.Runner
 	if err != nil {
 		return "", fmt.Errorf("write asset to file %s: %w", filename, err)
 	}
+
+	blobelapsed := time.Since(blobstart)
+	logger.InfoContext(ctx, "downloaded large asset", attr.SlogDuration(blobelapsed))
 
 	return filename, nil
 }
