@@ -42,6 +42,7 @@ const (
 	functionAuthSecretVar = "GRAM_FUNCTION_AUTH_SECRET"
 	defaultFlyBaseURL     = "https://api.fly.io"
 	defaultFlyMachinesURL = "https://api.machines.dev"
+	largeFunctionLimit    = 700 * 1024 // 700 KiB
 )
 
 type FlyRunnerOptions struct {
@@ -773,15 +774,12 @@ func (f *FlyRunner) serializeAssets(
 	useTigris := false
 	for _, asset := range assets {
 		total += asset.ContentLength
-		if total >= 700*1024 {
+		if total >= largeFunctionLimit {
 			useTigris = true
+			msg := fmt.Sprintf("copying function assets to blob storage: total function assets greater than %gKiB", float64(largeFunctionLimit)/1024)
+			logger.InfoContext(ctx, msg)
 			break
 		}
-	}
-
-	if useTigris {
-		logger.InfoContext(ctx, "total function assets greater than 700KiB")
-		logger.InfoContext(ctx, "copying function assets to blob storage")
 	}
 
 	files := make([]*fly.File, 0, len(assets))

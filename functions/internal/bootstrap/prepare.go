@@ -233,7 +233,7 @@ func resolveLazyFile(ctx context.Context, logger *slog.Logger, ident auth.Runner
 		if rootCause != nil {
 			return "", fmt.Errorf("file does not exist: %s: %w", filename, rootCause)
 		}
-		return "", fmt.Errorf("file does not exist: %s: %w", lazy, rootCause)
+		return "", fmt.Errorf("read %s: %w", lazy, err)
 	case err != nil:
 		return "", fmt.Errorf("read %s: %w", lazy, err)
 	}
