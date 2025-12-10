@@ -339,7 +339,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	interceptor := newResponseInterceptor(w)
 
 	err = s.toolProxy.Do(ctx, interceptor, requestBody, gateway.ToolCallEnv{
-		SystemEnv:  gateway.CIEnvFrom(systemConfig),
+		SystemEnv:  systemConfig,
 		UserConfig: ciEnv,
 	}, plan, toolCallLogger)
 	if err != nil {

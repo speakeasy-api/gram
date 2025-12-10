@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"strings"
 
 	"github.com/google/uuid"
@@ -119,7 +118,7 @@ func (e *EnvironmentEntries) LoadToolsetEnv(ctx context.Context, projectID uuid.
 // LoadSystemEnv loads and merges source and toolset environments.
 // Merges in order: source env (base) -> toolset env (override).
 // Returns empty map if neither environment exists.
-func (e *EnvironmentEntries) LoadSystemEnv(ctx context.Context, projectID uuid.UUID, toolsetID uuid.UUID, sourceKind string, sourceSlug string) (map[string]string, error) {
+func (e *EnvironmentEntries) LoadSystemEnv(ctx context.Context, projectID uuid.UUID, toolsetID uuid.UUID, sourceKind string, sourceSlug string) (*gateway.CaseInsensitiveEnv, error) {
 	// Load source environment (tool-specific)
 	sourceEnv, err := e.LoadSourceEnv(ctx, projectID, sourceKind, sourceSlug)
 	if err != nil {
@@ -133,9 +132,13 @@ func (e *EnvironmentEntries) LoadSystemEnv(ctx context.Context, projectID uuid.U
 	}
 
 	// Merge: source env (base) + toolset env (override)
-	systemEnv := make(map[string]string)
-	maps.Copy(systemEnv, sourceEnv)
-	maps.Copy(systemEnv, toolsetEnv)
+	systemEnv := gateway.NewCaseInsensitiveEnv()
+	for k, v := range sourceEnv {
+		systemEnv.Set(k, v)
+	}
+	for k, v := range toolsetEnv {
+		systemEnv.Set(k, v)
+	}
 
 	return systemEnv, nil
 }

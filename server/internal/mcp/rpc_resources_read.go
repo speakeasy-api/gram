@@ -170,7 +170,7 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 
 	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), gateway.ToolCallEnv{
 		UserConfig: userConfig,
-		SystemEnv:  gateway.CIEnvFrom(systemConfig),
+		SystemEnv:  systemConfig,
 	}, plan, toolCallLogger)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").Log(ctx, logger)
