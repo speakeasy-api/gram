@@ -26,16 +26,3 @@ type Provider interface {
 		serverURL *url.URL,
 	) (*TokenExchangeResult, error)
 }
-
-const (
-	ProviderErrorAccessDenied = iota
-)
-
-type ProviderError struct {
-	message string
-	code    string
-}
-
-func (e *ProviderError) Error() string {
-	return e.code
-}

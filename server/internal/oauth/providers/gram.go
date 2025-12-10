@@ -27,7 +27,7 @@ func NewGramProvider(logger *slog.Logger, sessions *sessions.Manager) *GramProvi
 	}
 }
 
-var AccessDeniedError = errors.New("user does not have access to the requested organization")
+var ErrAccessDenied = errors.New("user does not have access to the requested organization")
 
 // ExchangeToken exchanges an authorization code for an access token from Gram
 func (p *GramProvider) ExchangeToken(
@@ -69,7 +69,7 @@ func (p *GramProvider) ExchangeToken(
 			attr.SlogOAuthProvider(provider.Slug),
 			attr.SlogUserID(userInfo.UserID),
 			attr.SlogOrganizationID(toolset.OrganizationID))
-		return nil, AccessDeniedError
+		return nil, ErrAccessDenied
 	}
 
 	// Use idToken as access token for gram providers
@@ -85,5 +85,5 @@ func IsAccessDeniedError(err error) bool {
 		return false
 	}
 
-	return errors.Is(err, AccessDeniedError)
+	return errors.Is(err, ErrAccessDenied)
 }
