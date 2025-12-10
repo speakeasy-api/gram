@@ -23,6 +23,8 @@ const (
 type ToolMetricsProvider interface {
 	// List tool call logs
 	ListHTTPRequests(ctx context.Context, opts repo.ListToolLogsOptions) (*repo.ListResult, error)
+	// List structured tool logs
+	ListToolLogs(ctx context.Context, params repo.ListToolLogsParams) (*repo.ToolLogsListResult, error)
 	// Log tool call request/response
 	LogHTTPRequest(context.Context, repo.ToolHTTPRequest) error
 	// ShouldLog returns true if the tool call should be logged
