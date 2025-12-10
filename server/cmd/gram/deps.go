@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -450,6 +451,7 @@ func newFunctionOrchestrator(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	assetStore assets.BlobStore,
+	tigrisStore *assets.TigrisStore,
 	enc *encryption.Client,
 ) (functions.Orchestrator, func(context.Context) error, error) {
 	nilShutdown := func(context.Context) error { return nil }
@@ -476,6 +478,7 @@ func newFunctionOrchestrator(
 
 		return functions.NewLocalRunner(codeRoot), shutdown, nil
 	case "flyio":
+		surl := c.String("server-url")
 		tokenstr := c.String("functions-flyio-api-token")
 		ociImage := c.String("functions-runner-oci-image")
 		defaultOrg := c.String("functions-flyio-org")
@@ -483,12 +486,18 @@ func newFunctionOrchestrator(
 
 		if err := inv.Check(
 			"flyio flags",
-			"token is set", tokenstr != "",
-			"oci image is set", ociImage != "",
-			"default org is set", defaultOrg != "",
-			"default region is set", defaultRegion != "",
+			"server url must be set", surl != "",
+			"token must be set", tokenstr != "",
+			"oci image must be set", ociImage != "",
+			"default org must be set", defaultOrg != "",
+			"default region must be set", defaultRegion != "",
 		); err != nil {
 			return nil, nilShutdown, fmt.Errorf("invalid configuration for functions: %w", err)
+		}
+
+		serverURL, err := url.Parse(surl)
+		if err != nil {
+			return nil, nilShutdown, fmt.Errorf("invalid server url: %w", err)
 		}
 
 		tpl := fmt.Sprintf("%s:{{.Version}}-{{.Runtime.OCITag}}", ociImage)
@@ -500,8 +509,10 @@ func newFunctionOrchestrator(
 		return functions.NewFlyRunner(
 			logger,
 			tracerProvider,
+			serverURL,
 			db,
 			assetStore,
+			tigrisStore,
 			imgSelector,
 			enc,
 			functions.FlyRunnerOptions{

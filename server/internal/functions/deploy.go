@@ -65,13 +65,16 @@ type RunnerDestroyRequest struct {
 }
 
 type RunnerAsset struct {
+	AssetID  uuid.UUID
 	AssetURL *url.URL
 
 	GuestPath string
 	// Mode is a string representation of file mode, e.g. 0444
 	Mode uint32
 
-	SHA256Sum string
+	SHA256Sum     string
+	ContentLength int64
+	ContentType   string
 }
 
 type RunnerBaseRequest struct {
