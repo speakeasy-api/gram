@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	tm_repo  "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
 const toolUrnQueryParam = "tool_urn"
@@ -278,14 +279,14 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	}
 
 	descriptor := plan.Descriptor
-	var toolType tm.ToolType
+	var toolType tm_repo.ToolType
 	switch plan.Kind {
 	case gateway.ToolKindHTTP:
-		toolType = tm.ToolTypeHTTP
+		toolType = tm_repo.ToolTypeHTTP
 	case gateway.ToolKindFunction:
-		toolType = tm.ToolTypeFunction
+		toolType = tm_repo.ToolTypeFunction
 	case gateway.ToolKindPrompt:
-		toolType = tm.ToolTypePrompt
+		toolType = tm_repo.ToolTypePrompt
 	}
 
 	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, s.tcm, descriptor.OrganizationID, tm.ToolInfo{

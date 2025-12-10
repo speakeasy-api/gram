@@ -1,4 +1,4 @@
-package telemetry
+package repo
 
 type Pagination struct {
 	PerPage    int           `json:"per_page" validate:"required,gte=1,lte=100"`
@@ -9,6 +9,13 @@ type Pagination struct {
 }
 
 type PageDirection string
+
+// PaginationMetadata contains pagination metadata for list results.
+type PaginationMetadata struct {
+	PerPage        int     `json:"per_page"`
+	HasNextPage    bool    `json:"has_next_page"`
+	NextPageCursor *string `json:"next_page_cursor,omitempty"`
+}
 
 const (
 	Next PageDirection = "next"

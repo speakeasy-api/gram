@@ -1,4 +1,4 @@
-package logs_test
+package telemetry_test
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/server/gen/logs"
-	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	gen "github.com/speakeasy-api/gram/server/gen/logs"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,7 +18,7 @@ func TestListLogs_EmptyResult(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 
-	result, err := ti.service.ListLogs(ctx, &logs.ListLogsPayload{
+	result, err := ti.service.ListLogs(ctx, &gen.ListLogsPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -49,10 +49,10 @@ func TestListLogs_SinglePage(t *testing.T) {
 	ctx = setProjectID(t, ctx, projectID)
 
 	// Insert 10 test logs
-	insertTestLogs(t, ctx, ti, projectID, 10)
+	insertHTTPTestLogs(t, ctx, ti, projectID, 10)
 
 	// Query logs
-	result, err := ti.service.ListLogs(ctx, &logs.ListLogsPayload{
+	result, err := ti.service.ListLogs(ctx, &gen.ListLogsPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -92,10 +92,10 @@ func TestListLogs_Pagination(t *testing.T) {
 	ctx = setProjectID(t, ctx, projectID)
 
 	// Insert 10 test logs
-	insertTestLogs(t, ctx, ti, projectID, 10)
+	insertHTTPTestLogs(t, ctx, ti, projectID, 10)
 
 	// Query first page
-	result, err := ti.service.ListLogs(ctx, &logs.ListLogsPayload{
+	result, err := ti.service.ListLogs(ctx, &gen.ListLogsPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -118,7 +118,7 @@ func TestListLogs_Pagination(t *testing.T) {
 
 	// Query second page using cursor
 	cursor := result.Pagination.NextPageCursor
-	result2, err := ti.service.ListLogs(ctx, &logs.ListLogsPayload{
+	result2, err := ti.service.ListLogs(ctx, &gen.ListLogsPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -141,7 +141,7 @@ func TestListLogs_Pagination(t *testing.T) {
 
 	// Query third page
 	cursor = result2.Pagination.NextPageCursor
-	result3, err := ti.service.ListLogs(ctx, &logs.ListLogsPayload{
+	result3, err := ti.service.ListLogs(ctx, &gen.ListLogsPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -193,7 +193,7 @@ func TestListLogs_TimeRangeFilter(t *testing.T) {
 		id, err := fromTimeV7(baseTime.Add(time.Duration(i) * time.Minute))
 		require.NoError(t, err)
 
-		err = ti.chClient.Log(ctx, telemetry.ToolHTTPRequest{
+		err = ti.chClient.LogHTTPRequest(ctx, repo.ToolHTTPRequest{
 			ID:                id.String(),
 			Ts:                baseTime.Add(time.Duration(i) * time.Minute),
 			OrganizationID:    orgID,
@@ -201,7 +201,7 @@ func TestListLogs_TimeRangeFilter(t *testing.T) {
 			DeploymentID:      deploymentID,
 			ToolID:            toolID,
 			ToolURN:           "urn:tool:test",
-			ToolType:          telemetry.ToolTypeHTTP,
+			ToolType:          repo.ToolTypeHTTP,
 			TraceID:           id.String()[:32],
 			SpanID:            id.String()[:16],
 			HTTPMethod:        "GET",
@@ -222,7 +222,7 @@ func TestListLogs_TimeRangeFilter(t *testing.T) {
 	tsStart := baseTime.Add(3 * time.Minute).Format(time.RFC3339)
 	tsEnd := baseTime.Add(8 * time.Minute).Format(time.RFC3339)
 
-	result, err := ti.service.ListLogs(ctx, &logs.ListLogsPayload{
+	result, err := ti.service.ListLogs(ctx, &gen.ListLogsPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -259,7 +259,7 @@ func TestListLogs_DifferentPageSizes(t *testing.T) {
 	ctx = setProjectID(t, ctx, projectID)
 
 	// Insert 10 test logs
-	insertTestLogs(t, ctx, ti, projectID, 10)
+	insertHTTPTestLogs(t, ctx, ti, projectID, 10)
 
 	testCases := []struct {
 		perPage         int
@@ -272,7 +272,7 @@ func TestListLogs_DifferentPageSizes(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		result, err := ti.service.ListLogs(ctx, &logs.ListLogsPayload{
+		result, err := ti.service.ListLogs(ctx, &gen.ListLogsPayload{
 			ApikeyToken:      nil,
 			SessionToken:     nil,
 			ProjectSlugInput: nil,
@@ -285,7 +285,7 @@ func TestListLogs_DifferentPageSizes(t *testing.T) {
 			Sort:             "DESC",
 		})
 
-		mapTime := func(ts []*logs.HTTPToolLog) []time.Time {
+		mapTime := func(ts []*gen.HTTPToolLog) []time.Time {
 			times := make([]time.Time, len(result.Logs))
 			for i, toolLog := range result.Logs {
 				times[i], err = time.Parse(time.RFC3339, toolLog.Ts)
@@ -324,7 +324,7 @@ func TestListLogs_VerifyLogFields(t *testing.T) {
 	baseTime := time.Unix(id.Time().UnixTime()).
 		UTC().Add(-10 * time.Minute)
 
-	err = ti.chClient.Log(ctx, telemetry.ToolHTTPRequest{
+	err = ti.chClient.LogHTTPRequest(ctx, repo.ToolHTTPRequest{
 		ID:                id.String(),
 		Ts:                baseTime,
 		OrganizationID:    orgID,
@@ -332,7 +332,7 @@ func TestListLogs_VerifyLogFields(t *testing.T) {
 		DeploymentID:      deploymentID,
 		ToolID:            toolID,
 		ToolURN:           toolURN,
-		ToolType:          telemetry.ToolTypeHTTP,
+		ToolType:          repo.ToolTypeHTTP,
 		TraceID:           traceID,
 		SpanID:            spanID,
 		HTTPMethod:        "POST",
@@ -349,7 +349,7 @@ func TestListLogs_VerifyLogFields(t *testing.T) {
 	require.NoError(t, err)
 
 	// Query logs
-	result, err := ti.service.ListLogs(ctx, &logs.ListLogsPayload{
+	result, err := ti.service.ListLogs(ctx, &gen.ListLogsPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -372,7 +372,7 @@ func TestListLogs_VerifyLogFields(t *testing.T) {
 	require.Equal(t, deploymentID, toolLog.DeploymentID)
 	require.Equal(t, toolID, toolLog.ToolID)
 	require.Equal(t, toolURN, toolLog.ToolUrn)
-	require.Equal(t, logs.ToolType("http"), toolLog.ToolType)
+	require.Equal(t, gen.ToolType("http"), toolLog.ToolType)
 	require.Equal(t, traceID, toolLog.TraceID)
 	require.Equal(t, spanID, toolLog.SpanID)
 	require.Equal(t, "POST", toolLog.HTTPMethod)
@@ -394,7 +394,7 @@ func TestListLogs_VerifyLogFields(t *testing.T) {
 // insertTestLogs inserts a specified number of logs for testing purposes.
 // Logs are inserted with timestamps starting from baseTime, incrementing by 1 minute each.
 // Uses a timestamp of 1 hour ago to ensure logs are always within any reasonable default query window.
-func insertTestLogs(t *testing.T, ctx context.Context, ti *testInstance, projectID string, count int) {
+func insertHTTPTestLogs(t *testing.T, ctx context.Context, ti *testInstance, projectID string, count int) {
 	t.Helper()
 
 	orgID := uuid.New().String()
@@ -408,7 +408,7 @@ func insertTestLogs(t *testing.T, ctx context.Context, ti *testInstance, project
 		id, err := fromTimeV7(baseTime.Add(time.Duration(i) * time.Minute))
 		require.NoError(t, err)
 
-		err = ti.chClient.Log(ctx, telemetry.ToolHTTPRequest{
+		err = ti.chClient.LogHTTPRequest(ctx, repo.ToolHTTPRequest{
 			ID:                id.String(),
 			Ts:                baseTime.Add(time.Duration(i) * time.Minute),
 			OrganizationID:    orgID,
@@ -416,7 +416,7 @@ func insertTestLogs(t *testing.T, ctx context.Context, ti *testInstance, project
 			DeploymentID:      deploymentID,
 			ToolID:            toolID,
 			ToolURN:           "urn:tool:test",
-			ToolType:          telemetry.ToolTypeHTTP,
+			ToolType:          repo.ToolTypeHTTP,
 			TraceID:           id.String()[:32],
 			SpanID:            id.String()[:16],
 			HTTPMethod:        "GET",

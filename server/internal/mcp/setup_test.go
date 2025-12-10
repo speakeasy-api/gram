@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
-	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric/noop"
 
@@ -104,7 +104,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	toolMetrics := telemetry.New(logger, tracerProvider, chConn, func(context.Context, string) (bool, error) {
+	toolMetrics := tm_repo.New(logger, tracerProvider, chConn, func(context.Context, string) (bool, error) {
 		return true, nil
 	})
 

@@ -16,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
-	"github.com/speakeasy-api/gram/server/internal/logs"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/urfave/cli/v2"
@@ -57,6 +56,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/resources"
+	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/templates"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -575,7 +575,7 @@ func newStartCommand() *cli.Command {
 			variations.Attach(mux, variations.NewService(logger, db, sessionManager))
 			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
 			usage.Attach(mux, usage.NewService(logger, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter))
-			logs.Attach(mux, logs.NewService(logger, db, sessionManager, tcm))
+			tm.Attach(mux, tm.NewService(logger, db, sessionManager, tcm))
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 
 			srv := &http.Server{
