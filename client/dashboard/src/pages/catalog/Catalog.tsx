@@ -1,13 +1,8 @@
 import { Page } from "@/components/page-layout";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useSampleListRegistry } from "@/hooks/useSampleListRegistry";
-import {
-  Badge,
-  Button,
-  Input,
-  Skeleton,
-  Stack,
-} from "@speakeasy-api/moonshine";
+import { Badge, Button, Input, Stack } from "@speakeasy-api/moonshine";
 import { Search } from "lucide-react";
 import { useState } from "react";
 import { Outlet } from "react-router";
@@ -39,7 +34,7 @@ export default function Catalog() {
           <Page.Section.Title>MCP Catalog</Page.Section.Title>
           <Page.Section.Description>
             Import official MCP servers to your project. Powered by the official
-            MCP server registry.
+            MCP registry.
           </Page.Section.Description>
           <Page.Section.Body>
             <Stack direction="vertical" gap={6}>
@@ -123,11 +118,7 @@ function MCPServerCard({ server }: MCPServerCardProps) {
             <Stack direction="vertical" gap={1}>
               <Stack direction="horizontal" gap={2} align="center">
                 <Type variant="subheading">{server.title}</Type>
-                {isOfficial && (
-                  <Badge variant="default" size="sm">
-                    Official
-                  </Badge>
-                )}
+                {isOfficial && <Badge>Official</Badge>}
               </Stack>
               <Type small className="text-muted-foreground">
                 {server.name} • v{server.version}
@@ -148,7 +139,7 @@ function MCPServerCard({ server }: MCPServerCardProps) {
           ) : (
             <div />
           )}
-          <Button variant="outline" size="sm">
+          <Button variant="secondary" size="sm">
             <Button.Text>View Details</Button.Text>
           </Button>
         </Stack>

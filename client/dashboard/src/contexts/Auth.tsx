@@ -10,7 +10,12 @@ import { useSessionInfo } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { Navigate, useNavigate, useSearchParams } from "react-router";
+import {
+  Navigate,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -182,15 +187,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 };
 
 const AuthHandler = ({ children }: { children: React.ReactNode }) => {
-  const { orgSlug, projectSlug } = useSlugs();
+  // const { orgSlug, projectSlug } = useSlugs();
+  const { orgSlug, projectSlug } = useParams();
   const [searchParams] = useSearchParams();
-
   const { session, error, status } = useSessionData();
 
   const isLoading = status === "pending";
 
   useIdentifyUserForTelemetry(session?.user);
-
   usePylonInAppChat(session?.user);
 
   // you need something like this so you don't redirect with empty session too soon
@@ -216,6 +220,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
+  // Handle initial navigation
   const redirectParam = searchParams.get("redirect");
   if (redirectParam) {
     return <Navigate to={redirectParam} replace />;
@@ -269,6 +274,8 @@ export const useSessionData = () => {
     status,
   } = useSessionInfo(undefined, undefined, {
     refetchOnWindowFocus: false,
+    refetchOnMount: false, // Prevent refetch during hot reload
+    staleTime: import.meta.env.DEV ? Infinity : 0, // Keep data stable during HMR in dev
     retry: false,
     throwOnError: false,
   });
