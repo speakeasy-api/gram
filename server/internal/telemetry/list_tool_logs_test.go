@@ -2,40 +2,15 @@ package telemetry_test
 
 import (
 	"context"
-	"log"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
-
-var (
-	infra *testenv.Environment
-)
-
-func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background())
-	if err != nil {
-		log.Fatalf("Failed to launch test infrastructure: %v", err)
-		os.Exit(1)
-	}
-
-	infra = res
-
-	code := m.Run()
-
-	if err := cleanup(); err != nil {
-		log.Fatalf("Failed to cleanup test infrastructure: %v", err)
-		os.Exit(1)
-	}
-
-	os.Exit(code)
-}
 
 func TestListToolLogs(t *testing.T) {
 	t.Parallel()
@@ -47,7 +22,7 @@ func TestListToolLogs(t *testing.T) {
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	queries := telemetry.New(logger, tracerProvider, conn, nil)
+	queries := repo.New(logger, tracerProvider, conn, nil)
 
 	projectID := uuid.New().String()
 	deploymentID := uuid.New().String()
@@ -102,16 +77,16 @@ func TestListToolLogs(t *testing.T) {
 		},
 	}
 
-	insertTestLogs(t, ctx, conn, projectID, testLogs)
+	insertTestToolLogs(t, ctx, conn, projectID, testLogs)
 
 	tests := []struct {
 		name   string
-		params telemetry.ListToolLogsParams
-		assert func(t *testing.T, result *telemetry.ToolLogsListResult, err error)
+		params repo.ListToolLogsParams
+		assert func(t *testing.T, result *repo.ToolLogsListResult, err error)
 	}{
 		{
 			name: "lists all logs for a project",
-			params: telemetry.ListToolLogsParams{
+			params: repo.ListToolLogsParams{
 				ProjectID: projectID,
 				TsStart:   now.Add(-10 * time.Minute),
 				TsEnd:     now.Add(10 * time.Minute),
@@ -119,7 +94,7 @@ func TestListToolLogs(t *testing.T) {
 				Cursor:    uuid.Nil.String(),
 				Limit:     10,
 			},
-			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+			assert: func(t *testing.T, result *repo.ToolLogsListResult, err error) {
 				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
@@ -130,7 +105,7 @@ func TestListToolLogs(t *testing.T) {
 		},
 		{
 			name: "filters logs by deployment ID",
-			params: telemetry.ListToolLogsParams{
+			params: repo.ListToolLogsParams{
 				ProjectID:    projectID,
 				DeploymentID: deploymentID,
 				TsStart:      now.Add(-10 * time.Minute),
@@ -139,7 +114,7 @@ func TestListToolLogs(t *testing.T) {
 				Cursor:       uuid.Nil.String(),
 				Limit:        10,
 			},
-			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+			assert: func(t *testing.T, result *repo.ToolLogsListResult, err error) {
 				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
@@ -148,7 +123,7 @@ func TestListToolLogs(t *testing.T) {
 		},
 		{
 			name: "filters logs by function ID",
-			params: telemetry.ListToolLogsParams{
+			params: repo.ListToolLogsParams{
 				ProjectID:  projectID,
 				FunctionID: functionID,
 				TsStart:    now.Add(-10 * time.Minute),
@@ -157,7 +132,7 @@ func TestListToolLogs(t *testing.T) {
 				Cursor:     uuid.Nil.String(),
 				Limit:      10,
 			},
-			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+			assert: func(t *testing.T, result *repo.ToolLogsListResult, err error) {
 				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
@@ -166,7 +141,7 @@ func TestListToolLogs(t *testing.T) {
 		},
 		{
 			name: "filters logs by level",
-			params: telemetry.ListToolLogsParams{
+			params: repo.ListToolLogsParams{
 				ProjectID: projectID,
 				Level:     "error",
 				TsStart:   now.Add(-10 * time.Minute),
@@ -175,7 +150,7 @@ func TestListToolLogs(t *testing.T) {
 				Cursor:    uuid.Nil.String(),
 				Limit:     10,
 			},
-			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+			assert: func(t *testing.T, result *repo.ToolLogsListResult, err error) {
 				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
@@ -185,7 +160,7 @@ func TestListToolLogs(t *testing.T) {
 		},
 		{
 			name: "filters logs by source",
-			params: telemetry.ListToolLogsParams{
+			params: repo.ListToolLogsParams{
 				ProjectID: projectID,
 				Source:    "user",
 				TsStart:   now.Add(-10 * time.Minute),
@@ -194,7 +169,7 @@ func TestListToolLogs(t *testing.T) {
 				Cursor:    uuid.Nil.String(),
 				Limit:     10,
 			},
-			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+			assert: func(t *testing.T, result *repo.ToolLogsListResult, err error) {
 				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
@@ -206,7 +181,7 @@ func TestListToolLogs(t *testing.T) {
 		},
 		{
 			name: "filters logs by instance",
-			params: telemetry.ListToolLogsParams{
+			params: repo.ListToolLogsParams{
 				ProjectID: projectID,
 				Instance:  "test-instance-1",
 				TsStart:   now.Add(-10 * time.Minute),
@@ -215,7 +190,7 @@ func TestListToolLogs(t *testing.T) {
 				Cursor:    uuid.Nil.String(),
 				Limit:     10,
 			},
-			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+			assert: func(t *testing.T, result *repo.ToolLogsListResult, err error) {
 				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
@@ -227,7 +202,7 @@ func TestListToolLogs(t *testing.T) {
 		},
 		{
 			name: "paginates logs with configurable limit",
-			params: telemetry.ListToolLogsParams{
+			params: repo.ListToolLogsParams{
 				ProjectID: projectID,
 				TsStart:   now.Add(-10 * time.Minute),
 				TsEnd:     now.Add(10 * time.Minute),
@@ -235,7 +210,7 @@ func TestListToolLogs(t *testing.T) {
 				Cursor:    uuid.Nil.String(),
 				Limit:     3,
 			},
-			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+			assert: func(t *testing.T, result *repo.ToolLogsListResult, err error) {
 				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
@@ -247,7 +222,7 @@ func TestListToolLogs(t *testing.T) {
 		},
 		{
 			name: "sorts logs in ascending order by timestamp",
-			params: telemetry.ListToolLogsParams{
+			params: repo.ListToolLogsParams{
 				ProjectID: projectID,
 				TsStart:   now.Add(-10 * time.Minute),
 				TsEnd:     now.Add(10 * time.Minute),
@@ -255,7 +230,7 @@ func TestListToolLogs(t *testing.T) {
 				Cursor:    uuid.Nil.String(),
 				Limit:     10,
 			},
-			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+			assert: func(t *testing.T, result *repo.ToolLogsListResult, err error) {
 				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
@@ -268,7 +243,7 @@ func TestListToolLogs(t *testing.T) {
 		},
 		{
 			name: "sorts logs in descending order by timestamp",
-			params: telemetry.ListToolLogsParams{
+			params: repo.ListToolLogsParams{
 				ProjectID: projectID,
 				TsStart:   now.Add(-10 * time.Minute),
 				TsEnd:     now.Add(10 * time.Minute),
@@ -276,7 +251,7 @@ func TestListToolLogs(t *testing.T) {
 				Cursor:    uuid.Nil.String(),
 				Limit:     10,
 			},
-			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+			assert: func(t *testing.T, result *repo.ToolLogsListResult, err error) {
 				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
@@ -289,7 +264,7 @@ func TestListToolLogs(t *testing.T) {
 		},
 		{
 			name: "filters logs by time range",
-			params: telemetry.ListToolLogsParams{
+			params: repo.ListToolLogsParams{
 				ProjectID: projectID,
 				TsStart:   now.Add(-4*time.Minute - 30*time.Second),
 				TsEnd:     now.Add(-2*time.Minute - 30*time.Second),
@@ -297,7 +272,7 @@ func TestListToolLogs(t *testing.T) {
 				Cursor:    uuid.Nil.String(),
 				Limit:     10,
 			},
-			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+			assert: func(t *testing.T, result *repo.ToolLogsListResult, err error) {
 				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
@@ -306,7 +281,7 @@ func TestListToolLogs(t *testing.T) {
 		},
 		{
 			name: "combines multiple filters correctly",
-			params: telemetry.ListToolLogsParams{
+			params: repo.ListToolLogsParams{
 				ProjectID:    projectID,
 				DeploymentID: deploymentID,
 				FunctionID:   functionID,
@@ -317,7 +292,7 @@ func TestListToolLogs(t *testing.T) {
 				Cursor:       uuid.Nil.String(),
 				Limit:        10,
 			},
-			assert: func(t *testing.T, result *telemetry.ToolLogsListResult, err error) {
+			assert: func(t *testing.T, result *repo.ToolLogsListResult, err error) {
 				t.Helper()
 				require.NoError(t, err)
 				require.NotNil(t, result)
@@ -347,7 +322,7 @@ type testLog struct {
 	functionID   string
 }
 
-func insertTestLogs(t *testing.T, ctx context.Context, conn telemetry.CHTX, projectID string, logs []testLog) {
+func insertTestToolLogs(t *testing.T, ctx context.Context, conn repo.CHTX, projectID string, logs []testLog) {
 	t.Helper()
 
 	for _, log := range logs {
