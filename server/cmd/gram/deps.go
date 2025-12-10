@@ -48,6 +48,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
+	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+
 )
 
 func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
@@ -113,7 +115,7 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 		return &tm.StubToolMetricsClient{}, func(context.Context) error { return nil }, nil
 	}
 
-	cc := tm.New(logger, tracerProvider, conn, func(ctx context.Context, orgId string) (bool, error) {
+	cc := tm_repo.New(logger, tracerProvider, conn, func(ctx context.Context, orgId string) (bool, error) {
 		isEnabled, err := featureClient.IsFeatureEnabled(ctx, orgId, productfeatures.FeatureLogs)
 		if err != nil {
 			logger.ErrorContext(
