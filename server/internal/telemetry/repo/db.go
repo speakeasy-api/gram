@@ -1,4 +1,4 @@
-package telemetry
+package repo
 
 import (
 	"context"
@@ -41,7 +41,7 @@ func New(logger *slog.Logger, traceProvider trace.TracerProvider, conn CHTX, sho
 		}
 	}
 
-	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry")
+	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry/repo")
 
 	return &Queries{
 		conn:       conn,
