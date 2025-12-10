@@ -41,6 +41,12 @@ func newWorkerCommand() *cli.Command {
 
 	flags := []cli.Flag{
 		&cli.StringFlag{
+			Name:     "server-url",
+			Usage:    "The public URL of the server",
+			EnvVars:  []string{"GRAM_SERVER_URL"},
+			Required: true,
+		},
+		&cli.StringFlag{
 			Name:     "environment",
 			Usage:    "The current server environment", // local, dev, prod
 			Required: true,
@@ -357,7 +363,13 @@ func newWorkerCommand() *cli.Command {
 				}
 			}
 
-			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, db, assetStorage, encryptionClient)
+			tigrisStore, shutdown, err := newTigrisStore(ctx, c, logger)
+			if err != nil {
+				return fmt.Errorf("failed to create tigris asset store: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, db, assetStorage, tigrisStore, encryptionClient)
 			if err != nil {
 				return fmt.Errorf("failed to create functions orchestrator: %w", err)
 			}

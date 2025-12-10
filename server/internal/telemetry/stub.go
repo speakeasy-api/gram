@@ -2,15 +2,17 @@ package telemetry
 
 import (
 	"context"
+
+	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
 type StubToolMetricsClient struct{}
 
-func (n *StubToolMetricsClient) List(_ context.Context, _ ListToolLogsOptions) (*ListResult, error) {
+func (n *StubToolMetricsClient) ListHTTPRequests(_ context.Context, _ repo.ListToolLogsOptions) (*repo.ListResult, error) {
 	return nil, nil
 }
 
-func (n *StubToolMetricsClient) Log(_ context.Context, _ ToolHTTPRequest) error {
+func (n *StubToolMetricsClient) LogHTTPRequest(_ context.Context, _ repo.ToolHTTPRequest) error {
 	return nil
 }
 

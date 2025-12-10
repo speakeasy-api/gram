@@ -7,9 +7,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
-	"time"
+
+	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -41,23 +43,26 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	tm_repo  "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
 const toolUrnQueryParam = "tool_urn"
 const environmentSlugQueryParam = "environment_slug"
 
 type Service struct {
-	logger           *slog.Logger
-	tracer           trace.Tracer
-	db               *pgxpool.Pool
-	auth             *auth.Auth
-	toolset          *toolsets.Toolsets
-	environmentsRepo *environments_repo.Queries
-	env              *environments.EnvironmentEntries
-	toolProxy        *gateway.ToolProxy
-	tracking         billing.Tracker
-	toolsetCache     cache.TypedCacheObject[mv.ToolsetBaseContents]
-	tcm              tm.ToolMetricsProvider
+	logger            *slog.Logger
+	tracer            trace.Tracer
+	db                *pgxpool.Pool
+	auth              *auth.Auth
+	toolset           *toolsets.Toolsets
+	environmentsRepo  *environments_repo.Queries
+	env               *environments.EnvironmentEntries
+	toolProxy         *gateway.ToolProxy
+	tracking          billing.Tracker
+	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
+	tcm               tm.ToolMetricsProvider
+	customDomainsRepo *customdomainsRepo.Queries
+	serverURL         *url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -75,6 +80,7 @@ func NewService(
 	funcCaller functions.ToolCaller,
 	tracking billing.Tracker,
 	tcm tm.ToolMetricsProvider,
+	serverURL *url.URL,
 ) *Service {
 	envRepo := environments_repo.New(db)
 	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/instances")
@@ -99,8 +105,10 @@ func NewService(
 			guardianPolicy,
 			funcCaller,
 		),
-		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
-		tcm:          tcm,
+		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
+		tcm:               tcm,
+		customDomainsRepo: customdomainsRepo.New(db),
+		serverURL:         serverURL,
 	}
 }
 
@@ -126,53 +134,6 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 	toolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(conv.ToLower(payload.ToolsetSlug)), &s.toolsetCache)
 	if err != nil {
 		return nil, err
-	}
-
-	if toolset.DefaultEnvironmentSlug == nil && payload.EnvironmentSlug == nil {
-		return nil, oops.E(oops.CodeInvalid, nil, "environment is required").Log(ctx, s.logger)
-	}
-
-	var envModel environments_repo.Environment
-	if payload.EnvironmentSlug != nil {
-		envModel, err = s.environmentsRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
-			ProjectID: *authCtx.ProjectID,
-			Slug:      conv.ToLower(*payload.EnvironmentSlug),
-		})
-	} else {
-		envModel, err = s.environmentsRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
-			ProjectID: *authCtx.ProjectID,
-			Slug:      string(*toolset.DefaultEnvironmentSlug),
-		})
-	}
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, s.logger)
-	}
-
-	environmentEntries, err := s.env.ListEnvironmentEntries(ctx, *authCtx.ProjectID, envModel.ID, true)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment entries").Log(ctx, s.logger)
-	}
-
-	genEntries := make([]*types.EnvironmentEntry, len(environmentEntries))
-	for i, entry := range environmentEntries {
-		genEntries[i] = &types.EnvironmentEntry{
-			Name:      entry.Name,
-			Value:     entry.Value,
-			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
-		}
-	}
-
-	environment := &types.Environment{
-		ID:             envModel.ID.String(),
-		OrganizationID: envModel.OrganizationID,
-		ProjectID:      envModel.ProjectID.String(),
-		Name:           envModel.Name,
-		Slug:           types.Slug(envModel.Slug),
-		Description:    conv.FromPGText[string](envModel.Description),
-		Entries:        genEntries,
-		CreatedAt:      envModel.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      envModel.UpdatedAt.Time.Format(time.RFC3339),
 	}
 
 	promptTemplates := make([]*types.PromptTemplate, len(toolset.PromptTemplates))
@@ -203,6 +164,23 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		}
 	}
 
+	baseURL := s.serverURL.String()
+	if toolset.CustomDomainID != nil {
+		customDomain, err := s.customDomainsRepo.GetCustomDomainByID(ctx, uuid.MustParse(*toolset.CustomDomainID))
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get custom domain").Log(ctx, s.logger)
+		}
+		baseURL = fmt.Sprintf("https://%s", customDomain.Domain)
+	}
+
+	// modern gram toolsets always have an MCP slug
+	mcpServers := make([]*gen.InstanceMcpServer, 0)
+	if toolset.McpSlug != nil {
+		mcpServers = append(mcpServers, &gen.InstanceMcpServer{
+			URL: fmt.Sprintf("%s/mcp/%s", baseURL, string(*toolset.McpSlug)),
+		})
+	}
+
 	return &gen.GetInstanceResult{
 		Name:                         toolset.Name,
 		Description:                  toolset.Description,
@@ -211,7 +189,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		FunctionEnvironmentVariables: toolset.FunctionEnvironmentVariables,
 		Tools:                        toolset.Tools,
 		PromptTemplates:              promptTemplates,
-		Environment:                  environment,
+		McpServers:                   mcpServers,
 	}, nil
 }
 
@@ -301,14 +279,14 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	}
 
 	descriptor := plan.Descriptor
-	var toolType tm.ToolType
+	var toolType tm_repo.ToolType
 	switch plan.Kind {
 	case gateway.ToolKindHTTP:
-		toolType = tm.ToolTypeHTTP
+		toolType = tm_repo.ToolTypeHTTP
 	case gateway.ToolKindFunction:
-		toolType = tm.ToolTypeFunction
+		toolType = tm_repo.ToolTypeFunction
 	case gateway.ToolKindPrompt:
-		toolType = tm.ToolTypePrompt
+		toolType = tm_repo.ToolTypePrompt
 	}
 
 	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, s.tcm, descriptor.OrganizationID, tm.ToolInfo{
@@ -362,7 +340,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	interceptor := newResponseInterceptor(w)
 
 	err = s.toolProxy.Do(ctx, interceptor, requestBody, gateway.ToolCallEnv{
-		SystemEnv:  gateway.CIEnvFrom(systemConfig),
+		SystemEnv:  systemConfig,
 		UserConfig: ciEnv,
 	}, plan, toolCallLogger)
 	if err != nil {

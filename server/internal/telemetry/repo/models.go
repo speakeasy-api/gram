@@ -1,13 +1,9 @@
-package telemetry
+package repo
 
 import (
-	"context"
 	"fmt"
 	"time"
 )
-
-// ToolLogLevel represents the log level for tool logs.
-type ToolLogLevel string
 
 // ToolType represents the type of tool.
 type ToolType string
@@ -69,39 +65,54 @@ type ToolHTTPRequest struct {
 	ResponseBodyBytes int64             `ch:"response_body_bytes"` // Int64
 }
 
-// ListToolLogsOptions contains options for listing tool logs.
-type ListToolLogsOptions struct {
-	ProjectID  string
-	TsStart    time.Time
-	TsEnd      time.Time
-	Cursor     string
-	Status     string
-	ServerName string
-	ToolName   string
-	ToolType   string
-	ToolURNs   []string
-	*Pagination
+// WithStatusCode sets the HTTP status code on the log entry.
+func (t *ToolHTTPRequest) WithStatusCode(code int64) *ToolHTTPRequest {
+	t.StatusCode = code
+	return t
 }
 
-// PaginationMetadata contains pagination metadata for list results.
-type PaginationMetadata struct {
-	PerPage        int     `json:"per_page"`
-	HasNextPage    bool    `json:"has_next_page"`
-	NextPageCursor *string `json:"next_page_cursor,omitempty"`
+// WithHTTPMethod sets the HTTP method on the log entry.
+func (t *ToolHTTPRequest) WithHTTPMethod(method string) *ToolHTTPRequest {
+	t.HTTPMethod = method
+	return t
+}
+
+// WithHTTPRoute sets the HTTP route on the log entry.
+func (t *ToolHTTPRequest) WithHTTPRoute(route string) *ToolHTTPRequest {
+	t.HTTPRoute = route
+	return t
+}
+
+// ToolLog represents a log entry from the tool_logs table.
+type ToolLog struct {
+	ID         string    `ch:"id"`         // UUID
+	Timestamp  time.Time `ch:"timestamp"`  // DateTime64(3, 'UTC')
+	Instance   string    `ch:"instance"`   // String
+	Level      string    `ch:"level"`      // LowCardinality(String)
+	Source     string    `ch:"source"`     // LowCardinality(String)
+	RawLog     string    `ch:"raw_log"`    // String
+	Message    *string   `ch:"message"`    // Nullable(String)
+	Attributes string    `ch:"attributes"` // JSON
+
+	ProjectID    string `ch:"project_id"`    // UUID
+	DeploymentID string `ch:"deployment_id"` // UUID
+	FunctionID   string `ch:"function_id"`   // UUID
+}
+
+// HTTPRequestListResult contains the result of an HTTP request list operation.
+type HTTPRequestListResult struct {
+	Logs       []ToolHTTPRequest  `json:"logs"`
+	Pagination PaginationMetadata `json:"pagination"`
+}
+
+// ToolLogsListResult contains the result of a tool logs list operation.
+type ToolLogsListResult struct {
+	Logs       []ToolLog          `json:"logs"`
+	Pagination PaginationMetadata `json:"pagination"`
 }
 
 // ListResult contains the result of a list operation.
 type ListResult struct {
 	Logs       []ToolHTTPRequest  `json:"logs"`
 	Pagination PaginationMetadata `json:"pagination"`
-}
-
-// ToolMetricsProvider defines the interface for tool metrics operations.
-type ToolMetricsProvider interface {
-	// List tool call logs
-	List(ctx context.Context, opts ListToolLogsOptions) (*ListResult, error)
-	// Log tool call request/response
-	Log(context.Context, ToolHTTPRequest) error
-	// ShouldLog returns true if the tool call should be logged
-	ShouldLog(context.Context, string) (bool, error)
 }

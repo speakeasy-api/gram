@@ -7,11 +7,14 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
-import { Environment, Environment$inboundSchema } from "./environment.js";
 import {
   FunctionEnvironmentVariable,
   FunctionEnvironmentVariable$inboundSchema,
 } from "./functionenvironmentvariable.js";
+import {
+  InstanceMcpServer,
+  InstanceMcpServer$inboundSchema,
+} from "./instancemcpserver.js";
 import {
   PromptTemplate,
   PromptTemplate$inboundSchema,
@@ -32,13 +35,13 @@ export type GetInstanceResult = {
    */
   description?: string | undefined;
   /**
-   * Model representing an environment
-   */
-  environment: Environment;
-  /**
    * The function environment variables that are relevant to the toolset
    */
   functionEnvironmentVariables?: Array<FunctionEnvironmentVariable> | undefined;
+  /**
+   * The MCP servers that are relevant to the toolset
+   */
+  mcpServers: Array<InstanceMcpServer>;
   /**
    * The name of the toolset
    */
@@ -68,10 +71,10 @@ export const GetInstanceResult$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   description: z.string().optional(),
-  environment: Environment$inboundSchema,
   function_environment_variables: z.array(
     FunctionEnvironmentVariable$inboundSchema,
   ).optional(),
+  mcp_servers: z.array(InstanceMcpServer$inboundSchema),
   name: z.string(),
   prompt_templates: z.array(PromptTemplate$inboundSchema).optional(),
   security_variables: z.array(SecurityVariable$inboundSchema).optional(),
@@ -80,6 +83,7 @@ export const GetInstanceResult$inboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     "function_environment_variables": "functionEnvironmentVariables",
+    "mcp_servers": "mcpServers",
     "prompt_templates": "promptTemplates",
     "security_variables": "securityVariables",
     "server_variables": "serverVariables",

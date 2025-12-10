@@ -22,7 +22,7 @@ type EnvironmentLoader interface {
 	//
 	// # Errors
 	//   * `error`: when an unrecognized error occurs.
-	LoadSystemEnv(ctx context.Context, projectID uuid.UUID, toolsetID uuid.UUID, sourceKind string, sourceSlug string) (map[string]string, error)
+	LoadSystemEnv(ctx context.Context, projectID uuid.UUID, toolsetID uuid.UUID, sourceKind string, sourceSlug string) (*CaseInsensitiveEnv, error)
 }
 
 type SlugOrID struct {

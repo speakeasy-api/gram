@@ -1,4 +1,4 @@
-package telemetry
+package repo
 
 import (
 	"strings"
@@ -220,7 +220,7 @@ func TestBuildListLogsQuery(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			query, args := buildListLogsQuery(tt.opts)
+			query, args := buildListHTTPRequestsQuery(tt.opts)
 
 			// Normalize whitespace for comparison
 			normalizedQuery := strings.Join(strings.Fields(query), " ")
@@ -255,7 +255,7 @@ func TestBuildListLogsQuery_ParameterIndexing(t *testing.T) {
 		},
 	}
 
-	query, args := buildListLogsQuery(opts)
+	query, args := buildListHTTPRequestsQuery(opts)
 
 	// Verify that all parameter indices are present and sequential
 	require.Contains(t, query, "$1")
@@ -292,7 +292,7 @@ func TestBuildListLogsQuery_EmptyToolURNs(t *testing.T) {
 		},
 	}
 
-	query, args := buildListLogsQuery(opts)
+	query, args := buildListHTTPRequestsQuery(opts)
 
 	require.NotContains(t, query, " IN (")
 	require.Len(t, args, 5) // project_id, ts_start, ts_end, cursor, limit

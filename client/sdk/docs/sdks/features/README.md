@@ -1,5 +1,4 @@
 # Features
-(*features*)
 
 ## Overview
 

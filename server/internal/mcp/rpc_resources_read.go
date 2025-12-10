@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -93,7 +94,7 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		ProjectID:      descriptor.ProjectID,
 		DeploymentID:   descriptor.DeploymentID,
 		OrganizationID: descriptor.OrganizationID,
-	}, descriptor.Name, tm.ToolTypeFunction)
+	}, descriptor.Name, tm_repo.ToolTypeFunction)
 	if logErr != nil {
 		logger.ErrorContext(ctx,
 			"failed to prepare resource call log entry",
@@ -170,7 +171,7 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 
 	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), gateway.ToolCallEnv{
 		UserConfig: userConfig,
-		SystemEnv:  gateway.CIEnvFrom(systemConfig),
+		SystemEnv:  systemConfig,
 	}, plan, toolCallLogger)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").Log(ctx, logger)

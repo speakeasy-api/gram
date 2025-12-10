@@ -41,9 +41,10 @@ sha="$(git rev-parse --short HEAD)"
 # `.melangeignore` does not really work. They are using `github.com/zealic/xignore`
 # under the hood which does not seem to support negation patterns correctly.
 rm -rf .tmp-melange/functions
-mkdir -p .tmp-melange/functions
+mkdir -p .tmp-melange/functions .tmp-melange/server
 trap 'rm -rf .tmp-melange' EXIT
 cp -r ../go.mod ../go.sum .tmp-melange/
+cp -r ../server/gen .tmp-melange/server/
 cp -r ./{internal,cmd,buildinfo} .tmp-melange/functions/
 
 rm -rf ./packages

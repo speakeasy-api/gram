@@ -234,6 +234,37 @@ func (q *Queries) GetFlyAppsToReap(ctx context.Context, arg GetFlyAppsToReapPara
 	return items, nil
 }
 
+const getFunctionAssetURL = `-- name: GetFunctionAssetURL :one
+SELECT a.url
+FROM deployments_functions df
+INNER JOIN assets a ON df.asset_id = a.id
+WHERE
+  a.project_id = $1
+  AND df.deployment_id = $2
+  AND df.id = $3
+  AND a.id = $4
+  AND a.deleted IS FALSE
+`
+
+type GetFunctionAssetURLParams struct {
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+	FunctionID   uuid.UUID
+	AssetID      uuid.UUID
+}
+
+func (q *Queries) GetFunctionAssetURL(ctx context.Context, arg GetFunctionAssetURLParams) (string, error) {
+	row := q.db.QueryRow(ctx, getFunctionAssetURL,
+		arg.ProjectID,
+		arg.DeploymentID,
+		arg.FunctionID,
+		arg.AssetID,
+	)
+	var url string
+	err := row.Scan(&url)
+	return url, err
+}
+
 const getFunctionsRunnerVersion = `-- name: GetFunctionsRunnerVersion :one
 WITH project_preference AS (
   SELECT p.functions_runner_version as v

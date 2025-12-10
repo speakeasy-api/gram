@@ -1,4 +1,4 @@
-package logs
+package telemetry
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -24,7 +24,7 @@ import (
 )
 
 type Service struct {
-	tcm    tm.ToolMetricsProvider
+	tcm    ToolMetricsProvider
 	db     *pgxpool.Pool
 	tracer trace.Tracer
 	logger *slog.Logger
@@ -34,11 +34,11 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, tcm tm.ToolMetricsProvider) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, tcm ToolMetricsProvider) *Service {
 	logger = logger.With(attr.SlogComponent("logs"))
 
 	return &Service{
-		tracer: otel.Tracer("github.com/speakeasy-api/gram/server/internal/logs"),
+		tracer: otel.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
 		auth:   auth.New(logger, db, sessions),
 		logger: logger,
 		tcm:    tcm,
@@ -92,7 +92,7 @@ func (s *Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (r
 			Log(ctx, s.logger, attr.SlogProjectID(projectID.String()))
 	}
 
-	options := tm.ListToolLogsOptions{
+	options := repo.ListToolLogsOptions{
 		ProjectID:  projectID.String(),
 		TsStart:    tsStart,
 		TsEnd:      tsEnd,
@@ -102,10 +102,10 @@ func (s *Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (r
 		ToolName:   conv.PtrValOr(payload.ToolName, ""),
 		ToolType:   conv.PtrValOr(payload.ToolType, ""),
 		ToolURNs:   payload.ToolUrns,
-		Pagination: &tm.Pagination{
+		Pagination: &repo.Pagination{
 			PerPage:    payload.PerPage,
 			Sort:       payload.Sort,
-			Direction:  tm.PageDirection(payload.Direction),
+			Direction:  repo.PageDirection(payload.Direction),
 			PrevCursor: "",
 			NextCursor: "",
 		},
@@ -113,7 +113,7 @@ func (s *Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (r
 	options.SetDefaults()
 
 	// Query logs from ClickHouse
-	result, err := s.tcm.List(ctx, options)
+	result, err := s.tcm.ListHTTPRequests(ctx, options)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing logs").
 			Log(ctx, s.logger, attr.SlogProjectID(projectID.String()))
@@ -160,7 +160,7 @@ func parseTimeOrDefault(s *string, defaultTime time.Time) time.Time {
 	return t
 }
 
-func toHTTPToolLog(r tm.ToolHTTPRequest, projectId string) *gen.HTTPToolLog {
+func toHTTPToolLog(r repo.ToolHTTPRequest, projectId string) *gen.HTTPToolLog {
 	return &gen.HTTPToolLog{
 		ID:                conv.Ptr(r.ID),
 		Ts:                r.Ts.Format(time.RFC3339),

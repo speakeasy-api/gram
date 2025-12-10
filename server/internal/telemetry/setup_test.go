@@ -1,4 +1,4 @@
-package logs_test
+package telemetry_test
 
 import (
 	"context"
@@ -15,9 +15,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	logsvc "github.com/speakeasy-api/gram/server/internal/logs"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 var (
@@ -43,9 +43,9 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *logsvc.Service
+	service        *telemetry.Service
 	conn           *pgxpool.Pool
-	chClient       *telemetry.Queries
+	chClient       *repo.Queries
 	sessionManager *sessions.Manager
 }
 
@@ -74,11 +74,11 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 
 	tracerProvider := testenv.NewTracerProvider(t)
 
-	chClient := telemetry.New(logger, tracerProvider, chConn, func(context.Context, string) (bool, error) {
+	chClient := repo.New(logger, tracerProvider, chConn, func(context.Context, string) (bool, error) {
 		return true, nil
 	})
 
-	svc := logsvc.NewService(logger, conn, sessionManager, chClient)
+	svc := telemetry.NewService(logger, conn, sessionManager, chClient)
 
 	return ctx, &testInstance{
 		service:        svc,
