@@ -67,11 +67,7 @@ type Client struct {
 	key []byte
 }
 
-func New(base64Key string) (*Client, error) {
-	key, err := base64.StdEncoding.DecodeString(base64Key)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode base64 key: %w", err)
-	}
+func New(key []byte) (*Client, error) {
 	if len(key) != 32 {
 		return nil, fmt.Errorf("invalid AES-256 key size: %d bytes", len(key))
 	}
