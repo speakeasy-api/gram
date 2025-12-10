@@ -179,7 +179,6 @@ function ChatInner({
   const instance = useInstance(
     {
       toolsetSlug: configRef.current.toolsetSlug ?? "",
-      environmentSlug: configRef.current.environmentSlug ?? undefined,
     },
     undefined,
     {

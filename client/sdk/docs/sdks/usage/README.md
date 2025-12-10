@@ -1,5 +1,4 @@
 # Usage
-(*usage*)
 
 ## Overview
 

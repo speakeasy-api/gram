@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { create } from "zustand";
+import { getWebGLAvailability } from "./utils/detect-webgl";
 
 interface WebGLElement {
   element: HTMLDivElement;
@@ -15,6 +16,7 @@ interface DraggableWindow {
 }
 
 interface WebGLStore {
+  isWebGLAvailable: boolean;
   heroCanvasReady: boolean;
   elements: WebGLElement[];
   scrollOffset: THREE.Vector2;
@@ -48,6 +50,7 @@ interface WebGLStore {
 }
 
 export const useWebGLStore = create<WebGLStore>((set) => ({
+  isWebGLAvailable: getWebGLAvailability(),
   heroCanvasReady: false,
   elements: [],
   setElements: (elements) =>

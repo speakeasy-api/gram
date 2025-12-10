@@ -43,16 +43,6 @@ var _ = Service("toolsets", func() {
 	Method("listToolsets", func() {
 		Description("List all toolsets for a project")
 
-		// Note: Method-level Security declarations completely override service-level Security.
-		// To add chat scope support while preserving existing auth methods, we must repeat all security declarations here
-		Security(security.Session, security.ProjectSlug)
-		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("producer")
-		})
-		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("chat")
-		})
-
 		Payload(func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -126,16 +116,6 @@ var _ = Service("toolsets", func() {
 
 	Method("getToolset", func() {
 		Description("Get detailed information about a toolset including full HTTP tool definitions")
-
-		// Note: Method-level Security declarations completely override service-level Security.
-		// To add chat scope support while preserving existing auth methods, we must repeat all security declarations here
-		Security(security.Session, security.ProjectSlug)
-		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("producer")
-		})
-		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("chat")
-		})
 
 		Payload(func() {
 			Required("slug")

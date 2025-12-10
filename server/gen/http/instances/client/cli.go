@@ -17,7 +17,7 @@ import (
 
 // BuildGetInstancePayload builds the payload for the instances getInstance
 // endpoint from CLI flags.
-func BuildGetInstancePayload(instancesGetInstanceToolsetSlug string, instancesGetInstanceEnvironmentSlug string, instancesGetInstanceSessionToken string, instancesGetInstanceProjectSlugInput string, instancesGetInstanceApikeyToken string) (*instances.GetInstanceForm, error) {
+func BuildGetInstancePayload(instancesGetInstanceToolsetSlug string, instancesGetInstanceSessionToken string, instancesGetInstanceProjectSlugInput string, instancesGetInstanceApikeyToken string) (*instances.GetInstanceForm, error) {
 	var err error
 	var toolsetSlug string
 	{
@@ -28,19 +28,6 @@ func BuildGetInstancePayload(instancesGetInstanceToolsetSlug string, instancesGe
 		}
 		if err != nil {
 			return nil, err
-		}
-	}
-	var environmentSlug *string
-	{
-		if instancesGetInstanceEnvironmentSlug != "" {
-			environmentSlug = &instancesGetInstanceEnvironmentSlug
-			err = goa.MergeErrors(err, goa.ValidatePattern("environment_slug", *environmentSlug, "^[a-z0-9_-]{1,128}$"))
-			if utf8.RuneCountInString(*environmentSlug) > 40 {
-				err = goa.MergeErrors(err, goa.InvalidLengthError("environment_slug", *environmentSlug, utf8.RuneCountInString(*environmentSlug), 40, false))
-			}
-			if err != nil {
-				return nil, err
-			}
 		}
 	}
 	var sessionToken *string
@@ -63,10 +50,6 @@ func BuildGetInstancePayload(instancesGetInstanceToolsetSlug string, instancesGe
 	}
 	v := &instances.GetInstanceForm{}
 	v.ToolsetSlug = types.Slug(toolsetSlug)
-	if environmentSlug != nil {
-		tmpenvironmentSlug := types.Slug(*environmentSlug)
-		v.EnvironmentSlug = &tmpenvironmentSlug
-	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ApikeyToken = apikeyToken

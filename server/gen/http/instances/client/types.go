@@ -8,8 +8,6 @@
 package client
 
 import (
-	"unicode/utf8"
-
 	instances "github.com/speakeasy-api/gram/server/gen/instances"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
@@ -32,8 +30,8 @@ type GetInstanceResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The environment
-	Environment *EnvironmentResponseBody `form:"environment,omitempty" json:"environment,omitempty" xml:"environment,omitempty"`
+	// The MCP servers that are relevant to the toolset
+	McpServers []*InstanceMcpServerResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 }
 
 // GetInstanceUnauthorizedResponseBody is the type of the "instances" service
@@ -477,38 +475,11 @@ type FunctionEnvironmentVariableResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
-// EnvironmentResponseBody is used to define fields on response body types.
-type EnvironmentResponseBody struct {
-	// The ID of the environment
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The organization ID this environment belongs to
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// The project ID this environment belongs to
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// The name of the environment
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The slug identifier for the environment
-	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// The description of the environment
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// List of environment entries
-	Entries []*EnvironmentEntryResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
-	// The creation date of the environment
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// When the environment was last updated
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-}
-
-// EnvironmentEntryResponseBody is used to define fields on response body types.
-type EnvironmentEntryResponseBody struct {
-	// The name of the environment variable
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Redacted values of the environment variable
-	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
-	// The creation date of the environment entry
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// When the environment entry was last updated
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+// InstanceMcpServerResponseBody is used to define fields on response body
+// types.
+type InstanceMcpServerResponseBody struct {
+	// The address of the MCP server
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 }
 
 // NewGetInstanceResultOK builds a "instances" service "getInstance" endpoint
@@ -566,7 +537,14 @@ func NewGetInstanceResultOK(body *GetInstanceResponseBody) *instances.GetInstanc
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
 		}
 	}
-	v.Environment = unmarshalEnvironmentResponseBodyToTypesEnvironment(body.Environment)
+	v.McpServers = make([]*instances.InstanceMcpServer, len(body.McpServers))
+	for i, val := range body.McpServers {
+		if val == nil {
+			v.McpServers[i] = nil
+			continue
+		}
+		v.McpServers[i] = unmarshalInstanceMcpServerResponseBodyToInstancesInstanceMcpServer(val)
+	}
 
 	return v
 }
@@ -730,8 +708,8 @@ func ValidateGetInstanceResponseBody(body *GetInstanceResponseBody) (err error) 
 	if body.Tools == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
-	if body.Environment == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("environment", "body"))
+	if body.McpServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_servers", "body"))
 	}
 	for _, e := range body.Tools {
 		if e != nil {
@@ -768,9 +746,11 @@ func ValidateGetInstanceResponseBody(body *GetInstanceResponseBody) (err error) 
 			}
 		}
 	}
-	if body.Environment != nil {
-		if err2 := ValidateEnvironmentResponseBody(body.Environment); err2 != nil {
-			err = goa.MergeErrors(err, err2)
+	for _, e := range body.McpServers {
+		if e != nil {
+			if err2 := ValidateInstanceMcpServerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -1342,77 +1322,11 @@ func ValidateFunctionEnvironmentVariableResponseBody(body *FunctionEnvironmentVa
 	return
 }
 
-// ValidateEnvironmentResponseBody runs the validations defined on
-// EnvironmentResponseBody
-func ValidateEnvironmentResponseBody(body *EnvironmentResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
-	}
-	if body.ProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
-	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.Slug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
-	}
-	if body.Entries == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("entries", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.Slug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
-	}
-	if body.Slug != nil {
-		if utf8.RuneCountInString(*body.Slug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
-		}
-	}
-	for _, e := range body.Entries {
-		if e != nil {
-			if err2 := ValidateEnvironmentEntryResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
-	}
-	return
-}
-
-// ValidateEnvironmentEntryResponseBody runs the validations defined on
-// EnvironmentEntryResponseBody
-func ValidateEnvironmentEntryResponseBody(body *EnvironmentEntryResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.Value == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+// ValidateInstanceMcpServerResponseBody runs the validations defined on
+// InstanceMcpServerResponseBody
+func ValidateInstanceMcpServerResponseBody(body *InstanceMcpServerResponseBody) (err error) {
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
 	}
 	return
 }

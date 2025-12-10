@@ -1,5 +1,4 @@
 # McpMetadata
-(*mcpMetadata*)
 
 ## Overview
 

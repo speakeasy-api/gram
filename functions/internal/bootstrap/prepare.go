@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/speakeasy-api/gram/functions/internal/auth"
 	"github.com/speakeasy-api/gram/functions/internal/javascript"
 	"github.com/speakeasy-api/gram/functions/internal/o11y"
 	"github.com/speakeasy-api/gram/functions/internal/python"
@@ -31,22 +32,29 @@ func ResolveProgram(language string, workDir string) (string, []string, error) {
 	}
 }
 
-func InitializeMachine(ctx context.Context, logger *slog.Logger, language string, codePath string, workDir string) (command string, args []string, err error) {
-	if !filepath.IsAbs(workDir) {
+type InitializeMachineConfig struct {
+	Ident    auth.RunnerIdentity
+	Language string
+	CodePath string
+	WorkDir  string
+}
+
+func InitializeMachine(ctx context.Context, logger *slog.Logger, config InitializeMachineConfig) (command string, args []string, err error) {
+	if !filepath.IsAbs(config.WorkDir) {
 		return "", nil, fmt.Errorf("work dir path is not absolute")
 	}
 
-	if err := unzipCode(ctx, logger, codePath, workDir); err != nil {
+	if err := unzipCode(ctx, logger, config.CodePath, config.WorkDir); err != nil {
 		return "", nil, fmt.Errorf("unzip code: %w", err)
 	}
 
-	command, args, err = prepareProgram(workDir, language)
+	command, args, err = prepareProgram(config.WorkDir, config.Language)
 	if err != nil {
 		return "", nil, fmt.Errorf("prepare program: %w", err)
 	}
 
 	// #nosec G302 -- workDir is a directory and needs to be executable to enter it.
-	if err := os.Chmod(workDir, 0555); err != nil {
+	if err := os.Chmod(config.WorkDir, 0555); err != nil {
 		return "", nil, fmt.Errorf("chmod work dir: %w", err)
 	}
 

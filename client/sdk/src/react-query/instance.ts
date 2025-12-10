@@ -94,7 +94,6 @@ export function setInstanceData(
   queryKeyBase: [
     parameters: {
       toolsetSlug: string;
-      environmentSlug?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
       gramKey?: string | undefined;
@@ -112,7 +111,6 @@ export function invalidateInstance(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       toolsetSlug: string;
-      environmentSlug?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
       gramKey?: string | undefined;
@@ -148,7 +146,6 @@ export function buildInstanceQuery(
   return {
     queryKey: queryKeyInstance({
       toolsetSlug: request.toolsetSlug,
-      environmentSlug: request.environmentSlug,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
       gramKey: request.gramKey,
@@ -173,7 +170,6 @@ export function buildInstanceQuery(
 export function queryKeyInstance(
   parameters: {
     toolsetSlug: string;
-    environmentSlug?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
     gramKey?: string | undefined;

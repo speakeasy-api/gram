@@ -32,10 +32,6 @@ export type GetInstanceRequest = {
    */
   toolsetSlug: string;
   /**
-   * The slug of the environment to load
-   */
-  environmentSlug?: string | undefined;
-  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -171,7 +167,6 @@ export function getInstanceSecurityToJSON(
 /** @internal */
 export type GetInstanceRequest$Outbound = {
   toolset_slug: string;
-  environment_slug?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Key"?: string | undefined;
@@ -184,14 +179,12 @@ export const GetInstanceRequest$outboundSchema: z.ZodType<
   GetInstanceRequest
 > = z.object({
   toolsetSlug: z.string(),
-  environmentSlug: z.string().optional(),
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),
   gramKey: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     toolsetSlug: "toolset_slug",
-    environmentSlug: "environment_slug",
     gramSession: "Gram-Session",
     gramProject: "Gram-Project",
     gramKey: "Gram-Key",

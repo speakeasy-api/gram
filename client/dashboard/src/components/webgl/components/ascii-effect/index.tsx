@@ -273,7 +273,7 @@ class ASCIIEffectImpl extends Effect {
     scrollOffset,
   }: ASCIIEffectProps) {
     super("ASCIIEffect", fragmentShader, {
-      blendFunction: BlendFunction.NORMAL,
+      blendFunction: BlendFunction.SET,
       uniforms: new Map<string, THREE.Uniform<unknown>>([
         ["uFont", new THREE.Uniform(fontTexture)],
         ["uCharSize", new THREE.Uniform(charSize)],
