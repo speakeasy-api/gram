@@ -298,19 +298,14 @@ where project_id = ?
 	and (? = '' or instance = ?)
 	and (? = '' or level = ?)
 	and (? = '' or source = ?)
-	-- Cursor-based pagination using the nil UUID (00000000-0000-0000-0000-000000000000) as a sentinel
-	-- value to indicate "no cursor" (first page). This is necessary because ClickHouse doesn't support
-	-- short-circuit evaluation in OR expressions - it would try to parse an empty string as a UUID.
-	-- The IF function provides conditional evaluation: skip cursor filtering on first page, otherwise
-	-- filter by timestamp extracted from the UUIDv7 cursor (which embeds creation time).
+	-- Cursor pagination: nil UUID = first page, otherwise get records before cursor
+	-- Use IF to avoid subquery execution on first page
 	and if(
-		toUUID(?) = toUUID('00000000-0000-0000-0000-000000000000'),
+		? = '00000000-0000-0000-0000-000000000000',
 		true,
-		if(? = 'ASC', timestamp > UUIDv7ToDateTime(toUUID(?)), timestamp < UUIDv7ToDateTime(toUUID(?)))
+		(timestamp, toUUID(id)) < (select timestamp, toUUID(id) from tool_logs where id = ? limit 1)
 	)
-order by
-	case when ? = 'ASC' then timestamp end asc,
-	case when ? = 'DESC' then timestamp end desc
+order by timestamp desc, toUUID(id) desc
 limit ?
 `
 
@@ -323,7 +318,6 @@ type ListToolLogsParams struct {
 	Instance     string
 	Level        string
 	Source       string
-	SortOrder    string
 	Cursor       string
 	Limit        int
 }
@@ -341,13 +335,9 @@ func (q *Queries) ListToolLogs(ctx context.Context, arg ListToolLogsParams) (*To
 		arg.Instance, arg.Instance, // 8,9: instance filter
 		arg.Level, arg.Level, // 10,11: level filter
 		arg.Source, arg.Source, // 12,13: source filter
-		arg.Cursor,    // 14: cursor nil check
-		arg.SortOrder, // 15: sort order check in IF
-		arg.Cursor,    // 16: cursor for ASC case
-		arg.Cursor,    // 17: cursor for DESC case
-		arg.SortOrder, // 18: ORDER BY ASC
-		arg.SortOrder, // 19: ORDER BY DESC
-		arg.Limit,     // 20: LIMIT
+		arg.Cursor, // 14: cursor check (nil UUID for first page)
+		arg.Cursor, // 15: cursor subquery lookup
+		arg.Limit,  // 16: LIMIT
 	)
 	if err != nil {
 		return nil, err
@@ -371,13 +361,15 @@ func (q *Queries) ListToolLogs(ctx context.Context, arg ListToolLogsParams) (*To
 	// Calculate pagination metadata
 	hasNextPage := len(items) > perPage
 
+	// Trim to actual page size if we fetched extra for detection
+	if hasNextPage {
+		items = items[:perPage]
+	}
+
+	// Set cursor to last item in the trimmed page
 	var nextPageCursor *string
 	if len(items) > 0 && hasNextPage {
 		nextPageCursor = conv.Ptr(items[len(items)-1].ID)
-	}
-
-	if hasNextPage {
-		items = items[:perPage]
 	}
 
 	return &ToolLogsListResult{
