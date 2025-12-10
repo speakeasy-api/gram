@@ -267,7 +267,6 @@ var ListToolExecutionLogsResult = Type("ListToolExecutionLogsResult", func() {
 
 	Attribute("logs", ArrayOf(ToolExecutionLog), "List of tool execution logs")
 	Attribute("pagination", PaginationResponse, "Pagination metadata")
-	Attribute("enabled", Boolean, "Whether tool metrics are enabled for the organization")
 })
 
 var ToolExecutionLog = Type("ToolExecutionLog", func() {

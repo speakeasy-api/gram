@@ -11693,9 +11693,6 @@ components:
         ListToolExecutionLogsResult:
             type: object
             properties:
-                enabled:
-                    type: boolean
-                    description: Whether tool metrics are enabled for the organization
                 logs:
                     type: array
                     items:

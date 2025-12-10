@@ -28,8 +28,6 @@ type ListToolExecutionLogsResponseBody struct {
 	Logs []*ToolExecutionLogResponseBody `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
 	// Pagination metadata
 	Pagination *PaginationResponseResponseBody `form:"pagination,omitempty" json:"pagination,omitempty" xml:"pagination,omitempty"`
-	// Whether tool metrics are enabled for the organization
-	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
 // ListLogsUnauthorizedResponseBody is the type of the "logs" service
@@ -649,9 +647,7 @@ func NewListLogsGatewayError(body *ListLogsGatewayErrorResponseBody) *goa.Servic
 // NewListToolExecutionLogsResultOK builds a "logs" service
 // "listToolExecutionLogs" endpoint result from a HTTP "OK" response.
 func NewListToolExecutionLogsResultOK(body *ListToolExecutionLogsResponseBody) *logs.ListToolExecutionLogsResult {
-	v := &logs.ListToolExecutionLogsResult{
-		Enabled: body.Enabled,
-	}
+	v := &logs.ListToolExecutionLogsResult{}
 	if body.Logs != nil {
 		v.Logs = make([]*logs.ToolExecutionLog, len(body.Logs))
 		for i, val := range body.Logs {

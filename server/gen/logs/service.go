@@ -156,8 +156,6 @@ type ListToolExecutionLogsResult struct {
 	Logs []*ToolExecutionLog
 	// Pagination metadata
 	Pagination *PaginationResponse
-	// Whether tool metrics are enabled for the organization
-	Enabled *bool
 }
 
 // ListToolLogResponse is the result type of the logs service listLogs method.
