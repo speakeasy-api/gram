@@ -289,6 +289,274 @@ func DecodeListLogsResponse(decoder func(*http.Response) goahttp.Decoder, restor
 	}
 }
 
+// BuildListToolExecutionLogsRequest instantiates a HTTP request object with
+// method and path set to call the "logs" service "listToolExecutionLogs"
+// endpoint
+func (c *Client) BuildListToolExecutionLogsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListToolExecutionLogsLogsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("logs", "listToolExecutionLogs", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListToolExecutionLogsRequest returns an encoder for requests sent to
+// the logs listToolExecutionLogs server.
+func EncodeListToolExecutionLogsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*logs.ListToolExecutionLogsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("logs", "listToolExecutionLogs", "*logs.ListToolExecutionLogsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		if p.TsStart != nil {
+			values.Add("ts_start", *p.TsStart)
+		}
+		if p.TsEnd != nil {
+			values.Add("ts_end", *p.TsEnd)
+		}
+		if p.DeploymentID != nil {
+			values.Add("deployment_id", *p.DeploymentID)
+		}
+		if p.FunctionID != nil {
+			values.Add("function_id", *p.FunctionID)
+		}
+		if p.Instance != nil {
+			values.Add("instance", *p.Instance)
+		}
+		if p.Level != nil {
+			values.Add("level", *p.Level)
+		}
+		if p.Source != nil {
+			values.Add("source", *p.Source)
+		}
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		values.Add("per_page", fmt.Sprintf("%v", p.PerPage))
+		values.Add("direction", p.Direction)
+		values.Add("sort", p.Sort)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListToolExecutionLogsResponse returns a decoder for responses returned
+// by the logs listToolExecutionLogs endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListToolExecutionLogsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListToolExecutionLogsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListToolExecutionLogsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listToolExecutionLogs", err)
+			}
+			err = ValidateListToolExecutionLogsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listToolExecutionLogs", err)
+			}
+			res := NewListToolExecutionLogsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListToolExecutionLogsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listToolExecutionLogs", err)
+			}
+			err = ValidateListToolExecutionLogsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listToolExecutionLogs", err)
+			}
+			return nil, NewListToolExecutionLogsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListToolExecutionLogsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listToolExecutionLogs", err)
+			}
+			err = ValidateListToolExecutionLogsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listToolExecutionLogs", err)
+			}
+			return nil, NewListToolExecutionLogsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListToolExecutionLogsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listToolExecutionLogs", err)
+			}
+			err = ValidateListToolExecutionLogsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listToolExecutionLogs", err)
+			}
+			return nil, NewListToolExecutionLogsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListToolExecutionLogsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listToolExecutionLogs", err)
+			}
+			err = ValidateListToolExecutionLogsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listToolExecutionLogs", err)
+			}
+			return nil, NewListToolExecutionLogsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListToolExecutionLogsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listToolExecutionLogs", err)
+			}
+			err = ValidateListToolExecutionLogsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listToolExecutionLogs", err)
+			}
+			return nil, NewListToolExecutionLogsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListToolExecutionLogsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listToolExecutionLogs", err)
+			}
+			err = ValidateListToolExecutionLogsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listToolExecutionLogs", err)
+			}
+			return nil, NewListToolExecutionLogsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListToolExecutionLogsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listToolExecutionLogs", err)
+			}
+			err = ValidateListToolExecutionLogsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listToolExecutionLogs", err)
+			}
+			return nil, NewListToolExecutionLogsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListToolExecutionLogsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("logs", "listToolExecutionLogs", err)
+				}
+				err = ValidateListToolExecutionLogsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("logs", "listToolExecutionLogs", err)
+				}
+				return nil, NewListToolExecutionLogsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListToolExecutionLogsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("logs", "listToolExecutionLogs", err)
+				}
+				err = ValidateListToolExecutionLogsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("logs", "listToolExecutionLogs", err)
+				}
+				return nil, NewListToolExecutionLogsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("logs", "listToolExecutionLogs", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListToolExecutionLogsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listToolExecutionLogs", err)
+			}
+			err = ValidateListToolExecutionLogsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listToolExecutionLogs", err)
+			}
+			return nil, NewListToolExecutionLogsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("logs", "listToolExecutionLogs", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog builds a value of type
 // *logs.HTTPToolLog from a value of type *HTTPToolLogResponseBody.
 func unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog(v *HTTPToolLogResponseBody) *logs.HTTPToolLog {
@@ -340,6 +608,30 @@ func unmarshalPaginationResponseResponseBodyToLogsPaginationResponse(v *Paginati
 		PerPage:        v.PerPage,
 		HasNextPage:    v.HasNextPage,
 		NextPageCursor: v.NextPageCursor,
+	}
+
+	return res
+}
+
+// unmarshalToolExecutionLogResponseBodyToLogsToolExecutionLog builds a value
+// of type *logs.ToolExecutionLog from a value of type
+// *ToolExecutionLogResponseBody.
+func unmarshalToolExecutionLogResponseBodyToLogsToolExecutionLog(v *ToolExecutionLogResponseBody) *logs.ToolExecutionLog {
+	if v == nil {
+		return nil
+	}
+	res := &logs.ToolExecutionLog{
+		ID:           *v.ID,
+		Timestamp:    *v.Timestamp,
+		Instance:     *v.Instance,
+		Level:        *v.Level,
+		Source:       *v.Source,
+		RawLog:       *v.RawLog,
+		Message:      v.Message,
+		Attributes:   v.Attributes,
+		ProjectID:    *v.ProjectID,
+		DeploymentID: *v.DeploymentID,
+		FunctionID:   *v.FunctionID,
 	}
 
 	return res

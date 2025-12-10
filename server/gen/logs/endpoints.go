@@ -16,7 +16,8 @@ import (
 
 // Endpoints wraps the "logs" service endpoints.
 type Endpoints struct {
-	ListLogs goa.Endpoint
+	ListLogs              goa.Endpoint
+	ListToolExecutionLogs goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "logs" service with endpoints.
@@ -24,13 +25,15 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListLogs: NewListLogsEndpoint(s, a.APIKeyAuth),
+		ListLogs:              NewListLogsEndpoint(s, a.APIKeyAuth),
+		ListToolExecutionLogs: NewListToolExecutionLogsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "logs" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListLogs = m(e.ListLogs)
+	e.ListToolExecutionLogs = m(e.ListToolExecutionLogs)
 }
 
 // NewListLogsEndpoint returns an endpoint function that calls the method
@@ -89,5 +92,64 @@ func NewListLogsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.En
 			return nil, err
 		}
 		return s.ListLogs(ctx, p)
+	}
+}
+
+// NewListToolExecutionLogsEndpoint returns an endpoint function that calls the
+// method "listToolExecutionLogs" of service "logs".
+func NewListToolExecutionLogsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListToolExecutionLogsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat"},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListToolExecutionLogs(ctx, p)
 	}
 }

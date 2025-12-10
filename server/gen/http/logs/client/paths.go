@@ -11,3 +11,8 @@ package client
 func ListLogsLogsPath() string {
 	return "/rpc/logs.list"
 }
+
+// ListToolExecutionLogsLogsPath returns the URL path to the logs service listToolExecutionLogs HTTP endpoint.
+func ListToolExecutionLogsLogsPath() string {
+	return "/rpc/logs.listToolExecutionLogs"
+}
