@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -26,32 +27,7 @@ func NewGramProvider(logger *slog.Logger, sessions *sessions.Manager) *GramProvi
 	}
 }
 
-// BuildAuthorizationURL builds the authorization URL for Gram OAuth
-func (p *GramProvider) BuildAuthorizationURL(ctx context.Context, params AuthURLParams) (*url.URL, error) {
-	urlParams := url.Values{}
-	urlParams.Add("return_url", params.CallbackURL)
-	urlParams.Add("state", params.State)
-
-	// !TODO: Check why these are empty
-	// Set scope from provider configuration or request
-	// if len(params.ScopesSupported) > 0 {
-	// Gram provider doesn't use scopes in the same way, but we'll include it if specified
-	// } else if params.Scope != "" {
-	// Include scope if provided in request
-	// }
-
-	gramAuthURL := fmt.Sprintf("%s/v1/speakeasy_provider/login?%s",
-		params.SpeakeasyServerAddr,
-		urlParams.Encode())
-
-	authURL, err := url.Parse(gramAuthURL)
-	if err != nil {
-		p.logger.ErrorContext(ctx, "failed to parse gram OAuth URL", attr.SlogError(err))
-		return nil, fmt.Errorf("failed to parse gram OAuth URL: %w", err)
-	}
-
-	return authURL, nil
-}
+var AccessDeniedError = errors.New("user does not have access to the requested organization")
 
 // ExchangeToken exchanges an authorization code for an access token from Gram
 func (p *GramProvider) ExchangeToken(
@@ -93,7 +69,7 @@ func (p *GramProvider) ExchangeToken(
 			attr.SlogOAuthProvider(provider.Slug),
 			attr.SlogUserID(userInfo.UserID),
 			attr.SlogOrganizationID(toolset.OrganizationID))
-		return nil, fmt.Errorf("user does not have access to the requested organization")
+		return nil, AccessDeniedError
 	}
 
 	// Use idToken as access token for gram providers
@@ -108,5 +84,6 @@ func IsAccessDeniedError(err error) bool {
 	if err == nil {
 		return false
 	}
-	return err.Error() == "user does not have access to the requested organization"
+
+	return errors.Is(err, AccessDeniedError)
 }

@@ -32,14 +32,6 @@ func NewCustomProvider(logger *slog.Logger, environments *environments.Environme
 	}
 }
 
-// BuildAuthorizationURL builds the authorization URL for custom OAuth providers
-func (p *CustomProvider) BuildAuthorizationURL(ctx context.Context, params AuthURLParams) (*url.URL, error) {
-	// For custom providers, we need to get the authorization endpoint from the provider config
-	// This is handled in the main service, so this method isn't actually used
-	// But we need to implement it to satisfy the interface
-	return nil, fmt.Errorf("BuildAuthorizationURL should not be called for custom providers")
-}
-
 // ExchangeToken exchanges an authorization code for an access token from a custom OAuth provider
 func (p *CustomProvider) ExchangeToken(
 	ctx context.Context,

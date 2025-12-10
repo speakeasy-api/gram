@@ -9,16 +9,6 @@ import (
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-// AuthURLParams contains parameters needed to build an authorization URL
-type AuthURLParams struct {
-	CallbackURL         string
-	Scope               string
-	State               string
-	ClientID            string
-	ScopesSupported     []string
-	SpeakeasyServerAddr string
-}
-
 // TokenExchangeResult contains the result of exchanging an authorization code
 type TokenExchangeResult struct {
 	AccessToken string
@@ -27,9 +17,6 @@ type TokenExchangeResult struct {
 
 // Provider defines the interface for OAuth provider implementations
 type Provider interface {
-	// BuildAuthorizationURL builds the authorization URL for this provider
-	BuildAuthorizationURL(ctx context.Context, params AuthURLParams) (*url.URL, error)
-
 	// ExchangeToken exchanges an authorization code for an access token
 	ExchangeToken(
 		ctx context.Context,
@@ -38,4 +25,17 @@ type Provider interface {
 		toolset *toolsets_repo.Toolset,
 		serverURL *url.URL,
 	) (*TokenExchangeResult, error)
+}
+
+const (
+	ProviderErrorAccessDenied = iota
+)
+
+type ProviderError struct {
+	message string
+	code    string
+}
+
+func (e *ProviderError) Error() string {
+	return e.code
 }

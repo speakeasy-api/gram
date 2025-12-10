@@ -288,7 +288,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 
 	switch provider.ProviderType {
 	case "gram":
-		authURL, err = s.gramProvider.BuildAuthorizationURL(ctx, providers.AuthURLParams{
+		authURL, err = s.sessions.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
 			CallbackURL:         callbackURL,
 			Scope:               req.Scope,
 			State:               string(oauthReqInfoJSON),
