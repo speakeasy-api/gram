@@ -38,8 +38,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [changelogModalOpen, setChangelogModalOpen] = useState(false);
 
   const topNavGroups = {
-    create: [routes.toolsets, routes.customTools, routes.catalog],
-    consume: [routes.playground, routes.mcp, routes.environments],
+    connect: [routes.toolsets, routes.customTools, routes.catalog],
+    create: [routes.playground, routes.mcp, routes.environments],
   };
 
   const bottomNav = [routes.deployments, routes.billing, routes.settings];

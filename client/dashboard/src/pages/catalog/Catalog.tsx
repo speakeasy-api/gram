@@ -1,10 +1,11 @@
 import { Page } from "@/components/page-layout";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
-import { useSampleListRegistry } from "@/hooks/useSampleListRegistry";
+import { useSampleListRegistry } from "@/pages/catalog/useSampleListRegistry";
 import { Badge, Button, Input, Stack } from "@speakeasy-api/moonshine";
-import { Search } from "lucide-react";
-import { useState } from "react";
+import { Loader2, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet } from "react-router";
 
 export function CatalogRoot() {
@@ -13,16 +14,42 @@ export function CatalogRoot() {
 
 export default function Catalog() {
   const [searchQuery, setSearchQuery] = useState("");
-  const { data, isLoading } = useSampleListRegistry();
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useSampleListRegistry();
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  const filteredServers = data?.servers.filter((server) => {
+  // Flatten all pages into a single list
+  const allServers = useMemo(() => {
+    return data?.pages.flatMap((page) => page.servers) ?? [];
+  }, [data]);
+
+  const filteredServers = useMemo(() => {
     const query = searchQuery.toLowerCase();
-    return (
-      server.title.toLowerCase().includes(query) ||
-      server.name.toLowerCase().includes(query) ||
-      server.description.toLowerCase().includes(query)
+    return allServers.filter(
+      (server) =>
+        server.title.toLowerCase().includes(query) ||
+        server.name.toLowerCase().includes(query) ||
+        server.description.toLowerCase().includes(query),
     );
-  });
+  }, [allServers, searchQuery]);
+
+  // Infinite scroll with IntersectionObserver
+  useEffect(() => {
+    const element = loadMoreRef.current;
+    if (!element) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1 },
+    );
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   return (
     <Page>
@@ -48,17 +75,31 @@ export default function Catalog() {
                 />
               </div>
 
-              {isLoading ? (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {[...Array(6)].map((_, i) => (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {isLoading &&
+                  [...Array(6)].map((_, i) => (
                     <Skeleton key={i} className="h-[200px]" />
                   ))}
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {filteredServers?.map((server) => (
+                {!isLoading &&
+                  filteredServers?.map((server) => (
                     <MCPServerCard key={server.name} server={server} />
                   ))}
+              </div>
+
+              {/* Load more trigger */}
+              {!isLoading && hasNextPage && !searchQuery && (
+                <div
+                  ref={loadMoreRef}
+                  className="flex justify-center items-center py-8"
+                >
+                  {isFetchingNextPage && (
+                    <Stack direction="horizontal" gap={2} align="center">
+                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                      <Type small muted>
+                        Loading more...
+                      </Type>
+                    </Stack>
+                  )}
                 </div>
               )}
 
@@ -103,47 +144,52 @@ interface MCPServerCardProps {
 }
 
 function MCPServerCard({ server }: MCPServerCardProps) {
-  const isOfficial = server.meta["com.pulsemcp/server"]?.isOfficial;
-  const visitorsTotal =
-    server.meta["com.pulsemcp/server"]?.visitorsEstimateTotal;
+  const meta = server.meta["com.pulsemcp/server"];
+  const isOfficial = meta?.isOfficial;
+  const visitorsTotal = meta?.visitorsEstimateTotal;
 
   return (
-    <div className="border rounded-lg p-6 bg-card hover:bg-accent/50 transition-colors">
-      <Stack direction="vertical" gap={4}>
-        <Stack direction="horizontal" justify="space-between" align="start">
-          <Stack direction="horizontal" gap={3} align="start">
-            <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+    <Card>
+      <Card.Title>
+        <Stack direction="horizontal" justify="space-between">
+          <Stack direction="horizontal" gap={3}>
+            <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
               <Type variant="subheading">{server.title[0]}</Type>
             </div>
-            <Stack direction="vertical" gap={1}>
+            <Stack gap={1}>
               <Stack direction="horizontal" gap={2} align="center">
                 <Type variant="subheading">{server.title}</Type>
                 {isOfficial && <Badge>Official</Badge>}
               </Stack>
-              <Type small className="text-muted-foreground">
+              <Type small muted>
                 {server.name} • v{server.version}
               </Type>
             </Stack>
           </Stack>
         </Stack>
-
-        <Type small className="text-foreground line-clamp-2">
-          {server.description}
-        </Type>
-
-        <Stack direction="horizontal" justify="space-between" align="center">
-          {visitorsTotal ? (
-            <Type small className="text-muted-foreground">
-              {visitorsTotal.toLocaleString()} visitors
+      </Card.Title>
+      <Card.Description className="line-clamp-2 whitespace-pre-wrap">
+        {server.description}
+      </Card.Description>
+      <Card.Footer>
+        <Stack
+          direction="horizontal"
+          justify="space-between"
+          align="center"
+          className="w-full"
+        >
+          {visitorsTotal && visitorsTotal > 0 ? (
+            <Type small muted>
+              Usage: {visitorsTotal.toLocaleString()}
             </Type>
           ) : (
             <div />
           )}
           <Button variant="secondary" size="sm">
-            <Button.Text>View Details</Button.Text>
+            <Button.Text>Add to Project</Button.Text>
           </Button>
         </Stack>
-      </Stack>
-    </div>
+      </Card.Footer>
+    </Card>
   );
 }
