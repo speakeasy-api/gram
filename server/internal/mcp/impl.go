@@ -389,14 +389,23 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			if !ok || authCtx == nil {
+				return oops.E(oops.CodeUnauthorized, nil, "no auth context found").Log(ctx, s.logger)
+			}
+
+			if authCtx.SessionID == nil {
+				return oops.E(oops.CodeUnauthorized, nil, "no session ID found in auth context").Log(ctx, s.logger)
+			}
+
 			// If toolset has OAuth proxy server, validate OAuth token and check org access
 			if toolset.OauthProxyServerID.Valid {
-				oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
+				_, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
 				if err != nil {
 					return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
 				}
 
-				userInfo, err := s.sessions.GetUserInfoFromSpeakeasy(ctx, oauthToken.AccessToken)
+				userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 				if err != nil {
 					return oops.E(oops.CodeUnauthorized, err, "failed to get user info from access token").Log(ctx, s.logger)
 				}
