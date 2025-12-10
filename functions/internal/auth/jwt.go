@@ -7,7 +7,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// RunnerIdentity provisions a JWT that can be used to make API calls to the
+// NewServerJWT provisions a JWT that can be used to make API calls to the
 // functions service on the Gram API.
 func NewServerJWT(ident RunnerIdentity, claims jwt.MapClaims) (string, error) {
 	sub := fmt.Sprintf("%s:%s:%s", ident.ProjectID, ident.DeploymentID, ident.FunctionID)
