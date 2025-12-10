@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -72,10 +74,23 @@ func (p *GramProvider) ExchangeToken(
 		return nil, ErrAccessDenied
 	}
 
+	session := sessions.Session{
+		SessionID:            idToken,
+		UserID:               userInfo.UserID,
+		ActiveOrganizationID: "",
+	}
+
+	if err := p.sessions.StoreSession(ctx, session); err != nil {
+		p.logger.ErrorContext(ctx, "failed to store session from oauth gram provider",
+			attr.SlogOAuthProvider(provider.Slug),
+			attr.SlogError(err))
+	}
+
 	// Use idToken as access token for gram providers
+	// !TODO: Maybe return session instead?
 	return &TokenExchangeResult{
 		AccessToken: idToken,
-		ExpiresAt:   nil,
+		ExpiresAt:   conv.Ptr(time.Now().Add(session.TTL())),
 	}, nil
 }
 
