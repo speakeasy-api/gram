@@ -1,5 +1,4 @@
 # Environments
-(*environments*)
 
 ## Overview
 

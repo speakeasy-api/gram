@@ -1,5 +1,4 @@
 # Domains
-(*domains*)
 
 ## Overview
 
