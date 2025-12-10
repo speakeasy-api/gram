@@ -139,6 +139,18 @@ async function $do(
         value: security?.option2?.projectSlugHeaderGramProject,
       },
     ],
+    [
+      {
+        fieldName: "Gram-Key",
+        type: "apiKey:header",
+        value: security?.option3?.apikeyHeaderGramKey,
+      },
+      {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.option3?.projectSlugHeaderGramProject,
+      },
+    ],
   );
 
   const context = {
