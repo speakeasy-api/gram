@@ -2779,6 +2779,7 @@ func marshalTypesOAuthProxyProviderToOAuthProxyProviderResponseBody(v *types.OAu
 	res := &OAuthProxyProviderResponseBody{
 		ID:                    v.ID,
 		Slug:                  string(v.Slug),
+		ProviderType:          v.ProviderType,
 		AuthorizationEndpoint: v.AuthorizationEndpoint,
 		TokenEndpoint:         v.TokenEndpoint,
 		CreatedAt:             v.CreatedAt,
@@ -2979,17 +2980,22 @@ func unmarshalExternalOAuthServerFormRequestBodyToTypesExternalOAuthServerForm(v
 func unmarshalOAuthProxyServerFormRequestBodyToTypesOAuthProxyServerForm(v *OAuthProxyServerFormRequestBody) *types.OAuthProxyServerForm {
 	res := &types.OAuthProxyServerForm{
 		Slug:                  types.Slug(*v.Slug),
-		AuthorizationEndpoint: *v.AuthorizationEndpoint,
-		TokenEndpoint:         *v.TokenEndpoint,
+		ProviderType:          *v.ProviderType,
+		AuthorizationEndpoint: v.AuthorizationEndpoint,
+		TokenEndpoint:         v.TokenEndpoint,
 		EnvironmentSlug:       types.Slug(*v.EnvironmentSlug),
 	}
-	res.ScopesSupported = make([]string, len(v.ScopesSupported))
-	for i, val := range v.ScopesSupported {
-		res.ScopesSupported[i] = val
+	if v.ScopesSupported != nil {
+		res.ScopesSupported = make([]string, len(v.ScopesSupported))
+		for i, val := range v.ScopesSupported {
+			res.ScopesSupported[i] = val
+		}
 	}
-	res.TokenEndpointAuthMethodsSupported = make([]string, len(v.TokenEndpointAuthMethodsSupported))
-	for i, val := range v.TokenEndpointAuthMethodsSupported {
-		res.TokenEndpointAuthMethodsSupported[i] = val
+	if v.TokenEndpointAuthMethodsSupported != nil {
+		res.TokenEndpointAuthMethodsSupported = make([]string, len(v.TokenEndpointAuthMethodsSupported))
+		for i, val := range v.TokenEndpointAuthMethodsSupported {
+			res.TokenEndpointAuthMethodsSupported[i] = val
+		}
 	}
 
 	return res

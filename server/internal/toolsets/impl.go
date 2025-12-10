@@ -634,10 +634,6 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 		return nil, err
 	}
 
-	if toolsetDetails.McpIsPublic == nil || !*toolsetDetails.McpIsPublic {
-		return nil, oops.E(oops.CodeBadRequest, nil, "private MCP servers cannot have OAuth proxy servers").Log(ctx, s.logger)
-	}
-
 	if toolsetDetails.OauthProxyServer != nil || toolsetDetails.ExternalOauthServer != nil {
 		return nil, oops.E(oops.CodeConflict, nil, "OAuth server already exists").Log(ctx, s.logger)
 	}
@@ -665,6 +661,41 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 	for _, method := range payload.OauthProxyServer.TokenEndpointAuthMethodsSupported {
 		if !validAuthMethods[method] {
 			return nil, oops.E(oops.CodeBadRequest, nil, "invalid token_endpoint_auth_methods_supported value: %s (must be client_secret_basic or client_secret_post)", method).Log(ctx, s.logger)
+		}
+	}
+
+	// Validate provider_type
+	validProviderTypes := map[string]bool{
+		"custom": true,
+		"gram":   true,
+	}
+
+	if !validProviderTypes[payload.OauthProxyServer.ProviderType] {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid provider_type value: %s (must be 'custom' or 'gram')", payload.OauthProxyServer.ProviderType).Log(ctx, s.logger)
+	}
+
+	// Validate provider_type against public/private status
+	isPublic := toolsetDetails.McpIsPublic != nil && *toolsetDetails.McpIsPublic
+	if payload.OauthProxyServer.ProviderType == "gram" && isPublic {
+		return nil, oops.E(oops.CodeBadRequest, nil, "gram provider type can only be used with private MCP servers").Log(ctx, s.logger)
+	}
+	if payload.OauthProxyServer.ProviderType == "custom" && !isPublic {
+		return nil, oops.E(oops.CodeBadRequest, nil, "custom provider type can only be used with public MCP servers").Log(ctx, s.logger)
+	}
+
+	// Validate required fields for custom provider type
+	if payload.OauthProxyServer.ProviderType == "custom" {
+		if payload.OauthProxyServer.AuthorizationEndpoint == nil || *payload.OauthProxyServer.AuthorizationEndpoint == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "authorization_endpoint is required for custom provider type").Log(ctx, s.logger)
+		}
+		if payload.OauthProxyServer.TokenEndpoint == nil || *payload.OauthProxyServer.TokenEndpoint == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "token_endpoint is required for custom provider type").Log(ctx, s.logger)
+		}
+		if len(payload.OauthProxyServer.ScopesSupported) == 0 {
+			return nil, oops.E(oops.CodeBadRequest, nil, "scopes_supported is required for custom provider type").Log(ctx, s.logger)
+		}
+		if len(payload.OauthProxyServer.TokenEndpointAuthMethodsSupported) == 0 {
+			return nil, oops.E(oops.CodeBadRequest, nil, "token_endpoint_auth_methods_supported is required for custom provider type").Log(ctx, s.logger)
 		}
 	}
 
@@ -701,8 +732,9 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 		ProjectID:                         *authCtx.ProjectID,
 		OauthProxyServerID:                oauthProxyServer.ID,
 		Slug:                              conv.ToLower(payload.OauthProxyServer.Slug),
-		AuthorizationEndpoint:             conv.ToPGTextEmpty(payload.OauthProxyServer.AuthorizationEndpoint),
-		TokenEndpoint:                     conv.ToPGTextEmpty(payload.OauthProxyServer.TokenEndpoint),
+		ProviderType:                      payload.OauthProxyServer.ProviderType,
+		AuthorizationEndpoint:             conv.PtrToPGTextEmpty(payload.OauthProxyServer.AuthorizationEndpoint),
+		TokenEndpoint:                     conv.PtrToPGTextEmpty(payload.OauthProxyServer.TokenEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(nil),
 		ScopesSupported:                   payload.OauthProxyServer.ScopesSupported,
 		ResponseTypesSupported:            []string{"code"},

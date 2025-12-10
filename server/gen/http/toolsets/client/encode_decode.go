@@ -2820,6 +2820,7 @@ func unmarshalOAuthProxyProviderResponseBodyToTypesOAuthProxyProvider(v *OAuthPr
 	res := &types.OAuthProxyProvider{
 		ID:                    *v.ID,
 		Slug:                  types.Slug(*v.Slug),
+		ProviderType:          *v.ProviderType,
 		AuthorizationEndpoint: *v.AuthorizationEndpoint,
 		TokenEndpoint:         *v.TokenEndpoint,
 		CreatedAt:             *v.CreatedAt,
@@ -3012,6 +3013,7 @@ func marshalExternalOAuthServerFormRequestBodyToTypesExternalOAuthServerForm(v *
 func marshalTypesOAuthProxyServerFormToOAuthProxyServerFormRequestBody(v *types.OAuthProxyServerForm) *OAuthProxyServerFormRequestBody {
 	res := &OAuthProxyServerFormRequestBody{
 		Slug:                  string(v.Slug),
+		ProviderType:          v.ProviderType,
 		AuthorizationEndpoint: v.AuthorizationEndpoint,
 		TokenEndpoint:         v.TokenEndpoint,
 		EnvironmentSlug:       string(v.EnvironmentSlug),
@@ -3021,16 +3023,12 @@ func marshalTypesOAuthProxyServerFormToOAuthProxyServerFormRequestBody(v *types.
 		for i, val := range v.ScopesSupported {
 			res.ScopesSupported[i] = val
 		}
-	} else {
-		res.ScopesSupported = []string{}
 	}
 	if v.TokenEndpointAuthMethodsSupported != nil {
 		res.TokenEndpointAuthMethodsSupported = make([]string, len(v.TokenEndpointAuthMethodsSupported))
 		for i, val := range v.TokenEndpointAuthMethodsSupported {
 			res.TokenEndpointAuthMethodsSupported[i] = val
 		}
-	} else {
-		res.TokenEndpointAuthMethodsSupported = []string{}
 	}
 
 	return res
@@ -3042,6 +3040,7 @@ func marshalTypesOAuthProxyServerFormToOAuthProxyServerFormRequestBody(v *types.
 func marshalOAuthProxyServerFormRequestBodyToTypesOAuthProxyServerForm(v *OAuthProxyServerFormRequestBody) *types.OAuthProxyServerForm {
 	res := &types.OAuthProxyServerForm{
 		Slug:                  types.Slug(v.Slug),
+		ProviderType:          v.ProviderType,
 		AuthorizationEndpoint: v.AuthorizationEndpoint,
 		TokenEndpoint:         v.TokenEndpoint,
 		EnvironmentSlug:       types.Slug(v.EnvironmentSlug),
@@ -3051,16 +3050,12 @@ func marshalOAuthProxyServerFormRequestBodyToTypesOAuthProxyServerForm(v *OAuthP
 		for i, val := range v.ScopesSupported {
 			res.ScopesSupported[i] = val
 		}
-	} else {
-		res.ScopesSupported = []string{}
 	}
 	if v.TokenEndpointAuthMethodsSupported != nil {
 		res.TokenEndpointAuthMethodsSupported = make([]string, len(v.TokenEndpointAuthMethodsSupported))
 		for i, val := range v.TokenEndpointAuthMethodsSupported {
 			res.TokenEndpointAuthMethodsSupported[i] = val
 		}
-	} else {
-		res.TokenEndpointAuthMethodsSupported = []string{}
 	}
 
 	return res
