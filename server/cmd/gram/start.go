@@ -502,6 +502,12 @@ func newStartCommand() *cli.Command {
 				}
 			}
 
+			tigrisStore, shutdown, err := newTigrisStore(ctx, c, logger)
+			if err != nil {
+				return fmt.Errorf("failed to create tigris asset store: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
 			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, db, assetStorage, encryptionClient)
 			if err != nil {
 				return fmt.Errorf("failed to create functions orchestrator: %w", err)
@@ -570,6 +576,7 @@ func newStartCommand() *cli.Command {
 			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
 			usage.Attach(mux, usage.NewService(logger, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter))
 			logs.Attach(mux, logs.NewService(logger, db, sessionManager, tcm))
+			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
