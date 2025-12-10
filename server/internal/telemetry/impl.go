@@ -225,8 +225,8 @@ func (s *Service) ListToolExecutionLogs(ctx context.Context, payload *gen.ListTo
 		Instance:     conv.PtrValOr(payload.Instance, ""),
 		Level:        conv.PtrValOr(payload.Level, ""),
 		Source:       conv.PtrValOr(payload.Source, ""),
-		Cursor:       cursor,
 		SortOrder:    sortOrder,
+		Cursor:       cursor,
 		Limit:        perPage + 1, // +1 for detecting next page
 	}
 

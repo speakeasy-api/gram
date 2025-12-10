@@ -355,3 +355,31 @@ func insertToolExecutionLog(t *testing.T, ctx context.Context, conn repo.CHTX, p
 	// ClickHouse eventual consistency
 	time.Sleep(100 * time.Millisecond)
 }
+
+// fromTimeV7 generates a UUIDv7 from a given timestamp.
+// This is necessary for testing cursor-based pagination where the cursor
+// embeds a timestamp that must match the actual record timestamp.
+func fromTimeV7(t time.Time) (uuid.UUID, error) {
+	var u uuid.UUID
+
+	// 1) Encode unix milliseconds into first 48 bits
+	ms := t.UnixMilli()
+	u[0] = byte(ms >> 40)
+	u[1] = byte(ms >> 32)
+	u[2] = byte(ms >> 24)
+	u[3] = byte(ms >> 16)
+	u[4] = byte(ms >> 8)
+	u[5] = byte(ms)
+
+	// 2) 12-bit random field (or sub-millisecond precision)
+	u[6] = 0
+	u[7] = 0
+
+	// 3) Set version (v7)
+	u[6] = (u[6] & 0x0F) | 0x70
+
+	// 4) Set variant (RFC 4122)
+	u[8] = (u[8] & 0x3F) | 0x80
+
+	return u, nil
+}

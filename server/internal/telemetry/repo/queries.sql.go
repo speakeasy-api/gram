@@ -298,14 +298,22 @@ where project_id = ?
 	and (? = '' or instance = ?)
 	and (? = '' or level = ?)
 	and (? = '' or source = ?)
-	-- Cursor pagination: nil UUID = first page, otherwise get records before cursor
+	-- Cursor pagination: nil UUID = first page, otherwise compare based on sort direction
 	-- Use IF to avoid subquery execution on first page
 	and if(
 		? = '00000000-0000-0000-0000-000000000000',
 		true,
-		(timestamp, toUUID(id)) < (select timestamp, toUUID(id) from tool_logs where id = ? limit 1)
+		if(
+			? = 'ASC',
+			(timestamp, toUUID(id)) > (select timestamp, toUUID(id) from tool_logs where id = ? limit 1),
+			(timestamp, toUUID(id)) < (select timestamp, toUUID(id) from tool_logs where id = ? limit 1)
+		)
 	)
-order by timestamp desc, toUUID(id) desc
+order by
+	if(? = 'ASC', timestamp, toDateTime('1970-01-01')) asc,
+	if(? = 'ASC', toUUID(id), toUUID('00000000-0000-0000-0000-000000000000')) asc,
+	if(? = 'DESC', timestamp, toDateTime('1970-01-01')) desc,
+	if(? = 'DESC', toUUID(id), toUUID('00000000-0000-0000-0000-000000000000')) desc
 limit ?
 `
 
@@ -318,6 +326,7 @@ type ListToolLogsParams struct {
 	Instance     string
 	Level        string
 	Source       string
+	SortOrder    string
 	Cursor       string
 	Limit        int
 }
@@ -335,9 +344,15 @@ func (q *Queries) ListToolLogs(ctx context.Context, arg ListToolLogsParams) (*To
 		arg.Instance, arg.Instance, // 8,9: instance filter
 		arg.Level, arg.Level, // 10,11: level filter
 		arg.Source, arg.Source, // 12,13: source filter
-		arg.Cursor, // 14: cursor check (nil UUID for first page)
-		arg.Cursor, // 15: cursor subquery lookup
-		arg.Limit,  // 16: LIMIT
+		arg.Cursor,    // 14: cursor nil check
+		arg.SortOrder, // 15: ASC or DESC for comparison
+		arg.Cursor,    // 16: ASC cursor subquery
+		arg.Cursor,    // 17: DESC cursor subquery
+		arg.SortOrder, // 18: ORDER BY timestamp ASC
+		arg.SortOrder, // 19: ORDER BY id ASC
+		arg.SortOrder, // 20: ORDER BY timestamp DESC
+		arg.SortOrder, // 21: ORDER BY id DESC
+		arg.Limit,     // 22: LIMIT
 	)
 	if err != nil {
 		return nil, err
