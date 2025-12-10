@@ -259,3 +259,117 @@ func (q *Queries) Log(ctx context.Context, log ToolHTTPRequest) (err error) {
 
 	return nil
 }
+
+const listToolLogs = `-- name: ListToolLogs :many
+select
+	id,
+	timestamp,
+	instance,
+	level,
+	source,
+	raw_log,
+	message,
+	toString(attributes) as attributes,
+	project_id,
+	deployment_id,
+	function_id
+from tool_logs
+where project_id = ?
+	and timestamp >= ?
+	and timestamp <= ?
+	and (? = '' or deployment_id = ?)
+	and (? = '' or function_id = ?)
+	and (? = '' or instance = ?)
+	and (? = '' or level = ?)
+	and (? = '' or source = ?)
+	-- Cursor-based pagination using the nil UUID (00000000-0000-0000-0000-000000000000) as a sentinel
+	-- value to indicate "no cursor" (first page). This is necessary because ClickHouse doesn't support
+	-- short-circuit evaluation in OR expressions - it would try to parse an empty string as a UUID.
+	-- The IF function provides conditional evaluation: skip cursor filtering on first page, otherwise
+	-- filter by timestamp extracted from the UUIDv7 cursor (which embeds creation time).
+	and if(
+		toUUID(?) = toUUID('00000000-0000-0000-0000-000000000000'),
+		true,
+		if(? = 'ASC', timestamp > UUIDv7ToDateTime(toUUID(?)), timestamp < UUIDv7ToDateTime(toUUID(?)))
+	)
+order by
+	case when ? = 'ASC' then timestamp end asc,
+	case when ? = 'DESC' then timestamp end desc
+limit ?
+`
+
+type ListToolLogsParams struct {
+	ProjectID    string
+	TsStart      time.Time
+	TsEnd        time.Time
+	DeploymentID string
+	FunctionID   string
+	Instance     string
+	Level        string
+	Source       string
+	SortOrder    string
+	Cursor       string
+	Limit        int
+}
+
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) ListToolLogs(ctx context.Context, arg ListToolLogsParams) (*ToolLogsListResult, error) {
+	perPage := arg.Limit - 1
+
+	rows, err := q.conn.Query(ctx, listToolLogs,
+		arg.ProjectID,                      // 1: project_id
+		arg.TsStart,                        // 2: timestamp >=
+		arg.TsEnd,                          // 3: timestamp <=
+		arg.DeploymentID, arg.DeploymentID, // 4,5: deployment_id filter
+		arg.FunctionID, arg.FunctionID, // 6,7: function_id filter
+		arg.Instance, arg.Instance, // 8,9: instance filter
+		arg.Level, arg.Level, // 10,11: level filter
+		arg.Source, arg.Source, // 12,13: source filter
+		arg.Cursor,    // 14: cursor nil check
+		arg.SortOrder, // 15: sort order check in IF
+		arg.Cursor,    // 16: cursor for ASC case
+		arg.Cursor,    // 17: cursor for DESC case
+		arg.SortOrder, // 18: ORDER BY ASC
+		arg.SortOrder, // 19: ORDER BY DESC
+		arg.Limit,     // 20: LIMIT
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	var items []ToolLog
+	for rows.Next() {
+		var log ToolLog
+		if err = rows.ScanStruct(&log); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		items = append(items, log)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Calculate pagination metadata
+	hasNextPage := len(items) > perPage
+
+	var nextPageCursor *string
+	if len(items) > 0 && hasNextPage {
+		nextPageCursor = conv.Ptr(items[len(items)-1].ID)
+	}
+
+	if hasNextPage {
+		items = items[:perPage]
+	}
+
+	return &ToolLogsListResult{
+		Logs: items,
+		Pagination: PaginationMetadata{
+			PerPage:        perPage,
+			HasNextPage:    hasNextPage,
+			NextPageCursor: nextPageCursor,
+		},
+	}, nil
+}

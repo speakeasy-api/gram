@@ -96,6 +96,28 @@ type ListResult struct {
 	Pagination PaginationMetadata `json:"pagination"`
 }
 
+// ToolLog represents a log entry from the tool_logs table.
+type ToolLog struct {
+	ID         string    `ch:"id"`        // UUID
+	Timestamp  time.Time `ch:"timestamp"` // DateTime64(3, 'UTC')
+	Instance   string    `ch:"instance"`  // String
+	Level      string    `ch:"level"`     // LowCardinality(String)
+	Source     string    `ch:"source"`    // LowCardinality(String)
+	RawLog     string    `ch:"raw_log"`   // String
+	Message    *string   `ch:"message"`   // Nullable(String)
+	Attributes string    `ch:"attributes"` // JSON
+
+	ProjectID    string `ch:"project_id"`    // UUID
+	DeploymentID string `ch:"deployment_id"` // UUID
+	FunctionID   string `ch:"function_id"`   // UUID
+}
+
+// ToolLogsListResult contains the result of a tool logs list operation.
+type ToolLogsListResult struct {
+	Logs       []ToolLog          `json:"logs"`
+	Pagination PaginationMetadata `json:"pagination"`
+}
+
 // ToolMetricsProvider defines the interface for tool metrics operations.
 type ToolMetricsProvider interface {
 	// List tool call logs
