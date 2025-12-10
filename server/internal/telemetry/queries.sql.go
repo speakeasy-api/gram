@@ -312,6 +312,7 @@ type ListToolLogsParams struct {
 	Limit        int
 }
 
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListToolLogs(ctx context.Context, arg ListToolLogsParams) (*ToolLogsListResult, error) {
 	perPage := arg.Limit - 1
 
@@ -320,51 +321,51 @@ func (q *Queries) ListToolLogs(ctx context.Context, arg ListToolLogsParams) (*To
 		arg.TsStart,                        // 2: timestamp >=
 		arg.TsEnd,                          // 3: timestamp <=
 		arg.DeploymentID, arg.DeploymentID, // 4,5: deployment_id filter
-		arg.FunctionID, arg.FunctionID,     // 6,7: function_id filter
-		arg.Instance, arg.Instance,         // 8,9: instance filter
-		arg.Level, arg.Level,               // 10,11: level filter
-		arg.Source, arg.Source,             // 12,13: source filter
-		arg.Cursor,                         // 14: cursor nil check
-		arg.SortOrder,                      // 15: sort order check in IF
-		arg.Cursor,                         // 16: cursor for ASC case
-		arg.Cursor,                         // 17: cursor for DESC case
-		arg.SortOrder,                      // 18: ORDER BY ASC
-		arg.SortOrder,                      // 19: ORDER BY DESC
-		arg.Limit,                          // 20: LIMIT
+		arg.FunctionID, arg.FunctionID, // 6,7: function_id filter
+		arg.Instance, arg.Instance, // 8,9: instance filter
+		arg.Level, arg.Level, // 10,11: level filter
+		arg.Source, arg.Source, // 12,13: source filter
+		arg.Cursor,    // 14: cursor nil check
+		arg.SortOrder, // 15: sort order check in IF
+		arg.Cursor,    // 16: cursor for ASC case
+		arg.Cursor,    // 17: cursor for DESC case
+		arg.SortOrder, // 18: ORDER BY ASC
+		arg.SortOrder, // 19: ORDER BY DESC
+		arg.Limit,     // 20: LIMIT
 	)
 	if err != nil {
-		return nil, fmt.Errorf("query tool logs: %w", err)
+		return nil, err
 	}
 
-	defer o11y.LogDefer(ctx, q.logger, func() error { return rows.Close() })
+	defer rows.Close()
 
-	var results []ToolLog
+	var items []ToolLog
 	for rows.Next() {
 		var log ToolLog
 		if err = rows.ScanStruct(&log); err != nil {
 			return nil, fmt.Errorf("error scanning row: %w", err)
 		}
-		results = append(results, log)
+		items = append(items, log)
 	}
 
 	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows error: %w", err)
+		return nil, err
 	}
 
 	// Calculate pagination metadata
-	hasNextPage := len(results) > perPage
+	hasNextPage := len(items) > perPage
 
 	var nextPageCursor *string
-	if len(results) > 0 && hasNextPage {
-		nextPageCursor = conv.Ptr(results[len(results)-1].ID)
+	if len(items) > 0 && hasNextPage {
+		nextPageCursor = conv.Ptr(items[len(items)-1].ID)
 	}
 
 	if hasNextPage {
-		results = results[:perPage]
+		items = items[:perPage]
 	}
 
 	return &ToolLogsListResult{
-		Logs: results,
+		Logs: items,
 		Pagination: PaginationMetadata{
 			PerPage:        perPage,
 			HasNextPage:    hasNextPage,
