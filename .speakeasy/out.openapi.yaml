@@ -8256,6 +8256,8 @@ paths:
           session_header_Gram-Session: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - {}
       summary: getToolset toolsets
       tags:
@@ -8353,6 +8355,8 @@ paths:
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
@@ -11709,6 +11713,12 @@ components:
         id:
           type: string
           description: The ID of the OAuth proxy provider
+        provider_type:
+          type: string
+          description: The type of OAuth provider
+          enum:
+            - custom
+            - gram
         scopes_supported:
           type: array
           items:
@@ -11734,6 +11744,7 @@ components:
       required:
         - id
         - slug
+        - provider_type
         - authorization_endpoint
         - token_endpoint
         - created_at
@@ -11782,6 +11793,12 @@ components:
           description: A short url-friendly label that uniquely identifies a resource.
           pattern: ^[a-z0-9_-]{1,128}$
           maxLength: 40
+        provider_type:
+          type: string
+          description: The type of OAuth provider
+          enum:
+            - custom
+            - gram
         scopes_supported:
           type: array
           items:
@@ -11802,10 +11819,7 @@ components:
           description: Auth methods (client_secret_basic or client_secret_post)
       required:
         - slug
-        - authorization_endpoint
-        - token_endpoint
-        - scopes_supported
-        - token_endpoint_auth_methods_supported
+        - provider_type
         - environment_slug
     OpenAPIv3DeploymentAsset:
       type: object
