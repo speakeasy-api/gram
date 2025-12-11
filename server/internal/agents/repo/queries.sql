@@ -17,7 +17,8 @@ VALUES (
 )
 ON CONFLICT (id) DO UPDATE SET
     status = @status,
-    completed_at = @completed_at,
+    started_at = COALESCE(@started_at, agent_executions.started_at),
+    completed_at = COALESCE(@completed_at, agent_executions.completed_at),
     updated_at = clock_timestamp()
 RETURNING *;
 

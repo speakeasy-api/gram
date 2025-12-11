@@ -43,7 +43,8 @@ VALUES (
 )
 ON CONFLICT (id) DO UPDATE SET
     status = $4,
-    completed_at = $6,
+    started_at = COALESCE($5, agent_executions.started_at),
+    completed_at = COALESCE($6, agent_executions.completed_at),
     updated_at = clock_timestamp()
 RETURNING id, project_id, deployment_id, status, started_at, completed_at, deleted_at, deleted
 `
