@@ -10860,6 +10860,57 @@ components:
                 - version
                 - description
                 - registry_id
+        ExternalMCPToolDefinition:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the tool definition was created.
+                    format: date-time
+                deployment_external_mcp_id:
+                    type: string
+                    description: The ID of the deployments_external_mcps record
+                deployment_id:
+                    type: string
+                    description: The ID of the deployment
+                id:
+                    type: string
+                    description: The ID of the tool definition
+                name:
+                    type: string
+                    description: The reverse-DNS name of the external MCP server (e.g., ai.exa/exa)
+                registry_id:
+                    type: string
+                    description: The ID of the MCP registry
+                remote_url:
+                    type: string
+                    description: The URL to connect to the MCP server
+                requires_oauth:
+                    type: boolean
+                    description: Whether the external MCP server requires OAuth authentication
+                slug:
+                    type: string
+                    description: The slug used for tool prefixing (e.g., github)
+                tool_urn:
+                    type: string
+                    description: The URN of this tool (tools:externalmcp:<slug>:proxy)
+                updated_at:
+                    type: string
+                    description: When the tool definition was last updated.
+                    format: date-time
+            description: A proxy tool that references an external MCP server
+            required:
+                - id
+                - tool_urn
+                - deployment_external_mcp_id
+                - deployment_id
+                - registry_id
+                - name
+                - slug
+                - remote_url
+                - requires_oauth
+                - created_at
+                - updated_at
         ExternalOAuthServer:
             type: object
             properties:
@@ -13034,13 +13085,15 @@ components:
         Tool:
             type: object
             properties:
+                external_mcp_tool_definition:
+                    $ref: '#/components/schemas/ExternalMCPToolDefinition'
                 function_tool_definition:
                     $ref: '#/components/schemas/FunctionToolDefinition'
                 http_tool_definition:
                     $ref: '#/components/schemas/HTTPToolDefinition'
                 prompt_template:
                     $ref: '#/components/schemas/PromptTemplate'
-            description: A polymorphic tool - can be an HTTP tool or a prompt template
+            description: A polymorphic tool - can be an HTTP tool, function tool, prompt template, or external MCP proxy
         ToolEntry:
             type: object
             properties:
@@ -13059,6 +13112,7 @@ components:
                         - http
                         - prompt
                         - function
+                        - externalmcp
             required:
                 - type
                 - id

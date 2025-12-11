@@ -37,6 +37,11 @@ func GetToolURN(tool types.Tool) (*urn.Tool, error) {
 	return nil, urn.ErrInvalid
 }
 
+// IsProxyTool returns true if the tool is an external MCP proxy tool
+func IsProxyTool(tool *types.Tool) bool {
+	return tool != nil && tool.ExternalMcpToolDefinition != nil
+}
+
 func ToBaseTool(tool *types.Tool) types.BaseToolAttributes {
 	schema := constants.DefaultEmptyToolSchema
 

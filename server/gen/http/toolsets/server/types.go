@@ -2399,6 +2399,8 @@ type ToolResponseBody struct {
 	FunctionToolDefinition *FunctionToolDefinitionResponseBody `form:"function_tool_definition,omitempty" json:"function_tool_definition,omitempty" xml:"function_tool_definition,omitempty"`
 	// The prompt template
 	PromptTemplate *PromptTemplateResponseBody `form:"prompt_template,omitempty" json:"prompt_template,omitempty" xml:"prompt_template,omitempty"`
+	// The external MCP tool definition
+	ExternalMcpToolDefinition *ExternalMCPToolDefinitionResponseBody `form:"external_mcp_tool_definition,omitempty" json:"external_mcp_tool_definition,omitempty" xml:"external_mcp_tool_definition,omitempty"`
 }
 
 // HTTPToolDefinitionResponseBody is used to define fields on response body
@@ -2609,6 +2611,33 @@ type PromptTemplateResponseBody struct {
 	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
 	// The variation details of a tool. Only includes explicitly varied fields.
 	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
+}
+
+// ExternalMCPToolDefinitionResponseBody is used to define fields on response
+// body types.
+type ExternalMCPToolDefinitionResponseBody struct {
+	// The ID of the tool definition
+	ID string `form:"id" json:"id" xml:"id"`
+	// The URN of this tool (tools:externalmcp:<slug>:proxy)
+	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
+	// The ID of the deployments_external_mcps record
+	DeploymentExternalMcpID string `form:"deployment_external_mcp_id" json:"deployment_external_mcp_id" xml:"deployment_external_mcp_id"`
+	// The ID of the deployment
+	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
+	// The ID of the MCP registry
+	RegistryID string `form:"registry_id" json:"registry_id" xml:"registry_id"`
+	// The reverse-DNS name of the external MCP server (e.g., ai.exa/exa)
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug used for tool prefixing (e.g., github)
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The URL to connect to the MCP server
+	RemoteURL string `form:"remote_url" json:"remote_url" xml:"remote_url"`
+	// Whether the external MCP server requires OAuth authentication
+	RequiresOauth bool `form:"requires_oauth" json:"requires_oauth" xml:"requires_oauth"`
+	// When the tool definition was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the tool definition was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ResourceResponseBody is used to define fields on response body types.
