@@ -7,7 +7,8 @@
 
 package types
 
-// A polymorphic tool - can be an HTTP tool or a prompt template
+// A polymorphic tool - can be an HTTP tool, function tool, prompt template, or
+// external MCP proxy
 type Tool struct {
 	// The HTTP tool definition
 	HTTPToolDefinition *HTTPToolDefinition
@@ -15,4 +16,6 @@ type Tool struct {
 	FunctionToolDefinition *FunctionToolDefinition
 	// The prompt template
 	PromptTemplate *PromptTemplate
+	// The external MCP tool definition
+	ExternalMcpToolDefinition *ExternalMCPToolDefinition
 }
