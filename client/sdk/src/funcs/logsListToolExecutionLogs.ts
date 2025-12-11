@@ -27,19 +27,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getToolset toolsets
+ * listToolExecutionLogs logs
  *
  * @remarks
- * Get detailed information about a toolset including full HTTP tool definitions
+ * List structured logs from tool executions.
  */
-export function toolsetsGetBySlug(
+export function logsListToolExecutionLogs(
   client: GramCore,
-  request: operations.GetToolsetRequest,
-  security?: operations.GetToolsetSecurity | undefined,
+  request?: operations.ListToolExecutionLogsRequest | undefined,
+  security?: operations.ListToolExecutionLogsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.Toolset,
+    components.ListToolExecutionLogsResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -61,13 +61,13 @@ export function toolsetsGetBySlug(
 
 async function $do(
   client: GramCore,
-  request: operations.GetToolsetRequest,
-  security?: operations.GetToolsetSecurity | undefined,
+  request?: operations.ListToolExecutionLogsRequest | undefined,
+  security?: operations.ListToolExecutionLogsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.Toolset,
+      components.ListToolExecutionLogsResult,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -83,7 +83,10 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => operations.GetToolsetRequest$outboundSchema.parse(value),
+    (value) =>
+      operations.ListToolExecutionLogsRequest$outboundSchema.optional().parse(
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -92,23 +95,33 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/toolsets.get")();
+  const path = pathToFunc("/rpc/logs.listToolExecutionLogs")();
 
   const query = encodeFormQuery({
-    "slug": payload.slug,
+    "cursor": payload?.cursor,
+    "deployment_id": payload?.deployment_id,
+    "direction": payload?.direction,
+    "function_id": payload?.function_id,
+    "instance": payload?.instance,
+    "level": payload?.level,
+    "per_page": payload?.per_page,
+    "sort": payload?.sort,
+    "source": payload?.source,
+    "ts_end": payload?.ts_end,
+    "ts_start": payload?.ts_start,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -117,26 +130,26 @@ async function $do(
   const requestSecurity = resolveSecurity(
     [
       {
+        fieldName: "Gram-Key",
+        type: "apiKey:header",
+        value: security?.option1?.apikeyHeaderGramKey,
+      },
+      {
         fieldName: "Gram-Project",
         type: "apiKey:header",
         value: security?.option1?.projectSlugHeaderGramProject,
       },
-      {
-        fieldName: "Gram-Session",
-        type: "apiKey:header",
-        value: security?.option1?.sessionHeaderGramSession,
-      },
     ],
     [
-      {
-        fieldName: "Gram-Key",
-        type: "apiKey:header",
-        value: security?.option2?.apikeyHeaderGramKey,
-      },
       {
         fieldName: "Gram-Project",
         type: "apiKey:header",
         value: security?.option2?.projectSlugHeaderGramProject,
+      },
+      {
+        fieldName: "Gram-Session",
+        type: "apiKey:header",
+        value: security?.option2?.sessionHeaderGramSession,
       },
     ],
   );
@@ -144,7 +157,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getToolset",
+    operationID: "listToolExecutionLogs",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -200,7 +213,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.Toolset,
+    components.ListToolExecutionLogsResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -211,7 +224,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.Toolset$inboundSchema),
+    M.json(200, components.ListToolExecutionLogsResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

@@ -7,11 +7,11 @@ Sort order
 ```typescript
 import { Sort } from "@gram/client/models/operations";
 
-let value: Sort = "ASC";
+let value: Sort = "asc";
 ```
 
 ## Values
 
 ```typescript
-"ASC" | "DESC"
+"asc" | "desc"
 ```

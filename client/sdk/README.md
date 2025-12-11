@@ -122,13 +122,13 @@ run();
 <details open>
 <summary>Available methods</summary>
 
-### [Agents](docs/sdks/agents/README.md)
+### [agents](docs/sdks/agents/README.md)
 
 * [delete](docs/sdks/agents/README.md#delete) - deleteResponse agents
 * [get](docs/sdks/agents/README.md#get) - getResponse agents
 * [create](docs/sdks/agents/README.md#create) - createResponse agents
 
-### [Assets](docs/sdks/assets/README.md)
+### [assets](docs/sdks/assets/README.md)
 
 * [fetchOpenAPIv3FromURL](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 * [listAssets](docs/sdks/assets/README.md#listassets) - listAssets assets
@@ -139,7 +139,7 @@ run();
 * [uploadImage](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 * [uploadOpenAPIv3](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 
-### [Auth](docs/sdks/auth/README.md)
+### [auth](docs/sdks/auth/README.md)
 
 * [callback](docs/sdks/auth/README.md#callback) - callback auth
 * [info](docs/sdks/auth/README.md#info) - info auth
@@ -148,13 +148,13 @@ run();
 * [register](docs/sdks/auth/README.md#register) - register auth
 * [switchScopes](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 
-### [Chat](docs/sdks/chat/README.md)
+### [chat](docs/sdks/chat/README.md)
 
 * [creditUsage](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 * [list](docs/sdks/chat/README.md#list) - listChats chat
 * [load](docs/sdks/chat/README.md#load) - loadChat chat
 
-### [Deployments](docs/sdks/deployments/README.md)
+### [deployments](docs/sdks/deployments/README.md)
 
 * [active](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 * [create](docs/sdks/deployments/README.md#create) - createDeployment deployments
@@ -165,13 +165,13 @@ run();
 * [logs](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 * [redeployDeployment](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 
-### [Domains](docs/sdks/domains/README.md)
+### [domains](docs/sdks/domains/README.md)
 
 * [deleteDomain](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 * [getDomain](docs/sdks/domains/README.md#getdomain) - getDomain domains
 * [registerDomain](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 
-### [Environments](docs/sdks/environments/README.md)
+### [environments](docs/sdks/environments/README.md)
 
 * [create](docs/sdks/environments/README.md#create) - createEnvironment environments
 * [deleteBySlug](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
@@ -184,36 +184,37 @@ run();
 * [setToolsetLink](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 * [updateBySlug](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 
-### [Features](docs/sdks/features/README.md)
+### [features](docs/sdks/features/README.md)
 
 * [set](docs/sdks/features/README.md#set) - setProductFeature features
 
-### [Instances](docs/sdks/instances/README.md)
+### [instances](docs/sdks/instances/README.md)
 
 * [getBySlug](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 
-### [Integrations](docs/sdks/integrations/README.md)
+### [integrations](docs/sdks/integrations/README.md)
 
 * [integrationsNumberGet](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
 * [list](docs/sdks/integrations/README.md#list) - list integrations
 
-### [Keys](docs/sdks/keys/README.md)
+### [keys](docs/sdks/keys/README.md)
 
 * [create](docs/sdks/keys/README.md#create) - createKey keys
 * [list](docs/sdks/keys/README.md#list) - listKeys keys
 * [revokeById](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 * [validate](docs/sdks/keys/README.md#validate) - verifyKey keys
 
-### [Logs](docs/sdks/logs/README.md)
+### [logs](docs/sdks/logs/README.md)
 
 * [list](docs/sdks/logs/README.md#list) - listLogs logs
+* [listToolExecutionLogs](docs/sdks/logs/README.md#listtoolexecutionlogs) - listToolExecutionLogs logs
 
-### [McpMetadata](docs/sdks/mcpmetadata/README.md)
+### [mcpMetadata](docs/sdks/mcpmetadata/README.md)
 
 * [get](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 * [set](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 
-### [Packages](docs/sdks/packages/README.md)
+### [packages](docs/sdks/packages/README.md)
 
 * [create](docs/sdks/packages/README.md#create) - createPackage packages
 * [list](docs/sdks/packages/README.md#list) - listPackages packages
@@ -221,17 +222,17 @@ run();
 * [publish](docs/sdks/packages/README.md#publish) - publish packages
 * [update](docs/sdks/packages/README.md#update) - updatePackage packages
 
-### [Projects](docs/sdks/projects/README.md)
+### [projects](docs/sdks/projects/README.md)
 
 * [create](docs/sdks/projects/README.md#create) - createProject projects
 * [list](docs/sdks/projects/README.md#list) - listProjects projects
 * [setLogo](docs/sdks/projects/README.md#setlogo) - setLogo projects
 
-### [Resources](docs/sdks/resources/README.md)
+### [resources](docs/sdks/resources/README.md)
 
 * [list](docs/sdks/resources/README.md#list) - listResources resources
 
-### [Slack](docs/sdks/slack/README.md)
+### [slack](docs/sdks/slack/README.md)
 
 * [slackLogin](docs/sdks/slack/README.md#slacklogin) - login slack
 * [slackCallback](docs/sdks/slack/README.md#slackcallback) - callback slack
@@ -239,7 +240,7 @@ run();
 * [getSlackConnection](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
 * [updateSlackConnection](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
 
-### [Templates](docs/sdks/templates/README.md)
+### [templates](docs/sdks/templates/README.md)
 
 * [create](docs/sdks/templates/README.md#create) - createTemplate templates
 * [delete](docs/sdks/templates/README.md#delete) - deleteTemplate templates
@@ -249,11 +250,11 @@ run();
 * [render](docs/sdks/templates/README.md#render) - renderTemplate templates
 * [update](docs/sdks/templates/README.md#update) - updateTemplate templates
 
-### [Tools](docs/sdks/tools/README.md)
+### [tools](docs/sdks/tools/README.md)
 
 * [list](docs/sdks/tools/README.md#list) - listTools tools
 
-### [Toolsets](docs/sdks/toolsets/README.md)
+### [toolsets](docs/sdks/toolsets/README.md)
 
 * [addExternalOAuthServer](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 * [addOAuthProxyServer](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
@@ -266,14 +267,14 @@ run();
 * [removeOAuthServer](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
 * [updateBySlug](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 
-### [Usage](docs/sdks/usage/README.md)
+### [usage](docs/sdks/usage/README.md)
 
 * [createCheckout](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 * [createCustomerSession](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 * [getPeriodUsage](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
 * [getUsageTiers](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 
-### [Variations](docs/sdks/variations/README.md)
+### [variations](docs/sdks/variations/README.md)
 
 * [deleteGlobal](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 * [listGlobal](docs/sdks/variations/README.md#listglobal) - listGlobal variations
@@ -347,6 +348,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`keysValidate`](docs/sdks/keys/README.md#validate) - verifyKey keys
 - [`logsList`](docs/sdks/logs/README.md#list) - listLogs logs
+- [`logsListToolExecutionLogs`](docs/sdks/logs/README.md#listtoolexecutionlogs) - listToolExecutionLogs logs
 - [`mcpMetadataGet`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 - [`mcpMetadataSet`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`packagesCreate`](docs/sdks/packages/README.md#create) - createPackage packages
@@ -490,6 +492,7 @@ To learn about this feature and how to get started, check
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates
 - [`useTemplates`](docs/sdks/templates/README.md#list) - listTemplates templates
+- [`useToolExecutionLogs`](docs/sdks/logs/README.md#listtoolexecutionlogs) - listToolExecutionLogs logs
 - [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages
