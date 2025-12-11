@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/agents"
 	srv "github.com/speakeasy-api/gram/server/gen/http/agents/server"
 	agentspkg "github.com/speakeasy-api/gram/server/internal/agents"
+	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -43,6 +44,7 @@ type Service struct {
 	logger            *slog.Logger
 	agentsService     *agentspkg.Service
 	db                *pgxpool.Pool
+	agentExecRepo     *repo.Queries
 	auth              *auth.Auth
 	temporalClient    client.Client
 	temporalNamespace string // TODO: build a wrapper around temporal client to better encapsulate metadata like this
@@ -85,6 +87,7 @@ func NewService(
 		logger:            logger,
 		agentsService:     agentsService,
 		db:                db,
+		agentExecRepo:     repo.New(db),
 		auth:              authService,
 		temporalClient:    temporalClient,
 		temporalNamespace: temporalNamespace,
@@ -124,9 +127,10 @@ func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResp
 	}
 
 	workflowRun, err := background.ExecuteAgentsResponseWorkflow(ctx, s.temporalClient, background.AgentsResponseWorkflowParams{
-		OrgID:     authCtx.ActiveOrganizationID,
-		ProjectID: *authCtx.ProjectID,
-		Request:   request,
+		OrgID:       authCtx.ActiveOrganizationID,
+		ProjectID:   *authCtx.ProjectID,
+		Request:     request,
+		ShouldStore: shouldStore,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to start workflow").Log(ctx, s.logger)
@@ -164,8 +168,9 @@ func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResp
 
 	if !shouldStore {
 		// Delete the workflow execution to remove history
+		// No DB entry was written, so skip DB deletion
 		go func() {
-			if delErr := s.deleteAgentRun(context.WithoutCancel(ctx), workflowRun.GetID()); delErr != nil {
+			if delErr := s.deleteAgentRun(context.WithoutCancel(ctx), workflowRun.GetID(), false); delErr != nil {
 				s.logger.ErrorContext(ctx, "failed to delete non-stored agent run", attr.SlogError(delErr))
 			}
 		}()
@@ -307,14 +312,23 @@ func (s *Service) DeleteResponse(ctx context.Context, payload *agents.DeleteResp
 		}
 	}
 
-	return s.deleteAgentRun(ctx, responseID)
+	return s.deleteAgentRun(ctx, responseID, true)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func (s *Service) deleteAgentRun(ctx context.Context, responseID string) error {
+func (s *Service) deleteAgentRun(ctx context.Context, responseID string, deleteDBEntry bool) error {
+	// Delete database entry if it exists (soft delete)
+	if deleteDBEntry {
+		if err := s.agentExecRepo.DeleteAgentExecution(ctx, responseID); err != nil {
+			// Log but don't fail if DB entry doesn't exist
+			s.logger.DebugContext(ctx, "failed to delete agent execution from database", attr.SlogError(err))
+		}
+	}
+
+	// Delete workflow execution
 	_, err := s.temporalClient.WorkflowService().DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
 		Namespace: s.temporalNamespace,
 		WorkflowExecution: &commonv1.WorkflowExecution{

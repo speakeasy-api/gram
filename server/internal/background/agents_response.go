@@ -63,9 +63,10 @@ When making tool calls (either directly or via sub-agents), prioritize parallel 
 Think step by step: Review all available tools (including sub-agent tools), match the right tool to each task, and always prefer parallel execution when possible.`
 
 type AgentsResponseWorkflowParams struct {
-	OrgID     string
-	ProjectID uuid.UUID
-	Request   agents.ResponseRequest
+	OrgID       string
+	ProjectID   uuid.UUID
+	Request     agents.ResponseRequest
+	ShouldStore bool
 }
 
 func ExecuteAgentsResponseWorkflow(ctx context.Context, temporalClient client.Client, params AgentsResponseWorkflowParams) (client.WorkflowRun, error) {
@@ -118,6 +119,24 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 		},
 	})
 
+	// Record agent execution start
+	startTime := workflow.Now(ctx)
+	if params.ShouldStore {
+		if err := workflow.ExecuteActivity(
+			ctx,
+			a.RecordAgentExecution,
+			activities.RecordAgentExecutionInput{
+				ExecutionID: responseID,
+				ProjectID:   params.ProjectID,
+				Status:      "in_progress",
+				StartedAt:   startTime,
+				CompletedAt: nil,
+			},
+		).Get(ctx, nil); err != nil {
+			logger.Warn("failed to record agent execution start", "error", err)
+		}
+	}
+
 	executionHistory := agents.ExecutionHistory{
 		MainThreadToolCalls: 0,
 		SubAgentToolCalls:   make(map[string]int),
@@ -133,7 +152,8 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 	}
 
 	var preprocessOutput activities.PreprocessAgentsInputOutput
-	err := workflow.ExecuteActivity(
+	var err error
+	err = workflow.ExecuteActivity(
 		ctx,
 		a.PreprocessAgentsInput,
 		preprocessInput,
@@ -141,7 +161,23 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 	if err != nil {
 		logger.Error("failed to preprocess agents input", "error", err)
 		errMsg := err.Error()
-		return buildErrorResponse(ctx, params, responseID, &errMsg, executionHistory, agents.InputDetails{Instructions: params.Request.Instructions, Prompt: ""}), nil
+		result := buildErrorResponse(ctx, params, responseID, &errMsg, executionHistory, agents.InputDetails{Instructions: params.Request.Instructions, Prompt: ""})
+		// Record agent execution completion (failed)
+		if params.ShouldStore {
+			completedTime := workflow.Now(ctx)
+			_ = workflow.ExecuteActivity(
+				ctx,
+				a.RecordAgentExecution,
+				activities.RecordAgentExecutionInput{
+					ExecutionID: responseID,
+					ProjectID:   params.ProjectID,
+					Status:      "failed",
+					StartedAt:   startTime,
+					CompletedAt: &completedTime,
+				},
+			).Get(ctx, nil)
+		}
+		return result, nil
 	}
 
 	messages := preprocessOutput.Messages
@@ -439,13 +475,48 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 
 	if len(output) == 0 {
 		errMsg := "agent loop completed without producing output"
-		return buildErrorResponse(ctx, params, responseID, &errMsg, executionHistory, inputDetails), nil
+		result := buildErrorResponse(ctx, params, responseID, &errMsg, executionHistory, inputDetails)
+		// Record agent execution completion (failed)
+		if params.ShouldStore {
+			completedTime := workflow.Now(ctx)
+			_ = workflow.ExecuteActivity(
+				ctx,
+				a.RecordAgentExecution,
+				activities.RecordAgentExecutionInput{
+					ExecutionID: responseID,
+					ProjectID:   params.ProjectID,
+					Status:      "failed",
+					StartedAt:   startTime,
+					CompletedAt: &completedTime,
+				},
+			).Get(ctx, nil)
+		}
+		return result, nil
 	}
 
 	// Extract result text from the last output message
 	var result string
 	if msg, ok := output[len(output)-1].(agents.OutputMessage); ok && len(msg.Content) > 0 {
 		result = msg.Content[0].Text
+	}
+
+	// Record agent execution completion (success)
+	if params.ShouldStore {
+		completedTime := workflow.Now(ctx)
+		err = workflow.ExecuteActivity(
+			ctx,
+			a.RecordAgentExecution,
+			activities.RecordAgentExecutionInput{
+				ExecutionID: responseID,
+				ProjectID:   params.ProjectID,
+				Status:      "completed",
+				StartedAt:   startTime,
+				CompletedAt: &completedTime,
+			},
+		).Get(ctx, nil)
+		if err != nil {
+			logger.Warn("failed to record agent execution completion", "error", err)
+		}
 	}
 
 	return &agents.AgentsResponseWorkflowResult{
