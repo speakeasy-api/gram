@@ -89,7 +89,7 @@ var _ = Service("logs", func() {
 
 		Meta("openapi:operationId", "listToolExecutionLogs")
 		Meta("openapi:extension:x-speakeasy-name-override", "listToolExecutionLogs")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolExecutionLogs"}`)
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ToolExecutionLogs"}`)
 	})
 
 })
@@ -119,8 +119,8 @@ var ListToolLogsRequest = Type("ListToolLogsRequest", func() {
 		Default("next")
 	})
 	Attribute("sort", String, "Sort order", func() {
-		Enum("ASC", "DESC")
-		Default("DESC")
+		Enum("asc", "desc")
+		Default("desc")
 	})
 	Attribute("status", String, "Status filter", func() {
 		Enum("success", "failure")
@@ -257,8 +257,8 @@ var ListToolExecutionLogsPayload = Type("ListToolExecutionLogsPayload", func() {
 		Default("next")
 	})
 	Attribute("sort", String, "Sort order", func() {
-		Enum("ASC", "DESC")
-		Default("DESC")
+		Enum("asc", "desc")
+		Default("desc")
 	})
 })
 

@@ -30,7 +30,7 @@ func TestListToolExecutionLogs_EmptyResult(t *testing.T) {
 		Cursor:           nil,
 		PerPage:          20,
 		Direction:        "next",
-		Sort:             "DESC",
+		Sort:             "desc",
 	})
 
 	require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestListToolExecutionLogs_SinglePage(t *testing.T) {
 		Cursor:           nil,
 		PerPage:          10,
 		Direction:        "next",
-		Sort:             "DESC",
+		Sort:             "desc",
 	})
 
 	require.NoError(t, err)
@@ -121,7 +121,7 @@ func TestListToolExecutionLogs_Pagination(t *testing.T) {
 		Cursor:           nil,
 		PerPage:          3,
 		Direction:        "next",
-		Sort:             "DESC",
+		Sort:             "desc",
 	})
 
 	require.NoError(t, err)
@@ -148,7 +148,7 @@ func TestListToolExecutionLogs_Pagination(t *testing.T) {
 		Cursor:           cursor,
 		PerPage:          3,
 		Direction:        "next",
-		Sort:             "DESC",
+		Sort:             "desc",
 	})
 
 	require.NoError(t, err)
@@ -202,7 +202,7 @@ func TestListToolExecutionLogs_FilterByDeployment(t *testing.T) {
 		Cursor:           nil,
 		PerPage:          20,
 		Direction:        "next",
-		Sort:             "DESC",
+		Sort:             "desc",
 	})
 
 	require.NoError(t, err)
@@ -252,7 +252,7 @@ func TestListToolExecutionLogs_FilterByLevel(t *testing.T) {
 		Cursor:           nil,
 		PerPage:          20,
 		Direction:        "next",
-		Sort:             "DESC",
+		Sort:             "desc",
 	})
 
 	require.NoError(t, err)
@@ -297,7 +297,7 @@ func TestListToolExecutionLogs_VerifyFields(t *testing.T) {
 		Cursor:           nil,
 		PerPage:          20,
 		Direction:        "next",
-		Sort:             "DESC",
+		Sort:             "desc",
 	})
 
 	require.NoError(t, err)

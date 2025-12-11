@@ -30,7 +30,7 @@ func TestBuildListLogsQuery(t *testing.T) {
 				Cursor:    cursor,
 				Pagination: &Pagination{
 					PerPage: 20,
-					Sort:    "DESC",
+					Sort:    "desc",
 				},
 			},
 			expectedQuery: "select * from http_requests_raw where project_id = $1 and ts >= $2 and ts <= $3 and ts < UUIDv7ToDateTime(toUUID($4)) order by ts desc limit $5",
@@ -45,7 +45,7 @@ func TestBuildListLogsQuery(t *testing.T) {
 				Cursor:    cursor,
 				Pagination: &Pagination{
 					PerPage: 20,
-					Sort:    "ASC",
+					Sort:    "asc",
 				},
 			},
 			expectedQuery: "select * from http_requests_raw where project_id = $1 and ts >= $2 and ts <= $3 and ts > UUIDv7ToDateTime(toUUID($4)) order by ts limit $5",
@@ -61,7 +61,7 @@ func TestBuildListLogsQuery(t *testing.T) {
 				Status:    "success",
 				Pagination: &Pagination{
 					PerPage: 20,
-					Sort:    "DESC",
+					Sort:    "desc",
 				},
 			},
 			expectedQuery: "select * from http_requests_raw where project_id = $1 and ts >= $2 and ts <= $3 and ts < UUIDv7ToDateTime(toUUID($4)) and status_code <= 399 order by ts desc limit $5",
@@ -77,7 +77,7 @@ func TestBuildListLogsQuery(t *testing.T) {
 				Status:    "failure",
 				Pagination: &Pagination{
 					PerPage: 20,
-					Sort:    "DESC",
+					Sort:    "desc",
 				},
 			},
 			expectedQuery: "select * from http_requests_raw where project_id = $1 and ts >= $2 and ts <= $3 and ts < UUIDv7ToDateTime(toUUID($4)) and status_code >= 400 order by ts desc limit $5",
@@ -93,7 +93,7 @@ func TestBuildListLogsQuery(t *testing.T) {
 				ServerName: "my-server",
 				Pagination: &Pagination{
 					PerPage: 20,
-					Sort:    "DESC",
+					Sort:    "desc",
 				},
 			},
 			expectedQuery: "select * from http_requests_raw where project_id = $1 and ts >= $2 and ts <= $3 and ts < UUIDv7ToDateTime(toUUID($4)) and tool_urn LIKE $5 order by ts desc limit $6",
@@ -109,7 +109,7 @@ func TestBuildListLogsQuery(t *testing.T) {
 				ToolName:  "my-tool",
 				Pagination: &Pagination{
 					PerPage: 20,
-					Sort:    "DESC",
+					Sort:    "desc",
 				},
 			},
 			expectedQuery: "select * from http_requests_raw where project_id = $1 and ts >= $2 and ts <= $3 and ts < UUIDv7ToDateTime(toUUID($4)) and tool_urn LIKE $5 order by ts desc limit $6",
@@ -125,7 +125,7 @@ func TestBuildListLogsQuery(t *testing.T) {
 				ToolType:  "http",
 				Pagination: &Pagination{
 					PerPage: 20,
-					Sort:    "DESC",
+					Sort:    "desc",
 				},
 			},
 			expectedQuery: "select * from http_requests_raw where project_id = $1 and ts >= $2 and ts <= $3 and ts < UUIDv7ToDateTime(toUUID($4)) and tool_type = $5 order by ts desc limit $6",
@@ -141,7 +141,7 @@ func TestBuildListLogsQuery(t *testing.T) {
 				ToolURNs:  []string{"tool-urn-1"},
 				Pagination: &Pagination{
 					PerPage: 20,
-					Sort:    "DESC",
+					Sort:    "desc",
 				},
 			},
 			expectedQuery: "select * from http_requests_raw where project_id = $1 and ts >= $2 and ts <= $3 and ts < UUIDv7ToDateTime(toUUID($4)) and tool_urn IN ($5) order by ts desc limit $6",
@@ -157,7 +157,7 @@ func TestBuildListLogsQuery(t *testing.T) {
 				ToolURNs:  []string{"tool-urn-1", "tool-urn-2", "tool-urn-3"},
 				Pagination: &Pagination{
 					PerPage: 20,
-					Sort:    "DESC",
+					Sort:    "desc",
 				},
 			},
 			expectedQuery: "select * from http_requests_raw where project_id = $1 and ts >= $2 and ts <= $3 and ts < UUIDv7ToDateTime(toUUID($4)) and tool_urn IN ($5, $6, $7) order by ts desc limit $8",
@@ -174,7 +174,7 @@ func TestBuildListLogsQuery(t *testing.T) {
 				ToolName:   "my-tool",
 				Pagination: &Pagination{
 					PerPage: 20,
-					Sort:    "DESC",
+					Sort:    "desc",
 				},
 			},
 			expectedQuery: "select * from http_requests_raw where project_id = $1 and ts >= $2 and ts <= $3 and ts < UUIDv7ToDateTime(toUUID($4)) and tool_urn LIKE $5 and tool_urn LIKE $6 order by ts desc limit $7",
@@ -194,7 +194,7 @@ func TestBuildListLogsQuery(t *testing.T) {
 				ToolURNs:   []string{"tool-urn-1", "tool-urn-2"},
 				Pagination: &Pagination{
 					PerPage: 50,
-					Sort:    "ASC",
+					Sort:    "asc",
 				},
 			},
 			expectedQuery: "select * from http_requests_raw where project_id = $1 and ts >= $2 and ts <= $3 and ts > UUIDv7ToDateTime(toUUID($4)) and status_code <= 399 and tool_urn LIKE $5 and tool_urn LIKE $6 and tool_type = $7 and tool_urn IN ($8, $9) order by ts limit $10",
@@ -209,7 +209,7 @@ func TestBuildListLogsQuery(t *testing.T) {
 				Cursor:    cursor,
 				Pagination: &Pagination{
 					PerPage: 100,
-					Sort:    "DESC",
+					Sort:    "desc",
 				},
 			},
 			expectedQuery: "select * from http_requests_raw where project_id = $1 and ts >= $2 and ts <= $3 and ts < UUIDv7ToDateTime(toUUID($4)) order by ts desc limit $5",

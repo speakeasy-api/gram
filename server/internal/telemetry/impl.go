@@ -201,11 +201,19 @@ func (s *Service) ListToolExecutionLogs(ctx context.Context, payload *gen.ListTo
 
 	// Set defaults
 	perPage := 20
+	if payload.PerPage < 0 || payload.PerPage > 100 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "per page must be between 1 and 100")
+	}
 	if payload.PerPage > 0 {
 		perPage = payload.PerPage
 	}
 
-	sortOrder := "DESC"
+	sortOrder := "desc"
+	if payload.Sort != "desc" && payload.Sort != "asc" && payload.Sort != "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "sort order must be one of 'asc' or 'desc'")
+	}
+
+	// if a non-empty sort string is passed we can assume it's a valid sort as we validated it above
 	if payload.Sort != "" {
 		sortOrder = payload.Sort
 	}
@@ -213,6 +221,10 @@ func (s *Service) ListToolExecutionLogs(ctx context.Context, payload *gen.ListTo
 	// Use nil UUID as sentinel for "no cursor" (first page)
 	cursor := uuid.Nil.String()
 	if payload.Cursor != nil && *payload.Cursor != "" {
+		// Validate that cursor is a valid UUID
+		if _, err := uuid.Parse(*payload.Cursor); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "cursor must be a valid UUID")
+		}
 		cursor = *payload.Cursor
 	}
 

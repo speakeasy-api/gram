@@ -123,7 +123,7 @@ func buildListHTTPRequestsQuery(opts ListToolLogsOptions) (string, []any) {
 	args = append(args, opts.ProjectID, opts.TsStart, opts.TsEnd)
 
 	// Add cursor condition based on sort order
-	if opts.SortOrder() == "ASC" {
+	if opts.SortOrder() == "asc" {
 		baseQuery += fmt.Sprintf(" and ts > UUIDv7ToDateTime(toUUID($%d))", paramIndex)
 	} else {
 		baseQuery += fmt.Sprintf(" and ts < UUIDv7ToDateTime(toUUID($%d))", paramIndex)
@@ -177,7 +177,7 @@ func buildListHTTPRequestsQuery(opts ListToolLogsOptions) (string, []any) {
 	}
 
 	// Add ordering and limit
-	if opts.SortOrder() == "ASC" {
+	if opts.SortOrder() == "asc" {
 		baseQuery += " order by ts"
 	} else {
 		baseQuery += " order by ts desc"
@@ -304,16 +304,16 @@ where project_id = ?
 		? = '00000000-0000-0000-0000-000000000000',
 		true,
 		if(
-			? = 'ASC',
+			? = 'asc',
 			(timestamp, toUUID(id)) > (select timestamp, toUUID(id) from tool_logs where id = ? limit 1),
 			(timestamp, toUUID(id)) < (select timestamp, toUUID(id) from tool_logs where id = ? limit 1)
 		)
 	)
 order by
-	if(? = 'ASC', timestamp, toDateTime('1970-01-01')) asc,
-	if(? = 'ASC', toUUID(id), toUUID('00000000-0000-0000-0000-000000000000')) asc,
-	if(? = 'DESC', timestamp, toDateTime('1970-01-01')) desc,
-	if(? = 'DESC', toUUID(id), toUUID('00000000-0000-0000-0000-000000000000')) desc
+	if(? = 'asc', timestamp, toDateTime('1970-01-01')) asc,
+	if(? = 'asc', toUUID(id), toUUID('00000000-0000-0000-0000-000000000000')) asc,
+	if(? = 'desc', timestamp, toDateTime('1970-01-01')) desc,
+	if(? = 'desc', toUUID(id), toUUID('00000000-0000-0000-0000-000000000000')) desc
 limit ?
 `
 
