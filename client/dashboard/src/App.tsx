@@ -31,7 +31,7 @@ import { WebGLCanvas, FontTexture } from "@/components/webgl";
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
-  //  Initialize Pylon widget in production only
+  // Initialize Pylon widget in production only
   useEffect(() => {
     if (import.meta.env.PROD) {
       import("./lib/pylon").then((module) => {

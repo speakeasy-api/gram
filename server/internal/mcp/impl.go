@@ -315,6 +315,7 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	// !TODO: (walker) arbitrary change
 	w.WriteHeader(http.StatusOK)
 
 	body, err := json.Marshal(metadata)
