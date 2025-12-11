@@ -144,7 +144,7 @@ func (s *Service) loadToolsetFromCurrentURLContext(ctx context.Context, mcpSlug 
 		return nil, "", oops.E(oops.CodeNotFound, toolsetErr, "mcp server not found").Log(ctx, s.logger)
 	}
 
-	if !toolset.McpIsPublic {
+	if !toolset.McpIsPublic && !toolset.OauthProxyServerID.Valid {
 		return nil, "", oops.E(oops.CodeNotFound, nil, "mcp server not found").Log(ctx, s.logger)
 	}
 
