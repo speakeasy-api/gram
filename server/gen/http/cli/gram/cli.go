@@ -528,7 +528,7 @@ func ParseEndpoint(
 		logsListLogsToolUrnsFlag         = logsListLogsFlags.String("tool-urns", "", "")
 		logsListLogsPerPageFlag          = logsListLogsFlags.String("per-page", "20", "")
 		logsListLogsDirectionFlag        = logsListLogsFlags.String("direction", "next", "")
-		logsListLogsSortFlag             = logsListLogsFlags.String("sort", "DESC", "")
+		logsListLogsSortFlag             = logsListLogsFlags.String("sort", "desc", "")
 		logsListLogsApikeyTokenFlag      = logsListLogsFlags.String("apikey-token", "", "")
 		logsListLogsSessionTokenFlag     = logsListLogsFlags.String("session-token", "", "")
 		logsListLogsProjectSlugInputFlag = logsListLogsFlags.String("project-slug-input", "", "")
@@ -544,7 +544,7 @@ func ParseEndpoint(
 		logsListToolExecutionLogsCursorFlag           = logsListToolExecutionLogsFlags.String("cursor", "", "")
 		logsListToolExecutionLogsPerPageFlag          = logsListToolExecutionLogsFlags.String("per-page", "20", "")
 		logsListToolExecutionLogsDirectionFlag        = logsListToolExecutionLogsFlags.String("direction", "next", "")
-		logsListToolExecutionLogsSortFlag             = logsListToolExecutionLogsFlags.String("sort", "DESC", "")
+		logsListToolExecutionLogsSortFlag             = logsListToolExecutionLogsFlags.String("sort", "desc", "")
 		logsListToolExecutionLogsApikeyTokenFlag      = logsListToolExecutionLogsFlags.String("apikey-token", "", "")
 		logsListToolExecutionLogsSessionTokenFlag     = logsListToolExecutionLogsFlags.String("session-token", "", "")
 		logsListToolExecutionLogsProjectSlugInputFlag = logsListToolExecutionLogsFlags.String("project-slug-input", "", "")
@@ -3630,7 +3630,7 @@ func logsListLogsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "logs list-logs --tool-id \"8c53b00e-cff3-4aa9-bc16-e4d54a82562c\" --ts-start \"1994-10-09T08:14:09Z\" --ts-end \"1996-12-14T02:56:53Z\" --cursor \"d6d4ab96-8cf1-47ac-b032-cc0c5ec315a4\" --status \"success\" --server-name \"Provident quaerat et sunt commodi quidem.\" --tool-name \"Animi autem veritatis cum non sunt.\" --tool-type \"function\" --tool-urns '[\n      \"Labore accusantium unde facilis.\",\n      \"Minus quia temporibus modi laboriosam ducimus id.\"\n   ]' --per-page 73 --direction \"prev\" --sort \"DESC\" --apikey-token \"Eos corrupti ut qui optio aut sed.\" --session-token \"Saepe recusandae delectus.\" --project-slug-input \"Quidem enim voluptatem.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "logs list-logs --tool-id \"8c53b00e-cff3-4aa9-bc16-e4d54a82562c\" --ts-start \"1994-10-09T08:14:09Z\" --ts-end \"1996-12-14T02:56:53Z\" --cursor \"d6d4ab96-8cf1-47ac-b032-cc0c5ec315a4\" --status \"success\" --server-name \"Provident quaerat et sunt commodi quidem.\" --tool-name \"Animi autem veritatis cum non sunt.\" --tool-type \"function\" --tool-urns '[\n      \"Labore accusantium unde facilis.\",\n      \"Minus quia temporibus modi laboriosam ducimus id.\"\n   ]' --per-page 73 --direction \"prev\" --sort \"desc\" --apikey-token \"Eos corrupti ut qui optio aut sed.\" --session-token \"Saepe recusandae delectus.\" --project-slug-input \"Quidem enim voluptatem.\"")
 }
 
 func logsListToolExecutionLogsUsage() {
@@ -3674,7 +3674,7 @@ func logsListToolExecutionLogsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "logs list-tool-execution-logs --ts-start \"1987-05-14T04:49:09Z\" --ts-end \"1992-12-01T17:12:07Z\" --deployment-id \"a3adad55-7973-46ad-9b13-5928984b2e7c\" --function-id \"30bbbaa6-2e4e-4921-bbc3-afd63eb43a53\" --instance \"Rerum quis natus ducimus illum.\" --level \"debug\" --source \"stderr\" --cursor \"5c8ce6a5-312e-4f96-b868-3cc1d1528bd3\" --per-page 99 --direction \"next\" --sort \"DESC\" --apikey-token \"Voluptas velit at minima recusandae.\" --session-token \"Esse autem qui consectetur numquam doloribus atque.\" --project-slug-input \"Illum officia doloremque ut unde ab.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "logs list-tool-execution-logs --ts-start \"1987-05-14T04:49:09Z\" --ts-end \"1992-12-01T17:12:07Z\" --deployment-id \"a3adad55-7973-46ad-9b13-5928984b2e7c\" --function-id \"30bbbaa6-2e4e-4921-bbc3-afd63eb43a53\" --instance \"Rerum quis natus ducimus illum.\" --level \"debug\" --source \"stderr\" --cursor \"5c8ce6a5-312e-4f96-b868-3cc1d1528bd3\" --per-page 99 --direction \"next\" --sort \"desc\" --apikey-token \"Voluptas velit at minima recusandae.\" --session-token \"Esse autem qui consectetur numquam doloribus atque.\" --project-slug-input \"Illum officia doloremque ut unde ab.\"")
 }
 
 // toolsUsage displays the usage of the tools command and its subcommands.

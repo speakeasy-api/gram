@@ -141,8 +141,8 @@ func BuildListLogsPayload(logsListLogsToolID string, logsListLogsTsStart string,
 	{
 		if logsListLogsSort != "" {
 			sort = logsListLogsSort
-			if !(sort == "ASC" || sort == "DESC") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"ASC", "DESC"}))
+			if !(sort == "asc" || sort == "desc") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"asc", "desc"}))
 			}
 			if err != nil {
 				return nil, err
@@ -307,8 +307,8 @@ func BuildListToolExecutionLogsPayload(logsListToolExecutionLogsTsStart string, 
 	{
 		if logsListToolExecutionLogsSort != "" {
 			sort = logsListToolExecutionLogsSort
-			if !(sort == "ASC" || sort == "DESC") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"ASC", "DESC"}))
+			if !(sort == "asc" || sort == "desc") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"asc", "desc"}))
 			}
 			if err != nil {
 				return nil, err

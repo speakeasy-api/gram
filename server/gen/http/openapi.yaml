@@ -3939,11 +3939,11 @@ paths:
                   name: direction
                   required: false
                   type: string
-                - default: DESC
+                - default: desc
                   description: Sort order
                   enum:
-                    - ASC
-                    - DESC
+                    - asc
+                    - desc
                   in: query
                   name: sort
                   required: false
@@ -4096,11 +4096,11 @@ paths:
                   name: direction
                   required: false
                   type: string
-                - default: DESC
+                - default: desc
                   description: Sort order
                   enum:
-                    - ASC
-                    - DESC
+                    - asc
+                    - desc
                   in: query
                   name: sort
                   required: false
@@ -4173,7 +4173,7 @@ paths:
                 - logs
             x-speakeasy-name-override: listToolExecutionLogs
             x-speakeasy-react-hook:
-                name: ListToolExecutionLogs
+                name: ToolExecutionLogs
     /rpc/mcpMetadata.get:
         get:
             description: Fetch the metadata that powers the MCP install page.

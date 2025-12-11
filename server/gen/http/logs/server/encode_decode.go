@@ -140,10 +140,10 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if sortRaw != "" {
 			sort = sortRaw
 		} else {
-			sort = "DESC"
+			sort = "desc"
 		}
-		if !(sort == "ASC" || sort == "DESC") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"ASC", "DESC"}))
+		if !(sort == "asc" || sort == "desc") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"asc", "desc"}))
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -465,10 +465,10 @@ func DecodeListToolExecutionLogsRequest(mux goahttp.Muxer, decoder func(*http.Re
 		if sortRaw != "" {
 			sort = sortRaw
 		} else {
-			sort = "DESC"
+			sort = "desc"
 		}
-		if !(sort == "ASC" || sort == "DESC") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"ASC", "DESC"}))
+		if !(sort == "asc" || sort == "desc") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"asc", "desc"}))
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {

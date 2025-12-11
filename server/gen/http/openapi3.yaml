@@ -4895,11 +4895,11 @@ paths:
                   in: query
                   name: sort
                   schema:
-                    default: DESC
+                    default: desc
                     description: Sort order
                     enum:
-                        - ASC
-                        - DESC
+                        - asc
+                        - desc
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -5095,11 +5095,11 @@ paths:
                   in: query
                   name: sort
                   schema:
-                    default: DESC
+                    default: desc
                     description: Sort order
                     enum:
-                        - ASC
-                        - DESC
+                        - asc
+                        - desc
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -5193,7 +5193,7 @@ paths:
                 - logs
             x-speakeasy-name-override: listToolExecutionLogs
             x-speakeasy-react-hook:
-                name: ListToolExecutionLogs
+                name: ToolExecutionLogs
     /rpc/mcpMetadata.get:
         get:
             description: Fetch the metadata that powers the MCP install page.
@@ -11671,10 +11671,10 @@ components:
                 sort:
                     type: string
                     description: Sort order
-                    default: DESC
+                    default: desc
                     enum:
-                        - ASC
-                        - DESC
+                        - asc
+                        - desc
                 source:
                     type: string
                     description: Log source filter
@@ -11744,10 +11744,10 @@ components:
                 sort:
                     type: string
                     description: Sort order
-                    default: DESC
+                    default: desc
                     enum:
-                        - ASC
-                        - DESC
+                        - asc
+                        - desc
                 status:
                     type: string
                     description: Status filter
