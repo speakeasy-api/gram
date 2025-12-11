@@ -289,6 +289,18 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	}
 
 	if payload.McpIsPublic != nil {
+		oAuthIsAttached := existingToolset.ExternalOauthServerID.Valid || existingToolset.OauthProxyServerID.Valid
+		if (existingToolset.McpIsPublic != *payload.McpIsPublic) && oAuthIsAttached {
+			_, err := s.toolsets.repo.ClearToolsetOAuthServers(ctx, repo.ClearToolsetOAuthServersParams{
+				ProjectID: existingToolset.ProjectID,
+				Slug:      existingToolset.Slug,
+			})
+
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "error clearing oauth configurations").Log(ctx, logger)
+			}
+		}
+
 		updateParams.McpIsPublic = *payload.McpIsPublic
 	}
 
