@@ -33,6 +33,7 @@ import ToolsetPage, { ToolsetRoot } from "./pages/toolsets/Toolset";
 import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
 import Billing from "./pages/billing/Billing";
 import Logs from "./pages/logs/Logs.tsx";
+import ExecutionLogs from "./pages/logs/ExecutionLogs.tsx";
 import { SourcesRoot, SourcesPage } from "./pages/sources/Sources";
 import SourceDetails from "./pages/sources/SourceDetails";
 
@@ -224,6 +225,12 @@ const ROUTE_STRUCTURE = {
     url: "logs",
     icon: "test-tube-diagonal",
     component: Logs,
+  },
+  executionLogs: {
+    title: "Execution Logs",
+    url: "execution-logs",
+    icon: "terminal",
+    component: ExecutionLogs,
   },
   environments: {
     title: "Environments",

@@ -80,6 +80,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <NavButton
+                  title="Execution Logs"
+                  Icon={routes.executionLogs.Icon}
+                  href={routes.executionLogs.href()}
+                  active={routes.executionLogs.active}
+                />
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <NavButton
                   title="Metrics"
                   Icon={ChartNoAxesCombinedIcon}
                   onClick={() => setMetricsModalOpen(true)}
