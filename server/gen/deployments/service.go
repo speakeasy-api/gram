@@ -64,6 +64,15 @@ type AddDeploymentPackageForm struct {
 	Version *string
 }
 
+type AddExternalMCPForm struct {
+	// The ID of the MCP registry the server is from.
+	RegistryID string
+	// The reverse-DNS name of the external MCP server (e.g., 'ai.exa/exa').
+	Name string
+	// A URL-friendly identifier used for tool prefixing (e.g., 'exa').
+	Slug types.Slug
+}
+
 type AddFunctionsForm struct {
 	// The ID of the functions file from the assets service.
 	AssetID string
@@ -121,6 +130,7 @@ type CreateDeploymentPayload struct {
 	Openapiv3Assets []*AddOpenAPIv3DeploymentAssetForm
 	Functions       []*AddFunctionsForm
 	Packages        []*AddDeploymentPackageForm
+	ExternalMcps    []*AddExternalMCPForm
 }
 
 // CreateDeploymentResult is the result type of the deployments service
@@ -182,6 +192,8 @@ type EvolvePayload struct {
 	UpsertPackages []*AddPackageForm
 	// The tool functions to upsert in the new deployment.
 	UpsertFunctions []*AddFunctionsForm
+	// The external MCP servers to upsert in the new deployment.
+	UpsertExternalMcps []*AddExternalMCPForm
 	// The OpenAPI 3.x documents, identified by slug, to exclude from the new
 	// deployment when cloning a previous deployment.
 	ExcludeOpenapiv3Assets []string
@@ -191,6 +203,9 @@ type EvolvePayload struct {
 	// The functions, identified by slug, to exclude from the new deployment when
 	// cloning a previous deployment.
 	ExcludeFunctions []string
+	// The external MCP servers, identified by slug, to exclude from the new
+	// deployment when cloning a previous deployment.
+	ExcludeExternalMcps []string
 }
 
 // EvolveResult is the result type of the deployments service evolve method.
@@ -290,6 +305,8 @@ type GetDeploymentResult struct {
 	FunctionsAssets []*types.DeploymentFunctions
 	// The packages that were deployed.
 	Packages []*types.DeploymentPackage
+	// The external MCP servers that were deployed.
+	ExternalMcps []*types.DeploymentExternalMCP
 }
 
 // GetLatestDeploymentPayload is the payload type of the deployments service
