@@ -337,10 +337,6 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return r.Body.Close()
 	})
 
-	s.logger.InfoContext(ctx, "Received MCP request",
-		slog.String("authorization", r.Header.Get("Authorization")), //nolint:sloglint // debugging
-	)
-
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided")
