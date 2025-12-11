@@ -3,12 +3,14 @@ package activities
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"runtime"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sourcegraph/conc/pool"
 	"go.opentelemetry.io/otel/codes"
@@ -22,6 +24,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	externalmcpRepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -31,22 +35,25 @@ import (
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	resourcesRepo "github.com/speakeasy-api/gram/server/internal/resources/repo"
 	toolsRepo "github.com/speakeasy-api/gram/server/internal/tools/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type ProcessDeployment struct {
-	logger         *slog.Logger
-	tracer         trace.Tracer
-	tracerProvider trace.TracerProvider
-	metrics        *metrics
-	db             *pgxpool.Pool
-	features       feature.Provider
-	repo           *repo.Queries
-	assets         *assetsRepo.Queries
-	tools          *toolsRepo.Queries
-	resources      *resourcesRepo.Queries
-	assetStorage   assets.BlobStore
-	projects       *projectsRepo.Queries
-	billingRepo    billing.Repository
+	logger          *slog.Logger
+	tracer          trace.Tracer
+	tracerProvider  trace.TracerProvider
+	metrics         *metrics
+	db              *pgxpool.Pool
+	features        feature.Provider
+	repo            *repo.Queries
+	assets          *assetsRepo.Queries
+	tools           *toolsRepo.Queries
+	resources       *resourcesRepo.Queries
+	assetStorage    assets.BlobStore
+	projects        *projectsRepo.Queries
+	billingRepo     billing.Repository
+	externalmcp    *externalmcpRepo.Queries
+	registryClient *externalmcp.RegistryClient
 }
 
 func NewProcessDeployment(
@@ -59,19 +66,21 @@ func NewProcessDeployment(
 	billingRepo billing.Repository,
 ) *ProcessDeployment {
 	return &ProcessDeployment{
-		logger:         logger,
-		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities"),
-		tracerProvider: tracerProvider,
-		metrics:        newMetrics(newMeter(meterProvider), logger),
-		db:             db,
-		features:       features,
-		repo:           repo.New(db),
-		assets:         assetsRepo.New(db),
-		assetStorage:   assetStorage,
-		tools:          toolsRepo.New(db),
-		resources:      resourcesRepo.New(db),
-		projects:       projectsRepo.New(db),
-		billingRepo:    billingRepo,
+		logger:          logger,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities"),
+		tracerProvider:  tracerProvider,
+		metrics:         newMetrics(newMeter(meterProvider), logger),
+		db:              db,
+		features:        features,
+		repo:            repo.New(db),
+		assets:          assetsRepo.New(db),
+		assetStorage:    assetStorage,
+		tools:           toolsRepo.New(db),
+		resources:       resourcesRepo.New(db),
+		projects:        projectsRepo.New(db),
+		billingRepo:     billingRepo,
+		externalmcp:    externalmcpRepo.New(db),
+		registryClient: externalmcp.NewRegistryClient(logger),
 	}
 }
 
@@ -409,9 +418,71 @@ func (p *ProcessDeployment) doExternalMCPs(
 			attr.SlogRegistryID(mcp.RegistryID.String()),
 		)
 
-		// External MCPs don't create tool definitions at deployment time.
-		// Their tools are discovered dynamically at runtime (Slice 3).
-		// For now, we just log that the external MCP was processed.
+		// Get registry details to make API call
+		registry, err := p.externalmcp.GetMCPRegistry(ctx, mcp.RegistryID)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error getting registry for external mcp").Log(ctx, logger)
+		}
+		fmt.Printf("[DEBUG] Got registry: id=%s url=%s\n", registry.ID, registry.Url)
+
+		// Fetch server details from registry to get SSE URL
+		fmt.Printf("[DEBUG] Fetching server details for: %s\n", mcp.Name)
+		serverDetails, err := p.registryClient.GetServerDetails(ctx, externalmcp.Registry{
+			ID:  registry.ID,
+			URL: registry.Url,
+		}, mcp.Name)
+		if err != nil {
+			fmt.Printf("[DEBUG] Error fetching server details: %v\n", err)
+			return oops.E(oops.CodeUnexpected, err, "error fetching server details from registry").Log(ctx, logger)
+		}
+		fmt.Printf("[DEBUG] Got server details: name=%s remoteURL=%s\n", serverDetails.Name, serverDetails.RemoteURL)
+
+		logger.InfoContext(ctx, "fetched server details from registry",
+			attr.SlogURL(serverDetails.RemoteURL),
+		)
+
+		// Attempt to connect to detect OAuth requirements
+		var requiresOAuth bool
+		var authenticateHeader pgtype.Text
+		_, err = externalmcp.ListToolsFromProxy(ctx, logger, serverDetails.RemoteURL, nil)
+		if authErr, ok := externalmcp.IsAuthRequiredError(err); ok {
+			requiresOAuth = true
+			authenticateHeader = pgtype.Text{String: authErr.WWWAuthenticate, Valid: true}
+			logger.InfoContext(ctx, "external MCP server requires OAuth",
+				attr.SlogURL(serverDetails.RemoteURL),
+			)
+		} else if err != nil {
+			// Log but don't fail - the server might be temporarily unavailable
+			logger.WarnContext(ctx, "failed to probe external MCP server for auth requirements",
+				attr.SlogURL(serverDetails.RemoteURL),
+				attr.SlogError(err),
+			)
+		}
+
+		// Create a proxy tool URN for this external MCP
+		// Format: tools:externalmcp:<slug>:proxy
+		toolURN := urn.Tool{
+			Kind:   urn.ToolKindExternalMCP,
+			Source: mcp.Slug,
+			Name:   "proxy",
+		}
+
+		// Create the proxy tool definition with the remote URL and OAuth info
+		_, err = p.externalmcp.CreateExternalMCPToolDefinition(ctx, externalmcpRepo.CreateExternalMCPToolDefinitionParams{
+			DeploymentExternalMcpID: mcp.ID,
+			ToolUrn:                 toolURN.String(),
+			RemoteUrl:               serverDetails.RemoteURL,
+			RequiresOauth:           requiresOAuth,
+			AuthenticateHeader:      authenticateHeader,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error creating external mcp tool definition").Log(ctx, logger)
+		}
+
+		logger.InfoContext(ctx, "created external mcp proxy tool",
+			attr.SlogToolURN(toolURN.String()),
+			attr.SlogOAuthRequired(requiresOAuth),
+		)
 	}
 
 	return nil

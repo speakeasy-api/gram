@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	externalmcpRepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/openapi"
@@ -23,20 +25,24 @@ import (
 
 // Shared service for aggregating toolset details
 type Toolsets struct {
-	repo          *repo.Queries
-	toolsRepo     *toolsRepo.Queries
-	templatesRepo *templatesRepo.Queries
-	resourcesRepo *resourcesRepo.Queries
-	projects      *projectsRepo.Queries
+	repo            *repo.Queries
+	toolsRepo       *toolsRepo.Queries
+	templatesRepo   *templatesRepo.Queries
+	resourcesRepo   *resourcesRepo.Queries
+	projects        *projectsRepo.Queries
+	externalmcpRepo *externalmcpRepo.Queries
+	deploymentsRepo *deploymentsRepo.Queries
 }
 
 func NewToolsets(tx repo.DBTX) *Toolsets {
 	return &Toolsets{
-		repo:          repo.New(tx),
-		toolsRepo:     toolsRepo.New(tx),
-		templatesRepo: templatesRepo.New(tx),
-		resourcesRepo: resourcesRepo.New(tx),
-		projects:      projectsRepo.New(tx),
+		repo:            repo.New(tx),
+		toolsRepo:       toolsRepo.New(tx),
+		templatesRepo:   templatesRepo.New(tx),
+		resourcesRepo:   resourcesRepo.New(tx),
+		projects:        projectsRepo.New(tx),
+		externalmcpRepo: externalmcpRepo.New(tx),
+		deploymentsRepo: deploymentsRepo.New(tx),
 	}
 }
 
@@ -71,6 +77,13 @@ func (t *Toolsets) GetToolCallPlanByURN(ctx context.Context, toolUrn urn.Tool, p
 			return nil, fmt.Errorf("get prompt template by urn: %w", err)
 		}
 		return t.extractPromptToolCallPlan(ctx, tool)
+
+	case urn.ToolKindExternalMCP:
+		tool, err := t.externalmcpRepo.GetExternalMCPToolDefinitionByURN(ctx, toolUrn.String())
+		if err != nil {
+			return nil, fmt.Errorf("get external mcp tool definition by urn: %w", err)
+		}
+		return t.extractExternalMCPToolCallPlan(ctx, tool, toolUrn, projectID)
 
 	default:
 		return nil, fmt.Errorf("unsupported tool kind: %s", toolUrn.Kind)
@@ -258,6 +271,39 @@ func (t *Toolsets) extractPromptToolCallPlan(ctx context.Context, tool templates
 		Kind:       tool.Kind.String,
 	}
 	return gateway.NewPromptToolCallPlan(descriptor, plan), nil
+}
+
+func (t *Toolsets) extractExternalMCPToolCallPlan(ctx context.Context, tool externalmcpRepo.GetExternalMCPToolDefinitionByURNRow, toolUrn urn.Tool, projectID uuid.UUID) (*gateway.ToolCallPlan, error) {
+	// Get organization metadata
+	orgData, err := t.projects.GetProjectWithOrganizationMetadata(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get project with organization metadata: %w", err)
+	}
+
+	description := fmt.Sprintf("External MCP proxy tool for %s", tool.Name)
+
+	descriptor := &gateway.ToolDescriptor{
+		ID:               tool.ID.String(),
+		Name:             tool.Slug, // Use slug as name since this is the proxy identifier
+		Description:      &description,
+		DeploymentID:     tool.DeploymentID.String(),
+		ProjectID:        projectID.String(),
+		ProjectSlug:      orgData.ProjectSlug,
+		OrganizationID:   orgData.ID,
+		OrganizationSlug: orgData.Slug,
+		URN:              toolUrn,
+	}
+
+	// Note: The ToolName field is "proxy" for proxy tools. Actual external tool names
+	// are resolved at runtime when the tool is called (e.g., "notion:search" -> ToolName="search").
+	plan := &gateway.ExternalMCPToolCallPlan{
+		RemoteURL:     tool.RemoteUrl,
+		ToolName:      toolUrn.Name, // "proxy" for proxy tools, actual tool name for direct calls
+		Slug:          tool.Slug,
+		RequiresOAuth: tool.RequiresOauth,
+	}
+
+	return gateway.NewExternalMCPToolCallPlan(descriptor, plan), nil
 }
 
 func UnmarshalParameterSettings(settings []byte) (map[string]*gateway.HTTPParameter, error) {

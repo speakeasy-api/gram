@@ -309,6 +309,8 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		toolType = tm.ToolTypeFunction
 	case gateway.ToolKindPrompt:
 		toolType = tm.ToolTypePrompt
+	case gateway.ToolKindExternalMCP:
+		toolType = tm.ToolTypeExternalMCP
 	}
 
 	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, s.tcm, descriptor.OrganizationID, tm.ToolInfo{

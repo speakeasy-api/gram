@@ -264,6 +264,9 @@ func marshalTypesToolToToolResponseBody(v *types.Tool) *ToolResponseBody {
 	if v.PromptTemplate != nil {
 		res.PromptTemplate = marshalTypesPromptTemplateToPromptTemplateResponseBody(v.PromptTemplate)
 	}
+	if v.ExternalMcpToolDefinition != nil {
+		res.ExternalMcpToolDefinition = marshalTypesExternalMCPToolDefinitionToExternalMCPToolDefinitionResponseBody(v.ExternalMcpToolDefinition)
+	}
 
 	return res
 }
@@ -482,6 +485,31 @@ func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTempl
 	}
 	if v.Variation != nil {
 		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
+	}
+
+	return res
+}
+
+// marshalTypesExternalMCPToolDefinitionToExternalMCPToolDefinitionResponseBody
+// builds a value of type *ExternalMCPToolDefinitionResponseBody from a value
+// of type *types.ExternalMCPToolDefinition.
+func marshalTypesExternalMCPToolDefinitionToExternalMCPToolDefinitionResponseBody(v *types.ExternalMCPToolDefinition) *ExternalMCPToolDefinitionResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ExternalMCPToolDefinitionResponseBody{
+		ID:                      v.ID,
+		ToolUrn:                 v.ToolUrn,
+		DeploymentExternalMcpID: v.DeploymentExternalMcpID,
+		DeploymentID:            v.DeploymentID,
+		RegistryID:              v.RegistryID,
+		Name:                    v.Name,
+		Slug:                    v.Slug,
+		RemoteURL:               v.RemoteURL,
+		RequiresOauth:           v.RequiresOauth,
+		AuthenticateHeader:      v.AuthenticateHeader,
+		CreatedAt:               v.CreatedAt,
+		UpdatedAt:               v.UpdatedAt,
 	}
 
 	return res

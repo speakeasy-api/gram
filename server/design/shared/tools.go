@@ -97,20 +97,49 @@ var FunctionToolDefinition = Type("FunctionToolDefinition", func() {
 	Required("deployment_id", "asset_id", "function_id", "runtime")
 })
 
+// ExternalMCPToolDefinition represents a proxy tool that unfolds to external MCP server tools at runtime
+var ExternalMCPToolDefinition = Type("ExternalMCPToolDefinition", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("A proxy tool that references an external MCP server")
+
+	Attribute("id", String, "The ID of the tool definition")
+	Attribute("tool_urn", String, "The URN of this tool (tools:externalmcp:<slug>:proxy)")
+	Attribute("deployment_external_mcp_id", String, "The ID of the deployments_external_mcps record")
+	Attribute("deployment_id", String, "The ID of the deployment")
+	Attribute("registry_id", String, "The ID of the MCP registry")
+	Attribute("name", String, "The reverse-DNS name of the external MCP server (e.g., ai.exa/exa)")
+	Attribute("slug", String, "The slug used for tool prefixing (e.g., github)")
+	Attribute("remote_url", String, "The SSE URL to connect to the MCP server")
+	Attribute("requires_oauth", Boolean, "Whether the external MCP server requires OAuth authentication")
+	Attribute("authenticate_header", String, "The WWW-Authenticate header value from the external MCP server")
+	Attribute("created_at", String, func() {
+		Description("When the tool definition was created.")
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Description("When the tool definition was last updated.")
+		Format(FormatDateTime)
+	})
+
+	Required("id", "tool_urn", "deployment_external_mcp_id", "deployment_id", "registry_id", "name", "slug", "remote_url", "requires_oauth", "created_at", "updated_at")
+})
+
 // Tool is a discriminated union of HTTP tools and prompt templates.
 // Custom JSON marshaling provided in goaext.
 var Tool = Type("Tool", func() {
 	Meta("struct:pkg:path", "types")
-	Description("A polymorphic tool - can be an HTTP tool or a prompt template")
+	Description("A polymorphic tool - can be an HTTP tool, function tool, prompt template, or external MCP proxy")
 
 	Attribute("http_tool_definition", HTTPToolDefinition, "The HTTP tool definition")
 	Attribute("function_tool_definition", FunctionToolDefinition, "The function tool definition")
 	Attribute("prompt_template", PromptTemplate, "The prompt template")
+	Attribute("external_mcp_tool_definition", ExternalMCPToolDefinition, "The external MCP tool definition")
 })
 
 var ToolEntry = Type("ToolEntry", func() {
 	Attribute("type", String, func() {
-		Enum(string(urn.ToolKindHTTP), string(urn.ToolKindPrompt), string(urn.ToolKindFunction))
+		Enum(string(urn.ToolKindHTTP), string(urn.ToolKindPrompt), string(urn.ToolKindFunction), string(urn.ToolKindExternalMCP))
 	})
 
 	Attribute("id", String, "The ID of the tool")

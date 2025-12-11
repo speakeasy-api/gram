@@ -1103,8 +1103,11 @@ WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS external_mcp_tool_definitions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  external_mcp_id uuid NOT NULL,
+  deployment_external_mcp_id uuid NOT NULL,
   tool_urn TEXT NOT NULL CHECK (tool_urn <> ''),
+  remote_url TEXT NOT NULL CHECK (remote_url <> ''),
+  requires_oauth BOOLEAN NOT NULL DEFAULT FALSE,
+  authenticate_header TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1112,9 +1115,9 @@ CREATE TABLE IF NOT EXISTS external_mcp_tool_definitions (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT external_mcp_tool_definitions_pkey PRIMARY KEY (id),
-  CONSTRAINT external_mcp_tool_definitions_external_mcp_id_fkey FOREIGN KEY (external_mcp_id) REFERENCES deployments_external_mcps(id) ON DELETE SET NULL
+  CONSTRAINT external_mcp_tool_definitions_deployment_external_mcp_id_fkey FOREIGN KEY (deployment_external_mcp_id) REFERENCES deployments_external_mcps(id) ON DELETE SET NULL
 );
 
-CREATE INDEX IF NOT EXISTS external_mcp_tool_definitions_external_mcp_id_idx
-ON external_mcp_tool_definitions (external_mcp_id)
+CREATE INDEX IF NOT EXISTS external_mcp_tool_definitions_deployment_external_mcp_id_idx
+ON external_mcp_tool_definitions (deployment_external_mcp_id)
 WHERE deleted IS FALSE;

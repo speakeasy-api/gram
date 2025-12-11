@@ -196,13 +196,16 @@ type EnvironmentEntry struct {
 }
 
 type ExternalMcpToolDefinition struct {
-	ID            uuid.UUID
-	ExternalMcpID uuid.UUID
-	ToolUrn       string
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-	DeletedAt     pgtype.Timestamptz
-	Deleted       bool
+	ID                      uuid.UUID
+	DeploymentExternalMcpID uuid.UUID
+	ToolUrn                 string
+	RemoteUrl               string
+	RequiresOauth           bool
+	AuthenticateHeader      pgtype.Text
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	DeletedAt               pgtype.Timestamptz
+	Deleted                 bool
 }
 
 type ExternalOauthServerMetadatum struct {

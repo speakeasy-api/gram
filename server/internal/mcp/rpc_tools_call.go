@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contenttypes"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -102,11 +103,24 @@ func handleToolsCall(
 		metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, mcpURL, params.Name)
 	}
 
+	// Check if this is an external MCP tool call (format: "slug:toolname")
+	if proxyTool, externalToolName, ok := findExternalMCPTool(toolset.Tools, params.Name); ok {
+		return handleExternalMCPToolCall(ctx, logger, req.ID, proxyTool, externalToolName, params.Arguments, payload.oauthTokenInputs)
+	}
+
 	toolsetHelpers := toolsets.NewToolsets(db)
 	var tool *types.Tool
 
 	for _, t := range toolset.Tools {
-		baseTool := conv.ToBaseTool(t)
+		// Skip proxy tools - they should be unfolded before being called
+		if conv.IsProxyTool(t) {
+			continue
+		}
+
+		baseTool, err := conv.ToBaseTool(t)
+		if err != nil {
+			continue
+		}
 		if baseTool.Name == params.Name {
 			tool = t
 			break
@@ -151,6 +165,8 @@ func handleToolsCall(
 		toolType = tm.ToolTypeFunction
 	case gateway.ToolKindPrompt:
 		toolType = tm.ToolTypePrompt
+	case gateway.ToolKindExternalMCP:
+		toolType = tm.ToolTypeExternalMCP
 	}
 
 	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, tcm, descriptor.OrganizationID, tm.ToolInfo{
@@ -499,4 +515,82 @@ type contentChunk[T any, D any] struct {
 type toolCallResult struct {
 	Content []json.RawMessage `json:"content"`
 	IsError bool              `json:"isError,omitzero"`
+}
+
+// findExternalMCPTool checks if the tool name matches an external MCP tool pattern (slug:toolname)
+// and returns the proxy tool definition and the external tool name if found.
+func findExternalMCPTool(tools []*types.Tool, toolName string) (*types.ExternalMCPToolDefinition, string, bool) {
+	// External MCP tools are named as "slug:toolname"
+	parts := strings.SplitN(toolName, ":", 2)
+	if len(parts) != 2 {
+		return nil, "", false
+	}
+
+	slug := parts[0]
+	externalToolName := parts[1]
+
+	for _, t := range tools {
+		if !conv.IsProxyTool(t) {
+			continue
+		}
+		if t.ExternalMcpToolDefinition.Slug == slug {
+			return t.ExternalMcpToolDefinition, externalToolName, true
+		}
+	}
+
+	return nil, "", false
+}
+
+// handleExternalMCPToolCall proxies a tool call to an external MCP server.
+func handleExternalMCPToolCall(
+	ctx context.Context,
+	logger *slog.Logger,
+	reqID msgID,
+	proxy *types.ExternalMCPToolDefinition,
+	toolName string,
+	arguments json.RawMessage,
+	tokenInputs []oauthTokenInputs,
+) (json.RawMessage, error) {
+	// Extract OAuth token for external MCP servers
+	var oauthToken string
+	for _, t := range tokenInputs {
+		if len(t.securityKeys) == 0 && t.Token != "" {
+			oauthToken = t.Token
+			break
+		}
+	}
+
+	// Build session options with OAuth token if the proxy requires it
+	var opts *externalmcp.SessionOptions
+	if proxy.RequiresOauth && oauthToken != "" {
+		opts = &externalmcp.SessionOptions{
+			Authorization: "Bearer " + oauthToken,
+		}
+	}
+
+	// Create session and call tool
+	session, err := externalmcp.NewSession(ctx, logger, proxy.RemoteURL, opts)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").Log(ctx, logger)
+	}
+	defer func() { _ = session.Close() }()
+
+	callResult, err := session.CallTool(ctx, toolName, arguments)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to call external MCP tool").Log(ctx, logger)
+	}
+
+	// Return the result in MCP format - Content is already a JSON array from the external server
+	bs, err := json.Marshal(result[toolCallResult]{
+		ID: reqID,
+		Result: toolCallResult{
+			Content: callResult.Content,
+			IsError: callResult.IsError,
+		},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize external MCP tool result").Log(ctx, logger)
+	}
+
+	return bs, nil
 }

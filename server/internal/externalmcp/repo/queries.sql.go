@@ -55,6 +55,206 @@ func (q *Queries) CreateDeploymentExternalMCP(ctx context.Context, arg CreateDep
 	return i, err
 }
 
+const createExternalMCPToolDefinition = `-- name: CreateExternalMCPToolDefinition :one
+INSERT INTO external_mcp_tool_definitions (deployment_external_mcp_id, tool_urn, remote_url, requires_oauth, authenticate_header)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, deployment_external_mcp_id, tool_urn, remote_url, requires_oauth, authenticate_header, created_at, updated_at
+`
+
+type CreateExternalMCPToolDefinitionParams struct {
+	DeploymentExternalMcpID uuid.UUID
+	ToolUrn                 string
+	RemoteUrl               string
+	RequiresOauth           bool
+	AuthenticateHeader      pgtype.Text
+}
+
+type CreateExternalMCPToolDefinitionRow struct {
+	ID                      uuid.UUID
+	DeploymentExternalMcpID uuid.UUID
+	ToolUrn                 string
+	RemoteUrl               string
+	RequiresOauth           bool
+	AuthenticateHeader      pgtype.Text
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+}
+
+func (q *Queries) CreateExternalMCPToolDefinition(ctx context.Context, arg CreateExternalMCPToolDefinitionParams) (CreateExternalMCPToolDefinitionRow, error) {
+	row := q.db.QueryRow(ctx, createExternalMCPToolDefinition,
+		arg.DeploymentExternalMcpID,
+		arg.ToolUrn,
+		arg.RemoteUrl,
+		arg.RequiresOauth,
+		arg.AuthenticateHeader,
+	)
+	var i CreateExternalMCPToolDefinitionRow
+	err := row.Scan(
+		&i.ID,
+		&i.DeploymentExternalMcpID,
+		&i.ToolUrn,
+		&i.RemoteUrl,
+		&i.RequiresOauth,
+		&i.AuthenticateHeader,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getExternalMCPToolDefinitionByURN = `-- name: GetExternalMCPToolDefinitionByURN :one
+SELECT
+  t.id,
+  t.deployment_external_mcp_id,
+  t.tool_urn,
+  t.remote_url,
+  t.requires_oauth,
+  t.authenticate_header,
+  t.created_at,
+  t.updated_at,
+  e.deployment_id,
+  e.registry_id,
+  e.name,
+  e.slug
+FROM external_mcp_tool_definitions t
+JOIN deployments_external_mcps e ON t.deployment_external_mcp_id = e.id
+WHERE t.tool_urn = $1
+  AND t.deleted IS FALSE
+  AND e.deleted IS FALSE
+`
+
+type GetExternalMCPToolDefinitionByURNRow struct {
+	ID                      uuid.UUID
+	DeploymentExternalMcpID uuid.UUID
+	ToolUrn                 string
+	RemoteUrl               string
+	RequiresOauth           bool
+	AuthenticateHeader      pgtype.Text
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	DeploymentID            uuid.UUID
+	RegistryID              uuid.UUID
+	Name                    string
+	Slug                    string
+}
+
+func (q *Queries) GetExternalMCPToolDefinitionByURN(ctx context.Context, toolUrn string) (GetExternalMCPToolDefinitionByURNRow, error) {
+	row := q.db.QueryRow(ctx, getExternalMCPToolDefinitionByURN, toolUrn)
+	var i GetExternalMCPToolDefinitionByURNRow
+	err := row.Scan(
+		&i.ID,
+		&i.DeploymentExternalMcpID,
+		&i.ToolUrn,
+		&i.RemoteUrl,
+		&i.RequiresOauth,
+		&i.AuthenticateHeader,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeploymentID,
+		&i.RegistryID,
+		&i.Name,
+		&i.Slug,
+	)
+	return i, err
+}
+
+const getExternalMCPToolsRequiringOAuth = `-- name: GetExternalMCPToolsRequiringOAuth :many
+SELECT
+  t.id,
+  t.deployment_external_mcp_id,
+  t.tool_urn,
+  t.remote_url,
+  t.requires_oauth,
+  t.authenticate_header,
+  t.created_at,
+  t.updated_at,
+  e.deployment_id,
+  e.registry_id,
+  e.name,
+  e.slug
+FROM external_mcp_tool_definitions t
+JOIN deployments_external_mcps e ON t.deployment_external_mcp_id = e.id
+WHERE e.deployment_id = $1
+  AND t.requires_oauth = TRUE
+  AND t.deleted IS FALSE
+  AND e.deleted IS FALSE
+`
+
+type GetExternalMCPToolsRequiringOAuthRow struct {
+	ID                      uuid.UUID
+	DeploymentExternalMcpID uuid.UUID
+	ToolUrn                 string
+	RemoteUrl               string
+	RequiresOauth           bool
+	AuthenticateHeader      pgtype.Text
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	DeploymentID            uuid.UUID
+	RegistryID              uuid.UUID
+	Name                    string
+	Slug                    string
+}
+
+func (q *Queries) GetExternalMCPToolsRequiringOAuth(ctx context.Context, deploymentID uuid.UUID) ([]GetExternalMCPToolsRequiringOAuthRow, error) {
+	rows, err := q.db.Query(ctx, getExternalMCPToolsRequiringOAuth, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetExternalMCPToolsRequiringOAuthRow
+	for rows.Next() {
+		var i GetExternalMCPToolsRequiringOAuthRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeploymentExternalMcpID,
+			&i.ToolUrn,
+			&i.RemoteUrl,
+			&i.RequiresOauth,
+			&i.AuthenticateHeader,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeploymentID,
+			&i.RegistryID,
+			&i.Name,
+			&i.Slug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getMCPRegistry = `-- name: GetMCPRegistry :one
+SELECT id, name, url, created_at, updated_at
+FROM mcp_registries
+WHERE id = $1 AND deleted IS FALSE
+`
+
+type GetMCPRegistryRow struct {
+	ID        uuid.UUID
+	Name      string
+	Url       string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetMCPRegistry(ctx context.Context, id uuid.UUID) (GetMCPRegistryRow, error) {
+	row := q.db.QueryRow(ctx, getMCPRegistry, id)
+	var i GetMCPRegistryRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Url,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listDeploymentExternalMCPs = `-- name: ListDeploymentExternalMCPs :many
 SELECT id, deployment_id, registry_id, name, slug, created_at, updated_at
 FROM deployments_external_mcps
@@ -89,6 +289,76 @@ func (q *Queries) ListDeploymentExternalMCPs(ctx context.Context, deploymentID u
 			&i.Slug,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExternalMCPToolDefinitions = `-- name: ListExternalMCPToolDefinitions :many
+SELECT
+  t.id,
+  t.deployment_external_mcp_id,
+  t.tool_urn,
+  t.remote_url,
+  t.requires_oauth,
+  t.authenticate_header,
+  t.created_at,
+  t.updated_at,
+  e.deployment_id,
+  e.registry_id,
+  e.name,
+  e.slug
+FROM external_mcp_tool_definitions t
+JOIN deployments_external_mcps e ON t.deployment_external_mcp_id = e.id
+WHERE e.deployment_id = $1
+  AND t.deleted IS FALSE
+  AND e.deleted IS FALSE
+ORDER BY e.slug ASC
+`
+
+type ListExternalMCPToolDefinitionsRow struct {
+	ID                      uuid.UUID
+	DeploymentExternalMcpID uuid.UUID
+	ToolUrn                 string
+	RemoteUrl               string
+	RequiresOauth           bool
+	AuthenticateHeader      pgtype.Text
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	DeploymentID            uuid.UUID
+	RegistryID              uuid.UUID
+	Name                    string
+	Slug                    string
+}
+
+func (q *Queries) ListExternalMCPToolDefinitions(ctx context.Context, deploymentID uuid.UUID) ([]ListExternalMCPToolDefinitionsRow, error) {
+	rows, err := q.db.Query(ctx, listExternalMCPToolDefinitions, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListExternalMCPToolDefinitionsRow
+	for rows.Next() {
+		var i ListExternalMCPToolDefinitionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeploymentExternalMcpID,
+			&i.ToolUrn,
+			&i.RemoteUrl,
+			&i.RequiresOauth,
+			&i.AuthenticateHeader,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeploymentID,
+			&i.RegistryID,
+			&i.Name,
+			&i.Slug,
 		); err != nil {
 			return nil, err
 		}

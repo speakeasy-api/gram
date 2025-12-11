@@ -128,6 +128,18 @@ type PromptToolCallPlan struct {
 	Kind       string `json:"kind" yaml:"kind"`
 }
 
+// ExternalMCPToolCallPlan contains the execution plan for calling a tool on an external MCP server.
+type ExternalMCPToolCallPlan struct {
+	// RemoteURL is the URL of the external MCP server.
+	RemoteURL string `json:"remote_url" yaml:"remote_url"`
+	// ToolName is the name of the tool on the external server.
+	ToolName string `json:"tool_name" yaml:"tool_name"`
+	// Slug is the proxy identifier for this external MCP.
+	Slug string `json:"slug" yaml:"slug"`
+	// RequiresOAuth indicates if the external MCP requires OAuth authentication.
+	RequiresOAuth bool `json:"requires_oauth" yaml:"requires_oauth"`
+}
+
 type ResourceFunctionCallPlan struct {
 	FunctionID        string   `json:"function_id" yaml:"function_id"`
 	FunctionsAccessID string   `json:"functions_access_id" yaml:"functions_access_id"`
@@ -140,9 +152,10 @@ type ResourceFunctionCallPlan struct {
 type ToolKind string
 
 const (
-	ToolKindHTTP     ToolKind = "http"
-	ToolKindFunction ToolKind = "function"
-	ToolKindPrompt   ToolKind = "prompt"
+	ToolKindHTTP        ToolKind = "http"
+	ToolKindFunction    ToolKind = "function"
+	ToolKindPrompt      ToolKind = "prompt"
+	ToolKindExternalMCP ToolKind = "external_mcp"
 )
 
 type ResourceKind string
@@ -158,9 +171,10 @@ type ToolCallPlan struct {
 	BillingType billing.ToolCallType
 	Descriptor  *ToolDescriptor
 
-	HTTP     *HTTPToolCallPlan
-	Function *FunctionToolCallPlan
-	Prompt   *PromptToolCallPlan
+	HTTP        *HTTPToolCallPlan
+	Function    *FunctionToolCallPlan
+	Prompt      *PromptToolCallPlan
+	ExternalMCP *ExternalMCPToolCallPlan
 }
 
 // NewHTTPToolCallPlan creates a new Tool wrapping an HTTPTool.
@@ -172,6 +186,7 @@ func NewHTTPToolCallPlan(tool *ToolDescriptor, plan *HTTPToolCallPlan) *ToolCall
 		HTTP:        plan,
 		Function:    nil,
 		Prompt:      nil,
+		ExternalMCP: nil,
 	}
 }
 
@@ -184,6 +199,7 @@ func NewFunctionToolCallPlan(tool *ToolDescriptor, plan *FunctionToolCallPlan) *
 		HTTP:        nil,
 		Function:    plan,
 		Prompt:      nil,
+		ExternalMCP: nil,
 	}
 }
 
@@ -196,6 +212,20 @@ func NewPromptToolCallPlan(tool *ToolDescriptor, plan *PromptToolCallPlan) *Tool
 		HTTP:        nil,
 		Function:    nil,
 		Prompt:      plan,
+		ExternalMCP: nil,
+	}
+}
+
+// NewExternalMCPToolCallPlan creates a new Tool wrapping an ExternalMCPTool.
+func NewExternalMCPToolCallPlan(tool *ToolDescriptor, plan *ExternalMCPToolCallPlan) *ToolCallPlan {
+	return &ToolCallPlan{
+		Kind:        ToolKindExternalMCP,
+		BillingType: billing.ToolCallTypeHTTP, // External MCP is billed as HTTP
+		Descriptor:  tool,
+		HTTP:        nil,
+		Function:    nil,
+		Prompt:      nil,
+		ExternalMCP: plan,
 	}
 }
 

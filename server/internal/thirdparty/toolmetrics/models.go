@@ -13,9 +13,10 @@ type ToolLogLevel string
 type ToolType string
 
 const (
-	ToolTypeHTTP     ToolType = "http"
-	ToolTypeFunction ToolType = "function"
-	ToolTypePrompt   ToolType = "prompt"
+	ToolTypeHTTP        ToolType = "http"
+	ToolTypeFunction    ToolType = "function"
+	ToolTypePrompt      ToolType = "prompt"
+	ToolTypeExternalMCP ToolType = "external_mcp"
 )
 
 func (t *ToolType) Scan(src any) error {

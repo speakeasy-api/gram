@@ -393,7 +393,15 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	toolNames := []string{}
 
 	for _, toolDesc := range toolsetDetails.Tools {
-		baseTool := conv.ToBaseTool(toolDesc)
+		// Skip proxy tools - they don't have stable names until unfolded at runtime
+		if conv.IsProxyTool(toolDesc) {
+			continue
+		}
+
+		baseTool, err := conv.ToBaseTool(toolDesc)
+		if err != nil {
+			continue
+		}
 		toolNames = append(toolNames, baseTool.Name)
 	}
 

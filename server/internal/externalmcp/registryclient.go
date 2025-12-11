@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -66,6 +67,12 @@ type serverJSON struct {
 	Icons       []struct {
 		URL string `json:"url"`
 	} `json:"icons"`
+	Remotes []serverRemote `json:"remotes"`
+}
+
+type serverRemote struct {
+	URL  string `json:"url"`
+	Type string `json:"type"`
 }
 
 type responseMeta struct {
@@ -166,4 +173,98 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 	}
 
 	return servers, nil
+}
+
+// ServerDetails contains detailed information about an MCP server including connection info.
+type ServerDetails struct {
+	Name        string
+	Description string
+	Version     string
+	RemoteURL   string
+}
+
+// getServerResponse wraps a single server from the registry.
+type getServerResponse struct {
+	Server serverJSON `json:"server"`
+}
+
+// GetServerDetails fetches server details including the SSE URL from the registry.
+func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry, serverName string) (*ServerDetails, error) {
+	u, err := url.Parse(registry.URL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse registry URL: %w", err)
+	}
+	u = u.JoinPath("v0.1", "servers", url.PathEscape(serverName), "versions", "latest")
+	fmt.Printf("[DEBUG] Registry request URL: %s\n", u.String())
+
+	c.logger.InfoContext(ctx, "fetching server details from registry",
+		attr.SlogURL(u.String()),
+		attr.SlogRegistryID(registry.ID.String()),
+		attr.SlogName(serverName),
+	)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if tenantID := os.Getenv("PULSE_REGISTRY_TENANT"); tenantID != "" {
+		req.Header.Set("X-Tenant-ID", tenantID)
+	}
+	if apiKey := os.Getenv("PULSE_REGISTRY_KEY"); apiKey != "" {
+		req.Header.Set("X-Api-Key", apiKey)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		c.logger.ErrorContext(ctx, "registry request failed", attr.SlogError(err))
+		return nil, fmt.Errorf("failed to fetch from registry: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		c.logger.ErrorContext(ctx, "registry returned non-OK status",
+			attr.SlogStatusCode(resp.StatusCode),
+			attr.SlogBody(string(body)),
+		)
+		return nil, fmt.Errorf("registry returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	var serverResp getServerResponse
+	if err := json.Unmarshal(body, &serverResp); err != nil {
+		c.logger.ErrorContext(ctx, "failed to decode server response",
+			attr.SlogError(err),
+			attr.SlogBody(string(body)),
+		)
+		return nil, fmt.Errorf("failed to decode server response: %w", err)
+	}
+
+	// Find the remote URL, preferring streamable-http over sse
+	var remoteURL string
+	for _, remote := range serverResp.Server.Remotes {
+		if remote.Type == "streamable-http" {
+			remoteURL = remote.URL
+			break
+		}
+		if remote.Type == "sse" && remoteURL == "" {
+			remoteURL = remote.URL
+		}
+	}
+
+	if remoteURL == "" {
+		return nil, fmt.Errorf("server %s has no streamable-http or sse remote", serverName)
+	}
+
+	return &ServerDetails{
+		Name:        serverResp.Server.Name,
+		Description: serverResp.Server.Description,
+		Version:     serverResp.Server.Version,
+		RemoteURL:   remoteURL,
+	}, nil
 }

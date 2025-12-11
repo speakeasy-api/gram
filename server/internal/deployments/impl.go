@@ -27,6 +27,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	externalmcpRepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -40,16 +42,18 @@ import (
 )
 
 type Service struct {
-	logger       *slog.Logger
-	tracer       trace.Tracer
-	db           *pgxpool.Pool
-	repo         *repo.Queries
-	auth         *auth.Auth
-	assets       *assetsRepo.Queries
-	packages     *packagesRepo.Queries
-	assetStorage assets.BlobStore
-	temporal     client.Client
-	posthog      *posthog.Posthog
+	logger         *slog.Logger
+	tracer         trace.Tracer
+	db             *pgxpool.Pool
+	repo           *repo.Queries
+	externalmcp    *externalmcpRepo.Queries
+	registryClient *externalmcp.RegistryClient
+	auth           *auth.Auth
+	assets         *assetsRepo.Queries
+	packages       *packagesRepo.Queries
+	assetStorage   assets.BlobStore
+	temporal       client.Client
+	posthog        *posthog.Posthog
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -67,16 +71,18 @@ func NewService(
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/deployments")
 
 	return &Service{
-		logger:       logger,
-		tracer:       tracer,
-		db:           db,
-		repo:         repo.New(db),
-		auth:         auth.New(logger, db, sessions),
-		assets:       assetsRepo.New(db),
-		packages:     packagesRepo.New(db),
-		assetStorage: assetStorage,
-		temporal:     temporal,
-		posthog:      posthog,
+		logger:         logger,
+		tracer:         tracer,
+		db:             db,
+		repo:           repo.New(db),
+		externalmcp:    externalmcpRepo.New(db),
+		registryClient: externalmcp.NewRegistryClient(logger),
+		auth:           auth.New(logger, db, sessions),
+		assets:         assetsRepo.New(db),
+		packages:       packagesRepo.New(db),
+		assetStorage:   assetStorage,
+		temporal:       temporal,
+		posthog:        posthog,
 	}
 }
 

@@ -368,7 +368,7 @@ func newWorkerCommand() *cli.Command {
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			ragService := rag.NewToolsetVectorStore(tracerProvider, db, baseChatClient)
+			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, baseChatClient)
 			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator)
 
 			// Create agents service for the worker

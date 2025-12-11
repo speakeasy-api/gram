@@ -1,4 +1,4 @@
-h1:z5ZTtOUhMghf7cy/tCX7wq5FO20y53HHogMWNI6N2WM=
+h1:fQE9pxGGPKQbi6KGk/n0IbYxYO5q0UuMILhkUxoaoNk=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -79,3 +79,7 @@ h1:z5ZTtOUhMghf7cy/tCX7wq5FO20y53HHogMWNI6N2WM=
 20251202182959_agent-execution-table.sql h1:q2PyP6iOoBAkQC0pgAFPre5+Amk3Kal7Mc2Twbni0gg=
 20251203212657_add_mcp_registries_table.sql h1:rMZ8ErJ75Wyt/FSzkXDHi7NNYnv2/M9eTTwYOe+/GAU=
 20251205011912_add-external-mcp-tables.sql h1:/N0seCnCAKzbvYfV0+fibQep6xIaaOn+XOLyB0u5Jlc=
+20251209194142_rename-external-mcp-id.sql h1:rn9IX7Yh/GdIHVM+9svNt51sUgRHgegrdv3T39b2ANc=
+20251209204014_add-remote-url-to-external-mcps.sql h1:Af9ZYIJ1ZrRB9AIdOyaqKrlrSn9wO2HDuq0Nh1FJxIw=
+20251209211313_move-remote-url-to-tool-definitions.sql h1:vtlTqjSro0u7eGezP8xdfvbHCYm33ngGzRzXXKboibE=
+20251210010124_external-mcp-oauth-columns.sql h1:xQvFjXm7iNaiL20vk9VjUfUKSVCgnzUdADffQ32U+kQ=

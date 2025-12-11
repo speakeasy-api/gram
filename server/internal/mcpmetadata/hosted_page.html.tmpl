@@ -1412,17 +1412,20 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
         "name": "{{ .OrganizationName }} with Gram"
     },
     "server": {
-    "type": "node",
-    "entry_point": "npx",
-    "mcp_config": {
-        "command": "npx",
-        "args": [
-        "mcp-remote",
-        "{{ .MCPURL }}"{{- range .SecurityInputs }},
-        "--header",
-        "{{ printf "%s:${user_config.%s}" (.SystemName | asHTTPHeader) (.DisplayName | asPosixName) }}"{{- end }}
-        ]
-    }
+        "type": "node",
+        "entry_point": "npx",
+        "mcp_config": {
+            "command": "npx",
+            "args": [
+            "mcp-remote",
+            "{{ .MCPURL }}"{{- range .SecurityInputs }},
+            "--header",
+            "{{ printf "%s:${user_config.%s}" (.SystemName | asHTTPHeader) (.DisplayName | asPosixName) }}"{{- end }}
+            ]
+        }
+    },
+    "compatibility": {
+        "node": ">=26.0.0",
     },
     "user_config": {
     {{- range $i, $input := .SecurityInputs }}{{- if $i }},{{ end }}
