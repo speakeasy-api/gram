@@ -141,15 +141,25 @@ function EnvironmentCombobox({
   );
 }
 
+function getSourceKind(
+  assetType: NamedAsset["type"],
+): "http" | "function" | null {
+  if (assetType === "openapi") return "http";
+  if (assetType === "function") return "function";
+  return null; // externalmcp doesn't support environment attachment yet
+}
+
 function useSourceEnvironmentData(asset: NamedAsset) {
   const environments = useListEnvironments();
+  const sourceKind = getSourceKind(asset.type);
   const sourceEnvironment = useGetSourceEnvironment(
     {
-      sourceKind: asset.type === "openapi" ? "http" : asset.type,
+      sourceKind: (sourceKind ?? "http") as "http" | "function",
       sourceSlug: asset.slug,
     },
     undefined,
     {
+      enabled: sourceKind !== null,
       retry: (_, err) => {
         if (err instanceof GramError && err.statusCode === 404) {
           return false;
@@ -218,10 +228,13 @@ export function AttachEnvironmentDialogContent({
     });
 
   const handleConfirm = () => {
+    const sourceKind = getSourceKind(asset.type);
+    if (!sourceKind) return; // externalmcp doesn't support environment attachment
+
     if (!activeEnvironmentId && isDirty) {
       deleteSourceEnvironmentMutation.mutate({
         request: {
-          sourceKind: asset.type === "openapi" ? "http" : asset.type,
+          sourceKind,
           sourceSlug: asset.slug,
         },
       });
@@ -233,7 +246,7 @@ export function AttachEnvironmentDialogContent({
     setSourceEnvironmentMutation.mutate({
       request: {
         setSourceEnvironmentLinkRequestBody: {
-          sourceKind: asset.type === "openapi" ? "http" : asset.type,
+          sourceKind,
           sourceSlug: asset.slug,
           environmentId: activeEnvironmentId,
         },
