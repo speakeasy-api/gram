@@ -382,6 +382,39 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 				Token:        externalSecret.Token,
 			})
 		}
+	case !toolset.McpIsPublic && toolset.OauthProxyServerID.Valid:
+		if token == "" {
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
+			return oops.E(oops.CodeUnauthorized, err, "access token is required").Log(ctx, s.logger)
+		}
+
+		_, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
+		if err != nil {
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
+			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
+		}
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		if !ok || authCtx == nil {
+			return oops.E(oops.CodeUnauthorized, nil, "no auth context found").Log(ctx, s.logger)
+		}
+
+		userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+		if err != nil {
+			return oops.E(oops.CodeUnauthorized, err, "failed to get user info from access token").Log(ctx, s.logger)
+		}
+
+		hasOrgAccess := false
+		for _, org := range userInfo.Organizations {
+			if org.ID == toolset.OrganizationID {
+				hasOrgAccess = true
+				break
+			}
+		}
+
+		if !hasOrgAccess {
+			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+		}
 	default:
 		if token != "" {
 			ctx, err = s.authenticateToken(ctx, token)
@@ -396,33 +429,6 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 			if authCtx.SessionID == nil {
 				return oops.E(oops.CodeUnauthorized, nil, "no session ID found in auth context").Log(ctx, s.logger)
-			}
-
-			// If toolset has OAuth proxy server, validate OAuth token and check org access
-			if toolset.OauthProxyServerID.Valid {
-
-				_, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
-				if err != nil {
-					w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
-					return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
-				}
-
-				userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
-				if err != nil {
-					return oops.E(oops.CodeUnauthorized, err, "failed to get user info from access token").Log(ctx, s.logger)
-				}
-
-				hasOrgAccess := false
-				for _, org := range userInfo.Organizations {
-					if org.ID == toolset.OrganizationID {
-						hasOrgAccess = true
-						break
-					}
-				}
-
-				if !hasOrgAccess {
-					return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
-				}
 			}
 		}
 	}
