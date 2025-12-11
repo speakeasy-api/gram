@@ -48,4 +48,6 @@ type Deployment struct {
 	FunctionsAssets []*DeploymentFunctions
 	// The packages that were deployed.
 	Packages []*DeploymentPackage
+	// The external MCP servers that were deployed.
+	ExternalMcps []*DeploymentExternalMCP
 }
