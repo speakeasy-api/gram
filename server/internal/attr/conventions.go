@@ -116,6 +116,7 @@ const (
 	OAuthGrantKey                  = attribute.Key("gram.oauth.grant")
 	OAuthProviderKey               = attribute.Key("gram.oauth.provider")
 	OAuthRedirectURIFullKey        = attribute.Key("gram.oauth.redirect_uri.full")
+	OAuthRequiredKey               = attribute.Key("gram.oauth.required")
 	OAuthScopeKey                  = attribute.Key("gram.oauth.scope")
 	OpenAPIMethodKey               = attribute.Key("gram.openapi.method")
 	OpenAPIOperationIDKey          = attribute.Key("gram.openapi.operation_id")
@@ -503,6 +504,9 @@ func OAuthRedirectURIFull(v string) attribute.KeyValue { return OAuthRedirectURI
 func SlogOAuthRedirectURIFull(v string) slog.Attr {
 	return slog.String(string(OAuthRedirectURIFullKey), v)
 }
+
+func OAuthRequired(v bool) attribute.KeyValue { return OAuthRequiredKey.Bool(v) }
+func SlogOAuthRequired(v bool) slog.Attr      { return slog.Bool(string(OAuthRequiredKey), v) }
 
 func OAuthScope(v string) attribute.KeyValue { return OAuthScopeKey.String(v) }
 func SlogOAuthScope(v string) slog.Attr      { return slog.String(string(OAuthScopeKey), v) }
