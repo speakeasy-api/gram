@@ -90,6 +90,17 @@ export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
     );
   }, [deployment]);
 
+  const functionIdToSlug = useMemo(() => {
+    return deployment?.deployment?.functionsAssets?.reduce(
+      (acc, asset) => {
+        acc[asset.id] = asset.slug;
+        acc[asset.assetId] = asset.slug;
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
+  }, [deployment]);
+
   const toolGroups = useMemo(() => {
     return tools?.reduce((acc, tool) => {
       let groupKey = "unknown";
@@ -100,8 +111,10 @@ export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
           : undefined;
         groupKey = documentSlug || "unknown";
       } else if (tool.type === "function") {
-        // TODO: As the UX gets built out this should get more granular, tying to which function asset
-        groupKey = "functions";
+        const functionSlug =
+          functionIdToSlug?.[tool.functionId] ||
+          functionIdToSlug?.[tool.assetId];
+        groupKey = functionSlug || "functions";
       } else {
         groupKey = "custom";
       }
@@ -123,7 +136,7 @@ export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
       }
       return acc;
     }, [] as ToolGroup[]);
-  }, [deployment, tools]);
+  }, [documentIdToSlug, functionIdToSlug, tools]);
 
   return toolGroups;
 };
