@@ -6,7 +6,7 @@
       "name": "gram-local",
       "command": "npx",
       "args": [
-        "mcp-remote@0.1.25",
+        "mcp-remote",
         "http://localhost:8080/mcp/organization-123-um1c2",
         "--header",
         "Authorization:Bearer ${GRAM_KEY}"
