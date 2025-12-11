@@ -34,7 +34,7 @@ export type SetProjectLogoRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  setProjectLogoForm: components.SetProjectLogoForm;
+  getSignedAssetURLForm: components.GetSignedAssetURLForm;
 };
 
 /** @internal */
@@ -135,7 +135,7 @@ export type SetProjectLogoRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  SetProjectLogoForm: components.SetProjectLogoForm$Outbound;
+  GetSignedAssetURLForm: components.GetSignedAssetURLForm$Outbound;
 };
 
 /** @internal */
@@ -147,13 +147,13 @@ export const SetProjectLogoRequest$outboundSchema: z.ZodType<
   gramKey: z.string().optional(),
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),
-  setProjectLogoForm: components.SetProjectLogoForm$outboundSchema,
+  getSignedAssetURLForm: components.GetSignedAssetURLForm$outboundSchema,
 }).transform((v) => {
   return remap$(v, {
     gramKey: "Gram-Key",
     gramSession: "Gram-Session",
     gramProject: "Gram-Project",
-    setProjectLogoForm: "SetProjectLogoForm",
+    getSignedAssetURLForm: "GetSignedAssetURLForm",
   });
 });
 

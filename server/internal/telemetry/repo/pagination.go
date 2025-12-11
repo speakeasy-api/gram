@@ -3,7 +3,7 @@ package repo
 type Pagination struct {
 	PerPage    int           `json:"per_page" validate:"required,gte=1,lte=100"`
 	Direction  PageDirection `json:"direction" validate:"omitempty,oneof=next prev"`
-	Sort       string        `json:"sort" validate:"omitempty,oneof=ASC DESC"`
+	Sort       string        `json:"sort" validate:"omitempty,oneof=asc desc"`
 	PrevCursor string        `json:"prev_page_cursor" validate:"omitempty"`
 	NextCursor string        `json:"next_page_cursor" validate:"omitempty"`
 }
@@ -30,10 +30,10 @@ func (p *Pagination) Cursor() string {
 }
 
 func (p *Pagination) SortOrder() string {
-	if p.Sort == "ASC" || p.Sort == "DESC" {
+	if p.Sort == "asc" || p.Sort == "desc" {
 		return p.Sort
 	}
-	return "DESC"
+	return "desc"
 }
 
 func (p *Pagination) Limit() int {
@@ -45,7 +45,7 @@ func (p *Pagination) SetDefaults() {
 		p.PerPage = 20
 	}
 	if p.Sort == "" {
-		p.Sort = "DESC"
+		p.Sort = "desc"
 	}
 	if p.Direction == "" {
 		p.Direction = Next

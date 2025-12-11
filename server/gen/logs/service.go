@@ -18,6 +18,8 @@ import (
 type Service interface {
 	// List call logs for a toolset.
 	ListLogs(context.Context, *ListLogsPayload) (res *ListToolLogResponse, err error)
+	// List structured logs from tool executions.
+	ListToolExecutionLogs(context.Context, *ListToolExecutionLogsPayload) (res *ListToolExecutionLogsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -40,7 +42,7 @@ const ServiceName = "logs"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [1]string{"listLogs"}
+var MethodNames = [2]string{"listLogs", "listToolExecutionLogs"}
 
 // HTTP tool request and response log entry
 type HTTPToolLog struct {
@@ -117,6 +119,45 @@ type ListLogsPayload struct {
 	ToolUrns []string
 }
 
+// ListToolExecutionLogsPayload is the payload type of the logs service
+// listToolExecutionLogs method.
+type ListToolExecutionLogsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start timestamp
+	TsStart *string
+	// End timestamp
+	TsEnd *string
+	// Deployment ID filter
+	DeploymentID *string
+	// Function ID filter
+	FunctionID *string
+	// Instance filter
+	Instance *string
+	// Log level filter
+	Level *string
+	// Log source filter
+	Source *string
+	// Cursor for pagination
+	Cursor *string
+	// Number of items per page (1-100)
+	PerPage int
+	// Pagination direction
+	Direction string
+	// Sort order
+	Sort string
+}
+
+// ListToolExecutionLogsResult is the result type of the logs service
+// listToolExecutionLogs method.
+type ListToolExecutionLogsResult struct {
+	// List of tool execution logs
+	Logs []*ToolExecutionLog
+	// Pagination metadata
+	Pagination *PaginationResponse
+}
+
 // ListToolLogResponse is the result type of the logs service listLogs method.
 type ListToolLogResponse struct {
 	Logs       []*HTTPToolLog
@@ -133,6 +174,32 @@ type PaginationResponse struct {
 	HasNextPage *bool
 	// Cursor for next page
 	NextPageCursor *string
+}
+
+// Structured log entry from a tool execution
+type ToolExecutionLog struct {
+	// Log entry ID
+	ID string
+	// Timestamp of the log entry
+	Timestamp string
+	// Instance identifier
+	Instance string
+	// Log level
+	Level string
+	// Log source
+	Source string
+	// Raw log message
+	RawLog string
+	// Parsed log message
+	Message *string
+	// JSON-encoded log attributes
+	Attributes *string
+	// Project UUID
+	ProjectID string
+	// Deployment UUID
+	DeploymentID string
+	// Function UUID
+	FunctionID string
 }
 
 // Type of tool being logged

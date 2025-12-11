@@ -1,11 +1,11 @@
-# GetToolsetSecurityOption3
+# ListToolExecutionLogsSecurityOption1
 
 ## Example Usage
 
 ```typescript
-import { GetToolsetSecurityOption3 } from "@gram/client/models/operations";
+import { ListToolExecutionLogsSecurityOption1 } from "@gram/client/models/operations";
 
-let value: GetToolsetSecurityOption3 = {
+let value: ListToolExecutionLogsSecurityOption1 = {
   apikeyHeaderGramKey: "<value>",
   projectSlugHeaderGramProject: "<value>",
 };

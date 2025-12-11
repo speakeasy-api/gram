@@ -15,15 +15,9 @@ export type ListToolsetsSecurityOption2 = {
   projectSlugHeaderGramProject: string;
 };
 
-export type ListToolsetsSecurityOption3 = {
-  apikeyHeaderGramKey: string;
-  projectSlugHeaderGramProject: string;
-};
-
 export type ListToolsetsSecurity = {
   option1?: ListToolsetsSecurityOption1 | undefined;
   option2?: ListToolsetsSecurityOption2 | undefined;
-  option3?: ListToolsetsSecurityOption3 | undefined;
 };
 
 export type ListToolsetsRequest = {
@@ -104,41 +98,9 @@ export function listToolsetsSecurityOption2ToJSON(
 }
 
 /** @internal */
-export type ListToolsetsSecurityOption3$Outbound = {
-  "apikey_header_Gram-Key": string;
-  "project_slug_header_Gram-Project": string;
-};
-
-/** @internal */
-export const ListToolsetsSecurityOption3$outboundSchema: z.ZodType<
-  ListToolsetsSecurityOption3$Outbound,
-  z.ZodTypeDef,
-  ListToolsetsSecurityOption3
-> = z.object({
-  apikeyHeaderGramKey: z.string(),
-  projectSlugHeaderGramProject: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-  });
-});
-
-export function listToolsetsSecurityOption3ToJSON(
-  listToolsetsSecurityOption3: ListToolsetsSecurityOption3,
-): string {
-  return JSON.stringify(
-    ListToolsetsSecurityOption3$outboundSchema.parse(
-      listToolsetsSecurityOption3,
-    ),
-  );
-}
-
-/** @internal */
 export type ListToolsetsSecurity$Outbound = {
   Option1?: ListToolsetsSecurityOption1$Outbound | undefined;
   Option2?: ListToolsetsSecurityOption2$Outbound | undefined;
-  Option3?: ListToolsetsSecurityOption3$Outbound | undefined;
 };
 
 /** @internal */
@@ -149,12 +111,10 @@ export const ListToolsetsSecurity$outboundSchema: z.ZodType<
 > = z.object({
   option1: z.lazy(() => ListToolsetsSecurityOption1$outboundSchema).optional(),
   option2: z.lazy(() => ListToolsetsSecurityOption2$outboundSchema).optional(),
-  option3: z.lazy(() => ListToolsetsSecurityOption3$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
     option1: "Option1",
     option2: "Option2",
-    option3: "Option3",
   });
 });
 

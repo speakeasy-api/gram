@@ -5,23 +5,23 @@
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
 
-export type SetProjectLogoForm = {
+export type GetSignedAssetURLForm = {
   /**
-   * The ID of the asset
+   * The ID of the function asset
    */
   assetId: string;
 };
 
 /** @internal */
-export type SetProjectLogoForm$Outbound = {
+export type GetSignedAssetURLForm$Outbound = {
   asset_id: string;
 };
 
 /** @internal */
-export const SetProjectLogoForm$outboundSchema: z.ZodType<
-  SetProjectLogoForm$Outbound,
+export const GetSignedAssetURLForm$outboundSchema: z.ZodType<
+  GetSignedAssetURLForm$Outbound,
   z.ZodTypeDef,
-  SetProjectLogoForm
+  GetSignedAssetURLForm
 > = z.object({
   assetId: z.string(),
 }).transform((v) => {
@@ -30,10 +30,10 @@ export const SetProjectLogoForm$outboundSchema: z.ZodType<
   });
 });
 
-export function setProjectLogoFormToJSON(
-  setProjectLogoForm: SetProjectLogoForm,
+export function getSignedAssetURLFormToJSON(
+  getSignedAssetURLForm: GetSignedAssetURLForm,
 ): string {
   return JSON.stringify(
-    SetProjectLogoForm$outboundSchema.parse(setProjectLogoForm),
+    GetSignedAssetURLForm$outboundSchema.parse(getSignedAssetURLForm),
   );
 }

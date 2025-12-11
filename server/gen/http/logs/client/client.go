@@ -21,6 +21,10 @@ type Client struct {
 	// endpoint.
 	ListLogsDoer goahttp.Doer
 
+	// ListToolExecutionLogs Doer is the HTTP client used to make requests to the
+	// listToolExecutionLogs endpoint.
+	ListToolExecutionLogsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -41,12 +45,13 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListLogsDoer:        doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		ListLogsDoer:              doer,
+		ListToolExecutionLogsDoer: doer,
+		RestoreResponseBody:       restoreBody,
+		scheme:                    scheme,
+		host:                      host,
+		decoder:                   dec,
+		encoder:                   enc,
 	}
 }
 
@@ -69,6 +74,30 @@ func (c *Client) ListLogs() goa.Endpoint {
 		resp, err := c.ListLogsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("logs", "listLogs", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListToolExecutionLogs returns an endpoint that makes HTTP requests to the
+// logs service listToolExecutionLogs server.
+func (c *Client) ListToolExecutionLogs() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListToolExecutionLogsRequest(c.encoder)
+		decodeResponse = DecodeListToolExecutionLogsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListToolExecutionLogsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListToolExecutionLogsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("logs", "listToolExecutionLogs", err)
 		}
 		return decodeResponse(resp)
 	}
