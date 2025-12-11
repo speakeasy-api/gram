@@ -21,7 +21,9 @@ import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LogExecutionDetailSheet } from "./LogExecutionDetailSheet";
 
-function getLevelBadgeVariant(level: string): "neutral" | "information" | "warning" | "destructive" {
+function getLevelBadgeVariant(
+  level: string,
+): "neutral" | "information" | "warning" | "destructive" {
   switch (level.toLowerCase()) {
     case "debug":
       return "neutral";
@@ -93,7 +95,9 @@ export default function ExecutionLogsPage() {
       cursor: currentCursor,
       deploymentId: filters.deploymentFilter || undefined,
       functionId: filters.functionFilter || undefined,
-      level: (filters.levelFilter as "debug" | "info" | "warn" | "error" | null) || undefined,
+      level:
+        (filters.levelFilter as "debug" | "info" | "warn" | "error" | null) ||
+        undefined,
       source: (filters.sourceFilter as "stdout" | "stderr" | null) || undefined,
       sort: "desc",
     },
@@ -121,7 +125,8 @@ export default function ExecutionLogsPage() {
       } else {
         setAllLogs((prev) => {
           const existingIds = new Set(prev.map((log) => log.id));
-          const newLogs = data.logs?.filter((log) => !existingIds.has(log.id)) || [];
+          const newLogs =
+            data.logs?.filter((log) => !existingIds.has(log.id)) || [];
           return [...prev, ...newLogs];
         });
       }
@@ -349,7 +354,9 @@ export default function ExecutionLogsPage() {
                         <TableHead className="font-mono">LEVEL</TableHead>
                         <TableHead className="font-mono">MESSAGE</TableHead>
                         <TableHead className="font-mono">FUNCTION ID</TableHead>
-                        <TableHead className="font-mono">DEPLOYMENT ID</TableHead>
+                        <TableHead className="font-mono">
+                          DEPLOYMENT ID
+                        </TableHead>
                         <TableHead className="font-mono">SOURCE</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -424,7 +431,9 @@ export default function ExecutionLogsPage() {
                               <TableCell className="py-4">
                                 <Badge
                                   variant={
-                                    log.source === "stderr" ? "warning" : "neutral"
+                                    log.source === "stderr"
+                                      ? "warning"
+                                      : "neutral"
                                   }
                                   className="font-mono text-xs"
                                 >

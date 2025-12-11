@@ -27,7 +27,9 @@ function formatTimestamp(date: Date): string {
   }).format(date);
 }
 
-function getLevelBadgeVariant(level: string): "neutral" | "information" | "warning" | "destructive" {
+function getLevelBadgeVariant(
+  level: string,
+): "neutral" | "information" | "warning" | "destructive" {
   switch (level.toLowerCase()) {
     case "debug":
       return "neutral";
@@ -109,7 +111,9 @@ export function LogExecutionDetailSheet({
   open,
   onOpenChange,
 }: LogExecutionDetailSheetProps) {
-  const [activeTab, setActiveTab] = useState<"details" | "attributes">("details");
+  const [activeTab, setActiveTab] = useState<"details" | "attributes">(
+    "details",
+  );
 
   if (!log) return null;
 
@@ -183,7 +187,9 @@ export function LogExecutionDetailSheet({
               <h3 className="text-sm font-semibold mb-3 px-3">Properties</h3>
               <div className="space-y-3">
                 <div className="flex justify-between items-center py-2 px-3 border-b border-neutral-softest">
-                  <span className="text-sm text-muted-foreground">Timestamp</span>
+                  <span className="text-sm text-muted-foreground">
+                    Timestamp
+                  </span>
                   <span className="text-sm font-mono">
                     {formatTimestamp(log.timestamp)}
                   </span>
@@ -210,12 +216,16 @@ export function LogExecutionDetailSheet({
                 </div>
 
                 <div className="flex justify-between items-center py-2 px-3 border-b border-neutral-softest">
-                  <span className="text-sm text-muted-foreground">Instance</span>
+                  <span className="text-sm text-muted-foreground">
+                    Instance
+                  </span>
                   <span className="text-sm font-mono">{log.instance}</span>
                 </div>
 
                 <div className="flex justify-between items-center py-2 px-3 border-b border-neutral-softest">
-                  <span className="text-sm text-muted-foreground">Function ID</span>
+                  <span className="text-sm text-muted-foreground">
+                    Function ID
+                  </span>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-mono">{log.functionId}</span>
                     <Button
@@ -235,7 +245,9 @@ export function LogExecutionDetailSheet({
                     Deployment ID
                   </span>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-mono">{log.deploymentId}</span>
+                    <span className="text-sm font-mono">
+                      {log.deploymentId}
+                    </span>
                     <Button
                       size="sm"
                       variant="secondary"
@@ -249,7 +261,9 @@ export function LogExecutionDetailSheet({
                 </div>
 
                 <div className="flex justify-between items-center py-2 px-3 border-b border-neutral-softest">
-                  <span className="text-sm text-muted-foreground">Project ID</span>
+                  <span className="text-sm text-muted-foreground">
+                    Project ID
+                  </span>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-mono">{log.projectId}</span>
                     <Button
