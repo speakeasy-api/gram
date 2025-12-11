@@ -18,7 +18,7 @@ interface ServerMeta {
   };
 }
 
-interface Server {
+export interface Server {
   name: string;
   version: string;
   description: string;
