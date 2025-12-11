@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -28,6 +29,9 @@ import (
 	"github.com/speakeasy-api/gram/functions/internal/o11y"
 	"github.com/speakeasy-api/gram/functions/internal/runner"
 	"github.com/speakeasy-api/gram/functions/internal/svc"
+	funcclient "github.com/speakeasy-api/gram/server/gen/functions"
+	"github.com/speakeasy-api/gram/server/gen/http/functions/client"
+	goahttp "goa.design/goa/v3/http"
 )
 
 var (
@@ -96,13 +100,19 @@ func run(ctx context.Context, logger *slog.Logger, ident auth.RunnerIdentity) er
 		return fmt.Errorf("invalid arguments: %w", err)
 	}
 
+	serverClient, err := newServerClient()
+	if err != nil {
+		return fmt.Errorf("create server client: %w", err)
+	}
+
 	if *doinit {
 		logger.InfoContext(ctx, "initializing function runtime")
 		if _, _, err := bootstrap.InitializeMachine(ctx, logger, bootstrap.InitializeMachineConfig{
-			Ident:    ident,
-			Language: args.language,
-			CodePath: args.codePath,
-			WorkDir:  args.workDir,
+			Ident:        ident,
+			ServerClient: serverClient,
+			Language:     args.language,
+			CodePath:     args.codePath,
+			WorkDir:      args.workDir,
 		}); err != nil {
 			return fmt.Errorf("initialize machine: %w", err)
 		}
@@ -194,14 +204,6 @@ func sanitizeArgs() (*runnerArgs, error) {
 		return nil, fmt.Errorf("codePath is required")
 	}
 
-	codeStat, err := os.Stat(*codePath)
-	if err != nil {
-		return nil, fmt.Errorf("stat: %s: %w", *codePath, err)
-	}
-	if !codeStat.Mode().IsRegular() {
-		return nil, fmt.Errorf("stat: %s: not a regular file", *codePath)
-	}
-
 	if workDir == nil || *workDir == "" {
 		return nil, fmt.Errorf("workDir is required")
 	}
@@ -283,4 +285,29 @@ func enrichLogger(logger *slog.Logger, ident auth.RunnerIdentity) *slog.Logger {
 	attrs = append(attrs, attr.SlogFunctionID(ident.FunctionID))
 
 	return logger.With(attrs...)
+}
+
+func newServerClient() (*funcclient.Client, error) {
+	su := os.Getenv("GRAM_SERVER_URL")
+	if su == "" {
+		return nil, fmt.Errorf("GRAM_SERVER_URL is required")
+	}
+
+	serverURL, err := url.Parse(su)
+	if err != nil {
+		return nil, fmt.Errorf("parse GRAM_SERVER_URL: %w", err)
+	}
+
+	httpClient := client.NewClient(
+		serverURL.Scheme,
+		serverURL.Host,
+		http.DefaultClient,
+		goahttp.RequestEncoder,
+		goahttp.ResponseDecoder,
+		false, // Don't restore response body
+	)
+
+	return funcclient.NewClient(
+		httpClient.GetSignedAssetURL(),
+	), nil
 }
