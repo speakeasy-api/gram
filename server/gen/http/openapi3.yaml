@@ -5386,6 +5386,117 @@ paths:
             tags:
                 - mcpMetadata
             x-speakeasy-name-override: set
+    /rpc/mcpRegistries.listCatalog:
+        get:
+            description: List available MCP servers from configured registries
+            operationId: listMcpCatalog
+            parameters:
+                - allowEmptyValue: true
+                  description: Filter to a specific registry
+                  in: query
+                  name: registry_id
+                  schema:
+                    description: Filter to a specific registry
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Search query to filter servers by name
+                  in: query
+                  name: search
+                  schema:
+                    description: Search query to filter servers by name
+                    type: string
+                - allowEmptyValue: true
+                  description: Pagination cursor
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Pagination cursor
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListCatalogResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listCatalog mcpRegistries
+            tags:
+                - mcpRegistries
+            x-speakeasy-name-override: listCatalog
+            x-speakeasy-react-hook:
+                name: ListMcpCatalog
     /rpc/packages.create:
         post:
             description: Create a new package for a project.
@@ -10642,6 +10753,37 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        ExternalMCPServer:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Description of what the server does
+                icon_url:
+                    type: string
+                    description: URL to the server's icon
+                    format: uri
+                name:
+                    type: string
+                    description: Server name in reverse-DNS format (e.g., 'io.github.user/server')
+                    example: io.modelcontextprotocol.anonymous/exa
+                registry_id:
+                    type: string
+                    description: ID of the registry this server came from
+                    format: uuid
+                title:
+                    type: string
+                    description: Display name for the server
+                version:
+                    type: string
+                    description: Semantic version of the server
+                    example: 1.0.0
+            description: An MCP server from an external registry
+            required:
+                - name
+                - version
+                - description
+                - registry_id
         ExternalOAuthServer:
             type: object
             properties:
@@ -11507,6 +11649,19 @@ components:
                     description: The list of assets
             required:
                 - assets
+        ListCatalogResponseBody:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Pagination cursor for the next page
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExternalMCPServer'
+                    description: List of available MCP servers
+            required:
+                - servers
         ListChatsResult:
             type: object
             properties:
@@ -13663,6 +13818,8 @@ tags:
       description: Managing system api keys.
     - name: mcpMetadata
       description: Manages metadata for the MCP install page shown to users.
+    - name: mcpRegistries
+      description: External MCP registry operations
     - name: packages
       description: Manages packages in Gram.
     - name: features
