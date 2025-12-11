@@ -24,7 +24,7 @@ func BuildCreateProjectPayload(projectsCreateProjectBody string, projectsCreateP
 	{
 		err = json.Unmarshal([]byte(projectsCreateProjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"jxh\",\n      \"organization_id\": \"Magnam dolorem quo sunt et.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"nm3\",\n      \"organization_id\": \"Quibusdam voluptatem.\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 40, false))
@@ -90,7 +90,7 @@ func BuildSetLogoPayload(projectsSetLogoBody string, projectsSetLogoApikeyToken 
 	{
 		err = json.Unmarshal([]byte(projectsSetLogoBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"Et dolores in facere quo vitae impedit.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"Quisquam molestiae iure.\"\n   }'")
 		}
 	}
 	var apikeyToken *string

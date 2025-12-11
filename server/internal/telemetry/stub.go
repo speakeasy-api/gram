@@ -12,6 +12,10 @@ func (n *StubToolMetricsClient) ListHTTPRequests(_ context.Context, _ repo.ListT
 	return nil, nil
 }
 
+func (n *StubToolMetricsClient) ListToolLogs(_ context.Context, _ repo.ListToolLogsParams) (*repo.ToolLogsListResult, error) {
+	return nil, nil
+}
+
 func (n *StubToolMetricsClient) LogHTTPRequest(_ context.Context, _ repo.ToolHTTPRequest) error {
 	return nil
 }

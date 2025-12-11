@@ -140,10 +140,10 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if sortRaw != "" {
 			sort = sortRaw
 		} else {
-			sort = "DESC"
+			sort = "desc"
 		}
-		if !(sort == "ASC" || sort == "DESC") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"ASC", "DESC"}))
+		if !(sort == "asc" || sort == "desc") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"asc", "desc"}))
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -343,6 +343,331 @@ func EncodeListLogsError(encoder func(context.Context, http.ResponseWriter) goah
 	}
 }
 
+// EncodeListToolExecutionLogsResponse returns an encoder for responses
+// returned by the logs listToolExecutionLogs endpoint.
+func EncodeListToolExecutionLogsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*logs.ListToolExecutionLogsResult)
+		enc := encoder(ctx, w)
+		body := NewListToolExecutionLogsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListToolExecutionLogsRequest returns a decoder for requests sent to
+// the logs listToolExecutionLogs endpoint.
+func DecodeListToolExecutionLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*logs.ListToolExecutionLogsPayload, error) {
+	return func(r *http.Request) (*logs.ListToolExecutionLogsPayload, error) {
+		var (
+			tsStart          *string
+			tsEnd            *string
+			deploymentID     *string
+			functionID       *string
+			instance         *string
+			level            *string
+			source           *string
+			cursor           *string
+			perPage          int
+			direction        string
+			sort             string
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+			err              error
+		)
+		qp := r.URL.Query()
+		tsStartRaw := qp.Get("ts_start")
+		if tsStartRaw != "" {
+			tsStart = &tsStartRaw
+		}
+		if tsStart != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("ts_start", *tsStart, goa.FormatDateTime))
+		}
+		tsEndRaw := qp.Get("ts_end")
+		if tsEndRaw != "" {
+			tsEnd = &tsEndRaw
+		}
+		if tsEnd != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("ts_end", *tsEnd, goa.FormatDateTime))
+		}
+		deploymentIDRaw := qp.Get("deployment_id")
+		if deploymentIDRaw != "" {
+			deploymentID = &deploymentIDRaw
+		}
+		if deploymentID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("deployment_id", *deploymentID, goa.FormatUUID))
+		}
+		functionIDRaw := qp.Get("function_id")
+		if functionIDRaw != "" {
+			functionID = &functionIDRaw
+		}
+		if functionID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("function_id", *functionID, goa.FormatUUID))
+		}
+		instanceRaw := qp.Get("instance")
+		if instanceRaw != "" {
+			instance = &instanceRaw
+		}
+		levelRaw := qp.Get("level")
+		if levelRaw != "" {
+			level = &levelRaw
+		}
+		if level != nil {
+			if !(*level == "debug" || *level == "info" || *level == "warn" || *level == "error") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("level", *level, []any{"debug", "info", "warn", "error"}))
+			}
+		}
+		sourceRaw := qp.Get("source")
+		if sourceRaw != "" {
+			source = &sourceRaw
+		}
+		if source != nil {
+			if !(*source == "stdout" || *source == "stderr") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("source", *source, []any{"stdout", "stderr"}))
+			}
+		}
+		cursorRaw := qp.Get("cursor")
+		if cursorRaw != "" {
+			cursor = &cursorRaw
+		}
+		if cursor != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+		}
+		{
+			perPageRaw := qp.Get("per_page")
+			if perPageRaw == "" {
+				perPage = 20
+			} else {
+				v, err2 := strconv.ParseInt(perPageRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("per_page", perPageRaw, "integer"))
+				}
+				perPage = int(v)
+			}
+		}
+		if perPage < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("per_page", perPage, 1, true))
+		}
+		if perPage > 100 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("per_page", perPage, 100, false))
+		}
+		directionRaw := qp.Get("direction")
+		if directionRaw != "" {
+			direction = directionRaw
+		} else {
+			direction = "next"
+		}
+		if !(direction == "next" || direction == "prev") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("direction", direction, []any{"next", "prev"}))
+		}
+		sortRaw := qp.Get("sort")
+		if sortRaw != "" {
+			sort = sortRaw
+		} else {
+			sort = "desc"
+		}
+		if !(sort == "asc" || sort == "desc") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"asc", "desc"}))
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		if err != nil {
+			return nil, err
+		}
+		payload := NewListToolExecutionLogsPayload(tsStart, tsEnd, deploymentID, functionID, instance, level, source, cursor, perPage, direction, sort, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListToolExecutionLogsError returns an encoder for errors returned by
+// the listToolExecutionLogs logs endpoint.
+func EncodeListToolExecutionLogsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolExecutionLogsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolExecutionLogsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolExecutionLogsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolExecutionLogsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolExecutionLogsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolExecutionLogsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolExecutionLogsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolExecutionLogsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolExecutionLogsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolExecutionLogsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // marshalLogsHTTPToolLogToHTTPToolLogResponseBody builds a value of type
 // *HTTPToolLogResponseBody from a value of type *logs.HTTPToolLog.
 func marshalLogsHTTPToolLogToHTTPToolLogResponseBody(v *logs.HTTPToolLog) *HTTPToolLogResponseBody {
@@ -394,6 +719,30 @@ func marshalLogsPaginationResponseToPaginationResponseResponseBody(v *logs.Pagin
 		PerPage:        v.PerPage,
 		HasNextPage:    v.HasNextPage,
 		NextPageCursor: v.NextPageCursor,
+	}
+
+	return res
+}
+
+// marshalLogsToolExecutionLogToToolExecutionLogResponseBody builds a value of
+// type *ToolExecutionLogResponseBody from a value of type
+// *logs.ToolExecutionLog.
+func marshalLogsToolExecutionLogToToolExecutionLogResponseBody(v *logs.ToolExecutionLog) *ToolExecutionLogResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ToolExecutionLogResponseBody{
+		ID:           v.ID,
+		Timestamp:    v.Timestamp,
+		Instance:     v.Instance,
+		Level:        v.Level,
+		Source:       v.Source,
+		RawLog:       v.RawLog,
+		Message:      v.Message,
+		Attributes:   v.Attributes,
+		ProjectID:    v.ProjectID,
+		DeploymentID: v.DeploymentID,
+		FunctionID:   v.FunctionID,
 	}
 
 	return res

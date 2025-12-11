@@ -21,6 +21,15 @@ type ListLogsResponseBody struct {
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
+// ListToolExecutionLogsResponseBody is the type of the "logs" service
+// "listToolExecutionLogs" endpoint HTTP response body.
+type ListToolExecutionLogsResponseBody struct {
+	// List of tool execution logs
+	Logs []*ToolExecutionLogResponseBody `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
+	// Pagination metadata
+	Pagination *PaginationResponseResponseBody `form:"pagination,omitempty" json:"pagination,omitempty" xml:"pagination,omitempty"`
+}
+
 // ListLogsUnauthorizedResponseBody is the type of the "logs" service
 // "listLogs" endpoint HTTP response body for the "unauthorized" error.
 type ListLogsUnauthorizedResponseBody struct {
@@ -201,6 +210,194 @@ type ListLogsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListToolExecutionLogsUnauthorizedResponseBody is the type of the "logs"
+// service "listToolExecutionLogs" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListToolExecutionLogsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolExecutionLogsForbiddenResponseBody is the type of the "logs" service
+// "listToolExecutionLogs" endpoint HTTP response body for the "forbidden"
+// error.
+type ListToolExecutionLogsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolExecutionLogsBadRequestResponseBody is the type of the "logs"
+// service "listToolExecutionLogs" endpoint HTTP response body for the
+// "bad_request" error.
+type ListToolExecutionLogsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolExecutionLogsNotFoundResponseBody is the type of the "logs" service
+// "listToolExecutionLogs" endpoint HTTP response body for the "not_found"
+// error.
+type ListToolExecutionLogsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolExecutionLogsConflictResponseBody is the type of the "logs" service
+// "listToolExecutionLogs" endpoint HTTP response body for the "conflict" error.
+type ListToolExecutionLogsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolExecutionLogsUnsupportedMediaResponseBody is the type of the "logs"
+// service "listToolExecutionLogs" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListToolExecutionLogsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolExecutionLogsInvalidResponseBody is the type of the "logs" service
+// "listToolExecutionLogs" endpoint HTTP response body for the "invalid" error.
+type ListToolExecutionLogsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolExecutionLogsInvariantViolationResponseBody is the type of the
+// "logs" service "listToolExecutionLogs" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListToolExecutionLogsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolExecutionLogsUnexpectedResponseBody is the type of the "logs"
+// service "listToolExecutionLogs" endpoint HTTP response body for the
+// "unexpected" error.
+type ListToolExecutionLogsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolExecutionLogsGatewayErrorResponseBody is the type of the "logs"
+// service "listToolExecutionLogs" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListToolExecutionLogsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // HTTPToolLogResponseBody is used to define fields on response body types.
 type HTTPToolLogResponseBody struct {
 	// Id of the request
@@ -256,6 +453,32 @@ type PaginationResponseResponseBody struct {
 	NextPageCursor *string `form:"next_page_cursor,omitempty" json:"next_page_cursor,omitempty" xml:"next_page_cursor,omitempty"`
 }
 
+// ToolExecutionLogResponseBody is used to define fields on response body types.
+type ToolExecutionLogResponseBody struct {
+	// Log entry ID
+	ID string `form:"id" json:"id" xml:"id"`
+	// Timestamp of the log entry
+	Timestamp string `form:"timestamp" json:"timestamp" xml:"timestamp"`
+	// Instance identifier
+	Instance string `form:"instance" json:"instance" xml:"instance"`
+	// Log level
+	Level string `form:"level" json:"level" xml:"level"`
+	// Log source
+	Source string `form:"source" json:"source" xml:"source"`
+	// Raw log message
+	RawLog string `form:"raw_log" json:"raw_log" xml:"raw_log"`
+	// Parsed log message
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// JSON-encoded log attributes
+	Attributes *string `form:"attributes,omitempty" json:"attributes,omitempty" xml:"attributes,omitempty"`
+	// Project UUID
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Deployment UUID
+	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
+	// Function UUID
+	FunctionID string `form:"function_id" json:"function_id" xml:"function_id"`
+}
+
 // NewListLogsResponseBody builds the HTTP response body from the result of the
 // "listLogs" endpoint of the "logs" service.
 func NewListLogsResponseBody(res *logs.ListToolLogResponse) *ListLogsResponseBody {
@@ -273,6 +496,26 @@ func NewListLogsResponseBody(res *logs.ListToolLogResponse) *ListLogsResponseBod
 		}
 	} else {
 		body.Logs = []*HTTPToolLogResponseBody{}
+	}
+	if res.Pagination != nil {
+		body.Pagination = marshalLogsPaginationResponseToPaginationResponseResponseBody(res.Pagination)
+	}
+	return body
+}
+
+// NewListToolExecutionLogsResponseBody builds the HTTP response body from the
+// result of the "listToolExecutionLogs" endpoint of the "logs" service.
+func NewListToolExecutionLogsResponseBody(res *logs.ListToolExecutionLogsResult) *ListToolExecutionLogsResponseBody {
+	body := &ListToolExecutionLogsResponseBody{}
+	if res.Logs != nil {
+		body.Logs = make([]*ToolExecutionLogResponseBody, len(res.Logs))
+		for i, val := range res.Logs {
+			if val == nil {
+				body.Logs[i] = nil
+				continue
+			}
+			body.Logs[i] = marshalLogsToolExecutionLogToToolExecutionLogResponseBody(val)
+		}
 	}
 	if res.Pagination != nil {
 		body.Pagination = marshalLogsPaginationResponseToPaginationResponseResponseBody(res.Pagination)
@@ -420,6 +663,156 @@ func NewListLogsGatewayErrorResponseBody(res *goa.ServiceError) *ListLogsGateway
 	return body
 }
 
+// NewListToolExecutionLogsUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listToolExecutionLogs" endpoint of the "logs"
+// service.
+func NewListToolExecutionLogsUnauthorizedResponseBody(res *goa.ServiceError) *ListToolExecutionLogsUnauthorizedResponseBody {
+	body := &ListToolExecutionLogsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolExecutionLogsForbiddenResponseBody builds the HTTP response body
+// from the result of the "listToolExecutionLogs" endpoint of the "logs"
+// service.
+func NewListToolExecutionLogsForbiddenResponseBody(res *goa.ServiceError) *ListToolExecutionLogsForbiddenResponseBody {
+	body := &ListToolExecutionLogsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolExecutionLogsBadRequestResponseBody builds the HTTP response body
+// from the result of the "listToolExecutionLogs" endpoint of the "logs"
+// service.
+func NewListToolExecutionLogsBadRequestResponseBody(res *goa.ServiceError) *ListToolExecutionLogsBadRequestResponseBody {
+	body := &ListToolExecutionLogsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolExecutionLogsNotFoundResponseBody builds the HTTP response body
+// from the result of the "listToolExecutionLogs" endpoint of the "logs"
+// service.
+func NewListToolExecutionLogsNotFoundResponseBody(res *goa.ServiceError) *ListToolExecutionLogsNotFoundResponseBody {
+	body := &ListToolExecutionLogsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolExecutionLogsConflictResponseBody builds the HTTP response body
+// from the result of the "listToolExecutionLogs" endpoint of the "logs"
+// service.
+func NewListToolExecutionLogsConflictResponseBody(res *goa.ServiceError) *ListToolExecutionLogsConflictResponseBody {
+	body := &ListToolExecutionLogsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolExecutionLogsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listToolExecutionLogs" endpoint of the
+// "logs" service.
+func NewListToolExecutionLogsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListToolExecutionLogsUnsupportedMediaResponseBody {
+	body := &ListToolExecutionLogsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolExecutionLogsInvalidResponseBody builds the HTTP response body
+// from the result of the "listToolExecutionLogs" endpoint of the "logs"
+// service.
+func NewListToolExecutionLogsInvalidResponseBody(res *goa.ServiceError) *ListToolExecutionLogsInvalidResponseBody {
+	body := &ListToolExecutionLogsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolExecutionLogsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listToolExecutionLogs" endpoint of the
+// "logs" service.
+func NewListToolExecutionLogsInvariantViolationResponseBody(res *goa.ServiceError) *ListToolExecutionLogsInvariantViolationResponseBody {
+	body := &ListToolExecutionLogsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolExecutionLogsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listToolExecutionLogs" endpoint of the "logs"
+// service.
+func NewListToolExecutionLogsUnexpectedResponseBody(res *goa.ServiceError) *ListToolExecutionLogsUnexpectedResponseBody {
+	body := &ListToolExecutionLogsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolExecutionLogsGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listToolExecutionLogs" endpoint of the "logs"
+// service.
+func NewListToolExecutionLogsGatewayErrorResponseBody(res *goa.ServiceError) *ListToolExecutionLogsGatewayErrorResponseBody {
+	body := &ListToolExecutionLogsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListLogsPayload builds a logs service listLogs endpoint payload.
 func NewListLogsPayload(toolID *string, tsStart *string, tsEnd *string, cursor *string, status *string, serverName *string, toolName *string, toolType *string, toolUrns []string, perPage int, direction string, sort string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *logs.ListLogsPayload {
 	v := &logs.ListLogsPayload{}
@@ -432,6 +825,28 @@ func NewListLogsPayload(toolID *string, tsStart *string, tsEnd *string, cursor *
 	v.ToolName = toolName
 	v.ToolType = toolType
 	v.ToolUrns = toolUrns
+	v.PerPage = perPage
+	v.Direction = direction
+	v.Sort = sort
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListToolExecutionLogsPayload builds a logs service listToolExecutionLogs
+// endpoint payload.
+func NewListToolExecutionLogsPayload(tsStart *string, tsEnd *string, deploymentID *string, functionID *string, instance *string, level *string, source *string, cursor *string, perPage int, direction string, sort string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *logs.ListToolExecutionLogsPayload {
+	v := &logs.ListToolExecutionLogsPayload{}
+	v.TsStart = tsStart
+	v.TsEnd = tsEnd
+	v.DeploymentID = deploymentID
+	v.FunctionID = functionID
+	v.Instance = instance
+	v.Level = level
+	v.Source = source
+	v.Cursor = cursor
 	v.PerPage = perPage
 	v.Direction = direction
 	v.Sort = sort

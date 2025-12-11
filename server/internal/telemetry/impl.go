@@ -184,3 +184,114 @@ func toHTTPToolLog(r repo.ToolHTTPRequest, projectId string) *gen.HTTPToolLog {
 		ResponseBodyBytes: conv.Ptr(r.ResponseBodyBytes),
 	}
 }
+
+func (s *Service) ListToolExecutionLogs(ctx context.Context, payload *gen.ListToolExecutionLogsPayload) (res *gen.ListToolExecutionLogsResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	projectID := authCtx.ProjectID
+
+	// Parse time parameters - use very wide bounds if not specified to allow querying all historical data
+	// Unix epoch (Jan 1, 1970) as default start time
+	tsStart := parseTimeOrDefault(payload.TsStart, time.Unix(0, 0).UTC())
+	// Far future (year 2100) as default end time
+	tsEnd := parseTimeOrDefault(payload.TsEnd, time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC))
+
+	// Set defaults
+	perPage := 20
+	if payload.PerPage < 0 || payload.PerPage > 100 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "per page must be between 1 and 100")
+	}
+	if payload.PerPage > 0 {
+		perPage = payload.PerPage
+	}
+
+	sortOrder := "desc"
+	if payload.Sort != "desc" && payload.Sort != "asc" && payload.Sort != "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "sort order must be one of 'asc' or 'desc'")
+	}
+
+	// if a non-empty sort string is passed we can assume it's a valid sort as we validated it above
+	if payload.Sort != "" {
+		sortOrder = payload.Sort
+	}
+
+	// Use nil UUID as sentinel for "no cursor" (first page)
+	cursor := uuid.Nil.String()
+	if payload.Cursor != nil && *payload.Cursor != "" {
+		// Validate that cursor is a valid UUID
+		if _, err := uuid.Parse(*payload.Cursor); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "cursor must be a valid UUID")
+		}
+		cursor = *payload.Cursor
+	}
+
+	params := repo.ListToolLogsParams{
+		ProjectID:    projectID.String(),
+		TsStart:      tsStart,
+		TsEnd:        tsEnd,
+		DeploymentID: conv.PtrValOr(payload.DeploymentID, ""),
+		FunctionID:   conv.PtrValOr(payload.FunctionID, ""),
+		Instance:     conv.PtrValOr(payload.Instance, ""),
+		Level:        conv.PtrValOr(payload.Level, ""),
+		Source:       conv.PtrValOr(payload.Source, ""),
+		SortOrder:    sortOrder,
+		Cursor:       cursor,
+		Limit:        perPage + 1, // +1 for detecting next page
+	}
+
+	result, err := s.tcm.ListToolLogs(ctx, params)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing tool execution logs").
+			Log(ctx, s.logger, attr.SlogProjectID(projectID.String()))
+	}
+
+	if result == nil {
+		return &gen.ListToolExecutionLogsResult{
+			Logs: make([]*gen.ToolExecutionLog, 0),
+			Pagination: &gen.PaginationResponse{
+				PerPage:        conv.Ptr(0),
+				HasNextPage:    conv.Ptr(false),
+				NextPageCursor: conv.Ptr(""),
+			},
+		}, nil
+	}
+
+	// Convert results to gen.ToolExecutionLog
+	logs := make([]*gen.ToolExecutionLog, 0, len(result.Logs))
+	for _, r := range result.Logs {
+		logs = append(logs, toToolExecutionLog(r))
+	}
+
+	// Convert pagination metadata to API format
+	var nextPageCursor *string
+	if result.Pagination.NextPageCursor != nil {
+		nextPageCursor = result.Pagination.NextPageCursor
+	}
+
+	pp := &gen.PaginationResponse{
+		PerPage:        &result.Pagination.PerPage,
+		HasNextPage:    &result.Pagination.HasNextPage,
+		NextPageCursor: nextPageCursor,
+	}
+
+	return &gen.ListToolExecutionLogsResult{Logs: logs, Pagination: pp}, nil
+}
+
+func toToolExecutionLog(r repo.ToolLog) *gen.ToolExecutionLog {
+	return &gen.ToolExecutionLog{
+		ID:           r.ID,
+		Timestamp:    r.Timestamp.Format(time.RFC3339),
+		Instance:     r.Instance,
+		Level:        r.Level,
+		Source:       r.Source,
+		RawLog:       r.RawLog,
+		Message:      r.Message,
+		Attributes:   conv.Ptr(r.Attributes),
+		ProjectID:    r.ProjectID,
+		DeploymentID: r.DeploymentID,
+		FunctionID:   r.FunctionID,
+	}
+}

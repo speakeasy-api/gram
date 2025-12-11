@@ -81,6 +81,7 @@ export * from "./setToolsetEnvironmentLink.js";
 export * from "./switchScopes.js";
 export * from "./template.js";
 export * from "./templates.js";
+export * from "./toolExecutionLogs.js";
 export * from "./toolset.js";
 export * from "./updateEnvironment.js";
 export * from "./updatePackage.js";

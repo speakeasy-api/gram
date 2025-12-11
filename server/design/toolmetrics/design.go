@@ -54,6 +54,44 @@ var _ = Service("logs", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolLogs"}`)
 	})
 
+	Method("listToolExecutionLogs", func() {
+		Description("List structured logs from tool executions.")
+		Security(security.ByKey, security.ProjectSlug)
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(ListToolExecutionLogsPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListToolExecutionLogsResult)
+
+		HTTP(func() {
+			GET("/rpc/logs.listToolExecutionLogs")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+
+			Param("ts_start")
+			Param("ts_end")
+			Param("deployment_id")
+			Param("function_id")
+			Param("instance")
+			Param("level")
+			Param("source")
+			Param("cursor")
+			Param("per_page")
+			Param("direction")
+			Param("sort")
+		})
+
+		Meta("openapi:operationId", "listToolExecutionLogs")
+		Meta("openapi:extension:x-speakeasy-name-override", "listToolExecutionLogs")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ToolExecutionLogs"}`)
+	})
+
 })
 
 var ListToolLogsRequest = Type("ListToolLogsRequest", func() {
@@ -81,8 +119,8 @@ var ListToolLogsRequest = Type("ListToolLogsRequest", func() {
 		Default("next")
 	})
 	Attribute("sort", String, "Sort order", func() {
-		Enum("ASC", "DESC")
-		Default("DESC")
+		Enum("asc", "desc")
+		Default("desc")
 	})
 	Attribute("status", String, "Status filter", func() {
 		Enum("success", "failure")
@@ -181,5 +219,90 @@ var HTTPToolLog = Type("HTTPToolLog", func() {
 		"status_code",
 		"duration_ms",
 		"user_agent",
+	)
+})
+
+var ListToolExecutionLogsPayload = Type("ListToolExecutionLogsPayload", func() {
+	Description("Payload for listing tool execution logs")
+
+	Attribute("ts_start", String, "Start timestamp", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("ts_end", String, "End timestamp", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("deployment_id", String, "Deployment ID filter", func() {
+		Format(FormatUUID)
+	})
+	Attribute("function_id", String, "Function ID filter", func() {
+		Format(FormatUUID)
+	})
+	Attribute("instance", String, "Instance filter")
+	Attribute("level", String, "Log level filter", func() {
+		Enum("debug", "info", "warn", "error")
+	})
+	Attribute("source", String, "Log source filter", func() {
+		Enum("stdout", "stderr")
+	})
+	Attribute("cursor", String, "Cursor for pagination", func() {
+		Format(FormatUUID)
+	})
+	Attribute("per_page", Int, "Number of items per page (1-100)", func() {
+		Minimum(1)
+		Maximum(100)
+		Default(20)
+	})
+	Attribute("direction", String, "Pagination direction", func() {
+		Enum("next", "prev")
+		Default("next")
+	})
+	Attribute("sort", String, "Sort order", func() {
+		Enum("asc", "desc")
+		Default("desc")
+	})
+})
+
+var ListToolExecutionLogsResult = Type("ListToolExecutionLogsResult", func() {
+	Description("Result of listing tool execution logs")
+
+	Attribute("logs", ArrayOf(ToolExecutionLog), "List of tool execution logs")
+	Attribute("pagination", PaginationResponse, "Pagination metadata")
+})
+
+var ToolExecutionLog = Type("ToolExecutionLog", func() {
+	Description("Structured log entry from a tool execution")
+
+	Attribute("id", String, "Log entry ID", func() {
+		Format(FormatUUID)
+	})
+	Attribute("timestamp", String, "Timestamp of the log entry", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("instance", String, "Instance identifier")
+	Attribute("level", String, "Log level")
+	Attribute("source", String, "Log source")
+	Attribute("raw_log", String, "Raw log message")
+	Attribute("message", String, "Parsed log message")
+	Attribute("attributes", String, "JSON-encoded log attributes")
+	Attribute("project_id", String, "Project UUID", func() {
+		Format(FormatUUID)
+	})
+	Attribute("deployment_id", String, "Deployment UUID", func() {
+		Format(FormatUUID)
+	})
+	Attribute("function_id", String, "Function UUID", func() {
+		Format(FormatUUID)
+	})
+
+	Required(
+		"id",
+		"timestamp",
+		"instance",
+		"level",
+		"source",
+		"raw_log",
+		"project_id",
+		"deployment_id",
+		"function_id",
 	)
 })

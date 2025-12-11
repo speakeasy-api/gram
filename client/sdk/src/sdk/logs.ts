@@ -3,6 +3,7 @@
  */
 
 import { logsList } from "../funcs/logsList.js";
+import { logsListToolExecutionLogs } from "../funcs/logsListToolExecutionLogs.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -21,6 +22,25 @@ export class Logs extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListToolLogResponse> {
     return unwrapAsync(logsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listToolExecutionLogs logs
+   *
+   * @remarks
+   * List structured logs from tool executions.
+   */
+  async listToolExecutionLogs(
+    request?: operations.ListToolExecutionLogsRequest | undefined,
+    security?: operations.ListToolExecutionLogsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListToolExecutionLogsResult> {
+    return unwrapAsync(logsListToolExecutionLogs(
       this,
       request,
       security,

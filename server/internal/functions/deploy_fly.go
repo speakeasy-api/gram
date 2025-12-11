@@ -797,7 +797,7 @@ func (f *FlyRunner) serializeAssets(
 		})
 
 		if useTigris {
-			wr, _, err := f.tigrisStore.Write(ctx, asset.AssetURL.Path, "", asset.ContentLength)
+			wr, _, err := f.tigrisStore.Write(ctx, asset.AssetURL.Path, asset.ContentType, asset.ContentLength)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to create writer for function asset").Log(ctx, logger)
 			}

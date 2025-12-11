@@ -813,7 +813,7 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
 
   // Build the args array for public MCP config
   const mcpJsonPublicArgs = [
-    "mcp-remote",
+    "mcp-remote@0.1.25",
     mcpUrl,
     ...envHeaders.flatMap((header) => [
       "--header",
@@ -857,7 +857,7 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
       .replace(/^./, (c) => c.toUpperCase())}": {
       "command": "npx",
       "args": [
-        "mcp-remote",
+        "mcp-remote@0.1.25",
         "${mcpUrl}",
         "--header",
         "Gram-Environment:${toolset.defaultEnvironmentSlug}",
