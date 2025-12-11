@@ -98,6 +98,12 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 		logger.Warn("failed to register query handler", "error", err)
 	}
 
+	if err := workflow.SetQueryHandler(ctx, "project_id", func() (uuid.UUID, error) {
+		return params.ProjectID, nil
+	}); err != nil {
+		logger.Warn("failed to register query handler", "error", err)
+	}
+
 	// Register query handler to expose request parameters
 	if err := workflow.SetQueryHandler(ctx, "request", func() (agents.ResponseRequest, error) {
 		return params.Request, nil
@@ -461,6 +467,7 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 		},
 		ExecutionHistory: executionHistory,
 		OrgID:            params.OrgID,
+		ProjectID:        params.ProjectID,
 		InputDetails:     inputDetails,
 	}, nil
 }
@@ -485,6 +492,7 @@ func buildErrorResponse(ctx workflow.Context, params AgentsResponseWorkflowParam
 		},
 		ExecutionHistory: executionHistory,
 		OrgID:            params.OrgID,
+		ProjectID:        params.ProjectID,
 		InputDetails:     inputDetails,
 	}
 }
