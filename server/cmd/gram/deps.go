@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -24,7 +25,7 @@ import (
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/inv"
-	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
+	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/superfly/fly-go/tokens"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
@@ -48,6 +49,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
+	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+
 )
 
 func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
@@ -113,7 +116,7 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 		return &tm.StubToolMetricsClient{}, func(context.Context) error { return nil }, nil
 	}
 
-	cc := tm.New(logger, tracerProvider, conn, func(ctx context.Context, orgId string) (bool, error) {
+	cc := tm_repo.New(logger, tracerProvider, conn, func(ctx context.Context, orgId string) (bool, error) {
 		isEnabled, err := featureClient.IsFeatureEnabled(ctx, orgId, productfeatures.FeatureLogs)
 		if err != nil {
 			logger.ErrorContext(
@@ -383,12 +386,72 @@ func newBillingProvider(
 	}
 }
 
+func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*assets.TigrisStore, func(context.Context) error, error) {
+	nilShutdown := func(context.Context) error { return nil }
+
+	switch provider := c.String("functions-provider"); provider {
+	case "local":
+		tmpDir, err := os.MkdirTemp("", "gram-tigris-")
+		if err != nil {
+			return nil, nilShutdown, fmt.Errorf("create temp dir for mock tigris store: %w", err)
+		}
+
+		root, err := os.OpenRoot(tmpDir)
+		if err != nil {
+			return nil, nilShutdown, fmt.Errorf("open temp dir for mock tigris store: %w", err)
+		}
+
+		shutdown := func(ctx context.Context) error {
+			if err := root.Close(); err != nil {
+				return fmt.Errorf("close temp dir for mock tigris store: %w", err)
+			}
+			if err := os.RemoveAll(tmpDir); err != nil {
+				return fmt.Errorf("remove temp dir for mock tigris store: %w", err)
+			}
+			return nil
+		}
+
+		store := assets.NewFSBlobStore(logger, root)
+
+		return assets.NewTigrisStore(store), shutdown, nil
+	case "flyio":
+		tigrisBucketURI := c.String("functions-tigris-bucket-uri")
+		tigrisKey := c.String("functions-tigris-key")
+		tigrisSecret := c.String("functions-tigris-secret")
+
+		if err := inv.Check(
+			"tigris flags",
+			"tigris bucket uri must be set", tigrisBucketURI != "",
+			"tigris key must be set", tigrisKey != "",
+			"tigris secret must be set", tigrisSecret != "",
+		); err != nil {
+			return nil, nilShutdown, fmt.Errorf("invalid configuration for tigris: %w", err)
+		}
+
+		store, err := assets.NewS3BlobStore(ctx, logger, tigrisBucketURI, assets.S3BlobStoreOptions{
+			BaseEndpoint: "https://t3.storage.dev",
+			Region:       "auto",
+			UsePathStyle: false,
+			AccessKey:    tigrisKey,
+			AccessSecret: tigrisSecret,
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("create tigris blob store: %w", err)
+		}
+
+		return assets.NewTigrisStore(store), nilShutdown, nil
+	default:
+		return nil, nilShutdown, fmt.Errorf("unrecognized functions provider: %s", provider)
+	}
+}
+
 func newFunctionOrchestrator(
 	c *cli.Context,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	assetStore assets.BlobStore,
+	tigrisStore *assets.TigrisStore,
 	enc *encryption.Client,
 ) (functions.Orchestrator, func(context.Context) error, error) {
 	nilShutdown := func(context.Context) error { return nil }
@@ -415,6 +478,7 @@ func newFunctionOrchestrator(
 
 		return functions.NewLocalRunner(codeRoot), shutdown, nil
 	case "flyio":
+		surl := c.String("server-url")
 		tokenstr := c.String("functions-flyio-api-token")
 		ociImage := c.String("functions-runner-oci-image")
 		defaultOrg := c.String("functions-flyio-org")
@@ -422,12 +486,18 @@ func newFunctionOrchestrator(
 
 		if err := inv.Check(
 			"flyio flags",
-			"token is set", tokenstr != "",
-			"oci image is set", ociImage != "",
-			"default org is set", defaultOrg != "",
-			"default region is set", defaultRegion != "",
+			"server url must be set", surl != "",
+			"token must be set", tokenstr != "",
+			"oci image must be set", ociImage != "",
+			"default org must be set", defaultOrg != "",
+			"default region must be set", defaultRegion != "",
 		); err != nil {
 			return nil, nilShutdown, fmt.Errorf("invalid configuration for functions: %w", err)
+		}
+
+		serverURL, err := url.Parse(surl)
+		if err != nil {
+			return nil, nilShutdown, fmt.Errorf("invalid server url: %w", err)
 		}
 
 		tpl := fmt.Sprintf("%s:{{.Version}}-{{.Runtime.OCITag}}", ociImage)
@@ -439,8 +509,10 @@ func newFunctionOrchestrator(
 		return functions.NewFlyRunner(
 			logger,
 			tracerProvider,
+			serverURL,
 			db,
 			assetStore,
+			tigrisStore,
 			imgSelector,
 			enc,
 			functions.FlyRunnerOptions{

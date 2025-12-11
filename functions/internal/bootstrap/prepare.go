@@ -7,12 +7,20 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/hashicorp/go-cleanhttp"
+
+	"github.com/speakeasy-api/gram/functions/internal/attr"
+	"github.com/speakeasy-api/gram/functions/internal/auth"
 	"github.com/speakeasy-api/gram/functions/internal/javascript"
 	"github.com/speakeasy-api/gram/functions/internal/o11y"
 	"github.com/speakeasy-api/gram/functions/internal/python"
+	funcclient "github.com/speakeasy-api/gram/server/gen/functions"
 )
 
 func ResolveProgram(language string, workDir string) (string, []string, error) {
@@ -31,22 +39,40 @@ func ResolveProgram(language string, workDir string) (string, []string, error) {
 	}
 }
 
-func InitializeMachine(ctx context.Context, logger *slog.Logger, language string, codePath string, workDir string) (command string, args []string, err error) {
-	if !filepath.IsAbs(workDir) {
+type InitializeMachineConfig struct {
+	Ident        auth.RunnerIdentity
+	ServerClient *funcclient.Client
+	Language     string
+	CodePath     string
+	WorkDir      string
+}
+
+func InitializeMachine(ctx context.Context, logger *slog.Logger, config InitializeMachineConfig) (command string, args []string, err error) {
+	if !filepath.IsAbs(config.WorkDir) {
 		return "", nil, fmt.Errorf("work dir path is not absolute")
 	}
 
-	if err := unzipCode(ctx, logger, codePath, workDir); err != nil {
+	// The code may already be mounted in the runner or it's a large function
+	// that needs to be downloaded from a blob store. Work it out here before
+	// continuing with bootstrap.
+	codePath, err := resolveLazyFile(ctx, logger, config.Ident, config.ServerClient, config.CodePath)
+	if err != nil {
+		return "", nil, fmt.Errorf("resolve lazy file: %w", err)
+	}
+
+	// At this point we know we have a zip file at codePath and can proceed with
+	// unzipping it.
+	if err := unzipCode(ctx, logger, codePath, config.WorkDir); err != nil {
 		return "", nil, fmt.Errorf("unzip code: %w", err)
 	}
 
-	command, args, err = prepareProgram(workDir, language)
+	command, args, err = prepareProgram(config.WorkDir, config.Language)
 	if err != nil {
 		return "", nil, fmt.Errorf("prepare program: %w", err)
 	}
 
 	// #nosec G302 -- workDir is a directory and needs to be executable to enter it.
-	if err := os.Chmod(workDir, 0555); err != nil {
+	if err := os.Chmod(config.WorkDir, 0555); err != nil {
 		return "", nil, fmt.Errorf("chmod work dir: %w", err)
 	}
 
@@ -175,4 +201,101 @@ func prepareProgram(workDir string, language string) (string, []string, error) {
 	default:
 		return "", nil, fmt.Errorf("unsupported language: %s", language)
 	}
+}
+
+// resolveLazyFile checks if the given filename exists. If it does, it returns
+// the filename. If it does not, it checks for a .lazy file alongside it. If
+// found, it reads the asset ID from the .lazy file, fetches the asset from
+// the server using a pre-signed URL to a blob store, writes it to the original
+// filename, and returns the filename.
+func resolveLazyFile(ctx context.Context, logger *slog.Logger, ident auth.RunnerIdentity, serverClient *funcclient.Client, filename string) (dstfile string, err error) {
+	var rootCause error
+	stat, err := os.Stat(filename)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		rootCause = err
+		// fall through to check for .lazy file
+	case err != nil:
+		return "", fmt.Errorf("stat %s: %w", filename, err)
+	default:
+		if stat.IsDir() {
+			return "", fmt.Errorf("path is a directory: %s", filename)
+		}
+		return filename, nil
+	}
+
+	lazy := filename + ".lazy"
+	// #nosec G304 -- the source filename is rigidly defined elsewhere in the
+	// system
+	assetID, err := os.ReadFile(lazy)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		if rootCause != nil {
+			return "", fmt.Errorf("file does not exist: %s: %w", filename, rootCause)
+		}
+		return "", fmt.Errorf("read %s: %w", lazy, err)
+	case err != nil:
+		return "", fmt.Errorf("read %s: %w", lazy, err)
+	}
+
+	if len(assetID) == 0 {
+		return "", fmt.Errorf("read asset id %s: empty file", lazy)
+	}
+
+	logger = logger.With(attr.SlogAssetID(string(assetID)))
+
+	token, err := auth.NewServerJWT(ident, jwt.MapClaims{})
+	if err != nil {
+		return "", fmt.Errorf("create server jwt: %w", err)
+	}
+
+	apistart := time.Now()
+	pres, err := serverClient.GetSignedAssetURL(ctx, &funcclient.GetSignedAssetURLPayload{
+		FunctionToken: &token,
+		AssetID:       string(assetID),
+	})
+	if err != nil {
+		return "", fmt.Errorf("get signed asset url %s: %w", assetID, err)
+	}
+	apielapsed := time.Since(apistart)
+	logger.InfoContext(ctx, "fetched signed asset URL", attr.SlogDuration(apielapsed))
+
+	blobstart := time.Now()
+	res, err := cleanhttp.DefaultClient().Get(pres.URL)
+	if err != nil {
+		return "", fmt.Errorf("download asset %s: %w", assetID, err)
+	}
+	defer o11y.LogDefer(ctx, logger, func() error {
+		if err := res.Body.Close(); err != nil {
+			return fmt.Errorf("close asset %s response body: %w", assetID, err)
+		}
+		return nil
+	})
+
+	if res.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected response code %s: %s", assetID, res.Status)
+	}
+
+	// #nosec G304 -- the source filename is rigidly defined elsewhere in the
+	// system
+	outFile, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0444)
+	if err != nil {
+		return "", fmt.Errorf("create target file %s: %w", filename, err)
+	}
+	defer o11y.LogDefer(ctx, logger, func() error {
+		if err := outFile.Close(); err != nil {
+			return fmt.Errorf("close %s: %w", filename, err)
+		}
+		return nil
+	})
+
+	_, err = io.Copy(outFile, res.Body)
+	if err != nil {
+		return "", fmt.Errorf("write asset to file %s: %w", filename, err)
+	}
+
+	blobelapsed := time.Since(blobstart)
+	logger.InfoContext(ctx, "downloaded large asset", attr.SlogDuration(blobelapsed))
+
+	return filename, nil
 }

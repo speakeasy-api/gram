@@ -62,6 +62,7 @@ export * from "./getslackconnectionresult.js";
 export * from "./httptooldefinition.js";
 export * from "./httptoollog.js";
 export * from "./inforesponsebody.js";
+export * from "./instancemcpserver.js";
 export * from "./integration.js";
 export * from "./integrationentry.js";
 export * from "./integrationversion.js";

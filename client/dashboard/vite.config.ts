@@ -46,6 +46,7 @@ export default defineConfig({
     target: "es2022",
   },
   optimizeDeps: {
+    include: ["monaco-editor"],
     esbuildOptions: {
       target: "es2022",
     },

@@ -217,6 +217,7 @@ func handleSearchToolsCall(
 		Text:     string(payload),
 		MimeType: nil,
 		Data:     nil,
+		Meta:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool search chunk").Log(ctx, logger)
@@ -323,6 +324,7 @@ func handleDescribeToolsCall(
 		Text:     string(payload),
 		MimeType: nil,
 		Data:     nil,
+		Meta:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool description chunk").Log(ctx, logger)

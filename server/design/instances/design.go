@@ -28,7 +28,6 @@ var _ = Service("instances", func() {
 		HTTP(func() {
 			GET("/rpc/instances.get")
 			Param("toolset_slug")
-			Param("environment_slug")
 			security.SessionHeader()
 			security.ProjectHeader()
 			security.ByKeyHeader()
@@ -46,8 +45,12 @@ var GetInstanceForm = Type("GetInstanceForm", func() {
 	security.ByKeyPayload()
 	security.ProjectPayload()
 	Attribute("toolset_slug", shared.Slug, "The slug of the toolset to load")
-	Attribute("environment_slug", shared.Slug, "The slug of the environment to load")
 	Required("toolset_slug")
+})
+
+var InstanceMcpServer = Type("InstanceMcpServer", func() {
+	Attribute("url", String, "The address of the MCP server")
+	Required("url")
 })
 
 var GetInstanceResult = Type("GetInstanceResult", func() {
@@ -58,6 +61,6 @@ var GetInstanceResult = Type("GetInstanceResult", func() {
 	Attribute("security_variables", ArrayOf(shared.SecurityVariable), "The security variables that are relevant to the toolset")
 	Attribute("server_variables", ArrayOf(shared.ServerVariable), "The server variables that are relevant to the toolset")
 	Attribute("function_environment_variables", ArrayOf(shared.FunctionEnvironmentVariable), "The function environment variables that are relevant to the toolset")
-	Attribute("environment", shared.Environment, "The environment")
-	Required("name", "tools", "environment")
+	Attribute("mcp_servers", ArrayOf(InstanceMcpServer), "The MCP servers that are relevant to the toolset")
+	Required("name", "tools", "mcp_servers")
 })

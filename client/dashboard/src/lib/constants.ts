@@ -1,6 +1,6 @@
 export const TOOL_NAME_PATTERN = "^[a-zA-Z]+(?:[_][a-zA-Z0-9]+)*$";
 export const TOOL_NAME_REGEX = new RegExp(TOOL_NAME_PATTERN);
-export const PROMPT_NAME_PATTERN = TOOL_NAME_PATTERN;
+export const PROMPT_NAME_PATTERN = "^[a-z0-9_-]{1,128}$";
 export const PROMPT_NAME_REGEX = new RegExp(PROMPT_NAME_PATTERN);
 export const PROMPT_ARG_PATTERN = "^[a-zA-Z]+(?:[_][a-zA-Z0-9]+)*$";
 export const PROMPT_ARG_REGEX = new RegExp(PROMPT_ARG_PATTERN);

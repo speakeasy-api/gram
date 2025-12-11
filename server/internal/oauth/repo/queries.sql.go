@@ -152,7 +152,7 @@ func (q *Queries) GetOAuthProxyServer(ctx context.Context, arg GetOAuthProxyServ
 }
 
 const listOAuthProxyProvidersByServer = `-- name: ListOAuthProxyProvidersByServer :many
-SELECT id, project_id, oauth_proxy_server_id, slug, authorization_endpoint, token_endpoint, registration_endpoint, scopes_supported, response_types_supported, response_modes_supported, grant_types_supported, token_endpoint_auth_methods_supported, security_key_names, secrets, created_at, updated_at, deleted_at, deleted FROM oauth_proxy_providers
+SELECT id, project_id, oauth_proxy_server_id, slug, provider_type, authorization_endpoint, token_endpoint, registration_endpoint, scopes_supported, response_types_supported, response_modes_supported, grant_types_supported, token_endpoint_auth_methods_supported, security_key_names, secrets, created_at, updated_at, deleted_at, deleted FROM oauth_proxy_providers
 WHERE oauth_proxy_server_id = $1 AND project_id = $2 AND deleted IS FALSE
 ORDER BY created_at ASC
 `
@@ -176,6 +176,7 @@ func (q *Queries) ListOAuthProxyProvidersByServer(ctx context.Context, arg ListO
 			&i.ProjectID,
 			&i.OauthProxyServerID,
 			&i.Slug,
+			&i.ProviderType,
 			&i.AuthorizationEndpoint,
 			&i.TokenEndpoint,
 			&i.RegistrationEndpoint,
@@ -244,15 +245,15 @@ INSERT INTO oauth_proxy_providers (
     security_key_names = EXCLUDED.security_key_names,
     secrets = EXCLUDED.secrets,
     updated_at = clock_timestamp()
-RETURNING id, project_id, oauth_proxy_server_id, slug, authorization_endpoint, token_endpoint, registration_endpoint, scopes_supported, response_types_supported, response_modes_supported, grant_types_supported, token_endpoint_auth_methods_supported, security_key_names, secrets, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, oauth_proxy_server_id, slug, provider_type, authorization_endpoint, token_endpoint, registration_endpoint, scopes_supported, response_types_supported, response_modes_supported, grant_types_supported, token_endpoint_auth_methods_supported, security_key_names, secrets, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertOAuthProxyProviderParams struct {
 	ProjectID                         uuid.UUID
 	OauthProxyServerID                uuid.UUID
 	Slug                              string
-	AuthorizationEndpoint             string
-	TokenEndpoint                     string
+	AuthorizationEndpoint             pgtype.Text
+	TokenEndpoint                     pgtype.Text
 	RegistrationEndpoint              pgtype.Text
 	ScopesSupported                   []string
 	ResponseTypesSupported            []string
@@ -286,6 +287,7 @@ func (q *Queries) UpsertOAuthProxyProvider(ctx context.Context, arg UpsertOAuthP
 		&i.ProjectID,
 		&i.OauthProxyServerID,
 		&i.Slug,
+		&i.ProviderType,
 		&i.AuthorizationEndpoint,
 		&i.TokenEndpoint,
 		&i.RegistrationEndpoint,

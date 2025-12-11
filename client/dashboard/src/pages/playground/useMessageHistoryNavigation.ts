@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Message } from "@ai-sdk/react";
+import { UIMessage } from "ai";
 
-export function useMessageHistoryNavigation(messages: Message[]) {
+export function useMessageHistoryNavigation(messages: UIMessage[]) {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [originalInputValue, setOriginalInputValue] = useState("");
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const userMessages = messages
     .filter((m) => m.role === "user")
-    .map((m) => m.content)
+    .map((m) => m.parts.map((p) => (p.type === "text" ? p.text : "")).join(""))
     .reverse();
 
   const navigateHistory = useCallback(

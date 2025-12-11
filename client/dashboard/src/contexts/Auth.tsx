@@ -10,7 +10,7 @@ import { useSessionInfo } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { useNavigate, useSearchParams } from "react-router";
+import { Navigate, useNavigate, useSearchParams } from "react-router";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -182,7 +182,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 };
 
 const AuthHandler = ({ children }: { children: React.ReactNode }) => {
-  const navigate = useNavigate();
   const { orgSlug, projectSlug } = useSlugs();
   const [searchParams] = useSearchParams();
 
@@ -219,7 +218,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   const redirectParam = searchParams.get("redirect");
   if (redirectParam) {
-    navigate(redirectParam, { replace: true });
+    return <Navigate to={redirectParam} replace />;
   } else if (session.organization && !projectSlug) {
     // if we're logged in but the URL doesn't have a project slug, redirect to
     // the default project
@@ -242,12 +241,17 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     });
     const paramsToForwardString = forwardParams.toString();
 
-    navigate(
-      `/${session.organization.slug}/${preferredProject}?${paramsToForwardString}`,
+    return (
+      <Navigate
+        to={`/${session.organization.slug}/${preferredProject}?${paramsToForwardString}`}
+        replace
+      />
     );
   } else if (session.organization.slug !== orgSlug) {
     // make sure we don't direct to an org we aren't authenticated with
-    navigate(`/${session.organization.slug}/${projectSlug}`);
+    return (
+      <Navigate to={`/${session.organization.slug}/${projectSlug}`} replace />
+    );
   }
 
   return (

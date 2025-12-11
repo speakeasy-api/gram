@@ -1,18 +1,16 @@
 import { Button } from "@speakeasy-api/moonshine";
 import { Card } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
-import { useErrorHandler } from "@/contexts/ErrorHandler";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { ReactNode, Suspense } from "react";
 import { ErrorBoundary as ReactErrorBoundary } from "react-error-boundary";
+import { handleError } from "@/lib/errors";
 
 interface ContentErrorFallbackProps {
   error: Error;
 }
 
 function ContentErrorFallback({ error }: ContentErrorFallbackProps) {
-  const { handleError } = useErrorHandler();
-
   // Log error to our error handler for consistent logging
   handleError(error, { silent: true });
 

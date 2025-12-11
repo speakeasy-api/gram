@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -9,6 +10,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -20,12 +22,16 @@ import (
 
 	"github.com/speakeasy-api/gram/functions/buildinfo"
 	"github.com/speakeasy-api/gram/functions/internal/attr"
+	"github.com/speakeasy-api/gram/functions/internal/auth"
 	"github.com/speakeasy-api/gram/functions/internal/bootstrap"
 	"github.com/speakeasy-api/gram/functions/internal/encryption"
 	"github.com/speakeasy-api/gram/functions/internal/middleware"
 	"github.com/speakeasy-api/gram/functions/internal/o11y"
 	"github.com/speakeasy-api/gram/functions/internal/runner"
 	"github.com/speakeasy-api/gram/functions/internal/svc"
+	funcclient "github.com/speakeasy-api/gram/server/gen/functions"
+	"github.com/speakeasy-api/gram/server/gen/http/functions/client"
+	goahttp "goa.design/goa/v3/http"
 )
 
 var (
@@ -52,20 +58,25 @@ func main() {
 	ctx := context.Background()
 
 	pretty, _ := strconv.ParseBool(os.Getenv("GRAM_LOG_PRETTY"))
+	ident, err := identityFromEnv()
 	logger := enrichLogger(o11y.NewLogger(os.Stderr, o11y.LoggerOptions{
 		Pretty:      pretty,
 		DataDogAttr: false,
-	}))
+	}), ident)
+	if err != nil {
+		logger.ErrorContext(ctx, "invalid environment", attr.SlogError(err))
+		os.Exit(1)
+	}
 
 	flag.CommandLine.SetOutput(os.Stderr)
 	flag.Parse()
-	if err := run(ctx, logger); err != nil {
+	if err := run(ctx, logger, ident); err != nil {
 		logger.ErrorContext(ctx, "fatal error", attr.SlogError(err))
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, logger *slog.Logger) error {
+func run(ctx context.Context, logger *slog.Logger, ident auth.RunnerIdentity) error {
 	if *version {
 		fmt.Printf("version: %s\ncommit: %s\ndate: %s\n",
 			buildinfo.Version, buildinfo.Commit, buildinfo.Date)
@@ -75,6 +86,13 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
+	sigch := make(chan os.Signal, 1)
+	signal.Notify(sigch, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigch
+		cancel(svc.ErrTerminated)
+	}()
+
 	o11y.SetupOTelSDK(ctx, logger)
 
 	args, err := sanitizeArgs()
@@ -82,9 +100,20 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		return fmt.Errorf("invalid arguments: %w", err)
 	}
 
+	serverClient, err := newServerClient()
+	if err != nil {
+		return fmt.Errorf("create server client: %w", err)
+	}
+
 	if *doinit {
 		logger.InfoContext(ctx, "initializing function runtime")
-		if _, _, err := bootstrap.InitializeMachine(ctx, logger, args.language, args.codePath, args.workDir); err != nil {
+		if _, _, err := bootstrap.InitializeMachine(ctx, logger, bootstrap.InitializeMachineConfig{
+			Ident:        ident,
+			ServerClient: serverClient,
+			Language:     args.language,
+			CodePath:     args.codePath,
+			WorkDir:      args.workDir,
+		}); err != nil {
 			return fmt.Errorf("initialize machine: %w", err)
 		}
 		logger.InfoContext(ctx, "initialized function runtime")
@@ -100,22 +129,10 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		return fmt.Errorf("resolve program: %w", err)
 	}
 
-	authSecret := os.Getenv("GRAM_FUNCTION_AUTH_SECRET")
-	if authSecret == "" {
-		return fmt.Errorf("GRAM_FUNCTION_AUTH_SECRET is required")
-	}
-
-	enc, err := encryption.New(authSecret)
+	enc, err := encryption.New(ident.AuthSecret.Reveal())
 	if err != nil {
 		return fmt.Errorf("create encryption client: %w", err)
 	}
-
-	sigch := make(chan os.Signal, 1)
-	signal.Notify(sigch, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigch
-		cancel(svc.ErrTerminated)
-	}()
 
 	mux := http.NewServeMux()
 
@@ -187,14 +204,6 @@ func sanitizeArgs() (*runnerArgs, error) {
 		return nil, fmt.Errorf("codePath is required")
 	}
 
-	codeStat, err := os.Stat(*codePath)
-	if err != nil {
-		return nil, fmt.Errorf("stat: %s: %w", *codePath, err)
-	}
-	if !codeStat.Mode().IsRegular() {
-		return nil, fmt.Errorf("stat: %s: not a regular file", *codePath)
-	}
-
 	if workDir == nil || *workDir == "" {
 		return nil, fmt.Errorf("workDir is required")
 	}
@@ -225,24 +234,80 @@ func sanitizeArgs() (*runnerArgs, error) {
 	}, nil
 }
 
-func enrichLogger(logger *slog.Logger) *slog.Logger {
-	attrs := make([]any, 0, 4)
-	projectID := os.Getenv("GRAM_PROJECT_ID")
-	if projectID != "" {
-		attrs = append(attrs, attr.SlogProjectID(projectID))
-	}
-	projectSlug := os.Getenv("GRAM_PROJECT_SLUG")
-	if projectSlug != "" {
-		attrs = append(attrs, attr.SlogProjectSlug(projectSlug))
-	}
-	deploymentID := os.Getenv("GRAM_DEPLOYMENT_ID")
-	if deploymentID != "" {
-		attrs = append(attrs, attr.SlogDeploymentID(deploymentID))
-	}
-	functionID := os.Getenv("GRAM_FUNCTION_ID")
-	if functionID != "" {
-		attrs = append(attrs, attr.SlogFunctionID(functionID))
+// identityFromEnv constructs a RunnerIdentity from environment variables. If
+// any required variable is missing, it returns an error _AND_ a partially
+// filled RunnerIdentity that is useful for logging.
+func identityFromEnv() (auth.RunnerIdentity, error) {
+	var err error
+
+	as := os.Getenv("GRAM_FUNCTION_AUTH_SECRET")
+	if as == "" {
+		err = errors.Join(err, fmt.Errorf("GRAM_FUNCTION_AUTH_SECRET is required"))
 	}
 
+	authSecret, decodeErr := base64.StdEncoding.DecodeString(as)
+	if decodeErr != nil {
+		err = errors.Join(err, fmt.Errorf("decode base64 secret: %w", decodeErr))
+	}
+
+	projectID := os.Getenv("GRAM_PROJECT_ID")
+	if projectID == "" {
+		err = errors.Join(err, fmt.Errorf("GRAM_PROJECT_ID is required"))
+	}
+
+	deploymentID := os.Getenv("GRAM_DEPLOYMENT_ID")
+	if deploymentID == "" {
+		err = errors.Join(err, fmt.Errorf("GRAM_DEPLOYMENT_ID is required"))
+	}
+
+	functionID := os.Getenv("GRAM_FUNCTION_ID")
+	if functionID == "" {
+		err = errors.Join(err, fmt.Errorf("GRAM_FUNCTION_ID is required"))
+	}
+
+	version := buildinfo.Version
+
+	return auth.RunnerIdentity{
+		AuthSecret:   svc.NewSecret(authSecret),
+		ProjectID:    projectID,
+		DeploymentID: deploymentID,
+		FunctionID:   functionID,
+		Version:      version,
+	}, err
+}
+
+func enrichLogger(logger *slog.Logger, ident auth.RunnerIdentity) *slog.Logger {
+	attrs := make([]any, 0, 5)
+	attrs = append(attrs, attr.SlogServiceName("gram-function-runner"))
+	attrs = append(attrs, attr.SlogServiceVersion(ident.Version))
+	attrs = append(attrs, attr.SlogProjectID(ident.ProjectID))
+	attrs = append(attrs, attr.SlogDeploymentID(ident.DeploymentID))
+	attrs = append(attrs, attr.SlogFunctionID(ident.FunctionID))
+
 	return logger.With(attrs...)
+}
+
+func newServerClient() (*funcclient.Client, error) {
+	su := os.Getenv("GRAM_SERVER_URL")
+	if su == "" {
+		return nil, fmt.Errorf("GRAM_SERVER_URL is required")
+	}
+
+	serverURL, err := url.Parse(su)
+	if err != nil {
+		return nil, fmt.Errorf("parse GRAM_SERVER_URL: %w", err)
+	}
+
+	httpClient := client.NewClient(
+		serverURL.Scheme,
+		serverURL.Host,
+		http.DefaultClient,
+		goahttp.RequestEncoder,
+		goahttp.ResponseDecoder,
+		false, // Don't restore response body
+	)
+
+	return funcclient.NewClient(
+		httpClient.GetSignedAssetURL(),
+	), nil
 }

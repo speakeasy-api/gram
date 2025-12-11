@@ -155,6 +155,12 @@ export const filterPromptTools = (
   return tools?.filter(isPromptTool) ?? [];
 };
 
+export const filterFunctionTools = (
+  tools: Tool[] | undefined,
+): FunctionToolDefinition[] => {
+  return tools?.filter(isFunctionTool) ?? [];
+};
+
 export const toolNames = (toolset: { tools: Tool[] }) => {
   const { tools } = toolset;
   return tools.map((tool) => tool.name);

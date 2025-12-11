@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"mime"
 	"net/http"
 	"slices"
@@ -30,7 +29,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
-	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
+	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	temporal_client "go.temporal.io/sdk/client"
 )
@@ -143,14 +143,14 @@ func handleToolsCall(
 	}
 
 	descriptor := plan.Descriptor
-	var toolType tm.ToolType
+	var toolType tm_repo.ToolType
 	switch plan.Kind {
 	case gateway.ToolKindHTTP:
-		toolType = tm.ToolTypeHTTP
+		toolType = tm_repo.ToolTypeHTTP
 	case gateway.ToolKindFunction:
-		toolType = tm.ToolTypeFunction
+		toolType = tm_repo.ToolTypeFunction
 	case gateway.ToolKindPrompt:
-		toolType = tm.ToolTypePrompt
+		toolType = tm_repo.ToolTypePrompt
 	}
 
 	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, tcm, descriptor.OrganizationID, tm.ToolInfo{
@@ -220,7 +220,7 @@ func handleToolsCall(
 	}()
 
 	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), gateway.ToolCallEnv{
-		UserConfig: gateway.CIEnvFrom(userConfig), SystemEnv: gateway.CIEnvFrom(systemConfig)}, plan, toolCallLogger)
+		UserConfig: userConfig, SystemEnv: systemConfig}, plan, toolCallLogger)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
 	}
@@ -287,8 +287,8 @@ func resolveUserConfiguration(
 	env gateway.EnvironmentLoader,
 	payload *mcpInputs,
 	plan *gateway.ToolCallPlan,
-) (map[string]string, error) {
-	userConfig := make(map[string]string)
+) (*gateway.CaseInsensitiveEnv, error) {
+	userConfig := gateway.NewCaseInsensitiveEnv()
 
 	// IMPORTANT: we must only attach gram environments to authenticated payloads. Gram environments contain
 	// secrets owned by Gram projects and should not be usable by public clients
@@ -301,10 +301,14 @@ func resolveUserConfiguration(
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, logger)
 		}
 
-		maps.Copy(userConfig, storedEnvVars)
+		for k, v := range storedEnvVars {
+			userConfig.Set(k, v)
+		}
 	}
 
-	maps.Copy(userConfig, payload.mcpEnvVariables)
+	for k, v := range payload.mcpEnvVariables {
+		userConfig.Set(k, v)
+	}
 
 	// Process OAuth tokens for HTTP tools
 	if plan != nil && plan.Kind == gateway.ToolKindHTTP {
@@ -313,7 +317,7 @@ func resolveUserConfiguration(
 				if (slices.Contains(security.OAuthTypes, "authorization_code") || security.Type.Value == "openIdConnect") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
 					for _, envVar := range security.EnvVariables {
 						if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
-							userConfig[envVar] = token.Token
+							userConfig.Set(envVar, token.Token)
 						}
 					}
 				}
@@ -325,7 +329,7 @@ func resolveUserConfiguration(
 	if plan != nil && plan.Kind == gateway.ToolKindFunction && plan.Function.AuthInput != nil {
 		for _, token := range payload.oauthTokenInputs {
 			if plan.Function.AuthInput.Type == "oauth2" {
-				userConfig[plan.Function.AuthInput.Variable] = token.Token
+				userConfig.Set(plan.Function.AuthInput.Variable, token.Token)
 			}
 		}
 	}
@@ -452,6 +456,9 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 			Text:     string(body),
 			MimeType: nil,
 			Data:     nil,
+			Meta: map[string]any{
+				MetaGramMimeType: mt,
+			},
 		})
 		if err != nil {
 			return nil, fmt.Errorf("serialize text content: %w", err)
@@ -465,6 +472,7 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 			Data:     encoded,
 			MimeType: &mt,
 			Text:     nil,
+			Meta:     nil,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("serialize image content: %w", err)
@@ -478,6 +486,7 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 			Data:     encoded,
 			MimeType: &mt,
 			Text:     nil,
+			Meta:     nil,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("serialize audio content: %w", err)
@@ -490,10 +499,11 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 }
 
 type contentChunk[T any, D any] struct {
-	Type     string  `json:"type"`
-	MimeType *string `json:"mimeType,omitempty"`
-	Text     T       `json:"text,omitempty"`
-	Data     D       `json:"data,omitempty"`
+	Type     string         `json:"type"`
+	MimeType *string        `json:"mimeType,omitempty"`
+	Text     T              `json:"text,omitempty"`
+	Data     D              `json:"data,omitempty"`
+	Meta     map[string]any `json:"_meta,omitempty,omitzero"`
 }
 
 type toolCallResult struct {

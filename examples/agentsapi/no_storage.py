@@ -8,7 +8,7 @@ import requests
 verbose = "-v" in sys.argv
 
 # Configuration
-server_url = "https://api.getgram.ai"
+server_url = "https://app.getgram.ai"
 org_slug = ""  # Change this to your organization slug
 
 url = f"{server_url}/rpc/agents.response"

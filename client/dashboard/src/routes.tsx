@@ -63,6 +63,7 @@ export type AppRoute = Omit<AppRouteBasic, "icon" | "subPages"> & {
   Link: React.ComponentType<{
     params?: string[];
     queryParams?: Record<string, string>;
+    hash?: string;
     className?: string;
     children: React.ReactNode;
   }>;
@@ -380,18 +381,22 @@ export const useRoutes = (): RoutesWithGoTo => {
     const linkComponent = ({
       params = [],
       queryParams = {},
+      hash,
       className,
       children,
     }: {
       params?: string[];
       queryParams?: Record<string, string>;
+      hash?: string;
       className?: string;
       children: React.ReactNode;
     }) => {
       const queryString = new URLSearchParams(queryParams).toString();
+      const hashString = hash ? `#${hash}` : "";
+      const queryPart = queryString ? `?${queryString}` : "";
       return (
         <Link
-          to={`${resolveUrl(...params)}?${queryString}`}
+          to={`${resolveUrl(...params)}${queryPart}${hashString}`}
           className={cn("hover:underline", className)}
         >
           {children}

@@ -429,8 +429,8 @@ func DescribeToolset(
 				providers = append(providers, &types.OAuthProxyProvider{
 					ID:                                provider.ID.String(),
 					Slug:                              types.Slug(provider.Slug),
-					AuthorizationEndpoint:             provider.AuthorizationEndpoint,
-					TokenEndpoint:                     provider.TokenEndpoint,
+					AuthorizationEndpoint:             provider.AuthorizationEndpoint.String,
+					TokenEndpoint:                     provider.TokenEndpoint.String,
 					ScopesSupported:                   provider.ScopesSupported,
 					GrantTypesSupported:               provider.GrantTypesSupported,
 					TokenEndpointAuthMethodsSupported: provider.TokenEndpointAuthMethodsSupported,

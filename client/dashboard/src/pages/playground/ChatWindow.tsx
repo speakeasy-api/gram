@@ -1,29 +1,29 @@
-import { AutoSummarizeBadge } from "@/components/auto-summarize-badge";
 import { HttpRoute } from "@/components/http-route";
-import { ProjectAvatar } from "@/components/project-menu";
-import { Link } from "@/components/ui/link";
-import { Slider } from "@/components/ui/slider";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
-import { Telemetry, useTelemetry } from "@/contexts/Telemetry";
-import { asTool, Tool } from "@/lib/toolTypes";
-import { cn, getServerURL } from "@/lib/utils";
-import { Message, useChat } from "@ai-sdk/react";
+import { useSdkClient } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
+import {
+  asTool,
+  filterHttpTools,
+  filterPromptTools,
+  filterFunctionTools,
+} from "@/lib/toolTypes";
+import { getServerURL } from "@/lib/utils";
+import { useChat } from "@ai-sdk/react";
 import { useInstance } from "@gram/client/react-query/index.js";
 import {
-  AIChatContainer,
-  Stack,
-  useToolCallApproval,
-} from "@speakeasy-api/moonshine";
-import {
-  Tool as AiSdkTool,
   jsonSchema,
-  smoothStream,
-  streamText,
-  ToolCall,
+  UIMessage,
+  lastAssistantMessageIsCompleteWithToolCalls,
 } from "ai";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { CustomChatTransport } from "@/lib/CustomChatTransport";
+
+type CoreTool = {
+  description?: string;
+  inputSchema: unknown;
+  execute?: (input: unknown) => unknown | Promise<unknown>;
+};
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { v7 as uuidv7 } from "uuid";
 import { onboardingStepStorageKeys } from "../home/Home";
 import { ChatComposerWrapper } from "./ChatComposerWrapper";
@@ -33,27 +33,33 @@ import { MessageHistoryIndicator } from "./MessageHistoryIndicator";
 import { useModel } from "./Openrouter";
 import { Tool as MentionTool, parseMentionedTools } from "./ToolMentions";
 import { useMessageHistoryNavigation } from "./useMessageHistoryNavigation";
+import {
+  Tool as ToolElement,
+  ToolHeader,
+  ToolContent,
+  ToolInput,
+  ToolOutput,
+} from "@/components/ai-elements/tool";
+import { Message, MessageContent } from "@/components/ai-elements/message";
+import { Response } from "@/components/ai-elements/response";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputTextarea,
+  PromptInputSubmit,
+  PromptInputTools,
+  PromptInputFooter,
+} from "@/components/ai-elements/prompt-input";
 
 const defaultModel = {
   label: "Claude 4.5 Sonnet",
   value: "anthropic/claude-sonnet-4.5",
 };
-
-// when adding new models on the frontend ensure you update the server allow list
-// server/internal/thirdparty/openrouter/openrouter.go
-const availableModels = [
-  defaultModel,
-  { label: "Claude 4.5 Haiku", value: "anthropic/claude-haiku-4.5" },
-  { label: "Claude 4.5 Opus", value: "anthropic/claude-opus-4.5" },
-  { label: "GPT-5.1", value: "openai/gpt-5.1" },
-  { label: "GPT-5", value: "openai/gpt-5" },
-  { label: "GPT-4.1", value: "openai/gpt-4.1" },
-  { label: "GPT-4o-mini", value: "openai/gpt-4o-mini" },
-  { label: "Gemini 3 Pro Preview", value: "google/gemini-3-pro-preview" },
-  { label: "Gemini 2.5 Pro Preview", value: "google/gemini-2.5-pro-preview" },
-  { label: "Kimi K2", value: "moonshotai/kimi-k2" },
-  { label: "Mistral Medium 3.1", value: "mistralai/mistral-medium-3.1" },
-];
 
 export type ChatConfig = React.RefObject<{
   toolsetSlug: string | null;
@@ -68,16 +74,38 @@ export function ChatWindow({
   initialMessages,
   initialPrompt,
   hideTemperatureSlider = false,
+  initialTemperature = 0.5,
+  initialModel = defaultModel.value,
+  initialMaxTokens = 4096,
+  authWarning,
 }: {
   configRef: ChatConfig;
   additionalActions?: React.ReactNode;
-  initialMessages?: Message[];
+  initialMessages?: UIMessage[];
   initialPrompt?: string | null;
   hideTemperatureSlider?: boolean;
+  initialTemperature?: number;
+  initialModel?: string;
+  initialMaxTokens?: number;
+  authWarning?: React.ReactNode;
 }) {
-  const [model, setModel] = useState(defaultModel.value);
-  const [temperature, setTemperature] = useState(0.5);
+  const [model, setModel] = useState(initialModel);
+  const [temperature, setTemperature] = useState(initialTemperature);
+  const [maxTokens, setMaxTokens] = useState(initialMaxTokens);
   const chatKey = `chat-${model}`;
+
+  // Sync props with state
+  useEffect(() => {
+    setTemperature(initialTemperature);
+  }, [initialTemperature]);
+
+  useEffect(() => {
+    setModel(initialModel);
+  }, [initialModel]);
+
+  useEffect(() => {
+    setMaxTokens(initialMaxTokens);
+  }, [initialMaxTokens]);
 
   // We do this because we want the chat to reset when the model changes
   return (
@@ -89,6 +117,8 @@ export function ChatWindow({
       initialMessages={initialMessages}
       additionalActions={additionalActions}
       initialPrompt={initialPrompt}
+      maxTokens={maxTokens}
+      authWarning={authWarning}
       {...(!hideTemperatureSlider && { temperature, setTemperature })}
     />
   );
@@ -96,27 +126,31 @@ export function ChatWindow({
 
 type AiSdkToolset = Record<
   string,
-  AiSdkTool & { urn: string; method?: string; path?: string }
+  CoreTool & { id?: string; method?: string; path?: string }
 >;
 
 function ChatInner({
   model,
-  setModel,
-  temperature,
-  setTemperature,
+  setModel: _setModel,
+  temperature: _temperature,
+  setTemperature: _setTemperature,
+  maxTokens,
   configRef,
-  initialMessages,
+  initialMessages: _initialMessages,
   additionalActions,
-  initialPrompt,
+  initialPrompt: _initialPrompt,
+  authWarning,
 }: {
   model: string;
   setModel: (model: string) => void;
   temperature?: number;
   setTemperature?: (temperature: number) => void;
+  maxTokens: number;
   configRef: ChatConfig;
-  initialMessages?: Message[];
+  initialMessages?: UIMessage[];
   additionalActions?: React.ReactNode;
   initialPrompt?: string | null;
+  authWarning?: React.ReactNode;
 }) {
   const session = useSession();
   const project = useProject();
@@ -128,9 +162,14 @@ function ChatInner({
     chat.id,
   );
 
-  const [displayOnlyMessages, setDisplayOnlyMessages] = useState<Message[]>([]);
+  const [displayOnlyMessages, setDisplayOnlyMessages] = useState<UIMessage[]>(
+    [],
+  );
   const [_mentionedToolIds, setMentionedToolIds] = useState<string[]>([]);
   const [_inputText, setInputText] = useState("");
+
+  // Track which chat ID we've loaded messages for to prevent re-loading
+  const loadedChatIdRef = useRef<string | null>(null);
 
   // Feature flag for experimental tool tagging syntax
   const isToolTaggingEnabled = telemetry.isFeatureEnabled(
@@ -140,7 +179,6 @@ function ChatInner({
   const instance = useInstance(
     {
       toolsetSlug: configRef.current.toolsetSlug ?? "",
-      environmentSlug: configRef.current.environmentSlug ?? undefined,
     },
     undefined,
     {
@@ -156,7 +194,6 @@ function ChatInner({
         {
           id: uuidv7(),
           role: "system",
-          content: `unused`,
           parts: [
             {
               type: "text",
@@ -169,14 +206,13 @@ function ChatInner({
     [],
   );
 
-  const executeTool =
-    (tool: Tool, toolsetSlug: string) => async (args: unknown) => {
+  const createToolExecutor =
+    (tool: { toolUrn: string }, toolsetSlug: string) =>
+    async (args: unknown) => {
       const response = await fetch(
-        `${getServerURL()}/rpc/instances.invoke/tool?tool_urn=${
-          tool.toolUrn
-        }&environment_slug=${configRef.current.environmentSlug}&chat_id=${
-          chat.id
-        }&toolset_slug=${toolsetSlug}`,
+        `${getServerURL()}/rpc/instances.invoke/tool?tool_urn=${tool.toolUrn}&environment_slug=${
+          configRef.current.environmentSlug
+        }&chat_id=${chat.id}&toolset_slug=${toolsetSlug}`,
         {
           method: "POST",
           headers: {
@@ -199,36 +235,68 @@ function ChatInner({
       return result || `status code: ${response.status}`;
     };
 
+  const client = useSdkClient();
+
   const allTools: AiSdkToolset = useMemo(() => {
     const baseTools = instance.data?.tools.map(asTool);
 
     const tools: AiSdkToolset = Object.fromEntries(
-      baseTools?.map((tool) => {
+      filterHttpTools(baseTools)?.map((tool) => {
         return [
           tool.name,
           {
-            urn: tool.toolUrn,
+            id: tool.id,
             description: tool.description,
-            parameters: jsonSchema(tool.schema ? JSON.parse(tool.schema) : {}),
-            execute: executeTool(tool, configRef.current.toolsetSlug || ""),
-            ...(tool.type === "http"
-              ? {
-                  method: tool.httpMethod,
-                  path: tool.path,
-                }
-              : {}),
+            inputSchema: jsonSchema(tool.schema ? JSON.parse(tool.schema) : {}),
+            execute: createToolExecutor(
+              tool,
+              configRef.current.toolsetSlug || "",
+            ),
+            method: tool.httpMethod,
+            path: tool.path,
           },
         ];
       }) ?? [],
     );
 
+    filterPromptTools(baseTools).forEach((pt) => {
+      tools[pt.name] = {
+        id: pt.id as string,
+        description: pt.description ?? "",
+        inputSchema: jsonSchema(JSON.parse(pt.schema ?? "{}")),
+        execute: async (args: unknown) => {
+          const res = await client.templates.renderByID({
+            id: pt.id as `${string}.${string}`,
+            renderTemplateByIDRequestBody: {
+              arguments: args as Record<string, unknown>,
+            },
+          });
+
+          return res.prompt;
+        },
+      };
+    });
+
+    // Add function tools
+    filterFunctionTools(baseTools).forEach((ft) => {
+      tools[ft.name] = {
+        id: ft.id,
+        description: ft.description ?? "",
+        inputSchema: jsonSchema(ft.schema ? JSON.parse(ft.schema) : {}),
+        execute: createToolExecutor(
+          { toolUrn: ft.toolUrn },
+          configRef.current.toolsetSlug || "",
+        ),
+      };
+    });
+
     return tools;
-  }, [instance.data]);
+  }, [instance.data, client]);
 
   // Create a list of tools for the mention system
   const mentionTools: MentionTool[] = useMemo(() => {
     return Object.entries(allTools).map(([name, tool]) => {
-      const toolWithId = tool as AiSdkTool & { id?: string };
+      const toolWithId = tool as CoreTool & { id?: string };
       return {
         id: toolWithId.id || name,
         name,
@@ -244,41 +312,51 @@ function ChatInner({
     "Gram-Chat-ID": chat.id,
   });
 
-  const openaiFetch: typeof globalThis.fetch = async (_, init) => {
-    const messages = JSON.parse(init?.body as string).messages;
+  // Create a ref to access latest allTools without recreating transport
+  const allToolsRef = useRef<AiSdkToolset>(allTools);
+  useEffect(() => {
+    allToolsRef.current = allTools;
+  }, [allTools]);
 
-    let tools = allTools;
+  // Create transport with dynamic configuration
+  const transport = useMemo(() => {
+    return new CustomChatTransport({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      model: openrouterChat as any,
+      temperature: _temperature ?? 0.5,
+      maxGeneratedTokens: maxTokens,
+      getTools: async (messages: UIMessage[]) => {
+        // Use ref to get the latest allTools
+        const currentAllTools = allToolsRef.current;
 
-    // Check if there are mentioned tools in the message (only if feature flag is enabled)
-    const lastUserMessage = messages
-      .filter((m: Message) => m.role === "user")
-      .pop();
-    let hasMentions = false;
+        let tools = currentAllTools;
+        let hasMentions = false;
 
-    if (isToolTaggingEnabled && lastUserMessage && lastUserMessage.content) {
-      const mentionedIds = parseMentionedTools(
-        lastUserMessage.content,
-        mentionTools,
-      );
-      if (mentionedIds.length > 0) {
-        hasMentions = true;
-        // Filter tools to only include mentioned ones
-        tools = Object.fromEntries(
-          Object.entries(allTools).filter(([_, tool]) => {
-            const toolWithId = tool as AiSdkTool & { id?: string };
-            return mentionedIds.includes(toolWithId.id || _);
-          }),
-        );
+        // Check for tool mentions in the last user message
+        const lastUserMessage = messages.filter((m) => m.role === "user").pop();
+        if (isToolTaggingEnabled && lastUserMessage) {
+          const lastUserText = lastUserMessage.parts
+            .map((p) => (p.type === "text" ? p.text : ""))
+            .join("");
+          if (lastUserText) {
+            const mentionedIds = parseMentionedTools(
+              lastUserText,
+              mentionTools,
+            );
+            if (mentionedIds.length > 0) {
+              hasMentions = true;
+              tools = Object.fromEntries(
+                Object.entries(currentAllTools).filter(([_, tool]) => {
+                  const toolWithId = tool as CoreTool & { id?: string };
+                  return mentionedIds.includes(toolWithId.id || _);
+                }),
+              );
+            }
+          }
+        }
 
-        // Remove @ mentions from the message before sending to the model
-        const cleanedContent = lastUserMessage.content
-          .replace(/@\w+\s*/g, "")
-          .trim();
-        lastUserMessage.content = cleanedContent;
-      }
-    }
-
-    let systemPrompt = `You are operating in the context of a product that helps developers create tools for their own MCP servers. When
+        // Build system prompt
+        let systemPrompt = `You are operating in the context of a product that helps developers create tools for their own MCP servers. When
         choosing how to respond, keep in mind that the user is almost certainly intending to test or interact with one of the available tools.
         Prefer to use one of those tools wherever possible to resolve the prompt.
 
@@ -288,35 +366,29 @@ function ChatInner({
 
         The current date is ${new Date().toISOString()}`;
 
-    if (hasMentions) {
-      const toolNames = Object.keys(tools).join(", ");
-      systemPrompt += `
-        The user has specifically selected the following tools for this request: ${toolNames}.
-        Please use only these tools to fulfill the request.`;
-    }
+        if (hasMentions) {
+          const toolNames = Object.keys(tools).join(", ");
+          systemPrompt += `
+          The user has specifically selected the following tools for this request: ${toolNames}.
+          Please use only these tools to fulfill the request.`;
+        }
 
-    const result = streamText({
-      model: openrouterChat,
-      messages,
-      tools: Object.fromEntries(
-        Object.entries(tools).map(([name, tool]) => [
-          name,
-          {
-            description: tool.description,
-            parameters: tool.parameters,
-            // Remove execute function - we handle execution in onToolCall
-          },
-        ]),
-      ),
-      temperature,
-      system: systemPrompt,
-      experimental_transform: smoothStream({
-        delayInMs: 15, // Looks a little smoother
-      }),
+        return {
+          tools: Object.fromEntries(
+            Object.entries(tools).map(([name, tool]) => [
+              name,
+              {
+                description: tool.description,
+                inputSchema: tool.inputSchema,
+              },
+            ]),
+          ),
+          systemPrompt,
+        };
+      },
       onError: (event: { error: unknown }) => {
         let displayMessage = extractStreamError(event);
         if (displayMessage) {
-          // some manipulation to promote summarization
           if (displayMessage.includes("maximum context length")) {
             const cutoffPhrase = "Please reduce the length of either one";
             const cutoffIndex = displayMessage.indexOf(cutoffPhrase);
@@ -326,88 +398,97 @@ function ChatInner({
             displayMessage +=
               " Please start a new chat history and consider enabling *Auto-Summarize* for your tool or revise your prompt.";
           }
-
-          // Improve the error message for the case where the model is out of credits
           if (displayMessage.includes("requires more credits")) {
             displayMessage =
               "You have reached your monthly credit limit. Reach out to the Speakeasy team to upgrade your account.";
           }
-
           appendDisplayOnlyMessage(`**Model Error:** *${displayMessage}*`);
         }
       },
     });
-
-    return result.toDataStreamResponse();
-  };
-
-  const initialMessagesInner: Message[] =
-    chatHistory.length > 0 ? chatHistory : (initialMessages ?? []);
-
-  const toolCallApproval = useToolCallApproval({
-    // Disclaimer: this is a bit weird, because the tool's execute function actually seems to be called by the useChat hook
-    executeToolCall: async (toolCall) => {
-      const tool = allTools[toolCall.toolName];
-      if (!tool) {
-        throw new Error(`Tool ${toolCall.toolName} not found`);
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return await tool.execute!(toolCall.args, {} as any);
-    },
-    requiresApproval: (toolCall) => {
-      const tool = allTools[toolCall.toolName];
-      if (tool?.method === "GET") {
-        return false;
-      }
-      return true;
-    },
-  });
-
-  const validateArgs = (_toolCall: ToolCall<string, unknown>) => {
-    // This is stubbed out at this time because we validate args on the backend
-    return null;
-  };
+  }, [
+    openrouterChat,
+    _temperature,
+    allTools,
+    isToolTaggingEnabled,
+    mentionTools,
+    appendDisplayOnlyMessage,
+  ]);
 
   const {
     messages: chatMessages,
     status,
-    append,
+    sendMessage,
+    addToolResult,
+    setMessages: setUseChatMessages,
   } = useChat({
-    id: chat.id,
-    fetch: openaiFetch,
+    // Include model in the chat ID to force a fresh session when switching models
+    id: `${chat.id}-${model}`,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    transport: transport as any,
+    // Automatically continue conversation when all tool calls are complete
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onError: (error) => {
       console.error("Chat error:", error.message, error.stack);
-      // don't write display message for non useful obscured onChat error. StreamText will handle it if it's a model error.
       if (error.message.trim() !== "An error occurred.") {
         appendDisplayOnlyMessage(`**Error:** *${error.message}*`);
       }
-
       telemetry.capture("chat_event", {
         action: "chat_error",
         error: error.message,
       });
     },
-    maxSteps: 5,
-    initialMessages: initialMessagesInner,
-    onToolCall: (toolCall) => {
-      try {
-        const validationError = validateArgs(toolCall.toolCall);
-        if (validationError) {
-          appendDisplayOnlyMessage(`**Warning:** *${validationError}*`);
-        }
-      } catch (e) {
-        appendDisplayOnlyMessage(`**Warning:** *${e}*`);
+    onToolCall: async ({ toolCall }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const toolName = (toolCall as any).toolName;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const toolArgs = (toolCall as any).input; // AI SDK 5 uses 'input' not 'args'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const toolCallId = (toolCall as any).toolCallId;
+
+      const tool = allToolsRef.current[toolName];
+
+      if (!tool) {
+        appendDisplayOnlyMessage(`**Error:** *Tool ${toolName} not found*`);
+        return;
       }
 
-      return toolCallApproval.toolCallFn(toolCall);
+      try {
+        const result = await tool.execute!(toolArgs);
+
+        addToolResult({
+          toolCallId,
+          output: result,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+      } catch (error) {
+        appendDisplayOnlyMessage(
+          `**Tool Error:** *${error instanceof Error ? error.message : "Unknown error"}*`,
+        );
+      }
     },
   });
+
+  // Load chat history when available (AI SDK 5 workaround)
+  // Bridge between React Query (server state) and AI SDK (local state)
+  const currentChatId = `${chat.id}-${model}`;
+  useEffect(() => {
+    // Only load once per chat ID after React Query finishes loading
+    if (loadedChatIdRef.current !== currentChatId && !isChatHistoryLoading) {
+      loadedChatIdRef.current = currentChatId;
+
+      // Priority: loaded chat history > programmatically provided initial messages
+      const initialMessagesInner =
+        chatHistory.length > 0 ? chatHistory : _initialMessages;
+      if (initialMessagesInner && initialMessagesInner.length > 0) {
+        setUseChatMessages(initialMessagesInner);
+      }
+    }
+  }, [currentChatId, isChatHistoryLoading]);
 
   const handleSend = useCallback(
     async (msg: string) => {
       const userMessages = chatMessages.filter((m) => m.role === "user");
-      // Capture chat_started event when the user sends their first message
       if (userMessages.length === 0) {
         telemetry.capture("chat_event", {
           action: "chat_started",
@@ -418,7 +499,6 @@ function ChatInner({
         localStorage.setItem(onboardingStepStorageKeys.test, "true");
       }
 
-      // Track if tools were mentioned (only if feature flag is enabled)
       if (isToolTaggingEnabled) {
         const mentionedIds = parseMentionedTools(msg, mentionTools);
         if (mentionedIds.length > 0) {
@@ -429,102 +509,66 @@ function ChatInner({
         }
       }
 
-      await append({
-        role: "user",
-        content: msg,
-      });
-
-      // Clear the input text after sending
+      sendMessage({ text: msg });
       setInputText("");
     },
-    [append, chatMessages, telemetry, model, mentionTools],
+    [chatMessages, telemetry, model, mentionTools, sendMessage],
   );
 
-  // This needs to be set so that the chat provider can append messages
   useEffect(() => {
-    chat.setAppendMessage(append);
-  }, []);
+    chat.setAppendMessage((message) => {
+      sendMessage({ text: message.content as string });
+    });
+  }, [sendMessage]);
 
   useEffect(() => {
     setMessages(chatMessages);
   }, [chatMessages]);
 
-  // If chatId changes, clear the display only messages
   useEffect(() => {
     setDisplayOnlyMessages([]);
   }, [chat.id]);
 
   const messagesToDisplay = [...displayOnlyMessages, ...chatMessages];
-  messagesToDisplay.sort((a, b) => {
-    if (a.createdAt && b.createdAt) {
-      if (a.createdAt.getTime() === b.createdAt.getTime()) {
-        return a.role === "system" ? -1 : 1;
-      }
-      return a.createdAt.getTime() - b.createdAt.getTime();
-    }
-    return 0;
-  });
 
-  // Enable message history navigation with up/down arrow keys
   const { isNavigating, historyIndex, totalMessages } =
     useMessageHistoryNavigation(chatMessages);
 
-  // TODO: fix this
-  /* eslint-disable  @typescript-eslint/no-explicit-any */
-  const m = messagesToDisplay as any;
-
-  const temperatureSlider = temperature && setTemperature && (
-    <div className="flex items-center gap-3 px-2">
-      <SimpleTooltip tooltip="Controls randomness in responses. Lower values (0.0-0.3) make outputs more focused and deterministic. Higher values (0.7-1.0) increase creativity and variety. Default: 0.5">
-        <span className="text-xs text-muted-foreground whitespace-nowrap cursor-help">
-          Temp: {temperature.toFixed(1)}
-        </span>
-      </SimpleTooltip>
-      <Slider
-        value={temperature}
-        onChange={setTemperature}
-        min={0}
-        max={1}
-        step={0.1}
-        className="w-24"
-      />
-    </div>
-  );
-
   const chatContent = (
-    <div className="relative h-full flex items-center justify-center">
-      <AIChatContainer
-        messages={m}
-        isLoading={status === "streaming" || isChatHistoryLoading}
-        onSendMessage={handleSend}
-        className={"pb-4 w-3xl"} // Set width explicitly or else it will shrink to the size of the messages
-        toolCallApproval={toolCallApproval}
-        initialInput={initialPrompt || undefined}
-        components={{
-          composer: {
-            additionalActions: (
-              <div className="flex items-center gap-2">
-                {temperatureSlider}
-                {additionalActions}
-              </div>
-            ),
-            modelSelector: "text-foreground",
-          },
-          message: {
-            avatar: {
-              user: () => (
-                <ProjectAvatar project={project} className="h-6 w-6" />
-              ),
-            },
-            toolCall: toolCallComponents(allTools, telemetry),
-          },
-        }}
-        modelSelector={{
-          model,
-          onModelChange: setModel,
-          availableModels,
-        }}
-      />
+    <div className="relative h-full flex flex-col">
+      <Conversation className="flex-1">
+        <ConversationContent>
+          {messagesToDisplay.map((message) => (
+            <CustomMessageRenderer
+              key={message.id}
+              message={message}
+              allTools={allTools}
+            />
+          ))}
+        </ConversationContent>
+        <ConversationScrollButton />
+      </Conversation>
+      <div className="w-full px-4 pb-4">
+        {authWarning}
+        <PromptInput
+          onSubmit={(message) => {
+            if (message.text) {
+              handleSend(message.text);
+            }
+          }}
+        >
+          <PromptInputBody>
+            <PromptInputTextarea placeholder="Send a message..." />
+          </PromptInputBody>
+          <PromptInputFooter className="bg-secondary border-t border-neutral-softest rounded-bl-lg rounded-br-lg">
+            <PromptInputTools>{additionalActions}</PromptInputTools>
+            <PromptInputSubmit
+              disabled={status === "streaming"}
+              status={status}
+            />
+          </PromptInputFooter>
+        </PromptInput>
+      </div>
       <MessageHistoryIndicator
         isNavigating={isNavigating}
         historyIndex={historyIndex}
@@ -546,127 +590,60 @@ function ChatInner({
   );
 }
 
-const toolCallComponents = (tools: AiSdkToolset, telemetry: Telemetry) => {
-  const JsonDisplay = ({ json }: { json: string }) => {
-    let pretty = json;
-    // Particularly when loading chat history from the database, the JSON formatting needs to be restored
-    if (json.startsWith('"') && json.endsWith('"')) {
-      pretty = json.slice(1, -1);
-      pretty = pretty.replace(/\\"/g, '"');
-      pretty = pretty.replace(/\\n/g, "\n");
-    }
-    try {
-      pretty = JSON.stringify(JSON.parse(pretty), null, 2);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (e) {
-      // If its not JSON, that's ok, we'll just return the string
-    }
+function CustomMessageRenderer({
+  message,
+  allTools,
+}: {
+  message: UIMessage;
+  allTools: AiSdkToolset;
+}) {
+  return (
+    <Message from={message.role}>
+      <MessageContent variant="flat">
+        {message.parts.map((part, index) => {
+          if (part.type === "text") {
+            return <Response key={index}>{part.text}</Response>;
+          }
 
-    return (
-      <pre className="typography-body-xs max-h-48 overflow-auto rounded bg-neutral-900 p-2 break-all whitespace-pre-wrap text-neutral-300">
-        {pretty}
-      </pre>
-    );
-  };
+          // Handle tool invocations
+          // AI SDK creates ToolUIPart with type "tool-{toolName}" when tools are passed as a typed object
+          if (part.type.startsWith("tool-")) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const toolPart = part as any;
+            const toolName = part.type.replace("tool-", "");
+            const tool = allTools[toolName];
 
-  return {
-    toolName: ({
-      toolName,
-      result,
-      args,
-    }: {
-      toolName: string;
-      result?: unknown;
-      args?: Record<string, unknown>;
-    }) => {
-      const hasSummary = JSON.stringify(args)?.includes("gram-request-summary");
-      const validationError =
-        typeof result === "string" &&
-        result.includes("Schema validation error");
+            return (
+              <ToolElement key={index} defaultOpen>
+                <ToolHeader
+                  title={toolName}
+                  type={part.type as `tool-${string}`}
+                  state={toolPart.state}
+                />
+                <ToolContent>
+                  {tool?.method && tool?.path && (
+                    <div className="px-3 pb-2">
+                      <HttpRoute method={tool.method} path={tool.path} />
+                    </div>
+                  )}
+                  {toolPart.input && <ToolInput input={toolPart.input} />}
+                  {toolPart.output !== undefined && (
+                    <ToolOutput
+                      output={toolPart.output}
+                      errorText={toolPart.errorText}
+                    />
+                  )}
+                </ToolContent>
+              </ToolElement>
+            );
+          }
 
-      const isTooLong =
-        typeof result === "string" && result.includes("Response is too long");
-
-      return (
-        <Stack
-          direction="horizontal"
-          gap={2}
-          align="center"
-          className="mr-auto"
-        >
-          <Type
-            variant="small"
-            className={cn(
-              "font-medium",
-              validationError && "line-through text-muted-foreground",
-            )}
-          >
-            {toolName}
-          </Type>
-          {validationError && (
-            <Type variant="small" muted>
-              (invalid args)
-            </Type>
-          )}
-          {hasSummary && <AutoSummarizeBadge />}
-          {isTooLong && (
-            <SimpleTooltip tooltip="Response is too long and has been truncated to avoid bricking your playground's context window. Consider using reponse filtering (click to learn more).">
-              <Link
-                to="https://docs.getgram.ai/concepts/openapi#response-filtering"
-                target="_blank"
-                onClick={() => {
-                  telemetry.capture("feature_requested", {
-                    action: "response_filtering",
-                  });
-                }}
-              >
-                <Type variant="small" muted>
-                  (truncated)
-                </Type>
-              </Link>
-            </SimpleTooltip>
-          )}
-        </Stack>
-      );
-    },
-    input: (props: { toolName: string; args: string }) => {
-      const tool = tools[props.toolName];
-      return (
-        <Stack gap={2}>
-          {tool?.method && tool?.path && (
-            <HttpRoute method={tool.method} path={tool.path} />
-          )}
-          <JsonDisplay json={props.args} />
-        </Stack>
-      );
-    },
-    result: (props: {
-      toolName: string;
-      result: string;
-      args?: Record<string, unknown>;
-    }) => {
-      const tool = tools[props.toolName];
-      const hasSummary = JSON.stringify(props.args)?.includes(
-        "gram-request-summary",
-      );
-
-      return (
-        <Stack gap={2} className="mt-4">
-          <Type variant="small" className="font-medium text-muted-foreground">
-            {tool?.method ? "Response Body" : "Result"}
-            {hasSummary && (
-              <span className="text-muted-foreground/50">
-                {" "}
-                (auto-summarized)
-              </span>
-            )}
-          </Type>
-          <JsonDisplay json={props.result} />
-        </Stack>
-      );
-    },
-  };
-};
+          return null;
+        })}
+      </MessageContent>
+    </Message>
+  );
+}
 
 const extractStreamError = (event: { error: unknown }) => {
   let message: string | undefined;
@@ -685,16 +662,13 @@ const extractStreamError = (event: { error: unknown }) => {
           parsedBody !== null &&
           parsedBody.error
         ) {
-          // Try to extract the raw error message which contains the actual error
           if (parsedBody.error.metadata?.raw) {
             try {
               const rawError = JSON.parse(parsedBody.error.metadata.raw);
               if (rawError.error?.message) {
                 message = rawError.error.message;
               }
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            } catch (e) {
-              // If raw parsing fails, fall back to the main error message
+            } catch (_e) {
               if (typeof parsedBody.error.message === "string") {
                 message = parsedBody.error.message;
               }

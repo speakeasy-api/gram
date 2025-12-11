@@ -637,6 +637,10 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 		for _, functionEnvVar := range toolsetDetails.FunctionEnvironmentVariables {
 			if !seen[functionEnvVar.Name] {
 				seen[functionEnvVar.Name] = true
+				if isOAuthEnabled && functionEnvVar.AuthInputType != nil && *functionEnvVar.AuthInputType == "oauth2" {
+					continue
+				}
+
 				inputs = append(inputs, securityInput{
 					SystemName:  fmt.Sprintf("MCP-%s", functionEnvVar.Name),
 					DisplayName: fmt.Sprintf("MCP-%s", strings.ReplaceAll(functionEnvVar.Name, "_", "-")),

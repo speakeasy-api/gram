@@ -42,6 +42,7 @@ const (
 	functionAuthSecretVar = "GRAM_FUNCTION_AUTH_SECRET"
 	defaultFlyBaseURL     = "https://api.fly.io"
 	defaultFlyMachinesURL = "https://api.machines.dev"
+	largeFunctionLimit    = 700 * 1024 // 700 KiB
 )
 
 type FlyRunnerOptions struct {
@@ -58,8 +59,10 @@ type FlyRunnerOptions struct {
 type FlyRunner struct {
 	logger          *slog.Logger
 	tracer          trace.Tracer
+	serverURL       *url.URL
 	db              *pgxpool.Pool
-	assetStorage    assets.BlobStore
+	assetStore      assets.BlobStore
+	tigrisStore     *assets.TigrisStore
 	client          *fly.Client
 	tokens          *tokens.Tokens
 	machinesAPIBase string
@@ -79,8 +82,10 @@ var _ interface {
 func NewFlyRunner(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	serverURL *url.URL,
 	db *pgxpool.Pool,
 	assetStorage assets.BlobStore,
+	tigrisStore *assets.TigrisStore,
 	imageSelector ImageSelector,
 	encryption *encryption.Client,
 	o FlyRunnerOptions,
@@ -118,8 +123,10 @@ func NewFlyRunner(
 	return &FlyRunner{
 		logger:          logger.With(attr.SlogComponent("flyio-orchestrator")),
 		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/functions"),
+		serverURL:       serverURL,
 		db:              db,
-		assetStorage:    assetStorage,
+		assetStore:      assetStorage,
+		tigrisStore:     tigrisStore,
 		client:          c,
 		tokens:          o.FlyTokens,
 		machinesAPIBase: machinesAPIBase,
@@ -618,6 +625,7 @@ func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, file
 	return &fly.MachineConfig{
 		Image: image,
 		Env: map[string]string{
+			"GRAM_SERVER_URL":    f.serverURL.String(),
 			"GRAM_DEPLOYMENT_ID": req.DeploymentID.String(),
 			"GRAM_FUNCTION_ID":   req.FunctionID.String(),
 			"GRAM_PROJECT_ID":    req.ProjectID.String(),
@@ -762,33 +770,68 @@ func (f *FlyRunner) serializeAssets(
 	logger *slog.Logger,
 	assets []RunnerAsset,
 ) ([]*fly.File, error) {
-	total := 0
+	total := int64(0)
+	useTigris := false
+	for _, asset := range assets {
+		total += asset.ContentLength
+		if total >= largeFunctionLimit {
+			useTigris = true
+			msg := fmt.Sprintf("copying function assets to blob storage: total function assets greater than %gKiB", float64(largeFunctionLimit)/1024)
+			logger.InfoContext(ctx, msg)
+			break
+		}
+	}
 
 	files := make([]*fly.File, 0, len(assets))
 	for _, asset := range assets {
-		rdr, err := f.assetStorage.Read(ctx, asset.AssetURL)
+		rdr, err := f.assetStore.Read(ctx, asset.AssetURL)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch function asset").Log(ctx, logger)
 		}
-		defer o11y.LogDefer(ctx, f.logger, func() error { return rdr.Close() })
+		defer o11y.LogDefer(ctx, f.logger, func() error {
+			if cerr := rdr.Close(); cerr != nil {
+				return fmt.Errorf("close function asset reader: %w", cerr)
+			}
 
-		data, err := io.ReadAll(rdr)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to read function asset").Log(ctx, logger)
-		}
-
-		encoded := base64.StdEncoding.EncodeToString(data)
-		total += len(data)
-
-		if total > 1*1024*1024 {
-			return nil, oops.E(oops.CodeInvalid, nil, "total function assets size exceeds 1MiB limit").Log(ctx, logger)
-		}
-
-		files = append(files, &fly.File{
-			Mode:      conv.Default(asset.Mode, 0444),
-			GuestPath: asset.GuestPath,
-			RawValue:  &encoded,
+			return nil
 		})
+
+		if useTigris {
+			wr, _, err := f.tigrisStore.Write(ctx, asset.AssetURL.Path, "", asset.ContentLength)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to create writer for function asset").Log(ctx, logger)
+			}
+			defer o11y.LogDefer(ctx, f.logger, func() error {
+				if werr := wr.Close(); werr != nil {
+					return fmt.Errorf("close function asset tigris writer: %w", werr)
+				}
+
+				return nil
+			})
+
+			if _, err := io.Copy(wr, rdr); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to copy function asset to blob storage").Log(ctx, logger)
+			}
+
+			encoded := base64.StdEncoding.EncodeToString([]byte(asset.AssetID.String()))
+			files = append(files, &fly.File{
+				Mode:      conv.Default(asset.Mode, 0444),
+				GuestPath: fmt.Sprintf("%s.lazy", asset.GuestPath),
+				RawValue:  &encoded,
+			})
+		} else {
+			data, err := io.ReadAll(rdr)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to read function asset").Log(ctx, logger)
+			}
+
+			encoded := base64.StdEncoding.EncodeToString(data)
+			files = append(files, &fly.File{
+				Mode:      conv.Default(asset.Mode, 0444),
+				GuestPath: asset.GuestPath,
+				RawValue:  &encoded,
+			})
+		}
 	}
 
 	return files, nil

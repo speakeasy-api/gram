@@ -1,9 +1,9 @@
 import { existsSync } from "node:fs";
 import { open } from "node:fs/promises";
-import process from "node:process";
 import path from "node:path";
-import url from "node:url";
+import process from "node:process";
 import { Writable } from "node:stream";
+import url from "node:url";
 
 export const ERROR_CODES = /** @type {const} */ ({
   UNEXPECTED: "gram_err_000",
@@ -44,7 +44,6 @@ class FunctionsError extends Error {
     } else {
       cause = undefined;
     }
-
 
     return {
       name: this.name,
@@ -133,8 +132,14 @@ async function callTool(func, name, input) {
   } catch (e) {
     if (e instanceof FunctionsError) {
       throw e;
+    } else if (e instanceof Response) {
+      return e;
     } else {
-      throw new FunctionsError(ERROR_CODES.TOOL_CALL_FAILED, "Tool call failed", e);
+      throw new FunctionsError(
+        ERROR_CODES.TOOL_CALL_FAILED,
+        "Tool call failed",
+        e,
+      );
     }
   }
 }
@@ -159,8 +164,14 @@ async function callResource(func, uri, input) {
   } catch (e) {
     if (e instanceof FunctionsError) {
       throw e;
+    } else if (e instanceof Response) {
+      return e;
     } else {
-      throw new FunctionsError(ERROR_CODES.RESOURCE_REQUEST_FAILED, "Resource request failed", e);
+      throw new FunctionsError(
+        ERROR_CODES.RESOURCE_REQUEST_FAILED,
+        "Resource request failed",
+        e,
+      );
     }
   }
 }
@@ -219,7 +230,11 @@ async function importToolCallHandler(codePath) {
   try {
     const mod = await import(codePath).catch((e) => {
       const filename = path.basename(codePath);
-      throw new FunctionsError(ERROR_CODES.IMPORT_FAILURE, `Unable to import user code: ${filename}`, e);
+      throw new FunctionsError(
+        ERROR_CODES.IMPORT_FAILURE,
+        `Unable to import user code: ${filename}`,
+        e,
+      );
     });
 
     let f = mod["handleToolCall"];
@@ -227,7 +242,10 @@ async function importToolCallHandler(codePath) {
       const def = await mod["default"];
       // Bind `f` to `def` so if `f` contains references to `this`, they will
       // continue to work correctly.
-      f = typeof def?.handleToolCall === "function" ? def.handleToolCall.bind(def) : undefined;
+      f =
+        typeof def?.handleToolCall === "function"
+          ? def.handleToolCall.bind(def)
+          : undefined;
     }
 
     if (typeof f !== "function") {
@@ -247,7 +265,11 @@ async function importToolCallHandler(codePath) {
     } else {
       return {
         ok: false,
-        error: new FunctionsError(ERROR_CODES.UNEXPECTED, "Unexpected error occurred", e),
+        error: new FunctionsError(
+          ERROR_CODES.UNEXPECTED,
+          "Unexpected error occurred",
+          e,
+        ),
       };
     }
   }
@@ -261,7 +283,11 @@ async function importResourceHandler(codePath) {
   try {
     const mod = await import(codePath).catch((e) => {
       const filename = path.basename(codePath);
-      throw new FunctionsError(ERROR_CODES.IMPORT_FAILURE, `Unable to import user code: ${filename}`, e);
+      throw new FunctionsError(
+        ERROR_CODES.IMPORT_FAILURE,
+        `Unable to import user code: ${filename}`,
+        e,
+      );
     });
 
     let f = mod["handleResources"];
@@ -269,7 +295,10 @@ async function importResourceHandler(codePath) {
       const def = await mod["default"];
       // Bind `f` to `def` so if `f` contains references to `this`, they will
       // continue to work correctly.
-      f = typeof def?.handleResources === "function" ? def.handleResources.bind(def) : undefined;
+      f =
+        typeof def?.handleResources === "function"
+          ? def.handleResources.bind(def)
+          : undefined;
     }
 
     if (typeof f !== "function") {
@@ -289,7 +318,11 @@ async function importResourceHandler(codePath) {
     } else {
       return {
         ok: false,
-        error: new FunctionsError(ERROR_CODES.UNEXPECTED, "Unexpected error occurred", e),
+        error: new FunctionsError(
+          ERROR_CODES.UNEXPECTED,
+          "Unexpected error occurred",
+          e,
+        ),
       };
     }
   }
@@ -366,19 +399,19 @@ export async function main(args = process.argv, codePath = USER_CODE_PATH) {
       case "tool":
         await handleToolCall(
           pipeFile,
-          /** @type {{name: string, input: unknown}} */(request),
+          /** @type {{name: string, input: unknown}} */ (request),
           codePath,
         );
         break;
       case "resource":
         await handleResources(
           pipeFile,
-          /** @type {{uri: string, input: unknown}} */(request),
+          /** @type {{uri: string, input: unknown}} */ (request),
           codePath,
         );
         break;
       default:
-        throw new Error(`Unrecognized type: ${type}`)
+        throw new Error(`Unrecognized type: ${type}`);
     }
   } finally {
     await pipeFile.close();

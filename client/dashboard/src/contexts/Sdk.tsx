@@ -1,4 +1,3 @@
-import { useErrorHandler } from "@/contexts/ErrorHandler";
 import { getServerURL } from "@/lib/utils";
 import { datadogRum } from "@datadog/browser-rum";
 import { Gram } from "@gram/client";
@@ -8,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useMemo, useRef } from "react";
 import { useLocation, useParams } from "react-router";
 import { useTelemetry } from "./Telemetry";
+import { handleError } from "@/lib/errors";
 
 export const SdkContext = createContext<Gram>({} as Gram);
 
@@ -16,38 +16,33 @@ export const useSdkClient = () => {
   return client;
 };
 
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      throwOnError: true,
+      retry: (failureCount, error: Error) => {
+        // Don't retry on 4xx errors
+        if (error && typeof error === "object" && "status" in error) {
+          const status = (error as unknown as { status: number }).status;
+          if (status >= 400 && status < 500) {
+            return false;
+          }
+        }
+        // Default retry logic for other errors
+        return failureCount < 3;
+      },
+    },
+    mutations: {
+      onError: (error: Error) => {
+        handleError(error, { title: "Request failed" });
+      },
+    },
+  },
+});
+
 export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
   const { projectSlug } = useSlugs();
-  const { handleError } = useErrorHandler();
   const telemetry = useTelemetry();
-
-  const queryClient = useMemo(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            throwOnError: true,
-            retry: (failureCount, error: Error) => {
-              // Don't retry on 4xx errors
-              if (error && typeof error === "object" && "status" in error) {
-                const status = (error as unknown as { status: number }).status;
-                if (status >= 400 && status < 500) {
-                  return false;
-                }
-              }
-              // Default retry logic for other errors
-              return failureCount < 3;
-            },
-          },
-          mutations: {
-            onError: (error: Error) => {
-              handleError(error, { title: "Request failed" });
-            },
-          },
-        },
-      }),
-    [handleError],
-  );
 
   const previousProjectSlug = useRef(projectSlug);
 

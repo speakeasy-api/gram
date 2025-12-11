@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { Canvas as R3FCanvas, useThree } from "@react-three/fiber";
 import { EffectComposer } from "@react-three/postprocessing";
 import * as THREE from "three";
-import { useTheme } from "next-themes";
+import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { PerspectiveCamera } from "@react-three/drei";
 
 const CanvasManager = ({
@@ -20,7 +20,7 @@ const CanvasManager = ({
 }: {
   containerRef: RefObject<HTMLDivElement | null>;
 }) => {
-  const { resolvedTheme } = useTheme();
+  const { theme: resolvedTheme } = useMoonshineConfig();
   const canvasZIndex = useWebGLStore((state) => state.canvasZIndex);
   const canvasBlendMode = useWebGLStore((state) => state.canvasBlendMode);
   const gl = useThree((state) => state.gl);
@@ -139,11 +139,17 @@ InnerCanvas.displayName = "InnerCanvas";
 export const WebGLCanvas = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasZIndex = useWebGLStore((state) => state.canvasZIndex);
+  const isWebGLAvailable = useWebGLStore((state) => state.isWebGLAvailable);
 
   useScrollUpdate(containerRef);
 
   // Use full viewport height when visible (z-index >= 0), otherwise add padding for scroll
   const heightOffset = canvasZIndex >= 0 ? 1 : 1 + CANVAS_PADDING * 2;
+
+  // Gracefully skip rendering if WebGL is not available
+  if (!isWebGLAvailable) {
+    return null;
+  }
 
   return (
     <div

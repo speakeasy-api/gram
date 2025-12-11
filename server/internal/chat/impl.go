@@ -308,6 +308,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			projectID:            *authCtx.ProjectID,
 			repo:                 s.repo,
 			messageContent:       &strings.Builder{},
+			lineBuf:              &strings.Builder{},
 			accumulatedToolCalls: make(map[int]openrouter.ToolCall),
 			messageID:            "",
 			model:                "",
@@ -499,6 +500,7 @@ type responseCaptor struct {
 	chatID               uuid.UUID
 	projectID            uuid.UUID
 	messageContent       *strings.Builder
+	lineBuf              *strings.Builder // Buffer for accumulating partial SSE lines across Write calls
 	messageID            string
 	model                string
 	isDone               bool
@@ -515,13 +517,37 @@ func (r *responseCaptor) WriteHeader(statusCode int) {
 	r.ResponseWriter.WriteHeader(statusCode)
 }
 
+// Flush implements http.Flusher to ensure SSE streaming data is sent immediately.
+// Without this, the reverse proxy may buffer chunks, breaking stream parsing on the client.
+func (r *responseCaptor) Flush() {
+	if flusher, ok := r.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
 func (r *responseCaptor) Write(b []byte) (int, error) {
 	// If this is a streaming response, parse and collect the chunks
 	if r.isStreaming {
-		chunkData := string(b)
 		isDoneBeforeLineProcess := r.isDone
-		for _, line := range strings.Split(chunkData, "\n") {
-			r.processLine(line)
+
+		// Append new data to the line buffer
+		r.lineBuf.Write(b)
+		bufData := r.lineBuf.String()
+
+		// Find the last newline - everything before it is complete lines we can process
+		lastNewline := strings.LastIndex(bufData, "\n")
+		if lastNewline >= 0 {
+			// Process all complete lines
+			completeLines := bufData[:lastNewline]
+			for _, line := range strings.Split(completeLines, "\n") {
+				r.processLine(line)
+			}
+
+			// Keep the remainder (partial line) in the buffer for the next Write call
+			r.lineBuf.Reset()
+			if lastNewline < len(bufData)-1 {
+				r.lineBuf.WriteString(bufData[lastNewline+1:])
+			}
 		}
 
 		// Log if we are unexpectedly not receiving usage data on the next message after
@@ -534,6 +560,12 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 	// If we're done, log the message
 	// openrouter streams the usage data after the finish_reason, it's important we wait for that
 	if r.isDone && r.usageSet && !r.messageWritten {
+		// Process any remaining buffered line that didn't end with \n
+		if r.lineBuf.Len() > 0 {
+			r.processLine(r.lineBuf.String())
+			r.lineBuf.Reset()
+		}
+
 		// Convert accumulated tool calls to JSON for storage if needed
 		var toolCallsJSON []byte
 		if len(r.accumulatedToolCalls) > 0 {

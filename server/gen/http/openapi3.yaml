@@ -4160,15 +4160,6 @@ paths:
                     pattern: ^[a-z0-9_-]{1,128}$
                     type: string
                 - allowEmptyValue: true
-                  description: The slug of the environment to load
-                  in: query
-                  name: environment_slug
-                  schema:
-                    description: A short url-friendly label that uniquely identifies a resource.
-                    maxLength: 40
-                    pattern: ^[a-z0-9_-]{1,128}$
-                    type: string
-                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -6028,7 +6019,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/SetProjectLogoForm'
+                            $ref: '#/components/schemas/GetSignedAssetURLForm'
                 required: true
             responses:
                 "200":
@@ -10805,11 +10796,6 @@ components:
             properties:
                 apikey_token:
                     type: string
-                environment_slug:
-                    type: string
-                    description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9_-]{1,128}$
-                    maxLength: 40
                 project_slug_input:
                     type: string
                 session_token:
@@ -10827,13 +10813,16 @@ components:
                 description:
                     type: string
                     description: The description of the toolset
-                environment:
-                    $ref: '#/components/schemas/Environment'
                 function_environment_variables:
                     type: array
                     items:
                         $ref: '#/components/schemas/FunctionEnvironmentVariable'
                     description: The function environment variables that are relevant to the toolset
+                mcp_servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/InstanceMcpServer'
+                    description: The MCP servers that are relevant to the toolset
                 name:
                     type: string
                     description: The name of the toolset
@@ -10860,7 +10849,7 @@ components:
             required:
                 - name
                 - tools
-                - environment
+                - mcp_servers
         GetIntegrationForm:
             type: object
             properties:
@@ -10893,6 +10882,22 @@ components:
                     $ref: '#/components/schemas/PromptTemplate'
             required:
                 - template
+        GetSignedAssetURLForm:
+            type: object
+            properties:
+                asset_id:
+                    type: string
+                    description: The ID of the function asset
+            required:
+                - asset_id
+        GetSignedAssetURLResult:
+            type: object
+            properties:
+                url:
+                    type: string
+                    description: The signed URL to access the asset
+            required:
+                - url
         GetSlackConnectionResult:
             type: object
             properties:
@@ -11148,6 +11153,14 @@ components:
                 - active_organization_id
                 - organizations
                 - gram_account_type
+        InstanceMcpServer:
+            type: object
+            properties:
+                url:
+                    type: string
+                    description: The address of the MCP server
+            required:
+                - url
         Integration:
             type: object
             properties:
@@ -13281,6 +13294,10 @@ components:
             description: key based auth.
             name: Gram-Key
             in: header
+        function_token_header_Authorization:
+            type: http
+            description: Gram Functions token based auth.
+            scheme: bearer
         project_slug_header_Gram-Project:
             type: apiKey
             description: project slug header auth.
@@ -13311,6 +13328,8 @@ tags:
       description: Manage custom domains for gram.
     - name: environments
       description: Managing toolset environments.
+    - name: functions
+      description: Endpoints for working with functions.
     - name: instances
       description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
     - name: integrations

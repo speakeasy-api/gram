@@ -135,6 +135,8 @@ export function PromptEditor({
                 label="Name"
                 name="name"
                 pattern={PROMPT_NAME_PATTERN}
+                placeholder="my-prompt-name"
+                title="Only lowercase letters, numbers, hyphens, and underscores (max 128 characters)"
                 required
               />
             </div>

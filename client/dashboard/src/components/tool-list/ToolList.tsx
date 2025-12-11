@@ -40,6 +40,7 @@ interface ToolListProps {
   selectionMode?: "add" | "remove";
   selectedUrns?: string[];
   onSelectionChange?: (urns: string[]) => void;
+  onToolClick?: (tool: Tool) => void;
 }
 
 interface ToolGroup {
@@ -231,6 +232,7 @@ function ToolRow({
   onCheckboxChange,
   onTestInPlayground,
   onRemove,
+  onToolClick,
 }: {
   tool: Tool;
   availableToolUrns?: string[];
@@ -241,6 +243,7 @@ function ToolRow({
   onCheckboxChange: (checked: boolean) => void;
   onTestInPlayground?: () => void;
   onRemove?: () => void;
+  onToolClick?: (tool: Tool) => void;
 }) {
   const isDisabled = false;
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -318,12 +321,15 @@ function ToolRow({
         className={cn(
           "group flex items-center justify-between overflow-hidden pl-4 pr-3 py-4 relative border-b border-neutral-softest last:border-b-0 transition-colors hover:bg-muted",
           isFocused && "bg-muted",
+          onToolClick && "cursor-pointer",
         )}
+        onClick={() => onToolClick?.(tool)}
       >
         <div className="flex gap-4 items-center min-w-0 flex-[0_1_60%]">
           <Checkbox
             checked={isSelected}
             onCheckedChange={onCheckboxChange}
+            onClick={(e) => e.stopPropagation()}
             className={cn(
               "shrink-0 transition-opacity",
               !isSelected && !isFocused && "opacity-0 group-hover:opacity-100",
@@ -525,6 +531,7 @@ export function ToolList({
   selectionMode,
   selectedUrns = [],
   onSelectionChange,
+  onToolClick,
 }: ToolListProps) {
   const { data: deployment } = useLatestDeployment();
 
@@ -871,6 +878,7 @@ export function ToolList({
                             ? () => onToolsRemove([toolId])
                             : undefined
                         }
+                        onToolClick={onToolClick}
                       />
                     );
                   })}
