@@ -331,10 +331,15 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 }
 
 func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
+
 	ctx := r.Context()
 	defer o11y.LogDefer(ctx, s.logger, func() error {
 		return r.Body.Close()
 	})
+
+	s.logger.InfoContext(ctx, "Received MCP request",
+		slog.String("authorization", r.Header.Get("Authorization")), //nolint:sloglint // debugging
+	)
 
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
