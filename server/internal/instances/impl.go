@@ -287,6 +287,9 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		toolType = tm_repo.ToolTypeFunction
 	case gateway.ToolKindPrompt:
 		toolType = tm_repo.ToolTypePrompt
+	case gateway.ToolKindExternalMCP:
+		// TODO: implement external MCP tool call logging
+		panic("external MCP tool calls not yet supported via instances API")
 	}
 
 	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, s.tcm, descriptor.OrganizationID, tm.ToolInfo{
