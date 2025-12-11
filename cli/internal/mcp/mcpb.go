@@ -9,10 +9,10 @@ import (
 
 // MCPBManifest represents the Claude Desktop .mcpb manifest structure
 type MCPBManifest struct {
-	ManifestVersion string            `json:"manifest_version"`
-	Name            string            `json:"name"`
-	Version         string            `json:"version"`
-	Description     string            `json:"description"`
+	ManifestVersion string             `json:"manifest_version"`
+	Name            string             `json:"name"`
+	Version         string             `json:"version"`
+	Description     string             `json:"description"`
 	Author          MCPBAuthor         `json:"author"`
 	Server          MCPBServer         `json:"server"`
 	UserConfig      map[string]MCPBVar `json:"user_config,omitempty"`
@@ -23,8 +23,8 @@ type MCPBAuthor struct {
 }
 
 type MCPBServer struct {
-	Type       string         `json:"type"`
-	EntryPoint string         `json:"entry_point"`
+	Type       string          `json:"type"`
+	EntryPoint string          `json:"entry_point"`
 	MCPConfig  MCPServerConfig `json:"mcp_config"`
 }
 
@@ -73,7 +73,7 @@ func GenerateMCPBManifest(info *ToolsetInfo, useEnvVar bool) ([]byte, error) {
 			MCPConfig: MCPServerConfig{
 				Command: "npx",
 				Args: []string{
-					"mcp-remote",
+					"mcp-remote@0.1.25",
 					info.URL,
 					"--header",
 					headerValue,

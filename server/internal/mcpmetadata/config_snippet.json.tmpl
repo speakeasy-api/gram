@@ -1,7 +1,7 @@
 {
   "command": "npx",
   "args": [
-    "mcp-remote",
+    "mcp-remote@0.1.25",
     "{{ .MCPURL }}"{{- range .SecurityInputs }},
     "--header",
     "{{ .SystemName | asHTTPHeader }}:${{ "{" }}{{ .DisplayName | asPosixName }}{{ "}" }}"{{- end }}
