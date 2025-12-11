@@ -400,8 +400,10 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 			// If toolset has OAuth proxy server, validate OAuth token and check org access
 			if toolset.OauthProxyServerID.Valid {
+
 				_, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
 				if err != nil {
+					w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
 					return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
 				}
 
