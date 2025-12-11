@@ -14,9 +14,12 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"log/slog"
+
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/rag/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -32,6 +35,7 @@ const (
 )
 
 type ToolsetVectorStore struct {
+	logger         *slog.Logger
 	tracer         trace.Tracer
 	db             repo.DBTX
 	queries        *repo.Queries
@@ -39,12 +43,13 @@ type ToolsetVectorStore struct {
 	embeddingModel string
 }
 
-func NewToolsetVectorStore(tracerProvider trace.TracerProvider, db *pgxpool.Pool, chatClient *openrouter.ChatClient) *ToolsetVectorStore {
+func NewToolsetVectorStore(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, chatClient *openrouter.ChatClient) *ToolsetVectorStore {
 	if db == nil {
 		return nil
 	}
 
 	return &ToolsetVectorStore{
+		logger:         logger,
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/rag"),
 		db:             db,
 		queries:        repo.New(db),
@@ -104,7 +109,7 @@ func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Too
 		return fmt.Errorf("parse toolset id: %w", err)
 	}
 
-	candidates, err := s.prepareEmbeddingCandidates(toolset.Tools)
+	candidates, err := s.prepareEmbeddingCandidates(ctx, toolset.Tools)
 	if err != nil {
 		return err
 	}
@@ -280,12 +285,23 @@ type embeddingCandidate struct {
 	tags     []string
 }
 
-func (s *ToolsetVectorStore) prepareEmbeddingCandidates(tools []*types.Tool) ([]embeddingCandidate, error) {
+func (s *ToolsetVectorStore) prepareEmbeddingCandidates(ctx context.Context, tools []*types.Tool) ([]embeddingCandidate, error) {
 	candidates := make([]embeddingCandidate, 0, len(tools))
 
 	for _, tool := range tools {
-		baseTool := conv.ToBaseTool(tool)
-		name, description, inputSchema, meta := conv.ToToolListEntry(tool)
+		// Skip proxy tools - they are handled separately via unfolding below
+		if conv.IsProxyTool(tool) {
+			continue
+		}
+
+		baseTool, err := conv.ToBaseTool(tool)
+		if err != nil {
+			continue
+		}
+		name, description, inputSchema, meta, err := conv.ToToolListEntry(tool)
+		if err != nil {
+			continue
+		}
 		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
@@ -314,6 +330,81 @@ func (s *ToolsetVectorStore) prepareEmbeddingCandidates(tools []*types.Tool) ([]
 			content:  content,
 			tags:     extractTags(tool),
 		})
+	}
+
+	// Unfold proxy tools and add them to candidates
+	unfoldedCandidates, err := s.prepareUnfoldedCandidates(ctx, tools)
+	if err != nil {
+		// Log but don't fail - continue with regular tools
+		s.logger.WarnContext(ctx, "failed to prepare unfolded candidates", attr.SlogError(err))
+	} else {
+		candidates = append(candidates, unfoldedCandidates...)
+	}
+
+	return candidates, nil
+}
+
+func (s *ToolsetVectorStore) prepareUnfoldedCandidates(ctx context.Context, tools []*types.Tool) ([]embeddingCandidate, error) {
+	var candidates []embeddingCandidate
+
+	for _, tool := range tools {
+		if !conv.IsProxyTool(tool) {
+			continue
+		}
+
+		proxy := tool.ExternalMcpToolDefinition
+
+		// Skip OAuth-requiring tools - no token available in this context
+		if proxy.RequiresOauth {
+			s.logger.InfoContext(ctx, "skipping OAuth-requiring external MCP for embedding",
+				attr.SlogToolURN(proxy.ToolUrn),
+			)
+			continue
+		}
+
+		// List tools from the external MCP server
+		externalTools, err := externalmcp.ListToolsFromProxy(ctx, s.logger, proxy.RemoteURL, nil)
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to list tools from external MCP",
+				attr.SlogToolURN(proxy.ToolUrn),
+				attr.SlogError(err),
+			)
+			continue
+		}
+
+		for _, extTool := range externalTools {
+			name := proxy.Slug + ":" + extTool.Name
+			if strings.TrimSpace(name) == "" {
+				continue
+			}
+
+			entry := toolListEntry{
+				Name:        name,
+				Description: extTool.Description,
+				InputSchema: extTool.Schema,
+				Meta:        nil,
+			}
+
+			payload, err := json.Marshal(&entry)
+			if err != nil {
+				return nil, fmt.Errorf("marshal unfolded tool entry %s: %w", name, err)
+			}
+
+			content := buildEmbeddableContent(&entry)
+			if strings.TrimSpace(content) == "" {
+				continue
+			}
+
+			// Use the proxy tool URN as the entry key, with the tool name appended
+			entryKey := proxy.ToolUrn + ":" + extTool.Name
+
+			candidates = append(candidates, embeddingCandidate{
+				entryKey: entryKey,
+				payload:  payload,
+				content:  content,
+				tags:     []string{fmt.Sprintf("source:%s", proxy.Slug)},
+			})
+		}
 	}
 
 	return candidates, nil

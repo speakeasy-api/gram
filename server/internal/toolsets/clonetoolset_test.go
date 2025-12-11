@@ -64,12 +64,14 @@ func TestToolsetsService_CloneToolset_Success(t *testing.T) {
 	// Verify the tools are correctly copied
 	originalToolNames := make([]string, len(original.Tools))
 	for i, tool := range original.Tools {
-		baseTool := conv.ToBaseTool(tool)
+		baseTool, err := conv.ToBaseTool(tool)
+		require.NoError(t, err)
 		originalToolNames[i] = baseTool.Name
 	}
 	clonedToolNames := make([]string, len(cloned.Tools))
 	for i, tool := range cloned.Tools {
-		baseTool := conv.ToBaseTool(tool)
+		baseTool, err := conv.ToBaseTool(tool)
+		require.NoError(t, err)
 		clonedToolNames[i] = baseTool.Name
 	}
 	require.ElementsMatch(t, originalToolNames, clonedToolNames)

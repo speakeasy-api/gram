@@ -393,7 +393,11 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	toolNames := []string{}
 
 	for _, toolDesc := range toolsetDetails.Tools {
-		baseTool := conv.ToBaseTool(toolDesc)
+		baseTool, err := conv.ToBaseTool(toolDesc)
+		if err != nil {
+			// TODO: implement proxy tool handling for MCP metadata page
+			panic("proxy tools not yet supported in MCP metadata page")
+		}
 		toolNames = append(toolNames, baseTool.Name)
 	}
 

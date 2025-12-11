@@ -96,7 +96,15 @@ func buildDynamicSessionTools(
 func buildDescribeToolsTool(tools []*types.Tool) *toolListEntry {
 	toolNames := []string{}
 	for _, tool := range tools {
-		baseTool := conv.ToBaseTool(tool)
+		// Skip proxy tools - they should be unfolded before being used in dynamic tool calling
+		if conv.IsProxyTool(tool) {
+			continue
+		}
+
+		baseTool, err := conv.ToBaseTool(tool)
+		if err != nil {
+			continue
+		}
 		toolNames = append(toolNames, baseTool.Name)
 	}
 
@@ -175,11 +183,19 @@ func handleSearchToolsCall(
 	// Build a map of tools by name for quick lookup
 	toolsByName := make(map[string]*types.Tool)
 	for _, tool := range toolset.Tools {
-		baseTool := conv.ToBaseTool(tool)
+		// Skip proxy tools - they should be unfolded before being used in dynamic tool calling
+		if conv.IsProxyTool(tool) {
+			continue
+		}
+
+		baseTool, err := conv.ToBaseTool(tool)
+		if err != nil {
+			continue
+		}
 		toolsByName[baseTool.Name] = tool
 	}
 
-	// constuct full tool entries with similarity scores
+	// construct full tool entries with similarity scores
 	var results []*toolListEntry
 	for _, searchResult := range searchResults {
 		tool, exists := toolsByName[searchResult.ToolName]
@@ -187,7 +203,10 @@ func handleSearchToolsCall(
 			continue
 		}
 
-		name, description, _, meta := conv.ToToolListEntry(tool)
+		name, description, _, meta, err := conv.ToToolListEntry(tool)
+		if err != nil {
+			continue
+		}
 		if name == "" {
 			continue
 		}
@@ -292,7 +311,15 @@ func handleDescribeToolsCall(
 	// Build a map of tools by name for quick lookup
 	toolsByName := make(map[string]*types.Tool)
 	for _, tool := range toolset.Tools {
-		baseTool := conv.ToBaseTool(tool)
+		// Skip proxy tools - they should be unfolded before being used in dynamic tool calling
+		if conv.IsProxyTool(tool) {
+			continue
+		}
+
+		baseTool, err := conv.ToBaseTool(tool)
+		if err != nil {
+			continue
+		}
 		toolsByName[baseTool.Name] = tool
 	}
 

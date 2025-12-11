@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentR "github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	externalmcpR "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	oauth "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -183,6 +184,31 @@ func DescribeToolsetEntry(
 				ID:      pt.ID.String(),
 				Name:    pt.Name,
 				ToolUrn: pt.ToolUrn.String(),
+			})
+		}
+
+		// Fetch external MCP tool entries
+		externalmcpRepo := externalmcpR.New(tx)
+		// Filter toolUrns to find externalmcp URNs
+		externalMCPUrns := make([]string, 0)
+		for _, toolUrn := range toolUrns {
+			var parsedUrn urn.Tool
+			if err := parsedUrn.UnmarshalText([]byte(toolUrn)); err == nil {
+				if parsedUrn.Kind == urn.ToolKindExternalMCP {
+					externalMCPUrns = append(externalMCPUrns, toolUrn)
+				}
+			}
+		}
+		for _, toolUrn := range externalMCPUrns {
+			externalMCPTool, err := externalmcpRepo.GetExternalMCPToolDefinitionByURN(ctx, toolUrn)
+			if err != nil {
+				continue // Skip if not found
+			}
+			tools = append(tools, &types.ToolEntry{
+				Type:    string(urn.ToolKindExternalMCP),
+				ID:      externalMCPTool.ID.String(),
+				Name:    externalMCPTool.Slug + ":proxy",
+				ToolUrn: externalMCPTool.ToolUrn,
 			})
 		}
 
@@ -707,6 +733,45 @@ func readToolsetTools(
 		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, envQueries)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment variables for toolset").Log(ctx, logger)
+		}
+	}
+
+	// Fetch external MCP proxy tools
+	if activeDeploymentID != uuid.Nil {
+		externalmcpRepo := externalmcpR.New(tx)
+		externalMCPTools, err := externalmcpRepo.ListExternalMCPToolDefinitions(ctx, activeDeploymentID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get external mcp tools for toolset").Log(ctx, logger)
+		}
+
+		for _, def := range externalMCPTools {
+			// Only include if the tool URN is in the toolset's tool URNs
+			found := false
+			for _, toolUrn := range toolUrns {
+				if toolUrn == def.ToolUrn {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+
+			tools = append(tools, &types.Tool{
+				ExternalMcpToolDefinition: &types.ExternalMCPToolDefinition{
+					ID:                      def.ID.String(),
+					ToolUrn:                 def.ToolUrn,
+					DeploymentExternalMcpID: def.DeploymentExternalMcpID.String(),
+					DeploymentID:            def.DeploymentID.String(),
+					RegistryID:              def.RegistryID.String(),
+					Name:                    def.Name,
+					Slug:                    def.Slug,
+					RemoteURL:               def.RemoteUrl,
+					RequiresOauth:           def.RequiresOauth,
+					CreatedAt:               def.CreatedAt.Time.Format(time.RFC3339),
+					UpdatedAt:               def.UpdatedAt.Time.Format(time.RFC3339),
+				},
+			})
 		}
 	}
 

@@ -57,7 +57,8 @@ func TestToolsetsService_GetToolset_Success(t *testing.T) {
 
 	// Verify tools are properly populated
 	for _, tool := range result.Tools {
-		baseTool := conv.ToBaseTool(tool)
+		baseTool, err := conv.ToBaseTool(tool)
+		require.NoError(t, err)
 		require.NotEmpty(t, baseTool.ID)
 		require.NotEmpty(t, baseTool.Name)
 		// Summary and Description may be empty depending on the OpenAPI spec
