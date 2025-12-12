@@ -54,6 +54,14 @@ export function McpToolsetCard({ toolset }: { toolset: ToolsetForMCP }) {
   const routes = useRoutes();
   const [mcpModalOpen, setMcpModalOpen] = useState(false);
 
+  const handleOpenMcpModal = () => {
+    // Delay to ensure dropdown closes before dialog opens
+    // Prevents race condition between dropdown and dialog overlays
+    setTimeout(() => {
+      setMcpModalOpen(true);
+    }, 50);
+  };
+
   return (
     <>
       <ServerCard
@@ -62,7 +70,7 @@ export function McpToolsetCard({ toolset }: { toolset: ToolsetForMCP }) {
         additionalActions={[
           {
             label: "View/Copy Config",
-            onClick: () => setMcpModalOpen(true),
+            onClick: handleOpenMcpModal,
             icon: "braces",
           },
         ]}
