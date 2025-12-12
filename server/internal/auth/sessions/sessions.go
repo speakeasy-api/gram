@@ -79,14 +79,12 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 	}
 
 	if key == "" {
-		s.logger.InfoContext(ctx, "No key provided, checking for session token in context")
 		// This may have been set via cookie from http middleware, GOA does not support natively
 		key, _ = contextvalues.GetSessionTokenFromContext(ctx)
 	}
 
 	session, err := s.sessionCache.Get(ctx, SessionCacheKey(key))
 	if err != nil {
-		s.logger.InfoContext(ctx, "Error getting session from cache")
 		key, err = stubLocalAuth()
 		if err != nil {
 			return ctx, oops.C(oops.CodeUnauthorized)

@@ -395,10 +395,13 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
 		}
 
-		// Access token is the session id based on our gram provider implementation
+		if len(token.ExternalSecrets) == 0 {
+			return oops.E(oops.CodeUnauthorized, nil, "no session token found").Log(ctx, s.logger)
+		}
+
+		// underlying id token is the session id based on our gram provider implementation
 		// we are effectively attempting to authenticate with this session
-		s.logger.InfoContext(ctx, fmt.Sprintf("Authenticating with access token: %s", token.AccessToken))
-		ctx, err = s.sessions.Authenticate(ctx, token.AccessToken, false)
+		ctx, err = s.sessions.Authenticate(ctx, token.ExternalSecrets[0].Token, false)
 		if err != nil {
 			return oops.E(oops.CodeUnauthorized, err, "failed to authenticate access token").Log(ctx, s.logger)
 		}
