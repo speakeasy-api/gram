@@ -388,32 +388,26 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			return oops.E(oops.CodeUnauthorized, err, "access token is required").Log(ctx, s.logger)
 		}
 
-		_, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
+		token, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
 		if err != nil {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
 			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
 		}
 
+		if len(token.ExternalSecrets) == 0 {
+			return oops.E(oops.CodeUnauthorized, nil, "no session token found").Log(ctx, s.logger)
+		}
+
+		// underlying id token is the session id based on our gram provider implementation
+		// we are effectively attempting to authenticate with this session
+		ctx, err = s.sessions.Authenticate(ctx, token.ExternalSecrets[0].Token, false)
+		if err != nil {
+			return oops.E(oops.CodeUnauthorized, err, "failed to authenticate access token").Log(ctx, s.logger)
+		}
+
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		if !ok || authCtx == nil {
 			return oops.E(oops.CodeUnauthorized, nil, "no auth context found").Log(ctx, s.logger)
-		}
-
-		userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
-		if err != nil {
-			return oops.E(oops.CodeUnauthorized, err, "failed to get user info from access token").Log(ctx, s.logger)
-		}
-
-		hasOrgAccess := false
-		for _, org := range userInfo.Organizations {
-			if org.ID == toolset.OrganizationID {
-				hasOrgAccess = true
-				break
-			}
-		}
-
-		if !hasOrgAccess {
-			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 		}
 	default:
 		if token != "" {
