@@ -4,7 +4,7 @@ import { Button } from "@speakeasy-api/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Outlet } from "react-router";
 import { useToolsets } from "../toolsets/Toolsets";
 import { MCPJson } from "./MCPDetails";
@@ -54,6 +54,20 @@ export function McpToolsetCard({ toolset }: { toolset: ToolsetForMCP }) {
   const routes = useRoutes();
   const [mcpModalOpen, setMcpModalOpen] = useState(false);
 
+  // Workaround for Radix UI bug where pointer-events: none gets stuck on body
+  // after closing a dialog opened from a dropdown menu
+  // See: https://github.com/radix-ui/primitives/issues/1241
+  // See: https://github.com/radix-ui/primitives/issues/3317
+  useEffect(() => {
+    if (!mcpModalOpen) {
+      // Small delay to let Radix finish its cleanup, then force remove pointer-events
+      const timeoutId = setTimeout(() => {
+        document.body.style.pointerEvents = "";
+      }, 100);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [mcpModalOpen]);
+
   const handleOpenMcpModal = () => {
     // Delay to ensure dropdown closes before dialog opens
     // Prevents race condition between dropdown and dialog overlays
@@ -68,8 +82,12 @@ export function McpToolsetCard({ toolset }: { toolset: ToolsetForMCP }) {
       e.preventDefault();
       e.stopPropagation();
     }
-    // Close the modal
+    // Close the modal and force clear body pointer-events
     setMcpModalOpen(false);
+    // Force clear pointer-events immediately as well
+    setTimeout(() => {
+      document.body.style.pointerEvents = "";
+    }, 0);
   };
 
   return (
