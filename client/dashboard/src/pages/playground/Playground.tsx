@@ -370,7 +370,9 @@ export function ToolsetPanel({
           queryClient.invalidateQueries({
             queryKey: queryKeyListToolsets({}),
           });
-          if (selectedToolset && selectedEnvironment) {
+          if (selectedToolset) {
+            // Use partial query key (toolsetSlug only) to match all instances
+            // of this toolset, regardless of environment
             queryClient.invalidateQueries({
               queryKey: queryKeyInstance({
                 toolsetSlug: selectedToolset,
@@ -409,7 +411,9 @@ export function ToolsetPanel({
           queryClient.invalidateQueries({
             queryKey: queryKeyListToolsets({}),
           });
-          if (selectedToolset && selectedEnvironment) {
+          if (selectedToolset) {
+            // Use partial query key (toolsetSlug only) to match all instances
+            // of this toolset, regardless of environment
             queryClient.invalidateQueries({
               queryKey: queryKeyInstance({
                 toolsetSlug: selectedToolset,

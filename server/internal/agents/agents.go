@@ -28,8 +28,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -227,6 +227,7 @@ type InputDetails struct {
 // AgentsResponseWorkflowResult is the wrapper result returned by AgentsResponseWorkflow
 type AgentsResponseWorkflowResult struct {
 	OrgID            string           `json:"org_id"`
+	ProjectID        uuid.UUID        `json:"project_id"`
 	ResponseOutput   ResponseOutput   `json:"response_output"`
 	ExecutionHistory ExecutionHistory `json:"execution_history"`
 	InputDetails     InputDetails     `json:"input_details"`
