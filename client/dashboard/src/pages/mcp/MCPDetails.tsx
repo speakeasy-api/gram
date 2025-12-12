@@ -36,7 +36,7 @@ import {
 } from "@gram/client/react-query";
 import { Badge, Button, Grid, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Globe, Trash2, CheckIcon } from "lucide-react";
+import { Globe, Trash2 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
