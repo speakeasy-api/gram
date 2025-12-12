@@ -3,4 +3,4 @@
 
 set -e
 
-docker compose -p gram-local-registry -f local-registry-compose.yaml down --remove-orphans
+docker compose --profile local-registry down --remove-orphans
