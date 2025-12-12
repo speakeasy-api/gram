@@ -12,6 +12,33 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getMCPRegistryByID = `-- name: GetMCPRegistryByID :one
+SELECT id, name, url, created_at, updated_at
+FROM mcp_registries
+WHERE id = $1 AND deleted IS FALSE
+`
+
+type GetMCPRegistryByIDRow struct {
+	ID        uuid.UUID
+	Name      string
+	Url       string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetMCPRegistryByID(ctx context.Context, id uuid.UUID) (GetMCPRegistryByIDRow, error) {
+	row := q.db.QueryRow(ctx, getMCPRegistryByID, id)
+	var i GetMCPRegistryByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Url,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listMCPRegistries = `-- name: ListMCPRegistries :many
 SELECT id, name, url, created_at, updated_at
 FROM mcp_registries

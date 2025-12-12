@@ -108,7 +108,7 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 		reqURL += fmt.Sprintf("&cursor=%s", *params.Cursor)
 	}
 
-	c.logger.InfoContext(ctx, "fetching servers from registry", attr.SlogURL(reqURL))
+	c.logger.InfoContext(ctx, "fetching servers from registry", attr.SlogMCPRegistryURL(reqURL))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {

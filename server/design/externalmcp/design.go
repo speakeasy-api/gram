@@ -6,29 +6,6 @@ import (
 	. "goa.design/goa/v3/dsl"
 )
 
-var ExternalMCPServer = Type("ExternalMCPServer", func() {
-	Meta("struct:pkg:path", "types")
-
-	Description("An MCP server from an external registry")
-
-	Attribute("name", String, "Server name in reverse-DNS format (e.g., 'io.github.user/server')", func() {
-		Example("io.modelcontextprotocol.anonymous/exa")
-	})
-	Attribute("version", String, "Semantic version of the server", func() {
-		Example("1.0.0")
-	})
-	Attribute("description", String, "Description of what the server does")
-	Attribute("registry_id", String, "ID of the registry this server came from", func() {
-		Format(FormatUUID)
-	})
-	Attribute("title", String, "Display name for the server")
-	Attribute("icon_url", String, "URL to the server's icon", func() {
-		Format(FormatURI)
-	})
-
-	Required("name", "version", "description", "registry_id")
-})
-
 var _ = Service("mcpRegistries", func() {
 	Description("External MCP registry operations")
 
@@ -65,8 +42,31 @@ var _ = Service("mcpRegistries", func() {
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "listMcpCatalog")
+		Meta("openapi:operationId", "listMCPCatalog")
 		Meta("openapi:extension:x-speakeasy-name-override", "listCatalog")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListMcpCatalog"}`)
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListMCPCatalog"}`)
 	})
+})
+
+var ExternalMCPServer = Type("ExternalMCPServer", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("An MCP server from an external registry")
+
+	Attribute("name", String, "Server name in reverse-DNS format (e.g., 'io.github.user/server')", func() {
+		Example("io.modelcontextprotocol.anonymous/exa")
+	})
+	Attribute("version", String, "Semantic version of the server", func() {
+		Example("1.0.0")
+	})
+	Attribute("description", String, "Description of what the server does")
+	Attribute("registry_id", String, "ID of the registry this server came from", func() {
+		Format(FormatUUID)
+	})
+	Attribute("title", String, "Display name for the server")
+	Attribute("icon_url", String, "URL to the server's icon", func() {
+		Format(FormatURI)
+	})
+
+	Required("name", "version", "description", "registry_id")
 })

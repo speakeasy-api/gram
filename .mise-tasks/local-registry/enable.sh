@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
 #MISE description="Add the local MCP registry to Gram's mcp_registries table"
+#USAGE flag "--registry-url <url>" env="LOCAL_MCP_REGISTRY_URL" required=#true help="The URL of the local MCP registry"
 
 set -eo pipefail
 
-REGISTRY_URL="${LOCAL_MCP_REGISTRY_URL:-}"
-if [ -z "$REGISTRY_URL" ]; then
-  echo "Error: LOCAL_MCP_REGISTRY_URL is not set"
-  exit 1
-fi
+REGISTRY_URL="${usage_registry_url:?Error: --registry-url not provided}"
 
 REGISTRY_NAME="Local MCP Registry"
 

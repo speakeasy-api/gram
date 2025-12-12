@@ -2,9 +2,11 @@ package externalmcp
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -58,33 +60,52 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
+func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	return s.auth.Authorize(ctx, key, schema)
+}
+
 func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPayload) (*gen.ListCatalogResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// Fetch all registries from the database
-	registries, err := s.repo.ListMCPRegistries(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list registries").Log(ctx, s.logger)
-	}
-
-	// If a specific registry is requested, filter to just that one
+	// If a specific registry is requested, fetch just that one
 	if payload.RegistryID != nil {
 		registryID, err := uuid.Parse(*payload.RegistryID)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").Log(ctx, s.logger)
 		}
 
-		filtered := make([]repo.ListMCPRegistriesRow, 0, 1)
-		for _, r := range registries {
-			if r.ID == registryID {
-				filtered = append(filtered, r)
-				break
+		registry, err := s.repo.GetMCPRegistryByID(ctx, registryID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.C(oops.CodeNotFound)
 			}
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get registry").Log(ctx, s.logger)
 		}
-		registries = filtered
+
+		servers, err := s.registryClient.ListServers(ctx, Registry{
+			ID:  registry.ID,
+			URL: registry.Url,
+		}, ListServersParams{
+			Search: payload.Search,
+			Cursor: payload.Cursor,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch servers from registry").Log(ctx, s.logger)
+		}
+
+		return &gen.ListCatalogResult{
+			Servers:    servers,
+			NextCursor: nil, // Pagination not implemented in v0
+		}, nil
+	}
+
+	// Fetch all registries from the database
+	registries, err := s.repo.ListMCPRegistries(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list registries").Log(ctx, s.logger)
 	}
 
 	// Aggregate servers from all registries
@@ -99,8 +120,8 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 		})
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to fetch servers from registry",
-				attr.SlogRegistryID(registry.ID.String()),
-				attr.SlogURL(registry.Url),
+				attr.SlogMCPRegistryID(registry.ID.String()),
+				attr.SlogMCPRegistryURL(registry.Url),
 				attr.SlogError(err),
 			)
 			continue
@@ -117,8 +138,4 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 		Servers:    allServers,
 		NextCursor: nil, // Pagination not implemented in v0
 	}, nil
-}
-
-func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
 }

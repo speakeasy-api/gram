@@ -74,6 +74,8 @@ const (
 
 	AssetIDKey                     = attribute.Key("gram.asset.id")
 	AssetURLKey                    = attribute.Key("gram.asset.url")
+	MCPRegistryIDKey               = attribute.Key("gram.mcp_registry.id")
+	MCPRegistryURLKey              = attribute.Key("gram.mcp_registry.url")
 	CacheKeyKey                    = attribute.Key("gram.cache.key")
 	CacheNamespaceKey              = attribute.Key("gram.cache.namespace")
 	ComponentKey                   = attribute.Key("gram.component")
@@ -705,5 +707,8 @@ func SlogClickhouseQueryDurationMs(v float64) slog.Attr {
 	return slog.Float64(string(ClickhouseQueryDurationMsKey), v)
 }
 
-func SlogURL(v string) slog.Attr        { return slog.String("url", v) }
-func SlogRegistryID(v string) slog.Attr { return slog.String("registry_id", v) }
+func MCPRegistryID(v string) attribute.KeyValue { return MCPRegistryIDKey.String(v) }
+func SlogMCPRegistryID(v string) slog.Attr      { return slog.String(string(MCPRegistryIDKey), v) }
+
+func MCPRegistryURL(v string) attribute.KeyValue { return MCPRegistryURLKey.String(v) }
+func SlogMCPRegistryURL(v string) slog.Attr      { return slog.String(string(MCPRegistryURLKey), v) }
