@@ -62,6 +62,11 @@ function DialogContent({
         onClick={(e) => {
           e.stopPropagation();
         }}
+        // Prevent default focus behavior when dialog closes
+        // This fixes issues where focus tries to return to elements inside closed dropdowns/popovers
+        onCloseAutoFocus={(e) => {
+          e.preventDefault();
+        }}
         {...props}
       >
         {children}
