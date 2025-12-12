@@ -34,6 +34,13 @@ func TestNewTool(t *testing.T) {
 			wantErr:  nil,
 		},
 		{
+			name:     "valid externalmcp tool",
+			kind:     urn.ToolKindExternalMCP,
+			source:   "github",
+			toolName: "proxy",
+			wantErr:  nil,
+		},
+		{
 			name:     "valid with numbers",
 			kind:     urn.ToolKindFunction,
 			source:   "source123",
@@ -155,6 +162,11 @@ func TestTool_String(t *testing.T) {
 			name: "http tool",
 			tool: urn.NewTool(urn.ToolKindHTTP, "api-server", "get-users"),
 			want: "tools:http:api-server:get-users",
+		},
+		{
+			name: "externalmcp tool",
+			tool: urn.NewTool(urn.ToolKindExternalMCP, "github", "proxy"),
+			want: "tools:externalmcp:github:proxy",
 		},
 	}
 

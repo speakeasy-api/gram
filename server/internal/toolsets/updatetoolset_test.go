@@ -68,7 +68,8 @@ func TestToolsetsService_UpdateToolset_Success(t *testing.T) {
 	// Verify the tool URNs were updated
 	toolUrns := make([]string, len(result.Tools))
 	for i, tool := range result.Tools {
-		baseTool := conv.ToBaseTool(tool)
+		baseTool, err := conv.ToBaseTool(tool)
+		require.NoError(t, err)
 		toolUrns[i] = baseTool.ToolUrn
 	}
 	require.ElementsMatch(t, []string{tools[1].ToolUrn.String(), tools[2].ToolUrn.String()}, toolUrns)
@@ -121,7 +122,9 @@ func TestToolsetsService_UpdateToolset_PartialUpdate(t *testing.T) {
 	require.Equal(t, "Updated Name Only", result.Name)
 	require.Equal(t, "Original description", *result.Description) // Should remain unchanged
 	require.Len(t, result.Tools, 1, "should still have 1 tool")   // Should remain unchanged
-	require.Equal(t, tools[0].ToolUrn.String(), conv.ToBaseTool(result.Tools[0]).ToolUrn)
+	baseTool, err := conv.ToBaseTool(result.Tools[0])
+	require.NoError(t, err)
+	require.Equal(t, tools[0].ToolUrn.String(), baseTool.ToolUrn)
 }
 
 func TestToolsetsService_UpdateToolset_WithEnvironment(t *testing.T) {

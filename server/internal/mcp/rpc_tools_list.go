@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -76,6 +77,15 @@ func handleToolsList(
 		fallthrough
 	default:
 		tools = buildToolListEntries(toolset.Tools)
+
+		// Unfold proxy tools from external MCP servers
+		unfoldedTools, err := unfoldExternalMCPTools(ctx, logger, toolset.Tools, payload.oauthTokenInputs)
+		if err != nil {
+			logger.WarnContext(ctx, "failed to unfold external MCP tools", attr.SlogError(err))
+			// Continue with regular tools even if unfolding fails
+		} else {
+			tools = append(tools, unfoldedTools...)
+		}
 	}
 
 	result := &result[toolsListResult]{
@@ -103,12 +113,70 @@ func buildToolListEntries(tools []*types.Tool) []*toolListEntry {
 	return result
 }
 
+func unfoldExternalMCPTools(ctx context.Context, logger *slog.Logger, tools []*types.Tool, tokenInputs []oauthTokenInputs) ([]*toolListEntry, error) {
+	// Extract OAuth token for external MCP servers (use first token with empty security keys)
+	var oauthToken string
+	for _, t := range tokenInputs {
+		if len(t.securityKeys) == 0 && t.Token != "" {
+			oauthToken = t.Token
+			break
+		}
+	}
+
+	var result []*toolListEntry
+
+	for _, tool := range tools {
+		if !conv.IsProxyTool(tool) {
+			continue
+		}
+
+		proxy := tool.ExternalMcpToolDefinition
+
+		// Build session options with OAuth token if required
+		var opts *externalmcp.SessionOptions
+		if proxy.RequiresOauth && oauthToken != "" {
+			opts = &externalmcp.SessionOptions{
+				Authorization: "Bearer " + oauthToken,
+			}
+		}
+
+		// List tools from the external MCP server
+		externalTools, err := externalmcp.ListToolsFromProxy(ctx, logger, proxy.RemoteURL, opts)
+		if err != nil {
+			logger.WarnContext(ctx, "failed to list tools from external MCP",
+				attr.SlogToolURN(proxy.ToolUrn),
+				attr.SlogError(err),
+			)
+			continue
+		}
+
+		for _, extTool := range externalTools {
+			result = append(result, &toolListEntry{
+				Name:        proxy.Slug + ":" + extTool.Name,
+				Description: extTool.Description,
+				InputSchema: extTool.Schema,
+				Meta:        nil,
+			})
+		}
+	}
+
+	return result, nil
+}
+
 func toolToListEntry(tool *types.Tool) *toolListEntry {
 	if tool == nil {
 		return nil
 	}
 
-	name, description, inputSchema, meta := conv.ToToolListEntry(tool)
+	// Skip proxy tools - they are handled separately via unfoldExternalMCPTools
+	if conv.IsProxyTool(tool) {
+		return nil
+	}
+
+	name, description, inputSchema, meta, err := conv.ToToolListEntry(tool)
+	if err != nil {
+		return nil
+	}
 
 	return &toolListEntry{
 		Name:        name,
