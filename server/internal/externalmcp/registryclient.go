@@ -9,11 +9,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"time"
 
 	"github.com/google/uuid"
+	"github.com/hashicorp/go-retryablehttp"
+
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 // RegistryClient handles communication with external MCP registries.
@@ -25,10 +27,8 @@ type RegistryClient struct {
 // NewRegistryClient creates a new registry client.
 func NewRegistryClient(logger *slog.Logger) *RegistryClient {
 	return &RegistryClient{
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-		logger: logger,
+		httpClient: retryablehttp.NewClient().StandardClient(),
+		logger:     logger,
 	}
 }
 
@@ -125,7 +125,9 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch from registry: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer o11y.LogDefer(ctx, c.logger, func() error {
+		return resp.Body.Close()
+	})
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("registry returned status %d", resp.StatusCode)
