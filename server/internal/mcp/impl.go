@@ -406,23 +406,6 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		if !ok || authCtx == nil {
 			return oops.E(oops.CodeUnauthorized, nil, "no auth context found").Log(ctx, s.logger)
 		}
-
-		userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
-		if err != nil {
-			return oops.E(oops.CodeUnauthorized, err, "failed to get user info from access token").Log(ctx, s.logger)
-		}
-
-		hasOrgAccess := false
-		for _, org := range userInfo.Organizations {
-			if org.ID == toolset.OrganizationID {
-				hasOrgAccess = true
-				break
-			}
-		}
-
-		if !hasOrgAccess {
-			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
-		}
 	default:
 		if token != "" {
 			ctx, err = s.authenticateToken(ctx, token)

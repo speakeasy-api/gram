@@ -77,7 +77,7 @@ func (p *GramProvider) ExchangeToken(
 	session := sessions.Session{
 		SessionID:            idToken,
 		UserID:               userInfo.UserID,
-		ActiveOrganizationID: "",
+		ActiveOrganizationID: toolset.OrganizationID,
 	}
 
 	if err := p.sessions.StoreSession(ctx, session); err != nil {
