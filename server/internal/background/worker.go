@@ -187,6 +187,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ExecuteToolCall)
 	temporalWorker.RegisterActivity(activities.ExecuteModelCall)
 	temporalWorker.RegisterActivity(activities.LoadAgentTools)
+	temporalWorker.RegisterActivity(activities.RecordAgentExecution)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)

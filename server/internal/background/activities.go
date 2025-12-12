@@ -27,29 +27,30 @@ import (
 )
 
 type Activities struct {
-	collectPlatformUsageMetrics    *activities.CollectPlatformUsageMetrics
-	customDomainIngress            *activities.CustomDomainIngress
-	fallbackModelUsageTracking     *activities.FallbackModelUsageTracking
-	firePlatformUsageMetrics       *activities.FirePlatformUsageMetrics
-	freeTierReportingUsageMetrics  *activities.FreeTierReportingUsageMetrics
-	getAllOrganizations            *activities.GetAllOrganizations
-	getSlackProjectContext         *activities.GetSlackProjectContext
-	postSlackMessage               *activities.PostSlackMessage
-	processDeployment              *activities.ProcessDeployment
-	provisionFunctionsAccess       *activities.ProvisionFunctionsAccess
-	deployFunctionRunners          *activities.DeployFunctionRunners
-	reapFlyApps                    *activities.ReapFlyApps
-	refreshBillingUsage            *activities.RefreshBillingUsage
-	refreshOpenRouterKey           *activities.RefreshOpenRouterKey
-	slackChatCompletion            *activities.SlackChatCompletion
-	transitionDeployment           *activities.TransitionDeployment
-	validateDeployment             *activities.ValidateDeployment
-	verifyCustomDomain             *activities.VerifyCustomDomain
-	generateToolsetEmbeddings      *activities.GenerateToolsetEmbeddings
-	preprocessAgentsInput          *activities.PreprocessAgentsInput
-	executeToolCall                *activities.ExecuteToolCall
-	executeModelCall               *activities.ExecuteModelCall
-	loadAgentTools                 *activities.LoadAgentTools
+	collectPlatformUsageMetrics   *activities.CollectPlatformUsageMetrics
+	customDomainIngress           *activities.CustomDomainIngress
+	fallbackModelUsageTracking    *activities.FallbackModelUsageTracking
+	firePlatformUsageMetrics      *activities.FirePlatformUsageMetrics
+	freeTierReportingUsageMetrics *activities.FreeTierReportingUsageMetrics
+	getAllOrganizations           *activities.GetAllOrganizations
+	getSlackProjectContext        *activities.GetSlackProjectContext
+	postSlackMessage              *activities.PostSlackMessage
+	processDeployment             *activities.ProcessDeployment
+	provisionFunctionsAccess      *activities.ProvisionFunctionsAccess
+	deployFunctionRunners         *activities.DeployFunctionRunners
+	reapFlyApps                   *activities.ReapFlyApps
+	refreshBillingUsage           *activities.RefreshBillingUsage
+	refreshOpenRouterKey          *activities.RefreshOpenRouterKey
+	slackChatCompletion           *activities.SlackChatCompletion
+	transitionDeployment          *activities.TransitionDeployment
+	validateDeployment            *activities.ValidateDeployment
+	verifyCustomDomain            *activities.VerifyCustomDomain
+	generateToolsetEmbeddings     *activities.GenerateToolsetEmbeddings
+	preprocessAgentsInput         *activities.PreprocessAgentsInput
+	executeToolCall               *activities.ExecuteToolCall
+	executeModelCall              *activities.ExecuteModelCall
+	loadAgentTools                *activities.LoadAgentTools
+	recordAgentExecution          *activities.RecordAgentExecution
 }
 
 func NewActivities(
@@ -75,29 +76,30 @@ func NewActivities(
 	temporalClient client.Client,
 ) *Activities {
 	return &Activities{
-		collectPlatformUsageMetrics:    activities.NewCollectPlatformUsageMetrics(logger, db),
-		customDomainIngress:            activities.NewCustomDomainIngress(logger, db, k8sClient),
-		fallbackModelUsageTracking:     activities.NewFallbackModelUsageTracking(logger, openrouterProvisioner),
-		firePlatformUsageMetrics:       activities.NewFirePlatformUsageMetrics(logger, billingTracker),
-		freeTierReportingUsageMetrics:  activities.NewFreeTierReportingMetrics(logger, db, billingRepo, posthogClient),
-		getAllOrganizations:            activities.NewGetAllOrganizations(logger, db),
-		getSlackProjectContext:         activities.NewSlackProjectContextActivity(logger, db, slackClient),
-		postSlackMessage:               activities.NewPostSlackMessageActivity(logger, slackClient),
-		processDeployment:              activities.NewProcessDeployment(logger, tracerProvider, meterProvider, db, features, assetStorage, billingRepo),
-		provisionFunctionsAccess:       activities.NewProvisionFunctionsAccess(logger, db, encryption),
-		deployFunctionRunners:          activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
-		reapFlyApps:                    activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 3),
-		refreshBillingUsage:            activities.NewRefreshBillingUsage(logger, db, billingRepo),
-		refreshOpenRouterKey:           activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
-		slackChatCompletion:            activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
-		transitionDeployment:           activities.NewTransitionDeployment(logger, db),
-		validateDeployment:             activities.NewValidateDeployment(logger, db, billingRepo),
-		verifyCustomDomain:             activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
-		generateToolsetEmbeddings:      activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
-		preprocessAgentsInput:          activities.NewPreprocessAgentsInput(logger, agentsService, temporalClient),
-		executeToolCall:                activities.NewExecuteToolCall(logger, agentsService),
-		executeModelCall:               activities.NewExecuteModelCall(logger, agentsService),
-		loadAgentTools:                 activities.NewLoadAgentTools(logger, agentsService),
+		collectPlatformUsageMetrics:   activities.NewCollectPlatformUsageMetrics(logger, db),
+		customDomainIngress:           activities.NewCustomDomainIngress(logger, db, k8sClient),
+		fallbackModelUsageTracking:    activities.NewFallbackModelUsageTracking(logger, openrouterProvisioner),
+		firePlatformUsageMetrics:      activities.NewFirePlatformUsageMetrics(logger, billingTracker),
+		freeTierReportingUsageMetrics: activities.NewFreeTierReportingMetrics(logger, db, billingRepo, posthogClient),
+		getAllOrganizations:           activities.NewGetAllOrganizations(logger, db),
+		getSlackProjectContext:        activities.NewSlackProjectContextActivity(logger, db, slackClient),
+		postSlackMessage:              activities.NewPostSlackMessageActivity(logger, slackClient),
+		processDeployment:             activities.NewProcessDeployment(logger, tracerProvider, meterProvider, db, features, assetStorage, billingRepo),
+		provisionFunctionsAccess:      activities.NewProvisionFunctionsAccess(logger, db, encryption),
+		deployFunctionRunners:         activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
+		reapFlyApps:                   activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 3),
+		refreshBillingUsage:           activities.NewRefreshBillingUsage(logger, db, billingRepo),
+		refreshOpenRouterKey:          activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
+		slackChatCompletion:           activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
+		transitionDeployment:          activities.NewTransitionDeployment(logger, db),
+		validateDeployment:            activities.NewValidateDeployment(logger, db, billingRepo),
+		verifyCustomDomain:            activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
+		generateToolsetEmbeddings:     activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
+		preprocessAgentsInput:         activities.NewPreprocessAgentsInput(logger, agentsService, temporalClient),
+		executeToolCall:               activities.NewExecuteToolCall(logger, agentsService),
+		executeModelCall:              activities.NewExecuteModelCall(logger, agentsService),
+		loadAgentTools:                activities.NewLoadAgentTools(logger, agentsService),
+		recordAgentExecution:          activities.NewRecordAgentExecution(logger, db),
 	}
 }
 
@@ -191,4 +193,8 @@ func (a *Activities) LoadAgentTools(ctx context.Context, input activities.LoadAg
 
 func (a *Activities) FallbackModelUsageTracking(ctx context.Context, input activities.FallbackModelUsageTrackingArgs) error {
 	return a.fallbackModelUsageTracking.Do(ctx, input)
+}
+
+func (a *Activities) RecordAgentExecution(ctx context.Context, input activities.RecordAgentExecutionInput) error {
+	return a.recordAgentExecution.Do(ctx, input)
 }
