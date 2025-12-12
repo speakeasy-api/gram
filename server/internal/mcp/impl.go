@@ -397,6 +397,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 		// Access token is the session id based on our gram provider implementation
 		// we are effectively attempting to authenticate with this session
+		s.logger.InfoContext(ctx, fmt.Sprintf("Authenticating with access token: %s", token.AccessToken))
 		ctx, err = s.sessions.Authenticate(ctx, token.AccessToken, false)
 		if err != nil {
 			return oops.E(oops.CodeUnauthorized, err, "failed to authenticate access token").Log(ctx, s.logger)
