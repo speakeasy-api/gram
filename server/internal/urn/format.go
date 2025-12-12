@@ -11,15 +11,17 @@ const maxSegmentLength = 128
 type ToolKind string
 
 const (
-	ToolKindFunction ToolKind = "function"
-	ToolKindHTTP     ToolKind = "http"
-	ToolKindPrompt   ToolKind = "prompt"
+	ToolKindFunction    ToolKind = "function"
+	ToolKindHTTP        ToolKind = "http"
+	ToolKindPrompt      ToolKind = "prompt"
+	ToolKindExternalMCP ToolKind = "externalmcp"
 )
 
 var toolKinds = map[ToolKind]struct{}{
-	ToolKindFunction: {},
-	ToolKindHTTP:     {},
-	ToolKindPrompt:   {},
+	ToolKindFunction:    {},
+	ToolKindHTTP:        {},
+	ToolKindPrompt:      {},
+	ToolKindExternalMCP: {},
 }
 
 type ResourceKind string

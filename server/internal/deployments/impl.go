@@ -27,6 +27,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	externalmcpRepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -40,16 +42,18 @@ import (
 )
 
 type Service struct {
-	logger       *slog.Logger
-	tracer       trace.Tracer
-	db           *pgxpool.Pool
-	repo         *repo.Queries
-	auth         *auth.Auth
-	assets       *assetsRepo.Queries
-	packages     *packagesRepo.Queries
-	assetStorage assets.BlobStore
-	temporal     client.Client
-	posthog      *posthog.Posthog
+	logger         *slog.Logger
+	tracer         trace.Tracer
+	db             *pgxpool.Pool
+	repo           *repo.Queries
+	externalmcp    *externalmcpRepo.Queries
+	registryClient *externalmcp.RegistryClient
+	auth           *auth.Auth
+	assets         *assetsRepo.Queries
+	packages       *packagesRepo.Queries
+	assetStorage   assets.BlobStore
+	temporal       client.Client
+	posthog        *posthog.Posthog
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -67,16 +71,18 @@ func NewService(
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/deployments")
 
 	return &Service{
-		logger:       logger,
-		tracer:       tracer,
-		db:           db,
-		repo:         repo.New(db),
-		auth:         auth.New(logger, db, sessions),
-		assets:       assetsRepo.New(db),
-		packages:     packagesRepo.New(db),
-		assetStorage: assetStorage,
-		temporal:     temporal,
-		posthog:      posthog,
+		logger:         logger,
+		tracer:         tracer,
+		db:             db,
+		repo:           repo.New(db),
+		externalmcp:    externalmcpRepo.New(db),
+		registryClient: externalmcp.NewRegistryClient(logger),
+		auth:           auth.New(logger, db, sessions),
+		assets:         assetsRepo.New(db),
+		packages:       packagesRepo.New(db),
+		assetStorage:   assetStorage,
+		temporal:       temporal,
+		posthog:        posthog,
 	}
 }
 
@@ -133,6 +139,7 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 		Openapiv3ToolCount: dep.Openapiv3ToolCount,
 		FunctionsToolCount: dep.FunctionsToolCount,
 		FunctionsAssets:    dep.FunctionsAssets,
+		ExternalMcps:       dep.ExternalMcps,
 	}, nil
 }
 
@@ -415,8 +422,22 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		})
 	}
 
-	if len(newPackages) == 0 && len(newOpenAPIAssets) == 0 && len(newFunctions) == 0 {
-		return nil, oops.E(oops.CodeInvalid, nil, "at least one openapi document, functions file or package is required").Log(ctx, logger)
+	newExternalMCPs := make([]upsertExternalMCP, 0, len(form.ExternalMcps))
+	for _, add := range form.ExternalMcps {
+		registryID, err := uuid.Parse(add.RegistryID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing external mcp registry id").Log(ctx, s.logger)
+		}
+
+		newExternalMCPs = append(newExternalMCPs, upsertExternalMCP{
+			registryID: registryID,
+			name:       add.Name,
+			slug:       string(add.Slug),
+		})
+	}
+
+	if len(newPackages) == 0 && len(newOpenAPIAssets) == 0 && len(newFunctions) == 0 && len(newExternalMCPs) == 0 {
+		return nil, oops.E(oops.CodeInvalid, nil, "at least one openapi document, functions file, package, or external mcp is required").Log(ctx, logger)
 	}
 
 	newID, err := createDeployment(
@@ -435,6 +456,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		newOpenAPIAssets,
 		newFunctions,
 		newPackages,
+		newExternalMCPs,
 	)
 	if err != nil {
 		return nil, err
@@ -582,12 +604,30 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		packagesToExclude = append(packagesToExclude, id)
 	}
 
+	externalMCPsToUpsert := make([]upsertExternalMCP, 0, len(form.UpsertExternalMcps))
+	for _, add := range form.UpsertExternalMcps {
+		registryID, err := uuid.Parse(add.RegistryID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing external mcp registry id to upsert").Log(ctx, s.logger)
+		}
+
+		externalMCPsToUpsert = append(externalMCPsToUpsert, upsertExternalMCP{
+			registryID: registryID,
+			name:       add.Name,
+			slug:       string(add.Slug),
+		})
+	}
+
+	externalMCPsToExclude := make([]string, 0, len(form.ExcludeExternalMcps))
+	externalMCPsToExclude = append(externalMCPsToExclude, form.ExcludeExternalMcps...)
+
 	packagesChanged := len(packagesToUpsert) > 0 || len(packagesToExclude) > 0
 	openapiChanged := len(openapiv3ToUpsert) > 0 || len(openapiv3ToExclude) > 0
 	functionsChanged := len(functionsToUpsert) > 0 || len(functionsToExclude) > 0
+	externalMCPsChanged := len(externalMCPsToUpsert) > 0 || len(externalMCPsToExclude) > 0
 
-	if !packagesChanged && !openapiChanged && !functionsChanged {
-		return nil, oops.E(oops.CodeInvalid, nil, "at least one asset or package to upsert or exclude is required").Log(ctx, logger)
+	if !packagesChanged && !openapiChanged && !functionsChanged && !externalMCPsChanged {
+		return nil, oops.E(oops.CodeInvalid, nil, "at least one asset, package, or external mcp to upsert or exclude is required").Log(ctx, logger)
 	}
 
 	var cloneID uuid.UUID
@@ -613,6 +653,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 			openapiv3ToUpsert,
 			functionsToUpsert,
 			packagesToUpsert,
+			externalMCPsToUpsert,
 		)
 		if err != nil {
 			return nil, err
@@ -643,9 +684,11 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 			openapiv3ToUpsert,
 			functionsToUpsert,
 			packagesToUpsert,
+			externalMCPsToUpsert,
 			openapiv3ToExclude,
 			functionsToExclude,
 			packagesToExclude,
+			externalMCPsToExclude,
 		)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment").Log(ctx, logger)
@@ -735,9 +778,11 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 		[]upsertOpenAPIv3{},
 		[]upsertFunctions{},
 		[]upsertPackage{},
+		[]upsertExternalMCP{},
 		[]uuid.UUID{},
 		[]uuid.UUID{},
 		[]uuid.UUID{},
+		[]string{},
 	)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment").Log(ctx, logger)

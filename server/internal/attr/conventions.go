@@ -116,6 +116,7 @@ const (
 	OAuthGrantKey                  = attribute.Key("gram.oauth.grant")
 	OAuthProviderKey               = attribute.Key("gram.oauth.provider")
 	OAuthRedirectURIFullKey        = attribute.Key("gram.oauth.redirect_uri.full")
+	OAuthRequiredKey               = attribute.Key("gram.oauth.required")
 	OAuthScopeKey                  = attribute.Key("gram.oauth.scope")
 	OpenAPIMethodKey               = attribute.Key("gram.openapi.method")
 	OpenAPIOperationIDKey          = attribute.Key("gram.openapi.operation_id")
@@ -504,6 +505,9 @@ func SlogOAuthRedirectURIFull(v string) slog.Attr {
 	return slog.String(string(OAuthRedirectURIFullKey), v)
 }
 
+func OAuthRequired(v bool) attribute.KeyValue { return OAuthRequiredKey.Bool(v) }
+func SlogOAuthRequired(v bool) slog.Attr      { return slog.Bool(string(OAuthRequiredKey), v) }
+
 func OAuthScope(v string) attribute.KeyValue { return OAuthScopeKey.String(v) }
 func SlogOAuthScope(v string) slog.Attr      { return slog.String(string(OAuthScopeKey), v) }
 
@@ -705,5 +709,8 @@ func SlogClickhouseQueryDurationMs(v float64) slog.Attr {
 	return slog.Float64(string(ClickhouseQueryDurationMsKey), v)
 }
 
-func SlogURL(v string) slog.Attr        { return slog.String("url", v) }
-func SlogRegistryID(v string) slog.Attr { return slog.String("registry_id", v) }
+func SlogURL(v string) slog.Attr             { return slog.String("url", v) }
+func SlogRegistryID(v string) slog.Attr      { return slog.String("registry_id", v) }
+func SlogExternalMCPID(v string) slog.Attr   { return slog.String("external_mcp_id", v) }
+func SlogExternalMCPSlug(v string) slog.Attr { return slog.String("external_mcp_slug", v) }
+func SlogExternalMCPName(v string) slog.Attr { return slog.String("external_mcp_name", v) }

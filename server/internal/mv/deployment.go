@@ -35,9 +35,11 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 	attachedOpenAPIv3 := make([]*types.OpenAPIv3DeploymentAsset, 0, len(rows))
 	attachedFunctionsAssets := make([]*types.DeploymentFunctions, 0, len(rows))
 	attachedPackages := make([]*types.DeploymentPackage, 0, len(rows))
+	attachedExternalMCPs := make([]*types.DeploymentExternalMCP, 0, len(rows))
 	var seenOpenAPIv3 = make(map[uuid.UUID]bool)
 	var seenFunctions = make(map[uuid.UUID]bool)
 	var seenPackages = make(map[uuid.UUID]bool)
+	var seenExternalMCPs = make(map[uuid.UUID]bool)
 
 	for _, r := range rows {
 		depOpenAPIv3ID := r.DeploymentsOpenapiv3AssetID.UUID
@@ -99,6 +101,26 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 			})
 			seenPackages[pkgID] = true
 		}
+
+		externalMCPID := r.ExternalMcpID.UUID
+		if externalMCPID != uuid.Nil && !seenExternalMCPs[externalMCPID] {
+			if err := inv.Check(
+				"describe deployment external mcp",
+				"valid registry id", r.ExternalMcpRegistryID.Valid && r.ExternalMcpRegistryID.UUID != uuid.Nil,
+				"valid name", r.ExternalMcpName.Valid && r.ExternalMcpName.String != "",
+				"valid slug", r.ExternalMcpSlug.Valid && r.ExternalMcpSlug.String != "",
+			); err != nil {
+				return nil, oops.E(oops.CodeInvariantViolation, err, "invalid state for deployment external mcp").Log(ctx, logger)
+			}
+
+			attachedExternalMCPs = append(attachedExternalMCPs, &types.DeploymentExternalMCP{
+				ID:         externalMCPID.String(),
+				RegistryID: r.ExternalMcpRegistryID.UUID.String(),
+				Name:       r.ExternalMcpName.String,
+				Slug:       types.Slug(r.ExternalMcpSlug.String),
+			})
+			seenExternalMCPs[externalMCPID] = true
+		}
 	}
 
 	return &types.Deployment{
@@ -120,5 +142,6 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 		Openapiv3ToolCount: openapiv3ToolCount,
 		FunctionsToolCount: functionsToolCount,
 		FunctionsAssets:    attachedFunctionsAssets,
+		ExternalMcps:       attachedExternalMCPs,
 	}, nil
 }

@@ -754,7 +754,7 @@ func TestDeploymentsService_Evolve_Validation(t *testing.T) {
 		})
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "at least one asset or package to upsert or exclude is required")
+		require.Contains(t, err.Error(), "at least one asset, package, or external mcp to upsert or exclude is required")
 	})
 
 	t.Run("invalid asset ID to upsert", func(t *testing.T) {

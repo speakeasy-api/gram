@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  DeploymentExternalMCP,
+  DeploymentExternalMCP$inboundSchema,
+} from "./deploymentexternalmcp.js";
+import {
   DeploymentFunctions,
   DeploymentFunctions$inboundSchema,
 } from "./deploymentfunctions.js";
@@ -33,6 +37,10 @@ export type GetDeploymentResult = {
    * The external ID to refer to the deployment. This can be a git commit hash for example.
    */
   externalId?: string | undefined;
+  /**
+   * The external MCP servers that were deployed.
+   */
+  externalMcps?: Array<DeploymentExternalMCP> | undefined;
   /**
    * The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
    */
@@ -104,6 +112,7 @@ export const GetDeploymentResult$inboundSchema: z.ZodType<
   cloned_from: z.string().optional(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   external_id: z.string().optional(),
+  external_mcps: z.array(DeploymentExternalMCP$inboundSchema).optional(),
   external_url: z.string().optional(),
   functions_assets: z.array(DeploymentFunctions$inboundSchema).optional(),
   functions_tool_count: z.number().int(),
@@ -124,6 +133,7 @@ export const GetDeploymentResult$inboundSchema: z.ZodType<
     "cloned_from": "clonedFrom",
     "created_at": "createdAt",
     "external_id": "externalId",
+    "external_mcps": "externalMcps",
     "external_url": "externalUrl",
     "functions_assets": "functionsAssets",
     "functions_tool_count": "functionsToolCount",

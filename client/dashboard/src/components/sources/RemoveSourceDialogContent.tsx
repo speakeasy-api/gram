@@ -8,8 +8,8 @@ import { NamedAsset } from "./SourceCard";
 interface RemoveSourceDialogContentProps {
   asset: NamedAsset;
   onConfirmRemoval: (
-    assetId: string,
-    type: "openapi" | "function",
+    assetIdOrSlug: string,
+    type: "openapi" | "function" | "externalmcp",
   ) => Promise<void>;
 }
 
@@ -22,11 +22,17 @@ export function RemoveSourceDialogContent({
 
   const sourceSlug = slugify(asset.name);
   const sourceLabel =
-    asset.type === "openapi" ? "API Source" : "Function Source";
+    asset.type === "openapi"
+      ? "API Source"
+      : asset.type === "function"
+        ? "Function Source"
+        : "External MCP";
 
   const handleConfirm = async () => {
     setPending(true);
-    await onConfirmRemoval(asset.id, asset.type);
+    // For external MCPs, pass the slug; for others, pass the asset ID
+    const identifier = asset.type === "externalmcp" ? asset.slug : asset.id;
+    await onConfirmRemoval(identifier, asset.type);
     setPending(false);
     setInputMatches(false);
   };
@@ -54,13 +60,19 @@ export function RemoveSourceDialogContent({
     );
   };
 
+  const sourceTypeDescription =
+    asset.type === "openapi"
+      ? "API"
+      : asset.type === "function"
+        ? "gram function"
+        : "external MCP";
+
   return (
     <>
       <Dialog.Header>
         <Dialog.Title>Delete {sourceLabel}</Dialog.Title>
         <Dialog.Description>
-          This will permanently delete the{" "}
-          {asset.type === "openapi" ? "API" : "gram function"} source and
+          This will permanently delete the {sourceTypeDescription} source and
           related resources such as tools within toolsets.
         </Dialog.Description>
       </Dialog.Header>
