@@ -62,6 +62,16 @@ export function McpToolsetCard({ toolset }: { toolset: ToolsetForMCP }) {
     }, 150);
   };
 
+  const handleCloseModal = (e?: React.MouseEvent) => {
+    // Stop all event propagation
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    // Close the modal
+    setMcpModalOpen(false);
+  };
+
   return (
     <>
       <ServerCard
@@ -76,13 +86,19 @@ export function McpToolsetCard({ toolset }: { toolset: ToolsetForMCP }) {
         ]}
       />
       <Dialog open={mcpModalOpen} onOpenChange={setMcpModalOpen}>
-        <Dialog.Content className="!max-w-3xl !p-10">
+        <Dialog.Content
+          className="!max-w-3xl !p-10"
+          onInteractOutside={(e) => {
+            // Prevent closing via clicking outside
+            e.preventDefault();
+          }}
+        >
           <Dialog.Header>
             <Dialog.Title>MCP Config</Dialog.Title>
           </Dialog.Header>
           <MCPJson toolset={toolset} fullWidth />
           <div className="flex justify-end mt-4">
-            <Button onClick={() => setMcpModalOpen(false)}>Close</Button>
+            <Button onClick={handleCloseModal}>Close</Button>
           </div>
         </Dialog.Content>
       </Dialog>
