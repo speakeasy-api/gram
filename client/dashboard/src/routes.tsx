@@ -35,6 +35,7 @@ import Billing from "./pages/billing/Billing";
 import Logs from "./pages/logs/Logs.tsx";
 import { SourcesRoot, SourcesPage } from "./pages/sources/Sources";
 import SourceDetails from "./pages/sources/SourceDetails";
+import Catalog, { CatalogRoot } from "./pages/catalog/Catalog";
 
 type AppRouteBasic = {
   title: string;
@@ -196,6 +197,13 @@ const ROUTE_STRUCTURE = {
         component: SourceDetails,
       },
     },
+  },
+  catalog: {
+    title: "Catalog",
+    url: "catalog",
+    icon: "store",
+    component: CatalogRoot,
+    indexComponent: Catalog,
   },
   mcp: {
     title: "MCP",
