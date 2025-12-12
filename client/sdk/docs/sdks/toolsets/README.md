@@ -135,7 +135,6 @@ async function run() {
     slug: "<value>",
     addOAuthProxyServerRequestBody: {
       oauthProxyServer: {
-        environmentSlug: "<value>",
         providerType: "custom",
         slug: "<value>",
       },
@@ -165,7 +164,6 @@ async function run() {
     slug: "<value>",
     addOAuthProxyServerRequestBody: {
       oauthProxyServer: {
-        environmentSlug: "<value>",
         providerType: "custom",
         slug: "<value>",
       },

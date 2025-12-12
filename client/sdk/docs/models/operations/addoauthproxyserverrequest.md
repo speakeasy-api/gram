@@ -9,7 +9,6 @@ let value: AddOAuthProxyServerRequest = {
   slug: "<value>",
   addOAuthProxyServerRequestBody: {
     oauthProxyServer: {
-      environmentSlug: "<value>",
       providerType: "gram",
       slug: "<value>",
     },

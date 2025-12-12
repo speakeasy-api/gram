@@ -39935,7 +39935,6 @@ definitions:
         required:
             - slug
             - provider_type
-            - environment_slug
     OpenAPIv3DeploymentAsset:
         title: OpenAPIv3DeploymentAsset
         type: object

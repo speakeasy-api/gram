@@ -21,5 +21,5 @@ type OAuthProxyServerForm struct {
 	// Auth methods (client_secret_basic or client_secret_post)
 	TokenEndpointAuthMethodsSupported []string
 	// The environment slug to store secrets
-	EnvironmentSlug Slug
+	EnvironmentSlug *Slug
 }

@@ -2983,7 +2983,10 @@ func unmarshalOAuthProxyServerFormRequestBodyToTypesOAuthProxyServerForm(v *OAut
 		ProviderType:          *v.ProviderType,
 		AuthorizationEndpoint: v.AuthorizationEndpoint,
 		TokenEndpoint:         v.TokenEndpoint,
-		EnvironmentSlug:       types.Slug(*v.EnvironmentSlug),
+	}
+	if v.EnvironmentSlug != nil {
+		environmentSlug := types.Slug(*v.EnvironmentSlug)
+		res.EnvironmentSlug = &environmentSlug
 	}
 	if v.ScopesSupported != nil {
 		res.ScopesSupported = make([]string, len(v.ScopesSupported))

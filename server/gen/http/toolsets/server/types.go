@@ -5392,9 +5392,6 @@ func ValidateOAuthProxyServerFormRequestBody(body *OAuthProxyServerFormRequestBo
 	if body.ProviderType == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("provider_type", "body"))
 	}
-	if body.EnvironmentSlug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("environment_slug", "body"))
-	}
 	if body.Slug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
 	}

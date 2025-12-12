@@ -3016,7 +3016,10 @@ func marshalTypesOAuthProxyServerFormToOAuthProxyServerFormRequestBody(v *types.
 		ProviderType:          v.ProviderType,
 		AuthorizationEndpoint: v.AuthorizationEndpoint,
 		TokenEndpoint:         v.TokenEndpoint,
-		EnvironmentSlug:       string(v.EnvironmentSlug),
+	}
+	if v.EnvironmentSlug != nil {
+		environmentSlug := string(*v.EnvironmentSlug)
+		res.EnvironmentSlug = &environmentSlug
 	}
 	if v.ScopesSupported != nil {
 		res.ScopesSupported = make([]string, len(v.ScopesSupported))
@@ -3043,7 +3046,10 @@ func marshalOAuthProxyServerFormRequestBodyToTypesOAuthProxyServerForm(v *OAuthP
 		ProviderType:          v.ProviderType,
 		AuthorizationEndpoint: v.AuthorizationEndpoint,
 		TokenEndpoint:         v.TokenEndpoint,
-		EnvironmentSlug:       types.Slug(v.EnvironmentSlug),
+	}
+	if v.EnvironmentSlug != nil {
+		environmentSlug := types.Slug(*v.EnvironmentSlug)
+		res.EnvironmentSlug = &environmentSlug
 	}
 	if v.ScopesSupported != nil {
 		res.ScopesSupported = make([]string, len(v.ScopesSupported))

@@ -2821,7 +2821,7 @@ type OAuthProxyServerFormRequestBody struct {
 	// Auth methods (client_secret_basic or client_secret_post)
 	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
 	// The environment slug to store secrets
-	EnvironmentSlug string `form:"environment_slug" json:"environment_slug" xml:"environment_slug"`
+	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
 }
 
 // NewCreateToolsetRequestBody builds the HTTP request body from the payload of
@@ -9266,9 +9266,13 @@ func ValidateOAuthProxyServerFormRequestBody(body *OAuthProxyServerFormRequestBo
 	if !(body.ProviderType == "custom" || body.ProviderType == "gram") {
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider_type", body.ProviderType, []any{"custom", "gram"}))
 	}
-	err = goa.MergeErrors(err, goa.ValidatePattern("body.environment_slug", body.EnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
-	if utf8.RuneCountInString(body.EnvironmentSlug) > 40 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.environment_slug", body.EnvironmentSlug, utf8.RuneCountInString(body.EnvironmentSlug), 40, false))
+	if body.EnvironmentSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.environment_slug", *body.EnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.EnvironmentSlug != nil {
+		if utf8.RuneCountInString(*body.EnvironmentSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.environment_slug", *body.EnvironmentSlug, utf8.RuneCountInString(*body.EnvironmentSlug), 40, false))
+		}
 	}
 	return
 }

@@ -8,6 +8,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Link } from "@/components/ui/link";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TextArea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -33,19 +34,9 @@ import {
   useRemoveOAuthServerMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
-import {
-  Badge,
-  Button,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  Grid,
-  Icon,
-  Stack,
-} from "@speakeasy-api/moonshine";
+import { Badge, Button, Grid, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, Globe, Trash2 } from "lucide-react";
+import { Globe, Trash2, CheckIcon } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
@@ -62,13 +53,12 @@ export function MCPDetailPage() {
 
   const { data: toolset, isLoading } = useToolset(toolsetSlug);
 
-  const [isExternalOAuthModalOpen, setIsExternalOAuthModalOpen] =
-    useState(false);
-  const [isOAuthProxyModalOpen, setIsOAuthProxyModalOpen] = useState(false);
+  const isOAuthConnected = !!(
+    toolset?.oauthProxyServer || toolset?.externalOauthServer
+  );
+  const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
+  const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
-  const [isGramOAuthProxyModalOpen, setIsGramOAuthProxyModalOpen] =
-    useState(false);
-  const [isOAuthDropdownOpen, setIsOAuthDropdownOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(onboardingStepStorageKeys.configure, "true");
@@ -91,135 +81,40 @@ export function MCPDetailPage() {
       >
         <Heading variant="h2">MCP Details</Heading>
         <Stack direction="horizontal" gap={2}>
-          <DropdownMenu
-            open={isOAuthDropdownOpen}
-            onOpenChange={setIsOAuthDropdownOpen}
-          >
-            <DropdownMenuTrigger asChild>
-              <Button variant="secondary" size="md">
-                Configure OAuth
-                <Icon name="chevron-down" className="ml-2 size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    <DropdownMenuItem
-                      disabled={
-                        !availableOAuthAuthCode || !toolset?.mcpIsPublic
-                      }
-                      onClick={() => {
-                        setIsOAuthDropdownOpen(false);
-                        if (
-                          toolset?.externalOauthServer &&
-                          !toolset?.oauthProxyServer
-                        ) {
-                          setIsOAuthDetailsModalOpen(true);
-                        } else {
-                          setIsExternalOAuthModalOpen(true);
-                        }
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <span className="flex items-center justify-between w-full">
-                        <span>External OAuth</span>
-                        {toolset?.externalOauthServer &&
-                          !toolset?.oauthProxyServer && (
-                            <Check className="size-4" />
-                          )}
-                      </span>
-                    </DropdownMenuItem>
-                  </div>
-                </TooltipTrigger>
-                {(!availableOAuthAuthCode || !toolset?.mcpIsPublic) && (
-                  <TooltipContent side="left">
-                    {!availableOAuthAuthCode
-                      ? "This MCP server does not require the OAuth authorization code flow"
-                      : "Only available for public MCP servers"}
-                  </TooltipContent>
-                )}
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    <DropdownMenuItem
-                      disabled={
-                        !availableOAuthAuthCode || !toolset?.mcpIsPublic
-                      }
-                      onClick={() => {
-                        setIsOAuthDropdownOpen(false);
-                        if (
-                          toolset?.oauthProxyServer &&
-                          toolset?.oauthProxyServer.oauthProxyProviders?.[0]
-                            ?.providerType !== "gram"
-                        ) {
-                          setIsOAuthDetailsModalOpen(true);
-                        } else {
-                          setIsOAuthProxyModalOpen(true);
-                        }
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <span className="flex items-center justify-between w-full">
-                        <span>OAuth Proxy</span>
-                        {toolset?.oauthProxyServer &&
-                          toolset?.oauthProxyServer.oauthProxyProviders?.[0]
-                            ?.providerType !== "gram" && (
-                            <Check className="size-4" />
-                          )}
-                      </span>
-                    </DropdownMenuItem>
-                  </div>
-                </TooltipTrigger>
-                {(!availableOAuthAuthCode || !toolset?.mcpIsPublic) && (
-                  <TooltipContent side="left">
-                    {!availableOAuthAuthCode
-                      ? "This MCP server does not require the OAuth authorization code flow"
-                      : "Only available for public MCP servers"}
-                  </TooltipContent>
-                )}
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    <DropdownMenuItem
-                      disabled={toolset?.mcpIsPublic}
-                      onClick={() => {
-                        setIsOAuthDropdownOpen(false);
-                        if (
-                          toolset?.oauthProxyServer &&
-                          toolset?.oauthProxyServer.oauthProxyProviders?.[0]
-                            ?.providerType === "gram"
-                        ) {
-                          setIsOAuthDetailsModalOpen(true);
-                        } else {
-                          setIsGramOAuthProxyModalOpen(true);
-                        }
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <span className="flex items-center justify-between w-full">
-                        <span>Gram OAuth</span>
-                        {toolset?.oauthProxyServer &&
-                          toolset?.oauthProxyServer.oauthProxyProviders?.[0]
-                            ?.providerType === "gram" && (
-                            <Check className="size-4" />
-                          )}
-                      </span>
-                    </DropdownMenuItem>
-                  </div>
-                </TooltipTrigger>
-                {toolset?.mcpIsPublic && (
-                  <TooltipContent side="left">
-                    Only available for private MCP servers
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {!toolset?.mcpEnabled ||
+              (toolset.mcpIsPublic && !availableOAuthAuthCode) ? (
+                <span className="inline-block">
+                  <Button variant="secondary" size="md" disabled={true}>
+                    {isOAuthConnected ? "OAuth Connected" : "Configure OAuth"}
+                  </Button>
+                </span>
+              ) : (
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={() =>
+                    isOAuthConnected
+                      ? setIsOAuthDetailsModalOpen(true)
+                      : toolset.mcpIsPublic
+                        ? setIsOAuthModalOpen(true)
+                        : setIsGramOAuthModalOpen(true)
+                  }
+                >
+                  {isOAuthConnected ? "OAuth Connected" : "Configure OAuth"}
+                </Button>
+              )}
+            </TooltipTrigger>
+            {(!toolset?.mcpEnabled ||
+              (toolset.mcpIsPublic && !availableOAuthAuthCode)) && (
+              <TooltipContent>
+                {!toolset?.mcpEnabled
+                  ? "Enable server to configure OAuth"
+                  : "This MCP server does not require the OAuth authorization code flow"}
+              </TooltipContent>
+            )}
+          </Tooltip>
           <MCPEnableButton toolset={toolset} />
         </Stack>
       </Stack>
@@ -233,24 +128,20 @@ export function MCPDetailPage() {
         <ToolsetCard toolset={toolset} />
       </PageSection>
       <MCPDetails toolset={toolset} />
-      <ExternalOAuthModal
-        isOpen={isExternalOAuthModalOpen}
-        onClose={() => setIsExternalOAuthModalOpen(false)}
+      <ConnectOAuthModal
+        isOpen={isOAuthModalOpen}
+        onClose={() => setIsOAuthModalOpen(false)}
+        toolsetSlug={toolset.slug}
         toolset={toolset}
       />
-      <OAuthProxyModal
-        isOpen={isOAuthProxyModalOpen}
-        onClose={() => setIsOAuthProxyModalOpen(false)}
+      <GramOAuthProxyModal
+        isOpen={isGramOAuthModalOpen}
+        onClose={() => setIsGramOAuthModalOpen(false)}
         toolset={toolset}
       />
       <OAuthDetailsModal
         isOpen={isOAuthDetailsModalOpen}
         onClose={() => setIsOAuthDetailsModalOpen(false)}
-        toolset={toolset}
-      />
-      <GramOAuthProxyModal
-        isOpen={isGramOAuthProxyModalOpen}
-        onClose={() => setIsGramOAuthProxyModalOpen(false)}
         toolset={toolset}
       />
     </Stack>
@@ -920,446 +811,6 @@ export const randSlug = () => {
   return rand;
 };
 
-function ExternalOAuthModal({
-  isOpen,
-  onClose,
-  toolset,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  toolset: Toolset;
-}) {
-  const session = useSession();
-  const queryClient = useQueryClient();
-  const telemetry = useTelemetry();
-  const isAccountUpgrade = session.gramAccountType === "free";
-
-  const [externalSlug, setExternalSlug] = useState("");
-  const [metadataJson, setMetadataJson] = useState("");
-  const [jsonError, setJsonError] = useState<string | null>(null);
-
-  const hasMultipleOAuth2AuthCode =
-    toolset.oauthEnablementMetadata?.oauth2SecurityCount > 1;
-
-  const addExternalOAuthMutation = useAddExternalOAuthServerMutation({
-    onSuccess: () => {
-      invalidateAllToolset(queryClient);
-      toast.success("External OAuth server configured successfully");
-      telemetry.capture("mcp_event", {
-        action: "external_oauth_configured",
-        slug: toolset.slug,
-      });
-      onClose();
-    },
-    onError: (error) => {
-      console.error("Failed to configure external OAuth:", error);
-      toast.error(
-        error instanceof Error ? error.message : "Failed to configure OAuth",
-      );
-    },
-  });
-
-  const handleExternalSubmit = () => {
-    // Validate JSON
-    let parsedMetadata;
-    try {
-      parsedMetadata = JSON.parse(metadataJson);
-    } catch (_e) {
-      setJsonError("Invalid JSON format");
-      return;
-    }
-
-    if (!externalSlug.trim()) {
-      toast.error("Please provide a slug for the OAuth server");
-      return;
-    }
-
-    // Validate required OAuth endpoints
-    const requiredEndpoints = [
-      "authorization_endpoint",
-      "token_endpoint",
-      "registration_endpoint",
-    ];
-    const missingEndpoints = requiredEndpoints.filter(
-      (endpoint) => !parsedMetadata[endpoint],
-    );
-
-    if (missingEndpoints.length > 0) {
-      setJsonError(
-        `Missing required endpoints: ${missingEndpoints.join(", ")}`,
-      );
-      return;
-    }
-
-    setJsonError(null);
-    addExternalOAuthMutation.mutate({
-      request: {
-        slug: toolset.slug,
-        addExternalOAuthServerRequestBody: {
-          externalOauthServer: {
-            slug: externalSlug,
-            metadata: parsedMetadata,
-          },
-        },
-      },
-    });
-  };
-
-  // For free accounts, show the FeatureRequestModal
-  if (isAccountUpgrade) {
-    return (
-      <FeatureRequestModal
-        isOpen={isOpen}
-        onClose={onClose}
-        title="External OAuth"
-        description="A Managed OAuth integration requires upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
-        actionType="mcp_oauth_integration"
-        icon={Globe}
-        telemetryData={{ slug: toolset.slug }}
-        accountUpgrade={isAccountUpgrade}
-      />
-    );
-  }
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <Dialog.Content className="max-w-6xl max-h-[90vh] overflow-hidden">
-        <Dialog.Header>
-          <Dialog.Title>External OAuth Server</Dialog.Title>
-        </Dialog.Header>
-
-        <div className="space-y-4 overflow-auto max-h-[60vh]">
-          {hasMultipleOAuth2AuthCode && (
-            <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
-              <Type small className="text-red-600 mt-1">
-                Not Supported: This MCP server has{" "}
-                {toolset.oauthEnablementMetadata?.oauth2SecurityCount} OAuth2
-                security schemes detected.
-              </Type>
-            </div>
-          )}
-          <div>
-            <Type className="font-medium mb-2">
-              External OAuth Server Configuration
-            </Type>
-            <Type muted small className="mb-4">
-              Configure your MCP server to use an external authorization server
-              if your API fits the very specific MCP OAuth requirements.{" "}
-              <Link
-                external
-                to="https://docs.getgram.ai/host-mcp/adding-oauth#authorization-code"
-              >
-                Docs
-              </Link>
-            </Type>
-
-            <Stack gap={4}>
-              <div>
-                <Type className="font-medium mb-2">OAuth Server Slug</Type>
-                <Input
-                  placeholder="my-oauth-server"
-                  value={externalSlug}
-                  onChange={setExternalSlug}
-                  maxLength={40}
-                />
-              </div>
-
-              <div>
-                <Type className="font-medium mb-2">
-                  OAuth Authorization Server Metadata
-                </Type>
-                {jsonError && (
-                  <Type className="!text-red-500 text-sm mt-1">
-                    {jsonError}
-                  </Type>
-                )}
-                <TextArea
-                  placeholder={`{
-  "issuer": "https://your-oauth-server.com",
-  "authorization_endpoint": "https://your-oauth-server.com/oauth/authorize",
-  "registration_endpoint": "https://your-oauth-server.com/oauth/register",
-  "token_endpoint": "https://your-oauth-server.com/oauth/token",
-  "scopes_supported": ["read", "write"],
-  "response_types_supported": ["code"],
-  "grant_types_supported": ["authorization_code"],
-  "token_endpoint_auth_methods_supported": [
-    "client_secret_post"
-  ],
-  "code_challenge_methods_supported": [
-    "plain",
-    "S256"
-  ]
-}`}
-                  value={metadataJson}
-                  onChange={(value: string) => {
-                    setMetadataJson(value);
-                    setJsonError(null);
-                  }}
-                  rows={12}
-                  className="font-mono text-sm"
-                />
-              </div>
-            </Stack>
-          </div>
-        </div>
-
-        <Dialog.Footer className="flex justify-end">
-          <Button
-            onClick={handleExternalSubmit}
-            disabled={
-              hasMultipleOAuth2AuthCode ||
-              addExternalOAuthMutation.isPending ||
-              !externalSlug.trim() ||
-              !metadataJson.trim()
-            }
-          >
-            {addExternalOAuthMutation.isPending
-              ? "Configuring..."
-              : "Configure External OAuth"}
-          </Button>
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
-  );
-}
-
-function OAuthProxyModal({
-  isOpen,
-  onClose,
-  toolset,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  toolset: Toolset;
-}) {
-  const session = useSession();
-  const queryClient = useQueryClient();
-  const telemetry = useTelemetry();
-  const isAccountUpgrade = session.gramAccountType === "free";
-
-  const [proxySlug, setProxySlug] = useState("");
-  const [proxyAuthorizationEndpoint, setProxyAuthorizationEndpoint] =
-    useState("");
-  const [proxyTokenEndpoint, setProxyTokenEndpoint] = useState("");
-  const [proxyScopes, setProxyScopes] = useState("");
-  const [proxyTokenAuthMethod, setProxyTokenAuthMethod] =
-    useState("client_secret_post");
-  const [proxyEnvironmentSlug, setProxyEnvironmentSlug] = useState(
-    toolset.defaultEnvironmentSlug ?? "",
-  );
-  const [proxyError, setProxyError] = useState<string | null>(null);
-
-  const addOAuthProxyMutation = useAddOAuthProxyServerMutation({
-    onSuccess: () => {
-      invalidateAllToolset(queryClient);
-      toast.success("OAuth proxy configured successfully");
-      telemetry.capture("mcp_event", {
-        action: "oauth_proxy_configured",
-        slug: toolset.slug,
-      });
-      onClose();
-    },
-    onError: (error) => {
-      console.error("Failed to configure OAuth proxy:", error);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to configure OAuth proxy",
-      );
-    },
-  });
-
-  const handleProxySubmit = () => {
-    setProxyError(null);
-
-    if (!proxySlug.trim()) {
-      setProxyError("Please provide a slug for the OAuth proxy server");
-      return;
-    }
-
-    if (!proxyAuthorizationEndpoint.trim()) {
-      setProxyError("Authorization endpoint is required");
-      return;
-    }
-
-    if (!proxyTokenEndpoint.trim()) {
-      setProxyError("Token endpoint is required");
-      return;
-    }
-
-    if (!proxyEnvironmentSlug.trim()) {
-      setProxyError("Environment slug is required");
-      return;
-    }
-
-    const scopesArray = proxyScopes
-      .split(",")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-
-    if (scopesArray.length === 0) {
-      setProxyError("At least one scope is required");
-      return;
-    }
-
-    addOAuthProxyMutation.mutate({
-      request: {
-        slug: toolset.slug,
-        addOAuthProxyServerRequestBody: {
-          oauthProxyServer: {
-            slug: proxySlug,
-            providerType: "custom",
-            authorizationEndpoint: proxyAuthorizationEndpoint,
-            tokenEndpoint: proxyTokenEndpoint,
-            scopesSupported: scopesArray,
-            tokenEndpointAuthMethodsSupported: [proxyTokenAuthMethod],
-            environmentSlug: proxyEnvironmentSlug,
-          },
-        },
-      },
-    });
-  };
-
-  // For free accounts, show the FeatureRequestModal
-  if (isAccountUpgrade) {
-    return (
-      <FeatureRequestModal
-        isOpen={isOpen}
-        onClose={onClose}
-        title="OAuth Proxy"
-        description="A Managed OAuth integration requires upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
-        actionType="mcp_oauth_integration"
-        icon={Globe}
-        telemetryData={{ slug: toolset.slug }}
-        accountUpgrade={isAccountUpgrade}
-      />
-    );
-  }
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <Dialog.Content className="max-w-6xl max-h-[90vh] overflow-hidden">
-        <Dialog.Header>
-          <Dialog.Title>OAuth Proxy Server</Dialog.Title>
-        </Dialog.Header>
-
-        <div className="space-y-4 overflow-auto max-h-[60vh]">
-          <div>
-            <Type className="font-medium mb-2">
-              OAuth Proxy Server Configuration
-            </Type>
-            <Type muted small className="mb-4">
-              Configure an OAuth proxy server to handle OAuth authentication for
-              APIs that don't natively support MCP OAuth requirements. Getting
-              proxy settings correct can be tricky. Need help?{" "}
-              <Link
-                external
-                to="https://calendly.com/d/ctgg-5dv-3kw/intro-to-gram-call"
-              >
-                Book a meeting
-              </Link>
-            </Type>
-
-            {proxyError && (
-              <Type className="!text-red-500 text-sm mb-4">{proxyError}</Type>
-            )}
-
-            <Stack gap={4}>
-              <div>
-                <Type className="font-medium mb-2">
-                  OAuth Proxy Server Slug
-                </Type>
-                <Input
-                  placeholder="my-oauth-proxy"
-                  value={proxySlug}
-                  onChange={setProxySlug}
-                  maxLength={40}
-                />
-              </div>
-
-              <div>
-                <Type className="font-medium mb-2">Authorization Endpoint</Type>
-                <Input
-                  placeholder="https://provider.com/oauth/authorize"
-                  value={proxyAuthorizationEndpoint}
-                  onChange={setProxyAuthorizationEndpoint}
-                />
-              </div>
-
-              <div>
-                <Type className="font-medium mb-2">Token Endpoint</Type>
-                <Input
-                  placeholder="https://provider.com/oauth/token"
-                  value={proxyTokenEndpoint}
-                  onChange={setProxyTokenEndpoint}
-                />
-              </div>
-
-              <div>
-                <Type className="font-medium mb-2">
-                  Scopes (comma-separated)
-                </Type>
-                <Input
-                  placeholder="read, write, openid"
-                  value={proxyScopes}
-                  onChange={setProxyScopes}
-                />
-              </div>
-
-              <div>
-                <Type className="font-medium mb-2">
-                  Token Endpoint Auth Method
-                </Type>
-                <select
-                  className="w-full border rounded px-3 py-2 bg-background"
-                  value={proxyTokenAuthMethod}
-                  onChange={(e) => setProxyTokenAuthMethod(e.target.value)}
-                >
-                  <option value="client_secret_post">client_secret_post</option>
-                  <option value="client_secret_basic">
-                    client_secret_basic
-                  </option>
-                  <option value="none">none</option>
-                </select>
-              </div>
-
-              <div>
-                <Type className="font-medium mb-2">Environment</Type>
-                <EnvironmentDropdown
-                  selectedEnvironment={proxyEnvironmentSlug}
-                  setSelectedEnvironment={setProxyEnvironmentSlug}
-                  tooltip="Select environment for OAuth credentials"
-                  className="w-full max-w-full"
-                />
-                <Type muted small className="mt-1">
-                  The environment where OAuth client credentials will be stored.
-                </Type>
-              </div>
-            </Stack>
-          </div>
-        </div>
-
-        <Dialog.Footer className="flex justify-end">
-          <Button
-            onClick={handleProxySubmit}
-            disabled={
-              addOAuthProxyMutation.isPending ||
-              !proxySlug.trim() ||
-              !proxyAuthorizationEndpoint.trim() ||
-              !proxyTokenEndpoint.trim() ||
-              !proxyEnvironmentSlug.trim()
-            }
-          >
-            {addOAuthProxyMutation.isPending
-              ? "Configuring..."
-              : "Configure OAuth Proxy"}
-          </Button>
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
-  );
-}
-
 function OAuthDetailsModal({
   isOpen,
   onClose,
@@ -1398,27 +849,13 @@ function OAuthDetailsModal({
           <Stack gap={4}>
             {toolset.oauthProxyServer && isGramOAuth && (
               <>
-                <div className="flex items-center justify-between">
-                  <Type className="font-medium">Gram OAuth</Type>
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    className="hover:bg-destructive hover:text-white border-none"
-                    onClick={() =>
-                      removeOAuthMutation.mutate({
-                        request: { slug: toolset.slug },
-                      })
-                    }
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Unlink
-                  </Button>
+                <div>
+                  <Type className="font-medium">Gram OAuth is Active</Type>
                 </div>
-                <Stack gap={2} className="pl-4">
-                  <Type muted small className="mb-2">
+                <Stack gap={2} className="">
+                  <Type className="mb-2">
                     Gram users with access to your organization can use this MCP
-                    server. API calls will be made using the OAuth credentials
-                    stored in the selected environment.
+                    server.
                   </Type>
                   {toolset.oauthProxyServer.oauthProxyProviders?.[0]
                     ?.environmentSlug && (
@@ -1601,6 +1038,24 @@ function OAuthDetailsModal({
             )}
           </Stack>
         </div>
+        {isGramOAuth && (
+          <Dialog.Footer>
+            <Button variant="tertiary" onClick={onClose}>
+              Close
+            </Button>
+            <Button
+              variant="destructive-primary"
+              onClick={() =>
+                removeOAuthMutation.mutate({
+                  request: { slug: toolset.slug },
+                })
+              }
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Unlink
+            </Button>
+          </Dialog.Footer>
+        )}
       </Dialog.Content>
     </Dialog>
   );
@@ -1617,11 +1072,6 @@ function GramOAuthProxyModal({
 }) {
   const telemetry = useTelemetry();
   const queryClient = useQueryClient();
-
-  const [proxyEnvironmentSlug, setProxyEnvironmentSlug] = useState(
-    toolset.defaultEnvironmentSlug ?? "",
-  );
-  const [proxyError, setProxyError] = useState<string | null>(null);
 
   const addOAuthProxyMutation = useAddOAuthProxyServerMutation({
     onSuccess: () => {
@@ -1644,13 +1094,6 @@ function GramOAuthProxyModal({
   });
 
   const handleSubmit = () => {
-    setProxyError(null);
-
-    if (!proxyEnvironmentSlug.trim()) {
-      setProxyError("Environment is required");
-      return;
-    }
-
     addOAuthProxyMutation.mutate({
       request: {
         slug: toolset.slug,
@@ -1658,7 +1101,6 @@ function GramOAuthProxyModal({
           oauthProxyServer: {
             providerType: "gram",
             slug: "gram-oauth-proxy",
-            environmentSlug: proxyEnvironmentSlug,
           },
         },
       },
@@ -1675,54 +1117,489 @@ function GramOAuthProxyModal({
         <div className="space-y-4 overflow-auto max-h-[60vh]">
           <div>
             <Type className="font-medium mb-2">Gram OAuth Configuration</Type>
-            <Type muted small className="mb-4">
+            <Type small className="mb-4">
               Configure Gram OAuth to let users with access to your organization
               use this MCP server. Users will authenticate using their Gram
-              credentials, and API calls will be made using the OAuth
-              credentials stored in the selected environment. Need help?{" "}
-              <Link
-                external
-                to="https://calendly.com/d/ctgg-5dv-3kw/intro-to-gram-call"
-              >
-                Book a meeting
-              </Link>
+              credentials.
             </Type>
-
-            {proxyError && (
-              <Type className="!text-red-500 text-sm mb-4">{proxyError}</Type>
-            )}
-
-            <Stack gap={4}>
-              <div>
-                <Type className="font-medium mb-2">Environment</Type>
-                <EnvironmentDropdown
-                  selectedEnvironment={proxyEnvironmentSlug}
-                  setSelectedEnvironment={setProxyEnvironmentSlug}
-                  tooltip="Select environment for OAuth credentials"
-                  className="w-full max-w-full"
-                />
-                <Type muted small className="mt-1">
-                  The environment where OAuth client credentials will be stored
-                  and used for API authentication.
-                </Type>
-              </div>
-            </Stack>
           </div>
         </div>
 
         <Dialog.Footer className="flex justify-end">
           <Button
             onClick={handleSubmit}
-            disabled={
-              addOAuthProxyMutation.isPending || !proxyEnvironmentSlug.trim()
-            }
+            disabled={addOAuthProxyMutation.isPending}
           >
             {addOAuthProxyMutation.isPending
-              ? "Configuring..."
-              : "Configure Gram OAuth"}
+              ? "Enabling..."
+              : "Enable Gram OAuth"}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
+  );
+}
+
+function ConnectOAuthModal({
+  isOpen,
+  onClose,
+  toolsetSlug,
+  toolset,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  toolsetSlug: string;
+  toolset: Toolset;
+}) {
+  const session = useSession();
+  const queryClient = useQueryClient();
+  const isAccountUpgrade = session.gramAccountType === "free";
+
+  // For free accounts, show the FeatureRequestModal
+  if (isAccountUpgrade) {
+    return (
+      <FeatureRequestModal
+        isOpen={isOpen}
+        onClose={onClose}
+        title="Connect OAuth"
+        description="A Managed OAuth integration requires upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
+        actionType="mcp_oauth_integration"
+        icon={Globe}
+        telemetryData={{ slug: toolsetSlug }}
+        accountUpgrade={isAccountUpgrade}
+      />
+    );
+  }
+
+  // For non-free accounts, show the tab modal
+  return (
+    <OAuthTabModal
+      isOpen={isOpen}
+      onClose={onClose}
+      toolsetSlug={toolsetSlug}
+      toolset={toolset}
+      onSuccess={() => {
+        invalidateAllToolset(queryClient);
+        toast.success("External OAuth server configured successfully");
+        onClose();
+      }}
+    />
+  );
+}
+
+function OAuthTabModal({
+  isOpen,
+  onClose,
+  toolsetSlug,
+  toolset,
+  onSuccess,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  toolsetSlug: string;
+  toolset: Toolset;
+  onSuccess: () => void;
+}) {
+  const [activeTab, setActiveTab] = useState("external");
+  const [externalSlug, setExternalSlug] = useState("");
+  const [metadataJson, setMetadataJson] = useState("");
+  const [jsonError, setJsonError] = useState<string | null>(null);
+  const telemetry = useTelemetry();
+
+  // OAuth Proxy form state
+  const [proxySlug, setProxySlug] = useState("");
+  const [proxyAuthorizationEndpoint, setProxyAuthorizationEndpoint] =
+    useState("");
+  const [proxyTokenEndpoint, setProxyTokenEndpoint] = useState("");
+  const [proxyScopes, setProxyScopes] = useState("");
+  const [proxyTokenAuthMethod, setProxyTokenAuthMethod] =
+    useState("client_secret_post");
+  const [proxyEnvironmentSlug, setProxyEnvironmentSlug] = useState(
+    toolset.defaultEnvironmentSlug ?? "",
+  );
+  const [proxyError, setProxyError] = useState<string | null>(null);
+
+  const hasMultipleOAuth2AuthCode =
+    toolset.oauthEnablementMetadata?.oauth2SecurityCount > 1;
+  const queryClient = useQueryClient();
+
+  const addExternalOAuthMutation = useAddExternalOAuthServerMutation({
+    onSuccess: () => {
+      invalidateAllToolset(queryClient);
+
+      telemetry.capture("mcp_event", {
+        action: "external_oauth_configured",
+        slug: toolsetSlug,
+      });
+
+      onSuccess();
+    },
+    onError: (error) => {
+      console.error("Failed to configure external OAuth:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to configure OAuth",
+      );
+    },
+  });
+
+  const addOAuthProxyMutation = useAddOAuthProxyServerMutation({
+    onSuccess: () => {
+      invalidateAllToolset(queryClient);
+
+      telemetry.capture("mcp_event", {
+        action: "oauth_proxy_configured",
+        slug: toolsetSlug,
+      });
+
+      onSuccess();
+    },
+    onError: (error) => {
+      console.error("Failed to configure OAuth proxy:", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to configure OAuth proxy",
+      );
+    },
+  });
+
+  const handleExternalSubmit = () => {
+    // Validate JSON
+    let parsedMetadata;
+    try {
+      parsedMetadata = JSON.parse(metadataJson);
+    } catch (_e) {
+      setJsonError("Invalid JSON format");
+      return;
+    }
+
+    if (!externalSlug.trim()) {
+      toast.error("Please provide a slug for the OAuth server");
+      return;
+    }
+
+    // Validate required OAuth endpoints
+    const requiredEndpoints = [
+      "authorization_endpoint",
+      "token_endpoint",
+      "registration_endpoint",
+    ];
+    const missingEndpoints = requiredEndpoints.filter(
+      (endpoint) => !parsedMetadata[endpoint],
+    );
+
+    if (missingEndpoints.length > 0) {
+      setJsonError(
+        `Missing required endpoints: ${missingEndpoints.join(", ")}`,
+      );
+      return;
+    }
+
+    setJsonError(null);
+    addExternalOAuthMutation.mutate({
+      request: {
+        slug: toolsetSlug,
+        addExternalOAuthServerRequestBody: {
+          externalOauthServer: {
+            slug: externalSlug,
+            metadata: parsedMetadata,
+          },
+        },
+      },
+    });
+  };
+
+  const handleProxySubmit = () => {
+    setProxyError(null);
+
+    if (!proxySlug.trim()) {
+      setProxyError("Please provide a slug for the OAuth proxy server");
+      return;
+    }
+
+    if (!proxyAuthorizationEndpoint.trim()) {
+      setProxyError("Authorization endpoint is required");
+      return;
+    }
+
+    if (!proxyTokenEndpoint.trim()) {
+      setProxyError("Token endpoint is required");
+      return;
+    }
+
+    if (!proxyEnvironmentSlug.trim()) {
+      setProxyError("Environment slug is required");
+      return;
+    }
+
+    const scopesArray = proxyScopes
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    if (scopesArray.length === 0) {
+      setProxyError("At least one scope is required");
+      return;
+    }
+
+    addOAuthProxyMutation.mutate({
+      request: {
+        slug: toolsetSlug,
+        addOAuthProxyServerRequestBody: {
+          oauthProxyServer: {
+            providerType: "custom",
+            slug: proxySlug,
+            authorizationEndpoint: proxyAuthorizationEndpoint,
+            tokenEndpoint: proxyTokenEndpoint,
+            scopesSupported: scopesArray,
+            tokenEndpointAuthMethodsSupported: [proxyTokenAuthMethod],
+            environmentSlug: proxyEnvironmentSlug,
+          },
+        },
+      },
+    });
+  };
+
+  return (
+    <>
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <Dialog.Content className="max-w-6xl max-h-[90vh] overflow-hidden">
+          <Dialog.Header>
+            <Dialog.Title>Connect OAuth</Dialog.Title>
+          </Dialog.Header>
+
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="flex-1"
+          >
+            <TabsList>
+              <TabsTrigger value="external">External Server</TabsTrigger>
+              <TabsTrigger value="proxy">OAuth Proxy</TabsTrigger>
+            </TabsList>
+
+            <TabsContent
+              value="external"
+              className="space-y-4 overflow-auto max-h-[60vh]"
+            >
+              {hasMultipleOAuth2AuthCode && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
+                  <Type small className="text-red-600 mt-1">
+                    Not Supported: This MCP server has{" "}
+                    {toolset.oauthEnablementMetadata?.oauth2SecurityCount}{" "}
+                    OAuth2 security schemes detected.
+                  </Type>
+                </div>
+              )}
+              <div>
+                <Type className="font-medium mb-2">
+                  External OAuth Server Configuration
+                </Type>
+                <Type muted small className="mb-4">
+                  Configure your MCP server to use an external authorization
+                  server if your API fits the very specific MCP OAuth
+                  requirements.{" "}
+                  <Link
+                    external
+                    to="https://docs.getgram.ai/host-mcp/adding-oauth#authorization-code"
+                  >
+                    Docs
+                  </Link>
+                </Type>
+
+                <Stack gap={4}>
+                  <div>
+                    <Type className="font-medium mb-2">OAuth Server Slug</Type>
+                    <Input
+                      placeholder="my-oauth-server"
+                      value={externalSlug}
+                      onChange={setExternalSlug}
+                      maxLength={40}
+                    />
+                  </div>
+
+                  <div>
+                    <Type className="font-medium mb-2">
+                      OAuth Authorization Server Metadata
+                    </Type>
+                    {jsonError && (
+                      <Type className="!text-red-500 text-sm mt-1">
+                        {jsonError}
+                      </Type>
+                    )}
+                    <TextArea
+                      placeholder={`{
+  "issuer": "https://your-oauth-server.com",
+  "authorization_endpoint": "https://your-oauth-server.com/oauth/authorize",
+  "registration_endpoint": "https://your-oauth-server.com/oauth/register",
+  "token_endpoint": "https://your-oauth-server.com/oauth/token",
+  "scopes_supported": ["read", "write"],
+  "response_types_supported": ["code"],
+  "grant_types_supported": ["authorization_code"],
+  "token_endpoint_auth_methods_supported": [
+    "client_secret_post"
+  ],
+  "code_challenge_methods_supported": [
+    "plain",
+    "S256"
+  ]
+}`}
+                      value={metadataJson}
+                      onChange={(value: string) => {
+                        setMetadataJson(value);
+                        setJsonError(null);
+                      }}
+                      rows={12}
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                </Stack>
+              </div>
+            </TabsContent>
+
+            <TabsContent
+              value="proxy"
+              className="space-y-4 overflow-auto max-h-[60vh]"
+            >
+              <div>
+                <Type className="font-medium mb-2">
+                  OAuth Proxy Server Configuration
+                </Type>
+                <Type muted small className="mb-4">
+                  ONLY USE FOR INTERNAL SERVERS. Configure an OAuth proxy server
+                  to handle OAuth authentication for APIs that don't natively
+                  support MCP OAuth requirements. Getting proxy settings correct
+                  can be tricky. Need help?{" "}
+                  <Link
+                    external
+                    to="https://calendly.com/d/ctgg-5dv-3kw/intro-to-gram-call"
+                  >
+                    Book a meeting
+                  </Link>
+                </Type>
+
+                {proxyError && (
+                  <Type className="!text-red-500 text-sm mb-4">
+                    {proxyError}
+                  </Type>
+                )}
+
+                <Stack gap={4}>
+                  <div>
+                    <Type className="font-medium mb-2">
+                      OAuth Proxy Server Slug
+                    </Type>
+                    <Input
+                      placeholder="my-oauth-proxy"
+                      value={proxySlug}
+                      onChange={setProxySlug}
+                      maxLength={40}
+                    />
+                  </div>
+
+                  <div>
+                    <Type className="font-medium mb-2">
+                      Authorization Endpoint
+                    </Type>
+                    <Input
+                      placeholder="https://provider.com/oauth/authorize"
+                      value={proxyAuthorizationEndpoint}
+                      onChange={setProxyAuthorizationEndpoint}
+                    />
+                  </div>
+
+                  <div>
+                    <Type className="font-medium mb-2">Token Endpoint</Type>
+                    <Input
+                      placeholder="https://provider.com/oauth/token"
+                      value={proxyTokenEndpoint}
+                      onChange={setProxyTokenEndpoint}
+                    />
+                  </div>
+
+                  <div>
+                    <Type className="font-medium mb-2">
+                      Scopes (comma-separated)
+                    </Type>
+                    <Input
+                      placeholder="read, write, openid"
+                      value={proxyScopes}
+                      onChange={setProxyScopes}
+                    />
+                  </div>
+
+                  <div>
+                    <Type className="font-medium mb-2">
+                      Token Endpoint Auth Method
+                    </Type>
+                    <select
+                      className="w-full border rounded px-3 py-2 bg-background"
+                      value={proxyTokenAuthMethod}
+                      onChange={(e) => setProxyTokenAuthMethod(e.target.value)}
+                    >
+                      <option value="client_secret_post">
+                        client_secret_post
+                      </option>
+                      <option value="client_secret_basic">
+                        client_secret_basic
+                      </option>
+                      <option value="none">none</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <Type className="font-medium mb-2">Environment</Type>
+                    <EnvironmentDropdown
+                      selectedEnvironment={proxyEnvironmentSlug}
+                      setSelectedEnvironment={setProxyEnvironmentSlug}
+                      tooltip="Select environment for OAuth credentials"
+                      className="w-full max-w-full"
+                    />
+                    <Type muted small className="mt-1">
+                      The environment where OAuth client credentials will be
+                      stored.
+                    </Type>
+                  </div>
+                </Stack>
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          <Dialog.Footer className="flex justify-end">
+            {activeTab === "external" && (
+              <Button
+                onClick={handleExternalSubmit}
+                disabled={
+                  hasMultipleOAuth2AuthCode ||
+                  addExternalOAuthMutation.isPending ||
+                  !externalSlug.trim() ||
+                  !metadataJson.trim()
+                }
+              >
+                {addExternalOAuthMutation.isPending
+                  ? "Configuring..."
+                  : "Configure External OAuth"}
+              </Button>
+            )}
+            {activeTab === "proxy" && (
+              <Button
+                onClick={handleProxySubmit}
+                disabled={
+                  addOAuthProxyMutation.isPending ||
+                  !proxySlug.trim() ||
+                  !proxyAuthorizationEndpoint.trim() ||
+                  !proxyTokenEndpoint.trim() ||
+                  !proxyEnvironmentSlug.trim()
+                }
+              >
+                {addOAuthProxyMutation.isPending
+                  ? "Configuring..."
+                  : "Configure OAuth Proxy"}
+              </Button>
+            )}
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+    </>
   );
 }

@@ -697,6 +697,9 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 
 	// Validate required fields for custom provider type
 	if payload.OauthProxyServer.ProviderType == "custom" {
+		if payload.OauthProxyServer.EnvironmentSlug == nil || string(*payload.OauthProxyServer.EnvironmentSlug) == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "environment_slug is required for custom provider type").Log(ctx, s.logger)
+		}
 		if payload.OauthProxyServer.AuthorizationEndpoint == nil || *payload.OauthProxyServer.AuthorizationEndpoint == "" {
 			return nil, oops.E(oops.CodeBadRequest, nil, "authorization_endpoint is required for custom provider type").Log(ctx, s.logger)
 		}
@@ -712,16 +715,19 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 	}
 
 	// Create the OAuth proxy server
-	// Validate that the environment exists for this project
-	_, err = s.environmentRepo.GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
-		Slug:      string(payload.OauthProxyServer.EnvironmentSlug),
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "environment not found").Log(ctx, s.logger)
+	// Only validate environment for custom provider type (not gram)
+	if payload.OauthProxyServer.ProviderType == "custom" {
+		// Validate that the environment exists for this project
+		_, err = s.environmentRepo.GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
+			Slug:      string(*payload.OauthProxyServer.EnvironmentSlug),
+			ProjectID: *authCtx.ProjectID,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeNotFound, err, "environment not found").Log(ctx, s.logger)
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment").Log(ctx, s.logger)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment").Log(ctx, s.logger)
 	}
 
 	oauthProxyServer, err := s.oauthRepo.UpsertOAuthProxyServer(ctx, oauthRepo.UpsertOAuthProxyServerParams{
@@ -732,12 +738,19 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to create OAuth proxy server").Log(ctx, s.logger)
 	}
 
-	// Create the OAuth proxy provider with the secrets containing environment_slug
-	secretsJSON, err := json.Marshal(map[string]string{
-		"environment_slug": string(payload.OauthProxyServer.EnvironmentSlug),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal secrets").Log(ctx, s.logger)
+	// Create the OAuth proxy provider with the secrets
+	// Only store environment_slug in secrets for custom provider type
+	var secretsJSON []byte
+	if payload.OauthProxyServer.ProviderType == "custom" {
+		secretsJSON, err = json.Marshal(map[string]string{
+			"environment_slug": string(*payload.OauthProxyServer.EnvironmentSlug),
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal secrets").Log(ctx, s.logger)
+		}
+	} else {
+		// Empty JSON object for gram provider (doesn't need environment)
+		secretsJSON = []byte("{}")
 	}
 
 	_, err = s.oauthRepo.UpsertOAuthProxyProvider(ctx, oauthRepo.UpsertOAuthProxyProviderParams{

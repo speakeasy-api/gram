@@ -200,5 +200,5 @@ var OAuthProxyServerForm = Type("OAuthProxyServerForm", func() {
 	Attribute("scopes_supported", ArrayOf(String), "OAuth scopes to request")
 	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String), "Auth methods (client_secret_basic or client_secret_post)")
 	Attribute("environment_slug", Slug, "The environment slug to store secrets")
-	Required("slug", "provider_type", "environment_slug")
+	Required("slug", "provider_type")
 })

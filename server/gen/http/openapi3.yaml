@@ -12015,7 +12015,6 @@ components:
             required:
                 - slug
                 - provider_type
-                - environment_slug
         OpenAPIv3DeploymentAsset:
             type: object
             properties:

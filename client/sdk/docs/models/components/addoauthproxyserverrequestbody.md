@@ -7,7 +7,6 @@ import { AddOAuthProxyServerRequestBody } from "@gram/client/models/components";
 
 let value: AddOAuthProxyServerRequestBody = {
   oauthProxyServer: {
-    environmentSlug: "<value>",
     providerType: "gram",
     slug: "<value>",
   },

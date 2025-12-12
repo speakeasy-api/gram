@@ -331,7 +331,6 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 }
 
 func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
-
 	ctx := r.Context()
 	defer o11y.LogDefer(ctx, s.logger, func() error {
 		return r.Body.Close()

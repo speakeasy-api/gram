@@ -28,7 +28,7 @@ export type OAuthProxyServerForm = {
   /**
    * A short url-friendly label that uniquely identifies a resource.
    */
-  environmentSlug: string;
+  environmentSlug?: string | undefined;
   /**
    * The type of OAuth provider
    */
@@ -59,7 +59,7 @@ export const OAuthProxyServerFormProviderType$outboundSchema: z.ZodNativeEnum<
 /** @internal */
 export type OAuthProxyServerForm$Outbound = {
   authorization_endpoint?: string | undefined;
-  environment_slug: string;
+  environment_slug?: string | undefined;
   provider_type: string;
   scopes_supported?: Array<string> | undefined;
   slug: string;
@@ -74,7 +74,7 @@ export const OAuthProxyServerForm$outboundSchema: z.ZodType<
   OAuthProxyServerForm
 > = z.object({
   authorizationEndpoint: z.string().optional(),
-  environmentSlug: z.string(),
+  environmentSlug: z.string().optional(),
   providerType: OAuthProxyServerFormProviderType$outboundSchema,
   scopesSupported: z.array(z.string()).optional(),
   slug: z.string(),
