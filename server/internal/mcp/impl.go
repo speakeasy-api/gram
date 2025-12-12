@@ -432,10 +432,6 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			if !ok || authCtx == nil {
 				return oops.E(oops.CodeUnauthorized, nil, "no auth context found").Log(ctx, s.logger)
 			}
-
-			if authCtx.SessionID == nil {
-				return oops.E(oops.CodeUnauthorized, nil, "no session ID found in auth context").Log(ctx, s.logger)
-			}
 		}
 	}
 
