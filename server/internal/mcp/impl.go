@@ -389,10 +389,17 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			return oops.E(oops.CodeUnauthorized, err, "access token is required").Log(ctx, s.logger)
 		}
 
-		_, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
+		token, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
 		if err != nil {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
 			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
+		}
+
+		// Access token is the session id based on our gram provider implementation
+		// we are effectively attempting to authenticate with this session
+		ctx, err = s.sessions.Authenticate(ctx, token.AccessToken, false)
+		if err != nil {
+			return oops.E(oops.CodeUnauthorized, err, "failed to authenticate access token").Log(ctx, s.logger)
 		}
 
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
