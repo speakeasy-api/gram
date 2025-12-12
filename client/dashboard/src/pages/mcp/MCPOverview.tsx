@@ -59,7 +59,7 @@ export function McpToolsetCard({ toolset }: { toolset: ToolsetForMCP }) {
     // Prevents race condition between dropdown and dialog overlays
     setTimeout(() => {
       setMcpModalOpen(true);
-    }, 50);
+    }, 150);
   };
 
   return (
