@@ -36,10 +36,6 @@ import (
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-type Configurations struct {
-	SpeakeasyServerAddress string
-}
-
 type Service struct {
 	logger             *slog.Logger
 	tracer             trace.Tracer
@@ -55,13 +51,12 @@ type Service struct {
 	pkceService        *PKCEService
 	oauthRepo          *repo.Queries
 	enc                *encryption.Client
-	cfg                *Configurations
 	sessions           *sessions.Manager
 	gramProvider       *providers.GramProvider
 	customProvider     *providers.CustomProvider
 }
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, serverURL *url.URL, cacheImpl cache.Cache, enc *encryption.Client, env *environments.EnvironmentEntries, sessions *sessions.Manager, cfg *Configurations) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, serverURL *url.URL, cacheImpl cache.Cache, enc *encryption.Client, env *environments.EnvironmentEntries, sessions *sessions.Manager) *Service {
 	logger = logger.With(attr.SlogComponent("oauth"))
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/oauth")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/oauth")
@@ -93,7 +88,6 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		oauthRepo:          repo.New(db),
 		enc:                enc,
 		sessions:           sessions,
-		cfg:                cfg,
 
 		// OAuth providers
 		gramProvider:   gramProvider,
@@ -289,12 +283,11 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	switch provider.ProviderType {
 	case "gram":
 		authURL, err = s.sessions.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
-			CallbackURL:         callbackURL,
-			Scope:               req.Scope,
-			State:               string(oauthReqInfoJSON),
-			ScopesSupported:     provider.ScopesSupported,
-			SpeakeasyServerAddr: s.cfg.SpeakeasyServerAddress,
-			ClientID:            "",
+			CallbackURL:     callbackURL,
+			Scope:           req.Scope,
+			State:           string(oauthReqInfoJSON),
+			ScopesSupported: provider.ScopesSupported,
+			ClientID:        "",
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to build gram OAuth URL").Log(ctx, s.logger)

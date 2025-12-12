@@ -66,10 +66,9 @@ func (c CachedUserInfo) TTL() time.Duration {
 }
 
 type AuthURLParams struct {
-	CallbackURL         string
-	Scope               string
-	State               string
-	ClientID            string
-	ScopesSupported     []string
-	SpeakeasyServerAddr string
+	CallbackURL     string
+	Scope           string
+	State           string
+	ClientID        string
+	ScopesSupported []string
 }

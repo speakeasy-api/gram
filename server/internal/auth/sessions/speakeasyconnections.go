@@ -365,7 +365,7 @@ func (p *Manager) BuildAuthorizationURL(ctx context.Context, params AuthURLParam
 	urlParams.Add("state", params.State)
 
 	speakeasyAuthURL := fmt.Sprintf("%s/v1/speakeasy_provider/login?%s",
-		params.SpeakeasyServerAddr,
+		p.speakeasyServerAddress,
 		urlParams.Encode())
 
 	authURL, err := url.Parse(speakeasyAuthURL)
