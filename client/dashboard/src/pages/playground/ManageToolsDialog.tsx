@@ -166,96 +166,101 @@ export function ManageToolsDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="min-w-3xl max-h-[80vh] flex flex-col">
-        <Dialog.Header>
-          <Dialog.Title>
-            {mode === "add" ? "Add tools" : "Manage tools"}
-            {sourceFilter !== "all" && ` from ${sourceFilter}`}
-          </Dialog.Title>
-          <Dialog.Description>
-            {mode === "add"
-              ? "Select tools to add to your playground session"
-              : "Select tools to remove from your playground session"}
-          </Dialog.Description>
-        </Dialog.Header>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog.Content className="min-w-3xl max-h-[80vh] flex flex-col">
+          <Dialog.Header>
+            <Dialog.Title>
+              {mode === "add" ? "Add tools" : "Manage tools"}
+              {sourceFilter !== "all" && ` from ${sourceFilter}`}
+            </Dialog.Title>
+            <Dialog.Description>
+              {mode === "add"
+                ? "Select tools to add to your playground session"
+                : "Select tools to remove from your playground session"}
+            </Dialog.Description>
+          </Dialog.Header>
 
-        <div className="flex flex-col gap-4 flex-1 min-h-0">
-          {/* Mode toggle + Filters */}
-          <div className="flex gap-2">
-            <Select
-              value={mode}
-              onValueChange={(v) => setMode(v as typeof mode)}
-            >
-              <SelectTrigger className="w-[150px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="add">Add tools</SelectItem>
-                <SelectItem value="manage">Manage tools</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="flex flex-col gap-4 flex-1 min-h-0">
+            {/* Mode toggle + Filters */}
+            <div className="flex gap-2">
+              <Select
+                value={mode}
+                onValueChange={(v) => setMode(v as typeof mode)}
+              >
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="add">Add tools</SelectItem>
+                  <SelectItem value="manage">Manage tools</SelectItem>
+                </SelectContent>
+              </Select>
 
-            <Input
-              placeholder="Search tools..."
-              value={search}
-              onChange={setSearch}
-              className="flex-1"
-              autoFocus
-            />
-            <Select value={sourceFilter} onValueChange={setSourceFilter}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="All sources" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All sources</SelectItem>
-                {sources.map((source) => (
-                  <SelectItem key={source} value={source}>
-                    {source}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Tool list with selection mode */}
-          <div className="flex-1 overflow-auto">
-            {isLoading ? (
-              <div className="text-center py-8 text-neutral-500">
-                Loading tools...
-              </div>
-            ) : filteredTools.length === 0 ? (
-              <div className="text-center py-8 text-neutral-500">
-                {noResultsMessage}
-              </div>
-            ) : (
-              <ToolList
-                tools={filteredTools}
-                toolset={toolset}
-                selectionMode={mode === "add" ? "add" : "remove"}
-                selectedUrns={Array.from(selectedToolUrns)}
-                onSelectionChange={handleSelectionChange}
-                onToolClick={setEditingTool}
+              <Input
+                placeholder="Search tools..."
+                value={search}
+                onChange={setSearch}
+                className="flex-1"
+                autoFocus
               />
-            )}
+              <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="All sources" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All sources</SelectItem>
+                  {sources.map((source) => (
+                    <SelectItem key={source} value={source}>
+                      {source}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Tool list with selection mode */}
+            <div className="flex-1 overflow-auto">
+              {isLoading ? (
+                <div className="text-center py-8 text-neutral-500">
+                  Loading tools...
+                </div>
+              ) : filteredTools.length === 0 ? (
+                <div className="text-center py-8 text-neutral-500">
+                  {noResultsMessage}
+                </div>
+              ) : (
+                <ToolList
+                  tools={filteredTools}
+                  toolset={toolset}
+                  selectionMode={mode === "add" ? "add" : "remove"}
+                  selectedUrns={Array.from(selectedToolUrns)}
+                  onSelectionChange={handleSelectionChange}
+                  onToolClick={setEditingTool}
+                />
+              )}
+            </div>
           </div>
-        </div>
 
-        <Dialog.Footer>
-          <Button variant="secondary" onClick={handleClose}>
-            Cancel
-          </Button>
-          <Button onClick={handleApply} disabled={selectedToolUrns.size === 0}>
-            <Button.Text>
-              {mode === "add" ? "Add" : "Remove"}{" "}
-              {selectedToolUrns.size > 0 ? selectedToolUrns.size : ""} Tool
-              {selectedToolUrns.size !== 1 ? "s" : ""}
-            </Button.Text>
-          </Button>
-        </Dialog.Footer>
-      </Dialog.Content>
+          <Dialog.Footer>
+            <Button variant="secondary" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleApply}
+              disabled={selectedToolUrns.size === 0}
+            >
+              <Button.Text>
+                {mode === "add" ? "Add" : "Remove"}{" "}
+                {selectedToolUrns.size > 0 ? selectedToolUrns.size : ""} Tool
+                {selectedToolUrns.size !== 1 ? "s" : ""}
+              </Button.Text>
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
 
-      {/* Edit Tool Dialog */}
+      {/* Edit Tool Dialog - rendered as sibling to prevent nested dialog issues */}
       <EditToolDialog
         open={!!editingTool}
         onOpenChange={(open) => !open && setEditingTool(null)}
@@ -274,6 +279,6 @@ export function ManageToolsDialog({
           }
         }}
       />
-    </Dialog>
+    </>
   );
 }
