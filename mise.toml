@@ -145,5 +145,10 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 ## Default region for deploying fly.io apps
 # GRAM_FUNCTIONS_FLYIO_REGION = "sjc"
 
+##################
+## MCP Registry ##
+##################
+## Options below configure where your optional local registry container will be
+## discoverable by the Gram application.
 LOCAL_MCP_REGISTRY_PORT = "9847"
 LOCAL_MCP_REGISTRY_URL = "http://localhost:{{env.LOCAL_MCP_REGISTRY_PORT}}"

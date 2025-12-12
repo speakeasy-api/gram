@@ -1,8 +1,13 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
 
 //MISE description="Seed the local MCP registry with toolsets from a Gram project"
-//MISE usage="local-registry:seed <project-slug>"
 
+//USAGE flag "--project <slug>" required=#true help="Project slug to fetch toolsets from"
+//USAGE flag "--registry-url <url>" env="LOCAL_MCP_REGISTRY_URL" required=#true help="URL of the local MCP registry"
+//USAGE flag "--api-url <url>" env="GRAM_SERVER_URL" required=#true help="Gram API URL"
+//USAGE flag "--api-key <key>" env="GRAM_API_KEY" required=#true help="Gram API key"
+
+import assert from "node:assert";
 import { Gram } from "@gram/client";
 
 async function fetchRegistryToken(registryUrl: string): Promise<string> {
@@ -23,30 +28,17 @@ async function fetchRegistryToken(registryUrl: string): Promise<string> {
 
 
 async function run() {
-  const projectSlug = process.argv[2];
-  if (!projectSlug) {
-    console.error("Usage: mise local-registry:seed <project-slug>");
-    console.error("Example: mise local-registry:seed speakeasy");
-    process.exit(1);
-  }
+  const projectSlug = process.env["usage_project"];
+  assert(projectSlug, "Project slug is required");
 
-  const registryUrl = process.env["LOCAL_MCP_REGISTRY_URL"];
-  if (!registryUrl) {
-    console.error("LOCAL_MCP_REGISTRY_URL is not set");
-    process.exit(1);
-  }
+  const registryUrl = process.env["usage_registry_url"];
+  assert(registryUrl, "Registry URL is required");
 
-  const gramApiUrl = process.env["GRAM_API_URL"];
-  if (!gramApiUrl) {
-    console.error("GRAM_API_URL is not set");
-    process.exit(1);
-  }
+  const gramApiUrl = process.env["usage_api_url"];
+  assert(gramApiUrl, "Gram API URL is required");
 
-  const gramApiKey = process.env["GRAM_API_KEY"];
-  if (!gramApiKey) {
-    console.error("GRAM_API_KEY is not set");
-    process.exit(1);
-  }
+  const gramApiKey = process.env["usage_api_key"];
+  assert(gramApiKey, "Gram API key is required");
 
   // Check registry is reachable
   try {
