@@ -140,6 +140,10 @@ var OAuthProxyProvider = Type("OAuthProxyProvider", func() {
 
 	Attribute("id", String, "The ID of the OAuth proxy provider")
 	Attribute("slug", Slug, "The slug of the OAuth proxy provider")
+	Attribute("provider_type", String, func() {
+		Description("The type of OAuth provider")
+		Enum("custom", "gram")
+	})
 	Attribute("authorization_endpoint", String, "The authorization endpoint URL")
 	Attribute("token_endpoint", String, "The token endpoint URL")
 	Attribute("scopes_supported", ArrayOf(String), "The OAuth scopes supported by this provider")
@@ -154,7 +158,7 @@ var OAuthProxyProvider = Type("OAuthProxyProvider", func() {
 		Description("When the OAuth proxy provider was last updated.")
 		Format(FormatDateTime)
 	})
-	Required("id", "slug", "authorization_endpoint", "token_endpoint", "created_at", "updated_at")
+	Required("id", "slug", "provider_type", "authorization_endpoint", "token_endpoint", "created_at", "updated_at")
 })
 
 var OAuthProxyServer = Type("OAuthProxyServer", func() {
@@ -187,10 +191,14 @@ var OAuthProxyServerForm = Type("OAuthProxyServerForm", func() {
 	Meta("struct:pkg:path", "types")
 
 	Attribute("slug", Slug, "The slug of the OAuth proxy server")
+	Attribute("provider_type", String, func() {
+		Description("The type of OAuth provider")
+		Enum("custom", "gram")
+	})
 	Attribute("authorization_endpoint", String, "The authorization endpoint URL")
 	Attribute("token_endpoint", String, "The token endpoint URL")
 	Attribute("scopes_supported", ArrayOf(String), "OAuth scopes to request")
 	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String), "Auth methods (client_secret_basic or client_secret_post)")
 	Attribute("environment_slug", Slug, "The environment slug to store secrets")
-	Required("slug", "authorization_endpoint", "token_endpoint", "scopes_supported", "token_endpoint_auth_methods_supported", "environment_slug")
+	Required("slug", "provider_type")
 })

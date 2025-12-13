@@ -4,20 +4,39 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
+
+/**
+ * The type of OAuth provider
+ */
+export const OAuthProxyServerFormProviderType = {
+  Custom: "custom",
+  Gram: "gram",
+} as const;
+/**
+ * The type of OAuth provider
+ */
+export type OAuthProxyServerFormProviderType = ClosedEnum<
+  typeof OAuthProxyServerFormProviderType
+>;
 
 export type OAuthProxyServerForm = {
   /**
    * The authorization endpoint URL
    */
-  authorizationEndpoint: string;
+  authorizationEndpoint?: string | undefined;
   /**
    * A short url-friendly label that uniquely identifies a resource.
    */
-  environmentSlug: string;
+  environmentSlug?: string | undefined;
+  /**
+   * The type of OAuth provider
+   */
+  providerType: OAuthProxyServerFormProviderType;
   /**
    * OAuth scopes to request
    */
-  scopesSupported: Array<string>;
+  scopesSupported?: Array<string> | undefined;
   /**
    * A short url-friendly label that uniquely identifies a resource.
    */
@@ -25,21 +44,27 @@ export type OAuthProxyServerForm = {
   /**
    * The token endpoint URL
    */
-  tokenEndpoint: string;
+  tokenEndpoint?: string | undefined;
   /**
    * Auth methods (client_secret_basic or client_secret_post)
    */
-  tokenEndpointAuthMethodsSupported: Array<string>;
+  tokenEndpointAuthMethodsSupported?: Array<string> | undefined;
 };
 
 /** @internal */
+export const OAuthProxyServerFormProviderType$outboundSchema: z.ZodNativeEnum<
+  typeof OAuthProxyServerFormProviderType
+> = z.nativeEnum(OAuthProxyServerFormProviderType);
+
+/** @internal */
 export type OAuthProxyServerForm$Outbound = {
-  authorization_endpoint: string;
-  environment_slug: string;
-  scopes_supported: Array<string>;
+  authorization_endpoint?: string | undefined;
+  environment_slug?: string | undefined;
+  provider_type: string;
+  scopes_supported?: Array<string> | undefined;
   slug: string;
-  token_endpoint: string;
-  token_endpoint_auth_methods_supported: Array<string>;
+  token_endpoint?: string | undefined;
+  token_endpoint_auth_methods_supported?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -48,16 +73,18 @@ export const OAuthProxyServerForm$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   OAuthProxyServerForm
 > = z.object({
-  authorizationEndpoint: z.string(),
-  environmentSlug: z.string(),
-  scopesSupported: z.array(z.string()),
+  authorizationEndpoint: z.string().optional(),
+  environmentSlug: z.string().optional(),
+  providerType: OAuthProxyServerFormProviderType$outboundSchema,
+  scopesSupported: z.array(z.string()).optional(),
   slug: z.string(),
-  tokenEndpoint: z.string(),
-  tokenEndpointAuthMethodsSupported: z.array(z.string()),
+  tokenEndpoint: z.string().optional(),
+  tokenEndpointAuthMethodsSupported: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
     authorizationEndpoint: "authorization_endpoint",
     environmentSlug: "environment_slug",
+    providerType: "provider_type",
     scopesSupported: "scopes_supported",
     tokenEndpoint: "token_endpoint",
     tokenEndpointAuthMethodsSupported: "token_endpoint_auth_methods_supported",

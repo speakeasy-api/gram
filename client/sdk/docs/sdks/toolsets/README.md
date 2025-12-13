@@ -135,16 +135,8 @@ async function run() {
     slug: "<value>",
     addOAuthProxyServerRequestBody: {
       oauthProxyServer: {
-        authorizationEndpoint: "<value>",
-        environmentSlug: "<value>",
-        scopesSupported: [
-          "<value 1>",
-        ],
+        providerType: "custom",
         slug: "<value>",
-        tokenEndpoint: "<value>",
-        tokenEndpointAuthMethodsSupported: [
-          "<value 1>",
-        ],
       },
     },
   });
@@ -172,16 +164,8 @@ async function run() {
     slug: "<value>",
     addOAuthProxyServerRequestBody: {
       oauthProxyServer: {
-        authorizationEndpoint: "<value>",
-        environmentSlug: "<value>",
-        scopesSupported: [
-          "<value 1>",
-        ],
+        providerType: "custom",
         slug: "<value>",
-        tokenEndpoint: "<value>",
-        tokenEndpointAuthMethodsSupported: [
-          "<value 1>",
-        ],
       },
     },
   });

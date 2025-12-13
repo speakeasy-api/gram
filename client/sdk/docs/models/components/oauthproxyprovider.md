@@ -9,9 +9,10 @@ let value: OAuthProxyProvider = {
   authorizationEndpoint: "<value>",
   createdAt: new Date("2023-11-23T21:56:04.000Z"),
   id: "<id>",
+  providerType: "custom",
   slug: "<value>",
   tokenEndpoint: "<value>",
-  updatedAt: new Date("2023-09-24T08:35:06.731Z"),
+  updatedAt: new Date("2023-11-28T19:56:33.661Z"),
 };
 ```
 
@@ -24,6 +25,7 @@ let value: OAuthProxyProvider = {
 | `environmentSlug`                                                                             | *string*                                                                                      | :heavy_minus_sign:                                                                            | A short url-friendly label that uniquely identifies a resource.                               |
 | `grantTypesSupported`                                                                         | *string*[]                                                                                    | :heavy_minus_sign:                                                                            | The grant types supported by this provider                                                    |
 | `id`                                                                                          | *string*                                                                                      | :heavy_check_mark:                                                                            | The ID of the OAuth proxy provider                                                            |
+| `providerType`                                                                                | [components.ProviderType](../../models/components/providertype.md)                            | :heavy_check_mark:                                                                            | The type of OAuth provider                                                                    |
 | `scopesSupported`                                                                             | *string*[]                                                                                    | :heavy_minus_sign:                                                                            | The OAuth scopes supported by this provider                                                   |
 | `slug`                                                                                        | *string*                                                                                      | :heavy_check_mark:                                                                            | A short url-friendly label that uniquely identifies a resource.                               |
 | `tokenEndpoint`                                                                               | *string*                                                                                      | :heavy_check_mark:                                                                            | The token endpoint URL                                                                        |
