@@ -26,7 +26,7 @@ export default function AddSourceDialogContent({
   const isFunctionsEnabled =
     telemetry.isFeatureEnabled("gram-functions") ?? false;
   const isExternalMCPEnabled =
-    telemetry.isFeatureEnabled("external-mcp-catalog") ?? false;
+    telemetry.isFeatureEnabled("gram-external-mcp") ?? false;
   const [activeTab, setActiveTab] = React.useState<
     "openapi" | "functions" | "import-mcp"
   >("openapi");
