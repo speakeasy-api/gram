@@ -370,7 +370,6 @@ export function ServerCard({
         </Card.Footer>
       </Card>
 
-      {/* ServerEnableDialog - rendered as sibling to prevent nested dialog issues */}
       <ServerEnableDialog
         isOpen={isServerEnableDialogOpen}
         onClose={() => setIsServerEnableDialogOpen(false)}

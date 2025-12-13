@@ -260,7 +260,6 @@ export function ManageToolsDialog({
         </Dialog.Content>
       </Dialog>
 
-      {/* Edit Tool Dialog - rendered as sibling to prevent nested dialog issues */}
       <EditToolDialog
         open={!!editingTool}
         onOpenChange={(open) => !open && setEditingTool(null)}

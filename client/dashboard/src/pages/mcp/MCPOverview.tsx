@@ -54,40 +54,34 @@ export function McpToolsetCard({ toolset }: { toolset: ToolsetForMCP }) {
   const routes = useRoutes();
   const [mcpModalOpen, setMcpModalOpen] = useState(false);
 
-  // Workaround for Radix UI bug where pointer-events: none gets stuck on body
-  // after closing a dialog opened from a dropdown menu
-  // See: https://github.com/radix-ui/primitives/issues/1241
-  // See: https://github.com/radix-ui/primitives/issues/3317
+  // Workaround for Radix UI pointer-events bug
   useEffect(() => {
     if (!mcpModalOpen) {
-      // Small delay to let Radix finish its cleanup, then force remove pointer-events
-      const timeoutId = setTimeout(() => {
+      const clearPointerEvents = () => {
         document.body.style.pointerEvents = "";
-      }, 100);
-      return () => clearTimeout(timeoutId);
+        document.body.style.removeProperty("pointer-events");
+        document.querySelectorAll('[style*="pointer-events"]').forEach((el) => {
+          (el as HTMLElement).style.pointerEvents = "";
+        });
+      };
+
+      clearPointerEvents();
+      const t1 = setTimeout(clearPointerEvents, 50);
+      const t2 = setTimeout(clearPointerEvents, 100);
+      const t3 = setTimeout(clearPointerEvents, 200);
+
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
     }
   }, [mcpModalOpen]);
 
   const handleOpenMcpModal = () => {
-    // Delay to ensure dropdown closes before dialog opens
-    // Prevents race condition between dropdown and dialog overlays
     setTimeout(() => {
       setMcpModalOpen(true);
     }, 150);
-  };
-
-  const handleCloseModal = (e?: React.MouseEvent) => {
-    // Stop all event propagation
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    // Close the modal and force clear body pointer-events
-    setMcpModalOpen(false);
-    // Force clear pointer-events immediately as well
-    setTimeout(() => {
-      document.body.style.pointerEvents = "";
-    }, 0);
   };
 
   return (
@@ -104,19 +98,13 @@ export function McpToolsetCard({ toolset }: { toolset: ToolsetForMCP }) {
         ]}
       />
       <Dialog open={mcpModalOpen} onOpenChange={setMcpModalOpen}>
-        <Dialog.Content
-          className="!max-w-3xl !p-10"
-          onInteractOutside={(e) => {
-            // Prevent closing via clicking outside
-            e.preventDefault();
-          }}
-        >
+        <Dialog.Content className="!max-w-3xl !p-10">
           <Dialog.Header>
             <Dialog.Title>MCP Config</Dialog.Title>
           </Dialog.Header>
           <MCPJson toolset={toolset} fullWidth />
           <div className="flex justify-end mt-4">
-            <Button onClick={handleCloseModal}>Close</Button>
+            <Button onClick={() => setMcpModalOpen(false)}>Close</Button>
           </div>
         </Dialog.Content>
       </Dialog>
