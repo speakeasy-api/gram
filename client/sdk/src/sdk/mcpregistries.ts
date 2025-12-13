@@ -16,8 +16,8 @@ export class McpRegistries extends ClientSDK {
    * List available MCP servers from configured registries
    */
   async listCatalog(
-    request?: operations.ListMcpCatalogRequest | undefined,
-    security?: operations.ListMcpCatalogSecurity | undefined,
+    request?: operations.ListMCPCatalogRequest | undefined,
+    security?: operations.ListMCPCatalogSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListCatalogResponseBody> {
     return unwrapAsync(mcpRegistriesListCatalog(

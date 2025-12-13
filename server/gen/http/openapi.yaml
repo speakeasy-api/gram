@@ -4407,7 +4407,7 @@ paths:
                 - mcpRegistries
             x-speakeasy-name-override: listCatalog
             x-speakeasy-react-hook:
-                name: ListMcpCatalog
+                name: ListMCPCatalog
     /rpc/packages.create:
         post:
             description: |-

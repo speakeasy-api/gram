@@ -5,12 +5,12 @@
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
 
-export type ListMcpCatalogSecurity = {
+export type ListMCPCatalogSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type ListMcpCatalogRequest = {
+export type ListMCPCatalogRequest = {
   /**
    * Filter to a specific registry
    */
@@ -34,16 +34,16 @@ export type ListMcpCatalogRequest = {
 };
 
 /** @internal */
-export type ListMcpCatalogSecurity$Outbound = {
+export type ListMCPCatalogSecurity$Outbound = {
   "project_slug_header_Gram-Project"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
-export const ListMcpCatalogSecurity$outboundSchema: z.ZodType<
-  ListMcpCatalogSecurity$Outbound,
+export const ListMCPCatalogSecurity$outboundSchema: z.ZodType<
+  ListMCPCatalogSecurity$Outbound,
   z.ZodTypeDef,
-  ListMcpCatalogSecurity
+  ListMCPCatalogSecurity
 > = z.object({
   projectSlugHeaderGramProject: z.string().optional(),
   sessionHeaderGramSession: z.string().optional(),
@@ -54,16 +54,16 @@ export const ListMcpCatalogSecurity$outboundSchema: z.ZodType<
   });
 });
 
-export function listMcpCatalogSecurityToJSON(
-  listMcpCatalogSecurity: ListMcpCatalogSecurity,
+export function listMCPCatalogSecurityToJSON(
+  listMCPCatalogSecurity: ListMCPCatalogSecurity,
 ): string {
   return JSON.stringify(
-    ListMcpCatalogSecurity$outboundSchema.parse(listMcpCatalogSecurity),
+    ListMCPCatalogSecurity$outboundSchema.parse(listMCPCatalogSecurity),
   );
 }
 
 /** @internal */
-export type ListMcpCatalogRequest$Outbound = {
+export type ListMCPCatalogRequest$Outbound = {
   registry_id?: string | undefined;
   search?: string | undefined;
   cursor?: string | undefined;
@@ -72,10 +72,10 @@ export type ListMcpCatalogRequest$Outbound = {
 };
 
 /** @internal */
-export const ListMcpCatalogRequest$outboundSchema: z.ZodType<
-  ListMcpCatalogRequest$Outbound,
+export const ListMCPCatalogRequest$outboundSchema: z.ZodType<
+  ListMCPCatalogRequest$Outbound,
   z.ZodTypeDef,
-  ListMcpCatalogRequest
+  ListMCPCatalogRequest
 > = z.object({
   registryId: z.string().optional(),
   search: z.string().optional(),
@@ -90,10 +90,10 @@ export const ListMcpCatalogRequest$outboundSchema: z.ZodType<
   });
 });
 
-export function listMcpCatalogRequestToJSON(
-  listMcpCatalogRequest: ListMcpCatalogRequest,
+export function listMCPCatalogRequestToJSON(
+  listMCPCatalogRequest: ListMCPCatalogRequest,
 ): string {
   return JSON.stringify(
-    ListMcpCatalogRequest$outboundSchema.parse(listMcpCatalogRequest),
+    ListMCPCatalogRequest$outboundSchema.parse(listMCPCatalogRequest),
   );
 }

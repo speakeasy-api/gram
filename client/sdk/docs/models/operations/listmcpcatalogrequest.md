@@ -1,11 +1,11 @@
-# ListMcpCatalogRequest
+# ListMCPCatalogRequest
 
 ## Example Usage
 
 ```typescript
-import { ListMcpCatalogRequest } from "@gram/client/models/operations";
+import { ListMCPCatalogRequest } from "@gram/client/models/operations";
 
-let value: ListMcpCatalogRequest = {};
+let value: ListMCPCatalogRequest = {};
 ```
 
 ## Fields

@@ -26,7 +26,7 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 
-export type ListMcpCatalogQueryData = components.ListCatalogResponseBody;
+export type ListMCPCatalogQueryData = components.ListCatalogResponseBody;
 
 /**
  * listCatalog mcpRegistries
@@ -34,14 +34,14 @@ export type ListMcpCatalogQueryData = components.ListCatalogResponseBody;
  * @remarks
  * List available MCP servers from configured registries
  */
-export function useListMcpCatalog(
-  request?: operations.ListMcpCatalogRequest | undefined,
-  security?: operations.ListMcpCatalogSecurity | undefined,
-  options?: QueryHookOptions<ListMcpCatalogQueryData>,
-): UseQueryResult<ListMcpCatalogQueryData, Error> {
+export function useListMCPCatalog(
+  request?: operations.ListMCPCatalogRequest | undefined,
+  security?: operations.ListMCPCatalogSecurity | undefined,
+  options?: QueryHookOptions<ListMCPCatalogQueryData>,
+): UseQueryResult<ListMCPCatalogQueryData, Error> {
   const client = useGramContext();
   return useQuery({
-    ...buildListMcpCatalogQuery(
+    ...buildListMCPCatalogQuery(
       client,
       request,
       security,
@@ -57,14 +57,14 @@ export function useListMcpCatalog(
  * @remarks
  * List available MCP servers from configured registries
  */
-export function useListMcpCatalogSuspense(
-  request?: operations.ListMcpCatalogRequest | undefined,
-  security?: operations.ListMcpCatalogSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ListMcpCatalogQueryData>,
-): UseSuspenseQueryResult<ListMcpCatalogQueryData, Error> {
+export function useListMCPCatalogSuspense(
+  request?: operations.ListMCPCatalogRequest | undefined,
+  security?: operations.ListMCPCatalogSecurity | undefined,
+  options?: SuspenseQueryHookOptions<ListMCPCatalogQueryData>,
+): UseSuspenseQueryResult<ListMCPCatalogQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildListMcpCatalogQuery(
+    ...buildListMCPCatalogQuery(
       client,
       request,
       security,
@@ -74,14 +74,14 @@ export function useListMcpCatalogSuspense(
   });
 }
 
-export function prefetchListMcpCatalog(
+export function prefetchListMCPCatalog(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListMcpCatalogRequest | undefined,
-  security?: operations.ListMcpCatalogSecurity | undefined,
+  request?: operations.ListMCPCatalogRequest | undefined,
+  security?: operations.ListMCPCatalogSecurity | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildListMcpCatalogQuery(
+    ...buildListMCPCatalogQuery(
       client$,
       request,
       security,
@@ -89,7 +89,7 @@ export function prefetchListMcpCatalog(
   });
 }
 
-export function setListMcpCatalogData(
+export function setListMCPCatalogData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
@@ -100,14 +100,14 @@ export function setListMcpCatalogData(
       gramProject?: string | undefined;
     },
   ],
-  data: ListMcpCatalogQueryData,
-): ListMcpCatalogQueryData | undefined {
-  const key = queryKeyListMcpCatalog(...queryKeyBase);
+  data: ListMCPCatalogQueryData,
+): ListMCPCatalogQueryData | undefined {
+  const key = queryKeyListMCPCatalog(...queryKeyBase);
 
-  return client.setQueryData<ListMcpCatalogQueryData>(key, data);
+  return client.setQueryData<ListMCPCatalogQueryData>(key, data);
 }
 
-export function invalidateListMcpCatalog(
+export function invalidateListMCPCatalog(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
@@ -126,7 +126,7 @@ export function invalidateListMcpCatalog(
   });
 }
 
-export function invalidateAllListMcpCatalog(
+export function invalidateAllListMCPCatalog(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
@@ -136,26 +136,26 @@ export function invalidateAllListMcpCatalog(
   });
 }
 
-export function buildListMcpCatalogQuery(
+export function buildListMCPCatalogQuery(
   client$: GramCore,
-  request?: operations.ListMcpCatalogRequest | undefined,
-  security?: operations.ListMcpCatalogSecurity | undefined,
+  request?: operations.ListMCPCatalogRequest | undefined,
+  security?: operations.ListMCPCatalogSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<ListMcpCatalogQueryData>;
+  queryFn: (context: QueryFunctionContext) => Promise<ListMCPCatalogQueryData>;
 } {
   return {
-    queryKey: queryKeyListMcpCatalog({
+    queryKey: queryKeyListMCPCatalog({
       registryId: request?.registryId,
       search: request?.search,
       cursor: request?.cursor,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
     }),
-    queryFn: async function listMcpCatalogQueryFn(
+    queryFn: async function listMCPCatalogQueryFn(
       ctx,
-    ): Promise<ListMcpCatalogQueryData> {
+    ): Promise<ListMCPCatalogQueryData> {
       const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
       const mergedOptions = {
         ...options,
@@ -172,7 +172,7 @@ export function buildListMcpCatalogQuery(
   };
 }
 
-export function queryKeyListMcpCatalog(
+export function queryKeyListMCPCatalog(
   parameters: {
     registryId?: string | undefined;
     search?: string | undefined;

@@ -469,7 +469,7 @@ To learn about this feature and how to get started, check
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
 - [`useListIntegrations`](docs/sdks/integrations/README.md#list) - list integrations
-- [`useListMcpCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
+- [`useListMCPCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
 - [`useListPackages`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListResources`](docs/sdks/resources/README.md#list) - listResources resources

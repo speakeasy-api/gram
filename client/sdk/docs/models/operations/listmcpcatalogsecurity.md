@@ -1,11 +1,11 @@
-# ListMcpCatalogSecurity
+# ListMCPCatalogSecurity
 
 ## Example Usage
 
 ```typescript
-import { ListMcpCatalogSecurity } from "@gram/client/models/operations";
+import { ListMCPCatalogSecurity } from "@gram/client/models/operations";
 
-let value: ListMcpCatalogSecurity = {};
+let value: ListMCPCatalogSecurity = {};
 ```
 
 ## Fields

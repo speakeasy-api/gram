@@ -34,8 +34,8 @@ import { Result } from "../types/fp.js";
  */
 export function mcpRegistriesListCatalog(
   client: GramCore,
-  request?: operations.ListMcpCatalogRequest | undefined,
-  security?: operations.ListMcpCatalogSecurity | undefined,
+  request?: operations.ListMCPCatalogRequest | undefined,
+  security?: operations.ListMCPCatalogSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -61,8 +61,8 @@ export function mcpRegistriesListCatalog(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListMcpCatalogRequest | undefined,
-  security?: operations.ListMcpCatalogSecurity | undefined,
+  request?: operations.ListMCPCatalogRequest | undefined,
+  security?: operations.ListMCPCatalogSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -84,7 +84,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      operations.ListMcpCatalogRequest$outboundSchema.optional().parse(value),
+      operations.ListMCPCatalogRequest$outboundSchema.optional().parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -131,7 +131,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listMcpCatalog",
+    operationID: "listMCPCatalog",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

@@ -5389,7 +5389,7 @@ paths:
     /rpc/mcpRegistries.listCatalog:
         get:
             description: List available MCP servers from configured registries
-            operationId: listMcpCatalog
+            operationId: listMCPCatalog
             parameters:
                 - allowEmptyValue: true
                   description: Filter to a specific registry
@@ -5496,7 +5496,7 @@ paths:
                 - mcpRegistries
             x-speakeasy-name-override: listCatalog
             x-speakeasy-react-hook:
-                name: ListMcpCatalog
+                name: ListMCPCatalog
     /rpc/packages.create:
         post:
             description: Create a new package for a project.

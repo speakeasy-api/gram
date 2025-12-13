@@ -14,7 +14,7 @@ List available MCP servers from configured registries
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="listMcpCatalog" method="get" path="/rpc/mcpRegistries.listCatalog" -->
+<!-- UsageSnippet language="typescript" operationID="listMCPCatalog" method="get" path="/rpc/mcpRegistries.listCatalog" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -67,18 +67,18 @@ associated utilities.
 ```tsx
 import {
   // Query hooks for fetching data.
-  useListMcpCatalog,
-  useListMcpCatalogSuspense,
+  useListMCPCatalog,
+  useListMCPCatalogSuspense,
 
   // Utility for prefetching data during server-side rendering and in React
   // Server Components that will be immediately available to client components
   // using the hooks.
-  prefetchListMcpCatalog,
+  prefetchListMCPCatalog,
   
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
-  invalidateListMcpCatalog,
-  invalidateAllListMcpCatalog,
+  invalidateListMCPCatalog,
+  invalidateAllListMCPCatalog,
 } from "@gram/client/react-query/mcpRegistriesListCatalog.js";
 ```
 
@@ -86,8 +86,8 @@ import {
 
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.ListMcpCatalogRequest](../../models/operations/listmcpcatalogrequest.md)                                                                                           | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.ListMcpCatalogSecurity](../../models/operations/listmcpcatalogsecurity.md)                                                                                         | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
+| `request`                                                                                                                                                                      | [operations.ListMCPCatalogRequest](../../models/operations/listmcpcatalogrequest.md)                                                                                           | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `security`                                                                                                                                                                     | [operations.ListMCPCatalogSecurity](../../models/operations/listmcpcatalogsecurity.md)                                                                                         | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |

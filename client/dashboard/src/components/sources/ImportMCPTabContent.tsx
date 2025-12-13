@@ -1,5 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
-import { useListMcpCatalog } from "@gram/client/react-query";
+import { useListMCPCatalog } from "@gram/client/react-query";
 import type { ExternalMCPServer } from "@gram/client/models/components";
 import { Input } from "@speakeasy-api/moonshine";
 import { SearchIcon, ServerIcon } from "lucide-react";
@@ -58,7 +58,7 @@ export default function ImportMCPTabContent() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const { data, isLoading, error } = useListMcpCatalog(
+  const { data, isLoading, error } = useListMCPCatalog(
     debouncedSearch ? { search: debouncedSearch } : undefined,
   );
 
