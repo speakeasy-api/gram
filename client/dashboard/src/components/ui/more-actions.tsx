@@ -1,13 +1,14 @@
 import { cn } from "@/lib/utils";
-import { Icon, IconName } from "@speakeasy-api/moonshine";
-import { useState } from "react";
-import { Button } from "./button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  Icon,
+  IconName,
 } from "@speakeasy-api/moonshine";
+import { useState } from "react";
+import { Button } from "./button";
 
 export type Action = {
   icon?: IconName;
@@ -30,6 +31,7 @@ export function MoreActions({
     (onClick: () => void) => (e: React.MouseEvent<HTMLDivElement>) => {
       e.stopPropagation();
       e.preventDefault();
+      setIsOpen(false);
       onClick();
     };
 
