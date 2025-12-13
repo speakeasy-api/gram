@@ -1,5 +1,13 @@
 # server
 
+## 0.14.2
+
+### Patch Changes
+
+- e0b26ea: Add ListToolExecutionLogs API endpoint for querying structured tool logs with cursor-based pagination and filtering support
+- 82f637a: Updates AgentAPI with storing of agent run IDs for a paginated log view. Also changes the access control defensive check to work on project id which is better
+- 5482f4c: Introduces infrastructure to run a local MCP registry in a container
+
 ## 0.14.1
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # dashboard
 
+## 0.22.3
+
+### Patch Changes
+
+- ba502dc: fix playground tools list now updates immediately when adding/removing tools from a toolset
+- abbb9a3: Don't brick page when certain dialogs are closed. Also improves the mcp config dialog to not overflow the entire screen
+
 ## 0.22.2
 
 ### Patch Changes
