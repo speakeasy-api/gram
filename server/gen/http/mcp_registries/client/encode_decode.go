@@ -46,6 +46,10 @@ func EncodeListCatalogRequest(encoder func(*http.Request) goahttp.Encoder) func(
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.ProjectSlugInput != nil {
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
@@ -275,6 +279,7 @@ func unmarshalExternalMCPServerResponseBodyToTypesExternalMCPServer(v *ExternalM
 		RegistryID:  *v.RegistryID,
 		Title:       v.Title,
 		IconURL:     v.IconURL,
+		Meta:        v.Meta,
 	}
 
 	return res

@@ -221,6 +221,8 @@ type ExternalMCPServerResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
 	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
+	// Opaque metadata from the registry
+	Meta any `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
 }
 
 // NewListCatalogResultOK builds a "mcpRegistries" service "listCatalog"

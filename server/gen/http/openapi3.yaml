@@ -5421,6 +5421,13 @@ paths:
                     description: Session header
                     type: string
                 - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
                   description: project header
                   in: header
                   name: Gram-Project
@@ -5491,6 +5498,8 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
             summary: listCatalog mcpRegistries
             tags:
                 - mcpRegistries
@@ -10763,6 +10772,8 @@ components:
                     type: string
                     description: URL to the server's icon
                     format: uri
+                meta:
+                    description: Opaque metadata from the registry
                 name:
                     type: string
                     description: Server name in reverse-DNS format (e.g., 'io.github.user/server')

@@ -53,6 +53,7 @@ type ListCatalogPayload struct {
 	// Pagination cursor
 	Cursor           *string
 	SessionToken     *string
+	ApikeyToken      *string
 	ProjectSlugInput *string
 }
 

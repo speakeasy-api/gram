@@ -14,7 +14,7 @@ import (
 
 // BuildListCatalogPayload builds the payload for the mcpRegistries listCatalog
 // endpoint from CLI flags.
-func BuildListCatalogPayload(mcpRegistriesListCatalogRegistryID string, mcpRegistriesListCatalogSearch string, mcpRegistriesListCatalogCursor string, mcpRegistriesListCatalogSessionToken string, mcpRegistriesListCatalogProjectSlugInput string) (*mcpregistries.ListCatalogPayload, error) {
+func BuildListCatalogPayload(mcpRegistriesListCatalogRegistryID string, mcpRegistriesListCatalogSearch string, mcpRegistriesListCatalogCursor string, mcpRegistriesListCatalogSessionToken string, mcpRegistriesListCatalogApikeyToken string, mcpRegistriesListCatalogProjectSlugInput string) (*mcpregistries.ListCatalogPayload, error) {
 	var err error
 	var registryID *string
 	{
@@ -44,6 +44,12 @@ func BuildListCatalogPayload(mcpRegistriesListCatalogRegistryID string, mcpRegis
 			sessionToken = &mcpRegistriesListCatalogSessionToken
 		}
 	}
+	var apikeyToken *string
+	{
+		if mcpRegistriesListCatalogApikeyToken != "" {
+			apikeyToken = &mcpRegistriesListCatalogApikeyToken
+		}
+	}
 	var projectSlugInput *string
 	{
 		if mcpRegistriesListCatalogProjectSlugInput != "" {
@@ -55,6 +61,7 @@ func BuildListCatalogPayload(mcpRegistriesListCatalogRegistryID string, mcpRegis
 	v.Search = search
 	v.Cursor = cursor
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
