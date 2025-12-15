@@ -31,16 +31,6 @@ export default function Catalog() {
     return data?.pages.flatMap((page) => page.servers as Server[]) ?? [];
   }, [data]);
 
-  // const filteredServers = useMemo(() => {
-  //   const query = searchQuery.toLowerCase();
-  //   return allServers.filter(
-  //     (server) =>
-  //       server.title.toLowerCase().includes(query) ||
-  //       server.name.toLowerCase().includes(query) ||
-  //       server.description.toLowerCase().includes(query),
-  //   );
-  // }, [allServers, searchQuery]);
-
   // Infinite scroll with IntersectionObserver
   useEffect(() => {
     const element = loadMoreRef.current;
@@ -141,7 +131,7 @@ export default function Catalog() {
                 {!isLoading &&
                   allServers?.map((server) => (
                     <MCPServerCard
-                      key={server.registryId}
+                      key={`${server.registryId}-${server.name}`}
                       server={server}
                       onAddToProject={() => setAddingServer(server)}
                     />
@@ -214,7 +204,7 @@ function ServerHeading({ server }: { server: Server }) {
 
 function MCPServerCard({ server, onAddToProject }: MCPServerCardProps) {
   const meta = server.meta["com.pulsemcp/server"];
-  const visitorsTotal = meta?.visitorsEstimateTotal;
+  const visitorsTotal = meta?.visitorsEstimateLastFourWeeks;
 
   return (
     <Card>

@@ -11,7 +11,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useIsAdmin, useSession } from "@/contexts/Auth";
+import { useSession } from "@/contexts/Auth";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { AppRoute, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Stack } from "@speakeasy-api/moonshine";
@@ -33,17 +34,20 @@ import { Type } from "./ui/type";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
+  const telemetry = useTelemetry();
+
   const [metricsModalOpen, setMetricsModalOpen] = React.useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [changelogModalOpen, setChangelogModalOpen] = useState(false);
-  const isAdmin = useIsAdmin();
+
+  const isCatalogEnabled = telemetry.isFeatureEnabled("gram-external-mcp");
 
   const topNavGroups = {
     create: [routes.toolsets, routes.customTools, routes.prompts] as AppRoute[],
     connect: [routes.playground, routes.mcp, routes.environments],
   };
 
-  if (isAdmin) {
+  if (isCatalogEnabled) {
     topNavGroups.create.push(routes.catalog);
   }
 
