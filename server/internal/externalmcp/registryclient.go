@@ -186,7 +186,7 @@ type getServerResponse struct {
 func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry, serverName string) (*ServerDetails, error) {
 	u, err := url.Parse(registry.URL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse registry URL: %w", err)
+		return nil, fmt.Errorf("parse external mcp registry url: %w", err)
 	}
 	u = u.JoinPath("v0.1", "servers", url.PathEscape(serverName), "versions", "latest")
 
@@ -194,7 +194,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("create external mcp server details request: %w", err)
 	}
 
 	for key, values := range checkForPulseCredentials(registry.URL) {
@@ -205,7 +205,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch from registry: %w", err)
+		return nil, fmt.Errorf("send external mcp server details request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -215,12 +215,12 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, fmt.Errorf("read external mcp server details response: %w", err)
 	}
 
 	var serverResp getServerResponse
 	if err := json.Unmarshal(body, &serverResp); err != nil {
-		return nil, fmt.Errorf("failed to decode server response: %w", err)
+		return nil, fmt.Errorf("decode external mcp server details response: %w", err)
 	}
 
 	// Find the remote URL, preferring streamable-http over sse
