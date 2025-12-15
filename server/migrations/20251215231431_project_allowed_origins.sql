@@ -12,3 +12,5 @@ CREATE TABLE "project_allowed_origins" (
   CONSTRAINT "project_allowed_origins_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "project_allowed_origins_origin_check" CHECK ((origin <> ''::text) AND (char_length(origin) <= 500))
 );
+-- Create index "project_allowed_origins_project_id_origin_key" to table: "project_allowed_origins"
+CREATE UNIQUE INDEX "project_allowed_origins_project_id_origin_key" ON "project_allowed_origins" ("project_id", "origin") WHERE (deleted IS FALSE);
