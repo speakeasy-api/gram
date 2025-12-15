@@ -21,6 +21,10 @@ export type ExternalMCPServer = {
    */
   iconUrl?: string | undefined;
   /**
+   * Opaque metadata from the registry
+   */
+  meta?: any | undefined;
+  /**
    * Server name in reverse-DNS format (e.g., 'io.github.user/server')
    */
   name: string;
@@ -46,6 +50,7 @@ export const ExternalMCPServer$inboundSchema: z.ZodType<
 > = z.object({
   description: z.string(),
   icon_url: z.string().optional(),
+  meta: z.any().optional(),
   name: z.string(),
   registry_id: z.string(),
   title: z.string().optional(),

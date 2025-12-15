@@ -8,6 +8,13 @@ import { EvolveDeploymentRequest } from "@gram/client/models/operations";
 let value: EvolveDeploymentRequest = {
   evolveForm: {
     nonBlocking: false,
+    upsertExternalMcps: [
+      {
+        name: "ai.exa/exa",
+        registryId: "f1d0bf1d-70c9-4a3a-9de8-8ddb27c0c81b",
+        slug: "<value>",
+      },
+    ],
   },
 };
 ```

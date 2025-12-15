@@ -66,6 +66,60 @@ func (q *Queries) CloneDeployment(ctx context.Context, arg CloneDeploymentParams
 	return id, err
 }
 
+const cloneDeploymentExternalMCPs = `-- name: CloneDeploymentExternalMCPs :many
+INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug)
+SELECT
+  $1
+  , current.registry_id
+  , current.name
+  , current.slug
+FROM external_mcp_attachments as current
+WHERE current.deployment_id = $2
+  AND current.deleted IS FALSE
+  AND current.slug <> ALL ($3::text[])
+RETURNING id, deployment_id, registry_id, name, slug
+`
+
+type CloneDeploymentExternalMCPsParams struct {
+	CloneDeploymentID    uuid.UUID
+	OriginalDeploymentID uuid.UUID
+	ExcludedSlugs        []string
+}
+
+type CloneDeploymentExternalMCPsRow struct {
+	ID           uuid.UUID
+	DeploymentID uuid.UUID
+	RegistryID   uuid.UUID
+	Name         string
+	Slug         string
+}
+
+func (q *Queries) CloneDeploymentExternalMCPs(ctx context.Context, arg CloneDeploymentExternalMCPsParams) ([]CloneDeploymentExternalMCPsRow, error) {
+	rows, err := q.db.Query(ctx, cloneDeploymentExternalMCPs, arg.CloneDeploymentID, arg.OriginalDeploymentID, arg.ExcludedSlugs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CloneDeploymentExternalMCPsRow
+	for rows.Next() {
+		var i CloneDeploymentExternalMCPsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeploymentID,
+			&i.RegistryID,
+			&i.Name,
+			&i.Slug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const cloneDeploymentFunctionsAssets = `-- name: CloneDeploymentFunctionsAssets :many
 INSERT INTO deployments_functions (
   deployment_id
@@ -1167,15 +1221,15 @@ WITH latest_status as (
     LIMIT 1
 ),
 openapiv3_tool_counts as (
-    SELECT 
+    SELECT
         deployment_id,
         COUNT(DISTINCT id) as tool_count
-    FROM http_tool_definitions 
+    FROM http_tool_definitions
     WHERE deployment_id = $1 AND deleted IS FALSE
     GROUP BY deployment_id
 ),
 functions_tool_counts as (
-    SELECT 
+    SELECT
         deployment_id,
         COUNT(DISTINCT id) as tool_count
     FROM function_tool_definitions
@@ -1202,7 +1256,11 @@ SELECT
   package_versions.prerelease as package_version_prerelease,
   package_versions.build as package_version_build,
   COALESCE(openapiv3_tool_counts.tool_count, 0) as openapiv3_tool_count,
-  COALESCE(functions_tool_counts.tool_count, 0) as functions_tool_count
+  COALESCE(functions_tool_counts.tool_count, 0) as functions_tool_count,
+  external_mcp_attachments.id as external_mcp_id,
+  external_mcp_attachments.registry_id as external_mcp_registry_id,
+  external_mcp_attachments.name as external_mcp_name,
+  external_mcp_attachments.slug as external_mcp_slug
 FROM deployments
 LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
 LEFT JOIN deployments_functions ON deployments.id = deployments_functions.deployment_id
@@ -1212,6 +1270,7 @@ LEFT JOIN packages ON deployments_packages.package_id = packages.id
 LEFT JOIN package_versions ON deployments_packages.version_id = package_versions.id
 LEFT JOIN openapiv3_tool_counts ON deployments.id = openapiv3_tool_counts.deployment_id
 LEFT JOIN functions_tool_counts ON deployments.id = functions_tool_counts.deployment_id
+LEFT JOIN external_mcp_attachments ON deployments.id = external_mcp_attachments.deployment_id AND external_mcp_attachments.deleted IS FALSE
 WHERE deployments.id = $1 AND deployments.project_id = $2
 `
 
@@ -1241,6 +1300,10 @@ type GetDeploymentWithAssetsRow struct {
 	PackageVersionBuild              pgtype.Text
 	Openapiv3ToolCount               int64
 	FunctionsToolCount               int64
+	ExternalMcpID                    uuid.NullUUID
+	ExternalMcpRegistryID            uuid.NullUUID
+	ExternalMcpName                  pgtype.Text
+	ExternalMcpSlug                  pgtype.Text
 }
 
 func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeploymentWithAssetsParams) ([]GetDeploymentWithAssetsRow, error) {
@@ -1286,6 +1349,10 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 			&i.PackageVersionBuild,
 			&i.Openapiv3ToolCount,
 			&i.FunctionsToolCount,
+			&i.ExternalMcpID,
+			&i.ExternalMcpRegistryID,
+			&i.ExternalMcpName,
+			&i.ExternalMcpSlug,
 		); err != nil {
 			return nil, err
 		}
@@ -1362,6 +1429,51 @@ func (q *Queries) GetLatestDeploymentID(ctx context.Context, projectID uuid.UUID
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const listDeploymentExternalMCPs = `-- name: ListDeploymentExternalMCPs :many
+SELECT id, deployment_id, registry_id, name, slug, created_at, updated_at
+FROM external_mcp_attachments
+WHERE deployment_id = $1 AND deleted IS FALSE
+ORDER BY created_at ASC
+`
+
+type ListDeploymentExternalMCPsRow struct {
+	ID           uuid.UUID
+	DeploymentID uuid.UUID
+	RegistryID   uuid.UUID
+	Name         string
+	Slug         string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) ListDeploymentExternalMCPs(ctx context.Context, deploymentID uuid.UUID) ([]ListDeploymentExternalMCPsRow, error) {
+	rows, err := q.db.Query(ctx, listDeploymentExternalMCPs, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDeploymentExternalMCPsRow
+	for rows.Next() {
+		var i ListDeploymentExternalMCPsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeploymentID,
+			&i.RegistryID,
+			&i.Name,
+			&i.Slug,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listDeployments = `-- name: ListDeployments :many
@@ -1539,6 +1651,54 @@ func (q *Queries) TransitionDeployment(ctx context.Context, arg TransitionDeploy
 	)
 	var i TransitionDeploymentRow
 	err := row.Scan(&i.StatusID, &i.Status, &i.Moved)
+	return i, err
+}
+
+const upsertDeploymentExternalMCP = `-- name: UpsertDeploymentExternalMCP :one
+INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (deployment_id, slug) WHERE deleted IS FALSE
+DO UPDATE SET
+  registry_id = EXCLUDED.registry_id,
+  name = EXCLUDED.name,
+  updated_at = clock_timestamp()
+RETURNING id, deployment_id, registry_id, name, slug, created_at, updated_at
+`
+
+type UpsertDeploymentExternalMCPParams struct {
+	DeploymentID uuid.UUID
+	RegistryID   uuid.UUID
+	Name         string
+	Slug         string
+}
+
+type UpsertDeploymentExternalMCPRow struct {
+	ID           uuid.UUID
+	DeploymentID uuid.UUID
+	RegistryID   uuid.UUID
+	Name         string
+	Slug         string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertDeploymentExternalMCP(ctx context.Context, arg UpsertDeploymentExternalMCPParams) (UpsertDeploymentExternalMCPRow, error) {
+	row := q.db.QueryRow(ctx, upsertDeploymentExternalMCP,
+		arg.DeploymentID,
+		arg.RegistryID,
+		arg.Name,
+		arg.Slug,
+	)
+	var i UpsertDeploymentExternalMCPRow
+	err := row.Scan(
+		&i.ID,
+		&i.DeploymentID,
+		&i.RegistryID,
+		&i.Name,
+		&i.Slug,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
 	return i, err
 }
 

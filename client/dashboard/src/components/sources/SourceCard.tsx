@@ -17,13 +17,23 @@ import {
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
 import { Badge } from "@speakeasy-api/moonshine";
 import { CircleAlertIcon, FileCode, Globe, SquareFunction } from "lucide-react";
+import { McpIcon } from "@/components/ui/mcp-icon";
 
-export type NamedAsset = Asset & {
-  deploymentAssetId: string;
-  name: string;
-  slug: string;
-  type: "openapi" | "function";
-};
+export type NamedAsset =
+  | (Asset & {
+      deploymentAssetId: string;
+      name: string;
+      slug: string;
+      type: "openapi" | "function";
+    })
+  | {
+      id: string;
+      deploymentAssetId: string;
+      name: string;
+      slug: string;
+      type: "externalmcp";
+      registryId: string;
+    };
 
 export function SourceCard({
   asset,
@@ -41,11 +51,21 @@ export function SourceCard({
   setChangeDocumentTargetSlug: (slug: string) => void;
 }) {
   const routes = useRoutes();
-  const IconComponent = asset.type === "openapi" ? FileCode : SquareFunction;
+  const IconComponent =
+    asset.type === "openapi"
+      ? FileCode
+      : asset.type === "function"
+        ? SquareFunction
+        : McpIcon;
 
-  const sourceKind = asset.type === "openapi" ? "http" : "function";
+  const sourceKind =
+    asset.type === "openapi"
+      ? "http"
+      : asset.type === "function"
+        ? "function"
+        : "externalmcp";
 
-  // Check if environment is attached
+  // Check if environment is attached (not applicable for external MCPs)
   const sourceEnvironment = useGetSourceEnvironment(
     {
       sourceKind: sourceKind as "http" | "function",
@@ -53,6 +73,7 @@ export function SourceCard({
     },
     undefined,
     {
+      enabled: asset.type !== "externalmcp",
       retry: (_, err) => {
         if (err instanceof GramError && err.statusCode === 404) {
           return false;
@@ -63,7 +84,8 @@ export function SourceCard({
     },
   );
 
-  const hasEnvironment = !!sourceEnvironment.data?.id;
+  const hasEnvironment =
+    asset.type !== "externalmcp" && !!sourceEnvironment.data?.id;
 
   const actions = [
     ...(asset.type === "openapi"
@@ -80,11 +102,15 @@ export function SourceCard({
           },
         ]
       : []),
-    {
-      label: "Attach Environment",
-      onClick: () => handleAttachEnvironment(asset.id),
-      icon: "globe" as const,
-    },
+    ...(asset.type !== "externalmcp"
+      ? [
+          {
+            label: "Attach Environment",
+            onClick: () => handleAttachEnvironment(asset.id),
+            icon: "globe" as const,
+          },
+        ]
+      : []),
     {
       label: "Delete",
       onClick: () => handleRemove(asset.id),
@@ -93,12 +119,8 @@ export function SourceCard({
     },
   ];
 
-  return (
-    <routes.sources.source.Link
-      key={asset.id}
-      params={[sourceKind, asset.slug]}
-      className="bg-secondary max-w-sm text-card-foreground flex flex-col rounded-md border px-3 py-3 hover:brightness-95 transition-colors hover:no-underline"
-    >
+  const cardContent = (
+    <>
       <div className="flex items-center justify-between mb-2">
         <IconComponent className="size-5 shrink-0" strokeWidth={2} />
         <div onClick={(e) => e.stopPropagation()}>
@@ -107,7 +129,11 @@ export function SourceCard({
       </div>
 
       <div className="leading-none mb-1.5 flex items-center justify-between flex-wrap">
-        <Type>{asset.name}</Type>
+        <Type className="overflow-hidden text-ellipsis whitespace-nowrap max-w-[200px] [direction:rtl]">
+          <span className="[direction:ltr] [unicode-bidi:embed]">
+            {asset.name}
+          </span>
+        </Type>
         {hasEnvironment && (
           <SimpleTooltip
             tooltip={`Attached environment: ${sourceEnvironment.data?.name || "Unknown"}`}
@@ -122,13 +148,37 @@ export function SourceCard({
 
       <div className="flex gap-1.5 items-center text-muted-foreground text-xs">
         {causingFailure && <AssetIsCausingFailureNotice />}
-        <UpdatedAt
-          date={asset.updatedAt}
-          italic={false}
-          className="text-xs"
-          showRecentness
-        />
+        {"updatedAt" in asset && asset.updatedAt && (
+          <UpdatedAt
+            date={new Date(asset.updatedAt)}
+            italic={false}
+            className="text-xs"
+            showRecentness
+          />
+        )}
       </div>
+    </>
+  );
+
+  const cardClassName =
+    "bg-secondary max-w-sm text-card-foreground flex flex-col rounded-md border px-3 py-3 hover:brightness-95 transition-colors hover:no-underline";
+
+  // External MCPs don't have a details page yet, so render as a div
+  if (asset.type === "externalmcp") {
+    return (
+      <div key={asset.id} className={cardClassName}>
+        {cardContent}
+      </div>
+    );
+  }
+
+  return (
+    <routes.sources.source.Link
+      key={asset.id}
+      params={[sourceKind, asset.slug]}
+      className={cardClassName}
+    >
+      {cardContent}
     </routes.sources.source.Link>
   );
 }

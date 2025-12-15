@@ -84,15 +84,15 @@ WITH latest_status as (
     LIMIT 1
 ),
 openapiv3_tool_counts as (
-    SELECT 
+    SELECT
         deployment_id,
         COUNT(DISTINCT id) as tool_count
-    FROM http_tool_definitions 
+    FROM http_tool_definitions
     WHERE deployment_id = @id AND deleted IS FALSE
     GROUP BY deployment_id
 ),
 functions_tool_counts as (
-    SELECT 
+    SELECT
         deployment_id,
         COUNT(DISTINCT id) as tool_count
     FROM function_tool_definitions
@@ -119,7 +119,11 @@ SELECT
   package_versions.prerelease as package_version_prerelease,
   package_versions.build as package_version_build,
   COALESCE(openapiv3_tool_counts.tool_count, 0) as openapiv3_tool_count,
-  COALESCE(functions_tool_counts.tool_count, 0) as functions_tool_count
+  COALESCE(functions_tool_counts.tool_count, 0) as functions_tool_count,
+  external_mcp_attachments.id as external_mcp_id,
+  external_mcp_attachments.registry_id as external_mcp_registry_id,
+  external_mcp_attachments.name as external_mcp_name,
+  external_mcp_attachments.slug as external_mcp_slug
 FROM deployments
 LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
 LEFT JOIN deployments_functions ON deployments.id = deployments_functions.deployment_id
@@ -129,6 +133,7 @@ LEFT JOIN packages ON deployments_packages.package_id = packages.id
 LEFT JOIN package_versions ON deployments_packages.version_id = package_versions.id
 LEFT JOIN openapiv3_tool_counts ON deployments.id = openapiv3_tool_counts.deployment_id
 LEFT JOIN functions_tool_counts ON deployments.id = functions_tool_counts.deployment_id
+LEFT JOIN external_mcp_attachments ON deployments.id = external_mcp_attachments.deployment_id AND external_mcp_attachments.deleted IS FALSE
 WHERE deployments.id = @id AND deployments.project_id = @project_id;
 
 -- name: GetLatestDeploymentID :one
@@ -627,3 +632,32 @@ INSERT INTO functions_access (
   , @bearer_format
 )
 RETURNING id;
+
+-- name: UpsertDeploymentExternalMCP :one
+INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug)
+VALUES (@deployment_id, @registry_id, @name, @slug)
+ON CONFLICT (deployment_id, slug) WHERE deleted IS FALSE
+DO UPDATE SET
+  registry_id = EXCLUDED.registry_id,
+  name = EXCLUDED.name,
+  updated_at = clock_timestamp()
+RETURNING id, deployment_id, registry_id, name, slug, created_at, updated_at;
+
+-- name: ListDeploymentExternalMCPs :many
+SELECT id, deployment_id, registry_id, name, slug, created_at, updated_at
+FROM external_mcp_attachments
+WHERE deployment_id = @deployment_id AND deleted IS FALSE
+ORDER BY created_at ASC;
+
+-- name: CloneDeploymentExternalMCPs :many
+INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug)
+SELECT
+  @clone_deployment_id
+  , current.registry_id
+  , current.name
+  , current.slug
+FROM external_mcp_attachments as current
+WHERE current.deployment_id = @original_deployment_id
+  AND current.deleted IS FALSE
+  AND current.slug <> ALL (@excluded_slugs::text[])
+RETURNING id, deployment_id, registry_id, name, slug;
