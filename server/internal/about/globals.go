@@ -1,6 +1,6 @@
 package about
 
-// See main.go for why this file exists.
+//  See main.go for why this file exists.
 
 var openapiDoc []byte
 
