@@ -66,7 +66,7 @@ type Service struct {
 	serverURL         *url.URL
 	posthog           *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	toolProxy         *gateway.ToolProxy
-	oauthService      *oauth.Service
+	oauthService      OAuthService
 	oauthRepo         *oauth_repo.Queries
 	billingTracker    billing.Tracker
 	billingRepository billing.Repository
@@ -113,7 +113,7 @@ func NewService(
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	funcCaller functions.ToolCaller,
-	oauthService *oauth.Service,
+	oauthService OAuthService,
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
 	tcm tm.ToolMetricsProvider,
@@ -389,7 +389,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			securityKeys: []string{},
 			Token:        token,
 		})
-	case oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
+	case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
 		// Custom OAuth provider flow
 		token, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
 		if err != nil {
@@ -404,26 +404,25 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 				Token:        externalSecret.Token,
 			})
 		}
-	case (oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"):
-		if token == "" {
-			w.Header().Set(
-				"WWW-Authenticate",
-				fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
-			)
-			return oops.E(oops.CodeUnauthorized, nil, "access token is required")
+	case !toolset.McpIsPublic:
+		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
+
+		ctx, err = s.authenticateToken(ctx, token, toolset.ID)
+		if err == nil {
+			break
 		}
 
-		ctx, err = s.authenticateToken(ctx, token, toolset.ID, true)
-		if err != nil {
+		if isOAuthCapable {
 			w.Header().Set(
 				"WWW-Authenticate",
 				fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
 			)
-			return err
 		}
+
+		return oops.E(oops.CodeUnauthorized, nil, "expired or invalid access token")
 	default:
 		if token != "" {
-			ctx, err = s.authenticateToken(ctx, token, toolset.ID, false)
+			ctx, err = s.authenticateToken(ctx, token, toolset.ID)
 			if err != nil {
 				return err
 			}
@@ -754,23 +753,19 @@ func parseMcpSessionID(headers http.Header) string {
 	return session
 }
 
-func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID uuid.UUID, isGramOAuth bool) (context.Context, error) {
-	if isGramOAuth && token == "" {
-		return ctx, oops.E(oops.CodeUnauthorized, nil, "access token is required")
+func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID uuid.UUID) (context.Context, error) {
+	if token == "" {
+		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 
-	if isGramOAuth {
-		accessToken, err := s.oauthService.ValidateAccessToken(ctx, toolsetID, token)
-		if err != nil {
-			return ctx, oops.E(oops.CodeUnauthorized, err, "invalid or expired access token")
-		}
-
+	oAuthToken, err := s.oauthService.ValidateAccessToken(ctx, toolsetID, token)
+	if err == nil {
 		// OAuth token validated, authenticate with session
-		if len(accessToken.ExternalSecrets) == 0 {
+		if len(oAuthToken.ExternalSecrets) == 0 {
 			return ctx, oops.E(oops.CodeUnauthorized, nil, "no session token found")
 		}
 
-		ctx, err = s.sessions.Authenticate(ctx, accessToken.ExternalSecrets[0].Token, false)
+		ctx, err = s.sessions.Authenticate(ctx, oAuthToken.ExternalSecrets[0].Token, false)
 		if err != nil {
 			return ctx, oops.E(oops.CodeUnauthorized, err, "failed to authenticate session")
 		}
@@ -784,6 +779,10 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 		return ctx, nil
 	}
 
+	if errors.Is(err, oauth.ErrExpiredAccessToken) {
+		return ctx, oops.E(oops.CodeUnauthorized, err, "expired access token")
+	}
+
 	// Strategy 2: Try API key authentication (consumer scope)
 	sc := security.APIKeyScheme{
 		Name:           auth.KeySecurityScheme,
@@ -791,7 +790,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 		Scopes:         []string{},
 	}
 
-	ctx, err := s.auth.Authorize(ctx, token, &sc)
+	ctx, err = s.auth.Authorize(ctx, token, &sc)
 	if err == nil {
 		return ctx, nil
 	}
