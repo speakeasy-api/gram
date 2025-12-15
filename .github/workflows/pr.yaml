@@ -90,7 +90,7 @@ jobs:
 
       - name: Download server build artifact
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: server-bin
           path: server/bin
@@ -707,7 +707,7 @@ jobs:
 
       - name: Download melange packages artifact
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: functions-packages
           path: functions/packages
