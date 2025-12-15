@@ -21,4 +21,6 @@ type ExternalMCPServer struct {
 	Title *string
 	// URL to the server's icon
 	IconURL *string
+	// Opaque metadata from the registry
+	Meta any
 }

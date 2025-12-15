@@ -40,6 +40,7 @@ func DecodeListCatalogRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 			search           *string
 			cursor           *string
 			sessionToken     *string
+			apikeyToken      *string
 			projectSlugInput *string
 			err              error
 		)
@@ -63,6 +64,10 @@ func DecodeListCatalogRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
 		projectSlugInputRaw := r.Header.Get("Gram-Project")
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
@@ -70,7 +75,7 @@ func DecodeListCatalogRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		if err != nil {
 			return nil, err
 		}
-		payload := NewListCatalogPayload(registryID, search, cursor, sessionToken, projectSlugInput)
+		payload := NewListCatalogPayload(registryID, search, cursor, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -83,6 +88,13 @@ func DecodeListCatalogRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
 				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
 			}
 		}
 
@@ -257,6 +269,7 @@ func marshalTypesExternalMCPServerToExternalMCPServerResponseBody(v *types.Exter
 		RegistryID:  v.RegistryID,
 		Title:       v.Title,
 		IconURL:     v.IconURL,
+		Meta:        v.Meta,
 	}
 
 	return res

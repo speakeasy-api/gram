@@ -10,6 +10,9 @@ var _ = Service("mcpRegistries", func() {
 	Description("External MCP registry operations")
 
 	Security(security.Session, security.ProjectSlug)
+	Security(security.ByKey, security.ProjectSlug, func() {
+		Scope("producer")
+	})
 	shared.DeclareErrorResponses()
 
 	Method("listCatalog", func() {
@@ -23,6 +26,7 @@ var _ = Service("mcpRegistries", func() {
 			Attribute("cursor", String, "Pagination cursor")
 
 			security.SessionPayload()
+			security.ByKeyPayload()
 			security.ProjectPayload()
 		})
 
@@ -35,6 +39,7 @@ var _ = Service("mcpRegistries", func() {
 		HTTP(func() {
 			GET("/rpc/mcpRegistries.listCatalog")
 			security.SessionHeader()
+			security.ByKeyHeader()
 			security.ProjectHeader()
 			Param("registry_id")
 			Param("search")
@@ -67,6 +72,7 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 	Attribute("icon_url", String, "URL to the server's icon", func() {
 		Format(FormatURI)
 	})
+	Attribute("meta", Any, "Opaque metadata from the registry")
 
 	Required("name", "version", "description", "registry_id")
 })

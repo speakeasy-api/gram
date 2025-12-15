@@ -54,8 +54,8 @@ type listResponse struct {
 }
 
 type serverEntry struct {
-	Server serverJSON   `json:"server"`
-	Meta   responseMeta `json:"_meta"`
+	Server serverJSON `json:"server"`
+	Meta   any        `json:"_meta"`
 }
 
 type serverJSON struct {
@@ -67,10 +67,6 @@ type serverJSON struct {
 	Icons       []struct {
 		URL string `json:"url"`
 	} `json:"icons"`
-}
-
-type responseMeta struct {
-	ID string `json:"id"`
 }
 
 // checkForPulseCredentials returns headers for Pulse MCP registry authentication.
@@ -158,6 +154,7 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			RegistryID:  registryID,
 			Title:       s.Server.Title,
 			IconURL:     iconURL,
+			Meta:        s.Meta,
 		}
 
 		servers = append(servers, server)

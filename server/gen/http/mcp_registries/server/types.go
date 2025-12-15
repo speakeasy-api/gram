@@ -220,6 +220,8 @@ type ExternalMCPServerResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
 	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
+	// Opaque metadata from the registry
+	Meta any `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
 }
 
 // NewListCatalogResponseBody builds the HTTP response body from the result of
@@ -385,12 +387,13 @@ func NewListCatalogGatewayErrorResponseBody(res *goa.ServiceError) *ListCatalogG
 
 // NewListCatalogPayload builds a mcpRegistries service listCatalog endpoint
 // payload.
-func NewListCatalogPayload(registryID *string, search *string, cursor *string, sessionToken *string, projectSlugInput *string) *mcpregistries.ListCatalogPayload {
+func NewListCatalogPayload(registryID *string, search *string, cursor *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpregistries.ListCatalogPayload {
 	v := &mcpregistries.ListCatalogPayload{}
 	v.RegistryID = registryID
 	v.Search = search
 	v.Cursor = cursor
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
