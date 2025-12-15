@@ -97,6 +97,7 @@ export function setListMCPCatalogData(
       search?: string | undefined;
       cursor?: string | undefined;
       gramSession?: string | undefined;
+      gramKey?: string | undefined;
       gramProject?: string | undefined;
     },
   ],
@@ -115,6 +116,7 @@ export function invalidateListMCPCatalog(
       search?: string | undefined;
       cursor?: string | undefined;
       gramSession?: string | undefined;
+      gramKey?: string | undefined;
       gramProject?: string | undefined;
     }]
   >,
@@ -151,6 +153,7 @@ export function buildListMCPCatalogQuery(
       search: request?.search,
       cursor: request?.cursor,
       gramSession: request?.gramSession,
+      gramKey: request?.gramKey,
       gramProject: request?.gramProject,
     }),
     queryFn: async function listMCPCatalogQueryFn(
@@ -178,6 +181,7 @@ export function queryKeyListMCPCatalog(
     search?: string | undefined;
     cursor?: string | undefined;
     gramSession?: string | undefined;
+    gramKey?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {

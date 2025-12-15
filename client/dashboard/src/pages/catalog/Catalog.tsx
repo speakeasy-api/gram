@@ -4,10 +4,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
-import {
-  Server,
-  useSampleListRegistry,
-} from "@/pages/catalog/useSampleListRegistry";
+import { Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import { Badge, Button, Input, Stack } from "@speakeasy-api/moonshine";
 import { Loader2, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -20,7 +17,7 @@ export function CatalogRoot() {
 export default function Catalog() {
   const [searchQuery, setSearchQuery] = useState("");
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useSampleListRegistry();
+    useInfiniteListMCPCatalog(searchQuery);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const [addingServer, setAddingServer] = useState<Server | null>(null);
   const [desiredToolsetName, setDesiredToolsetName] = useState("");
@@ -31,18 +28,18 @@ export default function Catalog() {
 
   // Flatten all pages into a single list
   const allServers = useMemo(() => {
-    return data?.pages.flatMap((page) => page.servers) ?? [];
+    return data?.pages.flatMap((page) => page.servers as Server[]) ?? [];
   }, [data]);
 
-  const filteredServers = useMemo(() => {
-    const query = searchQuery.toLowerCase();
-    return allServers.filter(
-      (server) =>
-        server.title.toLowerCase().includes(query) ||
-        server.name.toLowerCase().includes(query) ||
-        server.description.toLowerCase().includes(query),
-    );
-  }, [allServers, searchQuery]);
+  // const filteredServers = useMemo(() => {
+  //   const query = searchQuery.toLowerCase();
+  //   return allServers.filter(
+  //     (server) =>
+  //       server.title.toLowerCase().includes(query) ||
+  //       server.name.toLowerCase().includes(query) ||
+  //       server.description.toLowerCase().includes(query),
+  //   );
+  // }, [allServers, searchQuery]);
 
   // Infinite scroll with IntersectionObserver
   useEffect(() => {
@@ -63,6 +60,7 @@ export default function Catalog() {
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   const addServerToProject = () => {
+    alert("TODO: implement adding server to project");
     //TODO create source
     //TODO create toolset
   };
@@ -141,9 +139,9 @@ export default function Catalog() {
                     <Skeleton key={i} className="h-[200px]" />
                   ))}
                 {!isLoading &&
-                  filteredServers?.map((server) => (
+                  allServers?.map((server) => (
                     <MCPServerCard
-                      key={server.registry_id}
+                      key={server.registryId}
                       server={server}
                       onAddToProject={() => setAddingServer(server)}
                     />
@@ -167,7 +165,7 @@ export default function Catalog() {
                 </div>
               )}
 
-              {!isLoading && filteredServers?.length === 0 && (
+              {!isLoading && allServers?.length === 0 && (
                 <div className="text-center py-12">
                   <Type variant="subheading" className="text-muted-foreground">
                     No MCP servers found matching "{searchQuery}"
@@ -192,15 +190,17 @@ function ServerHeading({ server }: { server: Server }) {
   const meta = server.meta["com.pulsemcp/server"];
   const isOfficial = meta?.isOfficial;
 
+  const displayName = server.title ?? server.name;
+
   return (
     <Stack direction="horizontal" justify="space-between">
       <Stack direction="horizontal" gap={3}>
         <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-          <Type variant="subheading">{server.title[0]}</Type>
+          <Type variant="subheading">{displayName[0]}</Type>
         </div>
         <Stack gap={1}>
           <Stack direction="horizontal" gap={2} align="center">
-            <Type variant="subheading">{server.title}</Type>
+            <Type variant="subheading">{displayName}</Type>
             {isOfficial && <Badge>Official</Badge>}
           </Stack>
           <Type small muted>
