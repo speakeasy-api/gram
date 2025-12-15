@@ -438,18 +438,16 @@ func (p *ProcessDeployment) doExternalMCPs(
 
 			// Attempt to connect to detect OAuth requirements
 			var requiresOAuth bool
-			_, err = externalmcp.ListToolsFromProxy(ctx, logger, serverDetails.RemoteURL, nil)
+			mcpClient, err := externalmcp.NewClient(ctx, logger, serverDetails.RemoteURL, nil)
 			if _, ok := externalmcp.IsAuthRequiredError(err); ok {
 				requiresOAuth = true
 				logger.InfoContext(ctx, "external MCP server requires OAuth",
 					attr.SlogURL(serverDetails.RemoteURL),
 				)
 			} else if err != nil {
-				// Log but don't fail - the server might be temporarily unavailable
-				logger.WarnContext(ctx, "failed to probe external MCP server for auth requirements",
-					attr.SlogURL(serverDetails.RemoteURL),
-					attr.SlogError(err),
-				)
+				return oops.E(oops.CodeUnexpected, err, "external mcp server unavailable").Log(ctx, logger)
+			} else {
+				_ = mcpClient.Close()
 			}
 
 			// Create a proxy tool URN for this external MCP

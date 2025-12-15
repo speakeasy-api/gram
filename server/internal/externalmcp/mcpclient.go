@@ -31,25 +31,26 @@ func IsAuthRequiredError(err error) (*AuthRequiredError, bool) {
 	return nil, false
 }
 
-// SessionOptions contains options for creating an MCP session.
-type SessionOptions struct {
+// ClientOptions contains options for creating an MCP client.
+type ClientOptions struct {
 	// Authorization is the value for the Authorization header (e.g., "Bearer token").
 	// If empty, no Authorization header is sent.
 	Authorization string
 }
 
-// Session represents an active connection to an external MCP server.
-type Session struct {
+// Client represents an active connection to an external MCP server.
+type Client struct {
 	logger    *slog.Logger
 	remoteURL string
 	session   *mcp.ClientSession
 	authRT    *authRoundTripper
 }
 
-// NewSession creates a new session to an external MCP server.
-func NewSession(ctx context.Context, logger *slog.Logger, remoteURL string, opts *SessionOptions) (*Session, error) {
+// NewClient creates a new client connection to an external MCP server.
+// This performs the MCP protocol initialization internally.
+func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, opts *ClientOptions) (*Client, error) {
 	if opts == nil {
-		opts = &SessionOptions{
+		opts = &ClientOptions{
 			Authorization: "",
 		}
 	}
@@ -87,12 +88,12 @@ func NewSession(ctx context.Context, logger *slog.Logger, remoteURL string, opts
 				WWWAuthenticate: authRT.wwwAuthenticate,
 			}
 		}
-		return nil, fmt.Errorf("failed to connect to MCP server: %w", err)
+		return nil, fmt.Errorf("connect to external mcp server: %w", err)
 	}
 
 	logger.InfoContext(ctx, "connected to external MCP server")
 
-	return &Session{
+	return &Client{
 		logger:    logger,
 		remoteURL: remoteURL,
 		session:   session,
@@ -100,10 +101,10 @@ func NewSession(ctx context.Context, logger *slog.Logger, remoteURL string, opts
 	}, nil
 }
 
-// Close closes the session.
-func (s *Session) Close() error {
-	if err := s.session.Close(); err != nil {
-		return fmt.Errorf("close MCP session: %w", err)
+// Close closes the client connection.
+func (c *Client) Close() error {
+	if err := c.session.Close(); err != nil {
+		return fmt.Errorf("close external mcp client: %w", err)
 	}
 	return nil
 }
@@ -116,23 +117,23 @@ type Tool struct {
 }
 
 // ListTools lists available tools from the external MCP server.
-func (s *Session) ListTools(ctx context.Context) ([]Tool, error) {
-	toolsResult, err := s.session.ListTools(ctx, nil)
+func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
+	toolsResult, err := c.session.ListTools(ctx, nil)
 	if err != nil {
-		if s.authRT.authRequired {
+		if c.authRT.authRequired {
 			return nil, &AuthRequiredError{
-				RemoteURL:       s.remoteURL,
-				WWWAuthenticate: s.authRT.wwwAuthenticate,
+				RemoteURL:       c.remoteURL,
+				WWWAuthenticate: c.authRT.wwwAuthenticate,
 			}
 		}
-		return nil, fmt.Errorf("failed to list tools: %w", err)
+		return nil, fmt.Errorf("list tools from external mcp server: %w", err)
 	}
 
 	tools := make([]Tool, 0, len(toolsResult.Tools))
 	for _, tool := range toolsResult.Tools {
 		schema, err := json.Marshal(tool.InputSchema)
 		if err != nil {
-			s.logger.WarnContext(ctx, "failed to marshal tool schema",
+			c.logger.WarnContext(ctx, "failed to marshal tool schema",
 				attr.SlogToolName(tool.Name),
 				attr.SlogError(err),
 			)
@@ -146,7 +147,7 @@ func (s *Session) ListTools(ctx context.Context) ([]Tool, error) {
 		})
 	}
 
-	s.logger.InfoContext(ctx, "listed tools from external MCP server",
+	c.logger.InfoContext(ctx, "listed tools from external MCP server",
 		attr.SlogValueInt(len(tools)),
 	)
 
@@ -160,8 +161,8 @@ type CallToolResult struct {
 }
 
 // CallTool calls a tool on the external MCP server.
-func (s *Session) CallTool(ctx context.Context, toolName string, arguments json.RawMessage) (*CallToolResult, error) {
-	s.logger.InfoContext(ctx, "calling tool on external MCP server",
+func (c *Client) CallTool(ctx context.Context, toolName string, arguments json.RawMessage) (*CallToolResult, error) {
+	c.logger.InfoContext(ctx, "calling tool on external MCP server",
 		attr.SlogToolName(toolName),
 	)
 
@@ -169,23 +170,23 @@ func (s *Session) CallTool(ctx context.Context, toolName string, arguments json.
 	var args map[string]any
 	if len(arguments) > 0 {
 		if err := json.Unmarshal(arguments, &args); err != nil {
-			return nil, fmt.Errorf("failed to parse tool arguments: %w", err)
+			return nil, fmt.Errorf("parse external mcp tool arguments: %w", err)
 		}
 	}
 
-	callResult, err := s.session.CallTool(ctx, &mcp.CallToolParams{
+	callResult, err := c.session.CallTool(ctx, &mcp.CallToolParams{
 		Meta:      mcp.Meta{},
 		Name:      toolName,
 		Arguments: args,
 	})
 	if err != nil {
-		if s.authRT.authRequired {
+		if c.authRT.authRequired {
 			return nil, &AuthRequiredError{
-				RemoteURL:       s.remoteURL,
-				WWWAuthenticate: s.authRT.wwwAuthenticate,
+				RemoteURL:       c.remoteURL,
+				WWWAuthenticate: c.authRT.wwwAuthenticate,
 			}
 		}
-		return nil, fmt.Errorf("failed to call tool: %w", err)
+		return nil, fmt.Errorf("call tool on external mcp server: %w", err)
 	}
 
 	// Marshal each content item back to JSON
@@ -193,12 +194,12 @@ func (s *Session) CallTool(ctx context.Context, toolName string, arguments json.
 	for _, item := range callResult.Content {
 		itemJSON, err := json.Marshal(item)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal tool result content: %w", err)
+			return nil, fmt.Errorf("marshal external mcp tool result: %w", err)
 		}
 		content = append(content, itemJSON)
 	}
 
-	s.logger.InfoContext(ctx, "tool call completed",
+	c.logger.InfoContext(ctx, "tool call completed",
 		attr.SlogToolName(toolName),
 	)
 
@@ -206,19 +207,6 @@ func (s *Session) CallTool(ctx context.Context, toolName string, arguments json.
 		Content: content,
 		IsError: callResult.IsError,
 	}, nil
-}
-
-// ListToolsFromProxy connects to an external MCP server and lists its tools.
-// This is a convenience function that creates a session, lists tools, and closes the session.
-// If authorization is required and not provided, tools requiring OAuth will be skipped with a warning.
-func ListToolsFromProxy(ctx context.Context, logger *slog.Logger, remoteURL string, opts *SessionOptions) ([]Tool, error) {
-	session, err := NewSession(ctx, logger, remoteURL, opts)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = session.Close() }()
-
-	return session.ListTools(ctx)
 }
 
 // authRoundTripper is an http.RoundTripper that adds Authorization headers
@@ -240,7 +228,7 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 
 	resp, err := rt.base.RoundTrip(req)
 	if err != nil {
-		return nil, fmt.Errorf("round trip failed: %w", err)
+		return nil, fmt.Errorf("external mcp round trip: %w", err)
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized {
