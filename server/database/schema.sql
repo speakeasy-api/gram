@@ -1078,3 +1078,19 @@ CREATE TABLE IF NOT EXISTS mcp_registries (
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_registries_url_key
 ON mcp_registries (url)
 WHERE deleted IS FALSE;
+
+-- Allowed origins, primarily for for Elements
+CREATE TABLE IF NOT EXISTS project_allowed_origins (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  origin TEXT NOT NULL CHECK (origin <> '' AND CHAR_LENGTH(origin) <= 500),
+  status TEXT NOT NULL DEFAULT 'pending',
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT project_allowed_origins_pkey PRIMARY KEY (id),
+  CONSTRAINT project_allowed_origins_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
