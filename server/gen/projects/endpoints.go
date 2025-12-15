@@ -16,9 +16,11 @@ import (
 
 // Endpoints wraps the "projects" service endpoints.
 type Endpoints struct {
-	CreateProject goa.Endpoint
-	ListProjects  goa.Endpoint
-	SetLogo       goa.Endpoint
+	CreateProject       goa.Endpoint
+	ListProjects        goa.Endpoint
+	SetLogo             goa.Endpoint
+	ListAllowedOrigins  goa.Endpoint
+	UpsertAllowedOrigin goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "projects" service with endpoints.
@@ -26,9 +28,11 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateProject: NewCreateProjectEndpoint(s, a.APIKeyAuth),
-		ListProjects:  NewListProjectsEndpoint(s, a.APIKeyAuth),
-		SetLogo:       NewSetLogoEndpoint(s, a.APIKeyAuth),
+		CreateProject:       NewCreateProjectEndpoint(s, a.APIKeyAuth),
+		ListProjects:        NewListProjectsEndpoint(s, a.APIKeyAuth),
+		SetLogo:             NewSetLogoEndpoint(s, a.APIKeyAuth),
+		ListAllowedOrigins:  NewListAllowedOriginsEndpoint(s, a.APIKeyAuth),
+		UpsertAllowedOrigin: NewUpsertAllowedOriginEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -37,6 +41,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateProject = m(e.CreateProject)
 	e.ListProjects = m(e.ListProjects)
 	e.SetLogo = m(e.SetLogo)
+	e.ListAllowedOrigins = m(e.ListAllowedOrigins)
+	e.UpsertAllowedOrigin = m(e.UpsertAllowedOrigin)
 }
 
 // NewCreateProjectEndpoint returns an endpoint function that calls the method
@@ -165,5 +171,123 @@ func NewSetLogoEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.End
 			return nil, err
 		}
 		return s.SetLogo(ctx, p)
+	}
+}
+
+// NewListAllowedOriginsEndpoint returns an endpoint function that calls the
+// method "listAllowedOrigins" of service "projects".
+func NewListAllowedOriginsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListAllowedOriginsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "session",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.SessionToken != nil {
+					key = *p.SessionToken
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListAllowedOrigins(ctx, p)
+	}
+}
+
+// NewUpsertAllowedOriginEndpoint returns an endpoint function that calls the
+// method "upsertAllowedOrigin" of service "projects".
+func NewUpsertAllowedOriginEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpsertAllowedOriginPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "session",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.SessionToken != nil {
+					key = *p.SessionToken
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UpsertAllowedOrigin(ctx, p)
 	}
 }

@@ -23,6 +23,10 @@ type Service interface {
 	ListProjects(context.Context, *ListProjectsPayload) (res *ListProjectsResult, err error)
 	// Uploads a logo for a project.
 	SetLogo(context.Context, *SetLogoPayload) (res *SetProjectLogoResult, err error)
+	// List allowed origins for a project.
+	ListAllowedOrigins(context.Context, *ListAllowedOriginsPayload) (res *ListAllowedOriginsResult, err error)
+	// Upsert an allowed origin for a project.
+	UpsertAllowedOrigin(context.Context, *UpsertAllowedOriginPayload) (res *UpsertAllowedOriginResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -45,7 +49,22 @@ const ServiceName = "projects"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"createProject", "listProjects", "setLogo"}
+var MethodNames = [5]string{"createProject", "listProjects", "setLogo", "listAllowedOrigins", "upsertAllowedOrigin"}
+
+type AllowedOrigin struct {
+	// The ID of the allowed origin
+	ID string
+	// The ID of the project
+	ProjectID string
+	// The origin URL
+	Origin string
+	// The status of the allowed origin
+	Status string
+	// The creation date of the allowed origin.
+	CreatedAt string
+	// The last update date of the allowed origin.
+	UpdatedAt string
+}
 
 // CreateProjectPayload is the payload type of the projects service
 // createProject method.
@@ -63,6 +82,21 @@ type CreateProjectPayload struct {
 type CreateProjectResult struct {
 	// The created project
 	Project *Project
+}
+
+// ListAllowedOriginsPayload is the payload type of the projects service
+// listAllowedOrigins method.
+type ListAllowedOriginsPayload struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	SessionToken     *string
+}
+
+// ListAllowedOriginsResult is the result type of the projects service
+// listAllowedOrigins method.
+type ListAllowedOriginsResult struct {
+	// The list of allowed origins
+	AllowedOrigins []*AllowedOrigin
 }
 
 // ListProjectsPayload is the payload type of the projects service listProjects
@@ -121,6 +155,25 @@ type SetLogoPayload struct {
 type SetProjectLogoResult struct {
 	// The updated project with the new logo
 	Project *Project
+}
+
+// UpsertAllowedOriginPayload is the payload type of the projects service
+// upsertAllowedOrigin method.
+type UpsertAllowedOriginPayload struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	SessionToken     *string
+	// The origin URL to upsert
+	Origin string
+	// The status of the allowed origin (defaults to 'pending')
+	Status string
+}
+
+// UpsertAllowedOriginResult is the result type of the projects service
+// upsertAllowedOrigin method.
+type UpsertAllowedOriginResult struct {
+	// The upserted allowed origin
+	AllowedOrigin *AllowedOrigin
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

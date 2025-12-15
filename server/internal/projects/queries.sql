@@ -45,3 +45,26 @@ SET logo_asset_id = @logo_asset_id,
 WHERE id = @project_id
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: ListAllowedOriginsByProjectID :many
+SELECT *
+FROM project_allowed_origins
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY created_at DESC;
+
+-- name: UpsertAllowedOrigin :one
+INSERT INTO project_allowed_origins (
+    project_id
+  , origin
+  , status
+) VALUES (
+    @project_id
+  , @origin
+  , @status
+)
+ON CONFLICT (project_id, origin) WHERE deleted IS FALSE
+DO UPDATE SET
+    status = EXCLUDED.status,
+    updated_at = clock_timestamp()
+RETURNING *;
