@@ -134,6 +134,35 @@ services:
         soft: 262144
         hard: 262144
 
+  mcp-registry-db:
+    profiles: [local-registry]
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mcp_registry
+      POSTGRES_PASSWORD: mcp_registry
+      POSTGRES_DB: mcp_registry
+    volumes:
+      - mcp_registry_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready", "-U", "mcp_registry"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  mcp-registry:
+    profiles: [local-registry]
+    image: ghcr.io/modelcontextprotocol/registry:1.3.10
+    restart: unless-stopped
+    environment:
+      MCP_REGISTRY_DATABASE_URL: postgresql://mcp_registry:mcp_registry@mcp-registry-db:5432/mcp_registry
+      MCP_REGISTRY_JWT_PRIVATE_KEY: ffb75d70bdacadee50324c5f93b04e5674b1df37b4e234e603e5c08500eb0740
+      MCP_REGISTRY_ENABLE_ANONYMOUS_AUTH: "true"
+    ports:
+      - "${LOCAL_MCP_REGISTRY_PORT}:8080"
+    depends_on:
+      mcp-registry-db:
+        condition: service_healthy
+
 volumes:
   postgres_data:
     driver: local
@@ -146,4 +175,6 @@ volumes:
   temporal_data:
     driver: local
   clickhouse_data:
+    driver: local
+  mcp_registry_data:
     driver: local

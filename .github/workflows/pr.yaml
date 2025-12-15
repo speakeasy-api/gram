@@ -90,7 +90,7 @@ jobs:
 
       - name: Download server build artifact
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: server-bin
           path: server/bin
@@ -174,7 +174,7 @@ jobs:
 
       - name: Cache Go
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -197,7 +197,7 @@ jobs:
 
       - name: Upload server build
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: server-bin
           path: server/bin
@@ -263,7 +263,7 @@ jobs:
 
       - name: Cache Go
         if: ${{ needs.changes.outputs.cli == 'true' }}
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -330,7 +330,7 @@ jobs:
 
       - name: Cache Go
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -376,7 +376,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.client == 'true' }}
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -459,7 +459,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.client == 'true' }}
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -520,7 +520,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.client == 'true' }}
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -577,7 +577,7 @@ jobs:
 
       - name: Cache Go
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -589,7 +589,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -645,7 +645,7 @@ jobs:
 
       - name: Upload melange packages artifact
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: functions-packages
           path: functions/packages
@@ -692,7 +692,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -707,7 +707,7 @@ jobs:
 
       - name: Download melange packages artifact
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: functions-packages
           path: functions/packages
@@ -843,7 +843,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.tsframework == 'true' }}
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |

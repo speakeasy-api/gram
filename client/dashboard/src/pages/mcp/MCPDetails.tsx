@@ -632,9 +632,11 @@ function PageSection({
 export function MCPJson({
   toolset,
   fullWidth = false,
+  className,
 }: {
   toolset: ToolsetEntry;
   fullWidth?: boolean; // If true, the code block will take up the full width of the page even when there's only one
+  className?: string;
 }) {
   const telemetry = useTelemetry();
 
@@ -651,7 +653,7 @@ export function MCPJson({
   return (
     <Grid
       gap={4}
-      className="my-4!"
+      className={cn("my-4!", className)}
       columns={!fullWidth ? { xs: 1, md: 2, lg: 2, xl: 2, "2xl": 2 } : 1}
     >
       <Grid.Item>
