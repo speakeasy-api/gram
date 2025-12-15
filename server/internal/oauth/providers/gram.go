@@ -87,7 +87,6 @@ func (p *GramProvider) ExchangeToken(
 	}
 
 	// Use idToken as access token for gram providers
-	// !TODO: Maybe return session instead?
 	return &TokenExchangeResult{
 		AccessToken: idToken,
 		ExpiresAt:   conv.Ptr(time.Now().Add(session.TTL())),
