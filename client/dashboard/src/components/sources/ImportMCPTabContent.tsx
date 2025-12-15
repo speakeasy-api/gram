@@ -1,15 +1,9 @@
 import { Skeleton } from "@/components/ui/skeleton";
-<<<<<<< HEAD
-import { useListMCPCatalog } from "@gram/client/react-query";
-||||||| parent of ba81c0be (implement external mcp in client)
-import { useListMcpCatalog } from "@gram/client/react-query";
-=======
 import {
   useLatestDeployment,
-  useListMcpCatalog,
+  useListMCPCatalog,
   useEvolveDeploymentMutation,
 } from "@gram/client/react-query";
->>>>>>> ba81c0be (implement external mcp in client)
 import type { ExternalMCPServer } from "@gram/client/models/components";
 import { Input } from "@speakeasy-api/moonshine";
 import { SearchIcon, ServerIcon, Loader2Icon } from "lucide-react";

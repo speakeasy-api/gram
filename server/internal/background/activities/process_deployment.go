@@ -103,7 +103,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		return err
 	}
 
-	if err := p.doExternalMCPs(ctx, projectID, deploymentID); err != nil {
+	if err := p.doExternalMCPs(ctx, workers, projectID, deploymentID); err != nil {
 		return err
 	}
 
@@ -395,6 +395,7 @@ func (p *ProcessDeployment) doFunctions(
 
 func (p *ProcessDeployment) doExternalMCPs(
 	ctx context.Context,
+	pool *pool.ErrorPool,
 	projectID uuid.UUID,
 	deploymentID uuid.UUID,
 ) error {
@@ -411,68 +412,72 @@ func (p *ProcessDeployment) doExternalMCPs(
 			attr.SlogExternalMCPSlug(mcp.Slug),
 		)
 
-		logger.InfoContext(ctx, "processing external mcp",
-			attr.SlogExternalMCPName(mcp.Name),
-			attr.SlogMCPRegistryID(mcp.RegistryID.String()),
-		)
+		pool.Go(func() error {
+			logger.InfoContext(ctx, "processing external mcp",
+				attr.SlogExternalMCPName(mcp.Name),
+				attr.SlogMCPRegistryID(mcp.RegistryID.String()),
+			)
 
-		// Get registry details to make API call
-		registry, err := p.externalmcp.GetMCPRegistryByID(ctx, mcp.RegistryID)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "error getting registry for external mcp").Log(ctx, logger)
-		}
+			// Get registry details to make API call
+			registry, err := p.externalmcp.GetMCPRegistryByID(ctx, mcp.RegistryID)
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "error getting registry for external mcp").Log(ctx, logger)
+			}
 
-		serverDetails, err := p.registryClient.GetServerDetails(ctx, externalmcp.Registry{
-			ID:  registry.ID,
-			URL: registry.Url,
-		}, mcp.Name)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "error fetching server details from registry").Log(ctx, logger)
-		}
+			serverDetails, err := p.registryClient.GetServerDetails(ctx, externalmcp.Registry{
+				ID:  registry.ID,
+				URL: registry.Url,
+			}, mcp.Name)
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "error fetching server details from registry").Log(ctx, logger)
+			}
 
-		logger.InfoContext(ctx, "fetched server details from registry",
-			attr.SlogURL(serverDetails.RemoteURL),
-		)
-
-		// Attempt to connect to detect OAuth requirements
-		var requiresOAuth bool
-		_, err = externalmcp.ListToolsFromProxy(ctx, logger, serverDetails.RemoteURL, nil)
-		if _, ok := externalmcp.IsAuthRequiredError(err); ok {
-			requiresOAuth = true
-			logger.InfoContext(ctx, "external MCP server requires OAuth",
+			logger.InfoContext(ctx, "fetched server details from registry",
 				attr.SlogURL(serverDetails.RemoteURL),
 			)
-		} else if err != nil {
-			// Log but don't fail - the server might be temporarily unavailable
-			logger.WarnContext(ctx, "failed to probe external MCP server for auth requirements",
-				attr.SlogURL(serverDetails.RemoteURL),
-				attr.SlogError(err),
+
+			// Attempt to connect to detect OAuth requirements
+			var requiresOAuth bool
+			_, err = externalmcp.ListToolsFromProxy(ctx, logger, serverDetails.RemoteURL, nil)
+			if _, ok := externalmcp.IsAuthRequiredError(err); ok {
+				requiresOAuth = true
+				logger.InfoContext(ctx, "external MCP server requires OAuth",
+					attr.SlogURL(serverDetails.RemoteURL),
+				)
+			} else if err != nil {
+				// Log but don't fail - the server might be temporarily unavailable
+				logger.WarnContext(ctx, "failed to probe external MCP server for auth requirements",
+					attr.SlogURL(serverDetails.RemoteURL),
+					attr.SlogError(err),
+				)
+			}
+
+			// Create a proxy tool URN for this external MCP
+			// Format: tools:externalmcp:<slug>:proxy
+			toolURN := urn.Tool{
+				Kind:   urn.ToolKindExternalMCP,
+				Source: mcp.Slug,
+				Name:   "proxy",
+			}
+
+			// Create the proxy tool definition with the remote URL and OAuth info
+			_, err = p.externalmcp.CreateExternalMCPToolDefinition(ctx, externalmcpRepo.CreateExternalMCPToolDefinitionParams{
+				ExternalMcpAttachmentID: mcp.ID,
+				ToolUrn:                 toolURN.String(),
+				RemoteUrl:               serverDetails.RemoteURL,
+				RequiresOauth:           requiresOAuth,
+			})
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "error creating external mcp tool definition").Log(ctx, logger)
+			}
+
+			logger.InfoContext(ctx, "created external mcp proxy tool",
+				attr.SlogToolURN(toolURN.String()),
+				attr.SlogOAuthRequired(requiresOAuth),
 			)
-		}
 
-		// Create a proxy tool URN for this external MCP
-		// Format: tools:externalmcp:<slug>:proxy
-		toolURN := urn.Tool{
-			Kind:   urn.ToolKindExternalMCP,
-			Source: mcp.Slug,
-			Name:   "proxy",
-		}
-
-		// Create the proxy tool definition with the remote URL and OAuth info
-		_, err = p.externalmcp.CreateExternalMCPToolDefinition(ctx, externalmcpRepo.CreateExternalMCPToolDefinitionParams{
-			ExternalMcpAttachmentID: mcp.ID,
-			ToolUrn:                 toolURN.String(),
-			RemoteUrl:               serverDetails.RemoteURL,
-			RequiresOauth:           requiresOAuth,
+			return nil
 		})
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "error creating external mcp tool definition").Log(ctx, logger)
-		}
-
-		logger.InfoContext(ctx, "created external mcp proxy tool",
-			attr.SlogToolURN(toolURN.String()),
-			attr.SlogOAuthRequired(requiresOAuth),
-		)
 	}
 
 	return nil
