@@ -407,7 +407,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	case !toolset.McpIsPublic:
 		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
 
-		ctx, err = s.authenticateToken(ctx, token, toolset.ID)
+		ctx, err = s.authenticateToken(ctx, token, toolset.ID, isOAuthCapable)
 		if err == nil {
 			break
 		}
@@ -422,7 +422,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeUnauthorized, nil, "expired or invalid access token")
 	default:
 		if token != "" {
-			ctx, err = s.authenticateToken(ctx, token, toolset.ID)
+			ctx, err = s.authenticateToken(ctx, token, toolset.ID, false)
 			if err != nil {
 				return err
 			}
@@ -753,13 +753,17 @@ func parseMcpSessionID(headers http.Header) string {
 	return session
 }
 
-func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID uuid.UUID) (context.Context, error) {
+func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID uuid.UUID, isOAuthCapable bool) (context.Context, error) {
 	if token == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 
-	oAuthToken, err := s.oauthService.ValidateAccessToken(ctx, toolsetID, token)
-	if err == nil {
+	var oAuthToken *oauth.Token
+	var err error
+	if isOAuthCapable {
+		oAuthToken, err = s.oauthService.ValidateAccessToken(ctx, toolsetID, token)
+	}
+	if err == nil && oAuthToken != nil {
 		// OAuth token validated, authenticate with session
 		if len(oAuthToken.ExternalSecrets) == 0 {
 			return ctx, oops.E(oops.CodeUnauthorized, nil, "no session token found")
