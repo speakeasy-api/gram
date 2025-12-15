@@ -11,8 +11,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useSession } from "@/contexts/Auth";
-import { useRoutes } from "@/routes";
+import { useIsAdmin, useSession } from "@/contexts/Auth";
+import { AppRoute, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Stack } from "@speakeasy-api/moonshine";
 import {
@@ -36,16 +36,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [metricsModalOpen, setMetricsModalOpen] = React.useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [changelogModalOpen, setChangelogModalOpen] = useState(false);
+  const isAdmin = useIsAdmin();
 
   const topNavGroups = {
-    create: [
-      routes.toolsets,
-      routes.customTools,
-      routes.prompts,
-      routes.catalog,
-    ],
+    create: [routes.toolsets, routes.customTools, routes.prompts] as AppRoute[],
     connect: [routes.playground, routes.mcp, routes.environments],
   };
+
+  if (isAdmin) {
+    topNavGroups.create.push(routes.catalog);
+  }
 
   const bottomNav = [routes.deployments, routes.billing, routes.settings];
 
