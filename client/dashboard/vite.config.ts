@@ -6,6 +6,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import monacoEditorPluginModule from "vite-plugin-monaco-editor";
+
+// https://github.com/vdesjs/vite-plugin-monaco-editor/issues/21
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const monacoEditorPlugin = (monacoEditorPluginModule as any).default;
 
 let key: Buffer | undefined;
