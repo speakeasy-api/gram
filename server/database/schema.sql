@@ -1139,3 +1139,7 @@ CREATE TABLE IF NOT EXISTS project_allowed_origins (
   CONSTRAINT project_allowed_origins_pkey PRIMARY KEY (id),
   CONSTRAINT project_allowed_origins_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS project_allowed_origins_project_id_origin_key
+ON project_allowed_origins (project_id, origin)
+WHERE deleted IS FALSE;
