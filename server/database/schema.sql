@@ -1123,3 +1123,23 @@ CREATE TABLE IF NOT EXISTS external_mcp_tool_definitions (
 CREATE INDEX IF NOT EXISTS external_mcp_tool_definitions_external_mcp_attachment_id_idx
 ON external_mcp_tool_definitions (external_mcp_attachment_id)
 WHERE deleted IS FALSE;
+
+-- Allowed origins, primarily used for Elements
+CREATE TABLE IF NOT EXISTS project_allowed_origins (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  origin TEXT NOT NULL CHECK (origin <> '' AND CHAR_LENGTH(origin) <= 500),
+  status TEXT NOT NULL DEFAULT 'pending',
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT project_allowed_origins_pkey PRIMARY KEY (id),
+  CONSTRAINT project_allowed_origins_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS project_allowed_origins_project_id_origin_key
+ON project_allowed_origins (project_id, origin)
+WHERE deleted IS FALSE;
