@@ -444,7 +444,7 @@ func TestCreateDeployment_CreateDeployment_Validation(t *testing.T) {
 		})
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "at least one openapi document, functions file or package is required")
+		require.Contains(t, err.Error(), "at least one openapi document, functions file, package, or external mcp is required")
 	})
 
 	t.Run("invalid asset ID", func(t *testing.T) {

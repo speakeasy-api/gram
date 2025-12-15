@@ -76,6 +76,7 @@ func (c *DeploymentsClient) CreateDeployment(
 		ExternalID:       nil,
 		ExternalURL:      nil,
 		Packages:         nil,
+		ExternalMcps:     nil,
 	}
 	result, err := c.client.CreateDeployment(ctx, payload)
 	if err != nil {
@@ -122,6 +123,7 @@ func (c *DeploymentsClient) GetDeployment(
 		FunctionsToolCount: result.FunctionsToolCount,
 		FunctionsAssets:    result.FunctionsAssets,
 		Packages:           result.Packages,
+		ExternalMcps:       result.ExternalMcps,
 	}, nil
 }
 
@@ -197,6 +199,8 @@ func (c *DeploymentsClient) Evolve(
 		ExcludePackages:        []string{},
 		UpsertPackages:         []*deployments.AddPackageForm{},
 		SessionToken:           nil,
+		UpsertExternalMcps:     nil,
+		ExcludeExternalMcps:    []string{},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("api error: %w", err)
