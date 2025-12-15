@@ -4160,15 +4160,6 @@ paths:
                     pattern: ^[a-z0-9_-]{1,128}$
                     type: string
                 - allowEmptyValue: true
-                  description: The slug of the environment to load
-                  in: query
-                  name: environment_slug
-                  schema:
-                    description: A short url-friendly label that uniquely identifies a resource.
-                    maxLength: 40
-                    pattern: ^[a-z0-9_-]{1,128}$
-                    type: string
-                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -4904,11 +4895,11 @@ paths:
                   in: query
                   name: sort
                   schema:
-                    default: DESC
+                    default: desc
                     description: Sort order
                     enum:
-                        - ASC
-                        - DESC
+                        - asc
+                        - desc
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -5003,6 +4994,206 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListToolLogs
+    /rpc/logs.listToolExecutionLogs:
+        get:
+            description: List structured logs from tool executions.
+            operationId: listToolExecutionLogs
+            parameters:
+                - allowEmptyValue: true
+                  description: Start timestamp
+                  in: query
+                  name: ts_start
+                  schema:
+                    description: Start timestamp
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: End timestamp
+                  in: query
+                  name: ts_end
+                  schema:
+                    description: End timestamp
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Deployment ID filter
+                  in: query
+                  name: deployment_id
+                  schema:
+                    description: Deployment ID filter
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Function ID filter
+                  in: query
+                  name: function_id
+                  schema:
+                    description: Function ID filter
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Instance filter
+                  in: query
+                  name: instance
+                  schema:
+                    description: Instance filter
+                    type: string
+                - allowEmptyValue: true
+                  description: Log level filter
+                  in: query
+                  name: level
+                  schema:
+                    description: Log level filter
+                    enum:
+                        - debug
+                        - info
+                        - warn
+                        - error
+                    type: string
+                - allowEmptyValue: true
+                  description: Log source filter
+                  in: query
+                  name: source
+                  schema:
+                    description: Log source filter
+                    enum:
+                        - stdout
+                        - stderr
+                    type: string
+                - allowEmptyValue: true
+                  description: Cursor for pagination
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor for pagination
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Number of items per page (1-100)
+                  in: query
+                  name: per_page
+                  schema:
+                    default: 20
+                    description: Number of items per page (1-100)
+                    format: int64
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Pagination direction
+                  in: query
+                  name: direction
+                  schema:
+                    default: next
+                    description: Pagination direction
+                    enum:
+                        - next
+                        - prev
+                    type: string
+                - allowEmptyValue: true
+                  description: Sort order
+                  in: query
+                  name: sort
+                  schema:
+                    default: desc
+                    description: Sort order
+                    enum:
+                        - asc
+                        - desc
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListToolExecutionLogsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listToolExecutionLogs logs
+            tags:
+                - logs
+            x-speakeasy-name-override: listToolExecutionLogs
+            x-speakeasy-react-hook:
+                name: ToolExecutionLogs
     /rpc/mcpMetadata.get:
         get:
             description: Fetch the metadata that powers the MCP install page.
@@ -5195,6 +5386,126 @@ paths:
             tags:
                 - mcpMetadata
             x-speakeasy-name-override: set
+    /rpc/mcpRegistries.listCatalog:
+        get:
+            description: List available MCP servers from configured registries
+            operationId: listMCPCatalog
+            parameters:
+                - allowEmptyValue: true
+                  description: Filter to a specific registry
+                  in: query
+                  name: registry_id
+                  schema:
+                    description: Filter to a specific registry
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Search query to filter servers by name
+                  in: query
+                  name: search
+                  schema:
+                    description: Search query to filter servers by name
+                    type: string
+                - allowEmptyValue: true
+                  description: Pagination cursor
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Pagination cursor
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListCatalogResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listCatalog mcpRegistries
+            tags:
+                - mcpRegistries
+            x-speakeasy-name-override: listCatalog
+            x-speakeasy-react-hook:
+                name: ListMCPCatalog
     /rpc/packages.create:
         post:
             description: Create a new package for a project.
@@ -6028,7 +6339,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/SetProjectLogoForm'
+                            $ref: '#/components/schemas/GetSignedAssetURLForm'
                 required: true
             responses:
                 "200":
@@ -8180,8 +8491,6 @@ paths:
                   session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: getToolset toolsets
             tags:
                 - toolsets
@@ -8278,8 +8587,6 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
             summary: listToolsets toolsets
@@ -10455,6 +10762,39 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        ExternalMCPServer:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Description of what the server does
+                icon_url:
+                    type: string
+                    description: URL to the server's icon
+                    format: uri
+                meta:
+                    description: Opaque metadata from the registry
+                name:
+                    type: string
+                    description: Server name in reverse-DNS format (e.g., 'io.github.user/server')
+                    example: io.modelcontextprotocol.anonymous/exa
+                registry_id:
+                    type: string
+                    description: ID of the registry this server came from
+                    format: uuid
+                title:
+                    type: string
+                    description: Display name for the server
+                version:
+                    type: string
+                    description: Semantic version of the server
+                    example: 1.0.0
+            description: An MCP server from an external registry
+            required:
+                - name
+                - version
+                - description
+                - registry_id
         ExternalOAuthServer:
             type: object
             properties:
@@ -10809,11 +11149,6 @@ components:
             properties:
                 apikey_token:
                     type: string
-                environment_slug:
-                    type: string
-                    description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9_-]{1,128}$
-                    maxLength: 40
                 project_slug_input:
                     type: string
                 session_token:
@@ -10831,13 +11166,16 @@ components:
                 description:
                     type: string
                     description: The description of the toolset
-                environment:
-                    $ref: '#/components/schemas/Environment'
                 function_environment_variables:
                     type: array
                     items:
                         $ref: '#/components/schemas/FunctionEnvironmentVariable'
                     description: The function environment variables that are relevant to the toolset
+                mcp_servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/InstanceMcpServer'
+                    description: The MCP servers that are relevant to the toolset
                 name:
                     type: string
                     description: The name of the toolset
@@ -10864,7 +11202,7 @@ components:
             required:
                 - name
                 - tools
-                - environment
+                - mcp_servers
         GetIntegrationForm:
             type: object
             properties:
@@ -10897,6 +11235,22 @@ components:
                     $ref: '#/components/schemas/PromptTemplate'
             required:
                 - template
+        GetSignedAssetURLForm:
+            type: object
+            properties:
+                asset_id:
+                    type: string
+                    description: The ID of the function asset
+            required:
+                - asset_id
+        GetSignedAssetURLResult:
+            type: object
+            properties:
+                url:
+                    type: string
+                    description: The signed URL to access the asset
+            required:
+                - url
         GetSlackConnectionResult:
             type: object
             properties:
@@ -11152,6 +11506,14 @@ components:
                 - active_organization_id
                 - organizations
                 - gram_account_type
+        InstanceMcpServer:
+            type: object
+            properties:
+                url:
+                    type: string
+                    description: The address of the MCP server
+            required:
+                - url
         Integration:
             type: object
             properties:
@@ -11298,6 +11660,19 @@ components:
                     description: The list of assets
             required:
                 - assets
+        ListCatalogResponseBody:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Pagination cursor for the next page
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExternalMCPServer'
+                    description: List of available MCP servers
+            required:
+                - servers
         ListChatsResult:
             type: object
             properties:
@@ -11419,6 +11794,79 @@ components:
                     description: The list of resources
             required:
                 - resources
+        ListToolExecutionLogsPayload:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: Cursor for pagination
+                    format: uuid
+                deployment_id:
+                    type: string
+                    description: Deployment ID filter
+                    format: uuid
+                direction:
+                    type: string
+                    description: Pagination direction
+                    default: next
+                    enum:
+                        - next
+                        - prev
+                function_id:
+                    type: string
+                    description: Function ID filter
+                    format: uuid
+                instance:
+                    type: string
+                    description: Instance filter
+                level:
+                    type: string
+                    description: Log level filter
+                    enum:
+                        - debug
+                        - info
+                        - warn
+                        - error
+                per_page:
+                    type: integer
+                    description: Number of items per page (1-100)
+                    default: 20
+                    format: int64
+                    minimum: 1
+                    maximum: 100
+                sort:
+                    type: string
+                    description: Sort order
+                    default: desc
+                    enum:
+                        - asc
+                        - desc
+                source:
+                    type: string
+                    description: Log source filter
+                    enum:
+                        - stdout
+                        - stderr
+                ts_end:
+                    type: string
+                    description: End timestamp
+                    format: date-time
+                ts_start:
+                    type: string
+                    description: Start timestamp
+                    format: date-time
+            description: Payload for listing tool execution logs
+        ListToolExecutionLogsResult:
+            type: object
+            properties:
+                logs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolExecutionLog'
+                    description: List of tool execution logs
+                pagination:
+                    $ref: '#/components/schemas/PaginationResponse'
+            description: Result of listing tool execution logs
         ListToolLogResponse:
             type: object
             properties:
@@ -11462,10 +11910,10 @@ components:
                 sort:
                     type: string
                     description: Sort order
-                    default: DESC
+                    default: desc
                     enum:
-                        - ASC
-                        - DESC
+                        - asc
+                        - desc
                 status:
                     type: string
                     description: Status filter
@@ -12546,6 +12994,58 @@ components:
                 - id
                 - name
                 - tool_urn
+        ToolExecutionLog:
+            type: object
+            properties:
+                attributes:
+                    type: string
+                    description: JSON-encoded log attributes
+                deployment_id:
+                    type: string
+                    description: Deployment UUID
+                    format: uuid
+                function_id:
+                    type: string
+                    description: Function UUID
+                    format: uuid
+                id:
+                    type: string
+                    description: Log entry ID
+                    format: uuid
+                instance:
+                    type: string
+                    description: Instance identifier
+                level:
+                    type: string
+                    description: Log level
+                message:
+                    type: string
+                    description: Parsed log message
+                project_id:
+                    type: string
+                    description: Project UUID
+                    format: uuid
+                raw_log:
+                    type: string
+                    description: Raw log message
+                source:
+                    type: string
+                    description: Log source
+                timestamp:
+                    type: string
+                    description: Timestamp of the log entry
+                    format: date-time
+            description: Structured log entry from a tool execution
+            required:
+                - id
+                - timestamp
+                - instance
+                - level
+                - source
+                - raw_log
+                - project_id
+                - deployment_id
+                - function_id
         ToolVariation:
             type: object
             properties:
@@ -13285,6 +13785,10 @@ components:
             description: key based auth.
             name: Gram-Key
             in: header
+        function_token_header_Authorization:
+            type: http
+            description: Gram Functions token based auth.
+            scheme: bearer
         project_slug_header_Gram-Project:
             type: apiKey
             description: project slug header auth.
@@ -13315,6 +13819,10 @@ tags:
       description: Manage custom domains for gram.
     - name: environments
       description: Managing toolset environments.
+    - name: mcpRegistries
+      description: External MCP registry operations
+    - name: functions
+      description: Endpoints for working with functions.
     - name: instances
       description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
     - name: integrations

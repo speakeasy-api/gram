@@ -1,6 +1,6 @@
 import { Button, Dialog } from "@speakeasy-api/moonshine";
 import { Type } from "@/components/ui/type";
-import { CodeBlock } from "@/components/code";
+import { MonacoEditor } from "@/components/monaco-editor";
 import { SkeletonCode } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { useProject } from "@/contexts/Auth";
@@ -22,7 +22,7 @@ function useFetchSourceContent(
   project: { id: string },
   projectSlug: string | undefined,
 ) {
-  return useQuery({
+  return useQuery<{ content: string; language: string }>({
     queryKey: ["sourceContent", source?.assetId, isOpenAPI],
     queryFn: async () => {
       if (!source) throw new Error("No source provided");
@@ -53,7 +53,19 @@ function useFetchSourceContent(
 
       if (isOpenAPI) {
         // OpenAPI specs are served as text (YAML/JSON)
-        return await response.text();
+        const text = await response.text();
+
+        // Try to parse and format as JSON if possible
+        try {
+          const parsed = JSON.parse(text);
+          return {
+            content: JSON.stringify(parsed, null, 2),
+            language: "json",
+          };
+        } catch {
+          // If not JSON, return as-is (likely YAML)
+          return { content: text, language: "yaml" };
+        }
       } else {
         // Function bundles are served as zip files - extract manifest.json
         // Use dynamic import to reduce bundle size
@@ -67,10 +79,16 @@ function useFetchSourceContent(
           const manifestText = strFromU8(unzipped["manifest.json"]);
           const manifest = JSON.parse(manifestText);
           // Pretty-print the manifest
-          return JSON.stringify(manifest, null, 2);
+          return {
+            content: JSON.stringify(manifest, null, 2),
+            language: "json",
+          };
         } else if (unzipped["functions.js"]) {
           // Fallback to functions.js if no manifest
-          return strFromU8(unzipped["functions.js"]);
+          return {
+            content: strFromU8(unzipped["functions.js"]),
+            language: "javascript",
+          };
         } else {
           throw new Error("No readable content found in bundle");
         }
@@ -127,9 +145,11 @@ export function ViewSourceDialogContent({
             </Button>
           </div>
         ) : sourceContent ? (
-          <CodeBlock language={isOpenAPI ? "yaml" : "json"} copyable>
-            {sourceContent}
-          </CodeBlock>
+          <MonacoEditor
+            value={sourceContent.content}
+            language={sourceContent.language}
+            height="calc(90vh - 120px)"
+          />
         ) : (
           <Type className="text-muted-foreground text-center py-8">
             No content available

@@ -112,7 +112,7 @@ go run . --help
 ### Releases
 
 > [!NOTE]  
-> All CLI updates must follow the [changeset process](./runbooks/version-management-with-changesets.md).
+> All CLI updates must follow the [changeset process](./docs/runbooks/version-management-with-changesets.md).
 
 New versions of the CLI are released automatically with [GoReleaser](./.goreleaser.yaml).
 

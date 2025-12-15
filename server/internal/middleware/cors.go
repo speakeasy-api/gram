@@ -22,13 +22,7 @@ func CORSMiddleware(env string, serverURL string) func(next http.Handler) http.H
 					w.Header().Set("Access-Control-Allow-Origin", origin)
 				}
 			case "dev":
-				origin := r.Header.Get("Origin")
-				// support preview urls
-				if _, err := url.Parse(origin); err == nil && strings.Contains(origin, "speakeasyapi.vercel.app") {
-					w.Header().Set("Access-Control-Allow-Origin", origin)
-				} else {
-					w.Header().Set("Access-Control-Allow-Origin", serverURL)
-				}
+				w.Header().Set("Access-Control-Allow-Origin", serverURL)
 			case "prod":
 				w.Header().Set("Access-Control-Allow-Origin", serverURL)
 			default:

@@ -62,8 +62,8 @@ export type Direction = ClosedEnum<typeof Direction>;
  * Sort order
  */
 export const Sort = {
-  Asc: "ASC",
-  Desc: "DESC",
+  Asc: "asc",
+  Desc: "desc",
 } as const;
 /**
  * Sort order
@@ -277,7 +277,7 @@ export const ListToolLogsRequest$outboundSchema: z.ZodType<
   toolUrns: z.array(z.string()).optional(),
   perPage: z.number().int().default(20),
   direction: Direction$outboundSchema.default("next"),
-  sort: Sort$outboundSchema.default("DESC"),
+  sort: Sort$outboundSchema.default("desc"),
   gramKey: z.string().optional(),
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),

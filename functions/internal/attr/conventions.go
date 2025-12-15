@@ -2,6 +2,7 @@ package attr
 
 import (
 	"log/slog"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
@@ -10,12 +11,16 @@ import (
 type Key = attribute.Key
 
 const (
+	ServiceNameKey    = semconv.ServiceNameKey
+	ServiceVersionKey = semconv.ServiceVersionKey
+
 	DeviceKey              = semconv.SystemDeviceKey
 	ExceptionStacktraceKey = semconv.ExceptionStacktraceKey
 	ErrorMessageKey        = semconv.ErrorMessageKey
 	ErrorIDKey             = attribute.Key("gram.error.id")
 	ProcessExitCodeKey     = semconv.ProcessExitCodeKey
 	ServerAddressKey       = semconv.ServerAddressKey
+	DurationKey            = attribute.Key("duration")
 
 	ComponentKey = attribute.Key("gram.component")
 
@@ -23,6 +28,7 @@ const (
 	ProjectSlugKey  = attribute.Key("gram.project.slug")
 	DeploymentIDKey = attribute.Key("gram.deployment.id")
 	FunctionIDKey   = attribute.Key("gram.function.id")
+	AssetIDKey      = attribute.Key("gram.asset.id")
 
 	EventPayloadKey = attribute.Key("gram.event.payload")
 	EventOriginKey  = attribute.Key("gram.event.origin")
@@ -32,6 +38,14 @@ const (
 	DataDogTraceIDKey = attribute.Key("dd.trace_id")
 	DataDogSpanIDKey  = attribute.Key("dd.span_id")
 )
+
+func ServiceName(v string) attribute.KeyValue { return ServiceNameKey.String(v) }
+func SlogServiceName(v string) slog.Attr      { return slog.String(string(ServiceNameKey), v) }
+
+func ServiceVersion(v string) attribute.KeyValue { return ServiceVersionKey.String(v) }
+func SlogServiceVersion(v string) slog.Attr {
+	return slog.String(string(ServiceVersionKey), v)
+}
 
 func Device(v string) attribute.KeyValue { return DeviceKey.String(v) }
 func SlogDevice(v string) slog.Attr      { return slog.String(string(DeviceKey), v) }
@@ -56,6 +70,9 @@ func SlogProcessExitCode(v int) slog.Attr      { return slog.Int(string(ProcessE
 func ServerAddress(v string) attribute.KeyValue { return ServerAddressKey.String(v) }
 func SlogServerAddress(v string) slog.Attr      { return slog.String(string(ServerAddressKey), v) }
 
+func Duration(v time.Duration) attribute.KeyValue { return DurationKey.Float64(v.Seconds()) }
+func SlogDuration(v time.Duration) slog.Attr      { return slog.Float64(string(DurationKey), v.Seconds()) }
+
 func Component(v string) attribute.KeyValue { return ComponentKey.String(v) }
 func SlogComponent(v string) slog.Attr      { return slog.String(string(ComponentKey), v) }
 
@@ -72,6 +89,9 @@ func FunctionID(v string) attribute.KeyValue { return FunctionIDKey.String(v) }
 func SlogFunctionID(v string) slog.Attr {
 	return slog.String(string(FunctionIDKey), v)
 }
+
+func AssetID(v string) attribute.KeyValue { return AssetIDKey.String(v) }
+func SlogAssetID(v string) slog.Attr      { return slog.String(string(AssetIDKey), v) }
 
 func EventPayload(v string) attribute.KeyValue { return EventPayloadKey.String(v) }
 func SlogEventPayload(v string) slog.Attr      { return slog.String(string(EventPayloadKey), v) }

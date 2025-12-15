@@ -76,7 +76,7 @@ func TestGenerateMCPBManifest_ManifestStructure(t *testing.T) {
 	require.Equal(t, "npx", manifest.Server.EntryPoint)
 	require.Equal(t, "npx", manifest.Server.MCPConfig.Command)
 	require.Equal(t, []string{
-		"mcp-remote",
+		"mcp-remote@0.1.25",
 		"https://mcp.example.com/test",
 		"--header",
 		"Authorization:test-api-key",
@@ -122,7 +122,7 @@ func TestGenerateMCPBManifest_WithEnvVar(t *testing.T) {
 
 	// Verify env var substitution in header
 	require.Equal(t, []string{
-		"mcp-remote",
+		"mcp-remote@0.1.25",
 		"https://mcp.example.com/test",
 		"--header",
 		"X-API-Key:${user_config.MY_API_KEY}",
@@ -204,7 +204,7 @@ func TestGenerateMCPBManifest_DifferentHeaderName(t *testing.T) {
 
 	// Verify custom header is used
 	require.Equal(t, []string{
-		"mcp-remote",
+		"mcp-remote@0.1.25",
 		"https://mcp.example.com/test",
 		"--header",
 		"X-Custom-Auth:secret-key-123",

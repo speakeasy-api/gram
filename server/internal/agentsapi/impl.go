@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
@@ -20,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/agents"
 	srv "github.com/speakeasy-api/gram/server/gen/http/agents/server"
 	agentspkg "github.com/speakeasy-api/gram/server/internal/agents"
+	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -42,6 +44,7 @@ type Service struct {
 	logger            *slog.Logger
 	agentsService     *agentspkg.Service
 	db                *pgxpool.Pool
+	agentExecRepo     *repo.Queries
 	auth              *auth.Auth
 	temporalClient    client.Client
 	temporalNamespace string // TODO: build a wrapper around temporal client to better encapsulate metadata like this
@@ -84,6 +87,7 @@ func NewService(
 		logger:            logger,
 		agentsService:     agentsService,
 		db:                db,
+		agentExecRepo:     repo.New(db),
 		auth:              authService,
 		temporalClient:    temporalClient,
 		temporalNamespace: temporalNamespace,
@@ -123,9 +127,10 @@ func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResp
 	}
 
 	workflowRun, err := background.ExecuteAgentsResponseWorkflow(ctx, s.temporalClient, background.AgentsResponseWorkflowParams{
-		OrgID:     authCtx.ActiveOrganizationID,
-		ProjectID: *authCtx.ProjectID,
-		Request:   request,
+		OrgID:       authCtx.ActiveOrganizationID,
+		ProjectID:   *authCtx.ProjectID,
+		Request:     request,
+		ShouldStore: shouldStore,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to start workflow").Log(ctx, s.logger)
@@ -157,10 +162,15 @@ func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResp
 		return nil, oops.E(oops.CodeUnexpected, err, "workflow execution failed").Log(ctx, s.logger)
 	}
 
+	if authCtx.ProjectID == nil || workflowResult.ProjectID != *authCtx.ProjectID {
+		return nil, oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
+	}
+
 	if !shouldStore {
 		// Delete the workflow execution to remove history
+		// No DB entry was written, so skip DB deletion
 		go func() {
-			if delErr := s.deleteAgentRun(context.WithoutCancel(ctx), workflowRun.GetID()); delErr != nil {
+			if delErr := s.deleteAgentRun(context.WithoutCancel(ctx), workflowRun.GetID(), false); delErr != nil {
 				s.logger.ErrorContext(ctx, "failed to delete non-stored agent run", attr.SlogError(delErr))
 			}
 		}()
@@ -188,16 +198,16 @@ func (s *Service) GetResponse(ctx context.Context, payload *agents.GetResponsePa
 
 	switch workflowStatus {
 	case enums.WORKFLOW_EXECUTION_STATUS_RUNNING:
-		// Query workflow for org_id and request parameters (only available while running)
-		var orgID string
-		queryValue, queryErr := s.temporalClient.QueryWorkflow(ctx, responseID, "", "org_id")
+		// Query workflow for project_id and request parameters (only available while running)
+		var projectID uuid.UUID
+		queryValue, queryErr := s.temporalClient.QueryWorkflow(ctx, responseID, "", "project_id")
 		if queryErr != nil {
 			return nil, oops.E(oops.CodeNotFound, queryErr, "workflow not found").Log(ctx, s.logger)
 		}
-		if err := queryValue.Get(&orgID); err != nil {
+		if err := queryValue.Get(&projectID); err != nil {
 			return nil, oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
 		}
-		if orgID != authCtx.ActiveOrganizationID {
+		if authCtx.ProjectID == nil || projectID != *authCtx.ProjectID {
 			return nil, oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
 		}
 
@@ -226,68 +236,35 @@ func (s *Service) GetResponse(ctx context.Context, payload *agents.GetResponsePa
 			Result: "",
 		}
 	case enums.WORKFLOW_EXECUTION_STATUS_COMPLETED:
-		// Workflow is complete, get the result which contains org_id and all request params
+		// Workflow is complete, get the result which contains project_id and all request params
 		workflowRun := s.temporalClient.GetWorkflow(ctx, responseID, "")
 		var workflowResult agentspkg.AgentsResponseWorkflowResult
 		err = workflowRun.Get(ctx, &workflowResult)
 		if err != nil {
-			errMsg := err.Error()
-			response = &agents.AgentResponseOutput{
-				ID:                 responseID,
-				Object:             "response",
-				CreatedAt:          time.Now().Unix(),
-				Status:             "failed",
-				Error:              &errMsg,
-				Instructions:       nil,
-				Model:              "",
-				Output:             []any{},
-				PreviousResponseID: nil,
-				Temperature:        0,
-				Text: &agents.AgentResponseText{
-					Format: &agents.AgentTextFormat{Type: "text"},
-				},
-				Result: errMsg,
-			}
-		} else {
-			// Verify org_id matches
-			if workflowResult.OrgID != authCtx.ActiveOrganizationID {
-				return nil, oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
-			}
-			response = toHTTPResponse(workflowResult.ResponseOutput)
+			return nil, oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
 		}
+
+		if authCtx.ProjectID == nil || workflowResult.ProjectID != *authCtx.ProjectID {
+			return nil, oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
+		}
+		response = toHTTPResponse(workflowResult.ResponseOutput)
 	default:
 		// Workflow failed, cancelled, or terminated - try to get result for any available data
 		workflowRun := s.temporalClient.GetWorkflow(ctx, responseID, "")
 		var workflowResult agentspkg.AgentsResponseWorkflowResult
 		err = workflowRun.Get(ctx, &workflowResult)
+		if err != nil {
+			return nil, oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
+		}
+
+		if authCtx.ProjectID == nil || workflowResult.ProjectID != *authCtx.ProjectID {
+			return nil, oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
+		}
 
 		errMsg := fmt.Sprintf("workflow in unexpected state: %v", workflowStatus)
-		if err == nil && workflowResult.OrgID != "" {
-			// Verify org_id matches
-			if workflowResult.OrgID != authCtx.ActiveOrganizationID {
-				return nil, oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
-			}
-			response = toHTTPResponse(workflowResult.ResponseOutput)
-			response.Status = "failed"
-			response.Error = &errMsg
-		} else {
-			response = &agents.AgentResponseOutput{
-				ID:                 responseID,
-				Object:             "response",
-				CreatedAt:          time.Now().Unix(),
-				Status:             "failed",
-				Error:              &errMsg,
-				Instructions:       nil,
-				Model:              "",
-				Output:             []any{},
-				PreviousResponseID: nil,
-				Temperature:        0,
-				Text: &agents.AgentResponseText{
-					Format: &agents.AgentTextFormat{Type: "text"},
-				},
-				Result: "",
-			}
-		}
+		response = toHTTPResponse(workflowResult.ResponseOutput)
+		response.Status = "failed"
+		response.Error = &errMsg
 	}
 
 	return response, nil
@@ -311,15 +288,15 @@ func (s *Service) DeleteResponse(ctx context.Context, payload *agents.DeleteResp
 	// Verify ownership based on workflow status
 	switch workflowStatus {
 	case enums.WORKFLOW_EXECUTION_STATUS_RUNNING:
-		var orgID string
-		queryValue, queryErr := s.temporalClient.QueryWorkflow(ctx, responseID, "", "org_id")
+		var projectID uuid.UUID
+		queryValue, queryErr := s.temporalClient.QueryWorkflow(ctx, responseID, "", "project_id")
 		if queryErr != nil {
 			return oops.E(oops.CodeNotFound, queryErr, "workflow not found").Log(ctx, s.logger)
 		}
-		if err := queryValue.Get(&orgID); err != nil {
+		if err := queryValue.Get(&projectID); err != nil {
 			return oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
 		}
-		if orgID != authCtx.ActiveOrganizationID {
+		if authCtx.ProjectID == nil || projectID != *authCtx.ProjectID {
 			return oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
 		}
 	default:
@@ -330,19 +307,28 @@ func (s *Service) DeleteResponse(ctx context.Context, payload *agents.DeleteResp
 			// Cannot verify ownership, deny access
 			return oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
 		}
-		if workflowResult.OrgID != authCtx.ActiveOrganizationID {
+		if authCtx.ProjectID == nil || workflowResult.ProjectID != *authCtx.ProjectID {
 			return oops.E(oops.CodeNotFound, fmt.Errorf("workflow not found"), "workflow not found").Log(ctx, s.logger)
 		}
 	}
 
-	return s.deleteAgentRun(ctx, responseID)
+	return s.deleteAgentRun(ctx, responseID, true)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func (s *Service) deleteAgentRun(ctx context.Context, responseID string) error {
+func (s *Service) deleteAgentRun(ctx context.Context, responseID string, deleteDBEntry bool) error {
+	// Delete database entry if it exists (soft delete)
+	if deleteDBEntry {
+		if err := s.agentExecRepo.DeleteAgentExecution(ctx, responseID); err != nil {
+			// Log but don't fail if DB entry doesn't exist
+			s.logger.DebugContext(ctx, "failed to delete agent execution from database", attr.SlogError(err))
+		}
+	}
+
+	// Delete workflow execution
 	_, err := s.temporalClient.WorkflowService().DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
 		Namespace: s.temporalNamespace,
 		WorkflowExecution: &commonv1.WorkflowExecution{

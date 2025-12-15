@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -17,6 +18,18 @@ const (
 	redactRevealPrefixLen = 3
 	redactMinTokenLen     = 10
 )
+
+// ToolMetricsProvider defines the interface for tool metrics operations.
+type ToolMetricsProvider interface {
+	// List tool call logs
+	ListHTTPRequests(ctx context.Context, opts repo.ListToolLogsOptions) (*repo.ListResult, error)
+	// List structured tool logs
+	ListToolLogs(ctx context.Context, params repo.ListToolLogsParams) (*repo.ToolLogsListResult, error)
+	// Log tool call request/response
+	LogHTTPRequest(context.Context, repo.ToolHTTPRequest) error
+	// ShouldLog returns true if the tool call should be logged
+	ShouldLog(context.Context, string) (bool, error)
+}
 
 // ToolCallLogger represents a logging strategy for tool HTTP requests.
 // Implementations may be backed by a real ToolHTTPRequest or behave as no-ops.
@@ -36,10 +49,10 @@ type ToolCallLogger interface {
 }
 
 type toolCallLogger struct {
-	entry    *ToolHTTPRequest
+	entry    *repo.ToolHTTPRequest
 	provider ToolMetricsProvider
 	toolName string
-	toolType ToolType
+	toolType repo.ToolType
 }
 
 var _ ToolCallLogger = (*toolCallLogger)(nil)
@@ -53,7 +66,7 @@ func NewToolCallLogger(
 	organizationID string,
 	info ToolInfo,
 	toolName string,
-	toolType ToolType,
+	toolType repo.ToolType,
 ) (ToolCallLogger, error) {
 	noop := NewNoopToolCallLogger()
 	if provider == nil || toolType == "" {
@@ -102,7 +115,7 @@ func (l *toolCallLogger) RecordHTTPMethod(method string) {
 func (l *toolCallLogger) RecordHTTPServerURL(url string) {
 	// currently we onyl want to record this server URL for HTTP tool types
 	// Not exposing fly function details unnecessarily
-	if l.toolType != ToolTypeHTTP {
+	if l.toolType != repo.ToolTypeHTTP {
 		return
 	}
 	if l.entry == nil {
@@ -209,7 +222,7 @@ func (l *noopToolCallLogger) RecordResponseBodyBytes(int64)                {}
 func (l *noopToolCallLogger) Enabled() bool                                { return false }
 
 // newToolLog initializes a ToolHTTPRequest with common metadata before the HTTP round tripper executes.
-func newToolLog(ctx context.Context, tool ToolInfo, toolType ToolType) (*ToolHTTPRequest, error) {
+func newToolLog(ctx context.Context, tool ToolInfo, toolType repo.ToolType) (*repo.ToolHTTPRequest, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return nil, fmt.Errorf("generate tool http request id: %w", err)
@@ -224,7 +237,7 @@ func newToolLog(ctx context.Context, tool ToolInfo, toolType ToolType) (*ToolHTT
 		spanID = spanCtx.SpanID().String()
 	}
 
-	return &ToolHTTPRequest{
+	return &repo.ToolHTTPRequest{
 		ID:                id.String(),
 		Ts:                time.Unix(id.Time().UnixTime()),
 		OrganizationID:    tool.OrganizationID,
@@ -248,24 +261,6 @@ func newToolLog(ctx context.Context, tool ToolInfo, toolType ToolType) (*ToolHTT
 	}, nil
 }
 
-// WithStatusCode sets the HTTP status code on the log entry.
-func (t *ToolHTTPRequest) WithStatusCode(code int64) *ToolHTTPRequest {
-	t.StatusCode = code
-	return t
-}
-
-// WithHTTPMethod sets the HTTP method on the log entry.
-func (t *ToolHTTPRequest) WithHTTPMethod(method string) *ToolHTTPRequest {
-	t.HTTPMethod = method
-	return t
-}
-
-// WithHTTPRoute sets the HTTP route on the log entry.
-func (t *ToolHTTPRequest) WithHTTPRoute(route string) *ToolHTTPRequest {
-	t.HTTPRoute = route
-	return t
-}
-
 // EmitHTTPRequestLog logs the provided HTTP request using the tool metrics provider.
 // Errors are reported through the supplied logger. Logging happens asynchronously to
 // avoid blocking the caller and the request struct is copied to prevent data races.
@@ -274,7 +269,7 @@ func EmitHTTPRequestLog(
 	logger *slog.Logger,
 	provider ToolMetricsProvider,
 	toolName string,
-	request ToolHTTPRequest,
+	request repo.ToolHTTPRequest,
 ) {
 	if provider == nil || request.ID == "" {
 		return
@@ -283,7 +278,7 @@ func EmitHTTPRequestLog(
 	go func() {
 		logCtx := context.WithoutCancel(ctx)
 
-		if err := provider.Log(logCtx, request); err != nil {
+		if err := provider.LogHTTPRequest(logCtx, request); err != nil {
 			logger.ErrorContext(logCtx,
 				"failed to log HTTP attempt to ClickHouse",
 				attr.SlogError(err),

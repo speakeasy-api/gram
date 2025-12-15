@@ -1,5 +1,4 @@
 # Projects
-(*projects*)
 
 ## Overview
 
@@ -220,7 +219,7 @@ const gram = new Gram();
 
 async function run() {
   const result = await gram.projects.setLogo({
-    setProjectLogoForm: {
+    getSignedAssetURLForm: {
       assetId: "<id>",
     },
   });
@@ -245,7 +244,7 @@ const gram = new GramCore();
 
 async function run() {
   const res = await projectsSetLogo(gram, {
-    setProjectLogoForm: {
+    getSignedAssetURLForm: {
       assetId: "<id>",
     },
   });

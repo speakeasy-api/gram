@@ -1417,7 +1417,7 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
     "mcp_config": {
         "command": "npx",
         "args": [
-        "mcp-remote",
+        "mcp-remote@0.1.25",
         "{{ .MCPURL }}"{{- range .SecurityInputs }},
         "--header",
         "{{ printf "%s:${user_config.%s}" (.SystemName | asHTTPHeader) (.DisplayName | asPosixName) }}"{{- end }}

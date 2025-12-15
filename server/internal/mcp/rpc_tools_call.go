@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	temporal_client "go.temporal.io/sdk/client"
 )
@@ -142,14 +143,14 @@ func handleToolsCall(
 	}
 
 	descriptor := plan.Descriptor
-	var toolType tm.ToolType
+	var toolType tm_repo.ToolType
 	switch plan.Kind {
 	case gateway.ToolKindHTTP:
-		toolType = tm.ToolTypeHTTP
+		toolType = tm_repo.ToolTypeHTTP
 	case gateway.ToolKindFunction:
-		toolType = tm.ToolTypeFunction
+		toolType = tm_repo.ToolTypeFunction
 	case gateway.ToolKindPrompt:
-		toolType = tm.ToolTypePrompt
+		toolType = tm_repo.ToolTypePrompt
 	}
 
 	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, tcm, descriptor.OrganizationID, tm.ToolInfo{
@@ -219,7 +220,7 @@ func handleToolsCall(
 	}()
 
 	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), gateway.ToolCallEnv{
-		UserConfig: userConfig, SystemEnv: gateway.CIEnvFrom(systemConfig)}, plan, toolCallLogger)
+		UserConfig: userConfig, SystemEnv: systemConfig}, plan, toolCallLogger)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
 	}

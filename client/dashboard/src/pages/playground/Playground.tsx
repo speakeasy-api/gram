@@ -44,6 +44,7 @@ import { PlaygroundRHS } from "./PlaygroundRHS";
 import { PlaygroundConfigPanel } from "./PlaygroundConfigPanel";
 import { PlaygroundLogsPanel } from "./PlaygroundLogsPanel";
 import { ScrollTextIcon } from "lucide-react";
+import { useEnvironment } from "../environments/Environment";
 
 export default function Playground() {
   return (
@@ -91,30 +92,21 @@ function PlaygroundInner() {
   const toolsets = toolsetsData?.toolsets;
   const toolset = toolsets?.find((ts) => ts.slug === selectedToolset);
 
-  const { data: instanceData } = useInstance(
-    {
-      toolsetSlug: selectedToolset ?? "",
-      environmentSlug: selectedEnvironment ?? undefined,
-    },
-    undefined,
-    {
-      enabled: !!selectedToolset && !!selectedEnvironment,
-    },
-  );
+  const environmentData = useEnvironment(selectedEnvironment ?? undefined);
 
   // Check auth status
   const authStatus = useMemo(() => {
-    if (!toolset || !instanceData?.environment) {
+    if (!toolset || !environmentData) {
       return null;
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return getAuthStatus(toolset as any, {
-      entries: instanceData.environment.entries?.map((e) => ({
+      entries: environmentData.entries?.map((e) => ({
         name: e.name,
         value: e.value,
       })),
     });
-  }, [toolset, instanceData?.environment]);
+  }, [toolset, environmentData]);
 
   useRegisterToolsetTelemetry({
     toolsetSlug: selectedToolset ?? "",
@@ -295,11 +287,12 @@ export function ToolsetPanel({
 
   const toolset = toolsets?.find((toolset) => toolset.slug === selectedToolset);
 
+  const environmentData = useEnvironment(selectedEnvironment ?? undefined);
+
   // Fetch instance data to get tools
   const { data: instanceData } = useInstance(
     {
       toolsetSlug: selectedToolset ?? "",
-      environmentSlug: selectedEnvironment ?? undefined,
     },
     undefined,
     {
@@ -377,11 +370,12 @@ export function ToolsetPanel({
           queryClient.invalidateQueries({
             queryKey: queryKeyListToolsets({}),
           });
-          if (selectedToolset && selectedEnvironment) {
+          if (selectedToolset) {
+            // Use partial query key (toolsetSlug only) to match all instances
+            // of this toolset, regardless of environment
             queryClient.invalidateQueries({
               queryKey: queryKeyInstance({
                 toolsetSlug: selectedToolset,
-                environmentSlug: selectedEnvironment,
               }),
             });
           }
@@ -417,11 +411,12 @@ export function ToolsetPanel({
           queryClient.invalidateQueries({
             queryKey: queryKeyListToolsets({}),
           });
-          if (selectedToolset && selectedEnvironment) {
+          if (selectedToolset) {
+            // Use partial query key (toolsetSlug only) to match all instances
+            // of this toolset, regardless of environment
             queryClient.invalidateQueries({
               queryKey: queryKeyInstance({
                 toolsetSlug: selectedToolset,
-                environmentSlug: selectedEnvironment,
               }),
             });
           }
@@ -502,13 +497,13 @@ export function ToolsetPanel({
           </Select>
         }
         authSettings={
-          toolset && instanceData?.environment ? (
+          toolset && environmentData ? (
             <PlaygroundAuth
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               toolset={toolset as any}
               environment={{
-                slug: instanceData.environment.slug,
-                entries: instanceData.environment.entries?.map((e) => ({
+                slug: environmentData.slug,
+                entries: environmentData.entries?.map((e) => ({
                   name: e.name,
                   value: e.value,
                 })),

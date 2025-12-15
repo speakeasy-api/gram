@@ -57,18 +57,32 @@ function amendSettings(settingsJSON: string): string {
   edited["workbench.editorAssociations"] ??= {};
   edited["workbench.editorAssociations"]["*.md"] ??= "default";
 
+  [
+    "[javascript]",
+    "[javascriptreact]",
+    "[typescript]",
+    "[typescriptreact]",
+    "[json]",
+    "[jsonc]",
+    "[css]",
+    "[mdx]",
+  ].forEach((lang) => {
+    edited[lang] ??= {};
+    edited[lang]["editor.defaultFormatter"] ??= "esbenp.prettier-vscode";
+  });
+
   return JSON.stringify(edited, null, 2);
 }
 
 function amendLaunchConfigs(
-  launchConfigsJSON: string
+  launchConfigsJSON: string,
 ): string | typeof unchanged {
   const edited = JSON.parse(launchConfigsJSON);
 
   edited["configurations"] ??= [];
   if (!Array.isArray(edited["configurations"])) {
     console.error(
-      "🚨 Invalid launch configurations format. Expected it to be an array."
+      "🚨 Invalid launch configurations format. Expected it to be an array.",
     );
     return unchanged;
   }
@@ -79,7 +93,7 @@ function amendLaunchConfigs(
         typeof cfg === "object" &&
         cfg != null &&
         "name" in cfg &&
-        cfg.name === "Server"
+        cfg.name === "Server",
     )
   ) {
     return unchanged;
@@ -105,7 +119,7 @@ function removeCommentLines(jsonString: string): string {
   return jsonString
     .split("\n")
     .filter(
-      (line) => !line.trim().startsWith("//") && !line.trim().startsWith("#")
+      (line) => !line.trim().startsWith("//") && !line.trim().startsWith("#"),
     )
     .join("\n");
 }

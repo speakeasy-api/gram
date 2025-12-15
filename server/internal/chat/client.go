@@ -29,8 +29,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
@@ -281,7 +281,7 @@ func (c *ChatClient) LoadToolsetTools(
 			}
 
 			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), gateway.ToolCallEnv{
-				SystemEnv:  gateway.CIEnvFrom(systemConfig),
+				SystemEnv:  systemConfig,
 				UserConfig: ciEnv,
 			}, plan, tm.NewNoopToolCallLogger())
 			if err != nil {

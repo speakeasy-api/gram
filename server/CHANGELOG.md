@@ -1,5 +1,45 @@
 # server
 
+## 0.14.2
+
+### Patch Changes
+
+- e0b26ea: Add ListToolExecutionLogs API endpoint for querying structured tool logs with cursor-based pagination and filtering support
+- 82f637a: Updates AgentAPI with storing of agent run IDs for a paginated log view. Also changes the access control defensive check to work on project id which is better
+- 5482f4c: Introduces infrastructure to run a local MCP registry in a container
+
+## 0.14.1
+
+### Patch Changes
+
+- 45bea6e: Pin to older mcp-remote@0.1.25 to avoid classic claude desktop issue with selecting the oldest node version on the machine. Versions pre v20 such as commonly available v18 make it not possible for people to load an mcp
+
+## 0.14.0
+
+### Minor Changes
+
+- 08ce250: Introducing support for large Gram Functions.
+
+  Previously, Gram Functions could only be around 700KiB zipped which was adequate for many use cases but was severely limiting for many others. One example is ChatGPT Apps which can be full fledged React applications with images, CSS and JS assets embedded alongside an MCP server and all running in a Gram Function. Many such apps may not fit into this constrained size. Large Gram Functions addresses this limitation by allowing larger zip files to be deployed with the help of Tigris, an S3-compatible object store that integrates nicely with Fly.io - where we deploy/run Gram Functions.
+
+  During the deployment phase on Gram, we detect if a Gram Function's assets exceed the size limitation and, instead of attaching them in the fly.io machine config directly, we upload them to Tigris and mount a lazy reference to them into machines.
+
+  When a machine boots up to serve a tool call (or resource read), it runs a bootstrap process and detects the lazy file representing the code asset. It then makes a call to the Gram API to get a pre-signed URL to the asset from Tigris and downloads it directly from there. Once done, it continues initialization as normal and handles the tool call.
+
+  There is some overhead in this process compared to directly mounting small functions into machines but for a 1.5MiB file, manual testing indicated that this is still a very snappy process overall with very acceptable overhead (<50ms). In upcoming work, we'll export measurements so users can observe this.
+
+### Patch Changes
+
+- 1538ac3: feat: chat scoped key access to mcp server
+- 1af4e7f: fix: ensure system env compilation is case sensitive
+- ea2f173: ensure function oauth is respected in install page
+- 90a3b7b: Allow instances.get to return mcp server representations of a toolset. Remove unneeded environment for instances get
+- a062fc7: fix: remove vercel check form cors
+- 0818c9a: feat: reading toolset endpointa available to chat scoped auth
+- c8a0376: - fix SSE streaming response truncation due to chunk boundary misalignment
+  - `addToolResult()` was called following tool execution, the AI SDK v5 wasn't automatically triggering a follow-up LLM request with the tool results. This is a known limitation with custom transports (vercel/ai#9178).
+- c039dc0: Updated the CORS middleware to include the `User-Agent` header in the `Access-Control-Allow-Headers` response. This allows clients to send the `User-Agent` header in cross-origin requests which is useful for debugging and analytics purposes.
+
 ## 0.13.0
 
 ### Minor Changes

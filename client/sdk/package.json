@@ -1,6 +1,6 @@
 {
   "name": "@gram/client",
-  "version": "0.22.0",
+  "version": "0.23.6",
   "author": "Speakeasy",
   "private": true,
   "type": "module",
@@ -60,15 +60,9 @@
     "react-dom": "^18 || ^19"
   },
   "peerDependenciesMeta": {
-    "@tanstack/react-query": {
-      "optional": true
-    },
-    "react": {
-      "optional": true
-    },
-    "react-dom": {
-      "optional": true
-    }
+    "@tanstack/react-query": {"optional":true},
+    "react": {"optional":true},
+    "react-dom": {"optional":true}
   },
   "devDependencies": {
     "@eslint/js": "^9.19.0",

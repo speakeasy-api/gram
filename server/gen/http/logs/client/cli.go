@@ -101,7 +101,7 @@ func BuildListLogsPayload(logsListLogsToolID string, logsListLogsTsStart string,
 		if logsListLogsToolUrns != "" {
 			err = json.Unmarshal([]byte(logsListLogsToolUrns), &toolUrns)
 			if err != nil {
-				return nil, fmt.Errorf("invalid JSON for toolUrns, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"Aut aut.\",\n      \"Voluptatum quo molestiae.\"\n   ]'")
+				return nil, fmt.Errorf("invalid JSON for toolUrns, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"Non vel minus.\",\n      \"Recusandae quos ut sint explicabo.\",\n      \"Deserunt repellat enim sit laboriosam.\"\n   ]'")
 			}
 		}
 	}
@@ -141,8 +141,8 @@ func BuildListLogsPayload(logsListLogsToolID string, logsListLogsTsStart string,
 	{
 		if logsListLogsSort != "" {
 			sort = logsListLogsSort
-			if !(sort == "ASC" || sort == "DESC") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"ASC", "DESC"}))
+			if !(sort == "asc" || sort == "desc") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"asc", "desc"}))
 			}
 			if err != nil {
 				return nil, err
@@ -177,6 +177,171 @@ func BuildListLogsPayload(logsListLogsToolID string, logsListLogsTsStart string,
 	v.ToolName = toolName
 	v.ToolType = toolType
 	v.ToolUrns = toolUrns
+	v.PerPage = perPage
+	v.Direction = direction
+	v.Sort = sort
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListToolExecutionLogsPayload builds the payload for the logs
+// listToolExecutionLogs endpoint from CLI flags.
+func BuildListToolExecutionLogsPayload(logsListToolExecutionLogsTsStart string, logsListToolExecutionLogsTsEnd string, logsListToolExecutionLogsDeploymentID string, logsListToolExecutionLogsFunctionID string, logsListToolExecutionLogsInstance string, logsListToolExecutionLogsLevel string, logsListToolExecutionLogsSource string, logsListToolExecutionLogsCursor string, logsListToolExecutionLogsPerPage string, logsListToolExecutionLogsDirection string, logsListToolExecutionLogsSort string, logsListToolExecutionLogsApikeyToken string, logsListToolExecutionLogsSessionToken string, logsListToolExecutionLogsProjectSlugInput string) (*logs.ListToolExecutionLogsPayload, error) {
+	var err error
+	var tsStart *string
+	{
+		if logsListToolExecutionLogsTsStart != "" {
+			tsStart = &logsListToolExecutionLogsTsStart
+			err = goa.MergeErrors(err, goa.ValidateFormat("ts_start", *tsStart, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var tsEnd *string
+	{
+		if logsListToolExecutionLogsTsEnd != "" {
+			tsEnd = &logsListToolExecutionLogsTsEnd
+			err = goa.MergeErrors(err, goa.ValidateFormat("ts_end", *tsEnd, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var deploymentID *string
+	{
+		if logsListToolExecutionLogsDeploymentID != "" {
+			deploymentID = &logsListToolExecutionLogsDeploymentID
+			err = goa.MergeErrors(err, goa.ValidateFormat("deployment_id", *deploymentID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var functionID *string
+	{
+		if logsListToolExecutionLogsFunctionID != "" {
+			functionID = &logsListToolExecutionLogsFunctionID
+			err = goa.MergeErrors(err, goa.ValidateFormat("function_id", *functionID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var instance *string
+	{
+		if logsListToolExecutionLogsInstance != "" {
+			instance = &logsListToolExecutionLogsInstance
+		}
+	}
+	var level *string
+	{
+		if logsListToolExecutionLogsLevel != "" {
+			level = &logsListToolExecutionLogsLevel
+			if !(*level == "debug" || *level == "info" || *level == "warn" || *level == "error") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("level", *level, []any{"debug", "info", "warn", "error"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var source *string
+	{
+		if logsListToolExecutionLogsSource != "" {
+			source = &logsListToolExecutionLogsSource
+			if !(*source == "stdout" || *source == "stderr") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("source", *source, []any{"stdout", "stderr"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var cursor *string
+	{
+		if logsListToolExecutionLogsCursor != "" {
+			cursor = &logsListToolExecutionLogsCursor
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var perPage int
+	{
+		if logsListToolExecutionLogsPerPage != "" {
+			var v int64
+			v, err = strconv.ParseInt(logsListToolExecutionLogsPerPage, 10, strconv.IntSize)
+			perPage = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for perPage, must be INT")
+			}
+			if perPage < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("per_page", perPage, 1, true))
+			}
+			if perPage > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("per_page", perPage, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var direction string
+	{
+		if logsListToolExecutionLogsDirection != "" {
+			direction = logsListToolExecutionLogsDirection
+			if !(direction == "next" || direction == "prev") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("direction", direction, []any{"next", "prev"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sort string
+	{
+		if logsListToolExecutionLogsSort != "" {
+			sort = logsListToolExecutionLogsSort
+			if !(sort == "asc" || sort == "desc") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"asc", "desc"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if logsListToolExecutionLogsApikeyToken != "" {
+			apikeyToken = &logsListToolExecutionLogsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if logsListToolExecutionLogsSessionToken != "" {
+			sessionToken = &logsListToolExecutionLogsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if logsListToolExecutionLogsProjectSlugInput != "" {
+			projectSlugInput = &logsListToolExecutionLogsProjectSlugInput
+		}
+	}
+	v := &logs.ListToolExecutionLogsPayload{}
+	v.TsStart = tsStart
+	v.TsEnd = tsEnd
+	v.DeploymentID = deploymentID
+	v.FunctionID = functionID
+	v.Instance = instance
+	v.Level = level
+	v.Source = source
+	v.Cursor = cursor
 	v.PerPage = perPage
 	v.Direction = direction
 	v.Sort = sort
