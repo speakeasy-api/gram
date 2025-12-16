@@ -10,14 +10,16 @@ package types
 type OAuthProxyServerForm struct {
 	// The slug of the OAuth proxy server
 	Slug Slug
+	// The type of OAuth provider
+	ProviderType string
 	// The authorization endpoint URL
-	AuthorizationEndpoint string
+	AuthorizationEndpoint *string
 	// The token endpoint URL
-	TokenEndpoint string
+	TokenEndpoint *string
 	// OAuth scopes to request
 	ScopesSupported []string
 	// Auth methods (client_secret_basic or client_secret_post)
 	TokenEndpointAuthMethodsSupported []string
 	// The environment slug to store secrets
-	EnvironmentSlug Slug
+	EnvironmentSlug *Slug
 }

@@ -49,3 +49,24 @@ type TokenResponse struct {
 	ExpiresIn   int    `json:"expires_in"`
 	Scope       string `json:"scope,omitempty"`
 }
+
+// OAuthProxyProviderType represents the type of OAuth provider.
+type OAuthProxyProviderType string
+
+const (
+	// OAuthProxyProviderTypeCustom represents a custom OAuth provider configured by the user.
+	OAuthProxyProviderTypeCustom OAuthProxyProviderType = "custom"
+	// OAuthProxyProviderTypeGram represents the Gram-managed OAuth provider.
+	OAuthProxyProviderTypeGram OAuthProxyProviderType = "gram"
+)
+
+var validOAuthProviderTypes = map[OAuthProxyProviderType]struct{}{
+	OAuthProxyProviderTypeCustom: {},
+	OAuthProxyProviderTypeGram:   {},
+}
+
+// IsValid returns true if the provider type is a recognized value.
+func (t OAuthProxyProviderType) IsValid() bool {
+	_, ok := validOAuthProviderTypes[t]
+	return ok
+}

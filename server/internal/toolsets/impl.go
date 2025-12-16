@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauthRepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
@@ -289,6 +290,18 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	}
 
 	if payload.McpIsPublic != nil {
+		oAuthIsAttached := existingToolset.ExternalOauthServerID.Valid || existingToolset.OauthProxyServerID.Valid
+		if (existingToolset.McpIsPublic != *payload.McpIsPublic) && oAuthIsAttached {
+			_, err := s.toolsets.repo.ClearToolsetOAuthServers(ctx, repo.ClearToolsetOAuthServersParams{
+				ProjectID: existingToolset.ProjectID,
+				Slug:      existingToolset.Slug,
+			})
+
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "error clearing oauth configurations").Log(ctx, logger)
+			}
+		}
+
 		updateParams.McpIsPublic = *payload.McpIsPublic
 	}
 
@@ -634,10 +647,6 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 		return nil, err
 	}
 
-	if toolsetDetails.McpIsPublic == nil || !*toolsetDetails.McpIsPublic {
-		return nil, oops.E(oops.CodeBadRequest, nil, "private MCP servers cannot have OAuth proxy servers").Log(ctx, s.logger)
-	}
-
 	if toolsetDetails.OauthProxyServer != nil || toolsetDetails.ExternalOauthServer != nil {
 		return nil, oops.E(oops.CodeConflict, nil, "OAuth server already exists").Log(ctx, s.logger)
 	}
@@ -668,17 +677,54 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 		}
 	}
 
-	// Create the OAuth proxy server
-	// Validate that the environment exists for this project
-	_, err = s.environmentRepo.GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
-		Slug:      string(payload.OauthProxyServer.EnvironmentSlug),
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "environment not found").Log(ctx, s.logger)
+	providerType := oauth.OAuthProxyProviderType(payload.OauthProxyServer.ProviderType)
+
+	if !providerType.IsValid() {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid provider_type value: %s (must be 'custom' or 'gram')", payload.OauthProxyServer.ProviderType).Log(ctx, s.logger)
+	}
+
+	// Validate provider_type against public/private status
+	isPublic := toolsetDetails.McpIsPublic != nil && *toolsetDetails.McpIsPublic
+	if providerType == oauth.OAuthProxyProviderTypeGram && isPublic {
+		return nil, oops.E(oops.CodeBadRequest, nil, "gram provider type can only be used with private MCP servers").Log(ctx, s.logger)
+	}
+	if providerType == oauth.OAuthProxyProviderTypeCustom && !isPublic {
+		return nil, oops.E(oops.CodeBadRequest, nil, "custom provider type can only be used with public MCP servers").Log(ctx, s.logger)
+	}
+
+	// Validate required fields for custom provider type
+	if providerType == oauth.OAuthProxyProviderTypeCustom {
+		if payload.OauthProxyServer.EnvironmentSlug == nil || string(*payload.OauthProxyServer.EnvironmentSlug) == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "environment_slug is required for custom provider type").Log(ctx, s.logger)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment").Log(ctx, s.logger)
+		if payload.OauthProxyServer.AuthorizationEndpoint == nil || *payload.OauthProxyServer.AuthorizationEndpoint == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "authorization_endpoint is required for custom provider type").Log(ctx, s.logger)
+		}
+		if payload.OauthProxyServer.TokenEndpoint == nil || *payload.OauthProxyServer.TokenEndpoint == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "token_endpoint is required for custom provider type").Log(ctx, s.logger)
+		}
+		if len(payload.OauthProxyServer.ScopesSupported) == 0 {
+			return nil, oops.E(oops.CodeBadRequest, nil, "scopes_supported is required for custom provider type").Log(ctx, s.logger)
+		}
+		if len(payload.OauthProxyServer.TokenEndpointAuthMethodsSupported) == 0 {
+			return nil, oops.E(oops.CodeBadRequest, nil, "token_endpoint_auth_methods_supported is required for custom provider type").Log(ctx, s.logger)
+		}
+	}
+
+	// Create the OAuth proxy server
+	// Only validate environment for custom provider type (not gram)
+	if providerType == oauth.OAuthProxyProviderTypeCustom {
+		// Validate that the environment exists for this project
+		_, err = s.environmentRepo.GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
+			Slug:      string(*payload.OauthProxyServer.EnvironmentSlug),
+			ProjectID: *authCtx.ProjectID,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeNotFound, err, "environment not found").Log(ctx, s.logger)
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment").Log(ctx, s.logger)
+		}
 	}
 
 	oauthProxyServer, err := s.oauthRepo.UpsertOAuthProxyServer(ctx, oauthRepo.UpsertOAuthProxyServerParams{
@@ -689,20 +735,28 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to create OAuth proxy server").Log(ctx, s.logger)
 	}
 
-	// Create the OAuth proxy provider with the secrets containing environment_slug
-	secretsJSON, err := json.Marshal(map[string]string{
-		"environment_slug": string(payload.OauthProxyServer.EnvironmentSlug),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal secrets").Log(ctx, s.logger)
+	// Create the OAuth proxy provider with the secrets
+	// Only store environment_slug in secrets for custom provider type
+	var secretsJSON []byte
+	if providerType == oauth.OAuthProxyProviderTypeCustom {
+		secretsJSON, err = json.Marshal(map[string]string{
+			"environment_slug": string(*payload.OauthProxyServer.EnvironmentSlug),
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal secrets").Log(ctx, s.logger)
+		}
+	} else {
+		// Empty JSON object for gram provider (doesn't need environment)
+		secretsJSON = []byte("{}")
 	}
 
 	_, err = s.oauthRepo.UpsertOAuthProxyProvider(ctx, oauthRepo.UpsertOAuthProxyProviderParams{
 		ProjectID:                         *authCtx.ProjectID,
 		OauthProxyServerID:                oauthProxyServer.ID,
 		Slug:                              conv.ToLower(payload.OauthProxyServer.Slug),
-		AuthorizationEndpoint:             conv.ToPGTextEmpty(payload.OauthProxyServer.AuthorizationEndpoint),
-		TokenEndpoint:                     conv.ToPGTextEmpty(payload.OauthProxyServer.TokenEndpoint),
+		ProviderType:                      payload.OauthProxyServer.ProviderType,
+		AuthorizationEndpoint:             conv.PtrToPGTextEmpty(payload.OauthProxyServer.AuthorizationEndpoint),
+		TokenEndpoint:                     conv.PtrToPGTextEmpty(payload.OauthProxyServer.TokenEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(nil),
 		ScopesSupported:                   payload.OauthProxyServer.ScopesSupported,
 		ResponseTypesSupported:            []string{"code"},

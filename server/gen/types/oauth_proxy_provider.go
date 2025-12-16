@@ -12,6 +12,8 @@ type OAuthProxyProvider struct {
 	ID string
 	// The slug of the OAuth proxy provider
 	Slug Slug
+	// The type of OAuth provider
+	ProviderType string
 	// The authorization endpoint URL
 	AuthorizationEndpoint string
 	// The token endpoint URL

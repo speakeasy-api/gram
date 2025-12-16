@@ -66,7 +66,7 @@ type Service struct {
 	serverURL         *url.URL
 	posthog           *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	toolProxy         *gateway.ToolProxy
-	oauthService      *oauth.Service
+	oauthService      OAuthService
 	oauthRepo         *oauth_repo.Queries
 	billingTracker    billing.Tracker
 	billingRepository billing.Repository
@@ -74,6 +74,7 @@ type Service struct {
 	tcm               tm.ToolMetricsProvider
 	vectorToolStore   *rag.ToolsetVectorStore
 	temporal          temporal_client.Client
+	sessions          *sessions.Manager
 }
 
 type oauthTokenInputs struct {
@@ -112,7 +113,7 @@ func NewService(
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	funcCaller functions.ToolCaller,
-	oauthService *oauth.Service,
+	oauthService OAuthService,
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
 	tcm tm.ToolMetricsProvider,
@@ -154,6 +155,7 @@ func NewService(
 		tcm:               tcm,
 		vectorToolStore:   vectorToolStore,
 		temporal:          temporal,
+		sessions:          sessions,
 	}
 }
 
@@ -354,8 +356,29 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	token = strings.TrimPrefix(token, "bearer ")
 	var tokenInputs []oauthTokenInputs
 
+	var oAuthProxyProvider *oauth_repo.OauthProxyProvider
+	if toolset.OauthProxyServerID.Valid {
+		providers, err := s.oauthRepo.ListOAuthProxyProvidersByServer(
+			ctx,
+			oauth_repo.ListOAuthProxyProvidersByServerParams{
+				OauthProxyServerID: toolset.OauthProxyServerID.UUID,
+				ProjectID:          toolset.ProjectID,
+			},
+		)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to load OAuth proxy providers").Log(ctx, s.logger)
+		}
+
+		if len(providers) == 0 {
+			return oops.E(oops.CodeUnexpected, nil, "no OAuth proxy providers found").Log(ctx, s.logger)
+		}
+
+		oAuthProxyProvider = &providers[0]
+	}
+
 	switch {
 	case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
+		// External OAuth server flow
 		if token == "" {
 			s.logger.WarnContext(ctx, "No authorization token provided")
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
@@ -366,7 +389,8 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			securityKeys: []string{},
 			Token:        token,
 		})
-	case toolset.McpIsPublic && toolset.OauthProxyServerID.Valid:
+	case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
+		// Custom OAuth provider flow
 		token, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
 		if err != nil {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
@@ -380,11 +404,32 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 				Token:        externalSecret.Token,
 			})
 		}
+	case !toolset.McpIsPublic:
+		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
+
+		ctx, err = s.authenticateToken(ctx, token, toolset.ID, isOAuthCapable)
+		if err == nil {
+			break
+		}
+
+		if isOAuthCapable {
+			w.Header().Set(
+				"WWW-Authenticate",
+				fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
+			)
+		}
+
+		return oops.E(oops.CodeUnauthorized, nil, "expired or invalid access token")
 	default:
 		if token != "" {
-			ctx, err = s.authenticateToken(ctx, token)
+			ctx, err = s.authenticateToken(ctx, token, toolset.ID, false)
 			if err != nil {
 				return err
+			}
+
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			if !ok || authCtx == nil {
+				return oops.E(oops.CodeUnauthorized, nil, "no auth context found").Log(ctx, s.logger)
 			}
 		}
 	}
@@ -708,19 +753,53 @@ func parseMcpSessionID(headers http.Header) string {
 	return session
 }
 
-func (s *Service) authenticateToken(ctx context.Context, token string) (context.Context, error) {
-	// This just follows Goa's implementation of checking multiple key scopes as a union
-	// Adding both scopes to the same RequiredScopes [] implies both scopes being required
+func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID uuid.UUID, isOAuthCapable bool) (context.Context, error) {
+	if token == "" {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+
+	var oAuthToken *oauth.Token
+	var err error
+	if isOAuthCapable {
+		oAuthToken, err = s.oauthService.ValidateAccessToken(ctx, toolsetID, token)
+	}
+	if err == nil && oAuthToken != nil {
+		// OAuth token validated, authenticate with session
+		if len(oAuthToken.ExternalSecrets) == 0 {
+			return ctx, oops.E(oops.CodeUnauthorized, nil, "no session token found")
+		}
+
+		ctx, err = s.sessions.Authenticate(ctx, oAuthToken.ExternalSecrets[0].Token, false)
+		if err != nil {
+			return ctx, oops.E(oops.CodeUnauthorized, err, "failed to authenticate session")
+		}
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		if !ok || authCtx == nil {
+			return ctx, oops.E(oops.CodeUnauthorized, nil, "no auth context found")
+		}
+
+		s.logger.InfoContext(ctx, "authenticated via gram OAuth", attr.SlogToolsetID(toolsetID.String()))
+		return ctx, nil
+	}
+
+	if errors.Is(err, oauth.ErrExpiredAccessToken) {
+		return ctx, oops.E(oops.CodeUnauthorized, err, "expired access token")
+	}
+
+	// Strategy 2: Try API key authentication (consumer scope)
 	sc := security.APIKeyScheme{
 		Name:           auth.KeySecurityScheme,
 		RequiredScopes: []string{"consumer"},
 		Scopes:         []string{},
 	}
-	ctx, err := s.auth.Authorize(ctx, token, &sc)
+
+	ctx, err = s.auth.Authorize(ctx, token, &sc)
 	if err == nil {
 		return ctx, nil
 	}
 
+	// Strategy 3: Try API key authentication (chat scope fallback)
 	sc = security.APIKeyScheme{
 		Name:           auth.KeySecurityScheme,
 		RequiredScopes: []string{"chat"},
@@ -728,7 +807,8 @@ func (s *Service) authenticateToken(ctx context.Context, token string) (context.
 	}
 	ctx, err = s.auth.Authorize(ctx, token, &sc)
 	if err != nil {
-		return ctx, oops.E(oops.CodeUnauthorized, err, "failed to authorize with API key (requires consumer or chat scope)").Log(ctx, s.logger)
+		// All strategies failed
+		return ctx, oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, s.logger)
 	}
 
 	return ctx, nil
