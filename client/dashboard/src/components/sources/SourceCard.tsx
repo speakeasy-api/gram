@@ -3,6 +3,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { ExternalMcpIcon } from "@/components/ui/mcp-icon";
 import { MoreActions } from "@/components/ui/more-actions";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
@@ -17,7 +18,6 @@ import {
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
 import { Badge } from "@speakeasy-api/moonshine";
 import { CircleAlertIcon, FileCode, Globe, SquareFunction } from "lucide-react";
-import { McpIcon } from "@/components/ui/mcp-icon";
 
 export type NamedAsset =
   | (Asset & {
@@ -56,7 +56,7 @@ export function SourceCard({
       ? FileCode
       : asset.type === "function"
         ? SquareFunction
-        : McpIcon;
+        : ExternalMcpIcon;
 
   const sourceKind =
     asset.type === "openapi"
@@ -119,6 +119,26 @@ export function SourceCard({
     },
   ];
 
+  let displayName = asset.name;
+  let footer =
+    "updatedAt" in asset && asset.updatedAt ? (
+      <UpdatedAt
+        date={new Date(asset.updatedAt)}
+        italic={false}
+        className="text-xs"
+        showRecentness
+      />
+    ) : null;
+
+  if (asset.type === "externalmcp") {
+    displayName = asset.slug;
+    footer = (
+      <Type muted className="text-xs">
+        {asset.name}
+      </Type>
+    );
+  }
+
   const cardContent = (
     <>
       <div className="flex items-center justify-between mb-2">
@@ -131,7 +151,7 @@ export function SourceCard({
       <div className="leading-none mb-1.5 flex items-center justify-between flex-wrap">
         <Type className="overflow-hidden text-ellipsis whitespace-nowrap max-w-[200px] [direction:rtl]">
           <span className="[direction:ltr] [unicode-bidi:embed]">
-            {asset.name}
+            {displayName}
           </span>
         </Type>
         {hasEnvironment && (
@@ -148,14 +168,7 @@ export function SourceCard({
 
       <div className="flex gap-1.5 items-center text-muted-foreground text-xs">
         {causingFailure && <AssetIsCausingFailureNotice />}
-        {"updatedAt" in asset && asset.updatedAt && (
-          <UpdatedAt
-            date={new Date(asset.updatedAt)}
-            italic={false}
-            className="text-xs"
-            showRecentness
-          />
-        )}
+        {footer}
       </div>
     </>
   );

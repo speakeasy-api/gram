@@ -14,7 +14,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { cn } from "@/lib/utils";
 import { useMcpUrl } from "@/pages/mcp/MCPDetails";
 import { useRoutes } from "@/routes";
-import { ToolsetEntry } from "@gram/client/models/components";
+import { ToolEntryType, ToolsetEntry } from "@gram/client/models/components";
 import {
   invalidateAllGetPeriodUsage,
   invalidateAllListToolsets,
@@ -30,6 +30,7 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import { useState } from "react";
+import { ExternalMcpIcon } from "./ui/mcp-icon";
 
 interface ServerCardProps {
   toolset: ToolsetEntry | undefined;
@@ -166,6 +167,13 @@ export function ServerCard({
     );
   }
 
+  const isExternalMcp = toolset.tools.some(
+    (tool) => tool.type === ToolEntryType.Externalmcp,
+  );
+  const externalMcpBadge = isExternalMcp ? (
+    <ExternalMcpIcon className="text-neutral-600 size-5" />
+  ) : null;
+
   return (
     <Card
       className={cn(className, "group transition-colors hover:bg-muted/50")}
@@ -177,6 +185,7 @@ export function ServerCard({
         <div className="flex flex-col gap-1">
           <Card.Title className="text-base">
             <div className="flex items-center gap-1 group">
+              {externalMcpBadge}
               {toolset.name}
               <CopyButton
                 text={toolset.slug}
@@ -192,7 +201,8 @@ export function ServerCard({
       </Card.Header>
       <Card.Content className="cursor-pointer" onClick={handleCardClick}>
         <Card.Description>
-          A toolset created from your OpenAPI document
+          {toolset.description ||
+            "A toolset created from your OpenAPI document"}
         </Card.Description>
       </Card.Content>
       <Card.Footer>
