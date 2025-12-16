@@ -9,4 +9,3 @@ GRAM_SSL_CERT_FILE = false
 GRAM_SSL_KEY_FILE = false
 ## Not needed for production builds, used by vite dev server.
 VITE_DEV_HOSTNAMES = false
-NODE_OPTIONS = "--max-old-space-size=6144"
