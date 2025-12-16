@@ -117,6 +117,13 @@ export const ProjectProvider = ({
     }
   }, [currentProject]);
 
+  // Update project state when current project changes
+  useEffect(() => {
+    if (!project || project.slug !== currentProject.slug) {
+      setProject(currentProject);
+    }
+  }, [currentProject, project]);
+
   // Not logged in
   if (!currentProject) {
     return (
@@ -125,13 +132,6 @@ export const ProjectProvider = ({
       </ProjectContext.Provider>
     );
   }
-
-  // Update project state when current project changes
-  useEffect(() => {
-    if (!project || project.slug !== currentProject.slug) {
-      setProject(currentProject);
-    }
-  }, [currentProject, project]);
 
   const switchProject = async (slug: string) => {
     client.clear();
