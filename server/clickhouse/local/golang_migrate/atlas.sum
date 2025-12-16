@@ -1,4 +1,5 @@
-h1:b9TWrAaa4gJpI+u/tEbRYB9vadfRoukqdPHmzwa78rQ=
+h1:su1ERT8NntF9QL38Lg3dLG9KhaYtt028BxL8Q1aHORA=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
+20251216153731_add-function-logs-table.up.sql h1:bNypFTaxki7LLiBqbjW5orMxXPM86MWpk44yt08ZlWE=
