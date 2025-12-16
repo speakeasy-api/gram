@@ -7,6 +7,7 @@ import {
   PromptTemplateEntry,
   PromptTemplateKind,
   FunctionToolDefinition,
+  ExternalMCPToolDefinition,
   Resource as GeneratedResource,
 } from "@gram/client/models/components";
 import { useMemo } from "react";
@@ -25,7 +26,8 @@ export type Toolset = Omit<GeneratedToolset, "tools" | "resources"> & {
 export type Tool =
   | ({ type: "http" } & HTTPToolDefinition)
   | ({ type: "prompt" } & PromptTemplate)
-  | ({ type: "function" } & FunctionToolDefinition);
+  | ({ type: "function" } & FunctionToolDefinition)
+  | ({ type: "external-mcp" } & ExternalMCPToolDefinition);
 
 export type ToolGroup = {
   key: string;
@@ -44,6 +46,8 @@ export const asTool = (tool: GeneratedTool): Tool => {
     return { type: "prompt", ...tool.promptTemplate };
   } else if (tool.functionToolDefinition) {
     return { type: "function", ...tool.functionToolDefinition };
+  } else if (tool.externalMcpToolDefinition) {
+    return { type: "external-mcp", ...tool.externalMcpToolDefinition };
   } else {
     throw new Error("Unexpected tool type");
   }
