@@ -1,13 +1,41 @@
 import { Skeleton } from "@/components/ui/skeleton";
-import { useListMCPCatalog } from "@gram/client/react-query";
+import {
+  useLatestDeployment,
+  useListMCPCatalog,
+  useEvolveDeploymentMutation,
+} from "@gram/client/react-query";
 import type { ExternalMCPServer } from "@gram/client/models/components";
 import { Input } from "@speakeasy-api/moonshine";
-import { SearchIcon, ServerIcon } from "lucide-react";
+import { SearchIcon, ServerIcon, Loader2Icon } from "lucide-react";
 import React from "react";
+import { toast } from "sonner";
 
-function MCPServerCard({ server }: { server: ExternalMCPServer }) {
+function generateSlug(name: string): string {
+  // Extract the last part after "/" for reverse-DNS names like "ai.exa/exa"
+  const lastPart = name.split("/").pop() || name;
+  // Convert to lowercase, replace non-alphanumeric with dashes, collapse multiple dashes
+  return lastPart
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function MCPServerCard({
+  server,
+  onImport,
+  isImporting,
+}: {
+  server: ExternalMCPServer;
+  onImport: (server: ExternalMCPServer) => void;
+  isImporting: boolean;
+}) {
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-border bg-card p-4 hover:border-border-hover transition-colors cursor-pointer">
+    <button
+      type="button"
+      onClick={() => onImport(server)}
+      disabled={isImporting}
+      className="flex items-start gap-3 rounded-lg border border-border bg-card p-4 hover:border-border-hover transition-colors cursor-pointer text-left w-full disabled:opacity-50 disabled:cursor-not-allowed"
+    >
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted">
         {server.iconUrl ? (
           <img
@@ -30,7 +58,10 @@ function MCPServerCard({ server }: { server: ExternalMCPServer }) {
           {server.name} v{server.version}
         </p>
       </div>
-    </div>
+      {isImporting && (
+        <Loader2Icon className="h-4 w-4 animate-spin text-muted-foreground" />
+      )}
+    </button>
   );
 }
 
@@ -47,9 +78,24 @@ function MCPServerCardSkeleton() {
   );
 }
 
-export default function ImportMCPTabContent() {
+interface ImportMCPTabContentProps {
+  onSuccess?: () => void;
+}
+
+export default function ImportMCPTabContent({
+  onSuccess,
+}: ImportMCPTabContentProps) {
+  const { data: deploymentResult, refetch: refetchDeployment } =
+    useLatestDeployment();
+  const deployment = deploymentResult?.deployment;
+
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const [importingServer, setImportingServer] = React.useState<string | null>(
+    null,
+  );
+
+  const evolveMutation = useEvolveDeploymentMutation();
 
   React.useEffect(() => {
     const timer = setTimeout(() => {
@@ -61,6 +107,37 @@ export default function ImportMCPTabContent() {
   const { data, isLoading, error } = useListMCPCatalog(
     debouncedSearch ? { search: debouncedSearch } : undefined,
   );
+
+  const handleImport = async (server: ExternalMCPServer) => {
+    const serverKey = `${server.registryId}-${server.name}`;
+    setImportingServer(serverKey);
+
+    try {
+      await evolveMutation.mutateAsync({
+        request: {
+          evolveForm: {
+            deploymentId: deployment?.id,
+            upsertExternalMcps: [
+              {
+                registryId: server.registryId,
+                name: server.name,
+                slug: generateSlug(server.name),
+              },
+            ],
+          },
+        },
+      });
+
+      await refetchDeployment();
+      toast.success(`Imported ${server.title ?? server.name}`);
+      onSuccess?.();
+    } catch (err) {
+      console.error("Failed to import external MCP:", err);
+      toast.error(`Failed to import ${server.title ?? server.name}`);
+    } finally {
+      setImportingServer(null);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -101,12 +178,17 @@ export default function ImportMCPTabContent() {
 
       {data && data.servers.length > 0 && (
         <div className="grid gap-3 max-h-[400px] overflow-y-auto">
-          {data.servers.map((server) => (
-            <MCPServerCard
-              key={`${server.registryId}-${server.name}`}
-              server={server}
-            />
-          ))}
+          {data.servers.map((server) => {
+            const serverKey = `${server.registryId}-${server.name}`;
+            return (
+              <MCPServerCard
+                key={serverKey}
+                server={server}
+                onImport={handleImport}
+                isImporting={importingServer === serverKey}
+              />
+            );
+          })}
         </div>
       )}
     </div>

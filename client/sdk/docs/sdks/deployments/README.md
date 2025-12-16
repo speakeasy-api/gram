@@ -228,6 +228,13 @@ async function run() {
   const result = await gram.deployments.evolveDeployment({
     evolveForm: {
       nonBlocking: false,
+      upsertExternalMcps: [
+        {
+          name: "ai.exa/exa",
+          registryId: "fb7378d0-8d03-460e-bcd1-36af78f7025c",
+          slug: "<value>",
+        },
+      ],
     },
   });
 
@@ -253,6 +260,13 @@ async function run() {
   const res = await deploymentsEvolveDeployment(gram, {
     evolveForm: {
       nonBlocking: false,
+      upsertExternalMcps: [
+        {
+          name: "ai.exa/exa",
+          registryId: "fb7378d0-8d03-460e-bcd1-36af78f7025c",
+          slug: "<value>",
+        },
+      ],
     },
   });
   if (res.ok) {

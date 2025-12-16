@@ -76,6 +76,10 @@ const (
 	AssetURLKey                    = attribute.Key("gram.asset.url")
 	MCPRegistryIDKey               = attribute.Key("gram.mcp_registry.id")
 	MCPRegistryURLKey              = attribute.Key("gram.mcp_registry.url")
+	ExternalMCPIDKey               = attribute.Key("gram.external_mcp.id")
+	ExternalMCPSlugKey             = attribute.Key("gram.external_mcp.slug")
+	ExternalMCPNameKey             = attribute.Key("gram.external_mcp.name")
+	URLKey                         = attribute.Key("url")
 	CacheKeyKey                    = attribute.Key("gram.cache.key")
 	CacheNamespaceKey              = attribute.Key("gram.cache.namespace")
 	ComponentKey                   = attribute.Key("gram.component")
@@ -118,6 +122,7 @@ const (
 	OAuthGrantKey                  = attribute.Key("gram.oauth.grant")
 	OAuthProviderKey               = attribute.Key("gram.oauth.provider")
 	OAuthRedirectURIFullKey        = attribute.Key("gram.oauth.redirect_uri.full")
+	OAuthRequiredKey               = attribute.Key("gram.oauth.required")
 	OAuthScopeKey                  = attribute.Key("gram.oauth.scope")
 	OpenAPIMethodKey               = attribute.Key("gram.openapi.method")
 	OpenAPIOperationIDKey          = attribute.Key("gram.openapi.operation_id")
@@ -506,6 +511,9 @@ func SlogOAuthRedirectURIFull(v string) slog.Attr {
 	return slog.String(string(OAuthRedirectURIFullKey), v)
 }
 
+func OAuthRequired(v bool) attribute.KeyValue { return OAuthRequiredKey.Bool(v) }
+func SlogOAuthRequired(v bool) slog.Attr      { return slog.Bool(string(OAuthRequiredKey), v) }
+
 func OAuthScope(v string) attribute.KeyValue { return OAuthScopeKey.String(v) }
 func SlogOAuthScope(v string) slog.Attr      { return slog.String(string(OAuthScopeKey), v) }
 
@@ -712,3 +720,15 @@ func SlogMCPRegistryID(v string) slog.Attr      { return slog.String(string(MCPR
 
 func MCPRegistryURL(v string) attribute.KeyValue { return MCPRegistryURLKey.String(v) }
 func SlogMCPRegistryURL(v string) slog.Attr      { return slog.String(string(MCPRegistryURLKey), v) }
+
+func ExternalMCPID(v string) attribute.KeyValue { return ExternalMCPIDKey.String(v) }
+func SlogExternalMCPID(v string) slog.Attr      { return slog.String(string(ExternalMCPIDKey), v) }
+
+func ExternalMCPSlug(v string) attribute.KeyValue { return ExternalMCPSlugKey.String(v) }
+func SlogExternalMCPSlug(v string) slog.Attr      { return slog.String(string(ExternalMCPSlugKey), v) }
+
+func ExternalMCPName(v string) attribute.KeyValue { return ExternalMCPNameKey.String(v) }
+func SlogExternalMCPName(v string) slog.Attr      { return slog.String(string(ExternalMCPNameKey), v) }
+
+func URL(v string) attribute.KeyValue { return URLKey.String(v) }
+func SlogURL(v string) slog.Attr      { return slog.String(string(URLKey), v) }

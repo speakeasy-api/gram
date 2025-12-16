@@ -10,6 +10,11 @@ import {
   AddDeploymentPackageForm$outboundSchema,
 } from "./adddeploymentpackageform.js";
 import {
+  AddExternalMCPForm,
+  AddExternalMCPForm$Outbound,
+  AddExternalMCPForm$outboundSchema,
+} from "./addexternalmcpform.js";
+import {
   AddFunctionsForm,
   AddFunctionsForm$Outbound,
   AddFunctionsForm$outboundSchema,
@@ -25,6 +30,7 @@ export type CreateDeploymentRequestBody = {
    * The external ID to refer to the deployment. This can be a git commit hash for example.
    */
   externalId?: string | undefined;
+  externalMcps?: Array<AddExternalMCPForm> | undefined;
   /**
    * The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
    */
@@ -53,6 +59,7 @@ export type CreateDeploymentRequestBody = {
 /** @internal */
 export type CreateDeploymentRequestBody$Outbound = {
   external_id?: string | undefined;
+  external_mcps?: Array<AddExternalMCPForm$Outbound> | undefined;
   external_url?: string | undefined;
   functions?: Array<AddFunctionsForm$Outbound> | undefined;
   github_pr?: string | undefined;
@@ -72,6 +79,7 @@ export const CreateDeploymentRequestBody$outboundSchema: z.ZodType<
   CreateDeploymentRequestBody
 > = z.object({
   externalId: z.string().optional(),
+  externalMcps: z.array(AddExternalMCPForm$outboundSchema).optional(),
   externalUrl: z.string().optional(),
   functions: z.array(AddFunctionsForm$outboundSchema).optional(),
   githubPr: z.string().optional(),
@@ -84,6 +92,7 @@ export const CreateDeploymentRequestBody$outboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     externalId: "external_id",
+    externalMcps: "external_mcps",
     externalUrl: "external_url",
     githubPr: "github_pr",
     githubRepo: "github_repo",

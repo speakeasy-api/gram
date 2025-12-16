@@ -37,6 +37,7 @@ type CreateDeploymentRequestBody struct {
 	Openapiv3Assets []*AddOpenAPIv3DeploymentAssetFormRequestBody `form:"openapiv3_assets,omitempty" json:"openapiv3_assets,omitempty" xml:"openapiv3_assets,omitempty"`
 	Functions       []*AddFunctionsFormRequestBody                `form:"functions,omitempty" json:"functions,omitempty" xml:"functions,omitempty"`
 	Packages        []*AddDeploymentPackageFormRequestBody        `form:"packages,omitempty" json:"packages,omitempty" xml:"packages,omitempty"`
+	ExternalMcps    []*AddExternalMCPFormRequestBody              `form:"external_mcps,omitempty" json:"external_mcps,omitempty" xml:"external_mcps,omitempty"`
 }
 
 // EvolveRequestBody is the type of the "deployments" service "evolve" endpoint
@@ -55,6 +56,8 @@ type EvolveRequestBody struct {
 	UpsertPackages []*AddPackageFormRequestBody `form:"upsert_packages,omitempty" json:"upsert_packages,omitempty" xml:"upsert_packages,omitempty"`
 	// The tool functions to upsert in the new deployment.
 	UpsertFunctions []*AddFunctionsFormRequestBody `form:"upsert_functions,omitempty" json:"upsert_functions,omitempty" xml:"upsert_functions,omitempty"`
+	// The external MCP servers to upsert in the new deployment.
+	UpsertExternalMcps []*AddExternalMCPFormRequestBody `form:"upsert_external_mcps,omitempty" json:"upsert_external_mcps,omitempty" xml:"upsert_external_mcps,omitempty"`
 	// The OpenAPI 3.x documents, identified by slug, to exclude from the new
 	// deployment when cloning a previous deployment.
 	ExcludeOpenapiv3Assets []string `form:"exclude_openapiv3_assets,omitempty" json:"exclude_openapiv3_assets,omitempty" xml:"exclude_openapiv3_assets,omitempty"`
@@ -64,6 +67,9 @@ type EvolveRequestBody struct {
 	// The functions, identified by slug, to exclude from the new deployment when
 	// cloning a previous deployment.
 	ExcludeFunctions []string `form:"exclude_functions,omitempty" json:"exclude_functions,omitempty" xml:"exclude_functions,omitempty"`
+	// The external MCP servers, identified by slug, to exclude from the new
+	// deployment when cloning a previous deployment.
+	ExcludeExternalMcps []string `form:"exclude_external_mcps,omitempty" json:"exclude_external_mcps,omitempty" xml:"exclude_external_mcps,omitempty"`
 }
 
 // RedeployRequestBody is the type of the "deployments" service "redeploy"
@@ -116,6 +122,8 @@ type GetDeploymentResponseBody struct {
 	FunctionsAssets []*DeploymentFunctionsResponseBody `form:"functions_assets,omitempty" json:"functions_assets,omitempty" xml:"functions_assets,omitempty"`
 	// The packages that were deployed.
 	Packages []*DeploymentPackageResponseBody `form:"packages,omitempty" json:"packages,omitempty" xml:"packages,omitempty"`
+	// The external MCP servers that were deployed.
+	ExternalMcps []*DeploymentExternalMCPResponseBody `form:"external_mcps,omitempty" json:"external_mcps,omitempty" xml:"external_mcps,omitempty"`
 }
 
 // GetLatestDeploymentResponseBody is the type of the "deployments" service
@@ -1705,6 +1713,19 @@ type DeploymentPackageResponseBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
+// DeploymentExternalMCPResponseBody is used to define fields on response body
+// types.
+type DeploymentExternalMCPResponseBody struct {
+	// The ID of the deployment external MCP record.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The ID of the MCP registry the server is from.
+	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
+	// The reverse-DNS name of the external MCP server.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// A URL-friendly identifier used for tool prefixing.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+}
+
 // DeploymentResponseBody is used to define fields on response body types.
 type DeploymentResponseBody struct {
 	// The ID to of the deployment.
@@ -1747,6 +1768,8 @@ type DeploymentResponseBody struct {
 	FunctionsAssets []*DeploymentFunctionsResponseBody `form:"functions_assets,omitempty" json:"functions_assets,omitempty" xml:"functions_assets,omitempty"`
 	// The packages that were deployed.
 	Packages []*DeploymentPackageResponseBody `form:"packages,omitempty" json:"packages,omitempty" xml:"packages,omitempty"`
+	// The external MCP servers that were deployed.
+	ExternalMcps []*DeploymentExternalMCPResponseBody `form:"external_mcps,omitempty" json:"external_mcps,omitempty" xml:"external_mcps,omitempty"`
 }
 
 // AddOpenAPIv3DeploymentAssetFormRequestBody is used to define fields on
@@ -1781,6 +1804,16 @@ type AddDeploymentPackageFormRequestBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The version of the package.
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+}
+
+// AddExternalMCPFormRequestBody is used to define fields on request body types.
+type AddExternalMCPFormRequestBody struct {
+	// The ID of the MCP registry the server is from.
+	RegistryID string `form:"registry_id" json:"registry_id" xml:"registry_id"`
+	// The reverse-DNS name of the external MCP server (e.g., 'ai.exa/exa').
+	Name string `form:"name" json:"name" xml:"name"`
+	// A URL-friendly identifier used for tool prefixing (e.g., 'exa').
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 }
 
 // AddPackageFormRequestBody is used to define fields on request body types.
@@ -1871,6 +1904,16 @@ func NewCreateDeploymentRequestBody(p *deployments.CreateDeploymentPayload) *Cre
 			body.Packages[i] = marshalDeploymentsAddDeploymentPackageFormToAddDeploymentPackageFormRequestBody(val)
 		}
 	}
+	if p.ExternalMcps != nil {
+		body.ExternalMcps = make([]*AddExternalMCPFormRequestBody, len(p.ExternalMcps))
+		for i, val := range p.ExternalMcps {
+			if val == nil {
+				body.ExternalMcps[i] = nil
+				continue
+			}
+			body.ExternalMcps[i] = marshalDeploymentsAddExternalMCPFormToAddExternalMCPFormRequestBody(val)
+		}
+	}
 	return body
 }
 
@@ -1911,6 +1954,16 @@ func NewEvolveRequestBody(p *deployments.EvolvePayload) *EvolveRequestBody {
 			body.UpsertFunctions[i] = marshalDeploymentsAddFunctionsFormToAddFunctionsFormRequestBody(val)
 		}
 	}
+	if p.UpsertExternalMcps != nil {
+		body.UpsertExternalMcps = make([]*AddExternalMCPFormRequestBody, len(p.UpsertExternalMcps))
+		for i, val := range p.UpsertExternalMcps {
+			if val == nil {
+				body.UpsertExternalMcps[i] = nil
+				continue
+			}
+			body.UpsertExternalMcps[i] = marshalDeploymentsAddExternalMCPFormToAddExternalMCPFormRequestBody(val)
+		}
+	}
 	if p.ExcludeOpenapiv3Assets != nil {
 		body.ExcludeOpenapiv3Assets = make([]string, len(p.ExcludeOpenapiv3Assets))
 		for i, val := range p.ExcludeOpenapiv3Assets {
@@ -1927,6 +1980,12 @@ func NewEvolveRequestBody(p *deployments.EvolvePayload) *EvolveRequestBody {
 		body.ExcludeFunctions = make([]string, len(p.ExcludeFunctions))
 		for i, val := range p.ExcludeFunctions {
 			body.ExcludeFunctions[i] = val
+		}
+	}
+	if p.ExcludeExternalMcps != nil {
+		body.ExcludeExternalMcps = make([]string, len(p.ExcludeExternalMcps))
+		for i, val := range p.ExcludeExternalMcps {
+			body.ExcludeExternalMcps[i] = val
 		}
 	}
 	return body
@@ -1986,6 +2045,16 @@ func NewGetDeploymentResultOK(body *GetDeploymentResponseBody) *deployments.GetD
 			continue
 		}
 		v.Packages[i] = unmarshalDeploymentPackageResponseBodyToTypesDeploymentPackage(val)
+	}
+	if body.ExternalMcps != nil {
+		v.ExternalMcps = make([]*types.DeploymentExternalMCP, len(body.ExternalMcps))
+		for i, val := range body.ExternalMcps {
+			if val == nil {
+				v.ExternalMcps[i] = nil
+				continue
+			}
+			v.ExternalMcps[i] = unmarshalDeploymentExternalMCPResponseBodyToTypesDeploymentExternalMCP(val)
+		}
 	}
 
 	return v
@@ -3335,6 +3404,13 @@ func ValidateGetDeploymentResponseBody(body *GetDeploymentResponseBody) (err err
 	for _, e := range body.Packages {
 		if e != nil {
 			if err2 := ValidateDeploymentPackageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.ExternalMcps {
+		if e != nil {
+			if err2 := ValidateDeploymentExternalMCPResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -5421,6 +5497,32 @@ func ValidateDeploymentPackageResponseBody(body *DeploymentPackageResponseBody) 
 	return
 }
 
+// ValidateDeploymentExternalMCPResponseBody runs the validations defined on
+// DeploymentExternalMCPResponseBody
+func ValidateDeploymentExternalMCPResponseBody(body *DeploymentExternalMCPResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.RegistryID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("registry_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
+	}
+	return
+}
+
 // ValidateDeploymentResponseBody runs the validations defined on
 // DeploymentResponseBody
 func ValidateDeploymentResponseBody(body *DeploymentResponseBody) (err error) {
@@ -5478,6 +5580,13 @@ func ValidateDeploymentResponseBody(body *DeploymentResponseBody) (err error) {
 			}
 		}
 	}
+	for _, e := range body.ExternalMcps {
+		if e != nil {
+			if err2 := ValidateDeploymentExternalMCPResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	return
 }
 
@@ -5494,6 +5603,17 @@ func ValidateAddOpenAPIv3DeploymentAssetFormRequestBody(body *AddOpenAPIv3Deploy
 // ValidateAddFunctionsFormRequestBody runs the validations defined on
 // AddFunctionsFormRequestBody
 func ValidateAddFunctionsFormRequestBody(body *AddFunctionsFormRequestBody) (err error) {
+	err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z0-9_-]{1,128}$"))
+	if utf8.RuneCountInString(body.Slug) > 40 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 40, false))
+	}
+	return
+}
+
+// ValidateAddExternalMCPFormRequestBody runs the validations defined on
+// AddExternalMCPFormRequestBody
+func ValidateAddExternalMCPFormRequestBody(body *AddExternalMCPFormRequestBody) (err error) {
+	err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", body.RegistryID, goa.FormatUUID))
 	err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z0-9_-]{1,128}$"))
 	if utf8.RuneCountInString(body.Slug) > 40 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 40, false))

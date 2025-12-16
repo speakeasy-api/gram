@@ -9476,6 +9476,26 @@ components:
                     description: The version of the package.
             required:
                 - name
+        AddExternalMCPForm:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: The reverse-DNS name of the external MCP server (e.g., 'ai.exa/exa').
+                    example: ai.exa/exa
+                registry_id:
+                    type: string
+                    description: The ID of the MCP registry the server is from.
+                    format: uuid
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+            required:
+                - registry_id
+                - name
+                - slug
         AddExternalOAuthServerForm:
             type: object
             properties:
@@ -10027,6 +10047,10 @@ components:
                     type: string
                     description: The external ID to refer to the deployment. This can be a git commit hash for example.
                     example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                external_mcps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AddExternalMCPForm'
                 external_url:
                     type: string
                     description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
@@ -10071,6 +10095,10 @@ components:
                     type: string
                     description: The external ID to refer to the deployment. This can be a git commit hash for example.
                     example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                external_mcps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AddExternalMCPForm'
                 external_url:
                     type: string
                     description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
@@ -10424,6 +10452,11 @@ components:
                     type: string
                     description: The external ID to refer to the deployment. This can be a git commit hash for example.
                     example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                external_mcps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DeploymentExternalMCP'
+                    description: The external MCP servers that were deployed.
                 external_url:
                     type: string
                     description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
@@ -10493,6 +10526,28 @@ components:
                 - packages
                 - openapiv3_tool_count
                 - functions_tool_count
+        DeploymentExternalMCP:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the deployment external MCP record.
+                name:
+                    type: string
+                    description: The reverse-DNS name of the external MCP server.
+                registry_id:
+                    type: string
+                    description: The ID of the MCP registry the server is from.
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+            required:
+                - id
+                - registry_id
+                - name
+                - slug
         DeploymentFunctions:
             type: object
             properties:
@@ -10723,6 +10778,11 @@ components:
                 deployment_id:
                     type: string
                     description: The ID of the deployment to evolve. If omitted, the latest deployment will be used.
+                exclude_external_mcps:
+                    type: array
+                    items:
+                        type: string
+                    description: The external MCP servers, identified by slug, to exclude from the new deployment when cloning a previous deployment.
                 exclude_functions:
                     type: array
                     items:
@@ -10742,6 +10802,11 @@ components:
                     type: boolean
                     description: If true, the deployment will be created in non-blocking mode where the request will return immediately and the deployment will proceed asynchronously.
                     example: false
+                upsert_external_mcps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AddExternalMCPForm'
+                    description: The external MCP servers to upsert in the new deployment.
                 upsert_functions:
                     type: array
                     items:
@@ -11075,6 +11140,11 @@ components:
                     type: string
                     description: The external ID to refer to the deployment. This can be a git commit hash for example.
                     example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                external_mcps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DeploymentExternalMCP'
+                    description: The external MCP servers that were deployed.
                 external_url:
                     type: string
                     description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
