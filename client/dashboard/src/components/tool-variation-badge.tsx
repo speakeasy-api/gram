@@ -1,9 +1,9 @@
+import { Tool } from "@/lib/toolTypes";
+import { CanonicalToolAttributes } from "@gram/client/models/components";
 import { Icon } from "@speakeasy-api/moonshine";
 import { SimpleTooltip } from "./ui/tooltip";
-import { StandardTool } from "@/lib/toolTypes";
-import { CanonicalToolAttributes } from "@gram/client/models/components";
 
-export const ToolVariationBadge = ({ tool }: { tool: StandardTool }) => {
+export const ToolVariationBadge = ({ tool }: { tool: Tool }) => {
   if (!tool.variation) {
     return null;
   }

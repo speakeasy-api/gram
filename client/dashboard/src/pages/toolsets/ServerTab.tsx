@@ -10,15 +10,22 @@ interface ServerTabContentProps {
 
 export function ServerTabContent({ toolset }: ServerTabContentProps) {
   // Find the external MCP tool to display its metadata
-  const externalMcpTool = toolset.tools.find((t) => t.type === "external-mcp");
+  const externalMcpTool = toolset.rawTools.find(
+    (t) => t.externalMcpToolDefinition !== undefined,
+  );
 
-  if (!externalMcpTool || externalMcpTool.type !== "external-mcp") {
+  if (
+    !externalMcpTool ||
+    externalMcpTool.externalMcpToolDefinition === undefined
+  ) {
     return (
       <div className="text-muted-foreground">
         No external MCP server configured.
       </div>
     );
   }
+
+  const tool = externalMcpTool.externalMcpToolDefinition;
 
   return (
     <Stack direction="vertical" gap={6}>
@@ -31,7 +38,7 @@ export function ServerTabContent({ toolset }: ServerTabContentProps) {
             <Stack gap={1}>
               <Type variant="subheading">External MCP Server</Type>
               <Type small muted>
-                {externalMcpTool.slug}
+                {tool.slug}
               </Type>
             </Stack>
           </Stack>
@@ -42,11 +49,9 @@ export function ServerTabContent({ toolset }: ServerTabContentProps) {
               <Type small muted className="block mb-1">
                 Remote URL
               </Type>
-              <Type className="font-mono text-sm">
-                {externalMcpTool.remoteUrl}
-              </Type>
+              <Type className="font-mono text-sm">{tool.remoteUrl}</Type>
             </div>
-            {externalMcpTool.requiresOauth && (
+            {tool.requiresOauth && (
               <div>
                 <Type small muted className="block mb-1">
                   Authentication

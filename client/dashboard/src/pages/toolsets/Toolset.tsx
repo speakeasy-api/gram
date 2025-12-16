@@ -1,3 +1,4 @@
+import { ToolsetEnvironmentForm } from "@/components/environments/ToolsetEnvironmentForm";
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { ToolList } from "@/components/tool-list";
@@ -13,7 +14,8 @@ import {
   useTelemetry,
 } from "@/contexts/Telemetry";
 import { useToolset } from "@/hooks/toolTypes";
-import { Tool, StandardTool, useGroupedTools } from "@/lib/toolTypes";
+import { handleAPIError } from "@/lib/errors";
+import { Tool, useGroupedTools } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Confirm } from "@gram/client/models/components";
@@ -35,12 +37,10 @@ import { AddToolsDialog } from "./AddToolsDialog";
 import { PromptsTabContent } from "./PromptsTab";
 import { ResourcesTabContent } from "./resources/ResourcesTab";
 import { ServerTabContent } from "./ServerTab";
-import { ToolsetEnvironmentForm } from "@/components/environments/ToolsetEnvironmentForm";
 import { ToolsetAuthAlert } from "./ToolsetAuthAlert";
 import { ToolsetEmptyState } from "./ToolsetEmptyState";
 import { ToolsetHeader } from "./ToolsetHeader";
 import { useToolsets } from "./Toolsets";
-import { handleAPIError } from "@/lib/errors";
 
 export function useDeleteToolset({
   onSuccess,
@@ -230,7 +230,13 @@ export default function ToolsetPage() {
   return <ToolsetView toolsetSlug={toolsetSlug} />;
 }
 
-type ToolsetTabs = "tools" | "prompts" | "resources" | "auth" | "mcp" | "server";
+type ToolsetTabs =
+  | "tools"
+  | "prompts"
+  | "resources"
+  | "auth"
+  | "mcp"
+  | "server";
 
 export function ToolsetView({
   toolsetSlug,
@@ -288,7 +294,12 @@ export function ToolsetView({
   useEffect(() => {
     if (!toolset) return;
 
-    if (isExternalMcp && (activeTab === "tools" || activeTab === "resources" || activeTab === "prompts")) {
+    if (
+      isExternalMcp &&
+      (activeTab === "tools" ||
+        activeTab === "resources" ||
+        activeTab === "prompts")
+    ) {
       // External MCP toolsets should show "server" tab instead of tools/resources/prompts
       setActiveTab("server");
       navigate("#server", { replace: true });
@@ -387,7 +398,7 @@ export function ToolsetView({
   });
 
   const handleToolUpdate = async (
-    tool: StandardTool,
+    tool: Tool,
     updates: { name?: string; description?: string },
   ) => {
     if (tool.type === "prompt") {

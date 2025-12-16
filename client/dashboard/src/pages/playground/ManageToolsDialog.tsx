@@ -9,14 +9,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
-import { Tool, StandardTool, Toolset, filterStandardTools } from "@/lib/toolTypes";
+import { Tool, Toolset } from "@/lib/toolTypes";
 import { Button } from "@speakeasy-api/moonshine";
 import { useMemo, useState } from "react";
-import { EditToolDialog } from "./EditToolDialog";
 import { toast } from "sonner";
+import { EditToolDialog } from "./EditToolDialog";
 
 function getToolSource(
-  tool: StandardTool,
+  tool: Tool,
   documentIdToName?: Record<string, string>,
   functionIdToName?: Record<string, string>,
 ): string {
@@ -65,7 +65,7 @@ export function ManageToolsDialog({
   const [sourceFilter, setSourceFilter] = useState<string>(
     initialGroup || "all",
   );
-  const [editingTool, setEditingTool] = useState<StandardTool | null>(null);
+  const [editingTool, setEditingTool] = useState<Tool | null>(null);
 
   const { data: allTools, isLoading } = useListTools();
   const { data: deployment } = useLatestDeployment();
@@ -95,38 +95,28 @@ export function ManageToolsDialog({
     );
   }, [deployment]);
 
-  // Filter to standard tools for UI operations
-  const standardToolsFromAll = useMemo(() => {
-    return filterStandardTools(allTools?.tools ?? []);
-  }, [allTools]);
-
   const sources = useMemo(() => {
-    if (!standardToolsFromAll.length) return [];
+    if (!allTools?.tools.length) return [];
 
     const sourceSet = new Set<string>();
-    standardToolsFromAll.forEach((tool) => {
+    allTools.tools.forEach((tool) => {
       const source = getToolSource(tool, documentIdToName, functionIdToName);
       sourceSet.add(source);
     });
 
     return Array.from(sourceSet).sort();
-  }, [standardToolsFromAll, documentIdToName, functionIdToName]);
+  }, [allTools, documentIdToName, functionIdToName]);
 
   // For "add" mode: show tools not in playground
-  const availableTools = useMemo<StandardTool[]>(() => {
-    if (!standardToolsFromAll.length) return [];
+  const availableTools = useMemo<Tool[]>(() => {
+    if (!allTools?.tools.length) return [];
 
-    return standardToolsFromAll.filter((tool) => {
+    return allTools.tools.filter((tool) => {
       return tool.toolUrn && !currentToolUrns.has(tool.toolUrn);
     });
-  }, [standardToolsFromAll, currentToolUrns]);
+  }, [allTools, currentToolUrns]);
 
-  // For "manage" mode: filter to standard tools only (external-mcp tools are managed differently)
-  const standardCurrentTools = useMemo<StandardTool[]>(() => {
-    return filterStandardTools(currentTools);
-  }, [currentTools]);
-
-  const displayTools = mode === "add" ? availableTools : standardCurrentTools;
+  const displayTools = mode === "add" ? availableTools : currentTools;
 
   const filteredTools = useMemo(() => {
     const searchLower = search.toLowerCase();

@@ -4,7 +4,6 @@ import { Heading } from "@/components/ui/heading";
 import { Spinner } from "@/components/ui/spinner";
 import { TextArea } from "@/components/ui/textarea";
 import { useToolset } from "@/hooks/toolTypes";
-import { filterStandardTools } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
@@ -75,8 +74,8 @@ export const ToolifyDialog = ({
   const [purpose, setPurpose] = useState("");
   const [selectedToolset, setSelectedToolset] = useState<ToolsetEntry>();
   const { data: toolset } = useToolset(selectedToolset?.slug);
-  // Filter to standard tools only - external-mcp tools are not supported in Toolify
-  const tools = filterStandardTools(toolset?.tools ?? []);
+
+  const tools = toolset?.tools ?? [];
 
   const { set } = useToolifyContext();
 

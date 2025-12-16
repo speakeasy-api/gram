@@ -24,7 +24,8 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useToolset } from "@/hooks/toolTypes";
 import { MUSTACHE_VAR_REGEX, slugify, TOOL_NAME_REGEX } from "@/lib/constants";
-import { Tool, StandardTool, filterStandardTools, useGroupedTools } from "@/lib/toolTypes";
+import { handleAPIError } from "@/lib/errors";
+import { Tool, useGroupedTools } from "@/lib/toolTypes";
 import { capitalize, cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
@@ -50,7 +51,6 @@ import { ChatProvider, useChatContext } from "../playground/ChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
 import { useToolifyContext } from "./Toolify";
-import { handleAPIError } from "@/lib/errors";
 
 type Input = {
   name: string;
@@ -211,8 +211,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     });
   };
 
-  // Filter to standard tools only - external-mcp tools are not supported in ToolBuilder
-  let tools = filterStandardTools(toolsetData?.tools ?? []);
+  let tools = toolsetData?.tools ?? [];
   tools = tools.filter((t) => t.id !== initial.id); // Make sure you can't create recursive tools
 
   // Ensures that the canonical tool, tool URN, and update function is set for the step
@@ -692,7 +691,7 @@ const StepCard = ({
   moveDown,
 }: {
   step: Step;
-  tools: StandardTool[];
+  tools: Tool[];
   remove: () => void;
   moveUp?: () => void;
   moveDown?: () => void;
@@ -819,8 +818,8 @@ const ToolSelectPopover = ({
 }: {
   open: boolean;
   setOpen: (open: boolean) => void;
-  onSelect: (tool: StandardTool | "none") => void;
-  tools: StandardTool[];
+  onSelect: (tool: Tool | "none") => void;
+  tools: Tool[];
   children: React.ReactNode;
 }) => {
   const groupedTools = useGroupedTools(tools);
