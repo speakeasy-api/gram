@@ -1,5 +1,5 @@
+import { ServerEnableDialog } from "@/components/server-enable-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@speakeasy-api/moonshine";
 import { Card } from "@/components/ui/card";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Action, MoreActions } from "@/components/ui/more-actions";
@@ -9,7 +9,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
-import { ServerEnableDialog } from "@/components/server-enable-dialog";
 import { UpdatedAt } from "@/components/updated-at";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn } from "@/lib/utils";
@@ -21,7 +20,7 @@ import {
   invalidateAllListToolsets,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircleIcon,

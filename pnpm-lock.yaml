@@ -55,6 +55,9 @@ importers:
       '@datadog/datadog-ci':
         specifier: ^4.2.2
         version: 4.2.2(@types/node@24.10.1)
+      '@gram/client':
+        specifier: workspace:*
+        version: link:client/sdk
       '@types/fs-extra':
         specifier: ^11.0.4
         version: 11.0.4

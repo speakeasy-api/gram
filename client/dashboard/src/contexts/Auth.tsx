@@ -117,6 +117,13 @@ export const ProjectProvider = ({
     }
   }, [currentProject]);
 
+  // Update project state when current project changes
+  useEffect(() => {
+    if (!project || project.slug !== currentProject.slug) {
+      setProject(currentProject);
+    }
+  }, [currentProject, project]);
+
   // Not logged in
   if (!currentProject) {
     return (
@@ -124,10 +131,6 @@ export const ProjectProvider = ({
         {children}
       </ProjectContext.Provider>
     );
-  }
-
-  if (!project || project.slug !== currentProject.slug) {
-    setProject(currentProject);
   }
 
   const switchProject = async (slug: string) => {
@@ -184,13 +187,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const { orgSlug, projectSlug } = useSlugs();
   const [searchParams] = useSearchParams();
-
   const { session, error, status } = useSessionData();
 
   const isLoading = status === "pending";
 
   useIdentifyUserForTelemetry(session?.user);
-
   usePylonInAppChat(session?.user);
 
   // you need something like this so you don't redirect with empty session too soon
@@ -216,10 +217,16 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
+  // Handle initial navigation
   const redirectParam = searchParams.get("redirect");
   if (redirectParam) {
-    return <Navigate to={redirectParam} replace />;
+    if (import.meta.env.DEV) {
+      window.location.href = redirectParam; // This is unfortunately necessary to avoid weird behavior during HMR
+    } else {
+      return <Navigate to={redirectParam} replace />;
+    }
   } else if (session.organization && !projectSlug) {
+    console.log("(1) redirecting to preferred project", projectSlug);
     // if we're logged in but the URL doesn't have a project slug, redirect to
     // the default project
     let preferredProject = localStorage.getItem(PREFERRED_PROJECT_KEY);
@@ -248,6 +255,8 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
       />
     );
   } else if (session.organization.slug !== orgSlug) {
+    console.log("(2) redirecting to organization");
+
     // make sure we don't direct to an org we aren't authenticated with
     return (
       <Navigate to={`/${session.organization.slug}/${projectSlug}`} replace />

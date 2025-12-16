@@ -12,6 +12,16 @@ export type ListToolExecutionLogsSecurityOption1 = {
 };
 
 export type ListToolExecutionLogsSecurityOption2 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
+export type ListToolExecutionLogsSecurityOption3 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
+export type ListToolExecutionLogsSecurityOption4 = {
   projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
@@ -19,6 +29,8 @@ export type ListToolExecutionLogsSecurityOption2 = {
 export type ListToolExecutionLogsSecurity = {
   option1?: ListToolExecutionLogsSecurityOption1 | undefined;
   option2?: ListToolExecutionLogsSecurityOption2 | undefined;
+  option3?: ListToolExecutionLogsSecurityOption3 | undefined;
+  option4?: ListToolExecutionLogsSecurityOption4 | undefined;
 };
 
 /**
@@ -163,8 +175,8 @@ export function listToolExecutionLogsSecurityOption1ToJSON(
 
 /** @internal */
 export type ListToolExecutionLogsSecurityOption2$Outbound = {
+  "apikey_header_Gram-Key": string;
   "project_slug_header_Gram-Project": string;
-  "session_header_Gram-Session": string;
 };
 
 /** @internal */
@@ -173,12 +185,12 @@ export const ListToolExecutionLogsSecurityOption2$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ListToolExecutionLogsSecurityOption2
 > = z.object({
+  apikeyHeaderGramKey: z.string(),
   projectSlugHeaderGramProject: z.string(),
-  sessionHeaderGramSession: z.string(),
 }).transform((v) => {
   return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
     projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
   });
 });
 
@@ -193,9 +205,73 @@ export function listToolExecutionLogsSecurityOption2ToJSON(
 }
 
 /** @internal */
+export type ListToolExecutionLogsSecurityOption3$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const ListToolExecutionLogsSecurityOption3$outboundSchema: z.ZodType<
+  ListToolExecutionLogsSecurityOption3$Outbound,
+  z.ZodTypeDef,
+  ListToolExecutionLogsSecurityOption3
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+export function listToolExecutionLogsSecurityOption3ToJSON(
+  listToolExecutionLogsSecurityOption3: ListToolExecutionLogsSecurityOption3,
+): string {
+  return JSON.stringify(
+    ListToolExecutionLogsSecurityOption3$outboundSchema.parse(
+      listToolExecutionLogsSecurityOption3,
+    ),
+  );
+}
+
+/** @internal */
+export type ListToolExecutionLogsSecurityOption4$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const ListToolExecutionLogsSecurityOption4$outboundSchema: z.ZodType<
+  ListToolExecutionLogsSecurityOption4$Outbound,
+  z.ZodTypeDef,
+  ListToolExecutionLogsSecurityOption4
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+export function listToolExecutionLogsSecurityOption4ToJSON(
+  listToolExecutionLogsSecurityOption4: ListToolExecutionLogsSecurityOption4,
+): string {
+  return JSON.stringify(
+    ListToolExecutionLogsSecurityOption4$outboundSchema.parse(
+      listToolExecutionLogsSecurityOption4,
+    ),
+  );
+}
+
+/** @internal */
 export type ListToolExecutionLogsSecurity$Outbound = {
   Option1?: ListToolExecutionLogsSecurityOption1$Outbound | undefined;
   Option2?: ListToolExecutionLogsSecurityOption2$Outbound | undefined;
+  Option3?: ListToolExecutionLogsSecurityOption3$Outbound | undefined;
+  Option4?: ListToolExecutionLogsSecurityOption4$Outbound | undefined;
 };
 
 /** @internal */
@@ -208,10 +284,16 @@ export const ListToolExecutionLogsSecurity$outboundSchema: z.ZodType<
     .optional(),
   option2: z.lazy(() => ListToolExecutionLogsSecurityOption2$outboundSchema)
     .optional(),
+  option3: z.lazy(() => ListToolExecutionLogsSecurityOption3$outboundSchema)
+    .optional(),
+  option4: z.lazy(() => ListToolExecutionLogsSecurityOption4$outboundSchema)
+    .optional(),
 }).transform((v) => {
   return remap$(v, {
     option1: "Option1",
     option2: "Option2",
+    option3: "Option3",
+    option4: "Option4",
   });
 });
 

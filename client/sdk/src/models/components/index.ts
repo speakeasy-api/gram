@@ -3,6 +3,7 @@
  */
 
 export * from "./adddeploymentpackageform.js";
+export * from "./addexternalmcpform.js";
 export * from "./addexternaloauthserverrequestbody.js";
 export * from "./addfunctionsform.js";
 export * from "./addoauthproxyserverrequestbody.js";
@@ -35,6 +36,7 @@ export * from "./creditusageresponsebody.js";
 export * from "./customdomain.js";
 export * from "./deleteglobaltoolvariationresult.js";
 export * from "./deployment.js";
+export * from "./deploymentexternalmcp.js";
 export * from "./deploymentfunctions.js";
 export * from "./deploymentlogevent.js";
 export * from "./deploymentpackage.js";
@@ -44,6 +46,7 @@ export * from "./environmententry.js";
 export * from "./environmententryinput.js";
 export * from "./evolveform.js";
 export * from "./evolveresult.js";
+export * from "./externalmcpserver.js";
 export * from "./externaloauthserver.js";
 export * from "./externaloauthserverform.js";
 export * from "./fetchopenapiv3fromurlform2.js";
@@ -69,6 +72,7 @@ export * from "./integrationentry.js";
 export * from "./integrationversion.js";
 export * from "./key.js";
 export * from "./listassetsresult.js";
+export * from "./listcatalogresponsebody.js";
 export * from "./listchatsresult.js";
 export * from "./listdeploymentresult.js";
 export * from "./listenvironmentsresult.js";
