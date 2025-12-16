@@ -736,6 +736,488 @@ func DecodeSetLogoResponse(decoder func(*http.Response) goahttp.Decoder, restore
 	}
 }
 
+// BuildListAllowedOriginsRequest instantiates a HTTP request object with
+// method and path set to call the "projects" service "listAllowedOrigins"
+// endpoint
+func (c *Client) BuildListAllowedOriginsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListAllowedOriginsProjectsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("projects", "listAllowedOrigins", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListAllowedOriginsRequest returns an encoder for requests sent to the
+// projects listAllowedOrigins server.
+func EncodeListAllowedOriginsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*projects.ListAllowedOriginsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("projects", "listAllowedOrigins", "*projects.ListAllowedOriginsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListAllowedOriginsResponse returns a decoder for responses returned by
+// the projects listAllowedOrigins endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListAllowedOriginsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListAllowedOriginsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListAllowedOriginsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listAllowedOrigins", err)
+			}
+			err = ValidateListAllowedOriginsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listAllowedOrigins", err)
+			}
+			res := NewListAllowedOriginsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListAllowedOriginsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listAllowedOrigins", err)
+			}
+			err = ValidateListAllowedOriginsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listAllowedOrigins", err)
+			}
+			return nil, NewListAllowedOriginsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListAllowedOriginsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listAllowedOrigins", err)
+			}
+			err = ValidateListAllowedOriginsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listAllowedOrigins", err)
+			}
+			return nil, NewListAllowedOriginsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListAllowedOriginsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listAllowedOrigins", err)
+			}
+			err = ValidateListAllowedOriginsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listAllowedOrigins", err)
+			}
+			return nil, NewListAllowedOriginsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListAllowedOriginsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listAllowedOrigins", err)
+			}
+			err = ValidateListAllowedOriginsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listAllowedOrigins", err)
+			}
+			return nil, NewListAllowedOriginsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListAllowedOriginsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listAllowedOrigins", err)
+			}
+			err = ValidateListAllowedOriginsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listAllowedOrigins", err)
+			}
+			return nil, NewListAllowedOriginsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListAllowedOriginsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listAllowedOrigins", err)
+			}
+			err = ValidateListAllowedOriginsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listAllowedOrigins", err)
+			}
+			return nil, NewListAllowedOriginsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListAllowedOriginsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listAllowedOrigins", err)
+			}
+			err = ValidateListAllowedOriginsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listAllowedOrigins", err)
+			}
+			return nil, NewListAllowedOriginsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListAllowedOriginsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "listAllowedOrigins", err)
+				}
+				err = ValidateListAllowedOriginsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "listAllowedOrigins", err)
+				}
+				return nil, NewListAllowedOriginsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListAllowedOriginsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "listAllowedOrigins", err)
+				}
+				err = ValidateListAllowedOriginsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "listAllowedOrigins", err)
+				}
+				return nil, NewListAllowedOriginsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("projects", "listAllowedOrigins", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListAllowedOriginsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listAllowedOrigins", err)
+			}
+			err = ValidateListAllowedOriginsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listAllowedOrigins", err)
+			}
+			return nil, NewListAllowedOriginsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("projects", "listAllowedOrigins", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpsertAllowedOriginRequest instantiates a HTTP request object with
+// method and path set to call the "projects" service "upsertAllowedOrigin"
+// endpoint
+func (c *Client) BuildUpsertAllowedOriginRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpsertAllowedOriginProjectsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("projects", "upsertAllowedOrigin", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpsertAllowedOriginRequest returns an encoder for requests sent to the
+// projects upsertAllowedOrigin server.
+func EncodeUpsertAllowedOriginRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*projects.UpsertAllowedOriginPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("projects", "upsertAllowedOrigin", "*projects.UpsertAllowedOriginPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUpsertAllowedOriginRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("projects", "upsertAllowedOrigin", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpsertAllowedOriginResponse returns a decoder for responses returned
+// by the projects upsertAllowedOrigin endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeUpsertAllowedOriginResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpsertAllowedOriginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpsertAllowedOriginResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "upsertAllowedOrigin", err)
+			}
+			err = ValidateUpsertAllowedOriginResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "upsertAllowedOrigin", err)
+			}
+			res := NewUpsertAllowedOriginResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpsertAllowedOriginUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "upsertAllowedOrigin", err)
+			}
+			err = ValidateUpsertAllowedOriginUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "upsertAllowedOrigin", err)
+			}
+			return nil, NewUpsertAllowedOriginUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpsertAllowedOriginForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "upsertAllowedOrigin", err)
+			}
+			err = ValidateUpsertAllowedOriginForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "upsertAllowedOrigin", err)
+			}
+			return nil, NewUpsertAllowedOriginForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpsertAllowedOriginBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "upsertAllowedOrigin", err)
+			}
+			err = ValidateUpsertAllowedOriginBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "upsertAllowedOrigin", err)
+			}
+			return nil, NewUpsertAllowedOriginBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpsertAllowedOriginNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "upsertAllowedOrigin", err)
+			}
+			err = ValidateUpsertAllowedOriginNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "upsertAllowedOrigin", err)
+			}
+			return nil, NewUpsertAllowedOriginNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpsertAllowedOriginConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "upsertAllowedOrigin", err)
+			}
+			err = ValidateUpsertAllowedOriginConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "upsertAllowedOrigin", err)
+			}
+			return nil, NewUpsertAllowedOriginConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpsertAllowedOriginUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "upsertAllowedOrigin", err)
+			}
+			err = ValidateUpsertAllowedOriginUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "upsertAllowedOrigin", err)
+			}
+			return nil, NewUpsertAllowedOriginUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpsertAllowedOriginInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "upsertAllowedOrigin", err)
+			}
+			err = ValidateUpsertAllowedOriginInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "upsertAllowedOrigin", err)
+			}
+			return nil, NewUpsertAllowedOriginInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpsertAllowedOriginInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "upsertAllowedOrigin", err)
+				}
+				err = ValidateUpsertAllowedOriginInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "upsertAllowedOrigin", err)
+				}
+				return nil, NewUpsertAllowedOriginInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpsertAllowedOriginUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "upsertAllowedOrigin", err)
+				}
+				err = ValidateUpsertAllowedOriginUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "upsertAllowedOrigin", err)
+				}
+				return nil, NewUpsertAllowedOriginUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("projects", "upsertAllowedOrigin", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpsertAllowedOriginGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "upsertAllowedOrigin", err)
+			}
+			err = ValidateUpsertAllowedOriginGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "upsertAllowedOrigin", err)
+			}
+			return nil, NewUpsertAllowedOriginGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("projects", "upsertAllowedOrigin", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalProjectResponseBodyToProjectsProject builds a value of type
 // *projects.Project from a value of type *ProjectResponseBody.
 func unmarshalProjectResponseBodyToProjectsProject(v *ProjectResponseBody) *projects.Project {
@@ -759,6 +1241,21 @@ func unmarshalProjectEntryResponseBodyToProjectsProjectEntry(v *ProjectEntryResp
 		ID:   *v.ID,
 		Name: *v.Name,
 		Slug: types.Slug(*v.Slug),
+	}
+
+	return res
+}
+
+// unmarshalAllowedOriginResponseBodyToProjectsAllowedOrigin builds a value of
+// type *projects.AllowedOrigin from a value of type *AllowedOriginResponseBody.
+func unmarshalAllowedOriginResponseBodyToProjectsAllowedOrigin(v *AllowedOriginResponseBody) *projects.AllowedOrigin {
+	res := &projects.AllowedOrigin{
+		ID:        *v.ID,
+		ProjectID: *v.ProjectID,
+		Origin:    *v.Origin,
+		Status:    *v.Status,
+		CreatedAt: *v.CreatedAt,
+		UpdatedAt: *v.UpdatedAt,
 	}
 
 	return res

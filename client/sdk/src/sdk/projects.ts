@@ -4,7 +4,9 @@
 
 import { projectsCreate } from "../funcs/projectsCreate.js";
 import { projectsList } from "../funcs/projectsList.js";
+import { projectsListAllowedOrigins } from "../funcs/projectsListAllowedOrigins.js";
 import { projectsSetLogo } from "../funcs/projectsSetLogo.js";
+import { projectsUpsertAllowedOrigin } from "../funcs/projectsUpsertAllowedOrigin.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -50,6 +52,25 @@ export class Projects extends ClientSDK {
   }
 
   /**
+   * listAllowedOrigins projects
+   *
+   * @remarks
+   * List allowed origins for a project.
+   */
+  async listAllowedOrigins(
+    request?: operations.ListAllowedOriginsRequest | undefined,
+    security?: operations.ListAllowedOriginsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListAllowedOriginsResult> {
+    return unwrapAsync(projectsListAllowedOrigins(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * setLogo projects
    *
    * @remarks
@@ -61,6 +82,25 @@ export class Projects extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.SetProjectLogoResult> {
     return unwrapAsync(projectsSetLogo(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * upsertAllowedOrigin projects
+   *
+   * @remarks
+   * Upsert an allowed origin for a project.
+   */
+  async upsertAllowedOrigin(
+    request: operations.UpsertAllowedOriginRequest,
+    security?: operations.UpsertAllowedOriginSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.UpsertAllowedOriginResult> {
+    return unwrapAsync(projectsUpsertAllowedOrigin(
       this,
       request,
       security,

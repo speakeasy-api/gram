@@ -204,3 +204,64 @@ func (s *Service) SetLogo(ctx context.Context, payload *gen.SetLogoPayload) (res
 		Project: projectResponse,
 	}, nil
 }
+
+func (s *Service) ListAllowedOrigins(ctx context.Context, payload *gen.ListAllowedOriginsPayload) (*gen.ListAllowedOriginsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	allowedOrigins, err := s.repo.ListAllowedOriginsByProjectID(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing allowed origins").Log(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
+	}
+
+	entries := make([]*gen.AllowedOrigin, 0, len(allowedOrigins))
+	for _, origin := range allowedOrigins {
+		entries = append(entries, &gen.AllowedOrigin{
+			ID:        origin.ID.String(),
+			ProjectID: origin.ProjectID.String(),
+			Origin:    origin.Origin,
+			Status:    origin.Status,
+			CreatedAt: origin.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt: origin.UpdatedAt.Time.Format(time.RFC3339),
+		})
+	}
+
+	return &gen.ListAllowedOriginsResult{
+		AllowedOrigins: entries,
+	}, nil
+}
+
+func (s *Service) UpsertAllowedOrigin(ctx context.Context, payload *gen.UpsertAllowedOriginPayload) (*gen.UpsertAllowedOriginResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Use the status from payload or default to "pending"
+	status := payload.Status
+	if status == "" {
+		status = "pending"
+	}
+
+	allowedOrigin, err := s.repo.UpsertAllowedOrigin(ctx, repo.UpsertAllowedOriginParams{
+		ProjectID: *authCtx.ProjectID,
+		Origin:    payload.Origin,
+		Status:    status,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error upserting allowed origin").Log(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
+	}
+
+	return &gen.UpsertAllowedOriginResult{
+		AllowedOrigin: &gen.AllowedOrigin{
+			ID:        allowedOrigin.ID.String(),
+			ProjectID: allowedOrigin.ProjectID.String(),
+			Origin:    allowedOrigin.Origin,
+			Status:    allowedOrigin.Status,
+			CreatedAt: allowedOrigin.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt: allowedOrigin.UpdatedAt.Time.Format(time.RFC3339),
+		},
+	}, nil
+}

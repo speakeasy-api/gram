@@ -24,7 +24,7 @@ func BuildCreateProjectPayload(projectsCreateProjectBody string, projectsCreateP
 	{
 		err = json.Unmarshal([]byte(projectsCreateProjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"2o7\",\n      \"organization_id\": \"Voluptatem sed nisi nostrum pariatur assumenda.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"3ot\",\n      \"organization_id\": \"Magnam corrupti alias praesentium ratione explicabo similique.\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 40, false))
@@ -90,7 +90,7 @@ func BuildSetLogoPayload(projectsSetLogoBody string, projectsSetLogoApikeyToken 
 	{
 		err = json.Unmarshal([]byte(projectsSetLogoBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"Esse dignissimos tempore et quae doloribus.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"Sit consequatur harum possimus.\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -113,6 +113,93 @@ func BuildSetLogoPayload(projectsSetLogoBody string, projectsSetLogoApikeyToken 
 	}
 	v := &projects.SetLogoPayload{
 		AssetID: body.AssetID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListAllowedOriginsPayload builds the payload for the projects
+// listAllowedOrigins endpoint from CLI flags.
+func BuildListAllowedOriginsPayload(projectsListAllowedOriginsApikeyToken string, projectsListAllowedOriginsSessionToken string, projectsListAllowedOriginsProjectSlugInput string) (*projects.ListAllowedOriginsPayload, error) {
+	var apikeyToken *string
+	{
+		if projectsListAllowedOriginsApikeyToken != "" {
+			apikeyToken = &projectsListAllowedOriginsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if projectsListAllowedOriginsSessionToken != "" {
+			sessionToken = &projectsListAllowedOriginsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if projectsListAllowedOriginsProjectSlugInput != "" {
+			projectSlugInput = &projectsListAllowedOriginsProjectSlugInput
+		}
+	}
+	v := &projects.ListAllowedOriginsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUpsertAllowedOriginPayload builds the payload for the projects
+// upsertAllowedOrigin endpoint from CLI flags.
+func BuildUpsertAllowedOriginPayload(projectsUpsertAllowedOriginBody string, projectsUpsertAllowedOriginApikeyToken string, projectsUpsertAllowedOriginSessionToken string, projectsUpsertAllowedOriginProjectSlugInput string) (*projects.UpsertAllowedOriginPayload, error) {
+	var err error
+	var body UpsertAllowedOriginRequestBody
+	{
+		err = json.Unmarshal([]byte(projectsUpsertAllowedOriginBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"origin\": \"6\",\n      \"status\": \"approved\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.Origin) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.origin", body.Origin, utf8.RuneCountInString(body.Origin), 1, true))
+		}
+		if utf8.RuneCountInString(body.Origin) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.origin", body.Origin, utf8.RuneCountInString(body.Origin), 500, false))
+		}
+		if !(body.Status == "pending" || body.Status == "approved" || body.Status == "rejected") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", body.Status, []any{"pending", "approved", "rejected"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if projectsUpsertAllowedOriginApikeyToken != "" {
+			apikeyToken = &projectsUpsertAllowedOriginApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if projectsUpsertAllowedOriginSessionToken != "" {
+			sessionToken = &projectsUpsertAllowedOriginSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if projectsUpsertAllowedOriginProjectSlugInput != "" {
+			projectSlugInput = &projectsUpsertAllowedOriginProjectSlugInput
+		}
+	}
+	v := &projects.UpsertAllowedOriginPayload{
+		Origin: body.Origin,
+		Status: body.Status,
+	}
+	{
+		var zero string
+		if v.Status == zero {
+			v.Status = "pending"
+		}
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

@@ -21,3 +21,13 @@ func ListProjectsProjectsPath() string {
 func SetLogoProjectsPath() string {
 	return "/rpc/projects.setLogo"
 }
+
+// ListAllowedOriginsProjectsPath returns the URL path to the projects service listAllowedOrigins HTTP endpoint.
+func ListAllowedOriginsProjectsPath() string {
+	return "/rpc/projects.listAllowedOrigins"
+}
+
+// UpsertAllowedOriginProjectsPath returns the URL path to the projects service upsertAllowedOrigin HTTP endpoint.
+func UpsertAllowedOriginProjectsPath() string {
+	return "/rpc/projects.upsertAllowedOrigin"
+}

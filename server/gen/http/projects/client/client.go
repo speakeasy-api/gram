@@ -29,6 +29,14 @@ type Client struct {
 	// endpoint.
 	SetLogoDoer goahttp.Doer
 
+	// ListAllowedOrigins Doer is the HTTP client used to make requests to the
+	// listAllowedOrigins endpoint.
+	ListAllowedOriginsDoer goahttp.Doer
+
+	// UpsertAllowedOrigin Doer is the HTTP client used to make requests to the
+	// upsertAllowedOrigin endpoint.
+	UpsertAllowedOriginDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -49,14 +57,16 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateProjectDoer:   doer,
-		ListProjectsDoer:    doer,
-		SetLogoDoer:         doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		CreateProjectDoer:       doer,
+		ListProjectsDoer:        doer,
+		SetLogoDoer:             doer,
+		ListAllowedOriginsDoer:  doer,
+		UpsertAllowedOriginDoer: doer,
+		RestoreResponseBody:     restoreBody,
+		scheme:                  scheme,
+		host:                    host,
+		decoder:                 dec,
+		encoder:                 enc,
 	}
 }
 
@@ -127,6 +137,54 @@ func (c *Client) SetLogo() goa.Endpoint {
 		resp, err := c.SetLogoDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("projects", "setLogo", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListAllowedOrigins returns an endpoint that makes HTTP requests to the
+// projects service listAllowedOrigins server.
+func (c *Client) ListAllowedOrigins() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListAllowedOriginsRequest(c.encoder)
+		decodeResponse = DecodeListAllowedOriginsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListAllowedOriginsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListAllowedOriginsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("projects", "listAllowedOrigins", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpsertAllowedOrigin returns an endpoint that makes HTTP requests to the
+// projects service upsertAllowedOrigin server.
+func (c *Client) UpsertAllowedOrigin() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpsertAllowedOriginRequest(c.encoder)
+		decodeResponse = DecodeUpsertAllowedOriginResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpsertAllowedOriginRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpsertAllowedOriginDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("projects", "upsertAllowedOrigin", err)
 		}
 		return decodeResponse(resp)
 	}

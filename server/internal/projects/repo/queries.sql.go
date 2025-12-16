@@ -123,6 +123,43 @@ func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uui
 	return i, err
 }
 
+const listAllowedOriginsByProjectID = `-- name: ListAllowedOriginsByProjectID :many
+SELECT id, project_id, origin, status, created_at, updated_at, deleted_at, deleted
+FROM project_allowed_origins
+WHERE project_id = $1
+  AND deleted IS FALSE
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListAllowedOriginsByProjectID(ctx context.Context, projectID uuid.UUID) ([]ProjectAllowedOrigin, error) {
+	rows, err := q.db.Query(ctx, listAllowedOriginsByProjectID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ProjectAllowedOrigin
+	for rows.Next() {
+		var i ProjectAllowedOrigin
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Origin,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjectsByOrganization = `-- name: ListProjectsByOrganization :many
 SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
 FROM projects
@@ -186,6 +223,45 @@ func (q *Queries) UploadProjectLogo(ctx context.Context, arg UploadProjectLogoPa
 		&i.OrganizationID,
 		&i.LogoAssetID,
 		&i.FunctionsRunnerVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertAllowedOrigin = `-- name: UpsertAllowedOrigin :one
+INSERT INTO project_allowed_origins (
+    project_id
+  , origin
+  , status
+) VALUES (
+    $1
+  , $2
+  , $3
+)
+ON CONFLICT (project_id, origin) WHERE deleted IS FALSE
+DO UPDATE SET
+    status = EXCLUDED.status,
+    updated_at = clock_timestamp()
+RETURNING id, project_id, origin, status, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertAllowedOriginParams struct {
+	ProjectID uuid.UUID
+	Origin    string
+	Status    string
+}
+
+func (q *Queries) UpsertAllowedOrigin(ctx context.Context, arg UpsertAllowedOriginParams) (ProjectAllowedOrigin, error) {
+	row := q.db.QueryRow(ctx, upsertAllowedOrigin, arg.ProjectID, arg.Origin, arg.Status)
+	var i ProjectAllowedOrigin
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Origin,
+		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
