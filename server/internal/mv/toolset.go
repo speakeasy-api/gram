@@ -761,7 +761,7 @@ func readToolsetTools(
 				ExternalMcpToolDefinition: &types.ExternalMCPToolDefinition{
 					ID:                      def.ID.String(),
 					ToolUrn:                 def.ToolUrn,
-					DeploymentExternalMcpID: def.DeploymentExternalMcpID.String(),
+					DeploymentExternalMcpID: def.ExternalMcpAttachmentID.String(),
 					DeploymentID:            def.DeploymentID.String(),
 					RegistryID:              def.RegistryID.String(),
 					Name:                    def.Name,
