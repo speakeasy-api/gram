@@ -746,14 +746,7 @@ func readToolsetTools(
 
 		for _, def := range externalMCPTools {
 			// Only include if the tool URN is in the toolset's tool URNs
-			found := false
-			for _, toolUrn := range toolUrns {
-				if toolUrn == def.ToolUrn {
-					found = true
-					break
-				}
-			}
-			if !found {
+			if !slices.Contains(toolUrns, def.ToolUrn) {
 				continue
 			}
 
