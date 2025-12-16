@@ -8,8 +8,8 @@ management:
   releaseVersion: 0.23.8
   configChecksum: 558cf79b0d403fb75c2b14136e0f8d94
 persistentEdits:
-  generation_id: 7c04bd02-ff8c-4c74-979b-03f02e117a8f
-  pristine_commit_hash: 380cced5483cf93d73cc404a1f5513ed783403a0
+  generation_id: eda096d2-7046-4ce1-a8bf-6280823f1256
+  pristine_commit_hash: b11d1696f1cb50afa723e7e67ce924f140f05b1b
   pristine_tree_hash: a60bd20779995d199f538658fec5d42a3dd96739
 features:
   typescript:
