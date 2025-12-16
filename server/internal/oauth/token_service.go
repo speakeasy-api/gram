@@ -87,11 +87,16 @@ func (ts *TokenService) ExchangeAuthorizationCode(ctx context.Context, req *Toke
 	return token, nil
 }
 
+var (
+	ErrInvalidAccessToken = fmt.Errorf("invalid access token")
+	ErrExpiredAccessToken = fmt.Errorf("access token has expired")
+)
+
 // ValidateAccessToken validates an access token
 func (ts *TokenService) ValidateAccessToken(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*Token, error) {
 	token, err := ts.getToken(ctx, toolsetId, accessToken)
 	if err != nil {
-		return nil, fmt.Errorf("invalid access token")
+		return nil, ErrInvalidAccessToken
 	}
 
 	// Check if token has expired
@@ -99,7 +104,7 @@ func (ts *TokenService) ValidateAccessToken(ctx context.Context, toolsetId uuid.
 		if err := ts.deleteToken(ctx, *token); err != nil {
 			ts.logger.ErrorContext(ctx, "failed to delete expired token", attr.SlogError(err))
 		}
-		return nil, fmt.Errorf("access token has expired")
+		return nil, ErrExpiredAccessToken
 	}
 
 	for _, externalSecret := range token.ExternalSecrets {
@@ -108,7 +113,7 @@ func (ts *TokenService) ValidateAccessToken(ctx context.Context, toolsetId uuid.
 			if err := ts.deleteToken(ctx, *token); err != nil {
 				ts.logger.ErrorContext(ctx, "failed to delete expired token", attr.SlogError(err))
 			}
-			return nil, fmt.Errorf("access token has expired")
+			return nil, ErrExpiredAccessToken
 		}
 	}
 

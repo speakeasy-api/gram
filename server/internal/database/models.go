@@ -507,6 +507,17 @@ type Project struct {
 	Deleted                bool
 }
 
+type ProjectAllowedOrigin struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Origin    string
+	Status    string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+	DeletedAt pgtype.Timestamptz
+	Deleted   bool
+}
+
 type ProjectToolVariation struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID

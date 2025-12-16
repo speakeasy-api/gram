@@ -5233,6 +5233,10 @@ paths:
       security:
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
         - {}
@@ -6368,6 +6372,105 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: ListProjects
+  /rpc/projects.listAllowedOrigins:
+    get:
+      description: List allowed origins for a project.
+      operationId: listAllowedOrigins
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAllowedOriginsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listAllowedOrigins projects
+      tags:
+        - projects
+      x-speakeasy-name-override: listAllowedOrigins
+      x-speakeasy-react-hook:
+        name: ListAllowedOrigins
   /rpc/projects.setLogo:
     post:
       description: Uploads a logo for a project.
@@ -6473,6 +6576,111 @@ paths:
       x-speakeasy-name-override: setLogo
       x-speakeasy-react-hook:
         name: setProjectLogo
+  /rpc/projects.upsertAllowedOrigin:
+    post:
+      description: Upsert an allowed origin for a project.
+      operationId: upsertAllowedOrigin
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertAllowedOriginForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpsertAllowedOriginResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: upsertAllowedOrigin projects
+      tags:
+        - projects
+      x-speakeasy-name-override: upsertAllowedOrigin
+      x-speakeasy-react-hook:
+        name: UpsertAllowedOrigin
   /rpc/resources.list:
     get:
       description: List all resources for a project
@@ -9855,6 +10063,40 @@ components:
       required:
         - toolset_slug
         - environment_slug
+    AllowedOrigin:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: The creation date of the allowed origin.
+          format: date-time
+        id:
+          type: string
+          description: The ID of the allowed origin
+        origin:
+          type: string
+          description: The origin URL
+        project_id:
+          type: string
+          description: The ID of the project
+        status:
+          type: string
+          default: pending
+          enum:
+            - pending
+            - approved
+            - rejected
+        updated_at:
+          type: string
+          description: The last update date of the allowed origin.
+          format: date-time
+      required:
+        - id
+        - project_id
+        - origin
+        - status
+        - created_at
+        - updated_at
     Asset:
       type: object
       properties:
@@ -11809,6 +12051,16 @@ components:
         - scopes
         - created_at
         - updated_at
+    ListAllowedOriginsResult:
+      type: object
+      properties:
+        allowed_origins:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllowedOrigin'
+          description: The list of allowed origins
+      required:
+        - allowed_origins
     ListAssetsResult:
       type: object
       properties:
@@ -12233,6 +12485,12 @@ components:
         id:
           type: string
           description: The ID of the OAuth proxy provider
+        provider_type:
+          type: string
+          description: The type of OAuth provider
+          enum:
+            - custom
+            - gram
         scopes_supported:
           type: array
           items:
@@ -12258,6 +12516,7 @@ components:
       required:
         - id
         - slug
+        - provider_type
         - authorization_endpoint
         - token_endpoint
         - created_at
@@ -12306,6 +12565,12 @@ components:
           description: A short url-friendly label that uniquely identifies a resource.
           pattern: ^[a-z0-9_-]{1,128}$
           maxLength: 40
+        provider_type:
+          type: string
+          description: The type of OAuth provider
+          enum:
+            - custom
+            - gram
         scopes_supported:
           type: array
           items:
@@ -12326,11 +12591,7 @@ components:
           description: Auth methods (client_secret_basic or client_secret_post)
       required:
         - slug
-        - authorization_endpoint
-        - token_endpoint
-        - scopes_supported
-        - token_endpoint_auth_methods_supported
-        - environment_slug
+        - provider_type
     OpenAPIv3DeploymentAsset:
       type: object
       properties:
@@ -13823,6 +14084,30 @@ components:
           $ref: '#/components/schemas/Asset'
       required:
         - asset
+    UpsertAllowedOriginForm:
+      type: object
+      properties:
+        origin:
+          type: string
+          description: The origin URL to upsert
+          minLength: 1
+          maxLength: 500
+        status:
+          type: string
+          default: pending
+          enum:
+            - pending
+            - approved
+            - rejected
+      required:
+        - origin
+    UpsertAllowedOriginResult:
+      type: object
+      properties:
+        allowed_origin:
+          $ref: '#/components/schemas/AllowedOrigin'
+      required:
+        - allowed_origin
     UpsertGlobalToolVariationForm:
       type: object
       properties:

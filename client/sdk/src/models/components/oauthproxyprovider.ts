@@ -5,8 +5,21 @@
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * The type of OAuth provider
+ */
+export const ProviderType = {
+  Custom: "custom",
+  Gram: "gram",
+} as const;
+/**
+ * The type of OAuth provider
+ */
+export type ProviderType = ClosedEnum<typeof ProviderType>;
 
 export type OAuthProxyProvider = {
   /**
@@ -30,6 +43,10 @@ export type OAuthProxyProvider = {
    */
   id: string;
   /**
+   * The type of OAuth provider
+   */
+  providerType: ProviderType;
+  /**
    * The OAuth scopes supported by this provider
    */
   scopesSupported?: Array<string> | undefined;
@@ -52,6 +69,10 @@ export type OAuthProxyProvider = {
 };
 
 /** @internal */
+export const ProviderType$inboundSchema: z.ZodNativeEnum<typeof ProviderType> =
+  z.nativeEnum(ProviderType);
+
+/** @internal */
 export const OAuthProxyProvider$inboundSchema: z.ZodType<
   OAuthProxyProvider,
   z.ZodTypeDef,
@@ -62,6 +83,7 @@ export const OAuthProxyProvider$inboundSchema: z.ZodType<
   environment_slug: z.string().optional(),
   grant_types_supported: z.array(z.string()).optional(),
   id: z.string(),
+  provider_type: ProviderType$inboundSchema,
   scopes_supported: z.array(z.string()).optional(),
   slug: z.string(),
   token_endpoint: z.string(),
@@ -73,6 +95,7 @@ export const OAuthProxyProvider$inboundSchema: z.ZodType<
     "created_at": "createdAt",
     "environment_slug": "environmentSlug",
     "grant_types_supported": "grantTypesSupported",
+    "provider_type": "providerType",
     "scopes_supported": "scopesSupported",
     "token_endpoint": "tokenEndpoint",
     "token_endpoint_auth_methods_supported":

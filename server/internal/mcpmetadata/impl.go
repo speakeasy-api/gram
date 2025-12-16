@@ -583,11 +583,11 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 // resolveSecurityMode determines the security mode based on toolset configuration
 // Prefers oauth > gram > public
 func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset) securityMode {
-	if toolset.OauthProxyServerID.Valid || toolset.ExternalOauthServerID.Valid {
-		return securityModeOAuth
-	}
-
 	if toolset.McpIsPublic {
+		if toolset.OauthProxyServerID.Valid || toolset.ExternalOauthServerID.Valid {
+			return securityModeOAuth
+		}
+
 		return securityModePublic
 	}
 

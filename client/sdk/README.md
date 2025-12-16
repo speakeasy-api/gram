@@ -230,7 +230,9 @@ run();
 
 * [create](docs/sdks/projects/README.md#create) - createProject projects
 * [list](docs/sdks/projects/README.md#list) - listProjects projects
+* [listAllowedOrigins](docs/sdks/projects/README.md#listallowedorigins) - listAllowedOrigins projects
 * [setLogo](docs/sdks/projects/README.md#setlogo) - setLogo projects
+* [upsertAllowedOrigin](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 
 ### [Resources](docs/sdks/resources/README.md)
 
@@ -363,7 +365,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`packagesUpdate`](docs/sdks/packages/README.md#update) - updatePackage packages
 - [`projectsCreate`](docs/sdks/projects/README.md#create) - createProject projects
 - [`projectsList`](docs/sdks/projects/README.md#list) - listProjects projects
+- [`projectsListAllowedOrigins`](docs/sdks/projects/README.md#listallowedorigins) - listAllowedOrigins projects
 - [`projectsSetLogo`](docs/sdks/projects/README.md#setlogo) - setLogo projects
+- [`projectsUpsertAllowedOrigin`](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
 - [`slackDeleteSlackConnection`](docs/sdks/slack/README.md#deleteslackconnection) - deleteSlackConnection slack
 - [`slackGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
@@ -463,6 +467,7 @@ To learn about this feature and how to get started, check
 - [`useInstance`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 - [`useIntegrationsIntegrationsNumberGet`](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
 - [`useLatestDeployment`](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
+- [`useListAllowedOrigins`](docs/sdks/projects/README.md#listallowedorigins) - listAllowedOrigins projects
 - [`useListAPIKeys`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`useListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
 - [`useListChats`](docs/sdks/chat/README.md#list) - listChats chat
@@ -508,6 +513,7 @@ To learn about this feature and how to get started, check
 - [`useUploadFunctionsMutation`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 - [`useUploadImageMutation`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
+- [`useUpsertAllowedOriginMutation`](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 - [`useUpsertGlobalVariationMutation`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
 - [`useValidateAPIKey`](docs/sdks/keys/README.md#validate) - verifyKey keys
 
