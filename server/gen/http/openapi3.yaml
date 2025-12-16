@@ -5186,6 +5186,10 @@ paths:
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
             summary: listToolExecutionLogs logs
@@ -5386,6 +5390,126 @@ paths:
             tags:
                 - mcpMetadata
             x-speakeasy-name-override: set
+    /rpc/mcpRegistries.listCatalog:
+        get:
+            description: List available MCP servers from configured registries
+            operationId: listMCPCatalog
+            parameters:
+                - allowEmptyValue: true
+                  description: Filter to a specific registry
+                  in: query
+                  name: registry_id
+                  schema:
+                    description: Filter to a specific registry
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Search query to filter servers by name
+                  in: query
+                  name: search
+                  schema:
+                    description: Search query to filter servers by name
+                    type: string
+                - allowEmptyValue: true
+                  description: Pagination cursor
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Pagination cursor
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListCatalogResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listCatalog mcpRegistries
+            tags:
+                - mcpRegistries
+            x-speakeasy-name-override: listCatalog
+            x-speakeasy-react-hook:
+                name: ListMCPCatalog
     /rpc/packages.create:
         post:
             description: Create a new package for a project.
@@ -9356,6 +9480,26 @@ components:
                     description: The version of the package.
             required:
                 - name
+        AddExternalMCPForm:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: The reverse-DNS name of the external MCP server (e.g., 'ai.exa/exa').
+                    example: ai.exa/exa
+                registry_id:
+                    type: string
+                    description: The ID of the MCP registry the server is from.
+                    format: uuid
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+            required:
+                - registry_id
+                - name
+                - slug
         AddExternalOAuthServerForm:
             type: object
             properties:
@@ -9907,6 +10051,10 @@ components:
                     type: string
                     description: The external ID to refer to the deployment. This can be a git commit hash for example.
                     example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                external_mcps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AddExternalMCPForm'
                 external_url:
                     type: string
                     description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
@@ -9951,6 +10099,10 @@ components:
                     type: string
                     description: The external ID to refer to the deployment. This can be a git commit hash for example.
                     example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                external_mcps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AddExternalMCPForm'
                 external_url:
                     type: string
                     description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
@@ -10304,6 +10456,11 @@ components:
                     type: string
                     description: The external ID to refer to the deployment. This can be a git commit hash for example.
                     example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                external_mcps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DeploymentExternalMCP'
+                    description: The external MCP servers that were deployed.
                 external_url:
                     type: string
                     description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
@@ -10373,6 +10530,28 @@ components:
                 - packages
                 - openapiv3_tool_count
                 - functions_tool_count
+        DeploymentExternalMCP:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the deployment external MCP record.
+                name:
+                    type: string
+                    description: The reverse-DNS name of the external MCP server.
+                registry_id:
+                    type: string
+                    description: The ID of the MCP registry the server is from.
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+            required:
+                - id
+                - registry_id
+                - name
+                - slug
         DeploymentFunctions:
             type: object
             properties:
@@ -10603,6 +10782,11 @@ components:
                 deployment_id:
                     type: string
                     description: The ID of the deployment to evolve. If omitted, the latest deployment will be used.
+                exclude_external_mcps:
+                    type: array
+                    items:
+                        type: string
+                    description: The external MCP servers, identified by slug, to exclude from the new deployment when cloning a previous deployment.
                 exclude_functions:
                     type: array
                     items:
@@ -10622,6 +10806,11 @@ components:
                     type: boolean
                     description: If true, the deployment will be created in non-blocking mode where the request will return immediately and the deployment will proceed asynchronously.
                     example: false
+                upsert_external_mcps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AddExternalMCPForm'
+                    description: The external MCP servers to upsert in the new deployment.
                 upsert_functions:
                     type: array
                     items:
@@ -10642,6 +10831,39 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        ExternalMCPServer:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Description of what the server does
+                icon_url:
+                    type: string
+                    description: URL to the server's icon
+                    format: uri
+                meta:
+                    description: Opaque metadata from the registry
+                name:
+                    type: string
+                    description: Server name in reverse-DNS format (e.g., 'io.github.user/server')
+                    example: io.modelcontextprotocol.anonymous/exa
+                registry_id:
+                    type: string
+                    description: ID of the registry this server came from
+                    format: uuid
+                title:
+                    type: string
+                    description: Display name for the server
+                version:
+                    type: string
+                    description: Semantic version of the server
+                    example: 1.0.0
+            description: An MCP server from an external registry
+            required:
+                - name
+                - version
+                - description
+                - registry_id
         ExternalOAuthServer:
             type: object
             properties:
@@ -10922,6 +11144,11 @@ components:
                     type: string
                     description: The external ID to refer to the deployment. This can be a git commit hash for example.
                     example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                external_mcps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DeploymentExternalMCP'
+                    description: The external MCP servers that were deployed.
                 external_url:
                     type: string
                     description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
@@ -11507,6 +11734,19 @@ components:
                     description: The list of assets
             required:
                 - assets
+        ListCatalogResponseBody:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Pagination cursor for the next page
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExternalMCPServer'
+                    description: List of available MCP servers
+            required:
+                - servers
         ListChatsResult:
             type: object
             properties:
@@ -13662,6 +13902,8 @@ tags:
       description: Manage custom domains for gram.
     - name: environments
       description: Managing toolset environments.
+    - name: mcpRegistries
+      description: External MCP registry operations
     - name: functions
       description: Endpoints for working with functions.
     - name: instances

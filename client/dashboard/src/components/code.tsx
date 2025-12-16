@@ -1,8 +1,8 @@
-import React, { useEffect } from "react";
-import { codeToHtml, BuiltinTheme } from "shiki";
-import { Check, Copy } from "lucide-react";
-import { Button, useMoonshineConfig, Theme } from "@speakeasy-api/moonshine";
 import { cn } from "@/lib/utils";
+import { Button, Theme, useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { Check, Copy } from "lucide-react";
+import React, { useEffect } from "react";
+import { BuiltinTheme, codeToHtml } from "shiki";
 
 const DEFAULT_THEME_PER_MODE: Record<Theme, BuiltinTheme> = {
   light: "github-light-default",
@@ -78,7 +78,7 @@ export function CodeBlock({
           variant="tertiary"
           size="sm"
           onClick={handleCopy}
-          className="absolute top-1/2 -translate-y-1/2 right-2 p-2"
+          className="absolute top-2 right-2 p-2"
         >
           <Button.LeftIcon>
             {copied ? (

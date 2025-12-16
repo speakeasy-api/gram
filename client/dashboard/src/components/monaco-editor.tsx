@@ -1,8 +1,11 @@
-import { useEffect, useRef } from "react";
-import Editor, { OnMount } from "@monaco-editor/react";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { cn } from "@/lib/utils";
+import Editor, { loader, OnMount } from "@monaco-editor/react";
+import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import type * as Monaco from "monaco-editor";
+import * as monaco from "monaco-editor";
+import { useEffect, useRef } from "react";
+
+loader.config({ monaco });
 
 interface MonacoEditorProps {
   value: string;

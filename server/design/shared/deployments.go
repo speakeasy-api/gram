@@ -73,6 +73,10 @@ var Deployment = Type("Deployment", func() {
 		Description("The packages that were deployed.")
 	})
 
+	Attribute("external_mcps", ArrayOf(DeploymentExternalMCP), func() {
+		Description("The external MCP servers that were deployed.")
+	})
+
 	Meta("struct:pkg:path", "types")
 })
 
@@ -128,6 +132,25 @@ var DeploymentPackage = Type("DeploymentPackage", func() {
 	})
 	Attribute("version", String, func() {
 		Description("The version of the package.")
+	})
+
+	Meta("struct:pkg:path", "types")
+})
+
+var DeploymentExternalMCP = Type("DeploymentExternalMCP", func() {
+	Required("id", "registry_id", "name", "slug")
+
+	Attribute("id", String, func() {
+		Description("The ID of the deployment external MCP record.")
+	})
+	Attribute("registry_id", String, func() {
+		Description("The ID of the MCP registry the server is from.")
+	})
+	Attribute("name", String, func() {
+		Description("The reverse-DNS name of the external MCP server.")
+	})
+	Attribute("slug", Slug, func() {
+		Description("A URL-friendly identifier used for tool prefixing.")
 	})
 
 	Meta("struct:pkg:path", "types")
