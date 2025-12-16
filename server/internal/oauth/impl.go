@@ -230,7 +230,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 
 	var clientID string
 
-	if provider.ProviderType == "custom" {
+	if provider.ProviderType == string(OAuthProxyProviderTypeCustom) {
 		var secrets map[string]string
 		if err := json.Unmarshal(provider.Secrets, &secrets); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "OAuth provider secrets invalid").Log(ctx, s.logger)
@@ -281,7 +281,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	var authURL *url.URL
 
 	switch provider.ProviderType {
-	case "gram":
+	case string(OAuthProxyProviderTypeGram):
 		authURL, err = s.sessions.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
 			CallbackURL:     callbackURL,
 			Scope:           req.Scope,
@@ -479,7 +479,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 
 	var oauthProvider providers.Provider
 	switch provider.ProviderType {
-	case "gram":
+	case string(OAuthProxyProviderTypeGram):
 		oauthProvider = s.gramProvider
 	default:
 		oauthProvider = s.customProvider

@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauthRepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
@@ -676,27 +677,23 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 		}
 	}
 
-	// Validate provider_type
-	validProviderTypes := map[string]bool{
-		"custom": true,
-		"gram":   true,
-	}
+	providerType := oauth.OAuthProxyProviderType(payload.OauthProxyServer.ProviderType)
 
-	if !validProviderTypes[payload.OauthProxyServer.ProviderType] {
+	if !providerType.IsValid() {
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid provider_type value: %s (must be 'custom' or 'gram')", payload.OauthProxyServer.ProviderType).Log(ctx, s.logger)
 	}
 
 	// Validate provider_type against public/private status
 	isPublic := toolsetDetails.McpIsPublic != nil && *toolsetDetails.McpIsPublic
-	if payload.OauthProxyServer.ProviderType == "gram" && isPublic {
+	if providerType == oauth.OAuthProxyProviderTypeGram && isPublic {
 		return nil, oops.E(oops.CodeBadRequest, nil, "gram provider type can only be used with private MCP servers").Log(ctx, s.logger)
 	}
-	if payload.OauthProxyServer.ProviderType == "custom" && !isPublic {
+	if providerType == oauth.OAuthProxyProviderTypeCustom && !isPublic {
 		return nil, oops.E(oops.CodeBadRequest, nil, "custom provider type can only be used with public MCP servers").Log(ctx, s.logger)
 	}
 
 	// Validate required fields for custom provider type
-	if payload.OauthProxyServer.ProviderType == "custom" {
+	if providerType == oauth.OAuthProxyProviderTypeCustom {
 		if payload.OauthProxyServer.EnvironmentSlug == nil || string(*payload.OauthProxyServer.EnvironmentSlug) == "" {
 			return nil, oops.E(oops.CodeBadRequest, nil, "environment_slug is required for custom provider type").Log(ctx, s.logger)
 		}
@@ -716,7 +713,7 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 
 	// Create the OAuth proxy server
 	// Only validate environment for custom provider type (not gram)
-	if payload.OauthProxyServer.ProviderType == "custom" {
+	if providerType == oauth.OAuthProxyProviderTypeCustom {
 		// Validate that the environment exists for this project
 		_, err = s.environmentRepo.GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
 			Slug:      string(*payload.OauthProxyServer.EnvironmentSlug),
@@ -741,7 +738,7 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 	// Create the OAuth proxy provider with the secrets
 	// Only store environment_slug in secrets for custom provider type
 	var secretsJSON []byte
-	if payload.OauthProxyServer.ProviderType == "custom" {
+	if providerType == oauth.OAuthProxyProviderTypeCustom {
 		secretsJSON, err = json.Marshal(map[string]string{
 			"environment_slug": string(*payload.OauthProxyServer.EnvironmentSlug),
 		})
