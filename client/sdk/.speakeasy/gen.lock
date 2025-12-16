@@ -5,12 +5,12 @@ management:
   docVersion: 0.0.1
   speakeasyVersion: 1.673.1
   generationVersion: 2.776.3
-  releaseVersion: 0.23.9
-  configChecksum: 4203192be07a4058f50ce06f84f712bc
+  releaseVersion: 0.23.10
+  configChecksum: 81e7da56b23a80f477de70bd388d0978
 persistentEdits:
-  generation_id: 5ffe5d59-0b7e-483c-8f33-4c5470c3b9d0
-  pristine_commit_hash: 846ee6e75ec2b413718331161145d4caf9875d38
-  pristine_tree_hash: ce8186d1c9413b4bbc25941182e831a5f8e03aef
+  generation_id: f25fd57f-12cc-4190-b787-917e670c13c1
+  pristine_commit_hash: d15a987856e85aeb386242f528ef575763c2552d
+  pristine_tree_hash: 87e3a354c12b49202d159259caba41c963bc712f
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -2013,12 +2013,12 @@ trackedFiles:
     pristine_git_object: 1a631486ce5148c35accdd3def55565ba0ec62c3
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:fb2200137d896e598b58e35eb8c35e30f35f7d31
-    pristine_git_object: 8a7693bd08287f133b6a75cfd83c30c3e33b5f32
+    last_write_checksum: sha1:40bf6548f4c07ad912c8932ec2c6a6d0df6c487e
+    pristine_git_object: ce3b7fc66f472d5397ed90db493b1ec580469d5a
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:bb1e6a82e74c70f882d6bc07a7911a992a150289
-    pristine_git_object: 5734fdf6a8f259fc8d5f4805e2e93fe510af490a
+    last_write_checksum: sha1:cb8ffe4feefde1b8afef6fc25ef6ffc789dcc946
+    pristine_git_object: f26cbe8387884824f485f04009fa456aacd96cd1
   src/core.ts:
     id: f431fdbcd144
     last_write_checksum: sha1:a753021efd93bddd574dea18c6bded2cd8f55aad
@@ -2417,8 +2417,8 @@ trackedFiles:
     pristine_git_object: 0aebd8b0a4867e35cb3348fc52921c3c0b4725b7
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:0cf3df65f5fa39aeaac115cbc00ba21c560c8839
-    pristine_git_object: 83790d499a25a8ba72fab87d889ef0dafa26da3f
+    last_write_checksum: sha1:af5ca2b5ca547a30219a0b366961c830d4dc558b
+    pristine_git_object: bce7c69c3422497cc9c38bed3ed789092e5caf46
   src/lib/dlv.ts:
     id: b1988214835a
     last_write_checksum: sha1:1dd3e3fbb4550c4bf31f5ef997faff355d6f3250
