@@ -4027,10 +4027,10 @@ paths:
                 List structured logs from tool executions.
 
                 **Required security scopes for apikey**:
-                  * `chat`
+                  * `producer`
 
                 **Required security scopes for project_slug**:
-                  * `chat`
+                  * `producer`
 
                 **Required security scopes for apikey**:
                   * `consumer`

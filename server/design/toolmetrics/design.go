@@ -57,7 +57,7 @@ var _ = Service("logs", func() {
 	Method("listToolExecutionLogs", func() {
 		Description("List structured logs from tool executions.")
 		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("chat")
+			Scope("producer")
 		})
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("consumer")
