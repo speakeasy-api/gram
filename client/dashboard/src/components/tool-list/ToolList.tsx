@@ -7,7 +7,7 @@ import { TextArea } from "@/components/ui/textarea";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useLatestDeployment } from "@/hooks/toolTypes";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
-import { Tool, Toolset, isHttpTool } from "@/lib/toolTypes";
+import { Tool, StandardTool, Toolset, isHttpTool, filterStandardTools } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
 import {
@@ -25,10 +25,10 @@ import { MethodBadge } from "./MethodBadge";
 import { SubtoolsBadge } from "./SubtoolsBadge";
 
 interface ToolListProps {
-  tools: Tool[];
+  tools: Tool[]; // Accepts all tool types, filters to StandardTool internally
   toolset?: Toolset; // Optionally specificy the toolset to provide rows with additional context
   onToolUpdate?: (
-    tool: Tool,
+    tool: StandardTool,
     updates: { name?: string; description?: string },
   ) => void;
   onToolsRemove?: (toolUrns: string[]) => void;
@@ -40,20 +40,20 @@ interface ToolListProps {
   selectionMode?: "add" | "remove";
   selectedUrns?: string[];
   onSelectionChange?: (urns: string[]) => void;
-  onToolClick?: (tool: Tool) => void;
+  onToolClick?: (tool: StandardTool) => void;
 }
 
 interface ToolGroup {
   type: "package" | "function" | "custom" | "higher_order";
   icon: "file-code" | "square-function" | "square-stack" | "pencil-ruler";
   title: string;
-  tools: Tool[];
+  tools: StandardTool[];
   packageName?: string;
 }
 
 const HTTP_METHOD_ORDER = ["GET", "POST", "PUT", "DELETE"];
 
-function sortToolsByMethod(tools: Tool[]): Tool[] {
+function sortToolsByMethod(tools: StandardTool[]): StandardTool[] {
   const httpTools = tools.filter(isHttpTool);
   const nonHttpTools = tools.filter((t) => !isHttpTool(t));
 
@@ -67,7 +67,7 @@ function sortToolsByMethod(tools: Tool[]): Tool[] {
     toolsByMethod.get(method)!.push(tool);
   });
 
-  const sortedTools: Tool[] = [];
+  const sortedTools: StandardTool[] = [];
 
   // Round-robin through GET, POST, PUT, DELETE continuously
   // When PUT runs out, use PATCH instead (both are orange/warning)
@@ -104,16 +104,16 @@ function sortToolsByMethod(tools: Tool[]): Tool[] {
 }
 
 function groupTools(
-  tools: Tool[],
+  tools: StandardTool[],
   documentIdToName?: Record<string, string>,
   functionIdToName?: Record<string, string>,
 ): ToolGroup[] {
   const groups: ToolGroup[] = [];
-  const packageMap = new Map<string, Tool[]>();
-  const functionMap = new Map<string, Tool[]>();
-  const functionTools: Tool[] = [];
-  const customTools: Tool[] = [];
-  const higherOrderTools: Tool[] = [];
+  const packageMap = new Map<string, StandardTool[]>();
+  const functionMap = new Map<string, StandardTool[]>();
+  const functionTools: StandardTool[] = [];
+  const customTools: StandardTool[] = [];
+  const higherOrderTools: StandardTool[] = [];
 
   tools.forEach((tool) => {
     if (tool.type === "http") {
@@ -234,7 +234,7 @@ function ToolRow({
   onRemove,
   onToolClick,
 }: {
-  tool: Tool;
+  tool: StandardTool;
   availableToolUrns?: string[];
   groupName: string;
   onUpdate?: (updates: { name?: string; description?: string }) => void;
@@ -243,7 +243,7 @@ function ToolRow({
   onCheckboxChange: (checked: boolean) => void;
   onTestInPlayground?: () => void;
   onRemove?: () => void;
-  onToolClick?: (tool: Tool) => void;
+  onToolClick?: (tool: StandardTool) => void;
 }) {
   const isDisabled = false;
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -535,6 +535,9 @@ export function ToolList({
 }: ToolListProps) {
   const { data: deployment } = useLatestDeployment();
 
+  // Filter to standard tools only - external-mcp tools are displayed in the Server tab
+  const standardTools = useMemo(() => filterStandardTools(tools), [tools]);
+
   const documentIdToName = useMemo(() => {
     return deployment?.deployment?.openapiv3Assets?.reduce(
       (acc, asset) => {
@@ -556,8 +559,8 @@ export function ToolList({
   }, [deployment]);
 
   const groups = useMemo(
-    () => groupTools(tools, documentIdToName, functionIdToName),
-    [tools, documentIdToName, functionIdToName],
+    () => groupTools(standardTools, documentIdToName, functionIdToName),
+    [standardTools, documentIdToName, functionIdToName],
   );
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
 

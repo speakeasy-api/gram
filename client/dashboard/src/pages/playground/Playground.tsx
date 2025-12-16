@@ -26,7 +26,7 @@ import { useLatestDeployment } from "@/hooks/toolTypes";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { v7 as uuidv7 } from "uuid";
-import { asTool, Tool } from "@/lib/toolTypes";
+import { asTool, Tool, StandardTool } from "@/lib/toolTypes";
 import { ToolsetsEmptyState } from "../toolsets/ToolsetsEmptyState";
 import {
   Select,
@@ -271,7 +271,7 @@ export function ToolsetPanel({
   const [manageToolsGroup, setManageToolsGroup] = useState<
     string | undefined
   >();
-  const [editingTool, setEditingTool] = useState<Tool | null>(null);
+  const [editingTool, setEditingTool] = useState<StandardTool | null>(null);
 
   const { data: toolsetsData } = useListToolsets();
   const { data: environmentsData } = useListEnvironments();

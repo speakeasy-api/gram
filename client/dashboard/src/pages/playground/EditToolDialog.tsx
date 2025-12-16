@@ -3,19 +3,19 @@ import { Input } from "@/components/ui/input";
 import { TextArea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Tool } from "@/lib/toolTypes";
+import { StandardTool } from "@/lib/toolTypes";
 import { Button } from "@speakeasy-api/moonshine";
 import { useEffect, useState, useRef } from "react";
 import { FileCode, SquareFunction, PencilRuler } from "lucide-react";
 
-function getToolIcon(tool: Tool) {
+function getToolIcon(tool: StandardTool) {
   if (tool.type === "http") return FileCode;
   if (tool.type === "function") return SquareFunction;
   return PencilRuler;
 }
 
 function getToolSource(
-  tool: Tool,
+  tool: StandardTool,
   documentIdToName?: Record<string, string>,
   functionIdToName?: Record<string, string>,
 ): string {
@@ -35,7 +35,7 @@ function getToolSource(
   return "Unknown";
 }
 
-function getToolTypeLabel(tool: Tool): string {
+function getToolTypeLabel(tool: StandardTool): string {
   if (tool.type === "http") return "HTTP";
   if (tool.type === "function") return "Function";
   if (tool.type === "prompt") return "Prompt";
@@ -45,7 +45,7 @@ function getToolTypeLabel(tool: Tool): string {
 interface EditToolDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  tool: Tool | null;
+  tool: StandardTool | null;
   documentIdToName?: Record<string, string>;
   functionIdToName?: Record<string, string>;
   onSave: (updates: { name: string; description: string }) => void;

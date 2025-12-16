@@ -9,12 +9,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
-import { Tool, Toolset } from "@/lib/toolTypes";
+import { Tool, StandardTool, Toolset, assertStandardTools, assertStandardTool } from "@/lib/toolTypes";
 import { Button } from "@speakeasy-api/moonshine";
 import { useMemo, useState } from "react";
 
 function getToolSource(
-  tool: Tool,
+  tool: StandardTool,
   documentIdToName?: Record<string, string>,
   functionIdToName?: Record<string, string>,
 ): string {
@@ -34,7 +34,7 @@ function getToolSource(
   return "unknown";
 }
 
-function getToolIdentifier(tool: Tool): string {
+function getToolIdentifier(tool: StandardTool): string {
   return tool.toolUrn;
 }
 
@@ -85,26 +85,31 @@ export function AddToolsDialog({
     );
   }, [deployment]);
 
+  // Assert standard tools at boundary - external-mcp tools are not supported in AddToolsDialog
+  const standardTools = useMemo(() => {
+    return assertStandardTools(allTools?.tools ?? []);
+  }, [allTools]);
+
   const sources = useMemo(() => {
-    if (!allTools?.tools) return [];
+    if (!standardTools.length) return [];
 
     const sourceSet = new Set<string>();
-    allTools.tools.forEach((tool) => {
+    standardTools.forEach((tool) => {
       const source = getToolSource(tool, documentIdToName, functionIdToName);
       sourceSet.add(source);
     });
 
     return Array.from(sourceSet).sort();
-  }, [allTools, documentIdToName, functionIdToName]);
+  }, [standardTools, documentIdToName, functionIdToName]);
 
-  const availableTools = useMemo<Tool[]>(() => {
-    if (!allTools?.tools) return [];
+  const availableTools = useMemo<StandardTool[]>(() => {
+    if (!standardTools.length) return [];
 
-    return allTools.tools.filter((tool) => {
+    return standardTools.filter((tool) => {
       const identifier = getToolIdentifier(tool);
       return identifier && !existingToolUrns.has(identifier);
     });
-  }, [allTools, existingToolUrns]);
+  }, [standardTools, existingToolUrns]);
 
   const filteredTools = useMemo(() => {
     const searchLower = search.toLowerCase();
@@ -133,14 +138,14 @@ export function AddToolsDialog({
   ]);
 
   const unavailableToolsMatchingSearch = useMemo(() => {
-    return allTools?.tools.filter((tool) => {
+    return standardTools.filter((tool) => {
       return (
         tool.name.toLowerCase().includes(search.toLowerCase()) ||
         (tool.description?.toLowerCase().includes(search.toLowerCase()) &&
           !existingToolUrns.has(tool.toolUrn))
       );
     });
-  }, [allTools, search, existingToolUrns]);
+  }, [standardTools, search, existingToolUrns]);
 
   const handleSelectionChange = (urns: string[]) => {
     setSelectedToolUrns(new Set(urns));

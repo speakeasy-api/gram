@@ -1,4 +1,4 @@
-import { asResource, asTool } from "@/lib/toolTypes";
+import { asResource, asTool, Tool } from "@/lib/toolTypes";
 import {
   ListToolsRequest,
   ListToolsSecurity,
@@ -22,17 +22,28 @@ import {
 } from "@gram/client/react-query/listTools.js";
 import { useToolset as useToolsetQuery } from "@gram/client/react-query/toolset.js";
 
+export type ToolsetKind = "default" | "external-mcp";
+
+function detectToolsetKind(tools: Tool[]): ToolsetKind {
+  const hasExternalMcp = tools.some((t) => t.type === "external-mcp");
+  return hasExternalMcp ? "external-mcp" : "default";
+}
+
 export function useToolset(toolsetSlug: string | undefined) {
   const result = useToolsetQuery({ slug: toolsetSlug! }, undefined, {
     enabled: !!toolsetSlug,
   });
+
+  const tools = result.data?.tools.map(asTool) ?? [];
+  const kind = detectToolsetKind(tools);
 
   return {
     ...result,
     data: result.data
       ? {
           ...result.data,
-          tools: result.data.tools.map(asTool),
+          kind,
+          tools,
           resources: result.data.resources?.map(asResource) ?? [],
         }
       : undefined,

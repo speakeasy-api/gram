@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { MethodBadge } from "@/components/tool-list/MethodBadge";
 import { useState, useEffect } from "react";
-import { Tool } from "@/lib/toolTypes";
+import { Tool, StandardTool, isStandardTool } from "@/lib/toolTypes";
 
 interface ToolsetInfo {
   name: string;
@@ -67,7 +67,7 @@ interface ToolsetSectionProps {
   functionIdToName?: Record<string, string>;
   onOpenToolsModal?: () => void;
   onOpenGroupModal?: (groupTitle: string) => void;
-  onToolClick?: (tool: Tool) => void;
+  onToolClick?: (tool: StandardTool) => void;
 }
 
 // Sort HTTP tools by method in round-robin fashion for visual variety
@@ -386,7 +386,7 @@ export function PlaygroundConfigPanel({
                                 className="group w-full px-3 py-2 flex items-center gap-2 hover:bg-muted/30 transition-colors"
                               >
                                 <button
-                                  onClick={() => onToolClick?.(tool)}
+                                  onClick={() => isStandardTool(tool) && onToolClick?.(tool)}
                                   className="flex-1 flex items-center justify-between text-left min-w-0"
                                 >
                                   <p className="text-xs leading-5 text-foreground truncate">

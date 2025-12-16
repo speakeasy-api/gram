@@ -8,21 +8,22 @@ import { Card } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
-import { ToolsetEntry } from "@gram/client/models/components";
+import { PromptTemplateEntry, ToolsetEntry } from "@gram/client/models/components";
 import { Button, cn, Stack } from "@speakeasy-api/moonshine";
 import { useCloneToolset, useDeleteToolset } from "./Toolset";
 
-type ToolsetForCard = Pick<
-  ToolsetEntry,
-  | "id"
-  | "name"
-  | "slug"
-  | "description"
-  | "updatedAt"
-  | "tools"
-  | "promptTemplates"
-  | "resources"
->;
+// Flexible type that accepts both ToolsetEntry (from SDK) and our transformed Toolset
+// The tools/resources arrays just need items with minimal properties
+type ToolsetForCard = {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  updatedAt: Date;
+  tools: Array<{ name: string }>;
+  promptTemplates?: PromptTemplateEntry[];
+  resources?: Array<{ name: string; uri?: string }>;
+};
 
 const BoundToolsBadge = ({
   toolset,
@@ -98,9 +99,12 @@ export function ToolsetCard({
           <Stack direction="horizontal" gap={1} align="center">
             <BoundToolsBadge toolset={toolset} />
             <ResourcesBadge
-              resourceUris={toolset.resources?.map((r) => r.uri) ?? []}
+              resourceUris={toolset.resources?.map((r) => r.uri).filter((uri): uri is string => !!uri) ?? []}
             />
-            <ToolsetPromptsBadge toolset={toolset} />
+            <ToolsetPromptsBadge toolset={{
+              ...toolset,
+              promptTemplates: toolset.promptTemplates ?? [],
+            }} />
           </Stack>
           <UpdatedAt date={new Date(toolset.updatedAt)} />
         </Card.Footer>

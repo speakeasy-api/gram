@@ -1,4 +1,4 @@
-import { Tool } from "@/lib/toolTypes";
+import { StandardTool } from "@/lib/toolTypes";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { HttpRoute } from "./http-route";
 import { Badge } from "./ui/badge";
@@ -10,7 +10,7 @@ export function ToolBadge({
   variant = "secondary",
   className,
 }: {
-  tool: Tool;
+  tool: StandardTool;
   variant?: "default" | "secondary" | "outline";
   className?: string;
 }) {

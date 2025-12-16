@@ -11,23 +11,73 @@ import {
   Resource as GeneratedResource,
 } from "@gram/client/models/components";
 import { useMemo } from "react";
-import { useLatestDeployment } from "@/hooks/toolTypes";
+import { useLatestDeployment, ToolsetKind } from "@/hooks/toolTypes";
 
-export type ToolWithDisplayName = Tool & { displayName: string };
-export type HttpToolWithDisplayName = Tool & { type: "http" } & {
-  displayName: string;
-};
-
-export type Toolset = Omit<GeneratedToolset, "tools" | "resources"> & {
-  tools: Tool[];
-  resources?: Resource[];
-};
-
+// Base tool union including all tool types
 export type Tool =
   | ({ type: "http" } & HTTPToolDefinition)
   | ({ type: "prompt" } & PromptTemplate)
   | ({ type: "function" } & FunctionToolDefinition)
   | ({ type: "external-mcp" } & ExternalMCPToolDefinition);
+
+/**
+ * Standard tools that can be edited, have descriptions, variations, etc.
+ * Excludes external-mcp proxy tools which have different properties.
+ */
+export type StandardTool =
+  | ({ type: "http" } & HTTPToolDefinition)
+  | ({ type: "prompt" } & PromptTemplate)
+  | ({ type: "function" } & FunctionToolDefinition);
+
+export const isStandardTool = (tool: Tool): tool is StandardTool => {
+  return tool.type !== "external-mcp";
+};
+
+export const filterStandardTools = (tools: Tool[]): StandardTool[] => {
+  return tools.filter(isStandardTool);
+};
+
+/**
+ * Asserts that all tools are standard tools (not external-mcp).
+ * Throws if any external-mcp tools are encountered.
+ *
+ * Use this at boundaries where external-mcp tools are not yet supported.
+ * Grep for usages to find places that need incremental external-mcp support.
+ */
+export const assertStandardTools = (tools: Tool[]): StandardTool[] => {
+  const externalMcpTools = tools.filter((t) => t.type === "external-mcp");
+  if (externalMcpTools.length > 0) {
+    throw new Error(
+      `Unexpected external-mcp tool(s) encountered: ${externalMcpTools.map((t) => t.name).join(", ")}. This code path does not yet support external MCP tools.`
+    );
+  }
+  return tools as StandardTool[];
+};
+
+/**
+ * Asserts that a single tool is a standard tool (not external-mcp).
+ * Throws if an external-mcp tool is encountered.
+ */
+export const assertStandardTool = (tool: Tool): StandardTool => {
+  if (tool.type === "external-mcp") {
+    throw new Error(
+      `Unexpected external-mcp tool encountered: ${tool.name}. This code path does not yet support external MCP tools.`
+    );
+  }
+  return tool as StandardTool;
+};
+
+// Derived types using StandardTool (these tools have displayName, description, etc.)
+export type ToolWithDisplayName = StandardTool & { displayName: string };
+export type HttpToolWithDisplayName = StandardTool & { type: "http" } & {
+  displayName: string;
+};
+
+export type Toolset = Omit<GeneratedToolset, "tools" | "resources"> & {
+  kind: ToolsetKind;
+  tools: Tool[];
+  resources?: Resource[];
+};
 
 export type ToolGroup = {
   key: string;
@@ -84,6 +134,9 @@ export const useGroupedHttpTools = (
 export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
   const { data: deployment } = useLatestDeployment();
 
+  // Filter to standard tools only - external-mcp tools are displayed differently
+  const standardTools = filterStandardTools(tools);
+
   const documentIdToSlug = useMemo(() => {
     return deployment?.deployment?.openapiv3Assets?.reduce(
       (acc, asset) => {
@@ -95,7 +148,7 @@ export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
   }, [deployment]);
 
   const toolGroups = useMemo(() => {
-    return tools?.reduce((acc, tool) => {
+    return standardTools?.reduce((acc, tool) => {
       let groupKey = "unknown";
 
       if (tool.type === "http") {
@@ -127,7 +180,7 @@ export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
       }
       return acc;
     }, [] as ToolGroup[]);
-  }, [deployment, tools]);
+  }, [deployment, standardTools]);
 
   return toolGroups;
 };
@@ -169,3 +222,6 @@ export const toolNames = (toolset: { tools: Tool[] }) => {
   const { tools } = toolset;
   return tools.map((tool) => tool.name);
 };
+
+// Re-export ToolsetKind for convenience
+export type { ToolsetKind } from "@/hooks/toolTypes";

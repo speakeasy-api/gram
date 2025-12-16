@@ -8,7 +8,7 @@ import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
-import { isPromptTool, Tool } from "@/lib/toolTypes";
+import { isPromptTool, StandardTool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import {
   Confirm,
@@ -23,7 +23,7 @@ export function ToolCard({
   tool,
   onUpdate,
 }: {
-  tool: Tool;
+  tool: StandardTool;
   onUpdate: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -197,7 +197,7 @@ export function ToolCard({
   );
 }
 
-function useToolSourceName(tool: Tool) {
+function useToolSourceName(tool: StandardTool) {
   const { data: deployment } = useDeployment(
     {
       id: (tool as HTTPToolDefinition).deploymentId,
