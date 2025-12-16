@@ -4023,7 +4023,20 @@ paths:
                 name: ListToolLogs
     /rpc/logs.listToolExecutionLogs:
         get:
-            description: List structured logs from tool executions.
+            description: |-
+                List structured logs from tool executions.
+
+                **Required security scopes for apikey**:
+                  * `chat`
+
+                **Required security scopes for project_slug**:
+                  * `chat`
+
+                **Required security scopes for apikey**:
+                  * `consumer`
+
+                **Required security scopes for project_slug**:
+                  * `consumer`
             operationId: logs#listToolExecutionLogs
             parameters:
                 - description: Start timestamp
@@ -4164,6 +4177,8 @@ paths:
             schemes:
                 - http
             security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
