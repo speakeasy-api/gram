@@ -208,6 +208,7 @@ INSERT INTO oauth_proxy_providers (
     project_id,
     oauth_proxy_server_id,
     slug,
+    provider_type,
     authorization_endpoint,
     token_endpoint,
     registration_endpoint,
@@ -231,9 +232,11 @@ INSERT INTO oauth_proxy_providers (
     $10,
     $11,
     $12,
-    $13
+    $13,
+    $14
 ) ON CONFLICT (project_id, slug) WHERE deleted IS FALSE DO UPDATE SET
     oauth_proxy_server_id = EXCLUDED.oauth_proxy_server_id,
+    provider_type = EXCLUDED.provider_type,
     authorization_endpoint = EXCLUDED.authorization_endpoint,
     token_endpoint = EXCLUDED.token_endpoint,
     registration_endpoint = EXCLUDED.registration_endpoint,
@@ -252,6 +255,7 @@ type UpsertOAuthProxyProviderParams struct {
 	ProjectID                         uuid.UUID
 	OauthProxyServerID                uuid.UUID
 	Slug                              string
+	ProviderType                      string
 	AuthorizationEndpoint             pgtype.Text
 	TokenEndpoint                     pgtype.Text
 	RegistrationEndpoint              pgtype.Text
@@ -270,6 +274,7 @@ func (q *Queries) UpsertOAuthProxyProvider(ctx context.Context, arg UpsertOAuthP
 		arg.ProjectID,
 		arg.OauthProxyServerID,
 		arg.Slug,
+		arg.ProviderType,
 		arg.AuthorizationEndpoint,
 		arg.TokenEndpoint,
 		arg.RegistrationEndpoint,

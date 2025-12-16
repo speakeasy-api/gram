@@ -57,6 +57,7 @@ export function MCPDetailPage() {
     toolset?.oauthProxyServer || toolset?.externalOauthServer
   );
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
+  const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
 
   useEffect(() => {
@@ -82,10 +83,11 @@ export function MCPDetailPage() {
         <Stack direction="horizontal" gap={2}>
           <Tooltip>
             <TooltipTrigger asChild>
-              {!availableOAuthAuthCode || !toolset?.mcpIsPublic ? (
+              {!toolset?.mcpEnabled ||
+              (toolset.mcpIsPublic && !availableOAuthAuthCode) ? (
                 <span className="inline-block">
                   <Button variant="secondary" size="md" disabled={true}>
-                    {isOAuthConnected ? "OAuth Connected" : "Connect OAuth"}
+                    {isOAuthConnected ? "OAuth Connected" : "Configure OAuth"}
                   </Button>
                 </span>
               ) : (
@@ -95,18 +97,21 @@ export function MCPDetailPage() {
                   onClick={() =>
                     isOAuthConnected
                       ? setIsOAuthDetailsModalOpen(true)
-                      : setIsOAuthModalOpen(true)
+                      : toolset.mcpIsPublic
+                        ? setIsOAuthModalOpen(true)
+                        : setIsGramOAuthModalOpen(true)
                   }
                 >
-                  {isOAuthConnected ? "OAuth Connected" : "Connect OAuth"}
+                  {isOAuthConnected ? "OAuth Connected" : "Configure OAuth"}
                 </Button>
               )}
             </TooltipTrigger>
-            {(!availableOAuthAuthCode || !toolset?.mcpIsPublic) && (
+            {(!toolset?.mcpEnabled ||
+              (toolset.mcpIsPublic && !availableOAuthAuthCode)) && (
               <TooltipContent>
-                {!availableOAuthAuthCode
-                  ? "This MCP server does not require the OAuth authorization code flow"
-                  : "This MCP Server must not be private to enable OAuth"}
+                {!toolset?.mcpEnabled
+                  ? "Enable server to configure OAuth"
+                  : "This MCP server does not require the OAuth authorization code flow"}
               </TooltipContent>
             )}
           </Tooltip>
@@ -127,6 +132,11 @@ export function MCPDetailPage() {
         isOpen={isOAuthModalOpen}
         onClose={() => setIsOAuthModalOpen(false)}
         toolsetSlug={toolset.slug}
+        toolset={toolset}
+      />
+      <GramOAuthProxyModal
+        isOpen={isGramOAuthModalOpen}
+        onClose={() => setIsGramOAuthModalOpen(false)}
         toolset={toolset}
       />
       <OAuthDetailsModal
@@ -803,6 +813,335 @@ export const randSlug = () => {
   return rand;
 };
 
+function OAuthDetailsModal({
+  isOpen,
+  onClose,
+  toolset,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  toolset: Toolset;
+}) {
+  const { url: mcpUrl } = useMcpUrl(toolset);
+  const queryClient = useQueryClient();
+
+  const removeOAuthMutation = useRemoveOAuthServerMutation({
+    onSuccess: () => {
+      invalidateAllToolset(queryClient);
+      onClose();
+    },
+  });
+
+  const isGramOAuth =
+    toolset.oauthProxyServer?.oauthProxyProviders?.[0]?.providerType === "gram";
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <Dialog.Content className="max-w-2xl max-h-[80vh] flex flex-col">
+        <Dialog.Header className="flex-shrink-0">
+          <Dialog.Title>
+            {toolset.externalOauthServer
+              ? "External OAuth Configuration"
+              : isGramOAuth
+                ? "Gram OAuth Configuration"
+                : "OAuth Proxy Configuration"}
+          </Dialog.Title>
+        </Dialog.Header>
+        <div className="flex-1 overflow-y-auto">
+          <Stack gap={4}>
+            {toolset.oauthProxyServer && isGramOAuth && (
+              <>
+                <div>
+                  <Type className="font-medium">Gram OAuth is Active</Type>
+                </div>
+                <Stack gap={2} className="">
+                  <Type className="mb-2">
+                    Gram users with access to your organization can use this MCP
+                    server.
+                  </Type>
+                  {toolset.oauthProxyServer.oauthProxyProviders?.[0]
+                    ?.environmentSlug && (
+                    <div>
+                      <Type small className="font-medium text-muted-foreground">
+                        Environment:
+                      </Type>
+                      <CodeBlock className="mt-1">
+                        {
+                          toolset.oauthProxyServer.oauthProxyProviders[0]
+                            .environmentSlug
+                        }
+                      </CodeBlock>
+                    </div>
+                  )}
+                </Stack>
+              </>
+            )}
+            {toolset.oauthProxyServer && !isGramOAuth && (
+              <>
+                <div className="flex items-center justify-between">
+                  <Type className="font-medium">OAuth Proxy Server</Type>
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    className="hover:bg-destructive hover:text-white border-none"
+                    onClick={() =>
+                      removeOAuthMutation.mutate({
+                        request: { slug: toolset.slug },
+                      })
+                    }
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Unlink
+                  </Button>
+                </div>
+                <Stack gap={2} className="pl-4">
+                  <div>
+                    <Type small className="font-medium text-muted-foreground">
+                      Server Slug:
+                    </Type>
+                    <CodeBlock className="mt-1">
+                      {toolset.oauthProxyServer.slug}
+                    </CodeBlock>
+                  </div>
+                </Stack>
+              </>
+            )}
+            {toolset.oauthProxyServer?.oauthProxyProviders?.map(
+              (provider) =>
+                provider.providerType !== "gram" && (
+                  <Stack key={provider.id} gap={2}>
+                    <Stack gap={2} className="pl-4">
+                      <div>
+                        <Type
+                          small
+                          className="font-medium text-muted-foreground"
+                        >
+                          Authorization Endpoint:
+                        </Type>
+                        <CodeBlock className="mt-1">
+                          {provider.authorizationEndpoint}
+                        </CodeBlock>
+                      </div>
+                      <div>
+                        <Type
+                          small
+                          className="font-medium text-muted-foreground"
+                        >
+                          Token Endpoint:
+                        </Type>
+                        <CodeBlock className="mt-1">
+                          {provider.tokenEndpoint}
+                        </CodeBlock>
+                      </div>
+                      {provider.tokenEndpointAuthMethodsSupported &&
+                        provider.tokenEndpointAuthMethodsSupported.length >
+                          0 && (
+                          <div>
+                            <Type
+                              small
+                              className="font-medium text-muted-foreground"
+                            >
+                              Token Auth Method:
+                            </Type>
+                            <CodeBlock className="mt-1">
+                              {provider.tokenEndpointAuthMethodsSupported.join(
+                                ", ",
+                              )}
+                            </CodeBlock>
+                          </div>
+                        )}
+                      {provider.scopesSupported &&
+                        provider.scopesSupported.length > 0 && (
+                          <div>
+                            <Type
+                              small
+                              className="font-medium text-muted-foreground"
+                            >
+                              Supported Scopes:
+                            </Type>
+                            <CodeBlock className="mt-1">
+                              {provider.scopesSupported.join(", ")}
+                            </CodeBlock>
+                          </div>
+                        )}
+                      {provider.environmentSlug && (
+                        <div>
+                          <Type
+                            small
+                            className="font-medium text-muted-foreground"
+                          >
+                            Environment:
+                          </Type>
+                          <CodeBlock className="mt-1">
+                            {provider.environmentSlug}
+                          </CodeBlock>
+                        </div>
+                      )}
+                    </Stack>
+                  </Stack>
+                ),
+            )}
+            {toolset.externalOauthServer && (
+              <Stack gap={2}>
+                <div className="flex items-center justify-between">
+                  <Type className="font-medium">External OAuth Server</Type>
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    className="text-muted-foreground hover:text-destructive hover:border-destructive"
+                    onClick={() =>
+                      removeOAuthMutation.mutate({
+                        request: { slug: toolset.slug },
+                      })
+                    }
+                  >
+                    <Button.Icon>
+                      <Trash2 className="w-4 h-4" />
+                    </Button.Icon>
+                  </Button>
+                </div>
+                <Stack gap={2} className="pl-4">
+                  <div>
+                    <Type small className="font-medium text-muted-foreground">
+                      External OAuth Server Slug:
+                    </Type>
+                    <CodeBlock className="mt-1">
+                      {toolset.externalOauthServer.slug}
+                    </CodeBlock>
+                  </div>
+                  <div>
+                    <Type small className="font-medium text-muted-foreground">
+                      OAuth Authorization Server Discovery URL:
+                    </Type>
+                    <CodeBlock className="mt-1">
+                      {mcpUrl
+                        ? `${
+                            new URL(mcpUrl).origin
+                          }/.well-known/oauth-authorization-server/mcp/${
+                            toolset.mcpSlug
+                          }`
+                        : ""}
+                    </CodeBlock>
+                  </div>
+                  <div>
+                    <Type small className="font-medium text-muted-foreground">
+                      OAuth Authorization Server Metadata:
+                    </Type>
+                    <CodeBlock className="mt-1">
+                      {JSON.stringify(
+                        toolset.externalOauthServer.metadata,
+                        null,
+                        2,
+                      )}
+                    </CodeBlock>
+                  </div>
+                </Stack>
+              </Stack>
+            )}
+          </Stack>
+        </div>
+        {isGramOAuth && (
+          <Dialog.Footer>
+            <Button variant="tertiary" onClick={onClose}>
+              Close
+            </Button>
+            <Button
+              variant="destructive-primary"
+              onClick={() =>
+                removeOAuthMutation.mutate({
+                  request: { slug: toolset.slug },
+                })
+              }
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Unlink
+            </Button>
+          </Dialog.Footer>
+        )}
+      </Dialog.Content>
+    </Dialog>
+  );
+}
+
+function GramOAuthProxyModal({
+  isOpen,
+  onClose,
+  toolset,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  toolset: Toolset;
+}) {
+  const telemetry = useTelemetry();
+  const queryClient = useQueryClient();
+
+  const addOAuthProxyMutation = useAddOAuthProxyServerMutation({
+    onSuccess: () => {
+      invalidateAllToolset(queryClient);
+      toast.success("Gram OAuth configured successfully");
+      telemetry.capture("mcp_event", {
+        action: "gram_oauth_proxy_configured",
+        slug: toolset.slug,
+      });
+      onClose();
+    },
+    onError: (error) => {
+      console.error("Failed to configure Gram OAuth:", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to configure Gram OAuth",
+      );
+    },
+  });
+
+  const handleSubmit = () => {
+    addOAuthProxyMutation.mutate({
+      request: {
+        slug: toolset.slug,
+        addOAuthProxyServerRequestBody: {
+          oauthProxyServer: {
+            providerType: "gram",
+            slug: "gram-oauth-proxy",
+          },
+        },
+      },
+    });
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <Dialog.Content className="max-w-2xl max-h-[90vh] overflow-hidden">
+        <Dialog.Header>
+          <Dialog.Title>Gram OAuth</Dialog.Title>
+        </Dialog.Header>
+
+        <div className="space-y-4 overflow-auto max-h-[60vh]">
+          <div>
+            <Type className="font-medium mb-2">Gram OAuth Configuration</Type>
+            <Type small className="mb-4">
+              Configure Gram OAuth to let users with access to your organization
+              use this MCP server. Users will authenticate using their Gram
+              credentials.
+            </Type>
+          </div>
+        </div>
+
+        <Dialog.Footer className="flex justify-end">
+          <Button
+            onClick={handleSubmit}
+            disabled={addOAuthProxyMutation.isPending}
+          >
+            {addOAuthProxyMutation.isPending
+              ? "Enabling..."
+              : "Enable Gram OAuth"}
+          </Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
+  );
+}
+
 function ConnectOAuthModal({
   isOpen,
   onClose,
@@ -888,7 +1227,6 @@ function OAuthTabModal({
 
   const addExternalOAuthMutation = useAddExternalOAuthServerMutation({
     onSuccess: () => {
-      // Invalidate both the specific toolset and all toolsets
       invalidateAllToolset(queryClient);
 
       telemetry.capture("mcp_event", {
@@ -1011,6 +1349,7 @@ function OAuthTabModal({
         slug: toolsetSlug,
         addOAuthProxyServerRequestBody: {
           oauthProxyServer: {
+            providerType: "custom",
             slug: proxySlug,
             authorizationEndpoint: proxyAuthorizationEndpoint,
             tokenEndpoint: proxyTokenEndpoint,
@@ -1264,192 +1603,5 @@ function OAuthTabModal({
         </Dialog.Content>
       </Dialog>
     </>
-  );
-}
-
-function OAuthDetailsModal({
-  isOpen,
-  onClose,
-  toolset,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  toolset: Toolset;
-}) {
-  const { url: mcpUrl } = useMcpUrl(toolset);
-  const queryClient = useQueryClient();
-
-  const removeOAuthMutation = useRemoveOAuthServerMutation({
-    onSuccess: () => {
-      invalidateAllToolset(queryClient);
-      onClose();
-    },
-  });
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <Dialog.Content className="max-w-2xl max-h-[80vh] flex flex-col">
-        <Dialog.Header className="flex-shrink-0">
-          <Dialog.Title>
-            {toolset.externalOauthServer
-              ? "External OAuth Configuration"
-              : "OAuth Proxy Configuration"}
-          </Dialog.Title>
-        </Dialog.Header>
-        <div className="flex-1 overflow-y-auto">
-          <Stack gap={4}>
-            {toolset.oauthProxyServer && (
-              <>
-                <div className="flex items-center justify-between">
-                  <Type className="font-medium">OAuth Proxy Server</Type>
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    className="hover:bg-destructive hover:text-white border-none"
-                    onClick={() =>
-                      removeOAuthMutation.mutate({
-                        request: { slug: toolset.slug },
-                      })
-                    }
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Unlink
-                  </Button>
-                </div>
-                <Stack gap={2} className="pl-4">
-                  <div>
-                    <Type small className="font-medium text-muted-foreground">
-                      Server Slug:
-                    </Type>
-                    <CodeBlock className="mt-1">
-                      {toolset.oauthProxyServer.slug}
-                    </CodeBlock>
-                  </div>
-                </Stack>
-              </>
-            )}
-            {toolset.oauthProxyServer?.oauthProxyProviders?.map((provider) => (
-              <Stack key={provider.id} gap={2}>
-                <Stack gap={2} className="pl-4">
-                  <div>
-                    <Type small className="font-medium text-muted-foreground">
-                      Authorization Endpoint:
-                    </Type>
-                    <CodeBlock className="mt-1">
-                      {provider.authorizationEndpoint}
-                    </CodeBlock>
-                  </div>
-                  <div>
-                    <Type small className="font-medium text-muted-foreground">
-                      Token Endpoint:
-                    </Type>
-                    <CodeBlock className="mt-1">
-                      {provider.tokenEndpoint}
-                    </CodeBlock>
-                  </div>
-                  {provider.tokenEndpointAuthMethodsSupported &&
-                    provider.tokenEndpointAuthMethodsSupported.length > 0 && (
-                      <div>
-                        <Type
-                          small
-                          className="font-medium text-muted-foreground"
-                        >
-                          Token Auth Method:
-                        </Type>
-                        <CodeBlock className="mt-1">
-                          {provider.tokenEndpointAuthMethodsSupported.join(
-                            ", ",
-                          )}
-                        </CodeBlock>
-                      </div>
-                    )}
-                  {provider.scopesSupported &&
-                    provider.scopesSupported.length > 0 && (
-                      <div>
-                        <Type
-                          small
-                          className="font-medium text-muted-foreground"
-                        >
-                          Supported Scopes:
-                        </Type>
-                        <CodeBlock className="mt-1">
-                          {provider.scopesSupported.join(", ")}
-                        </CodeBlock>
-                      </div>
-                    )}
-                  {provider.environmentSlug && (
-                    <div>
-                      <Type small className="font-medium text-muted-foreground">
-                        Environment:
-                      </Type>
-                      <CodeBlock className="mt-1">
-                        {provider.environmentSlug}
-                      </CodeBlock>
-                    </div>
-                  )}
-                </Stack>
-              </Stack>
-            ))}
-            {toolset.externalOauthServer && (
-              <Stack gap={2}>
-                <div className="flex items-center justify-between">
-                  <Type className="font-medium">External OAuth Server</Type>
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    className="text-muted-foreground hover:text-destructive hover:border-destructive"
-                    onClick={() =>
-                      removeOAuthMutation.mutate({
-                        request: { slug: toolset.slug },
-                      })
-                    }
-                  >
-                    <Button.Icon>
-                      <Trash2 className="w-4 h-4" />
-                    </Button.Icon>
-                  </Button>
-                </div>
-                <Stack gap={2} className="pl-4">
-                  <div>
-                    <Type small className="font-medium text-muted-foreground">
-                      External OAuth Server Slug:
-                    </Type>
-                    <CodeBlock className="mt-1">
-                      {toolset.externalOauthServer.slug}
-                    </CodeBlock>
-                  </div>
-                  <div>
-                    <Type small className="font-medium text-muted-foreground">
-                      OAuth Authorization Server Discovery URL:
-                    </Type>
-                    <CodeBlock className="mt-1">
-                      {mcpUrl
-                        ? `${
-                            new URL(mcpUrl).origin
-                          }/.well-known/oauth-authorization-server/mcp/${
-                            toolset.mcpSlug
-                          }`
-                        : ""}
-                    </CodeBlock>
-                  </div>
-                  <div>
-                    <Type small className="font-medium text-muted-foreground">
-                      OAuth Authorization Server Metadata:
-                    </Type>
-                    <CodeBlock className="mt-1">
-                      {JSON.stringify(
-                        toolset.externalOauthServer.metadata,
-                        null,
-                        2,
-                      )}
-                    </CodeBlock>
-                  </div>
-                </Stack>
-              </Stack>
-            )}
-          </Stack>
-        </div>
-      </Dialog.Content>
-    </Dialog>
   );
 }

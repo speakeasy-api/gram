@@ -171,6 +171,9 @@ const (
 	PaginationHasNextPageKey = attribute.Key("gram.pagination.has_next_page")
 
 	ClickhouseQueryDurationMsKey = attribute.Key("gram.clickhouse.query_duration_ms")
+
+	RetryAttemptKey = attribute.Key("retry.attempt")
+	RetryWaitKey    = attribute.Key("retry.wait")
 )
 
 const (
@@ -732,3 +735,9 @@ func SlogExternalMCPName(v string) slog.Attr      { return slog.String(string(Ex
 
 func URL(v string) attribute.KeyValue { return URLKey.String(v) }
 func SlogURL(v string) slog.Attr      { return slog.String(string(URLKey), v) }
+
+func RetryAttempt(v int) attribute.KeyValue { return RetryAttemptKey.Int(v) }
+func SlogRetryAttempt(v int) slog.Attr      { return slog.Int(string(RetryAttemptKey), v) }
+
+func RetryWait(v time.Duration) attribute.KeyValue { return RetryWaitKey.String(v.String()) }
+func SlogRetryWait(v time.Duration) slog.Attr      { return slog.Duration(string(RetryWaitKey), v) }

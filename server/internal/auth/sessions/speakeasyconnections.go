@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/gen/auth"
@@ -355,4 +356,23 @@ func (s *Manager) HasAccessToOrganization(ctx context.Context, organizationID, u
 		}
 	}
 	return nil, userInfo.Email, false
+}
+
+// BuildAuthorizationURL builds the authorization URL for Gram OAuth
+func (p *Manager) BuildAuthorizationURL(ctx context.Context, params AuthURLParams) (*url.URL, error) {
+	urlParams := url.Values{}
+	urlParams.Add("return_url", params.CallbackURL)
+	urlParams.Add("state", params.State)
+
+	speakeasyAuthURL := fmt.Sprintf("%s/v1/speakeasy_provider/login?%s",
+		p.speakeasyServerAddress,
+		urlParams.Encode())
+
+	authURL, err := url.Parse(speakeasyAuthURL)
+	if err != nil {
+		p.logger.ErrorContext(ctx, "failed to parse gram OAuth URL", attr.SlogError(err))
+		return nil, fmt.Errorf("failed to parse gram OAuth URL: %w", err)
+	}
+
+	return authURL, nil
 }
