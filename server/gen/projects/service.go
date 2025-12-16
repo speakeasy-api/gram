@@ -58,7 +58,6 @@ type AllowedOrigin struct {
 	ProjectID string
 	// The origin URL
 	Origin string
-	// The status of the allowed origin
 	Status string
 	// The creation date of the allowed origin.
 	CreatedAt string
@@ -165,7 +164,6 @@ type UpsertAllowedOriginPayload struct {
 	SessionToken     *string
 	// The origin URL to upsert
 	Origin string
-	// The status of the allowed origin (defaults to 'pending')
 	Status string
 }
 

@@ -3,17 +3,29 @@
  */
 
 import * as z from "zod/v3";
+import { ClosedEnum } from "../../types/enums.js";
+
+export const UpsertAllowedOriginFormStatus = {
+  Pending: "pending",
+  Approved: "approved",
+  Rejected: "rejected",
+} as const;
+export type UpsertAllowedOriginFormStatus = ClosedEnum<
+  typeof UpsertAllowedOriginFormStatus
+>;
 
 export type UpsertAllowedOriginForm = {
   /**
    * The origin URL to upsert
    */
   origin: string;
-  /**
-   * The status of the allowed origin (defaults to 'pending')
-   */
-  status?: string | undefined;
+  status?: UpsertAllowedOriginFormStatus | undefined;
 };
+
+/** @internal */
+export const UpsertAllowedOriginFormStatus$outboundSchema: z.ZodNativeEnum<
+  typeof UpsertAllowedOriginFormStatus
+> = z.nativeEnum(UpsertAllowedOriginFormStatus);
 
 /** @internal */
 export type UpsertAllowedOriginForm$Outbound = {
@@ -28,7 +40,7 @@ export const UpsertAllowedOriginForm$outboundSchema: z.ZodType<
   UpsertAllowedOriginForm
 > = z.object({
   origin: z.string(),
-  status: z.string().default("pending"),
+  status: UpsertAllowedOriginFormStatus$outboundSchema.default("pending"),
 });
 
 export function upsertAllowedOriginFormToJSON(

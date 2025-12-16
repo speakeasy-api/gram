@@ -11,7 +11,6 @@ let value: UpsertAllowedOriginResult = {
     id: "<id>",
     origin: "<value>",
     projectId: "<id>",
-    status: "<value>",
     updatedAt: new Date("2023-07-30T03:58:23.773Z"),
   },
 };

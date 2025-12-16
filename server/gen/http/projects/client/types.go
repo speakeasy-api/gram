@@ -35,7 +35,6 @@ type SetLogoRequestBody struct {
 type UpsertAllowedOriginRequestBody struct {
 	// The origin URL to upsert
 	Origin string `form:"origin" json:"origin" xml:"origin"`
-	// The status of the allowed origin (defaults to 'pending')
 	Status string `form:"status" json:"status" xml:"status"`
 }
 
@@ -1030,7 +1029,6 @@ type AllowedOriginResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The origin URL
 	Origin *string `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
-	// The status of the allowed origin
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// The creation date of the allowed origin.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -3235,6 +3233,11 @@ func ValidateAllowedOriginResponseBody(body *AllowedOriginResponseBody) (err err
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "pending" || *body.Status == "approved" || *body.Status == "rejected") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"pending", "approved", "rejected"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

@@ -5,8 +5,16 @@
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+export const AllowedOriginStatus = {
+  Pending: "pending",
+  Approved: "approved",
+  Rejected: "rejected",
+} as const;
+export type AllowedOriginStatus = ClosedEnum<typeof AllowedOriginStatus>;
 
 export type AllowedOrigin = {
   /**
@@ -25,15 +33,17 @@ export type AllowedOrigin = {
    * The ID of the project
    */
   projectId: string;
-  /**
-   * The status of the allowed origin
-   */
-  status: string;
+  status?: AllowedOriginStatus | undefined;
   /**
    * The last update date of the allowed origin.
    */
   updatedAt: Date;
 };
+
+/** @internal */
+export const AllowedOriginStatus$inboundSchema: z.ZodNativeEnum<
+  typeof AllowedOriginStatus
+> = z.nativeEnum(AllowedOriginStatus);
 
 /** @internal */
 export const AllowedOrigin$inboundSchema: z.ZodType<
@@ -45,7 +55,7 @@ export const AllowedOrigin$inboundSchema: z.ZodType<
   id: z.string(),
   origin: z.string(),
   project_id: z.string(),
-  status: z.string(),
+  status: AllowedOriginStatus$inboundSchema.default("pending"),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
 }).transform((v) => {
   return remap$(v, {

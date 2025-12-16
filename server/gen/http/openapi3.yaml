@@ -9991,7 +9991,11 @@ components:
                     description: The ID of the project
                 status:
                     type: string
-                    description: The status of the allowed origin
+                    default: pending
+                    enum:
+                        - pending
+                        - approved
+                        - rejected
                 updated_at:
                     type: string
                     description: The last update date of the allowed origin.
@@ -13999,8 +14003,11 @@ components:
                     maxLength: 500
                 status:
                     type: string
-                    description: The status of the allowed origin (defaults to 'pending')
                     default: pending
+                    enum:
+                        - pending
+                        - approved
+                        - rejected
             required:
                 - origin
         UpsertAllowedOriginResult:

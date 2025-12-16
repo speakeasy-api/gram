@@ -187,7 +187,7 @@ var AllowedOrigin = Type("AllowedOrigin", func() {
 	Attribute("id", String, "The ID of the allowed origin")
 	Attribute("project_id", String, "The ID of the project")
 	Attribute("origin", String, "The origin URL")
-	Attribute("status", String, "The status of the allowed origin")
+	AllowedOriginStatus()
 	Attribute("created_at", String, func() {
 		Description("The creation date of the allowed origin.")
 		Format(FormatDateTime)
@@ -197,6 +197,13 @@ var AllowedOrigin = Type("AllowedOrigin", func() {
 		Format(FormatDateTime)
 	})
 })
+
+var AllowedOriginStatus = func() {
+	Attribute("status", String, func() {
+		Enum("pending", "approved", "rejected")
+		Default("pending")
+	})
+}
 
 var ListAllowedOriginsResult = Type("ListAllowedOriginsResult", func() {
 	Required("allowed_origins")
@@ -211,9 +218,7 @@ var UpsertAllowedOriginForm = Type("UpsertAllowedOriginForm", func() {
 		MaxLength(500)
 		MinLength(1)
 	})
-	Attribute("status", String, "The status of the allowed origin (defaults to 'pending')", func() {
-		Default("pending")
-	})
+	AllowedOriginStatus()
 })
 
 var UpsertAllowedOriginResult = Type("UpsertAllowedOriginResult", func() {

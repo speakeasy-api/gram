@@ -12,7 +12,6 @@ let value: ListAllowedOriginsResult = {
       id: "<id>",
       origin: "<value>",
       projectId: "<id>",
-      status: "<value>",
       updatedAt: new Date("2025-11-03T17:27:17.996Z"),
     },
   ],

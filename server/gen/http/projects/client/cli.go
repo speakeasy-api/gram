@@ -158,13 +158,16 @@ func BuildUpsertAllowedOriginPayload(projectsUpsertAllowedOriginBody string, pro
 	{
 		err = json.Unmarshal([]byte(projectsUpsertAllowedOriginBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"origin\": \"gjh\",\n      \"status\": \"Voluptatibus magnam voluptas voluptatem.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"origin\": \"6\",\n      \"status\": \"approved\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Origin) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.origin", body.Origin, utf8.RuneCountInString(body.Origin), 1, true))
 		}
 		if utf8.RuneCountInString(body.Origin) > 500 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.origin", body.Origin, utf8.RuneCountInString(body.Origin), 500, false))
+		}
+		if !(body.Status == "pending" || body.Status == "approved" || body.Status == "rejected") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", body.Status, []any{"pending", "approved", "rejected"}))
 		}
 		if err != nil {
 			return nil, err

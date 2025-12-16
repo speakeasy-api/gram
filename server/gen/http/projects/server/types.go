@@ -35,7 +35,6 @@ type SetLogoRequestBody struct {
 type UpsertAllowedOriginRequestBody struct {
 	// The origin URL to upsert
 	Origin *string `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
-	// The status of the allowed origin (defaults to 'pending')
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 }
 
@@ -1030,7 +1029,6 @@ type AllowedOriginResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The origin URL
 	Origin string `form:"origin" json:"origin" xml:"origin"`
-	// The status of the allowed origin
 	Status string `form:"status" json:"status" xml:"status"`
 	// The creation date of the allowed origin.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
@@ -1927,6 +1925,11 @@ func ValidateUpsertAllowedOriginRequestBody(body *UpsertAllowedOriginRequestBody
 	if body.Origin != nil {
 		if utf8.RuneCountInString(*body.Origin) > 500 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.origin", *body.Origin, utf8.RuneCountInString(*body.Origin), 500, false))
+		}
+	}
+	if body.Status != nil {
+		if !(*body.Status == "pending" || *body.Status == "approved" || *body.Status == "rejected") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"pending", "approved", "rejected"}))
 		}
 	}
 	return
