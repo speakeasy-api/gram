@@ -22,6 +22,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	externalmcpRepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -31,6 +33,7 @@ import (
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	resourcesRepo "github.com/speakeasy-api/gram/server/internal/resources/repo"
 	toolsRepo "github.com/speakeasy-api/gram/server/internal/tools/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type ProcessDeployment struct {
@@ -47,6 +50,8 @@ type ProcessDeployment struct {
 	assetStorage   assets.BlobStore
 	projects       *projectsRepo.Queries
 	billingRepo    billing.Repository
+	externalmcp    *externalmcpRepo.Queries
+	registryClient *externalmcp.RegistryClient
 }
 
 func NewProcessDeployment(
@@ -72,6 +77,8 @@ func NewProcessDeployment(
 		resources:      resourcesRepo.New(db),
 		projects:       projectsRepo.New(db),
 		billingRepo:    billingRepo,
+		externalmcp:    externalmcpRepo.New(db),
+		registryClient: externalmcp.NewRegistryClient(logger),
 	}
 }
 
@@ -93,6 +100,10 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 	}
 
 	if err := p.doOpenAPIv3(ctx, workers, projectID, deploymentID, orgData.Slug, orgData.ProjectSlug, deployment); err != nil {
+		return err
+	}
+
+	if err := p.doExternalMCPs(ctx, workers, projectID, deploymentID); err != nil {
 		return err
 	}
 
@@ -150,11 +161,23 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		})
 	}
 
+	// Get external MCPs to check if deployment has any
+	externalMCPs, err := p.repo.ListDeploymentExternalMCPs(ctx, deploymentID)
+	if err != nil {
+		err = oops.E(oops.CodeUnexpected, err, "failed to read list of external mcps in deployment").Log(ctx, p.logger)
+		return temporal.NewApplicationErrorWithOptions("deployment external mcps could not be verified", "deployment_error", temporal.ApplicationErrorOptions{
+			NonRetryable: true,
+			Cause:        err,
+		})
+	}
+
 	// If there were documents to process in this deployment but no tools were created then we consider this a failure.
+	// External MCPs don't produce tools at deployment time - they're expanded at runtime.
 	expectsTools := len(deployment.Openapiv3Assets) > 0 || len(deployment.FunctionsAssets) > 0
 	hasTools := len(tools) > 0 || len(functionTools) > 0
 	hasResources := len(functionResources) > 0
-	if expectsTools && !hasTools && !hasResources {
+	hasExternalMCPs := len(externalMCPs) > 0
+	if expectsTools && !hasTools && !hasResources && !hasExternalMCPs {
 		err = oops.E(oops.CodeUnexpected, err, "no tools were created for deployment").Log(ctx, p.logger)
 		return temporal.NewApplicationErrorWithOptions("empty deployment was not expected", "deployment_error", temporal.ApplicationErrorOptions{
 			NonRetryable: true,
@@ -364,6 +387,94 @@ func (p *ProcessDeployment) doFunctions(
 			}
 
 			return err
+		})
+	}
+
+	return nil
+}
+
+func (p *ProcessDeployment) doExternalMCPs(
+	ctx context.Context,
+	pool *pool.ErrorPool,
+	projectID uuid.UUID,
+	deploymentID uuid.UUID,
+) error {
+	externalMCPs, err := p.repo.ListDeploymentExternalMCPs(ctx, deploymentID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error listing external mcps for deployment").Log(ctx, p.logger)
+	}
+
+	for _, mcp := range externalMCPs {
+		logger := p.logger.With(
+			attr.SlogDeploymentID(deploymentID.String()),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogExternalMCPID(mcp.ID.String()),
+			attr.SlogExternalMCPSlug(mcp.Slug),
+		)
+
+		pool.Go(func() error {
+			logger.InfoContext(ctx, "processing external mcp",
+				attr.SlogExternalMCPName(mcp.Name),
+				attr.SlogMCPRegistryID(mcp.RegistryID.String()),
+			)
+
+			// Get registry details to make API call
+			registry, err := p.externalmcp.GetMCPRegistryByID(ctx, mcp.RegistryID)
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "error getting registry for external mcp").Log(ctx, logger)
+			}
+
+			serverDetails, err := p.registryClient.GetServerDetails(ctx, externalmcp.Registry{
+				ID:  registry.ID,
+				URL: registry.Url,
+			}, mcp.Name)
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "error fetching server details from registry").Log(ctx, logger)
+			}
+
+			logger.InfoContext(ctx, "fetched server details from registry",
+				attr.SlogURL(serverDetails.RemoteURL),
+			)
+
+			// Attempt to connect to detect OAuth requirements
+			var requiresOAuth bool
+			mcpClient, err := externalmcp.NewClient(ctx, logger, serverDetails.RemoteURL, nil)
+			if _, ok := externalmcp.IsAuthRequiredError(err); ok {
+				requiresOAuth = true
+				logger.InfoContext(ctx, "external MCP server requires OAuth",
+					attr.SlogURL(serverDetails.RemoteURL),
+				)
+			} else if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "external mcp server unavailable").Log(ctx, logger)
+			} else {
+				_ = mcpClient.Close()
+			}
+
+			// Create a proxy tool URN for this external MCP
+			// Format: tools:externalmcp:<slug>:proxy
+			toolURN := urn.Tool{
+				Kind:   urn.ToolKindExternalMCP,
+				Source: mcp.Slug,
+				Name:   "proxy",
+			}
+
+			// Create the proxy tool definition with the remote URL and OAuth info
+			_, err = p.externalmcp.CreateExternalMCPToolDefinition(ctx, externalmcpRepo.CreateExternalMCPToolDefinitionParams{
+				ExternalMcpAttachmentID: mcp.ID,
+				ToolUrn:                 toolURN.String(),
+				RemoteUrl:               serverDetails.RemoteURL,
+				RequiresOauth:           requiresOAuth,
+			})
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "error creating external mcp tool definition").Log(ctx, logger)
+			}
+
+			logger.InfoContext(ctx, "created external mcp proxy tool",
+				attr.SlogToolURN(toolURN.String()),
+				attr.SlogOAuthRequired(requiresOAuth),
+			)
+
+			return nil
 		})
 	}
 

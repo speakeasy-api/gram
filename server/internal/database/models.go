@@ -183,6 +183,30 @@ type EnvironmentEntry struct {
 	UpdatedAt     pgtype.Timestamptz
 }
 
+type ExternalMcpAttachment struct {
+	ID           uuid.UUID
+	DeploymentID uuid.UUID
+	RegistryID   uuid.UUID
+	Name         string
+	Slug         string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
+}
+
+type ExternalMcpToolDefinition struct {
+	ID                      uuid.UUID
+	ExternalMcpAttachmentID uuid.UUID
+	ToolUrn                 string
+	RemoteUrl               string
+	RequiresOauth           bool
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	DeletedAt               pgtype.Timestamptz
+	Deleted                 bool
+}
+
 type ExternalOauthServerMetadatum struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID
@@ -481,6 +505,17 @@ type Project struct {
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
 	Deleted                bool
+}
+
+type ProjectAllowedOrigin struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Origin    string
+	Status    string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+	DeletedAt pgtype.Timestamptz
+	Deleted   bool
 }
 
 type ProjectToolVariation struct {
