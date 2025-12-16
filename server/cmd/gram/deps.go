@@ -119,6 +119,11 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 	var pingErr error
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
+			// Exponential backoff: 1<<(attempt-1) doubles the wait time each retry
+			// attempt=1: 1s * 2^0 = 1s
+			// attempt=2: 1s * 2^1 = 2s
+			// ...
+			// attempt=5: 1s * 2^4 = 16s, capped at maxWait (10s)
 			waitDuration := min(minWait*time.Duration(1<<(attempt-1)), maxWait)
 			logger.InfoContext(ctx, "retrying clickhouse ping",
 				attr.SlogRetryAttempt(attempt),
