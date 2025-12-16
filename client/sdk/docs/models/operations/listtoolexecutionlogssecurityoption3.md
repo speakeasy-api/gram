@@ -1,11 +1,11 @@
-# ListToolExecutionLogsSecurityOption2
+# ListToolExecutionLogsSecurityOption3
 
 ## Example Usage
 
 ```typescript
-import { ListToolExecutionLogsSecurityOption2 } from "@gram/client/models/operations";
+import { ListToolExecutionLogsSecurityOption3 } from "@gram/client/models/operations";
 
-let value: ListToolExecutionLogsSecurityOption2 = {
+let value: ListToolExecutionLogsSecurityOption3 = {
   apikeyHeaderGramKey: "<value>",
   projectSlugHeaderGramProject: "<value>",
 };
