@@ -46,11 +46,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
-	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-
 )
 
 func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
@@ -107,13 +106,37 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 
 	conn, err := clickhouse.Open(opts)
 	if err != nil {
-		logger.WarnContext(ctx, "error connecting to clickhouse; falling back to stub tool call metrics client")
-		return &tm.StubToolMetricsClient{}, func(context.Context) error { return nil }, nil
+		return nil, nilFunc, fmt.Errorf("failed to open clickhouse connection: %w", err)
 	}
 
-	if err = conn.Ping(ctx); err != nil {
-		logger.WarnContext(ctx, "failed to ping clickhouse; falling back to stub tool call metrics client", attr.SlogError(err))
-		return &tm.StubToolMetricsClient{}, func(context.Context) error { return nil }, nil
+	// Retry ping with exponential backoff
+	const (
+		maxRetries = 5
+		minWait    = 1 * time.Second
+		maxWait    = 10 * time.Second
+	)
+
+	var pingErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			waitDuration := min(minWait*time.Duration(1<<(attempt-1)), maxWait)
+			logger.InfoContext(ctx, "retrying clickhouse ping",
+				attr.SlogRetryAttempt(attempt),
+				attr.SlogRetryWait(waitDuration))
+			time.Sleep(waitDuration)
+		}
+
+		pingErr = conn.Ping(ctx)
+		if pingErr == nil {
+			break
+		}
+
+		logger.WarnContext(ctx, "clickhouse ping failed",
+			attr.SlogError(pingErr), attr.SlogRetryAttempt(attempt))
+	}
+
+	if pingErr != nil {
+		return nil, nilFunc, fmt.Errorf("failed to ping clickhouse after %d attempts: %w", maxRetries+1, pingErr)
 	}
 
 	cc := tm_repo.New(logger, tracerProvider, conn, func(ctx context.Context, orgId string) (bool, error) {
