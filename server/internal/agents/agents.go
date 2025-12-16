@@ -458,7 +458,16 @@ func (s *Service) unfoldExternalMCPTools(ctx context.Context, tools []*types.Too
 		}
 
 		// List tools from the external MCP server
-		externalTools, err := externalmcp.ListToolsFromProxy(ctx, s.logger, proxy.RemoteURL, nil)
+		mcpClient, err := externalmcp.NewClient(ctx, s.logger, proxy.RemoteURL, nil)
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to connect to external MCP",
+				attr.SlogToolURN(proxy.ToolUrn),
+				attr.SlogError(err),
+			)
+			continue
+		}
+		externalTools, err := mcpClient.ListTools(ctx)
+		_ = mcpClient.Close()
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to list tools from external MCP",
 				attr.SlogToolURN(proxy.ToolUrn),

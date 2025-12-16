@@ -570,22 +570,22 @@ func handleExternalMCPToolCall(
 		}
 	}
 
-	// Build session options with OAuth token if the proxy requires it
-	var opts *externalmcp.SessionOptions
+	// Build client options with OAuth token if the proxy requires it
+	var opts *externalmcp.ClientOptions
 	if proxy.RequiresOauth && oauthToken != "" {
-		opts = &externalmcp.SessionOptions{
+		opts = &externalmcp.ClientOptions{
 			Authorization: "Bearer " + oauthToken,
 		}
 	}
 
-	// Create session and call tool
-	session, err := externalmcp.NewSession(ctx, logger, proxy.RemoteURL, opts)
+	// Create client and call tool
+	client, err := externalmcp.NewClient(ctx, logger, proxy.RemoteURL, opts)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").Log(ctx, logger)
 	}
-	defer func() { _ = session.Close() }()
+	defer func() { _ = client.Close() }()
 
-	callResult, err := session.CallTool(ctx, toolName, arguments)
+	callResult, err := client.CallTool(ctx, toolName, arguments)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to call external MCP tool").Log(ctx, logger)
 	}

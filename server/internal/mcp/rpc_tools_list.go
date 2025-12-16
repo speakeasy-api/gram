@@ -132,16 +132,25 @@ func unfoldExternalMCPTools(ctx context.Context, logger *slog.Logger, tools []*t
 
 		proxy := tool.ExternalMcpToolDefinition
 
-		// Build session options with OAuth token if required
-		var opts *externalmcp.SessionOptions
+		// Build client options with OAuth token if required
+		var opts *externalmcp.ClientOptions
 		if proxy.RequiresOauth && oauthToken != "" {
-			opts = &externalmcp.SessionOptions{
+			opts = &externalmcp.ClientOptions{
 				Authorization: "Bearer " + oauthToken,
 			}
 		}
 
 		// List tools from the external MCP server
-		externalTools, err := externalmcp.ListToolsFromProxy(ctx, logger, proxy.RemoteURL, opts)
+		mcpClient, err := externalmcp.NewClient(ctx, logger, proxy.RemoteURL, opts)
+		if err != nil {
+			logger.WarnContext(ctx, "failed to connect to external MCP",
+				attr.SlogToolURN(proxy.ToolUrn),
+				attr.SlogError(err),
+			)
+			continue
+		}
+		externalTools, err := mcpClient.ListTools(ctx)
+		_ = mcpClient.Close()
 		if err != nil {
 			logger.WarnContext(ctx, "failed to list tools from external MCP",
 				attr.SlogToolURN(proxy.ToolUrn),

@@ -599,24 +599,24 @@ func (tp *ToolProxy) doExternalMCP(
 		return oops.E(oops.CodeBadRequest, err, "failed to read tool arguments").Log(ctx, logger)
 	}
 
-	// Build session options with OAuth token if required and available
-	var opts *externalmcp.SessionOptions
+	// Build client options with OAuth token if required and available
+	var opts *externalmcp.ClientOptions
 	if plan.RequiresOAuth {
 		if token := env.UserConfig.Get(ExternalMCPOAuthTokenKey); token != "" {
-			opts = &externalmcp.SessionOptions{
+			opts = &externalmcp.ClientOptions{
 				Authorization: "Bearer " + token,
 			}
 		}
 	}
 
-	// Create session and call tool
-	session, err := externalmcp.NewSession(ctx, logger, plan.RemoteURL, opts)
+	// Create client and call tool
+	client, err := externalmcp.NewClient(ctx, logger, plan.RemoteURL, opts)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").Log(ctx, logger)
 	}
-	defer func() { _ = session.Close() }()
+	defer func() { _ = client.Close() }()
 
-	callResult, err := session.CallTool(ctx, plan.ToolName, arguments)
+	callResult, err := client.CallTool(ctx, plan.ToolName, arguments)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to call external MCP tool").Log(ctx, logger)
 	}
