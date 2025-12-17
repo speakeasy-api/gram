@@ -44,7 +44,6 @@ func GetToolURN(tool types.Tool) (*urn.Tool, error) {
 	return nil, urn.ErrInvalid
 }
 
-// IsProxyTool returns true if the tool is an external MCP proxy tool.
 func IsProxyTool(tool *types.Tool) bool {
 	return tool != nil && tool.ExternalMcpToolDefinition != nil
 }
@@ -233,24 +232,37 @@ func variedToolSchema(baseSchema string, summarizer *string) (string, error) {
 }
 
 // ToToolListEntry converts a Tool to basic list entry fields.
-// Returns name, description, inputSchema, and meta map.
-// Returns empty values if the tool is nil.
+// ToolListEntry contains the fields needed for a tool list entry.
+type ToolListEntry struct {
+	Name        string
+	Description string
+	InputSchema json.RawMessage
+	Meta        map[string]any
+}
+
+// ToToolListEntry extracts tool list entry fields from a tool.
 // Returns error for proxy tools that must be unfolded first.
-func ToToolListEntry(tool *types.Tool) (name, description string, inputSchema json.RawMessage, meta map[string]any, err error) {
+func ToToolListEntry(tool *types.Tool) (ToolListEntry, error) {
 	if tool == nil {
-		return "", "", nil, nil, nil
+		return ToolListEntry{}, nil
 	}
 
+	var meta map[string]any
 	if tool.FunctionToolDefinition != nil {
 		meta = tool.FunctionToolDefinition.Meta
 	}
 
 	baseTool, err := ToBaseTool(tool)
 	if err != nil {
-		return "", "", nil, nil, err
+		return ToolListEntry{}, err
 	}
 
-	return baseTool.Name, baseTool.Description, json.RawMessage(baseTool.Schema), meta, nil
+	return ToolListEntry{
+		Name:        baseTool.Name,
+		Description: baseTool.Description,
+		InputSchema: json.RawMessage(baseTool.Schema),
+		Meta:        meta,
+	}, nil
 }
 
 // ResolvedExternalTool contains the tool metadata resolved from an external MCP server.

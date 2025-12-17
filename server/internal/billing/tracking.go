@@ -10,6 +10,7 @@ const (
 	ToolCallTypeHTTP        ToolCallType = "http"
 	ToolCallTypeFunction    ToolCallType = "function"
 	ToolCallTypeHigherOrder ToolCallType = "higher-order"
+	ToolCallTypeExternalMCP ToolCallType = "external-mcp"
 )
 
 type ModelUsageSource string

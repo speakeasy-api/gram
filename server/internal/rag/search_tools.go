@@ -296,20 +296,20 @@ func (s *ToolsetVectorStore) prepareEmbeddingCandidates(ctx context.Context, too
 		if err != nil {
 			continue
 		}
-		name, description, inputSchema, meta, err := conv.ToToolListEntry(tool)
+		toolEntry, err := conv.ToToolListEntry(tool)
 		if err != nil {
 			continue
 		}
-		name = strings.TrimSpace(name)
+		name := strings.TrimSpace(toolEntry.Name)
 		if name == "" {
 			continue
 		}
 
 		entry := toolListEntry{
 			Name:        name,
-			Description: description,
-			InputSchema: inputSchema,
-			Meta:        meta,
+			Description: toolEntry.Description,
+			InputSchema: toolEntry.InputSchema,
+			Meta:        toolEntry.Meta,
 		}
 
 		payload, err := json.Marshal(&entry)

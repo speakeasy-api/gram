@@ -183,15 +183,15 @@ func toolToListEntry(tool *types.Tool) *toolListEntry {
 		return nil
 	}
 
-	name, description, inputSchema, meta, err := conv.ToToolListEntry(tool)
+	toolEntry, err := conv.ToToolListEntry(tool)
 	if err != nil {
 		return nil
 	}
 
 	return &toolListEntry{
-		Name:        name,
-		Description: description,
-		InputSchema: inputSchema,
-		Meta:        meta,
+		Name:        toolEntry.Name,
+		Description: toolEntry.Description,
+		InputSchema: toolEntry.InputSchema,
+		Meta:        toolEntry.Meta,
 	}
 }

@@ -206,15 +206,16 @@ func handleSearchToolsCall(
 			continue
 		}
 
-		name, description, _, meta, err := conv.ToToolListEntry(tool)
+		toolEntry, err := conv.ToToolListEntry(tool)
 		if err != nil {
 			continue
 		}
-		if name == "" {
+		if toolEntry.Name == "" {
 			continue
 		}
 
 		// Add similarity score and tags to meta
+		meta := toolEntry.Meta
 		if meta == nil {
 			meta = make(map[string]any)
 		}
@@ -222,8 +223,8 @@ func handleSearchToolsCall(
 		meta["tags"] = searchResult.Tags
 
 		results = append(results, &toolListEntry{
-			Name:        name,
-			Description: description,
+			Name:        toolEntry.Name,
+			Description: toolEntry.Description,
 			Meta:        meta,
 			InputSchema: nil, // Intentional don't return to keep token usage down
 		})

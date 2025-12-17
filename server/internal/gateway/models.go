@@ -220,7 +220,7 @@ func NewPromptToolCallPlan(tool *ToolDescriptor, plan *PromptToolCallPlan) *Tool
 func NewExternalMCPToolCallPlan(tool *ToolDescriptor, plan *ExternalMCPToolCallPlan) *ToolCallPlan {
 	return &ToolCallPlan{
 		Kind:        ToolKindExternalMCP,
-		BillingType: billing.ToolCallTypeHTTP, // External MCP is billed as HTTP
+		BillingType: billing.ToolCallTypeExternalMCP,
 		Descriptor:  tool,
 		HTTP:        nil,
 		Function:    nil,
