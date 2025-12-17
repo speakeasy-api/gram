@@ -180,6 +180,7 @@ linters:
 
         - "github.com/speakeasy-api/gram/server/internal/oops.Permanent("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).Authorize("
+        - "(*github.com/speakeasy-api/gram/server/internal/auth/chatsessions.Manager).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).CheckProjectAccess("
         - "(*github.com/speakeasy-api/gram/server/internal/auth/sessions.Manager).Authenticate("
         - "(*github.com/speakeasy-api/gram/server/internal/openapi.ToolExtractor).Do("

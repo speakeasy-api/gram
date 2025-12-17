@@ -37,11 +37,12 @@ func EncodeGetInstanceResponse(encoder func(context.Context, http.ResponseWriter
 func DecodeGetInstanceRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*instances.GetInstanceForm, error) {
 	return func(r *http.Request) (*instances.GetInstanceForm, error) {
 		var (
-			toolsetSlug      string
-			sessionToken     *string
-			projectSlugInput *string
-			apikeyToken      *string
-			err              error
+			toolsetSlug       string
+			sessionToken      *string
+			projectSlugInput  *string
+			apikeyToken       *string
+			chatSessionsToken *string
+			err               error
 		)
 		toolsetSlug = r.URL.Query().Get("toolset_slug")
 		if toolsetSlug == "" {
@@ -63,10 +64,14 @@ func DecodeGetInstanceRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
 		}
+		chatSessionsTokenRaw := r.Header.Get("Gram-Chat-Session")
+		if chatSessionsTokenRaw != "" {
+			chatSessionsToken = &chatSessionsTokenRaw
+		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewGetInstanceForm(toolsetSlug, sessionToken, projectSlugInput, apikeyToken)
+		payload := NewGetInstanceForm(toolsetSlug, sessionToken, projectSlugInput, apikeyToken, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -86,6 +91,13 @@ func DecodeGetInstanceRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
 				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ChatSessionsToken != nil {
+			if strings.Contains(*payload.ChatSessionsToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ChatSessionsToken, " ", 2)[1]
+				payload.ChatSessionsToken = &cred
 			}
 		}
 

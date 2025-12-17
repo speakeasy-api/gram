@@ -54,6 +54,10 @@ func EncodeGetInstanceRequest(encoder func(*http.Request) goahttp.Encoder) func(
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
+		if p.ChatSessionsToken != nil {
+			head := *p.ChatSessionsToken
+			req.Header.Set("Gram-Chat-Session", head)
+		}
 		values := req.URL.Query()
 		values.Add("toolset_slug", string(p.ToolsetSlug))
 		req.URL.RawQuery = values.Encode()

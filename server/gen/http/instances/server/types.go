@@ -697,12 +697,13 @@ func NewGetInstanceGatewayErrorResponseBody(res *goa.ServiceError) *GetInstanceG
 }
 
 // NewGetInstanceForm builds a instances service getInstance endpoint payload.
-func NewGetInstanceForm(toolsetSlug string, sessionToken *string, projectSlugInput *string, apikeyToken *string) *instances.GetInstanceForm {
+func NewGetInstanceForm(toolsetSlug string, sessionToken *string, projectSlugInput *string, apikeyToken *string, chatSessionsToken *string) *instances.GetInstanceForm {
 	v := &instances.GetInstanceForm{}
 	v.ToolsetSlug = types.Slug(toolsetSlug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ApikeyToken = apikeyToken
+	v.ChatSessionsToken = chatSessionsToken
 
 	return v
 }

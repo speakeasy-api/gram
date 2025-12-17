@@ -26,9 +26,9 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListChats:   NewListChatsEndpoint(s, a.APIKeyAuth),
-		LoadChat:    NewLoadChatEndpoint(s, a.APIKeyAuth),
-		CreditUsage: NewCreditUsageEndpoint(s, a.APIKeyAuth),
+		ListChats:   NewListChatsEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		LoadChat:    NewLoadChatEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		CreditUsage: NewCreditUsageEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 	}
 }
 
@@ -41,7 +41,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 
 // NewListChatsEndpoint returns an endpoint function that calls the method
 // "listChats" of service "chat".
-func NewListChatsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewListChatsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJWTFn security.AuthJWTFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*ListChatsPayload)
 		var err error
@@ -68,6 +68,18 @@ func NewListChatsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}
 		if err != nil {
+			sc := security.JWTScheme{
+				Name:           "chat_sessions_token",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var token string
+			if p.ChatSessionsToken != nil {
+				token = *p.ChatSessionsToken
+			}
+			ctx, err = authJWTFn(ctx, token, &sc)
+		}
+		if err != nil {
 			return nil, err
 		}
 		return s.ListChats(ctx, p)
@@ -76,7 +88,7 @@ func NewListChatsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 
 // NewLoadChatEndpoint returns an endpoint function that calls the method
 // "loadChat" of service "chat".
-func NewLoadChatEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewLoadChatEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJWTFn security.AuthJWTFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*LoadChatPayload)
 		var err error
@@ -103,6 +115,18 @@ func NewLoadChatEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.En
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}
 		if err != nil {
+			sc := security.JWTScheme{
+				Name:           "chat_sessions_token",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var token string
+			if p.ChatSessionsToken != nil {
+				token = *p.ChatSessionsToken
+			}
+			ctx, err = authJWTFn(ctx, token, &sc)
+		}
+		if err != nil {
 			return nil, err
 		}
 		return s.LoadChat(ctx, p)
@@ -111,7 +135,7 @@ func NewLoadChatEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.En
 
 // NewCreditUsageEndpoint returns an endpoint function that calls the method
 // "creditUsage" of service "chat".
-func NewCreditUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewCreditUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJWTFn security.AuthJWTFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*CreditUsagePayload)
 		var err error
@@ -136,6 +160,18 @@ func NewCreditUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.JWTScheme{
+				Name:           "chat_sessions_token",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var token string
+			if p.ChatSessionsToken != nil {
+				token = *p.ChatSessionsToken
+			}
+			ctx, err = authJWTFn(ctx, token, &sc)
 		}
 		if err != nil {
 			return nil, err

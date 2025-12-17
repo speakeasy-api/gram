@@ -17,7 +17,7 @@ import (
 
 // BuildGetInstancePayload builds the payload for the instances getInstance
 // endpoint from CLI flags.
-func BuildGetInstancePayload(instancesGetInstanceToolsetSlug string, instancesGetInstanceSessionToken string, instancesGetInstanceProjectSlugInput string, instancesGetInstanceApikeyToken string) (*instances.GetInstanceForm, error) {
+func BuildGetInstancePayload(instancesGetInstanceToolsetSlug string, instancesGetInstanceSessionToken string, instancesGetInstanceProjectSlugInput string, instancesGetInstanceApikeyToken string, instancesGetInstanceChatSessionsToken string) (*instances.GetInstanceForm, error) {
 	var err error
 	var toolsetSlug string
 	{
@@ -48,11 +48,18 @@ func BuildGetInstancePayload(instancesGetInstanceToolsetSlug string, instancesGe
 			apikeyToken = &instancesGetInstanceApikeyToken
 		}
 	}
+	var chatSessionsToken *string
+	{
+		if instancesGetInstanceChatSessionsToken != "" {
+			chatSessionsToken = &instancesGetInstanceChatSessionsToken
+		}
+	}
 	v := &instances.GetInstanceForm{}
 	v.ToolsetSlug = types.Slug(toolsetSlug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ApikeyToken = apikeyToken
+	v.ChatSessionsToken = chatSessionsToken
 
 	return v, nil
 }
