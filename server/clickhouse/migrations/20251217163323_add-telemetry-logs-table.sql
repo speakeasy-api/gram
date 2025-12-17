@@ -1,0 +1,30 @@
+-- Create "telemetry_logs" table
+CREATE TABLE `telemetry_logs` (
+  `id` UUID DEFAULT generateUUIDv7() COMMENT 'Unique identifier for the log entry.',
+  `time_unix_nano` Int64 COMMENT 'Unix time (ns) when the event occurred measured by the origin clock.' CODEC(Delta(8), ZSTD(1)),
+  `observed_time_unix_nano` Int64 COMMENT 'Unix time (ns) when the event was observed by the collection system.' CODEC(Delta(8), ZSTD(1)),
+  `severity_text` LowCardinality(Nullable(String)) COMMENT 'Text representation of severity (DEBUG, INFO, WARN, ERROR, FATAL).',
+  `body` String COMMENT 'The primary log message extracted from the log record. For structured logs, this is the human-readable message component.' CODEC(ZSTD(1)),
+  `trace_id` Nullable(FixedString(32)) COMMENT 'W3C trace ID linking related logs across services.',
+  `span_id` Nullable(FixedString(16)) COMMENT 'W3C span ID for specific operation within a trace.',
+  `attributes` JSON COMMENT 'Additional attributes about the specific event occurrence.' CODEC(ZSTD(1)),
+  `resource_attributes` JSON COMMENT 'Attributes describing the resource that generated this log.' CODEC(ZSTD(1)),
+  `gram_project_id` UUID COMMENT 'Project ID (denormalized from resource_attributes).',
+  `gram_deployment_id` Nullable(UUID) COMMENT 'Deployment ID (denormalized from resource_attributes).',
+  `gram_function_id` Nullable(UUID) COMMENT 'Function ID that generated the log (null for HTTP logs).',
+  `gram_urn` String COMMENT 'The Gram URN (e.g. tools:function:my-source:my-tool).',
+  `service_name` LowCardinality(String) COMMENT 'Logical service name (e.g., gram-functions, gram-http-gateway).',
+  `service_version` Nullable(String) COMMENT 'Service version.',
+  `http_request_method` LowCardinality(Nullable(String)) COMMENT 'HTTP method (GET, POST, etc.) - null for non-HTTP logs.',
+  `http_response_status_code` Nullable(Int32) COMMENT 'HTTP status code - null for non-HTTP logs.',
+  `http_route` Nullable(String) COMMENT 'HTTP route pattern (/api/v1/users) - null for non-HTTP logs.',
+  `http_server_url` Nullable(String) COMMENT 'HTTP server URL - null for non-HTTP logs.' CODEC(ZSTD(1)),
+  INDEX `idx_telemetry_logs_deployment_id` ((gram_deployment_id)) TYPE bloom_filter(0.01) GRANULARITY 1,
+  INDEX `idx_telemetry_logs_function_id` ((gram_function_id)) TYPE bloom_filter(0.01) GRANULARITY 1,
+  INDEX `idx_telemetry_logs_gram_urn` ((gram_urn)) TYPE bloom_filter(0.01) GRANULARITY 1,
+  INDEX `idx_telemetry_logs_http_route` ((http_route)) TYPE bloom_filter(0.01) GRANULARITY 1,
+  INDEX `idx_telemetry_logs_http_status` ((http_response_status_code)) TYPE set(100) GRANULARITY 4,
+  INDEX `idx_telemetry_logs_severity` ((severity_text)) TYPE set(0) GRANULARITY 4,
+  INDEX `idx_telemetry_logs_trace_id` ((trace_id)) TYPE bloom_filter(0.01) GRANULARITY 1
+) ENGINE = MergeTree
+PRIMARY KEY (`gram_project_id`, `time_unix_nano`, `id`) ORDER BY (`gram_project_id`, `time_unix_nano`, `id`) PARTITION BY (toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))) TTL fromUnixTimestamp64Nano(time_unix_nano) + toIntervalDay(30) SETTINGS index_granularity = 8192 COMMENT 'Unified OTel-compatible telemetry logs from all Gram sources (HTTP requests, function logs, etc.)';
