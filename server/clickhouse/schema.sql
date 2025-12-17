@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     gram_project_id UUID COMMENT 'Project ID (denormalized from resource_attributes).',
     gram_deployment_id Nullable(UUID) COMMENT 'Deployment ID (denormalized from resource_attributes).',
     gram_function_id Nullable(UUID) COMMENT 'Function ID that generated the log (null for HTTP logs).',
-    gram_tool_urn String COMMENT 'Tool URN. For HTTP tools, this is the tool URN (e.g., com.example.api). For function logs, use a default like "gram:function".',
+    gram_urn String COMMENT 'The Gram URN (e.g. tools:function:my-source:my-tool).',
     service_name LowCardinality(String) COMMENT 'Logical service name (e.g., gram-functions, gram-http-gateway).',
     service_version Nullable(String) COMMENT 'Service version.',
 
@@ -109,7 +109,7 @@ COMMENT 'Unified OTel-compatible telemetry logs from all Gram sources (HTTP requ
 
 -- Note: gram_project_id is already first in ORDER BY, so no bloom filter index needed for it
 -- Primary query patterns 
-CREATE INDEX IF NOT EXISTS idx_telemetry_logs_tool_urn ON telemetry_logs (gram_tool_urn) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_gram_urn ON telemetry_logs (gram_urn) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_trace_id ON telemetry_logs (trace_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_deployment_id ON telemetry_logs (gram_deployment_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 -- Secondary filters

@@ -1,5 +1,5 @@
-h1:aM+DlgRszJpBxwz5ZLopZnuqY+mnnb762u0tOBmfK04=
+h1:0V3nHVhfO6dstNtXn2bpuZ6WW5icdgzasSSPIVol5/0=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
-20251217144055_add-telemetry-logs-table.up.sql h1:Y4nDUtnrantLFIM0G3+Uji8yv2Po5R8h6iT7bwWrMHk=
+20251217163326_add-telemetry-logs-table.up.sql h1:9nsauxhOm4lo/DddEKbpJy+ZeVdbT1FQYUi6rw82V1A=

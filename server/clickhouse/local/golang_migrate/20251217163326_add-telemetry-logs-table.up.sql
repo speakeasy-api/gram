@@ -12,7 +12,7 @@ CREATE TABLE `telemetry_logs` (
   `gram_project_id` UUID COMMENT 'Project ID (denormalized from resource_attributes).',
   `gram_deployment_id` Nullable(UUID) COMMENT 'Deployment ID (denormalized from resource_attributes).',
   `gram_function_id` Nullable(UUID) COMMENT 'Function ID that generated the log (null for HTTP logs).',
-  `gram_tool_urn` String COMMENT 'Tool URN. For HTTP tools, this is the tool URN (e.g., com.example.api). For function logs, use a default like "gram:function".',
+  `gram_urn` String COMMENT 'The Gram URN (e.g. tools:function:my-source:my-tool).',
   `service_name` LowCardinality(String) COMMENT 'Logical service name (e.g., gram-functions, gram-http-gateway).',
   `service_version` Nullable(String) COMMENT 'Service version.',
   `http_request_method` LowCardinality(Nullable(String)) COMMENT 'HTTP method (GET, POST, etc.) - null for non-HTTP logs.',
@@ -21,10 +21,10 @@ CREATE TABLE `telemetry_logs` (
   `http_server_url` Nullable(String) COMMENT 'HTTP server URL - null for non-HTTP logs.' CODEC(ZSTD(1)),
   INDEX `idx_telemetry_logs_deployment_id` ((gram_deployment_id)) TYPE bloom_filter(0.01) GRANULARITY 1,
   INDEX `idx_telemetry_logs_function_id` ((gram_function_id)) TYPE bloom_filter(0.01) GRANULARITY 1,
+  INDEX `idx_telemetry_logs_gram_urn` ((gram_urn)) TYPE bloom_filter(0.01) GRANULARITY 1,
   INDEX `idx_telemetry_logs_http_route` ((http_route)) TYPE bloom_filter(0.01) GRANULARITY 1,
   INDEX `idx_telemetry_logs_http_status` ((http_response_status_code)) TYPE set(100) GRANULARITY 4,
   INDEX `idx_telemetry_logs_severity` ((severity_text)) TYPE set(0) GRANULARITY 4,
-  INDEX `idx_telemetry_logs_tool_urn` ((gram_tool_urn)) TYPE bloom_filter(0.01) GRANULARITY 1,
   INDEX `idx_telemetry_logs_trace_id` ((trace_id)) TYPE bloom_filter(0.01) GRANULARITY 1
 ) ENGINE = MergeTree
 PRIMARY KEY (`gram_project_id`, `time_unix_nano`, `id`) ORDER BY (`gram_project_id`, `time_unix_nano`, `id`) PARTITION BY (toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))) TTL fromUnixTimestamp64Nano(time_unix_nano) + toIntervalDay(30) SETTINGS index_granularity = 8192 COMMENT 'Unified OTel-compatible telemetry logs from all Gram sources (HTTP requests, function logs, etc.)';
