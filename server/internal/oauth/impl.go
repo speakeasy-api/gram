@@ -51,7 +51,7 @@ var oauthFailurePageTmplData string
 var oauthSuccessScriptData []byte
 
 type oauthSuccessPageData struct {
-	RedirectURL string
+	RedirectURL template.URL
 	ScriptHash  string
 }
 
@@ -631,7 +631,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 	}
 
 	data := oauthSuccessPageData{
-		RedirectURL: responseURL,
+		RedirectURL: template.URL(responseURL), // #nosec G203 // This has been checked and escaped
 		ScriptHash:  s.successScriptHash,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
