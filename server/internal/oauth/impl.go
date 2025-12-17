@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"io"
 	"log/slog"
 	"net/http"
@@ -19,6 +20,8 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
+
+	_ "embed"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -35,6 +38,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
+
+//go:embed oauth_success.html.tmpl
+var oauthSuccessPageTmplData string
+
+//go:embed oauth_failure.html.tmpl
+var oauthFailurePageTmplData string
+
+type oauthSuccessPageData struct {
+	RedirectURL string
+}
+
+type oauthFailurePageData struct {
+	RedirectURL      string
+	ErrorDescription string
+	ErrorCode        string
+}
 
 type Service struct {
 	logger             *slog.Logger
@@ -54,6 +73,8 @@ type Service struct {
 	sessions           *sessions.Manager
 	gramProvider       *providers.GramProvider
 	customProvider     *providers.CustomProvider
+	successPageTmpl    *template.Template
+	failurePageTmpl    *template.Template
 }
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, serverURL *url.URL, cacheImpl cache.Cache, enc *encryption.Client, env *environments.EnvironmentEntries, sessions *sessions.Manager) *Service {
@@ -69,6 +90,10 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 	// Initialize OAuth providers
 	gramProvider := providers.NewGramProvider(logger, sessions)
 	customProvider := providers.NewCustomProvider(logger, env)
+
+	// Parse templates once during initialization
+	successPageTmpl := template.Must(template.New("oauth_success").Parse(oauthSuccessPageTmplData))
+	failurePageTmpl := template.Must(template.New("oauth_failure").Parse(oauthFailurePageTmplData))
 
 	return &Service{
 		logger:            logger,
@@ -92,6 +117,10 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		// OAuth providers
 		gramProvider:   gramProvider,
 		customProvider: customProvider,
+
+		// HTML templates
+		successPageTmpl: successPageTmpl,
+		failurePageTmpl: failurePageTmpl,
 	}
 }
 
@@ -164,6 +193,22 @@ func (s *Service) loadToolsetForProjectAndMCPSlug(ctx context.Context, projectID
 	}
 	return &toolset, mcpURL, nil
 }
+
+// func (s *Service) ServeOAuthResultPage(w http.ResponseWriter, r *http.Request) error {
+// 	ctx := r.Context()
+//
+// 	successPageTempl, err := template.New("hosted_page").Parse(oauthSuccessPageTmplData)
+// 	if err != nil {
+// 		return oops.E(oops.CodeUnexpected, err, "failed to parse hosted oauth success page template").Log(ctx, s.logger)
+// 	}
+//
+// 	failurePageTempl, err := template.New("hosted_page").Parse(oauthFailurePageTmpl)
+// 	if err != nil {
+// 		return oops.E(oops.CodeUnexpected, err, "failed to parse hosted oauth failure page template").Log(ctx, s.logger)
+// 	}
+//
+// 	return nil
+// }
 
 // handleAuthorize handles OAuth 2.1 authorization requests
 func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error {
@@ -510,8 +555,22 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 			s.logger.ErrorContext(ctx, "failed to build error response URL", attr.SlogError(buildErr))
 			return oops.E(oops.CodeUnexpected, buildErr, "failed to build error response").Log(ctx, s.logger)
 		}
-		http.Redirect(w, r, errorURL, http.StatusFound)
+
+		data := oauthFailurePageData{
+			RedirectURL:      errorURL,
+			ErrorDescription: errorDescription,
+			ErrorCode:        errorCode,
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := s.failurePageTmpl.Execute(w, data); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to render oauth failure page").Log(ctx, s.logger)
+		}
+
 		return nil
+
+		// http.Redirect(w, r, errorURL, http.StatusFound)
+		// return nil
 	}
 
 	accessToken = result.AccessToken
@@ -550,9 +609,24 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		return oops.E(oops.CodeBadRequest, err, "failed to build authorization response").Log(ctx, s.logger)
 	}
 
-	// Redirect back to client with the authorization code
-	http.Redirect(w, r, responseURL, http.StatusFound)
+	data := oauthSuccessPageData{
+		RedirectURL: responseURL,
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.successPageTmpl.Execute(w, data); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to render oauth success page").Log(ctx, s.logger)
+	}
+
 	return nil
+
+	// failurePageTempl, err := template.New("hosted_page").Parse(oauthFailurePageTmpl)
+	// if err != nil {
+	// 	return oops.E(oops.CodeUnexpected, err, "failed to parse hosted oauth failure page template").Log(ctx, s.logger)
+	// }
+
+	// Redirect back to client with the authorization code
+	// http.Redirect(w, r, responseURL, http.StatusFound)
+	// return nil
 }
 
 // extractClientCredentials extracts client credentials from the request
