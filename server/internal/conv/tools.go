@@ -244,7 +244,12 @@ type ToolListEntry struct {
 // Returns error for proxy tools that must be unfolded first.
 func ToToolListEntry(tool *types.Tool) (ToolListEntry, error) {
 	if tool == nil {
-		return ToolListEntry{}, nil
+		return ToolListEntry{
+			Name:        "",
+			Description: "",
+			InputSchema: nil,
+			Meta:        nil,
+		}, nil
 	}
 
 	var meta map[string]any

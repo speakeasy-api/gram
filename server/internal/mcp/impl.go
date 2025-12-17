@@ -274,9 +274,16 @@ func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *h
 		}
 
 		proxy := &httputil.ReverseProxy{
+			Director:       nil,
 			Rewrite: func(pr *httputil.ProxyRequest) {
 				pr.SetURL(target)
 			},
+			Transport:      nil,
+			FlushInterval:  0,
+			ErrorLog:       nil,
+			BufferPool:     nil,
+			ModifyResponse: nil,
+			ErrorHandler:   nil,
 		}
 		proxy.ServeHTTP(w, r)
 		return nil

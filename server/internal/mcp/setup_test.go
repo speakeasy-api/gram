@@ -180,7 +180,7 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 	billingStub := billing.NewStubClient(logger, tracerProvider)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
 	chatClient := openrouter.NewChatClient(logger, devProvisioner)
-	vectorToolStore := rag.NewToolsetVectorStore(tracerProvider, conn, chatClient)
+	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)

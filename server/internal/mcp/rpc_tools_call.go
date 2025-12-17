@@ -103,7 +103,6 @@ func handleToolsCall(
 		metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, mcpURL, params.Name)
 	}
 
-	// Check if this is an external MCP tool call (format: "slug:toolname")
 	if proxyTool, externalToolName, ok := findExternalMCPTool(toolset.Tools, params.Name); ok {
 		return handleExternalMCPToolCall(ctx, logger, req.ID, proxyTool, externalToolName, params.Arguments, payload.oauthTokenInputs)
 	}
@@ -527,11 +526,8 @@ type toolCallResult struct {
 	IsError bool              `json:"isError,omitzero"`
 }
 
-// findExternalMCPTool checks if the tool name matches an external MCP tool pattern (slug:toolname)
-// and returns the proxy tool definition and the external tool name if found.
 func findExternalMCPTool(tools []*types.Tool, toolName string) (*types.ExternalMCPToolDefinition, string, bool) {
-	// External MCP tools are named as "slug:toolname"
-	parts := strings.SplitN(toolName, ":", 2)
+	parts := strings.SplitN(toolName, "--", 2)
 	if len(parts) != 2 {
 		return nil, "", false
 	}

@@ -22,6 +22,7 @@ package wellknown
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -80,6 +81,7 @@ func ResolveOAuthServerMetadataFromToolset(
 				GrantTypesSupported:           []string{"authorization_code"},
 				CodeChallengeMethodsSupported: []string{"plain", "S256"},
 			},
+			ProxyURL: "",
 		}, nil
 	}
 
@@ -89,17 +91,18 @@ func ResolveOAuthServerMetadataFromToolset(
 			ID:        toolset.ExternalOauthServerID.UUID,
 		})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("get external oauth server metadata: %w", err)
 		}
 
 		var metadata OAuthServerMetadata
 		if err := json.Unmarshal(externalOAuthServer.Metadata, &metadata); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unmarshal oauth server metadata: %w", err)
 		}
 
 		return &OAuthServerMetadataResult{
-			Kind:   OAuthServerMetadataResultKindStatic,
-			Static: &metadata,
+			Kind:     OAuthServerMetadataResultKindStatic,
+			Static:   &metadata,
+			ProxyURL: "",
 		}, nil
 	}
 
@@ -111,6 +114,7 @@ func ResolveOAuthServerMetadataFromToolset(
 	if oauthConfig := externalmcp.ResolveOAuthConfig(fullToolset); oauthConfig != nil {
 		return &OAuthServerMetadataResult{
 			Kind:     OAuthServerMetadataResultKindProxy,
+			Static:   nil,
 			ProxyURL: oauthConfig.WellKnownOAuthServerURL(),
 		}, nil
 	}

@@ -151,7 +151,7 @@ func unfoldExternalMCPTools(ctx context.Context, logger *slog.Logger, tools []*t
 			continue
 		}
 		externalTools, err := mcpClient.ListTools(ctx)
-		o11y.LogDefer(ctx, logger, mcpClient.Close)
+		_ = o11y.LogDefer(ctx, logger, mcpClient.Close)
 		if err != nil {
 			logger.WarnContext(ctx, "failed to list tools from external MCP",
 				attr.SlogToolURN(proxy.ToolUrn),
@@ -162,7 +162,7 @@ func unfoldExternalMCPTools(ctx context.Context, logger *slog.Logger, tools []*t
 
 		for _, extTool := range externalTools {
 			result = append(result, &toolListEntry{
-				Name:        proxy.Slug + ":" + extTool.Name,
+				Name:        proxy.Slug + "--" + extTool.Name,
 				Description: extTool.Description,
 				InputSchema: extTool.Schema,
 				Meta:        nil,
