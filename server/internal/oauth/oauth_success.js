@@ -3,16 +3,20 @@
 
 (function () {
   // Get redirect URL from data attribute or use mock for testing
-  const redirectURL =
-    document.body.getAttribute('data-redirect-url') || 'https://example.com';
+  const redirectURL = document.body.getAttribute("data-redirect-url");
 
   let secondsLeft = 5;
-  const countdownElement = document.getElementById('countdown');
-  const redirectMessage = document.getElementById('redirect-message');
-  const redirectLink = document.getElementById('redirect-link');
+  const countdownElement = document.getElementById("countdown");
+  const redirectMessage = document.getElementById("redirect-message");
+  const redirectLink = document.getElementById("redirect-link");
+
+  const postRedirectMessage = "It is ok to close this page.";
 
   // Fallback redirect in case interval fails
   const fallbackTimeout = setTimeout(() => {
+    if (redirectMessage) {
+      redirectMessage.textContent = postRedirectMessage;
+    }
     window.location.href = redirectURL;
   }, 6000);
 
@@ -27,7 +31,7 @@
       clearInterval(countdownInterval);
       clearTimeout(fallbackTimeout);
       if (redirectMessage) {
-        redirectMessage.textContent = 'Redirecting now...';
+        redirectMessage.textContent = "It is ok to close this page.";
       }
       window.location.href = redirectURL;
     }
@@ -36,7 +40,7 @@
   // Set the manual link to the same URL and clear timers on click
   if (redirectLink) {
     redirectLink.href = redirectURL;
-    redirectLink.addEventListener('click', () => {
+    redirectLink.addEventListener("click", () => {
       clearInterval(countdownInterval);
       clearTimeout(fallbackTimeout);
     });
