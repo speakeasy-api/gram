@@ -63,36 +63,57 @@ CREATE INDEX IF NOT EXISTS idx_instance ON tool_logs (instance) TYPE bloom_filte
 CREATE INDEX IF NOT EXISTS idx_source ON tool_logs (source) TYPE set(0) GRANULARITY 4;
 CREATE INDEX IF NOT EXISTS idx_level ON tool_logs (level) TYPE set(0) GRANULARITY 4;
 
-CREATE TABLE IF NOT EXISTS function_logs (
-    id UUID DEFAULT generateUUIDv7 () COMMENT 'Unique identifier for the log entry.',
-    -- OTel timestamp fields
-    time_unix_nano Int64 COMMENT 'Unix time (ns) when the event occurred measured by the origin clock, i.e. the function log.' CODEC (Delta, ZSTD),
-    observed_time_unix_nano Int64 COMMENT 'Unix time (ns) when the event was observed by the collection system, i.e. the server.' CODEC (Delta, ZSTD),
-    -- OTel severity fields
-    severity_text LowCardinality (Nullable (String)) COMMENT 'Original string representation of the severity as it is known at the source (the function).',
-    -- OTel message data
-    body Nullable (String) COMMENT 'The body of the raw log record as emitted by the server. Can be for example a human-readable string message describing the event in a free form or it can be a structured data composed of arrays and maps of other values.' CODEC (ZSTD),
-    message Nullable (String) COMMENT 'Message extracted from the log body.' CODEC (ZSTD),
-    -- OTel trace context
-    trace_id Nullable (FixedString (32)) COMMENT 'Request trace id. Can be set for logs that are part of request processing and have an assigned trace id.',
-    span_id Nullable (FixedString (16)) COMMENT 'Can be set for logs that are part of a particular processing span. If SpanId is present TraceId SHOULD be also present.',
-    -- OTel log attributes (structured)
-    attributes JSON COMMENT 'Additional information about the specific event occurrence.' CODEC (ZSTD),
-    -- OTel resource attributes (denormalized for query performance)
-    resource_service_name String COMMENT 'Logical name of the service (e.g. gram-function-runner).',
-    resource_service_version Nullable (String) COMMENT 'The version string of the service API or implementation.',
-    -- Gram-specific resource attributes
-    resource_gram_project_id UUID COMMENT 'The project ID where the function that generated the log ran.',
-    resource_gram_deployment_id UUID COMMENT 'The deployment ID associated with the log.',
-    resource_gram_function_id UUID COMMENT 'ID of the function that generated the log.'
-) ENGINE = MergeTree
-PARTITION BY
-    toYYYYMMDD (fromUnixTimestamp64Nano (time_unix_nano))
-ORDER BY
-    (resource_gram_project_id, time_unix_nano, id) TTL fromUnixTimestamp64Nano (time_unix_nano) + INTERVAL 30 DAY SETTINGS index_granularity = 8192 COMMENT 'Stores logs from Gram function executions following OTel specification';
+CREATE TABLE IF NOT EXISTS telemetry_logs (
+    -- OTel Log Record Identity
+    id UUID DEFAULT generateUUIDv7() COMMENT 'Unique identifier for the log entry.',
 
-CREATE INDEX IF NOT EXISTS idx_function_logs_project_id ON function_logs (resource_gram_project_id) TYPE bloom_filter (0.01) GRANULARITY 1;
-CREATE INDEX IF NOT EXISTS idx_function_logs_deployment_id ON function_logs (resource_gram_deployment_id) TYPE bloom_filter (0.01) GRANULARITY 1;
-CREATE INDEX IF NOT EXISTS idx_function_logs_function_id ON function_logs (resource_gram_function_id) TYPE bloom_filter (0.01) GRANULARITY 1;
-CREATE INDEX IF NOT EXISTS idx_function_logs_service_name ON function_logs (resource_service_name) TYPE bloom_filter (0.01) GRANULARITY 1;
-CREATE INDEX IF NOT EXISTS idx_function_logs_severity_text ON function_logs (severity_text) TYPE SET (0) GRANULARITY 4;
+    -- OTel Timestamp fields
+    time_unix_nano Int64 COMMENT 'Unix time (ns) when the event occurred measured by the origin clock.' CODEC(Delta, ZSTD),
+    observed_time_unix_nano Int64 COMMENT 'Unix time (ns) when the event was observed by the collection system.' CODEC(Delta, ZSTD),
+    
+    -- OTel Severity
+    severity_text LowCardinality(Nullable(String)) COMMENT 'Text representation of severity (DEBUG, INFO, WARN, ERROR, FATAL).',
+    
+    -- OTel Body (the actual log content/message)
+    body String COMMENT 'The primary log message extracted from the log record. For structured logs, this is the human-readable message component.' CODEC(ZSTD),
+    
+    -- OTel Trace Context (for distributed tracing)
+    trace_id Nullable(FixedString(32)) COMMENT 'W3C trace ID linking related logs across services.',
+    span_id Nullable(FixedString(16)) COMMENT 'W3C span ID for specific operation within a trace.',
+
+    -- OTel Attributes (log-level structured data - WHAT happened)
+    attributes JSON COMMENT 'Additional attributes about the specific event occurrence.' CODEC(ZSTD),
+
+    -- OTel Resource Attributes (WHO/WHERE generated this log)
+    resource_attributes JSON COMMENT 'Attributes describing the resource that generated this log.' CODEC(ZSTD),
+
+    -- Denormalized Gram Fields (for fast filtering)
+    gram_project_id UUID COMMENT 'Project ID (denormalized from resource_attributes).',
+    gram_deployment_id Nullable(UUID) COMMENT 'Deployment ID (denormalized from resource_attributes).',
+    gram_function_id Nullable(UUID) COMMENT 'Function ID that generated the log (null for HTTP logs).',
+    gram_tool_urn String COMMENT 'Tool URN. For HTTP tools, this is the tool URN (e.g., com.example.api). For function logs, use a default like "gram:function".',
+    service_name LowCardinality(String) COMMENT 'Logical service name (e.g., gram-functions, gram-http-gateway).',
+    service_version Nullable(String) COMMENT 'Service version.',
+
+    -- Denormalized HTTP Fields (Wide Event Pattern - for HTTP logs only, NULL for function logs)
+    http_request_method LowCardinality(Nullable(String)) COMMENT 'HTTP method (GET, POST, etc.) - null for non-HTTP logs.',
+    http_response_status_code Nullable(Int32) COMMENT 'HTTP status code - null for non-HTTP logs.',
+    http_route Nullable(String) COMMENT 'HTTP route pattern (/api/v1/users) - null for non-HTTP logs.',
+    http_server_url Nullable(String) COMMENT 'HTTP server URL - null for non-HTTP logs.' CODEC(ZSTD),
+) ENGINE = MergeTree
+PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
+ORDER BY (gram_project_id, time_unix_nano, id)
+TTL fromUnixTimestamp64Nano(time_unix_nano) + INTERVAL 30 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Unified OTel-compatible telemetry logs from all Gram sources (HTTP requests, function logs, etc.)';
+
+-- Note: gram_project_id is already first in ORDER BY, so no bloom filter index needed for it
+-- Primary query patterns 
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_tool_urn ON telemetry_logs (gram_tool_urn) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_trace_id ON telemetry_logs (trace_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_deployment_id ON telemetry_logs (gram_deployment_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+-- Secondary filters
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_function_id ON telemetry_logs (gram_function_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_severity ON telemetry_logs (severity_text) TYPE set(0) GRANULARITY 4;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_http_status ON telemetry_logs (http_response_status_code) TYPE set(100) GRANULARITY 4;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_http_route ON telemetry_logs (http_route) TYPE bloom_filter(0.01) GRANULARITY 1;
