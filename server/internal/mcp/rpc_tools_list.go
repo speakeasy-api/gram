@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mv"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -115,7 +114,6 @@ func buildToolListEntries(tools []*types.Tool) []*toolListEntry {
 }
 
 func unfoldExternalMCPTools(ctx context.Context, logger *slog.Logger, tools []*types.Tool, tokenInputs []oauthTokenInputs) ([]*toolListEntry, error) {
-	// Extract OAuth token for external MCP servers (use first token with empty security keys)
 	var oauthToken string
 	for _, t := range tokenInputs {
 		if len(t.securityKeys) == 0 && t.Token != "" {
@@ -133,7 +131,6 @@ func unfoldExternalMCPTools(ctx context.Context, logger *slog.Logger, tools []*t
 
 		proxy := tool.ExternalMcpToolDefinition
 
-		// Build client options with OAuth token if required
 		var opts *externalmcp.ClientOptions
 		if proxy.RequiresOauth && oauthToken != "" {
 			opts = &externalmcp.ClientOptions{
@@ -141,23 +138,16 @@ func unfoldExternalMCPTools(ctx context.Context, logger *slog.Logger, tools []*t
 			}
 		}
 
-		// List tools from the external MCP server
 		mcpClient, err := externalmcp.NewClient(ctx, logger, proxy.RemoteURL, opts)
 		if err != nil {
-			logger.WarnContext(ctx, "failed to connect to external MCP",
-				attr.SlogToolURN(proxy.ToolUrn),
-				attr.SlogError(err),
-			)
-			continue
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP").Log(ctx, logger)
 		}
 		externalTools, err := mcpClient.ListTools(ctx)
-		_ = o11y.LogDefer(ctx, logger, mcpClient.Close)
+		if closeErr := mcpClient.Close(); closeErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, closeErr, "failed to close external MCP client").Log(ctx, logger)
+		}
 		if err != nil {
-			logger.WarnContext(ctx, "failed to list tools from external MCP",
-				attr.SlogToolURN(proxy.ToolUrn),
-				attr.SlogError(err),
-			)
-			continue
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools from external MCP").Log(ctx, logger)
 		}
 
 		for _, extTool := range externalTools {
