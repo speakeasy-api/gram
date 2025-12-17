@@ -95,6 +95,7 @@ export function setListChatsData(
     parameters: {
       gramSession?: string | undefined;
       gramProject?: string | undefined;
+      gramChatSession?: string | undefined;
     },
   ],
   data: ListChatsQueryData,
@@ -110,6 +111,7 @@ export function invalidateListChats(
     [parameters: {
       gramSession?: string | undefined;
       gramProject?: string | undefined;
+      gramChatSession?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
@@ -143,6 +145,7 @@ export function buildListChatsQuery(
     queryKey: queryKeyListChats({
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
+      gramChatSession: request?.gramChatSession,
     }),
     queryFn: async function listChatsQueryFn(ctx): Promise<ListChatsQueryData> {
       const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
@@ -165,6 +168,7 @@ export function queryKeyListChats(
   parameters: {
     gramSession?: string | undefined;
     gramProject?: string | undefined;
+    gramChatSession?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "chat", "list", parameters];

@@ -5,9 +5,18 @@
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
 
+export type ListChatsSecurityOption1 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
+export type ListChatsSecurityOption2 = {
+  chatSessionsTokenHeaderGramChatSession: string;
+};
+
 export type ListChatsSecurity = {
-  projectSlugHeaderGramProject?: string | undefined;
-  sessionHeaderGramSession?: string | undefined;
+  option1?: ListChatsSecurityOption1 | undefined;
+  option2?: ListChatsSecurityOption2 | undefined;
 };
 
 export type ListChatsRequest = {
@@ -19,12 +28,72 @@ export type ListChatsRequest = {
    * project header
    */
   gramProject?: string | undefined;
+  /**
+   * Chat Sessions token header
+   */
+  gramChatSession?: string | undefined;
 };
 
 /** @internal */
+export type ListChatsSecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const ListChatsSecurityOption1$outboundSchema: z.ZodType<
+  ListChatsSecurityOption1$Outbound,
+  z.ZodTypeDef,
+  ListChatsSecurityOption1
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+export function listChatsSecurityOption1ToJSON(
+  listChatsSecurityOption1: ListChatsSecurityOption1,
+): string {
+  return JSON.stringify(
+    ListChatsSecurityOption1$outboundSchema.parse(listChatsSecurityOption1),
+  );
+}
+
+/** @internal */
+export type ListChatsSecurityOption2$Outbound = {
+  "chat_sessions_token_header_Gram-Chat-Session": string;
+};
+
+/** @internal */
+export const ListChatsSecurityOption2$outboundSchema: z.ZodType<
+  ListChatsSecurityOption2$Outbound,
+  z.ZodTypeDef,
+  ListChatsSecurityOption2
+> = z.object({
+  chatSessionsTokenHeaderGramChatSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    chatSessionsTokenHeaderGramChatSession:
+      "chat_sessions_token_header_Gram-Chat-Session",
+  });
+});
+
+export function listChatsSecurityOption2ToJSON(
+  listChatsSecurityOption2: ListChatsSecurityOption2,
+): string {
+  return JSON.stringify(
+    ListChatsSecurityOption2$outboundSchema.parse(listChatsSecurityOption2),
+  );
+}
+
+/** @internal */
 export type ListChatsSecurity$Outbound = {
-  "project_slug_header_Gram-Project"?: string | undefined;
-  "session_header_Gram-Session"?: string | undefined;
+  Option1?: ListChatsSecurityOption1$Outbound | undefined;
+  Option2?: ListChatsSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -33,12 +102,12 @@ export const ListChatsSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ListChatsSecurity
 > = z.object({
-  projectSlugHeaderGramProject: z.string().optional(),
-  sessionHeaderGramSession: z.string().optional(),
+  option1: z.lazy(() => ListChatsSecurityOption1$outboundSchema).optional(),
+  option2: z.lazy(() => ListChatsSecurityOption2$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
+    option1: "Option1",
+    option2: "Option2",
   });
 });
 
@@ -54,6 +123,7 @@ export function listChatsSecurityToJSON(
 export type ListChatsRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
+  "Gram-Chat-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -64,10 +134,12 @@ export const ListChatsRequest$outboundSchema: z.ZodType<
 > = z.object({
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),
+  gramChatSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     gramSession: "Gram-Session",
     gramProject: "Gram-Project",
+    gramChatSession: "Gram-Chat-Session",
   });
 });
 

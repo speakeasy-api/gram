@@ -97,6 +97,7 @@ export function setInstanceData(
       gramSession?: string | undefined;
       gramProject?: string | undefined;
       gramKey?: string | undefined;
+      gramChatSession?: string | undefined;
     },
   ],
   data: InstanceQueryData,
@@ -114,6 +115,7 @@ export function invalidateInstance(
       gramSession?: string | undefined;
       gramProject?: string | undefined;
       gramKey?: string | undefined;
+      gramChatSession?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
@@ -149,6 +151,7 @@ export function buildInstanceQuery(
       gramSession: request.gramSession,
       gramProject: request.gramProject,
       gramKey: request.gramKey,
+      gramChatSession: request.gramChatSession,
     }),
     queryFn: async function instanceQueryFn(ctx): Promise<InstanceQueryData> {
       const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
@@ -173,6 +176,7 @@ export function queryKeyInstance(
     gramSession?: string | undefined;
     gramProject?: string | undefined;
     gramKey?: string | undefined;
+    gramChatSession?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "instances", "getBySlug", parameters];

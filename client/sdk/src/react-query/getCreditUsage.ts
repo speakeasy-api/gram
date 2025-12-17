@@ -95,6 +95,7 @@ export function setGetCreditUsageData(
     parameters: {
       gramSession?: string | undefined;
       gramProject?: string | undefined;
+      gramChatSession?: string | undefined;
     },
   ],
   data: GetCreditUsageQueryData,
@@ -110,6 +111,7 @@ export function invalidateGetCreditUsage(
     [parameters: {
       gramSession?: string | undefined;
       gramProject?: string | undefined;
+      gramChatSession?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
@@ -143,6 +145,7 @@ export function buildGetCreditUsageQuery(
     queryKey: queryKeyGetCreditUsage({
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
+      gramChatSession: request?.gramChatSession,
     }),
     queryFn: async function getCreditUsageQueryFn(
       ctx,
@@ -167,6 +170,7 @@ export function queryKeyGetCreditUsage(
   parameters: {
     gramSession?: string | undefined;
     gramProject?: string | undefined;
+    gramChatSession?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "chat", "creditUsage", parameters];

@@ -96,6 +96,7 @@ export function setLoadChatData(
       id: string;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
+      gramChatSession?: string | undefined;
     },
   ],
   data: LoadChatQueryData,
@@ -112,6 +113,7 @@ export function invalidateLoadChat(
       id: string;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
+      gramChatSession?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
@@ -146,6 +148,7 @@ export function buildLoadChatQuery(
       id: request.id,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
+      gramChatSession: request.gramChatSession,
     }),
     queryFn: async function loadChatQueryFn(ctx): Promise<LoadChatQueryData> {
       const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
@@ -169,6 +172,7 @@ export function queryKeyLoadChat(
     id: string;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
+    gramChatSession?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "chat", "load", parameters];

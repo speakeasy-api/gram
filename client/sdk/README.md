@@ -154,6 +154,11 @@ run();
 * [list](docs/sdks/chat/README.md#list) - listChats chat
 * [load](docs/sdks/chat/README.md#load) - loadChat chat
 
+### [ChatSessions](docs/sdks/chatsessions/README.md)
+
+* [create](docs/sdks/chatsessions/README.md#create) - create chatSessions
+* [revoke](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
+
 ### [Deployments](docs/sdks/deployments/README.md)
 
 * [active](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
@@ -324,6 +329,8 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`chatCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 - [`chatList`](docs/sdks/chat/README.md#list) - listChats chat
 - [`chatLoad`](docs/sdks/chat/README.md#load) - loadChat chat
+- [`chatSessionsCreate`](docs/sdks/chatsessions/README.md#create) - create chatSessions
+- [`chatSessionsRevoke`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
 - [`deploymentsActive`](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 - [`deploymentsCreate`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`deploymentsEvolveDeployment`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
@@ -431,6 +438,8 @@ To learn about this feature and how to get started, check
 - [`useAgentsCreateMutation`](docs/sdks/agents/README.md#create) - createResponse agents
 - [`useAgentsDeleteMutation`](docs/sdks/agents/README.md#delete) - deleteResponse agents
 - [`useAgentsGet`](docs/sdks/agents/README.md#get) - getResponse agents
+- [`useChatSessionsCreateMutation`](docs/sdks/chatsessions/README.md#create) - create chatSessions
+- [`useChatSessionsRevokeMutation`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 - [`useCloneToolsetMutation`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
