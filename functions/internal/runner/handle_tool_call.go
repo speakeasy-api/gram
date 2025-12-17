@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/functions/internal/attr"
+	"github.com/speakeasy-api/gram/functions/internal/auth"
 	"github.com/speakeasy-api/gram/functions/internal/guardian"
 	"github.com/speakeasy-api/gram/functions/internal/ipc"
 	"github.com/speakeasy-api/gram/functions/internal/o11y"
@@ -50,9 +52,7 @@ type callRequest struct {
 	requestType string
 }
 
-func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.ResponseWriter) error {
-	logger := s.logger
-
+func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req callRequest, w http.ResponseWriter) error {
 	fifoPath, cleanup, err := ipc.Mkfifo()
 	if err != nil {
 		return svc.Fault(
@@ -219,7 +219,7 @@ func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.Re
 	return nil
 }
 
-func (s *Service) callTool(ctx context.Context, payload CallToolPayload, w http.ResponseWriter) error {
+func (s *Service) callTool(ctx context.Context, logger *slog.Logger, payload CallToolPayload, w http.ResponseWriter) error {
 	if payload.ToolName == "" {
 		return svc.NewPermanentError(
 			fmt.Errorf("invalid request: missing name"),
@@ -244,7 +244,7 @@ func (s *Service) callTool(ctx context.Context, payload CallToolPayload, w http.
 		)
 	}
 
-	return s.executeRequest(ctx, callRequest{
+	return s.executeRequest(ctx, logger, callRequest{
 		requestArg:  reqArg,
 		environment: payload.Environment,
 		requestType: "tool",
@@ -253,6 +253,11 @@ func (s *Service) callTool(ctx context.Context, payload CallToolPayload, w http.
 
 func (s *Service) handleToolCall(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	authCtx := auth.FromContext(ctx)
+	if authCtx == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 
 	var payload CallToolPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -263,7 +268,11 @@ func (s *Service) handleToolCall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := s.callTool(ctx, payload, w)
+	logger := s.logger.With(
+		attr.SlogURN(authCtx.Subject),
+	)
+
+	err := s.callTool(ctx, logger, payload, w)
 	if err != nil {
 		s.handleError(ctx, err, "call tool", w)
 		return

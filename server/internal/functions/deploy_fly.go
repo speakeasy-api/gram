@@ -206,8 +206,9 @@ func (f *FlyRunner) ToolCall(ctx context.Context, req RunnerToolCallRequest) (ht
 	}
 
 	token, err := TokenV1(enc, TokenRequestV1{
-		ID:  req.InvocationID.String(),
-		Exp: time.Now().Add(10 * time.Minute).Unix(),
+		ID:      req.InvocationID.String(),
+		Exp:     time.Now().Add(10 * time.Minute).Unix(),
+		Subject: req.ToolURN.String(),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to create bearer token for function tool call").Log(ctx, logger)
@@ -267,8 +268,9 @@ func (f *FlyRunner) ReadResource(ctx context.Context, req RunnerResourceReadRequ
 	}
 
 	token, err := TokenV1(enc, TokenRequestV1{
-		ID:  req.InvocationID.String(),
-		Exp: time.Now().Add(10 * time.Minute).Unix(),
+		ID:      req.InvocationID.String(),
+		Exp:     time.Now().Add(10 * time.Minute).Unix(),
+		Subject: req.ResourceURN.String(),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to create bearer token for function read resource call").Log(ctx, logger)
