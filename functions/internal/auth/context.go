@@ -2,10 +2,10 @@ package auth
 
 import "context"
 
-type ctxkey int
+type ctxKey int
 
 const (
-	authContextKey ctxkey = iota
+	authContextKey ctxKey = iota
 )
 
 type AuthContext struct {
