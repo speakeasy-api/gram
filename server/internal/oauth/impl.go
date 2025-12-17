@@ -56,7 +56,7 @@ type oauthSuccessPageData struct {
 }
 
 type oauthFailurePageData struct {
-	RedirectURL      string
+	RedirectURL      template.URL
 	ErrorDescription string
 	ErrorCode        string
 	ScriptHash       string
@@ -584,7 +584,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		}
 
 		data := oauthFailurePageData{
-			RedirectURL:      errorURL,
+			RedirectURL:      template.URL(errorURL), // #nosec G203 // This has been checked and escaped
 			ErrorDescription: errorDescription,
 			ErrorCode:        errorCode,
 			ScriptHash:       s.successScriptHash,
@@ -596,9 +596,6 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		}
 
 		return nil
-
-		// http.Redirect(w, r, errorURL, http.StatusFound)
-		// return nil
 	}
 
 	accessToken = result.AccessToken

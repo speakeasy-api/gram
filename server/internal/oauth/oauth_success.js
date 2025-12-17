@@ -39,7 +39,6 @@
 
   // Set the manual link to the same URL and clear timers on click
   if (redirectLink) {
-    redirectLink.href = redirectURL;
     redirectLink.addEventListener("click", () => {
       clearInterval(countdownInterval);
       clearTimeout(fallbackTimeout);
