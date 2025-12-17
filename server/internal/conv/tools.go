@@ -44,10 +44,6 @@ func GetToolURN(tool types.Tool) (*urn.Tool, error) {
 	return nil, urn.ErrInvalid
 }
 
-// ErrProxyToolNotUnfolded is returned when ToBaseTool is called with an external MCP proxy tool.
-// Proxy tools must be unfolded via the MCP server before they can be converted to base attributes.
-var ErrProxyToolNotUnfolded = errors.New("proxy tool must be unfolded before converting to base attributes")
-
 // IsProxyTool returns true if the tool is an external MCP proxy tool.
 func IsProxyTool(tool *types.Tool) bool {
 	return tool != nil && tool.ExternalMcpToolDefinition != nil
@@ -127,10 +123,8 @@ func ToBaseTool(tool *types.Tool) (types.BaseToolAttributes, error) {
 		}, nil
 	}
 
-	// External MCP tools are proxy tools that must be unfolded before use.
-	// Callers must handle proxy tools explicitly - use ProxyToolToBaseTool instead.
 	if tool.ExternalMcpToolDefinition != nil {
-		return types.BaseToolAttributes{}, ErrProxyToolNotUnfolded
+		return types.BaseToolAttributes{}, errors.New("proxy tool cannot be converted to base attributes")
 	}
 
 	return types.BaseToolAttributes{}, urn.ErrInvalid

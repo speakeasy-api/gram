@@ -614,7 +614,7 @@ func (tp *ToolProxy) doExternalMCP(
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").Log(ctx, logger)
 	}
-	defer func() { _ = client.Close() }()
+	defer o11y.LogDefer(ctx, logger, client.Close)
 
 	callResult, err := client.CallTool(ctx, plan.ToolName, arguments)
 	if err != nil {

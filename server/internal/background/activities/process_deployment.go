@@ -447,7 +447,7 @@ func (p *ProcessDeployment) doExternalMCPs(
 			} else if err != nil {
 				return oops.E(oops.CodeUnexpected, err, "external mcp server unavailable").Log(ctx, logger)
 			} else {
-				_ = mcpClient.Close()
+				o11y.LogDefer(ctx, logger, mcpClient.Close)
 			}
 
 			// Create a proxy tool URN for this external MCP

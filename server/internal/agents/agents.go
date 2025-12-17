@@ -23,8 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	env_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
-	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -363,9 +361,8 @@ func (s *Service) LoadToolsetTools(
 			continue
 		}
 
-		// Skip proxy tools - they are handled separately via unfolding below
 		if conv.IsProxyTool(tool) {
-			continue
+			return nil, fmt.Errorf("resolve external mcp tool from agent: %s", tool.ExternalMcpToolDefinition.Name)
 		}
 
 		toolURN, err := conv.GetToolURN(*tool)
@@ -396,8 +393,7 @@ func (s *Service) LoadToolsetTools(
 		case gateway.ToolKindPrompt:
 			schema = json.RawMessage(`{}`)
 		case gateway.ToolKindExternalMCP:
-			// External MCP tools are handled separately via unfoldExternalMCPTools
-			continue
+			return nil, fmt.Errorf("resolve external mcp tool from agent: %s", baseTool.Name)
 		}
 
 		if len(schema) == 0 {
@@ -426,79 +422,7 @@ func (s *Service) LoadToolsetTools(
 		})
 	}
 
-	// Unfold proxy tools from external MCP servers
-	unfoldedTools, err := s.unfoldExternalMCPTools(ctx, toolset.Tools, toolsetSlug)
-	if err != nil {
-		s.logger.WarnContext(ctx, "failed to unfold external MCP tools for agent", attr.SlogError(err))
-		// Continue with regular tools even if unfolding fails
-	} else {
-		agentTools = append(agentTools, unfoldedTools...)
-	}
-
 	return agentTools, nil
-}
-
-// unfoldExternalMCPTools unfolds proxy tools from external MCP servers into AgentTools.
-func (s *Service) unfoldExternalMCPTools(ctx context.Context, tools []*types.Tool, toolsetSlug string) ([]AgentTool, error) {
-	var result []AgentTool
-
-	for _, tool := range tools {
-		if !conv.IsProxyTool(tool) {
-			continue
-		}
-
-		proxy := tool.ExternalMcpToolDefinition
-
-		// Skip OAuth-requiring tools - no token available in this context
-		if proxy.RequiresOauth {
-			s.logger.InfoContext(ctx, "skipping OAuth-requiring external MCP for agent",
-				attr.SlogToolURN(proxy.ToolUrn),
-			)
-			continue
-		}
-
-		// List tools from the external MCP server
-		mcpClient, err := externalmcp.NewClient(ctx, s.logger, proxy.RemoteURL, nil)
-		if err != nil {
-			s.logger.WarnContext(ctx, "failed to connect to external MCP",
-				attr.SlogToolURN(proxy.ToolUrn),
-				attr.SlogError(err),
-			)
-			continue
-		}
-		externalTools, err := mcpClient.ListTools(ctx)
-		_ = mcpClient.Close()
-		if err != nil {
-			s.logger.WarnContext(ctx, "failed to list tools from external MCP",
-				attr.SlogToolURN(proxy.ToolUrn),
-				attr.SlogError(err),
-			)
-			continue
-		}
-
-		for _, extTool := range externalTools {
-			schema := extTool.Schema
-			if len(schema) == 0 {
-				schema = json.RawMessage(`{}`)
-			}
-
-			result = append(result, AgentTool{
-				Definition: openrouter.Tool{
-					Type: "function",
-					Function: &openrouter.FunctionDefinition{
-						Name:        proxy.Slug + ":" + extTool.Name,
-						Description: extTool.Description,
-						Parameters:  schema,
-					},
-				},
-				IsMCPTool:   true,
-				ServerLabel: toolsetSlug,
-				ToolURN:     nil, // External MCP tools don't have a gram URN for execution
-			})
-		}
-	}
-
-	return result, nil
 }
 
 // LoadToolsByURN loads tool definitions by their URNs (without executors)
@@ -538,8 +462,7 @@ func (s *Service) LoadToolsByURN(
 			// Prompt tools don't have a schema in the same way
 			schema = json.RawMessage(`{}`)
 		case gateway.ToolKindExternalMCP:
-			// External MCP tools are handled separately via unfoldExternalMCPTools
-			continue
+			return nil, fmt.Errorf("resolve external mcp tool from agent: %s", toolURN.String())
 		}
 
 		if plan.Descriptor.Description != nil {

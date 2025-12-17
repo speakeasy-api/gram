@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -150,7 +151,7 @@ func unfoldExternalMCPTools(ctx context.Context, logger *slog.Logger, tools []*t
 			continue
 		}
 		externalTools, err := mcpClient.ListTools(ctx)
-		_ = mcpClient.Close()
+		o11y.LogDefer(ctx, logger, mcpClient.Close)
 		if err != nil {
 			logger.WarnContext(ctx, "failed to list tools from external MCP",
 				attr.SlogToolURN(proxy.ToolUrn),

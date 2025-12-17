@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/rag/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -289,9 +288,8 @@ func (s *ToolsetVectorStore) prepareEmbeddingCandidates(ctx context.Context, too
 	candidates := make([]embeddingCandidate, 0, len(tools))
 
 	for _, tool := range tools {
-		// Skip proxy tools - they are handled separately via unfolding below
 		if conv.IsProxyTool(tool) {
-			continue
+			return nil, fmt.Errorf("index proxy tool for vector search: %s", tool.ExternalMcpToolDefinition.Name)
 		}
 
 		baseTool, err := conv.ToBaseTool(tool)
@@ -332,92 +330,9 @@ func (s *ToolsetVectorStore) prepareEmbeddingCandidates(ctx context.Context, too
 		})
 	}
 
-	// Unfold proxy tools and add them to candidates
-	unfoldedCandidates, err := s.prepareUnfoldedCandidates(ctx, tools)
-	if err != nil {
-		// Log but don't fail - continue with regular tools
-		s.logger.WarnContext(ctx, "failed to prepare unfolded candidates", attr.SlogError(err))
-	} else {
-		candidates = append(candidates, unfoldedCandidates...)
-	}
-
 	return candidates, nil
 }
 
-func (s *ToolsetVectorStore) prepareUnfoldedCandidates(ctx context.Context, tools []*types.Tool) ([]embeddingCandidate, error) {
-	var candidates []embeddingCandidate
-
-	for _, tool := range tools {
-		if !conv.IsProxyTool(tool) {
-			continue
-		}
-
-		proxy := tool.ExternalMcpToolDefinition
-
-		// Skip OAuth-requiring tools - no token available in this context
-		if proxy.RequiresOauth {
-			s.logger.InfoContext(ctx, "skipping OAuth-requiring external MCP for embedding",
-				attr.SlogToolURN(proxy.ToolUrn),
-			)
-			continue
-		}
-
-		// List tools from the external MCP server
-		mcpClient, err := externalmcp.NewClient(ctx, s.logger, proxy.RemoteURL, nil)
-		if err != nil {
-			s.logger.WarnContext(ctx, "failed to connect to external MCP",
-				attr.SlogToolURN(proxy.ToolUrn),
-				attr.SlogError(err),
-			)
-			continue
-		}
-		externalTools, err := mcpClient.ListTools(ctx)
-		_ = mcpClient.Close()
-		if err != nil {
-			s.logger.WarnContext(ctx, "failed to list tools from external MCP",
-				attr.SlogToolURN(proxy.ToolUrn),
-				attr.SlogError(err),
-			)
-			continue
-		}
-
-		for _, extTool := range externalTools {
-			name := proxy.Slug + ":" + extTool.Name
-			if strings.TrimSpace(name) == "" {
-				continue
-			}
-
-			entry := toolListEntry{
-				Name:        name,
-				Description: extTool.Description,
-				InputSchema: extTool.Schema,
-				Meta:        nil,
-			}
-
-			payload, err := json.Marshal(&entry)
-			if err != nil {
-				return nil, fmt.Errorf("marshal unfolded tool entry %s: %w", name, err)
-			}
-
-			content := buildEmbeddableContent(&entry)
-			if strings.TrimSpace(content) == "" {
-				continue
-			}
-
-			// Use the proxy tool URN as the entry key, with the tool name appended
-			entryKey := proxy.ToolUrn + ":" + extTool.Name
-
-			candidates = append(candidates, embeddingCandidate{
-				entryKey: entryKey,
-				payload:  payload,
-				content:  content,
-				tags:     []string{fmt.Sprintf("source:%s", proxy.Slug)},
-			})
-		}
-	}
-
-	return candidates, nil
-}
 
 func extractTags(tool *types.Tool) []string {
 	var tags []string

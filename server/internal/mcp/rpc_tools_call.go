@@ -583,7 +583,7 @@ func handleExternalMCPToolCall(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").Log(ctx, logger)
 	}
-	defer func() { _ = client.Close() }()
+	defer o11y.LogDefer(ctx, logger, client.Close)
 
 	callResult, err := client.CallTool(ctx, toolName, arguments)
 	if err != nil {
