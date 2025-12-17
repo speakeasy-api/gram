@@ -59,6 +59,7 @@ type oauthFailurePageData struct {
 	RedirectURL      string
 	ErrorDescription string
 	ErrorCode        string
+	ScriptHash       string
 }
 
 type Service struct {
@@ -577,10 +578,16 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 			return oops.E(oops.CodeUnexpected, buildErr, "failed to build error response").Log(ctx, s.logger)
 		}
 
+		// Add defensive check for empty error description
+		if errorDescription == "" {
+			errorDescription = "Authorization failed. Please try again."
+		}
+
 		data := oauthFailurePageData{
 			RedirectURL:      errorURL,
 			ErrorDescription: errorDescription,
 			ErrorCode:        errorCode,
+			ScriptHash:       s.successScriptHash,
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
