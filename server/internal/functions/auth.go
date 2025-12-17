@@ -21,8 +21,9 @@ import (
 )
 
 type TokenRequestV1 struct {
-	ID  string `json:"id"`
-	Exp int64  `json:"exp"`
+	ID      string `json:"id"`
+	Exp     int64  `json:"exp"`
+	Subject string  `json:"sub"`
 }
 
 func TokenV1(enc *encryption.Client, req TokenRequestV1) (string, error) {

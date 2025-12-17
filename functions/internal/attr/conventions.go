@@ -29,6 +29,7 @@ const (
 	DeploymentIDKey = attribute.Key("gram.deployment.id")
 	FunctionIDKey   = attribute.Key("gram.function.id")
 	AssetIDKey      = attribute.Key("gram.asset.id")
+	URNKey          = attribute.Key("gram.urn")
 
 	EventPayloadKey = attribute.Key("gram.event.payload")
 	EventOriginKey  = attribute.Key("gram.event.origin")
@@ -92,6 +93,9 @@ func SlogFunctionID(v string) slog.Attr {
 
 func AssetID(v string) attribute.KeyValue { return AssetIDKey.String(v) }
 func SlogAssetID(v string) slog.Attr      { return slog.String(string(AssetIDKey), v) }
+
+func URN(v string) attribute.KeyValue { return URNKey.String(v) }
+func SlogURN(v string) slog.Attr      { return slog.String(string(URNKey), v) }
 
 func EventPayload(v string) attribute.KeyValue { return EventPayloadKey.String(v) }
 func SlogEventPayload(v string) slog.Attr      { return slog.String(string(EventPayloadKey), v) }

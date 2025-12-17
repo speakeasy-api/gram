@@ -9,8 +9,9 @@ import (
 )
 
 type authPayloadV1 struct {
-	ID  string `json:"id"`
-	Exp int64  `json:"exp"`
+	ID      string `json:"id"`
+	Exp     int64  `json:"exp"`
+	Subject string `json:"sub"`
 }
 
 func authorizeV1(enc *encryption.Client, ciphertext string) (*authPayloadV1, error) {

@@ -40,6 +40,11 @@ func AuthorizeRequest(logger *slog.Logger, enc *encryption.Client, handler http.
 		case "v01.":
 			if payload, autherr := authorizeV1(enc, token); autherr == nil {
 				w.Header().Set("Gram-Invoke-ID", payload.ID)
+				ctx = WithContext(ctx, &AuthContext{
+					InvocationID: payload.ID,
+					Subject:      payload.Subject,
+				})
+				r = r.WithContext(ctx)
 			} else {
 				err = autherr
 			}
