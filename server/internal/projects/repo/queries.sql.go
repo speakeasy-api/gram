@@ -160,6 +160,35 @@ func (q *Queries) ListAllowedOriginsByProjectID(ctx context.Context, projectID u
 	return items, nil
 }
 
+const listApprovedOriginsByProjectID = `-- name: ListApprovedOriginsByProjectID :many
+SELECT origin
+FROM project_allowed_origins
+WHERE project_id = $1
+  AND status = 'approved'
+  AND deleted IS FALSE
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListApprovedOriginsByProjectID(ctx context.Context, projectID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listApprovedOriginsByProjectID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var origin string
+		if err := rows.Scan(&origin); err != nil {
+			return nil, err
+		}
+		items = append(items, origin)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjectsByOrganization = `-- name: ListProjectsByOrganization :many
 SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
 FROM projects

@@ -11,35 +11,29 @@ import (
 
 // ChatSessionClaims represents the custom claims for a chat session JWT
 type ChatSessionClaims struct {
-	OrgID            string  `json:"org_id"`
-	ProjectID        string  `json:"project_id"`
-	OrganizationSlug string  `json:"organization_slug"`
-	ProjectSlug      string  `json:"project_slug"`
-	UserIdentifier   *string `json:"user_identifier,omitempty"`
+	OrgID            string   `json:"org_id"`
+	ProjectID        string   `json:"project_id"`
+	OrganizationSlug string   `json:"organization_slug"`
+	ProjectSlug      string   `json:"project_slug"`
+	UserIdentifier   *string  `json:"user_identifier,omitempty"`
+	AllowedOrigins   []string `json:"allowed_origins,omitempty"`
 	jwt.RegisteredClaims
 }
 
 // GenerateToken creates a new JWT token for a chat session
-func (m *Manager) GenerateToken(ctx context.Context, orgID, projectID, organizationSlug, projectSlug string, userIdentifier *string, expiresAfter int) (string, string, error) {
+func (m *Manager) GenerateToken(ctx context.Context, claims ChatSessionClaims, expiresAfter int) (string, string, error) {
 	now := time.Now()
 	expiry := now.Add(time.Duration(expiresAfter) * time.Second)
 	jti := uuid.New().String()
 
-	claims := ChatSessionClaims{
-		OrgID:            orgID,
-		ProjectID:        projectID,
-		OrganizationSlug: organizationSlug,
-		ProjectSlug:      projectSlug,
-		UserIdentifier:   userIdentifier,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(expiry),
-			IssuedAt:  jwt.NewNumericDate(now),
-			ID:        jti,
-			Issuer:    "",
-			Subject:   "",
-			Audience:  nil,
-			NotBefore: nil,
-		},
+	claims.RegisteredClaims = jwt.RegisteredClaims{
+		ExpiresAt: jwt.NewNumericDate(expiry),
+		IssuedAt:  jwt.NewNumericDate(now),
+		ID:        jti,
+		Issuer:    "",
+		Subject:   "",
+		Audience:  nil,
+		NotBefore: nil,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

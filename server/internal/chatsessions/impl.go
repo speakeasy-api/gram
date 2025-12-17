@@ -2,8 +2,10 @@ package chatsessions
 
 import (
 	"context"
+	"database/sql"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -19,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 type Service struct {
@@ -27,6 +30,7 @@ type Service struct {
 	db                  *pgxpool.Pool
 	auth                *auth.Auth
 	chatSessionsManager *chatsessions.Manager
+	projects            *projects_repo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -40,6 +44,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		db:                  db,
 		auth:                auth.New(logger, db, sessions),
 		chatSessionsManager: chatSessionsManager,
+		projects:            projects_repo.New(db),
 	}
 }
 
@@ -79,14 +84,25 @@ func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.Create
 		return nil, oops.E(oops.CodeBadRequest, nil, "expires_after must be between 1 and 3600 seconds").Log(ctx, s.logger)
 	}
 
+	projectID := uuid.MustParse(authCtx.ProjectID.String())
+	allowedOrigins, err := s.projects.ListApprovedOriginsByProjectID(ctx, projectID)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list allowed origins").Log(ctx, s.logger)
+	}
+
+	claims := chatsessions.ChatSessionClaims{
+		OrgID:            authCtx.ActiveOrganizationID,
+		ProjectID:        authCtx.ProjectID.String(),
+		OrganizationSlug: authCtx.OrganizationSlug,
+		ProjectSlug:      *authCtx.ProjectSlug,
+		UserIdentifier:   p.UserIdentifier,
+		AllowedOrigins:   allowedOrigins,
+	}
+
 	// Generate JWT token
 	token, _, err := s.chatSessionsManager.GenerateToken(
 		ctx,
-		authCtx.ActiveOrganizationID,
-		authCtx.ProjectID.String(),
-		authCtx.OrganizationSlug,
-		*authCtx.ProjectSlug,
-		p.UserIdentifier,
+		claims,
 		expiresAfter,
 	)
 	if err != nil {
