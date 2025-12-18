@@ -209,8 +209,9 @@ type ListCatalogGatewayErrorResponseBody struct {
 // ExternalMCPServerResponseBody is used to define fields on response body
 // types.
 type ExternalMCPServerResponseBody struct {
-	// Server name in reverse-DNS format (e.g., 'io.github.user/server')
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Server specifier used to look up in the registry (e.g.,
+	// 'io.github.user/server')
+	RegistrySpecifier *string `form:"registry_specifier,omitempty" json:"registry_specifier,omitempty" xml:"registry_specifier,omitempty"`
 	// Semantic version of the server
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// Description of what the server does
@@ -652,8 +653,8 @@ func ValidateListCatalogGatewayErrorResponseBody(body *ListCatalogGatewayErrorRe
 // ValidateExternalMCPServerResponseBody runs the validations defined on
 // ExternalMCPServerResponseBody
 func ValidateExternalMCPServerResponseBody(body *ExternalMCPServerResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	if body.RegistrySpecifier == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("registry_specifier", "body"))
 	}
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))

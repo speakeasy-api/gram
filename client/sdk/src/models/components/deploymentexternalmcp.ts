@@ -14,13 +14,17 @@ export type DeploymentExternalMCP = {
    */
   id: string;
   /**
-   * The reverse-DNS name of the external MCP server.
+   * The display name for the external MCP server.
    */
   name: string;
   /**
    * The ID of the MCP registry the server is from.
    */
   registryId: string;
+  /**
+   * The canonical server name used to look up the server in the registry.
+   */
+  registryServerSpecifier: string;
   /**
    * A short url-friendly label that uniquely identifies a resource.
    */
@@ -36,10 +40,12 @@ export const DeploymentExternalMCP$inboundSchema: z.ZodType<
   id: z.string(),
   name: z.string(),
   registry_id: z.string(),
+  registry_server_specifier: z.string(),
   slug: z.string(),
 }).transform((v) => {
   return remap$(v, {
     "registry_id": "registryId",
+    "registry_server_specifier": "registryServerSpecifier",
   });
 });
 

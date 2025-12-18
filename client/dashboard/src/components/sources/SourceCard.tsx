@@ -131,10 +131,10 @@ export function SourceCard({
     ) : null;
 
   if (asset.type === "externalmcp") {
-    displayName = asset.slug;
+    displayName = asset.name;
     footer = (
       <Type muted className="text-xs">
-        {asset.name}
+        {asset.slug}
       </Type>
     );
   }

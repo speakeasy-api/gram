@@ -40,7 +40,7 @@ function MCPServerCard({
         {server.iconUrl ? (
           <img
             src={server.iconUrl}
-            alt={server.title ?? server.name}
+            alt={server.title ?? server.registrySpecifier}
             className="h-6 w-6 rounded"
           />
         ) : (
@@ -49,13 +49,13 @@ function MCPServerCard({
       </div>
       <div className="flex-1 min-w-0">
         <h3 className="font-medium text-foreground truncate">
-          {server.title ?? server.name}
+          {server.title ?? server.registrySpecifier}
         </h3>
         <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
           {server.description}
         </p>
         <p className="text-xs text-muted-foreground/70 mt-2">
-          {server.name} v{server.version}
+          {server.registrySpecifier} v{server.version}
         </p>
       </div>
       {isImporting && (
@@ -109,7 +109,7 @@ export default function ImportMCPTabContent({
   );
 
   const handleImport = async (server: ExternalMCPServer) => {
-    const serverKey = `${server.registryId}-${server.name}`;
+    const serverKey = `${server.registryId}-${server.registrySpecifier}`;
     setImportingServer(serverKey);
 
     try {
@@ -120,8 +120,9 @@ export default function ImportMCPTabContent({
             upsertExternalMcps: [
               {
                 registryId: server.registryId,
-                name: server.name,
-                slug: generateSlug(server.name),
+                name: server.title ?? server.registrySpecifier,
+                slug: generateSlug(server.registrySpecifier),
+                registryServerSpecifier: server.registrySpecifier,
               },
             ],
           },
@@ -129,11 +130,13 @@ export default function ImportMCPTabContent({
       });
 
       await refetchDeployment();
-      toast.success(`Imported ${server.title ?? server.name}`);
+      toast.success(`Imported ${server.title ?? server.registrySpecifier}`);
       onSuccess?.();
     } catch (err) {
       console.error("Failed to import external MCP:", err);
-      toast.error(`Failed to import ${server.title ?? server.name}`);
+      toast.error(
+        `Failed to import ${server.title ?? server.registrySpecifier}`,
+      );
     } finally {
       setImportingServer(null);
     }
@@ -179,7 +182,7 @@ export default function ImportMCPTabContent({
       {data && data.servers.length > 0 && (
         <div className="grid gap-3 max-h-[400px] overflow-y-auto">
           {data.servers.map((server) => {
-            const serverKey = `${server.registryId}-${server.name}`;
+            const serverKey = `${server.registryId}-${server.registrySpecifier}`;
             return (
               <MCPServerCard
                 key={serverKey}

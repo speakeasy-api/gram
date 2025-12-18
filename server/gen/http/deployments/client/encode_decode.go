@@ -2008,10 +2008,11 @@ func unmarshalDeploymentExternalMCPResponseBodyToTypesDeploymentExternalMCP(v *D
 		return nil
 	}
 	res := &types.DeploymentExternalMCP{
-		ID:         *v.ID,
-		RegistryID: *v.RegistryID,
-		Name:       *v.Name,
-		Slug:       types.Slug(*v.Slug),
+		ID:                      *v.ID,
+		RegistryID:              *v.RegistryID,
+		Name:                    *v.Name,
+		Slug:                    types.Slug(*v.Slug),
+		RegistryServerSpecifier: *v.RegistryServerSpecifier,
 	}
 
 	return res
@@ -2136,9 +2137,10 @@ func marshalDeploymentsAddExternalMCPFormToAddExternalMCPFormRequestBody(v *depl
 		return nil
 	}
 	res := &AddExternalMCPFormRequestBody{
-		RegistryID: v.RegistryID,
-		Name:       v.Name,
-		Slug:       string(v.Slug),
+		RegistryID:              v.RegistryID,
+		Name:                    v.Name,
+		Slug:                    string(v.Slug),
+		RegistryServerSpecifier: v.RegistryServerSpecifier,
 	}
 
 	return res
@@ -2200,9 +2202,10 @@ func marshalAddExternalMCPFormRequestBodyToDeploymentsAddExternalMCPForm(v *AddE
 		return nil
 	}
 	res := &deployments.AddExternalMCPForm{
-		RegistryID: v.RegistryID,
-		Name:       v.Name,
-		Slug:       types.Slug(v.Slug),
+		RegistryID:              v.RegistryID,
+		Name:                    v.Name,
+		Slug:                    types.Slug(v.Slug),
+		RegistryServerSpecifier: v.RegistryServerSpecifier,
 	}
 
 	return res

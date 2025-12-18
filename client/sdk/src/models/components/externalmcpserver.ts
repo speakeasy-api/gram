@@ -25,13 +25,13 @@ export type ExternalMCPServer = {
    */
   meta?: any | undefined;
   /**
-   * Server name in reverse-DNS format (e.g., 'io.github.user/server')
-   */
-  name: string;
-  /**
    * ID of the registry this server came from
    */
   registryId: string;
+  /**
+   * Server specifier used to look up in the registry (e.g., 'io.github.user/server')
+   */
+  registrySpecifier: string;
   /**
    * Display name for the server
    */
@@ -51,14 +51,15 @@ export const ExternalMCPServer$inboundSchema: z.ZodType<
   description: z.string(),
   icon_url: z.string().optional(),
   meta: z.any().optional(),
-  name: z.string(),
   registry_id: z.string(),
+  registry_specifier: z.string(),
   title: z.string().optional(),
   version: z.string(),
 }).transform((v) => {
   return remap$(v, {
     "icon_url": "iconUrl",
     "registry_id": "registryId",
+    "registry_specifier": "registrySpecifier",
   });
 });
 

@@ -9,8 +9,9 @@ let value: CreateDeploymentRequestBody = {
   externalId: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
   externalMcps: [
     {
-      name: "ai.exa/exa",
+      name: "My Slack Integration",
       registryId: "dc2de89f-c791-4883-835b-59b1b715de3a",
+      registryServerSpecifier: "slack",
       slug: "<value>",
     },
   ],

@@ -123,7 +123,8 @@ SELECT
   external_mcp_attachments.id as external_mcp_id,
   external_mcp_attachments.registry_id as external_mcp_registry_id,
   external_mcp_attachments.name as external_mcp_name,
-  external_mcp_attachments.slug as external_mcp_slug
+  external_mcp_attachments.slug as external_mcp_slug,
+  external_mcp_attachments.registry_server_specifier as external_mcp_registry_server_specifier
 FROM deployments
 LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
 LEFT JOIN deployments_functions ON deployments.id = deployments_functions.deployment_id
@@ -634,30 +635,32 @@ INSERT INTO functions_access (
 RETURNING id;
 
 -- name: UpsertDeploymentExternalMCP :one
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug)
-VALUES (@deployment_id, @registry_id, @name, @slug)
+INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
+VALUES (@deployment_id, @registry_id, @name, @slug, @registry_server_specifier)
 ON CONFLICT (deployment_id, slug) WHERE deleted IS FALSE
 DO UPDATE SET
   registry_id = EXCLUDED.registry_id,
   name = EXCLUDED.name,
+  registry_server_specifier = EXCLUDED.registry_server_specifier,
   updated_at = clock_timestamp()
-RETURNING id, deployment_id, registry_id, name, slug, created_at, updated_at;
+RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at;
 
 -- name: ListDeploymentExternalMCPs :many
-SELECT id, deployment_id, registry_id, name, slug, created_at, updated_at
+SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at
 FROM external_mcp_attachments
 WHERE deployment_id = @deployment_id AND deleted IS FALSE
 ORDER BY created_at ASC;
 
 -- name: CloneDeploymentExternalMCPs :many
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug)
+INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
 SELECT
   @clone_deployment_id
   , current.registry_id
   , current.name
   , current.slug
+  , current.registry_server_specifier
 FROM external_mcp_attachments as current
 WHERE current.deployment_id = @original_deployment_id
   AND current.deleted IS FALSE
   AND current.slug <> ALL (@excluded_slugs::text[])
-RETURNING id, deployment_id, registry_id, name, slug;
+RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier;

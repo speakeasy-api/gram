@@ -232,6 +232,7 @@ async function run() {
         {
           name: "ai.exa/exa",
           registryId: "fb7378d0-8d03-460e-bcd1-36af78f7025c",
+          registryServerSpecifier: "slack",
           slug: "<value>",
         },
       ],
@@ -264,6 +265,7 @@ async function run() {
         {
           name: "ai.exa/exa",
           registryId: "fb7378d0-8d03-460e-bcd1-36af78f7025c",
+          registryServerSpecifier: "slack",
           slug: "<value>",
         },
       ],

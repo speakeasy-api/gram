@@ -53,7 +53,7 @@ export default function Catalog() {
       server: Server;
       toolsetName: string;
     }) => {
-      const slug = generateSlug(server.name);
+      const slug = generateSlug(server.registrySpecifier);
       const toolUrn = `tools:externalmcp:${slug}:proxy`;
 
       // 1. Evolve deployment with the external MCP source
@@ -63,8 +63,9 @@ export default function Catalog() {
           upsertExternalMcps: [
             {
               registryId: server.registryId,
-              name: server.name,
+              name: toolsetName,
               slug,
+              registryServerSpecifier: server.registrySpecifier,
             },
           ],
         },
@@ -74,7 +75,8 @@ export default function Catalog() {
       const toolset = await client.toolsets.create({
         createToolsetRequestBody: {
           name: toolsetName,
-          description: server.description ?? `MCP server: ${server.name}`,
+          description:
+            server.description ?? `MCP server: ${server.registrySpecifier}`,
         },
       });
 
@@ -247,7 +249,7 @@ export default function Catalog() {
                 {!isLoading &&
                   allServers?.map((server) => (
                     <MCPServerCard
-                      key={`${server.registryId}-${server.name}`}
+                      key={`${server.registryId}-${server.registrySpecifier}`}
                       server={server}
                       onAddToProject={() => setAddingServer(server)}
                     />
@@ -296,7 +298,7 @@ function ServerHeading({ server }: { server: Server }) {
   const meta = server.meta["com.pulsemcp/server"];
   const isOfficial = meta?.isOfficial;
 
-  const displayName = server.title ?? server.name;
+  const displayName = server.title ?? server.registrySpecifier;
 
   return (
     <Stack direction="horizontal" justify="space-between">
@@ -310,7 +312,7 @@ function ServerHeading({ server }: { server: Server }) {
             {isOfficial && <Badge>Official</Badge>}
           </Stack>
           <Type small muted>
-            {server.name} • v{server.version}
+            {server.registrySpecifier} • v{server.version}
           </Type>
         </Stack>
       </Stack>

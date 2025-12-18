@@ -263,13 +263,13 @@ func EncodeListCatalogError(encoder func(context.Context, http.ResponseWriter) g
 // *types.ExternalMCPServer.
 func marshalTypesExternalMCPServerToExternalMCPServerResponseBody(v *types.ExternalMCPServer) *ExternalMCPServerResponseBody {
 	res := &ExternalMCPServerResponseBody{
-		Name:        v.Name,
-		Version:     v.Version,
-		Description: v.Description,
-		RegistryID:  v.RegistryID,
-		Title:       v.Title,
-		IconURL:     v.IconURL,
-		Meta:        v.Meta,
+		RegistrySpecifier: v.RegistrySpecifier,
+		Version:           v.Version,
+		Description:       v.Description,
+		RegistryID:        v.RegistryID,
+		Title:             v.Title,
+		IconURL:           v.IconURL,
+		Meta:              v.Meta,
 	}
 
 	return res
