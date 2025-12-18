@@ -3,12 +3,12 @@ package security
 import (
 	"fmt"
 
-	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/constants"
 	. "goa.design/goa/v3/dsl"
 )
 
 var (
-	FunctionToken = JWTSecurity(auth.FunctionTokenSecurityScheme, func() {
+	FunctionToken = JWTSecurity(constants.FunctionTokenSecurityScheme, func() {
 		Description("Gram Functions token based auth.")
 	})
 
@@ -17,7 +17,7 @@ var (
 	}
 
 	FunctionTokenHeader = func() {
-		Header(fmt.Sprintf("function_token:%s", auth.FunctionTokenHeader), String, "Functions token header")
+		Header(fmt.Sprintf("function_token:%s", constants.FunctionTokenHeader), String, "Functions token header")
 	}
 
 	FunctionTokenNamedHeader = func(name string) {

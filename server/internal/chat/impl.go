@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/constants"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -104,26 +105,26 @@ func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JW
 func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context.Context, *contextvalues.AuthContext, error) {
 	// Try session auth first
 	sc := security.APIKeyScheme{
-		Name:           auth.SessionSecurityScheme,
+		Name:           constants.SessionSecurityScheme,
 		Scopes:         []string{},
 		RequiredScopes: []string{},
 	}
 
-	authorizedCtx, err := s.auth.Authorize(ctx, r.Header.Get(auth.SessionHeader), &sc)
+	authorizedCtx, err := s.auth.Authorize(ctx, r.Header.Get(constants.SessionHeader), &sc)
 
 	// Try API key auth if session auth fails
 	if err != nil {
 		sc := security.APIKeyScheme{
-			Name:           auth.KeySecurityScheme,
+			Name:           constants.KeySecurityScheme,
 			RequiredScopes: []string{"chat"},
 			Scopes:         []string{},
 		}
-		authorizedCtx, err = s.auth.Authorize(ctx, r.Header.Get(auth.APIKeyHeader), &sc)
+		authorizedCtx, err = s.auth.Authorize(ctx, r.Header.Get(constants.APIKeyHeader), &sc)
 	}
 
 	// Try Chat Sessions auth if API key auth fails
 	if err != nil {
-		token := r.Header.Get(auth.ChatSessionsTokenHeader)
+		token := r.Header.Get(constants.ChatSessionsTokenHeader)
 		authorizedCtx, err = s.chatSessions.Authorize(ctx, token)
 		if err != nil {
 			return authorizedCtx, nil, oops.E(oops.CodeUnauthorized, err, "%s", "unauthorized access (chat)"+err.Error())
@@ -132,11 +133,11 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 
 	// Authorize with project
 	sc = security.APIKeyScheme{
-		Name:           auth.ProjectSlugSecuritySchema,
+		Name:           constants.ProjectSlugSecuritySchema,
 		Scopes:         []string{},
 		RequiredScopes: []string{},
 	}
-	authorizedCtx, err = s.auth.Authorize(authorizedCtx, r.Header.Get(auth.ProjectHeader), &sc)
+	authorizedCtx, err = s.auth.Authorize(authorizedCtx, r.Header.Get(constants.ProjectHeader), &sc)
 	if err != nil {
 		return authorizedCtx, nil, oops.E(oops.CodeUnauthorized, err, "unauthorized access")
 	}

@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/constants"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -203,26 +204,26 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	// TODO: Handling security, we can probably factor this out into something smarter like a proxy
 	sc := security.APIKeyScheme{
-		Name:           auth.SessionSecurityScheme,
+		Name:           constants.SessionSecurityScheme,
 		Scopes:         []string{},
 		RequiredScopes: []string{},
 	}
 
-	ctx, err := s.auth.Authorize(r.Context(), r.Header.Get(auth.SessionHeader), &sc)
+	ctx, err := s.auth.Authorize(r.Context(), r.Header.Get(constants.SessionHeader), &sc)
 	if err != nil {
 		sc := security.APIKeyScheme{
-			Name:           auth.KeySecurityScheme,
+			Name:           constants.KeySecurityScheme,
 			RequiredScopes: []string{"consumer"},
 			Scopes:         []string{},
 		}
-		ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(auth.APIKeyHeader), &sc)
+		ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(constants.APIKeyHeader), &sc)
 		if err != nil {
 			sc := security.APIKeyScheme{
-				Name:           auth.KeySecurityScheme,
+				Name:           constants.KeySecurityScheme,
 				RequiredScopes: []string{"chat"},
 				Scopes:         []string{},
 			}
-			ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(auth.APIKeyHeader), &sc)
+			ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(constants.APIKeyHeader), &sc)
 			if err != nil {
 				return oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, logger)
 			}
@@ -230,12 +231,12 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	}
 
 	sc = security.APIKeyScheme{
-		Name:           auth.ProjectSlugSecuritySchema,
+		Name:           constants.ProjectSlugSecuritySchema,
 		Scopes:         []string{},
 		RequiredScopes: []string{},
 	}
 
-	ctx, err = s.auth.Authorize(ctx, r.Header.Get(auth.ProjectHeader), &sc)
+	ctx, err = s.auth.Authorize(ctx, r.Header.Get(constants.ProjectHeader), &sc)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, logger)
 	}

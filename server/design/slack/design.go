@@ -5,7 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
-	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/constants"
 )
 
 var _ = Service("slack", func() {
@@ -50,7 +50,7 @@ var _ = Service("slack", func() {
 
 		Payload(func() {
 			security.SessionPayload()
-			APIKey(auth.ProjectSlugSecuritySchema, "project_slug", String)
+			APIKey(constants.ProjectSlugSecuritySchema, "project_slug", String)
 			Attribute("return_url", String, "The dashboard location to return too")
 		})
 

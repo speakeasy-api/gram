@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/constants"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -610,7 +611,7 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 	}
 
 	sc := security.APIKeyScheme{
-		Name:           auth.KeySecurityScheme,
+		Name:           constants.KeySecurityScheme,
 		Scopes:         []string{"consumer"},
 		RequiredScopes: []string{},
 	}
@@ -624,7 +625,7 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 
 	// Authorize with project
 	sc = security.APIKeyScheme{
-		Name:           auth.ProjectSlugSecuritySchema,
+		Name:           constants.ProjectSlugSecuritySchema,
 		Scopes:         []string{},
 		RequiredScopes: []string{},
 	}
@@ -841,7 +842,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 
 	// Strategy 2: Try API key authentication (consumer scope)
 	sc := security.APIKeyScheme{
-		Name:           auth.KeySecurityScheme,
+		Name:           constants.KeySecurityScheme,
 		RequiredScopes: []string{"consumer"},
 		Scopes:         []string{},
 	}
@@ -853,7 +854,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 
 	// Strategy 3: Try API key authentication (chat scope fallback)
 	sc = security.APIKeyScheme{
-		Name:           auth.KeySecurityScheme,
+		Name:           constants.KeySecurityScheme,
 		RequiredScopes: []string{"chat"},
 		Scopes:         []string{},
 	}

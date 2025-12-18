@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/constants"
 	"github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -40,11 +41,11 @@ func (s *Auth) Authorize(ctx context.Context, key string, schema *security.APIKe
 	}
 
 	switch schema.Name {
-	case KeySecurityScheme:
+	case constants.KeySecurityScheme:
 		return s.keys.KeyBasedAuth(ctx, key, schema.RequiredScopes)
-	case SessionSecurityScheme:
+	case constants.SessionSecurityScheme:
 		return s.sessions.Authenticate(ctx, key, false)
-	case ProjectSlugSecuritySchema:
+	case constants.ProjectSlugSecuritySchema:
 		return s.checkProjectAccess(ctx, s.logger, key)
 	default:
 		return ctx, oops.E(oops.CodeUnauthorized, nil, "unsupported security scheme")
