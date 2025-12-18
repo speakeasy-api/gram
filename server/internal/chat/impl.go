@@ -29,6 +29,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/chat/server"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -41,6 +42,7 @@ import (
 )
 
 var _ gen.Service = (*Service)(nil)
+var _ gen.Auther = (*Service)(nil)
 
 // FallbackModelUsageTracker schedules fallback model usage tracking when the inline call fails.
 type FallbackModelUsageTracker interface {
@@ -54,16 +56,18 @@ type Service struct {
 	openRouter           openrouter.Provisioner
 	logger               *slog.Logger
 	sessions             *sessions.Manager
+	chatSessions         *chatsessions.Manager
 	proxyTransport       http.RoundTripper
 	fallbackUsageTracker FallbackModelUsageTracker
 }
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, openRouter openrouter.Provisioner, fallbackUsageTracker FallbackModelUsageTracker) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, chatSessions *chatsessions.Manager, openRouter openrouter.Provisioner, fallbackUsageTracker FallbackModelUsageTracker) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
 		auth:                 auth.New(logger, db, sessions),
 		sessions:             sessions,
+		chatSessions:         chatSessions,
 		logger:               logger,
 		repo:                 repo.New(db),
 		tracer:               otel.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
@@ -88,6 +92,65 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JWTScheme) (context.Context, error) {
+	return s.chatSessions.Authorize(ctx, token)
+}
+
+// directAuthorize performs authentication and authorization for chat requests.
+// It tries session auth first, then API key auth, then chat session token as fallback.
+// It also validates the project header and ensures ProjectID is present.
+func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context.Context, *contextvalues.AuthContext, error) {
+	// Try session auth first
+	sc := security.APIKeyScheme{
+		Name:           auth.SessionSecurityScheme,
+		Scopes:         []string{},
+		RequiredScopes: []string{},
+	}
+
+	authorizedCtx, err := s.auth.Authorize(ctx, r.Header.Get(auth.SessionHeader), &sc)
+
+	// Try API key auth if session auth fails
+	if err != nil {
+		sc := security.APIKeyScheme{
+			Name:           auth.KeySecurityScheme,
+			RequiredScopes: []string{"chat"},
+			Scopes:         []string{},
+		}
+		authorizedCtx, err = s.auth.Authorize(ctx, r.Header.Get(auth.APIKeyHeader), &sc)
+	}
+
+	// Try Chat Sessions auth if API key auth fails
+	if err != nil {
+		token := r.Header.Get(auth.ChatSessionsTokenHeader)
+		authorizedCtx, err = s.chatSessions.Authorize(ctx, token)
+		if err != nil {
+			return authorizedCtx, nil, oops.E(oops.CodeUnauthorized, err, "%s", "unauthorized access (chat)"+err.Error())
+		}
+	}
+
+	// Authorize with project
+	sc = security.APIKeyScheme{
+		Name:           auth.ProjectSlugSecuritySchema,
+		Scopes:         []string{},
+		RequiredScopes: []string{},
+	}
+	authorizedCtx, err = s.auth.Authorize(authorizedCtx, r.Header.Get(auth.ProjectHeader), &sc)
+	if err != nil {
+		return authorizedCtx, nil, oops.E(oops.CodeUnauthorized, err, "unauthorized access")
+	}
+
+	authCtx, ok := contextvalues.GetAuthContext(authorizedCtx)
+	if !ok {
+		return authorizedCtx, nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if authCtx.ProjectID == nil {
+		return authorizedCtx, nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized: project id is required")
+	}
+
+	return authorizedCtx, authCtx, nil
 }
 
 func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) (*gen.ListChatsResult, error) {
@@ -200,55 +263,13 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 
 // HandleCompletion is a proxy to the OpenAI API that logs request and response data.
 func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error {
-	// Authorize with session or API key
-	sc := security.APIKeyScheme{
-		Name:           auth.SessionSecurityScheme,
-		Scopes:         []string{},
-		RequiredScopes: []string{},
-	}
-
-	ctx, err := s.auth.Authorize(r.Context(), r.Header.Get(auth.SessionHeader), &sc)
+	ctx, authCtx, err := s.directAuthorize(r.Context(), r)
 	if err != nil {
-		sc := security.APIKeyScheme{
-			Name:           auth.KeySecurityScheme,
-			RequiredScopes: []string{"chat"},
-			Scopes:         []string{},
-		}
-		ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(auth.APIKeyHeader), &sc)
-		if err != nil {
-			return oops.E(oops.CodeUnauthorized, err, "unauthorized access").Log(ctx, s.logger)
-		}
+		return err
 	}
 
-	// Authorize with project
-	sc = security.APIKeyScheme{
-		Name:           auth.ProjectSlugSecuritySchema,
-		Scopes:         []string{},
-		RequiredScopes: []string{},
-	}
-	ctx, err = s.auth.Authorize(ctx, r.Header.Get(auth.ProjectHeader), &sc)
-	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "unauthorized access").Log(ctx, s.logger)
-	}
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	if authCtx.ProjectID == nil {
-		return oops.E(oops.CodeUnauthorized, nil, "unauthorized: project id is required").Log(ctx, s.logger)
-	}
-
-	orgID := ""
-	if authCtx.ActiveOrganizationID != "" {
-		orgID = authCtx.ActiveOrganizationID
-	}
-
-	userID := ""
-	if authCtx.UserID != "" {
-		userID = authCtx.UserID
-	}
+	orgID := authCtx.ActiveOrganizationID
+	userID := authCtx.UserID
 
 	slogArgs := []any{
 		attr.SlogProjectID(authCtx.ProjectID.String()),

@@ -1803,6 +1803,13 @@ paths:
                   schema:
                     description: project header
                     type: string
+                - allowEmptyValue: true
+                  description: Chat Sessions token header
+                  in: header
+                  name: Gram-Chat-Session
+                  schema:
+                    description: Chat Sessions token header
+                    type: string
             responses:
                 "200":
                     content:
@@ -1867,6 +1874,7 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
+                - chat_sessions_token_header_Gram-Chat-Session: []
             summary: creditUsage chat
             tags:
                 - chat
@@ -1891,6 +1899,13 @@ paths:
                   name: Gram-Project
                   schema:
                     description: project header
+                    type: string
+                - allowEmptyValue: true
+                  description: Chat Sessions token header
+                  in: header
+                  name: Gram-Chat-Session
+                  schema:
+                    description: Chat Sessions token header
                     type: string
             responses:
                 "200":
@@ -1956,6 +1971,7 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
+                - chat_sessions_token_header_Gram-Chat-Session: []
             summary: listChats chat
             tags:
                 - chat
@@ -1988,6 +2004,13 @@ paths:
                   name: Gram-Project
                   schema:
                     description: project header
+                    type: string
+                - allowEmptyValue: true
+                  description: Chat Sessions token header
+                  in: header
+                  name: Gram-Chat-Session
+                  schema:
+                    description: Chat Sessions token header
                     type: string
             responses:
                 "200":
@@ -2053,12 +2076,197 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
+                - chat_sessions_token_header_Gram-Chat-Session: []
             summary: loadChat chat
             tags:
                 - chat
             x-speakeasy-name-override: load
             x-speakeasy-react-hook:
                 name: LoadChat
+    /rpc/chatSessions.create:
+        post:
+            description: Creates a new chat session token
+            operationId: createChatSession
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreateResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: create chatSessions
+            tags:
+                - chatSessions
+            x-speakeasy-name-override: create
+    /rpc/chatSessions.revoke:
+        delete:
+            description: Revokes an existing chat session token
+            operationId: revokeChatSession
+            parameters:
+                - allowEmptyValue: true
+                  description: The chat session token to revoke
+                  in: query
+                  name: token
+                  required: true
+                  schema:
+                    description: The chat session token to revoke
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: revoke chatSessions
+            tags:
+                - chatSessions
+            x-speakeasy-name-override: revoke
     /rpc/deployments.active:
         get:
             description: Get the active deployment for a project.
@@ -4180,6 +4388,13 @@ paths:
                   schema:
                     description: API Key header
                     type: string
+                - allowEmptyValue: true
+                  description: Chat Sessions token header
+                  in: header
+                  name: Gram-Chat-Session
+                  schema:
+                    description: Chat Sessions token header
+                    type: string
             responses:
                 "200":
                     content:
@@ -4248,6 +4463,7 @@ paths:
                   project_slug_header_Gram-Project: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
+                - chat_sessions_token_header_Gram-Chat-Session: []
             summary: getInstance instances
             tags:
                 - instances
@@ -10555,6 +10771,39 @@ components:
                     $ref: '#/components/schemas/PromptTemplate'
             required:
                 - template
+        CreateRequestBody:
+            type: object
+            properties:
+                expires_after:
+                    type: integer
+                    description: Token expiration in seconds (max / default 3600)
+                    default: 3600
+                    format: int64
+                    minimum: 1
+                    maximum: 3600
+                user_identifier:
+                    type: string
+                    description: Optional free-form user identifier
+        CreateResponseBody:
+            type: object
+            properties:
+                client_token:
+                    type: string
+                    description: JWT token for chat session
+                expires_after:
+                    type: integer
+                    description: Token expiration in seconds
+                    format: int64
+                status:
+                    type: string
+                    description: Session status
+                user_identifier:
+                    type: string
+                    description: User identifier if provided
+            required:
+                - client_token
+                - expires_after
+                - status
         CreateToolsetForm:
             type: object
             properties:
@@ -11509,6 +11758,8 @@ components:
             type: object
             properties:
                 apikey_token:
+                    type: string
+                chat_sessions_token:
                     type: string
                 project_slug_input:
                     type: string
@@ -14192,6 +14443,10 @@ components:
             description: key based auth.
             name: Gram-Key
             in: header
+        chat_sessions_token_header_Gram-Chat-Session:
+            type: http
+            description: Gram Chat Sessions token based auth.
+            scheme: bearer
         function_token_header_Authorization:
             type: http
             description: Gram Functions token based auth.
@@ -14220,6 +14475,8 @@ tags:
       description: Managed auth for gram producers and dashboard.
     - name: chat
       description: Managed chats for gram AI consumers.
+    - name: chatSessions
+      description: Manages chat session tokens for client-side authentication
     - name: deployments
       description: Manages deployments of tools from upstream sources.
     - name: domains

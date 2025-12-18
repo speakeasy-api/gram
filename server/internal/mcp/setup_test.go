@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric/noop"
 
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -118,7 +119,10 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		require.NoError(t, devserver.Stop(), "shutdown temporal")
 	})
 
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, toolMetrics, vectorToolStore, temporalClient)
+	redisClient, err2 := infra.NewRedisClient(t, 0)
+	require.NoError(t, err2)
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, toolMetrics, vectorToolStore, temporalClient)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -196,7 +200,10 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 		require.NoError(t, devserver.Stop(), "shutdown temporal")
 	})
 
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthSvc, billingStub, billingStub, toolMetrics, vectorToolStore, temporalClient)
+	redisClient, err2 := infra.NewRedisClient(t, 0)
+	require.NoError(t, err2)
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthSvc, billingStub, billingStub, toolMetrics, vectorToolStore, temporalClient)
 
 	return ctx, &testInstance{
 		service:        svc,

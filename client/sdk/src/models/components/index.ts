@@ -32,6 +32,8 @@ export * from "./createprojectrequestbody.js";
 export * from "./createprojectresult.js";
 export * from "./createprompttemplateform.js";
 export * from "./createprompttemplateresult.js";
+export * from "./createrequestbody.js";
+export * from "./createresponsebody.js";
 export * from "./createtoolsetrequestbody.js";
 export * from "./creditusageresponsebody.js";
 export * from "./customdomain.js";

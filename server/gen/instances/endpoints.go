@@ -24,7 +24,7 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetInstance: NewGetInstanceEndpoint(s, a.APIKeyAuth),
+		GetInstance: NewGetInstanceEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 	}
 }
 
@@ -35,7 +35,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 
 // NewGetInstanceEndpoint returns an endpoint function that calls the method
 // "getInstance" of service "instances".
-func NewGetInstanceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewGetInstanceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJWTFn security.AuthJWTFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*GetInstanceForm)
 		var err error
@@ -108,6 +108,18 @@ func NewGetInstanceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 				}
 				ctx, err = authAPIKeyFn(ctx, key, &sc)
 			}
+		}
+		if err != nil {
+			sc := security.JWTScheme{
+				Name:           "chat_sessions_token",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var token string
+			if p.ChatSessionsToken != nil {
+				token = *p.ChatSessionsToken
+			}
+			ctx, err = authJWTFn(ctx, token, &sc)
 		}
 		if err != nil {
 			return nil, err

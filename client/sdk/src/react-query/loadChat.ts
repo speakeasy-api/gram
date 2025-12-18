@@ -5,28 +5,30 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { chatLoad } from "../funcs/chatLoad.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
-
-export type LoadChatQueryData = components.Chat;
+import {
+  buildLoadChatQuery,
+  LoadChatQueryData,
+  prefetchLoadChat,
+  queryKeyLoadChat,
+} from "./loadChat.core.js";
+export {
+  buildLoadChatQuery,
+  type LoadChatQueryData,
+  prefetchLoadChat,
+  queryKeyLoadChat,
+};
 
 /**
  * loadChat chat
@@ -74,21 +76,6 @@ export function useLoadChatSuspense(
   });
 }
 
-export function prefetchLoadChat(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request: operations.LoadChatRequest,
-  security?: operations.LoadChatSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildLoadChatQuery(
-      client$,
-      request,
-      security,
-    ),
-  });
-}
-
 export function setLoadChatData(
   client: QueryClient,
   queryKeyBase: [
@@ -96,6 +83,7 @@ export function setLoadChatData(
       id: string;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
+      gramChatSession?: string | undefined;
     },
   ],
   data: LoadChatQueryData,
@@ -112,6 +100,7 @@ export function invalidateLoadChat(
       id: string;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
+      gramChatSession?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
@@ -130,46 +119,4 @@ export function invalidateAllLoadChat(
     ...filters,
     queryKey: ["@gram/client", "chat", "load"],
   });
-}
-
-export function buildLoadChatQuery(
-  client$: GramCore,
-  request: operations.LoadChatRequest,
-  security?: operations.LoadChatSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<LoadChatQueryData>;
-} {
-  return {
-    queryKey: queryKeyLoadChat({
-      id: request.id,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
-    queryFn: async function loadChatQueryFn(ctx): Promise<LoadChatQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(chatLoad(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyLoadChat(
-  parameters: {
-    id: string;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "chat", "load", parameters];
 }
