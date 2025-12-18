@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -161,6 +162,8 @@ func (tp *ToolProxy) Do(
 		return tp.doHTTP(ctx, logger, w, requestBody, env, plan.Descriptor, plan.HTTP, toolCallLogger)
 	case ToolKindPrompt:
 		return tp.doPrompt(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Prompt)
+	case ToolKindExternalMCP:
+		return tp.doExternalMCP(ctx, logger, w, requestBody, env, plan.ExternalMCP)
 	default:
 		return fmt.Errorf("tool type not supported: %s", plan.Kind)
 	}
@@ -574,6 +577,64 @@ func (tp *ToolProxy) doPrompt(ctx context.Context, logger *slog.Logger, w http.R
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte(promptData)); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to write prompt data").Log(ctx, logger)
+	}
+
+	return nil
+}
+
+// ExternalMCPOAuthTokenKey is the key used to pass OAuth tokens for external MCP servers via ToolCallEnv.
+const ExternalMCPOAuthTokenKey = "externalmcp_oauth" //nolint:gosec // not a credential, just a key name
+
+func (tp *ToolProxy) doExternalMCP(
+	ctx context.Context,
+	logger *slog.Logger,
+	w http.ResponseWriter,
+	requestBody io.Reader,
+	env ToolCallEnv,
+	plan *ExternalMCPToolCallPlan,
+) error {
+	// Read the request body (tool arguments)
+	arguments, err := io.ReadAll(requestBody)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "failed to read tool arguments").Log(ctx, logger)
+	}
+
+	// Build client options with OAuth token if required and available
+	var opts *externalmcp.ClientOptions
+	if plan.RequiresOAuth {
+		if token := env.UserConfig.Get(ExternalMCPOAuthTokenKey); token != "" {
+			opts = &externalmcp.ClientOptions{
+				Authorization: "Bearer " + token,
+			}
+		}
+	}
+
+	// Create client and call tool
+	client, err := externalmcp.NewClient(ctx, logger, plan.RemoteURL, opts)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").Log(ctx, logger)
+	}
+	defer o11y.LogDefer(ctx, logger, client.Close)
+
+	callResult, err := client.CallTool(ctx, plan.ToolName, arguments)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to call external MCP tool").Log(ctx, logger)
+	}
+
+	// Write the response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	response := struct {
+		Content []json.RawMessage `json:"content"`
+		IsError bool              `json:"isError,omitzero"`
+	}{
+		Content: callResult.Content,
+		IsError: callResult.IsError,
+	}
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to write external MCP tool result").Log(ctx, logger)
 	}
 
 	return nil

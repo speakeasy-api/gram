@@ -14,6 +14,8 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"log/slog"
+
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -32,6 +34,7 @@ const (
 )
 
 type ToolsetVectorStore struct {
+	logger         *slog.Logger
 	tracer         trace.Tracer
 	db             repo.DBTX
 	queries        *repo.Queries
@@ -39,12 +42,13 @@ type ToolsetVectorStore struct {
 	embeddingModel string
 }
 
-func NewToolsetVectorStore(tracerProvider trace.TracerProvider, db *pgxpool.Pool, chatClient *openrouter.ChatClient) *ToolsetVectorStore {
+func NewToolsetVectorStore(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, chatClient *openrouter.ChatClient) *ToolsetVectorStore {
 	if db == nil {
 		return nil
 	}
 
 	return &ToolsetVectorStore{
+		logger:         logger,
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/rag"),
 		db:             db,
 		queries:        repo.New(db),
@@ -104,7 +108,7 @@ func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Too
 		return fmt.Errorf("parse toolset id: %w", err)
 	}
 
-	candidates, err := s.prepareEmbeddingCandidates(toolset.Tools)
+	candidates, err := s.prepareEmbeddingCandidates(ctx, toolset.Tools)
 	if err != nil {
 		return err
 	}
@@ -280,22 +284,32 @@ type embeddingCandidate struct {
 	tags     []string
 }
 
-func (s *ToolsetVectorStore) prepareEmbeddingCandidates(tools []*types.Tool) ([]embeddingCandidate, error) {
+func (s *ToolsetVectorStore) prepareEmbeddingCandidates(ctx context.Context, tools []*types.Tool) ([]embeddingCandidate, error) {
 	candidates := make([]embeddingCandidate, 0, len(tools))
 
 	for _, tool := range tools {
-		baseTool := conv.ToBaseTool(tool)
-		name, description, inputSchema, meta := conv.ToToolListEntry(tool)
-		name = strings.TrimSpace(name)
+		if conv.IsProxyTool(tool) {
+			return nil, fmt.Errorf("index proxy tool for vector search: %s", tool.ExternalMcpToolDefinition.Name)
+		}
+
+		baseTool, err := conv.ToBaseTool(tool)
+		if err != nil {
+			continue
+		}
+		toolEntry, err := conv.ToToolListEntry(tool)
+		if err != nil {
+			continue
+		}
+		name := strings.TrimSpace(toolEntry.Name)
 		if name == "" {
 			continue
 		}
 
 		entry := toolListEntry{
 			Name:        name,
-			Description: description,
-			InputSchema: inputSchema,
-			Meta:        meta,
+			Description: toolEntry.Description,
+			InputSchema: toolEntry.InputSchema,
+			Meta:        toolEntry.Meta,
 		}
 
 		payload, err := json.Marshal(&entry)
@@ -318,6 +332,7 @@ func (s *ToolsetVectorStore) prepareEmbeddingCandidates(tools []*types.Tool) ([]
 
 	return candidates, nil
 }
+
 
 func extractTags(tool *types.Tool) []string {
 	var tags []string

@@ -76,15 +76,20 @@ func buildDynamicSessionTools(
 		findDescription += fmt.Sprintf(" The available tools fall under the following categories: %s.", strings.Join(availableTags, ", "))
 	}
 
+	describeToolsTool, err := buildDescribeToolsTool(toolset.Tools)
+	if err != nil {
+		return nil, err
+	}
+
 	return []*toolListEntry{
-		&toolListEntry{
+		{
 			Name:        searchToolsToolName,
 			Description: findDescription,
 			InputSchema: buildDynamicSearchToolsSchema(availableTags),
 			Meta:        nil,
 		},
-		buildDescribeToolsTool(toolset.Tools),
-		&toolListEntry{
+		describeToolsTool,
+		{
 			Name:        executeToolToolName,
 			Description: executeDescription,
 			InputSchema: dynamicExecuteToolSchema,
@@ -93,10 +98,17 @@ func buildDynamicSessionTools(
 	}, nil
 }
 
-func buildDescribeToolsTool(tools []*types.Tool) *toolListEntry {
+func buildDescribeToolsTool(tools []*types.Tool) (*toolListEntry, error) {
 	toolNames := []string{}
 	for _, tool := range tools {
-		baseTool := conv.ToBaseTool(tool)
+		if conv.IsProxyTool(tool) {
+			return nil, fmt.Errorf("build describe tools with external mcp proxy: %s", tool.ExternalMcpToolDefinition.Name)
+		}
+
+		baseTool, err := conv.ToBaseTool(tool)
+		if err != nil {
+			continue
+		}
 		toolNames = append(toolNames, baseTool.Name)
 	}
 
@@ -125,7 +137,7 @@ func buildDescribeToolsTool(tools []*types.Tool) *toolListEntry {
 		Description: description,
 		InputSchema: json.RawMessage(schemaJSON),
 		Meta:        nil,
-	}
+	}, nil
 }
 
 type searchToolsArguments struct {
@@ -175,11 +187,18 @@ func handleSearchToolsCall(
 	// Build a map of tools by name for quick lookup
 	toolsByName := make(map[string]*types.Tool)
 	for _, tool := range toolset.Tools {
-		baseTool := conv.ToBaseTool(tool)
+		if conv.IsProxyTool(tool) {
+			return nil, fmt.Errorf("search tools with external mcp proxy: %s", tool.ExternalMcpToolDefinition.Name)
+		}
+
+		baseTool, err := conv.ToBaseTool(tool)
+		if err != nil {
+			continue
+		}
 		toolsByName[baseTool.Name] = tool
 	}
 
-	// constuct full tool entries with similarity scores
+	// construct full tool entries with similarity scores
 	var results []*toolListEntry
 	for _, searchResult := range searchResults {
 		tool, exists := toolsByName[searchResult.ToolName]
@@ -187,12 +206,16 @@ func handleSearchToolsCall(
 			continue
 		}
 
-		name, description, _, meta := conv.ToToolListEntry(tool)
-		if name == "" {
+		toolEntry, err := conv.ToToolListEntry(tool)
+		if err != nil {
+			continue
+		}
+		if toolEntry.Name == "" {
 			continue
 		}
 
 		// Add similarity score and tags to meta
+		meta := toolEntry.Meta
 		if meta == nil {
 			meta = make(map[string]any)
 		}
@@ -200,8 +223,8 @@ func handleSearchToolsCall(
 		meta["tags"] = searchResult.Tags
 
 		results = append(results, &toolListEntry{
-			Name:        name,
-			Description: description,
+			Name:        toolEntry.Name,
+			Description: toolEntry.Description,
 			Meta:        meta,
 			InputSchema: nil, // Intentional don't return to keep token usage down
 		})
@@ -292,7 +315,14 @@ func handleDescribeToolsCall(
 	// Build a map of tools by name for quick lookup
 	toolsByName := make(map[string]*types.Tool)
 	for _, tool := range toolset.Tools {
-		baseTool := conv.ToBaseTool(tool)
+		if conv.IsProxyTool(tool) {
+			return nil, fmt.Errorf("describe tools with external mcp proxy: %s", tool.ExternalMcpToolDefinition.Name)
+		}
+
+		baseTool, err := conv.ToBaseTool(tool)
+		if err != nil {
+			continue
+		}
 		toolsByName[baseTool.Name] = tool
 	}
 

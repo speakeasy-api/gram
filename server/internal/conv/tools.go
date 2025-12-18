@@ -33,11 +33,22 @@ func GetToolURN(tool types.Tool) (*urn.Tool, error) {
 		}
 		return &toolURN, nil
 	}
+	if tool.ExternalMcpToolDefinition != nil {
+		err := toolURN.UnmarshalText([]byte(tool.ExternalMcpToolDefinition.ToolUrn))
+		if err != nil {
+			return nil, urn.ErrInvalid
+		}
+		return &toolURN, nil
+	}
 
 	return nil, urn.ErrInvalid
 }
 
-func ToBaseTool(tool *types.Tool) types.BaseToolAttributes {
+func IsProxyTool(tool *types.Tool) bool {
+	return tool != nil && tool.ExternalMcpToolDefinition != nil
+}
+
+func ToBaseTool(tool *types.Tool) (types.BaseToolAttributes, error) {
 	schema := constants.DefaultEmptyToolSchema
 
 	if tool.HTTPToolDefinition != nil {
@@ -61,7 +72,7 @@ func ToBaseTool(tool *types.Tool) types.BaseToolAttributes {
 			UpdatedAt:     tool.HTTPToolDefinition.UpdatedAt,
 			Canonical:     tool.HTTPToolDefinition.Canonical,
 			Variation:     tool.HTTPToolDefinition.Variation,
-		}
+		}, nil
 	}
 
 	if tool.PromptTemplate != nil {
@@ -85,7 +96,7 @@ func ToBaseTool(tool *types.Tool) types.BaseToolAttributes {
 			UpdatedAt:     tool.PromptTemplate.UpdatedAt,
 			Canonical:     tool.PromptTemplate.Canonical,
 			Variation:     tool.PromptTemplate.Variation,
-		}
+		}, nil
 	}
 
 	if tool.FunctionToolDefinition != nil {
@@ -108,14 +119,21 @@ func ToBaseTool(tool *types.Tool) types.BaseToolAttributes {
 			UpdatedAt:     tool.FunctionToolDefinition.UpdatedAt,
 			Canonical:     tool.FunctionToolDefinition.Canonical,
 			Variation:     tool.FunctionToolDefinition.Variation,
-		}
+		}, nil
 	}
 
-	panic(urn.ErrInvalid)
+	if tool.ExternalMcpToolDefinition != nil {
+		return types.BaseToolAttributes{}, errors.New("proxy tool cannot be converted to base attributes")
+	}
+
+	return types.BaseToolAttributes{}, urn.ErrInvalid
 }
 
 func ApplyVariation(tool types.Tool, variation types.ToolVariation) {
-	baseTool := ToBaseTool(&tool)
+	baseTool, err := ToBaseTool(&tool)
+	if err != nil {
+		panic("ApplyVariation called with unsupported tool type: " + err.Error())
+	}
 
 	canonicalAttributes := types.CanonicalToolAttributes{
 		VariationID:   variation.ID,
@@ -214,18 +232,77 @@ func variedToolSchema(baseSchema string, summarizer *string) (string, error) {
 }
 
 // ToToolListEntry converts a Tool to basic list entry fields.
-// Returns name, description, inputSchema, and meta map.
-// Returns empty values if the tool is nil.
-func ToToolListEntry(tool *types.Tool) (name, description string, inputSchema json.RawMessage, meta map[string]any) {
+// ToolListEntry contains the fields needed for a tool list entry.
+type ToolListEntry struct {
+	Name        string
+	Description string
+	InputSchema json.RawMessage
+	Meta        map[string]any
+}
+
+// ToToolListEntry extracts tool list entry fields from a tool.
+// Returns error for proxy tools that must be unfolded first.
+func ToToolListEntry(tool *types.Tool) (ToolListEntry, error) {
 	if tool == nil {
-		return "", "", nil, nil
+		return ToolListEntry{
+			Name:        "",
+			Description: "",
+			InputSchema: nil,
+			Meta:        nil,
+		}, nil
 	}
 
+	var meta map[string]any
 	if tool.FunctionToolDefinition != nil {
 		meta = tool.FunctionToolDefinition.Meta
 	}
 
-	baseTool := ToBaseTool(tool)
+	baseTool, err := ToBaseTool(tool)
+	if err != nil {
+		return ToolListEntry{}, err
+	}
 
-	return baseTool.Name, baseTool.Description, json.RawMessage(baseTool.Schema), meta
+	return ToolListEntry{
+		Name:        baseTool.Name,
+		Description: baseTool.Description,
+		InputSchema: json.RawMessage(baseTool.Schema),
+		Meta:        meta,
+	}, nil
+}
+
+// ResolvedExternalTool contains the tool metadata resolved from an external MCP server.
+type ResolvedExternalTool struct {
+	Name        string
+	Description string
+	Schema      string
+}
+
+// ProxyToolToBaseTool converts an unfolded external MCP tool to base attributes.
+// Takes the proxy tool definition and the resolved tool metadata from the MCP server.
+func ProxyToolToBaseTool(proxy *types.ExternalMCPToolDefinition, resolved ResolvedExternalTool) types.BaseToolAttributes {
+	schema := resolved.Schema
+	if schema == "" {
+		schema = constants.DefaultEmptyToolSchema
+	}
+
+	// Prefix the tool name with the slug to namespace it
+	prefixedName := proxy.Slug + ":" + resolved.Name
+
+	return types.BaseToolAttributes{
+		ID:            proxy.ID,
+		ToolUrn:       proxy.ToolUrn,
+		ProjectID:     "",
+		Name:          prefixedName,
+		CanonicalName: prefixedName,
+		Description:   resolved.Description,
+		SchemaVersion: nil,
+		Schema:        schema,
+		Confirm:       nil,
+		ConfirmPrompt: nil,
+		Summarizer:    nil,
+		CreatedAt:     proxy.CreatedAt,
+		UpdatedAt:     proxy.UpdatedAt,
+		Canonical:     nil,
+		Variation:     nil,
+	}
 }

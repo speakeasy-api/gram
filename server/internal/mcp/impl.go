@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"slices"
 	"strings"
@@ -35,7 +36,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -45,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -61,6 +66,8 @@ type Service struct {
 	toolsetsRepo      *toolsets_repo.Queries
 	mcpMetadataRepo   *metadata_repo.Queries
 	orgsRepo          *organizations_repo.Queries
+	deploymentsRepo   *deployments_repo.Queries
+	externalmcpRepo   *externalmcp_repo.Queries
 	auth              *auth.Auth
 	env               gateway.EnvironmentLoader
 	serverURL         *url.URL
@@ -133,6 +140,8 @@ func NewService(
 		toolsetsRepo:    toolsets_repo.New(db),
 		mcpMetadataRepo: metadata_repo.New(db),
 		orgsRepo:        organizations_repo.New(db),
+		deploymentsRepo: deployments_repo.New(db),
+		externalmcpRepo: externalmcp_repo.New(db),
 		auth:            auth.New(logger, db, sessions),
 		env:             env,
 		serverURL:       serverURL,
@@ -239,40 +248,52 @@ func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *h
 		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
 	}
 
-	var metadata map[string]interface{}
-	switch {
-	case toolset.OauthProxyServerID.Valid:
-		metadata = map[string]interface{}{
-			"issuer":                           baseURL + "/oauth/" + mcpSlug,
-			"authorization_endpoint":           baseURL + "/oauth/" + mcpSlug + "/authorize",
-			"token_endpoint":                   baseURL + "/oauth/" + mcpSlug + "/token",
-			"registration_endpoint":            baseURL + "/oauth/" + mcpSlug + "/register",
-			"response_types_supported":         []string{"code"},
-			"grant_types_supported":            []string{"authorization_code"},
-			"code_challenge_methods_supported": []string{"plain", "S256"},
-		}
-	case toolset.ExternalOauthServerID.Valid:
-		// Fetch metadata from external_oauth_server_metadata table
-		externalOAuthServer, err := s.oauthRepo.GetExternalOAuthServerMetadata(ctx, oauth_repo.GetExternalOAuthServerMetadataParams{
-			ProjectID: toolset.ProjectID,
-			ID:        toolset.ExternalOauthServerID.UUID,
-		})
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to load OAuth server metadata").Log(ctx, s.logger)
-		}
-
-		// Parse the stored JSON metadata
-		if err := json.Unmarshal(externalOAuthServer.Metadata, &metadata); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "invalid OAuth server metadata").Log(ctx, s.logger)
-		}
-	default:
-		return oops.E(oops.CodeNotFound, nil, "").Log(ctx, s.logger)
+	result, err := wellknown.ResolveOAuthServerMetadataFromToolset(
+		ctx,
+		s.logger,
+		s.db,
+		s.oauthRepo,
+		&s.toolsetCache,
+		toolset,
+		baseURL,
+		mcpSlug,
+	)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth server metadata").Log(ctx, s.logger)
 	}
 
+	if result == nil {
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found").Log(ctx, s.logger)
+	}
+
+	// Handle proxy case - reverse proxy to external MCP OAuth server
+	if result.Kind == wellknown.OAuthServerMetadataResultKindProxy {
+		target, parseErr := url.Parse(result.ProxyURL)
+		if parseErr != nil {
+			return oops.E(oops.CodeUnexpected, parseErr, "failed to parse well-known URL").Log(ctx, s.logger)
+		}
+
+		proxy := &httputil.ReverseProxy{
+			Director:       nil,
+			Rewrite: func(pr *httputil.ProxyRequest) {
+				pr.SetURL(target)
+			},
+			Transport:      nil,
+			FlushInterval:  0,
+			ErrorLog:       nil,
+			BufferPool:     nil,
+			ModifyResponse: nil,
+			ErrorHandler:   nil,
+		}
+		proxy.ServeHTTP(w, r)
+		return nil
+	}
+
+	// Handle static case - return metadata directly
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	body, err := json.Marshal(metadata)
+	body, err := json.Marshal(result.Static)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to marshal OAuth server metadata").Log(ctx, s.logger)
 	}
@@ -297,21 +318,29 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
 	}
 
-	switch {
-	case toolset.OauthProxyServerID.Valid, toolset.ExternalOauthServerID.Valid:
-		// Continue processing
-	default:
-		return oops.E(oops.CodeNotFound, nil, "not found").Log(ctx, s.logger)
-	}
-
 	baseURL := s.serverURL.String()
 	if customDomainCtx != nil {
 		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
 	}
 
+	hasOAuth, err := wellknown.IsToolsetOAuthProtected(
+		ctx,
+		s.logger,
+		s.db,
+		&s.toolsetCache,
+		toolset,
+	)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to check OAuth protection").Log(ctx, s.logger)
+	}
+
+	if !hasOAuth {
+		return oops.E(oops.CodeNotFound, nil, "not found").Log(ctx, s.logger)
+	}
+
 	metadata := map[string]any{
 		"issuer":                baseURL + "/mcp/" + mcpSlug,
-		"authorization_servers": []string{baseURL + "/mcp/" + mcpSlug},
+		"authorization_servers": []string{baseURL + "/.well-known/oauth-authorization-server/mcp/" + mcpSlug},
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -350,6 +379,12 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	if customDomainCtx != nil {
 		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
 	}
+
+	fullToolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to load toolset").Log(ctx, s.logger)
+	}
+	hasExternalMCPOAuth := externalmcp.ResolveOAuthConfig(fullToolset) != nil
 
 	token := r.Header.Get("Authorization")
 	token = strings.TrimPrefix(token, "Bearer ")
@@ -404,6 +439,19 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 				Token:        externalSecret.Token,
 			})
 		}
+	case toolset.McpIsPublic && hasExternalMCPOAuth:
+		if token == "" {
+			w.Header().Set(
+				"WWW-Authenticate",
+				fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
+			)
+			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+		}
+		// Token provided - pass it through as OAuth token for external MCP
+		tokenInputs = append(tokenInputs, oauthTokenInputs{
+			securityKeys: []string{},
+			Token:        token,
+		})
 	case !toolset.McpIsPublic:
 		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
 

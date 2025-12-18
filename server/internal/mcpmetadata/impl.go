@@ -393,7 +393,17 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	toolNames := []string{}
 
 	for _, toolDesc := range toolsetDetails.Tools {
-		baseTool := conv.ToBaseTool(toolDesc)
+		// Handle proxy tools (external MCP) separately - they show as a single proxy entry
+		if conv.IsProxyTool(toolDesc) {
+			toolNames = append(toolNames, toolDesc.ExternalMcpToolDefinition.Name)
+			continue
+		}
+
+		baseTool, err := conv.ToBaseTool(toolDesc)
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to convert tool to base tool", attr.SlogError(err))
+			continue
+		}
 		toolNames = append(toolNames, baseTool.Name)
 	}
 
