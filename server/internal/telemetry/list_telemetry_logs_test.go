@@ -1,6 +1,7 @@
 package telemetry_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -379,4 +380,42 @@ func TestService_ListLogsForTrace_RespectsLimit(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Len(t, result.Logs, 5, "should respect limit parameter")
+}
+
+func insertTestTelemetryLogs(t *testing.T, ctx context.Context, projectID, deploymentID string, count int) {
+	t.Helper()
+
+	now := time.Now().UTC().Add(-1 * time.Hour)
+
+	for i := range count {
+		timestamp := now.Add(time.Duration(i) * time.Minute)
+		insertTelemetryLog(t, ctx, projectID, deploymentID, timestamp, nil, "urn:gram:test", "INFO")
+	}
+
+	// ClickHouse eventual consistency - sleep once at the end
+	time.Sleep(100 * time.Millisecond)
+}
+
+func insertTelemetryLog(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, traceID *string, gramURN, severityText string) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := fromTimeV7(timestamp)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_deployment_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), severityText, "test log body",
+		traceID, nil, "{}", "{}",
+		projectID, deploymentID, gramURN, "test-service")
+	require.NoError(t, err)
+
+	// ClickHouse eventual consistency
+	time.Sleep(100 * time.Millisecond)
 }
