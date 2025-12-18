@@ -580,16 +580,20 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 			errorDescription = "Authorization failed. Please try again."
 		}
 
-		data := gramOAuthResultPageData{
-			RedirectURL:      template.URL(errorURL), // #nosec G203 // This has been checked and escaped
-			ErrorDescription: errorDescription,
-			ErrorCode:        errorCode,
-			ScriptHash:       s.oauthStatusPageScriptHash,
-		}
+		if provider.ProviderType == string(OAuthProxyProviderTypeGram) {
+			data := gramOAuthResultPageData{
+				RedirectURL:      template.URL(errorURL), // #nosec G203 // This has been checked and escaped
+				ErrorDescription: errorDescription,
+				ErrorCode:        errorCode,
+				ScriptHash:       s.oauthStatusPageScriptHash,
+			}
 
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := s.failurePageTmpl.Execute(w, data); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to render oauth failure page").Log(ctx, s.logger)
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			if err := s.failurePageTmpl.Execute(w, data); err != nil {
+				return oops.E(oops.CodeUnexpected, err, "failed to render oauth failure page").Log(ctx, s.logger)
+			}
+		} else {
+			http.Redirect(w, r, errorURL, http.StatusFound)
 		}
 
 		return nil
@@ -631,28 +635,23 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		return oops.E(oops.CodeBadRequest, err, "failed to build authorization response").Log(ctx, s.logger)
 	}
 
-	data := gramOAuthResultPageData{
-		RedirectURL:      template.URL(responseURL), // #nosec G203 // This has been checked and escaped
-		ScriptHash:       s.oauthStatusPageScriptHash,
-		ErrorDescription: "",
-		ErrorCode:        "",
-	}
+	if provider.ProviderType != string(OAuthProxyProviderTypeGram) {
+		data := gramOAuthResultPageData{
+			RedirectURL:      template.URL(responseURL), // #nosec G203 // This has been checked and escaped
+			ScriptHash:       s.oauthStatusPageScriptHash,
+			ErrorDescription: "",
+			ErrorCode:        "",
+		}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.successPageTmpl.Execute(w, data); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to render oauth success page").Log(ctx, s.logger)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := s.successPageTmpl.Execute(w, data); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to render oauth success page").Log(ctx, s.logger)
+		}
+	} else {
+		http.Redirect(w, r, responseURL, http.StatusFound)
 	}
 
 	return nil
-
-	// failurePageTempl, err := template.New("hosted_page").Parse(oauthFailurePageTmpl)
-	// if err != nil {
-	// 	return oops.E(oops.CodeUnexpected, err, "failed to parse hosted oauth failure page template").Log(ctx, s.logger)
-	// }
-
-	// Redirect back to client with the authorization code
-	// http.Redirect(w, r, responseURL, http.StatusFound)
-	// return nil
 }
 
 // serveSuccessScript serves the OAuth success page JavaScript file with cache headers
