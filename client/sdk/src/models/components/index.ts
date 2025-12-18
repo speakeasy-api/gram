@@ -48,6 +48,7 @@ export * from "./environmententryinput.js";
 export * from "./evolveform.js";
 export * from "./evolveresult.js";
 export * from "./externalmcpserver.js";
+export * from "./externalmcptooldefinition.js";
 export * from "./externaloauthserver.js";
 export * from "./externaloauthserverform.js";
 export * from "./fetchopenapiv3fromurlform2.js";

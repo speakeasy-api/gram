@@ -25,7 +25,7 @@ import { MethodBadge } from "./MethodBadge";
 import { SubtoolsBadge } from "./SubtoolsBadge";
 
 interface ToolListProps {
-  tools: Tool[];
+  tools: Tool[]; // Accepts all tool types, filters to Tool internally
   toolset?: Toolset; // Optionally specificy the toolset to provide rows with additional context
   onToolUpdate?: (
     tool: Tool,

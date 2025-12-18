@@ -1,3 +1,4 @@
+import { ToolsetEnvironmentForm } from "@/components/environments/ToolsetEnvironmentForm";
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { ToolList } from "@/components/tool-list";
@@ -13,6 +14,7 @@ import {
   useTelemetry,
 } from "@/contexts/Telemetry";
 import { useToolset } from "@/hooks/toolTypes";
+import { handleAPIError } from "@/lib/errors";
 import { Tool, useGroupedTools } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -34,12 +36,11 @@ import { MCPDetails, MCPEnableButton } from "../mcp/MCPDetails";
 import { AddToolsDialog } from "./AddToolsDialog";
 import { PromptsTabContent } from "./PromptsTab";
 import { ResourcesTabContent } from "./resources/ResourcesTab";
-import { ToolsetEnvironmentForm } from "@/components/environments/ToolsetEnvironmentForm";
+import { ServerTabContent } from "./ServerTab";
 import { ToolsetAuthAlert } from "./ToolsetAuthAlert";
 import { ToolsetEmptyState } from "./ToolsetEmptyState";
 import { ToolsetHeader } from "./ToolsetHeader";
 import { useToolsets } from "./Toolsets";
-import { handleAPIError } from "@/lib/errors";
 
 export function useDeleteToolset({
   onSuccess,
@@ -229,7 +230,13 @@ export default function ToolsetPage() {
   return <ToolsetView toolsetSlug={toolsetSlug} />;
 }
 
-type ToolsetTabs = "tools" | "prompts" | "resources" | "auth" | "mcp";
+type ToolsetTabs =
+  | "tools"
+  | "prompts"
+  | "resources"
+  | "auth"
+  | "mcp"
+  | "server";
 
 export function ToolsetView({
   toolsetSlug,
@@ -255,7 +262,9 @@ export function ToolsetView({
 
   const tools = toolset?.tools ?? [];
 
-  // Get initial tab from URL hash, default to "tools"
+  const isExternalMcp = toolset?.kind === "external-mcp";
+
+  // Get initial tab from URL hash, default depends on toolset kind
   const getTabFromHash = (): ToolsetTabs => {
     const hash = location.hash.slice(1); // Remove the # character
     const validTabs: ToolsetTabs[] = [
@@ -264,6 +273,7 @@ export function ToolsetView({
       "resources",
       "auth",
       "mcp",
+      "server",
     ];
     return validTabs.includes(hash as ToolsetTabs)
       ? (hash as ToolsetTabs)
@@ -279,6 +289,26 @@ export function ToolsetView({
       setActiveTab(newTab);
     }
   }, [location.hash]);
+
+  // Redirect to appropriate default tab based on toolset kind
+  useEffect(() => {
+    if (!toolset) return;
+
+    if (
+      isExternalMcp &&
+      (activeTab === "tools" ||
+        activeTab === "resources" ||
+        activeTab === "prompts")
+    ) {
+      // External MCP toolsets should show "server" tab instead of tools/resources/prompts
+      setActiveTab("server");
+      navigate("#server", { replace: true });
+    } else if (!isExternalMcp && activeTab === "server") {
+      // Default toolsets shouldn't show "server" tab
+      setActiveTab("tools");
+      navigate("#tools", { replace: true });
+    }
+  }, [toolset?.kind]);
 
   // Update URL hash when tab changes
   const handleTabChange = (tab: ToolsetTabs) => {
@@ -303,13 +333,18 @@ export function ToolsetView({
     if (!toolset) return;
 
     const pageActions = [
-      {
-        id: "toolset-add-tools",
-        label: "Add tools",
-        icon: "plus",
-        onSelect: () => setAddToolsDialogOpen(true),
-        group: "Toolset",
-      },
+      // Only show "Add tools" for default toolsets
+      ...(toolset.kind !== "external-mcp"
+        ? [
+            {
+              id: "toolset-add-tools",
+              label: "Add tools",
+              icon: "plus",
+              onSelect: () => setAddToolsDialogOpen(true),
+              group: "Toolset",
+            },
+          ]
+        : []),
       {
         id: "toolset-go-to-playground",
         label: "Open in playground",
@@ -333,7 +368,7 @@ export function ToolsetView({
     };
     // addActions and removeActions are memoized in CommandPaletteContext with empty deps
     // so they're stable and don't need to be in the dependency array
-  }, [toolsetSlug]); // Only re-run when toolset slug changes
+  }, [toolsetSlug, toolset?.kind]); // Re-run when toolset slug or kind changes
 
   // Refetch any loaded instances of this toolset on update (primarily for the playground)
   const refetchInstance = () => {
@@ -500,12 +535,14 @@ export function ToolsetView({
 
   const actions = (
     <Stack direction="horizontal" gap={2} align="center">
-      <Button onClick={gotoAddTools} size="sm">
-        <Button.LeftIcon>
-          <Icon name="plus" className="h-4 w-4" />
-        </Button.LeftIcon>
-        <Button.Text>Add Tools</Button.Text>
-      </Button>
+      {!isExternalMcp && (
+        <Button onClick={gotoAddTools} size="sm">
+          <Button.LeftIcon>
+            <Icon name="plus" className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Add Tools</Button.Text>
+        </Button>
+      )}
       <MoreActions
         actions={[
           {
@@ -572,19 +609,28 @@ export function ToolsetView({
         />
       )}
       <ToolsetHeader toolsetSlug={toolsetSlug} actions={actions} />
-      {groupFilterItems.length > 1 && filterButton}
+      {!isExternalMcp && groupFilterItems.length > 1 && filterButton}
       <Tabs
         value={activeTab}
         onValueChange={(value) => handleTabChange(value as ToolsetTabs)}
         className="h-full relative"
       >
         <TabsList className="mb-4">
-          <TabsTrigger value="tools">Tools</TabsTrigger>
-          <TabsTrigger value="resources">Resources</TabsTrigger>
-          <TabsTrigger value="prompts">Prompts</TabsTrigger>
+          {isExternalMcp ? (
+            <TabsTrigger value="server">Server</TabsTrigger>
+          ) : (
+            <>
+              <TabsTrigger value="tools">Tools</TabsTrigger>
+              <TabsTrigger value="resources">Resources</TabsTrigger>
+              <TabsTrigger value="prompts">Prompts</TabsTrigger>
+            </>
+          )}
           <TabsTrigger value="auth">Auth</TabsTrigger>
           <TabsTrigger value="mcp">MCP</TabsTrigger>
         </TabsList>
+        <TabsContent value="server">
+          {toolset && <ServerTabContent toolset={toolset} />}
+        </TabsContent>
         <TabsContent value="tools">
           {toolsToDisplay.length > 0 ? (
             <ToolList

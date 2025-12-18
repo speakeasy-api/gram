@@ -86,7 +86,7 @@ export function AddToolsDialog({
   }, [deployment]);
 
   const sources = useMemo(() => {
-    if (!allTools?.tools) return [];
+    if (!allTools?.tools.length) return [];
 
     const sourceSet = new Set<string>();
     allTools.tools.forEach((tool) => {
@@ -98,7 +98,7 @@ export function AddToolsDialog({
   }, [allTools, documentIdToName, functionIdToName]);
 
   const availableTools = useMemo<Tool[]>(() => {
-    if (!allTools?.tools) return [];
+    if (!allTools?.tools.length) return [];
 
     return allTools.tools.filter((tool) => {
       const identifier = getToolIdentifier(tool);

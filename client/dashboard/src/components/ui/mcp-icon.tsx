@@ -1,5 +1,6 @@
 import type { LucideProps } from "lucide-react";
 import { forwardRef } from "react";
+import { SimpleTooltip } from "./tooltip";
 
 export const McpIcon = forwardRef<SVGSVGElement, LucideProps>(
   ({ color = "currentColor", size = 24, strokeWidth = 2, ...props }, ref) => (
@@ -23,4 +24,12 @@ export const McpIcon = forwardRef<SVGSVGElement, LucideProps>(
   ),
 );
 
-McpIcon.displayName = "McpIcon";
+export const ExternalMcpIcon = forwardRef<SVGSVGElement, LucideProps>(
+  (props, ref) => (
+    <SimpleTooltip tooltip="External MCP server imported from the Catalog">
+      <McpIcon ref={ref} {...props} />
+    </SimpleTooltip>
+  ),
+);
+
+ExternalMcpIcon.displayName = "ExternalMcpIcon";

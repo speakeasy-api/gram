@@ -1,33 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import { Combobox, DropdownItem } from "@/components/ui/combobox";
-import { Type } from "@/components/ui/type";
-import {
-  useRegisterEnvironmentTelemetry,
-  useRegisterToolsetTelemetry,
-  useTelemetry,
-} from "@/contexts/Telemetry";
-import { dateTimeFormatters } from "@/lib/dates";
-import { capitalize } from "@/lib/utils";
-import { useRoutes } from "@/routes";
-import {
-  useListChats,
-  useListToolsets,
-  useListEnvironments,
-  useInstance,
-  useUpdateToolsetMutation,
-  queryKeyInstance,
-  queryKeyListToolsets,
-} from "@gram/client/react-query/index.js";
-import { useQueryClient } from "@tanstack/react-query";
-import { Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useLatestDeployment } from "@/hooks/toolTypes";
-import { useSearchParams } from "react-router";
-import { toast } from "sonner";
-import { v7 as uuidv7 } from "uuid";
-import { asTool, Tool } from "@/lib/toolTypes";
-import { ToolsetsEmptyState } from "../toolsets/ToolsetsEmptyState";
 import {
   Select,
   SelectContent,
@@ -35,16 +8,43 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Type } from "@/components/ui/type";
+import {
+  useRegisterEnvironmentTelemetry,
+  useRegisterToolsetTelemetry,
+  useTelemetry,
+} from "@/contexts/Telemetry";
+import { useLatestDeployment } from "@/hooks/toolTypes";
+import { dateTimeFormatters } from "@/lib/dates";
+import { asTools, Tool } from "@/lib/toolTypes";
+import { capitalize } from "@/lib/utils";
+import { useRoutes } from "@/routes";
+import {
+  queryKeyInstance,
+  queryKeyListToolsets,
+  useInstance,
+  useListChats,
+  useListEnvironments,
+  useListToolsets,
+  useUpdateToolsetMutation,
+} from "@gram/client/react-query/index.js";
+import { Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
+import { useQueryClient } from "@tanstack/react-query";
+import { ScrollTextIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
+import { toast } from "sonner";
+import { v7 as uuidv7 } from "uuid";
+import { useEnvironment } from "../environments/Environment";
+import { ToolsetsEmptyState } from "../toolsets/ToolsetsEmptyState";
 import { ChatProvider, useChatContext } from "./ChatContext";
-import { ManageToolsDialog } from "./ManageToolsDialog";
-import { EditToolDialog } from "./EditToolDialog";
-import { PlaygroundAuth, getAuthStatus } from "./PlaygroundAuth";
 import { ChatConfig } from "./ChatWindow";
-import { PlaygroundRHS } from "./PlaygroundRHS";
+import { EditToolDialog } from "./EditToolDialog";
+import { ManageToolsDialog } from "./ManageToolsDialog";
+import { getAuthStatus, PlaygroundAuth } from "./PlaygroundAuth";
 import { PlaygroundConfigPanel } from "./PlaygroundConfigPanel";
 import { PlaygroundLogsPanel } from "./PlaygroundLogsPanel";
-import { ScrollTextIcon } from "lucide-react";
-import { useEnvironment } from "../environments/Environment";
+import { PlaygroundRHS } from "./PlaygroundRHS";
 
 export default function Playground() {
   return (
@@ -342,7 +342,7 @@ export function ToolsetPanel({
 
   // Transform tools data for the config panel
   const tools = useMemo(
-    () => instanceData?.tools?.map(asTool) ?? [],
+    () => asTools(instanceData?.tools ?? []),
     [instanceData?.tools],
   );
 

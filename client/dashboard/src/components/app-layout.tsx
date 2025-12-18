@@ -1,23 +1,23 @@
 import { useSession } from "@/contexts/Auth.tsx";
-import { Navigate, Outlet, useLocation } from "react-router";
-import { AppSidebar } from "./app-sidebar.tsx";
-import { SidebarInset, SidebarProvider } from "./ui/sidebar.tsx";
+import { useLocalStorageState } from "@/hooks/useLocalStorageState.ts";
 import { Modal, ModalProvider, useModal } from "@speakeasy-api/moonshine";
 import { useEffect } from "react";
-import { useLocalStorageState } from "@/hooks/useLocalStorageState.ts";
+import { Navigate, Outlet, useLocation } from "react-router";
+import { AppSidebar } from "./app-sidebar.tsx";
 import { FunctionsAnnouncementModal } from "./functions-announcement-modal/index.tsx";
+import { SidebarInset, SidebarProvider } from "./ui/sidebar.tsx";
 
 // Layout to handle unauthenticated landing pages and the authenticated webapp experience
 export const LoginCheck = () => {
   const session = useSession();
   const location = useLocation();
 
-  if (session.session === "") {
+  if (session.session === "" && !import.meta.env.DEV) {
     const redirectTo = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?redirect=${redirectTo}`} />;
   }
 
-  if (!session.activeOrganizationId) {
+  if (!session.activeOrganizationId && !import.meta.env.DEV) {
     const redirectTo = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/register?redirect=${redirectTo}`} />;
   }

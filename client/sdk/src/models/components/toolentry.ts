@@ -13,6 +13,7 @@ export const ToolEntryType = {
   Http: "http",
   Prompt: "prompt",
   Function: "function",
+  Externalmcp: "externalmcp",
 } as const;
 export type ToolEntryType = ClosedEnum<typeof ToolEntryType>;
 
