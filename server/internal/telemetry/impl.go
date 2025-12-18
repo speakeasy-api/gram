@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"time"
 
@@ -294,4 +295,229 @@ func toToolExecutionLog(r repo.ToolLog) *gen.ToolExecutionLog {
 		DeploymentID: r.DeploymentID,
 		FunctionID:   r.FunctionID,
 	}
+}
+
+// ListTelemetryLogs retrieves unified telemetry logs with pagination.
+func (s *Service) ListTelemetryLogs(ctx context.Context, payload *gen.ListTelemetryLogsPayload) (res *gen.ListTelemetryLogsResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	projectID := authCtx.ProjectID
+
+	limit := payload.Limit
+	if limit < 1 || limit > 1000 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "limit must be between 1 and 1000")
+	}
+
+	sortOrder := "desc"
+	if payload.Sort != "desc" && payload.Sort != "asc" && payload.Sort != "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "sort order must be one of 'asc' or 'desc'")
+	}
+
+	// if a non-empty sort string is passed we can assume it's a valid sort as we validated it above
+	if payload.Sort != "" {
+		sortOrder = payload.Sort
+	}
+
+	// Empty string cursor for first page
+	cursor := ""
+	if payload.Cursor != nil  {
+		cursor = *payload.Cursor
+	}
+
+	// Query with limit+1 to detect if there are more results
+	items, err := s.tcm.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
+		GramProjectID:          projectID.String(),
+		TimeStart:              conv.PtrValOr(payload.TimeStart, 0),
+		TimeEnd:                conv.PtrValOr(payload.TimeEnd, 0),
+		GramURN:                conv.PtrValOr(payload.GramUrn, ""),
+		TraceID:                conv.PtrValOr(payload.TraceID, ""),
+		GramDeploymentID:       conv.PtrValOr(payload.DeploymentID, ""),
+		GramFunctionID:         conv.PtrValOr(payload.FunctionID, ""),
+		SeverityText:           conv.PtrValOr(payload.SeverityText, ""),
+		HTTPResponseStatusCode: conv.PtrValOr(payload.HTTPStatusCode, 0),
+		HTTPRoute:              conv.PtrValOr(payload.HTTPRoute, ""),
+		HTTPRequestMethod:      conv.PtrValOr(payload.HTTPMethod, ""),
+		ServiceName:            conv.PtrValOr(payload.ServiceName, ""),
+		SortOrder:              sortOrder,
+		Cursor:                 cursor,
+		Limit:                  limit + 1, // +1 for overflow detection
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing telemetry logs")
+	}
+
+	// Compute next cursor using limit+1 pattern
+	var nextCursor *string
+	if len(items) > limit {
+		// More results exist - set cursor to last item in the page
+		nextCursor = conv.Ptr(items[limit-1].ID)
+		// Trim to requested page size
+		items = items[:limit]
+	}
+
+	// Convert repo models to Goa types
+	telemetryLogs := make([]*gen.TelemetryLogRecord, len(items))
+	for i, log := range items {
+		record, err := toTelemetryLogPayload(log)
+		if err != nil {
+			return nil, err
+		}
+		telemetryLogs[i] = record
+	}
+
+	return &gen.ListTelemetryLogsResult{
+		Logs:       telemetryLogs,
+		NextCursor: nextCursor,
+	}, nil
+}
+
+// ListTraces retrieves trace summaries with pagination.
+func (s *Service) ListTraces(ctx context.Context, payload *gen.ListTracesPayload) (res *gen.ListTracesResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	projectID := authCtx.ProjectID
+
+	// Validate and set limit (defaults handled by Goa)
+	limit := payload.Limit
+	if limit < 1 || limit > 1000 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "limit must be between 1 and 1000")
+	}
+
+	sortOrder := "desc"
+	if payload.Sort != "desc" && payload.Sort != "asc" && payload.Sort != "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "sort order must be one of 'asc' or 'desc'")
+	}
+
+	// if a non-empty sort string is passed we can assume it's a valid sort as we validated it above
+	if payload.Sort != "" {
+		sortOrder = payload.Sort
+	}
+
+	// Empty string cursor for first page
+	cursor := ""
+	if payload.Cursor != nil && *payload.Cursor != "" {
+		cursor = *payload.Cursor
+	}
+
+	// Query with limit+1 to detect if there are more results
+	items, err := s.tcm.ListTraces(ctx, repo.ListTracesParams{
+		GramProjectID:    projectID.String(),
+		TimeStart:        conv.PtrValOr(payload.TimeStart, 0),
+		TimeEnd:          conv.PtrValOr(payload.TimeEnd, 0),
+		GramDeploymentID: conv.PtrValOr(payload.DeploymentID, ""),
+		GramFunctionID:   conv.PtrValOr(payload.FunctionID, ""),
+		SortOrder:        sortOrder,
+		Cursor:           cursor,
+		Limit:            limit + 1, // +1 for overflow detection
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing traces")
+	}
+
+	// Compute next cursor using limit+1 pattern
+	var nextCursor *string
+	if len(items) > limit {
+		// More results exist - set cursor to last item's trace_id
+		nextCursor = &items[limit-1].TraceID
+		items = items[:limit]
+	}
+
+	// Convert repo models to Goa types
+	traces := make([]*gen.TraceSummaryRecord, len(items))
+	for i, item := range items {
+		traces[i] = &gen.TraceSummaryRecord{
+			TraceID:           item.TraceID,
+			StartTimeUnixNano: item.StartTimeUnixNano,
+			LogCount:          item.LogCount,
+			HTTPStatusCode:    item.HTTPStatusCode,
+			GramUrn:           item.GramURN,
+		}
+	}
+
+	return &gen.ListTracesResult{
+		Traces:     traces,
+		NextCursor: nextCursor,
+	}, nil
+}
+
+// ListLogsForTrace retrieves all logs for a specific trace ID.
+func (s *Service) ListLogsForTrace(ctx context.Context, payload *gen.ListLogsForTracePayload) (res *gen.ListLogsForTraceResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	projectID := authCtx.ProjectID
+
+	// Validate limit (defaults handled by Goa)
+	limit := payload.Limit
+	if limit < 1 || limit > 1000 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "limit must be between 1 and 1000")
+	}
+
+	logs, err := s.tcm.ListLogsForTrace(ctx, repo.ListLogsForTraceParams{
+		GramProjectID: projectID.String(),
+		TraceID:       payload.TraceID,
+		Limit:         limit,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing logs for trace")
+	}
+
+	// Convert repo models to Goa types
+	telemetryLogs := make([]*gen.TelemetryLogRecord, len(logs))
+	for i, log := range logs {
+		record, err := toTelemetryLogPayload(log)
+		if err != nil {
+			return nil, err
+		}
+		telemetryLogs[i] = record
+	}
+
+	return &gen.ListLogsForTraceResult{
+		Logs: telemetryLogs,
+	}, nil
+}
+
+// toTelemetryLogPayload converts a ClickHouse telemetry log record to the API response format.
+// It parses the JSON-encoded attributes and resource_attributes fields into proper JSON objects.
+func toTelemetryLogPayload(log repo.TelemetryLog) (*gen.TelemetryLogRecord, error) {
+	// Parse JSON attributes into objects
+	var attributes any
+	var resourceAttributes any
+
+	if err := json.Unmarshal([]byte(log.Attributes), &attributes); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse log attributes")
+	}
+	if err := json.Unmarshal([]byte(log.ResourceAttributes), &resourceAttributes); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse resource attributes")
+	}
+
+	return &gen.TelemetryLogRecord{
+		ID:                     log.ID,
+		TimeUnixNano:           log.TimeUnixNano,
+		ObservedTimeUnixNano:   log.ObservedTimeUnixNano,
+		SeverityText:           log.SeverityText,
+		Body:                   log.Body,
+		TraceID:                log.TraceID,
+		SpanID:                 log.SpanID,
+		Attributes:             attributes,
+		ResourceAttributes:     resourceAttributes,
+		GramProjectID:          log.GramProjectID,
+		GramDeploymentID:       log.GramDeploymentID,
+		GramFunctionID:         log.GramFunctionID,
+		GramUrn:                log.GramURN,
+		ServiceName:            log.ServiceName,
+		ServiceVersion:         log.ServiceVersion,
+		HTTPRequestMethod:      log.HTTPRequestMethod,
+		HTTPResponseStatusCode: log.HTTPResponseStatusCode,
+		HTTPRoute:              log.HTTPRoute,
+		HTTPServerURL:          log.HTTPServerURL,
+	}, nil
 }
