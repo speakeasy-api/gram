@@ -8,31 +8,19 @@ Unlike PostgreSQL queries in other packages, ClickHouse queries are **not auto-g
 
 ### Query Files
 
-- **`queries.sql`**: Human-readable SQL queries following sqlc conventions with `-- name:` comments
-- **`queries.sql.go`**: Manual Go implementations of the queries
+- **`queries.sql.go`**: Manual Go implementations of queries following sqlc patterns
+
+**Note:** We do NOT maintain a separate `queries.sql` file. All queries are defined directly in `queries.sql.go`.
 
 ### Adding a New Query
 
-1. **Add the query to `queries.sql`** with sqlc-style formatting:
-   ```sql
-   -- name: GetSomething :one
-   select * from table where id = ?;
-   ```
+**Implement directly in `queries.sql.go`**:
 
-2. **Implement the function in `queries.sql.go`**:
-   - Extract the query as a const with the sqlc comment
-   - Create a params struct (if needed) right before the function
-   - Implement the function following existing patterns
-
-3. **Ask Claude Code to generate the implementation** - it will follow the sqlc conventions established in this package.
+1. Define the query as a const with sqlc-style comment header
+2. Create a params struct (if needed) right before the function
+3. Implement the function following existing patterns
 
 ### Example Pattern
-
-**In `queries.sql`:**
-```sql
--- name: ListItems :many
-select id, name from items where project_id = ? limit ?;
-```
 
 **In `queries.sql.go`:**
 ```go
@@ -47,31 +35,56 @@ type ListItemsParams struct {
 
 func (q *Queries) ListItems(ctx context.Context, arg ListItemsParams) ([]Item, error) {
     rows, err := q.conn.Query(ctx, listItems, arg.ProjectID, arg.Limit)
-    // ... implementation
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+
+    var items []Item
+    for rows.Next() {
+        var i Item
+        if err = rows.ScanStruct(&i); err != nil {
+            return nil, fmt.Errorf("error scanning row: %w", err)
+        }
+        items = append(items, i)
+    }
+
+    return items, rows.Err()
 }
 ```
 
 ## Pagination
 
-This package uses cursor-based pagination with the "limit + 1" pattern:
+### Service Layer Pagination (limit + 1 pattern)
+
+Pagination logic lives in the **service layer** (`impl.go`), not the repo layer. The repo returns raw results, and the service handles cursor computation.
 
 1. Client requests N items per page
-2. Query fetches N+1 items
-3. If N+1 items returned → `hasNextPage = true`, return only N items
-4. If ≤N items returned → `hasNextPage = false`, return all items
-5. Cursor is the ID of the last returned item
+2. Service queries repo with N+1 items
+3. If N+1 items returned → compute `nextCursor` from item N, trim to N items
+4. If ≤N items returned → `nextCursor = nil`, return all items
+5. Cursor is the UUID of the last returned item
 
 ### ClickHouse-Specific Patterns
 
-#### Nil UUID Sentinel
-ClickHouse doesn't support short-circuit evaluation in OR expressions, so we use the nil UUID (`00000000-0000-0000-0000-000000000000`) as a sentinel value to indicate "no cursor" (first page):
+#### Empty String Cursor Sentinel
+Use empty string to indicate "no cursor" (first page). This avoids complex nil UUID checks:
 
 ```sql
-and if(
-    toUUID(?) = toUUID('00000000-0000-0000-0000-000000000000'),
-    true,
-    -- cursor comparison logic
+AND (
+    ? = '' OR
+    IF(
+        ? = 'asc',
+        (time_unix_nano, toUUID(id)) > (SELECT time_unix_nano, toUUID(id) FROM table WHERE id = ? LIMIT 1),
+        (time_unix_nano, toUUID(id)) < (SELECT time_unix_nano, toUUID(id) FROM table WHERE id = ? LIMIT 1)
+    )
 )
+```
+
+When calling from Go:
+```go
+cursor := ""  // First page
+cursor := "some-uuid"  // Subsequent pages
 ```
 
 #### Optional Filters
