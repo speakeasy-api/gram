@@ -103,7 +103,7 @@ export function setToolExecutionLogsData(
       cursor?: string | undefined;
       perPage?: number | undefined;
       direction?: operations.QueryParamDirection | undefined;
-      sort?: operations.QueryParamSort | undefined;
+      sort?: operations.ListToolExecutionLogsQueryParamSort | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -130,7 +130,7 @@ export function invalidateToolExecutionLogs(
       cursor?: string | undefined;
       perPage?: number | undefined;
       direction?: operations.QueryParamDirection | undefined;
-      sort?: operations.QueryParamSort | undefined;
+      sort?: operations.ListToolExecutionLogsQueryParamSort | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -218,7 +218,7 @@ export function queryKeyToolExecutionLogs(
     cursor?: string | undefined;
     perPage?: number | undefined;
     direction?: operations.QueryParamDirection | undefined;
-    sort?: operations.QueryParamSort | undefined;
+    sort?: operations.ListToolExecutionLogsQueryParamSort | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;

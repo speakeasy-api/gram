@@ -3,7 +3,10 @@
  */
 
 import { logsList } from "../funcs/logsList.js";
+import { logsListLogsForTrace } from "../funcs/logsListLogsForTrace.js";
+import { logsListTelemetryLogs } from "../funcs/logsListTelemetryLogs.js";
 import { logsListToolExecutionLogs } from "../funcs/logsListToolExecutionLogs.js";
+import { logsListTraces } from "../funcs/logsListTraces.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -30,6 +33,44 @@ export class Logs extends ClientSDK {
   }
 
   /**
+   * listLogsForTrace logs
+   *
+   * @remarks
+   * List all logs for a specific trace ID.
+   */
+  async listLogsForTrace(
+    request: operations.ListLogsForTraceRequest,
+    security?: operations.ListLogsForTraceSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListLogsForTraceResult> {
+    return unwrapAsync(logsListLogsForTrace(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listTelemetryLogs logs
+   *
+   * @remarks
+   * List unified telemetry logs following OpenTelemetry Logs Data Model.
+   */
+  async listTelemetryLogs(
+    request?: operations.ListTelemetryLogsRequest | undefined,
+    security?: operations.ListTelemetryLogsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListTelemetryLogsResult> {
+    return unwrapAsync(logsListTelemetryLogs(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listToolExecutionLogs logs
    *
    * @remarks
@@ -41,6 +82,25 @@ export class Logs extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListToolExecutionLogsResult> {
     return unwrapAsync(logsListToolExecutionLogs(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listTraces logs
+   *
+   * @remarks
+   * List trace summaries for distributed tracing.
+   */
+  async listTraces(
+    request?: operations.ListTracesRequest | undefined,
+    security?: operations.ListTracesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListTracesResult> {
+    return unwrapAsync(logsListTraces(
       this,
       request,
       security,

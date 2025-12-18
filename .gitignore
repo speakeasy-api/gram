@@ -40,3 +40,4 @@ cover.*
 poetry-installer-error-*.log
 package-lock.json
 /examples/*/pnpm-lock.yaml
+.beads
