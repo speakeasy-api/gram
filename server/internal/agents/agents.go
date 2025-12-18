@@ -361,12 +361,19 @@ func (s *Service) LoadToolsetTools(
 			continue
 		}
 
+		if conv.IsProxyTool(tool) {
+			return nil, fmt.Errorf("resolve external mcp tool from agent: %s", tool.ExternalMcpToolDefinition.Name)
+		}
+
 		toolURN, err := conv.GetToolURN(*tool)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get tool urn: %w", err)
 		}
 
-		tool := conv.ToBaseTool(tool)
+		baseTool, err := conv.ToBaseTool(tool)
+		if err != nil {
+			continue
+		}
 
 		plan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, *toolURN, projectID)
 		if err != nil {
@@ -385,6 +392,8 @@ func (s *Service) LoadToolsetTools(
 			}
 		case gateway.ToolKindPrompt:
 			schema = json.RawMessage(`{}`)
+		case gateway.ToolKindExternalMCP:
+			return nil, fmt.Errorf("resolve external mcp tool from agent: %s", baseTool.Name)
 		}
 
 		if len(schema) == 0 {
@@ -395,14 +404,14 @@ func (s *Service) LoadToolsetTools(
 		if plan.Descriptor != nil && plan.Descriptor.Description != nil {
 			description = *plan.Descriptor.Description
 		} else {
-			description = tool.Description
+			description = baseTool.Description
 		}
 
 		agentTools = append(agentTools, AgentTool{
 			Definition: openrouter.Tool{
 				Type: "function",
 				Function: &openrouter.FunctionDefinition{
-					Name:        tool.Name,
+					Name:        baseTool.Name,
 					Description: description,
 					Parameters:  schema,
 				},
@@ -452,6 +461,8 @@ func (s *Service) LoadToolsByURN(
 		case gateway.ToolKindPrompt:
 			// Prompt tools don't have a schema in the same way
 			schema = json.RawMessage(`{}`)
+		case gateway.ToolKindExternalMCP:
+			return nil, fmt.Errorf("resolve external mcp tool from agent: %s", toolURN.String())
 		}
 
 		if plan.Descriptor.Description != nil {

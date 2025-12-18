@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
@@ -64,9 +65,10 @@ func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, opts 
 		wwwAuthenticate: "",
 	}
 
-	httpClient := &http.Client{
-		Transport: authRT,
-	}
+	retryClient := retryablehttp.NewClient()
+	retryClient.HTTPClient.Transport = authRT
+
+	httpClient := retryClient.StandardClient()
 
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:    "gram-server",

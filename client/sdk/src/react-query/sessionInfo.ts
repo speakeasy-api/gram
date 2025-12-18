@@ -5,27 +5,30 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { authInfo } from "../funcs/authInfo.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
-
-export type SessionInfoQueryData = operations.SessionInfoResponse;
+import {
+  buildSessionInfoQuery,
+  prefetchSessionInfo,
+  queryKeySessionInfo,
+  SessionInfoQueryData,
+} from "./sessionInfo.core.js";
+export {
+  buildSessionInfoQuery,
+  prefetchSessionInfo,
+  queryKeySessionInfo,
+  type SessionInfoQueryData,
+};
 
 /**
  * info auth
@@ -73,21 +76,6 @@ export function useSessionInfoSuspense(
   });
 }
 
-export function prefetchSessionInfo(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request?: operations.SessionInfoRequest | undefined,
-  security?: operations.SessionInfoSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildSessionInfoQuery(
-      client$,
-      request,
-      security,
-    ),
-  });
-}
-
 export function setSessionInfoData(
   client: QueryClient,
   queryKeyBase: [parameters: { gramSession?: string | undefined }],
@@ -119,40 +107,4 @@ export function invalidateAllSessionInfo(
     ...filters,
     queryKey: ["@gram/client", "auth", "info"],
   });
-}
-
-export function buildSessionInfoQuery(
-  client$: GramCore,
-  request?: operations.SessionInfoRequest | undefined,
-  security?: operations.SessionInfoSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<SessionInfoQueryData>;
-} {
-  return {
-    queryKey: queryKeySessionInfo({ gramSession: request?.gramSession }),
-    queryFn: async function sessionInfoQueryFn(
-      ctx,
-    ): Promise<SessionInfoQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(authInfo(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeySessionInfo(
-  parameters: { gramSession?: string | undefined },
-): QueryKey {
-  return ["@gram/client", "auth", "info", parameters];
 }

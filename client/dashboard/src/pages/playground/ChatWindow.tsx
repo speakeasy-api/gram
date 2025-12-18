@@ -1,28 +1,44 @@
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import { Message, MessageContent } from "@/components/ai-elements/message";
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+} from "@/components/ai-elements/prompt-input";
+import { Response } from "@/components/ai-elements/response";
+import {
+  ToolContent,
+  Tool as ToolElement,
+  ToolHeader,
+  ToolInput,
+  ToolOutput,
+} from "@/components/ai-elements/tool";
 import { HttpRoute } from "@/components/http-route";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { CustomChatTransport } from "@/lib/CustomChatTransport";
 import {
-  asTool,
+  asTools,
+  filterFunctionTools,
   filterHttpTools,
   filterPromptTools,
-  filterFunctionTools,
 } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useChat } from "@ai-sdk/react";
 import { useInstance } from "@gram/client/react-query/index.js";
 import {
   jsonSchema,
-  UIMessage,
   lastAssistantMessageIsCompleteWithToolCalls,
+  UIMessage,
 } from "ai";
-import { CustomChatTransport } from "@/lib/CustomChatTransport";
-
-type CoreTool = {
-  description?: string;
-  inputSchema: unknown;
-  execute?: (input: unknown) => unknown | Promise<unknown>;
-};
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { v7 as uuidv7 } from "uuid";
 import { onboardingStepStorageKeys } from "../home/Home";
@@ -33,28 +49,12 @@ import { MessageHistoryIndicator } from "./MessageHistoryIndicator";
 import { useModel } from "./Openrouter";
 import { Tool as MentionTool, parseMentionedTools } from "./ToolMentions";
 import { useMessageHistoryNavigation } from "./useMessageHistoryNavigation";
-import {
-  Tool as ToolElement,
-  ToolHeader,
-  ToolContent,
-  ToolInput,
-  ToolOutput,
-} from "@/components/ai-elements/tool";
-import { Message, MessageContent } from "@/components/ai-elements/message";
-import { Response } from "@/components/ai-elements/response";
-import {
-  Conversation,
-  ConversationContent,
-  ConversationScrollButton,
-} from "@/components/ai-elements/conversation";
-import {
-  PromptInput,
-  PromptInputBody,
-  PromptInputTextarea,
-  PromptInputSubmit,
-  PromptInputTools,
-  PromptInputFooter,
-} from "@/components/ai-elements/prompt-input";
+
+type CoreTool = {
+  description?: string;
+  inputSchema: unknown;
+  execute?: (input: unknown) => unknown | Promise<unknown>;
+};
 
 const defaultModel = {
   label: "Claude 4.5 Sonnet",
@@ -238,7 +238,7 @@ function ChatInner({
   const client = useSdkClient();
 
   const allTools: AiSdkToolset = useMemo(() => {
-    const baseTools = instance.data?.tools.map(asTool);
+    const baseTools = asTools(instance.data?.tools ?? []);
 
     const tools: AiSdkToolset = Object.fromEntries(
       filterHttpTools(baseTools)?.map((tool) => {

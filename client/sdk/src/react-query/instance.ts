@@ -5,28 +5,30 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { instancesGetBySlug } from "../funcs/instancesGetBySlug.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
-
-export type InstanceQueryData = components.GetInstanceResult;
+import {
+  buildInstanceQuery,
+  InstanceQueryData,
+  prefetchInstance,
+  queryKeyInstance,
+} from "./instance.core.js";
+export {
+  buildInstanceQuery,
+  type InstanceQueryData,
+  prefetchInstance,
+  queryKeyInstance,
+};
 
 /**
  * getInstance instances
@@ -71,21 +73,6 @@ export function useInstanceSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchInstance(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request: operations.GetInstanceRequest,
-  security?: operations.GetInstanceSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildInstanceQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -134,50 +121,4 @@ export function invalidateAllInstance(
     ...filters,
     queryKey: ["@gram/client", "instances", "getBySlug"],
   });
-}
-
-export function buildInstanceQuery(
-  client$: GramCore,
-  request: operations.GetInstanceRequest,
-  security?: operations.GetInstanceSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<InstanceQueryData>;
-} {
-  return {
-    queryKey: queryKeyInstance({
-      toolsetSlug: request.toolsetSlug,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-      gramKey: request.gramKey,
-      gramChatSession: request.gramChatSession,
-    }),
-    queryFn: async function instanceQueryFn(ctx): Promise<InstanceQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(instancesGetBySlug(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyInstance(
-  parameters: {
-    toolsetSlug: string;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-    gramKey?: string | undefined;
-    gramChatSession?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "instances", "getBySlug", parameters];
 }

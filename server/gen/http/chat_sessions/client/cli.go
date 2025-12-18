@@ -22,7 +22,7 @@ func BuildCreatePayload(chatSessionsCreateBody string, chatSessionsCreateApikeyT
 	{
 		err = json.Unmarshal([]byte(chatSessionsCreateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"expires_after\": 1931,\n      \"user_identifier\": \"Et non.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"expires_after\": 482,\n      \"user_identifier\": \"Asperiores sapiente.\"\n   }'")
 		}
 	}
 	var apikeyToken *string

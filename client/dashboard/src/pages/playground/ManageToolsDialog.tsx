@@ -12,8 +12,8 @@ import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
 import { Tool, Toolset } from "@/lib/toolTypes";
 import { Button } from "@speakeasy-api/moonshine";
 import { useMemo, useState } from "react";
-import { EditToolDialog } from "./EditToolDialog";
 import { toast } from "sonner";
+import { EditToolDialog } from "./EditToolDialog";
 
 function getToolSource(
   tool: Tool,
@@ -96,7 +96,7 @@ export function ManageToolsDialog({
   }, [deployment]);
 
   const sources = useMemo(() => {
-    if (!allTools?.tools) return [];
+    if (!allTools?.tools.length) return [];
 
     const sourceSet = new Set<string>();
     allTools.tools.forEach((tool) => {
@@ -109,14 +109,13 @@ export function ManageToolsDialog({
 
   // For "add" mode: show tools not in playground
   const availableTools = useMemo<Tool[]>(() => {
-    if (!allTools?.tools) return [];
+    if (!allTools?.tools.length) return [];
 
     return allTools.tools.filter((tool) => {
       return tool.toolUrn && !currentToolUrns.has(tool.toolUrn);
     });
   }, [allTools, currentToolUrns]);
 
-  // For "manage" mode: show current tools
   const displayTools = mode === "add" ? availableTools : currentTools;
 
   const filteredTools = useMemo(() => {

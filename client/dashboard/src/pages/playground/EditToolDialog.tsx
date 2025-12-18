@@ -1,12 +1,12 @@
+import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { TextArea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { TextArea } from "@/components/ui/textarea";
 import { Tool } from "@/lib/toolTypes";
 import { Button } from "@speakeasy-api/moonshine";
-import { useEffect, useState, useRef } from "react";
-import { FileCode, SquareFunction, PencilRuler } from "lucide-react";
+import { FileCode, PencilRuler, SquareFunction } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 function getToolIcon(tool: Tool) {
   if (tool.type === "http") return FileCode;

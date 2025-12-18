@@ -5,11 +5,11 @@
 ```typescript
 import { ToolEntryType } from "@gram/client/models/components";
 
-let value: ToolEntryType = "prompt";
+let value: ToolEntryType = "function";
 ```
 
 ## Values
 
 ```typescript
-"http" | "prompt" | "function"
+"http" | "prompt" | "function" | "externalmcp"
 ```

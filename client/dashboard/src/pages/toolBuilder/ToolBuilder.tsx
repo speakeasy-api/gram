@@ -24,6 +24,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useToolset } from "@/hooks/toolTypes";
 import { MUSTACHE_VAR_REGEX, slugify, TOOL_NAME_REGEX } from "@/lib/constants";
+import { handleAPIError } from "@/lib/errors";
 import { Tool, useGroupedTools } from "@/lib/toolTypes";
 import { capitalize, cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -50,7 +51,6 @@ import { ChatProvider, useChatContext } from "../playground/ChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
 import { useToolifyContext } from "./Toolify";
-import { handleAPIError } from "@/lib/errors";
 
 type Input = {
   name: string;

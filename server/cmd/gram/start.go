@@ -536,7 +536,7 @@ func newStartCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator)
-			ragService := rag.NewToolsetVectorStore(tracerProvider, db, baseChatClient)
+			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, baseChatClient)
 			mux := goahttp.NewMuxer()
 
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url")))

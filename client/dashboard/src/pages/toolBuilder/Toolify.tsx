@@ -74,6 +74,7 @@ export const ToolifyDialog = ({
   const [purpose, setPurpose] = useState("");
   const [selectedToolset, setSelectedToolset] = useState<ToolsetEntry>();
   const { data: toolset } = useToolset(selectedToolset?.slug);
+
   const tools = toolset?.tools ?? [];
 
   const { set } = useToolifyContext();

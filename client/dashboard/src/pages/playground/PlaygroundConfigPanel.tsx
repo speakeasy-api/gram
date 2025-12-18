@@ -1,13 +1,11 @@
+import { MethodBadge } from "@/components/tool-list/MethodBadge";
+import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -15,18 +13,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
+import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Type } from "@/components/ui/type";
+import { Tool } from "@/lib/toolTypes";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
   FileCode,
-  SquareFunction,
-  PencilRuler,
   Layers,
+  PencilRuler,
   PlusIcon,
+  SquareFunction,
 } from "lucide-react";
-import { MethodBadge } from "@/components/tool-list/MethodBadge";
-import { useState, useEffect } from "react";
-import { Tool } from "@/lib/toolTypes";
+import { useEffect, useState } from "react";
 
 interface ToolsetInfo {
   name: string;
@@ -386,7 +386,7 @@ export function PlaygroundConfigPanel({
                                 className="group w-full px-3 py-2 flex items-center gap-2 hover:bg-muted/30 transition-colors"
                               >
                                 <button
-                                  onClick={() => onToolClick?.(tool)}
+                                  onClick={() => tool && onToolClick?.(tool)}
                                   className="flex-1 flex items-center justify-between text-left min-w-0"
                                 >
                                   <p className="text-xs leading-5 text-foreground truncate">

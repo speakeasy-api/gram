@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type CreateRequestBody = {
   /**
-   * Token expiration in seconds (max 3600, default 600)
+   * Token expiration in seconds (max / default 3600)
    */
   expiresAfter?: number | undefined;
   /**
@@ -28,7 +28,7 @@ export const CreateRequestBody$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   CreateRequestBody
 > = z.object({
-  expiresAfter: z.number().int().default(600),
+  expiresAfter: z.number().int().default(3600),
   userIdentifier: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {

@@ -33,7 +33,7 @@ export type AllowedOrigin = {
    * The ID of the project
    */
   projectId: string;
-  status?: AllowedOriginStatus | undefined;
+  status: AllowedOriginStatus;
   /**
    * The last update date of the allowed origin.
    */

@@ -58,7 +58,8 @@ func TestToolsetsService_CreateToolset_Success(t *testing.T) {
 	// Verify the tools are correctly populated
 	toolSetUrns := make([]string, len(result.Tools))
 	for i, tool := range result.Tools {
-		baseTool := conv.ToBaseTool(tool)
+		baseTool, err := conv.ToBaseTool(tool)
+		require.NoError(t, err)
 		toolSetUrns[i] = baseTool.ToolUrn
 		require.NotEmpty(t, baseTool.ID)
 		require.NotEmpty(t, baseTool.Name)
@@ -113,7 +114,9 @@ func TestToolsetsService_CreateToolset_WithDefaultEnvironment(t *testing.T) {
 	require.Equal(t, "test-toolset-with-env", string(result.Slug))
 	require.Equal(t, "test-env", string(*result.DefaultEnvironmentSlug))
 	require.Len(t, result.Tools, 1, "should have 1 HTTP tool")
-	require.Equal(t, tools[0].ToolUrn.String(), conv.ToBaseTool(result.Tools[0]).ToolUrn)
+	baseTool, err := conv.ToBaseTool(result.Tools[0])
+	require.NoError(t, err)
+	require.Equal(t, tools[0].ToolUrn.String(), baseTool.ToolUrn)
 }
 
 func TestToolsetsService_CreateToolset_DuplicateSlug(t *testing.T) {

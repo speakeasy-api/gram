@@ -5,28 +5,30 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { deploymentsActive } from "../funcs/deploymentsActive.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
-
-export type ActiveDeploymentQueryData = components.GetActiveDeploymentResult;
+import {
+  ActiveDeploymentQueryData,
+  buildActiveDeploymentQuery,
+  prefetchActiveDeployment,
+  queryKeyActiveDeployment,
+} from "./activeDeployment.core.js";
+export {
+  type ActiveDeploymentQueryData,
+  buildActiveDeploymentQuery,
+  prefetchActiveDeployment,
+  queryKeyActiveDeployment,
+};
 
 /**
  * getActiveDeployment deployments
@@ -74,21 +76,6 @@ export function useActiveDeploymentSuspense(
   });
 }
 
-export function prefetchActiveDeployment(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request?: operations.GetActiveDeploymentRequest | undefined,
-  security?: operations.GetActiveDeploymentSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildActiveDeploymentQuery(
-      client$,
-      request,
-      security,
-    ),
-  });
-}
-
 export function setActiveDeploymentData(
   client: QueryClient,
   queryKeyBase: [
@@ -130,50 +117,4 @@ export function invalidateAllActiveDeployment(
     ...filters,
     queryKey: ["@gram/client", "deployments", "active"],
   });
-}
-
-export function buildActiveDeploymentQuery(
-  client$: GramCore,
-  request?: operations.GetActiveDeploymentRequest | undefined,
-  security?: operations.GetActiveDeploymentSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<ActiveDeploymentQueryData>;
-} {
-  return {
-    queryKey: queryKeyActiveDeployment({
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
-    queryFn: async function activeDeploymentQueryFn(
-      ctx,
-    ): Promise<ActiveDeploymentQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(deploymentsActive(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyActiveDeployment(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "deployments", "active", parameters];
 }
