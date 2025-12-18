@@ -41,49 +41,46 @@ import (
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-//go:embed oauth_success.html.tmpl
+//go:embed hosted_oauth_success_page.html.tmpl
 var oauthSuccessPageTmplData string
 
-//go:embed oauth_failure.html.tmpl
+//go:embed hosted_oauth_failure_page.html.tmpl
 var oauthFailurePageTmplData string
 
-//go:embed oauth_success.js
+//go:embed hosted_oauth_status_script.js
 var oauthSuccessScriptData []byte
 
-type oauthSuccessPageData struct {
+type gramOAuthResultPageData struct {
 	RedirectURL template.URL
 	ScriptHash  string
-}
 
-type oauthFailurePageData struct {
-	RedirectURL      template.URL
+	// Error fields for failure page
 	ErrorDescription string
 	ErrorCode        string
-	ScriptHash       string
 }
 
 type Service struct {
-	logger             *slog.Logger
-	tracer             trace.Tracer
-	meter              metric.Meter
-	db                 *pgxpool.Pool
-	toolsetsRepo       *toolsets_repo.Queries
-	customDomainsRepo  *customdomains_repo.Queries
-	environments       *environments.EnvironmentEntries
-	serverURL          *url.URL
-	clientRegistration *ClientRegistrationService
-	grantManager       *GrantManager
-	tokenService       *TokenService
-	pkceService        *PKCEService
-	oauthRepo          *repo.Queries
-	enc                *encryption.Client
-	sessions           *sessions.Manager
-	gramProvider       *providers.GramProvider
-	customProvider     *providers.CustomProvider
-	successPageTmpl    *template.Template
-	failurePageTmpl    *template.Template
-	successScriptHash  string
-	successScriptData  []byte
+	logger                    *slog.Logger
+	tracer                    trace.Tracer
+	meter                     metric.Meter
+	db                        *pgxpool.Pool
+	toolsetsRepo              *toolsets_repo.Queries
+	customDomainsRepo         *customdomains_repo.Queries
+	environments              *environments.EnvironmentEntries
+	serverURL                 *url.URL
+	clientRegistration        *ClientRegistrationService
+	grantManager              *GrantManager
+	tokenService              *TokenService
+	pkceService               *PKCEService
+	oauthRepo                 *repo.Queries
+	enc                       *encryption.Client
+	sessions                  *sessions.Manager
+	gramProvider              *providers.GramProvider
+	customProvider            *providers.CustomProvider
+	successPageTmpl           *template.Template
+	failurePageTmpl           *template.Template
+	oauthStatusPageScriptHash string
+	oauthStatusPageScriptData []byte
 }
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, serverURL *url.URL, cacheImpl cache.Cache, enc *encryption.Client, env *environments.EnvironmentEntries, sessions *sessions.Manager) *Service {
@@ -136,8 +133,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		failurePageTmpl: failurePageTmpl,
 
 		// Success page script with hash for cache busting
-		successScriptHash: scriptHash,
-		successScriptData: oauthSuccessScriptData,
+		oauthStatusPageScriptHash: scriptHash,
+		oauthStatusPageScriptData: oauthSuccessScriptData,
 	}
 }
 
@@ -560,10 +557,10 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 
 		// Determine error code based on error type
 		errorCode := "server_error"
-		errorDescription := "Failed to exchange authorization code"
+		errorDescription := "Failed to authorize. Please try again."
 		if providers.IsAccessDeniedError(err) {
 			errorCode = "access_denied"
-			errorDescription = "User does not have access to the requested organization"
+			errorDescription = "User does not have access to the requested organization."
 		}
 
 		errorURL, buildErr := s.grantManager.BuildErrorResponse(
@@ -583,11 +580,11 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 			errorDescription = "Authorization failed. Please try again."
 		}
 
-		data := oauthFailurePageData{
+		data := gramOAuthResultPageData{
 			RedirectURL:      template.URL(errorURL), // #nosec G203 // This has been checked and escaped
 			ErrorDescription: errorDescription,
 			ErrorCode:        errorCode,
-			ScriptHash:       s.successScriptHash,
+			ScriptHash:       s.oauthStatusPageScriptHash,
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -634,10 +631,13 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		return oops.E(oops.CodeBadRequest, err, "failed to build authorization response").Log(ctx, s.logger)
 	}
 
-	data := oauthSuccessPageData{
-		RedirectURL: template.URL(responseURL), // #nosec G203 // This has been checked and escaped
-		ScriptHash:  s.successScriptHash,
+	data := gramOAuthResultPageData{
+		RedirectURL:      template.URL(responseURL), // #nosec G203 // This has been checked and escaped
+		ScriptHash:       s.oauthStatusPageScriptHash,
+		ErrorDescription: "",
+		ErrorCode:        "",
 	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.successPageTmpl.Execute(w, data); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to render oauth success page").Log(ctx, s.logger)
@@ -666,7 +666,7 @@ func (s *Service) serveSuccessScript(w http.ResponseWriter, r *http.Request) err
 	hash := chi.URLParam(r, "hash")
 
 	// Validate hash matches our current script hash
-	if hash != s.successScriptHash {
+	if hash != s.oauthStatusPageScriptHash {
 		w.WriteHeader(http.StatusNotFound)
 		return nil
 	}
@@ -676,7 +676,7 @@ func (s *Service) serveSuccessScript(w http.ResponseWriter, r *http.Request) err
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	w.WriteHeader(http.StatusOK)
 
-	_, err := w.Write(s.successScriptData)
+	_, err := w.Write(s.oauthStatusPageScriptData)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to write script response").Log(ctx, s.logger)
 	}
