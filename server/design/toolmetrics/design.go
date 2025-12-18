@@ -98,6 +98,128 @@ var _ = Service("logs", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ToolExecutionLogs"}`)
 	})
 
+	Method("listTelemetryLogs", func() {
+		Description("List unified telemetry logs following OpenTelemetry Logs Data Model.")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("consumer")
+		})
+		Security(security.ByKey, security.ProjectSlug)
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(ListTelemetryLogsPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListTelemetryLogsResult)
+
+		HTTP(func() {
+			GET("/rpc/logs.listTelemetryLogs")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+
+			Param("time_start")
+			Param("time_end")
+			Param("gram_urn")
+			Param("trace_id")
+			Param("deployment_id")
+			Param("function_id")
+			Param("severity_text")
+			Param("http_status_code")
+			Param("http_route")
+			Param("http_method")
+			Param("service_name")
+			Param("cursor")
+			Param("limit")
+			Param("sort")
+		})
+
+		Meta("openapi:operationId", "listTelemetryLogs")
+		Meta("openapi:extension:x-speakeasy-name-override", "listTelemetryLogs")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryLogs"}`)
+	})
+
+	Method("listTraces", func() {
+		Description("List trace summaries for distributed tracing.")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("consumer")
+		})
+		Security(security.ByKey, security.ProjectSlug)
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(ListTracesPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListTracesResult)
+
+		HTTP(func() {
+			GET("/rpc/logs.listTraces")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+
+			Param("time_start")
+			Param("time_end")
+			Param("deployment_id")
+			Param("function_id")
+			Param("cursor")
+			Param("limit")
+			Param("sort")
+		})
+
+		Meta("openapi:operationId", "listTraces")
+		Meta("openapi:extension:x-speakeasy-name-override", "listTraces")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Traces"}`)
+	})
+
+	Method("listLogsForTrace", func() {
+		Description("List all logs for a specific trace ID.")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("consumer")
+		})
+		Security(security.ByKey, security.ProjectSlug)
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(ListLogsForTracePayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListLogsForTraceResult)
+
+		HTTP(func() {
+			GET("/rpc/logs.listLogsForTrace")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+
+			Param("trace_id")
+			Param("limit")
+		})
+
+		Meta("openapi:operationId", "listLogsForTrace")
+		Meta("openapi:extension:x-speakeasy-name-override", "listLogsForTrace")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "LogsForTrace"}`)
+	})
+
 })
 
 var ListToolLogsRequest = Type("ListToolLogsRequest", func() {
@@ -311,4 +433,175 @@ var ToolExecutionLog = Type("ToolExecutionLog", func() {
 		"deployment_id",
 		"function_id",
 	)
+})
+
+var ListTelemetryLogsPayload = Type("ListTelemetryLogsPayload", func() {
+	Description("Payload for listing unified telemetry logs following OpenTelemetry Logs Data Model")
+
+	Attribute("time_start", Int64, "Start time in Unix nanoseconds")
+	Attribute("time_end", Int64, "End time in Unix nanoseconds")
+	Attribute("gram_urn", String, "Gram URN filter")
+	Attribute("trace_id", String, "Trace ID filter (32 hex characters)", func() {
+		Pattern("^[a-f0-9]{32}$")
+	})
+	Attribute("deployment_id", String, "Deployment ID filter", func() {
+		Format(FormatUUID)
+	})
+	Attribute("function_id", String, "Function ID filter", func() {
+		Format(FormatUUID)
+	})
+	Attribute("severity_text", String, "Severity level filter", func() {
+		Enum("DEBUG", "INFO", "WARN", "ERROR", "FATAL")
+	})
+	Attribute("http_status_code", Int32, "HTTP status code filter")
+	Attribute("http_route", String, "HTTP route filter")
+	Attribute("http_method", String, "HTTP method filter", func() {
+		Enum("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
+	})
+	Attribute("service_name", String, "Service name filter")
+	Attribute("cursor", String, "Cursor for pagination", func() {
+		Format(FormatUUID)
+	})
+	Attribute("limit", Int, "Number of items to return (1-1000)", func() {
+		Minimum(1)
+		Maximum(1000)
+		Default(50)
+	})
+	Attribute("sort", String, "Sort order", func() {
+		Enum("asc", "desc")
+		Default("desc")
+	})
+})
+
+var ListTelemetryLogsResult = Type("ListTelemetryLogsResult", func() {
+	Description("Result of listing unified telemetry logs")
+
+	Attribute("logs", ArrayOf(TelemetryLogRecord), "List of telemetry log records")
+	Attribute("next_cursor", String, "Cursor for next page", func() {
+		Format(FormatUUID)
+	})
+
+	Required("logs")
+})
+
+var TelemetryLogRecord = Type("TelemetryLogRecord", func() {
+	Description("OpenTelemetry log record")
+
+	Attribute("id", String, "Log record ID", func() {
+		Format(FormatUUID)
+	})
+	Attribute("time_unix_nano", Int64, "Unix time in nanoseconds when event occurred")
+	Attribute("observed_time_unix_nano", Int64, "Unix time in nanoseconds when event was observed")
+	Attribute("severity_text", String, "Text representation of severity")
+	Attribute("body", String, "The primary log message")
+	Attribute("trace_id", String, "W3C trace ID (32 hex characters)")
+	Attribute("span_id", String, "W3C span ID (16 hex characters)")
+	Attribute("attributes", Any, "Log attributes as JSON object")
+	Attribute("resource_attributes", Any, "Resource attributes as JSON object")
+	Attribute("gram_project_id", String, "Project ID", func() {
+		Format(FormatUUID)
+	})
+	Attribute("gram_deployment_id", String, "Deployment ID", func() {
+		Format(FormatUUID)
+	})
+	Attribute("gram_function_id", String, "Function ID", func() {
+		Format(FormatUUID)
+	})
+	Attribute("gram_urn", String, "Gram URN")
+	Attribute("service_name", String, "Service name")
+	Attribute("service_version", String, "Service version")
+	Attribute("http_request_method", String, "HTTP method (null for non-HTTP logs)")
+	Attribute("http_response_status_code", Int32, "HTTP status code (null for non-HTTP logs)")
+	Attribute("http_route", String, "HTTP route (null for non-HTTP logs)")
+	Attribute("http_server_url", String, "HTTP server URL (null for non-HTTP logs)")
+
+	Required(
+		"id",
+		"time_unix_nano",
+		"observed_time_unix_nano",
+		"body",
+		"attributes",
+		"resource_attributes",
+		"gram_project_id",
+		"gram_urn",
+		"service_name",
+	)
+})
+
+var ListTracesPayload = Type("ListTracesPayload", func() {
+	Description("Payload for listing trace summaries")
+
+	Attribute("time_start", Int64, "Start time in Unix nanoseconds")
+	Attribute("time_end", Int64, "End time in Unix nanoseconds")
+	Attribute("deployment_id", String, "Deployment ID filter", func() {
+		Format(FormatUUID)
+	})
+	Attribute("function_id", String, "Function ID filter", func() {
+		Format(FormatUUID)
+	})
+	Attribute("cursor", String, "Cursor for pagination (trace ID)", func() {
+		Pattern("^[a-f0-9]{32}$")
+	})
+	Attribute("limit", Int, "Number of items to return (1-1000)", func() {
+		Minimum(1)
+		Maximum(1000)
+		Default(50)
+	})
+	Attribute("sort", String, "Sort order", func() {
+		Enum("asc", "desc")
+		Default("desc")
+	})
+})
+
+var ListTracesResult = Type("ListTracesResult", func() {
+	Description("Result of listing trace summaries")
+
+	Attribute("traces", ArrayOf(TraceSummaryRecord), "List of trace summaries")
+	Attribute("next_cursor", String, "Cursor for next page (trace ID)", func() {
+		Pattern("^[a-f0-9]{32}$")
+	})
+
+	Required("traces")
+})
+
+var TraceSummaryRecord = Type("TraceSummaryRecord", func() {
+	Description("Summary information for a distributed trace")
+
+	Attribute("trace_id", String, "Trace ID (32 hex characters)", func() {
+		Pattern("^[a-f0-9]{32}$")
+	})
+	Attribute("start_time_unix_nano", Int64, "Earliest log timestamp in Unix nanoseconds")
+	Attribute("log_count", UInt64, "Total number of logs in this trace")
+	Attribute("http_status_code", Int32, "HTTP status code (if applicable)")
+	Attribute("gram_urn", String, "Gram URN associated with this trace")
+
+	Required(
+		"trace_id",
+		"start_time_unix_nano",
+		"log_count",
+		"gram_urn",
+	)
+})
+
+var ListLogsForTracePayload = Type("ListLogsForTracePayload", func() {
+	Description("Payload for listing all logs for a specific trace")
+
+	Attribute("trace_id", String, "Trace ID (32 hex characters)", func() {
+		Pattern("^[a-f0-9]{32}$")
+	})
+	Attribute("limit", Int, "Number of items to return (1-1000)", func() {
+		Minimum(1)
+		Maximum(1000)
+		Default(100)
+	})
+
+	Required("trace_id")
+})
+
+var ListLogsForTraceResult = Type("ListLogsForTraceResult", func() {
+	Description("Result of listing logs for a trace")
+
+	Attribute("logs", ArrayOf(TelemetryLogRecord), "List of telemetry log records for this trace")
+
+	Required("logs")
 })
