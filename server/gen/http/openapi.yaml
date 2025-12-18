@@ -18141,8 +18141,8 @@ definitions:
         properties:
             expires_after:
                 type: integer
-                description: Token expiration in seconds (max 3600, default 600)
-                default: 600
+                description: Token expiration in seconds (max / default 3600)
+                default: 3600
                 example: 2799
                 format: int64
                 minimum: 1

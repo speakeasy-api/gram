@@ -44,7 +44,7 @@ func BuildCreatePayload(chatSessionsCreateBody string, chatSessionsCreateApikeyT
 	{
 		var zero int
 		if v.ExpiresAfter == zero {
-			v.ExpiresAfter = 600
+			v.ExpiresAfter = 3600
 		}
 	}
 	v.ApikeyToken = apikeyToken

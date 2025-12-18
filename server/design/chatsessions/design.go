@@ -21,10 +21,10 @@ var _ = Service("chatSessions", func() {
 
 		Payload(func() {
 			Attribute("user_identifier", String, "Optional free-form user identifier")
-			Attribute("expires_after", Int, "Token expiration in seconds (max 3600, default 600)", func() {
+			Attribute("expires_after", Int, "Token expiration in seconds (max / default 3600)", func() {
 				Minimum(1)
 				Maximum(3600)
-				Default(600)
+				Default(3600)
 			})
 			security.ByKeyPayload()
 			security.ProjectPayload()

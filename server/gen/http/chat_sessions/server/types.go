@@ -17,7 +17,7 @@ import (
 type CreateRequestBody struct {
 	// Optional free-form user identifier
 	UserIdentifier *string `form:"user_identifier,omitempty" json:"user_identifier,omitempty" xml:"user_identifier,omitempty"`
-	// Token expiration in seconds (max 3600, default 600)
+	// Token expiration in seconds (max / default 3600)
 	ExpiresAfter *int `form:"expires_after,omitempty" json:"expires_after,omitempty" xml:"expires_after,omitempty"`
 }
 
@@ -697,7 +697,7 @@ func NewCreatePayload(body *CreateRequestBody, apikeyToken *string, projectSlugI
 		v.ExpiresAfter = *body.ExpiresAfter
 	}
 	if body.ExpiresAfter == nil {
-		v.ExpiresAfter = 600
+		v.ExpiresAfter = 3600
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

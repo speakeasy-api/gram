@@ -98,10 +98,10 @@ func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JW
 	return s.chatSessions.Authorize(ctx, token)
 }
 
-// authorize performs authentication and authorization for chat requests.
+// directAuthorize performs authentication and authorization for chat requests.
 // It tries session auth first, then API key auth, then chat session token as fallback.
 // It also validates the project header and ensures ProjectID is present.
-func (s *Service) authorize(ctx context.Context, r *http.Request) (context.Context, *contextvalues.AuthContext, error) {
+func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context.Context, *contextvalues.AuthContext, error) {
 	// Try session auth first
 	sc := security.APIKeyScheme{
 		Name:           auth.SessionSecurityScheme,
@@ -263,7 +263,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 
 // HandleCompletion is a proxy to the OpenAI API that logs request and response data.
 func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error {
-	ctx, authCtx, err := s.authorize(r.Context(), r)
+	ctx, authCtx, err := s.directAuthorize(r.Context(), r)
 	if err != nil {
 		return err
 	}

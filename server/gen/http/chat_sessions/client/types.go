@@ -17,7 +17,7 @@ import (
 type CreateRequestBody struct {
 	// Optional free-form user identifier
 	UserIdentifier *string `form:"user_identifier,omitempty" json:"user_identifier,omitempty" xml:"user_identifier,omitempty"`
-	// Token expiration in seconds (max 3600, default 600)
+	// Token expiration in seconds (max / default 3600)
 	ExpiresAfter int `form:"expires_after" json:"expires_after" xml:"expires_after"`
 }
 
@@ -406,7 +406,7 @@ func NewCreateRequestBody(p *chatsessions.CreatePayload) *CreateRequestBody {
 	{
 		var zero int
 		if body.ExpiresAfter == zero {
-			body.ExpiresAfter = 600
+			body.ExpiresAfter = 3600
 		}
 	}
 	return body

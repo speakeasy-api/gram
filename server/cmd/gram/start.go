@@ -193,6 +193,12 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_ENCRYPTION_KEY"},
 		},
 		&cli.StringFlag{
+			Name:     "jwt-signing-key",
+			Usage:    "Key for JWT signing",
+			Required: true,
+			EnvVars:  []string{"GRAM_JWT_SIGNING_KEY"},
+		},
+		&cli.StringFlag{
 			Name:    "openrouter-dev-key",
 			Usage:   "Dev API key for OpenRouter (primarily for local development) - https://openrouter.ai/settings/keys",
 			EnvVars: []string{"OPENROUTER_DEV_KEY"},
@@ -425,9 +431,7 @@ func newStartCommand() *cli.Command {
 				sessionManager = s
 			}
 
-			// Initialize chat sessions manager
-			// TODO: Should this use a different encryption key?
-			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("encryption-key"))
+			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
 
 			encryptionClient, err := encryption.New(c.String("encryption-key"))
 			if err != nil {

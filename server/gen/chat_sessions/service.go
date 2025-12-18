@@ -48,7 +48,7 @@ var MethodNames = [2]string{"create", "revoke"}
 type CreatePayload struct {
 	// Optional free-form user identifier
 	UserIdentifier *string
-	// Token expiration in seconds (max 3600, default 600)
+	// Token expiration in seconds (max / default 3600)
 	ExpiresAfter     int
 	ApikeyToken      *string
 	ProjectSlugInput *string

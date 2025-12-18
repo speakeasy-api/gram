@@ -73,12 +73,6 @@ func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.Create
 		return nil, oops.C(oops.CodeUnauthorized).Log(ctx, s.logger)
 	}
 
-	// Validate expires_after (1-3600 seconds)
-	expiresAfter := p.ExpiresAfter
-	if expiresAfter < 1 || expiresAfter > 3600 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "expires_after must be between 1 and 3600 seconds").Log(ctx, s.logger)
-	}
-
 	// Generate JWT token
 	token, _, err := s.chatSessionsManager.GenerateToken(
 		ctx,
@@ -87,7 +81,7 @@ func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.Create
 		authCtx.OrganizationSlug,
 		*authCtx.ProjectSlug,
 		p.UserIdentifier,
-		expiresAfter,
+		p.ExpiresAfter, // Min/max validated by Goa
 	)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate chat session token").Log(ctx, s.logger)
@@ -95,7 +89,7 @@ func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.Create
 
 	result := &gen.CreateResult{
 		ClientToken:    token,
-		ExpiresAfter:   expiresAfter,
+		ExpiresAfter:   p.ExpiresAfter,
 		Status:         "active",
 		UserIdentifier: p.UserIdentifier,
 	}
