@@ -20,6 +20,12 @@ type Service interface {
 	ListLogs(context.Context, *ListLogsPayload) (res *ListToolLogResponse, err error)
 	// List structured logs from tool executions.
 	ListToolExecutionLogs(context.Context, *ListToolExecutionLogsPayload) (res *ListToolExecutionLogsResult, err error)
+	// List unified telemetry logs following OpenTelemetry Logs Data Model.
+	ListTelemetryLogs(context.Context, *ListTelemetryLogsPayload) (res *ListTelemetryLogsResult, err error)
+	// List trace summaries for distributed tracing.
+	ListTraces(context.Context, *ListTracesPayload) (res *ListTracesResult, err error)
+	// List all logs for a specific trace ID.
+	ListLogsForTrace(context.Context, *ListLogsForTracePayload) (res *ListLogsForTraceResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -42,7 +48,7 @@ const ServiceName = "logs"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"listLogs", "listToolExecutionLogs"}
+var MethodNames = [5]string{"listLogs", "listToolExecutionLogs", "listTelemetryLogs", "listTraces", "listLogsForTrace"}
 
 // HTTP tool request and response log entry
 type HTTPToolLog struct {
@@ -88,6 +94,25 @@ type HTTPToolLog struct {
 	ResponseBodyBytes *int64
 }
 
+// ListLogsForTracePayload is the payload type of the logs service
+// listLogsForTrace method.
+type ListLogsForTracePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Trace ID (32 hex characters)
+	TraceID string
+	// Number of items to return (1-1000)
+	Limit int
+}
+
+// ListLogsForTraceResult is the result type of the logs service
+// listLogsForTrace method.
+type ListLogsForTraceResult struct {
+	// List of telemetry log records for this trace
+	Logs []*TelemetryLogRecord
+}
+
 // ListLogsPayload is the payload type of the logs service listLogs method.
 type ListLogsPayload struct {
 	ApikeyToken      *string
@@ -117,6 +142,51 @@ type ListLogsPayload struct {
 	ToolType *string
 	// Tool URNs filter
 	ToolUrns []string
+}
+
+// ListTelemetryLogsPayload is the payload type of the logs service
+// listTelemetryLogs method.
+type ListTelemetryLogsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in Unix nanoseconds
+	TimeStart *int64
+	// End time in Unix nanoseconds
+	TimeEnd *int64
+	// Gram URN filter
+	GramUrn *string
+	// Trace ID filter (32 hex characters)
+	TraceID *string
+	// Deployment ID filter
+	DeploymentID *string
+	// Function ID filter
+	FunctionID *string
+	// Severity level filter
+	SeverityText *string
+	// HTTP status code filter
+	HTTPStatusCode *int32
+	// HTTP route filter
+	HTTPRoute *string
+	// HTTP method filter
+	HTTPMethod *string
+	// Service name filter
+	ServiceName *string
+	// Cursor for pagination
+	Cursor *string
+	// Number of items to return (1-1000)
+	Limit int
+	// Sort order
+	Sort string
+}
+
+// ListTelemetryLogsResult is the result type of the logs service
+// listTelemetryLogs method.
+type ListTelemetryLogsResult struct {
+	// List of telemetry log records
+	Logs []*TelemetryLogRecord
+	// Cursor for next page
+	NextCursor *string
 }
 
 // ListToolExecutionLogsPayload is the payload type of the logs service
@@ -166,6 +236,35 @@ type ListToolLogResponse struct {
 	Enabled bool
 }
 
+// ListTracesPayload is the payload type of the logs service listTraces method.
+type ListTracesPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in Unix nanoseconds
+	TimeStart *int64
+	// End time in Unix nanoseconds
+	TimeEnd *int64
+	// Deployment ID filter
+	DeploymentID *string
+	// Function ID filter
+	FunctionID *string
+	// Cursor for pagination (trace ID)
+	Cursor *string
+	// Number of items to return (1-1000)
+	Limit int
+	// Sort order
+	Sort string
+}
+
+// ListTracesResult is the result type of the logs service listTraces method.
+type ListTracesResult struct {
+	// List of trace summaries
+	Traces []*TraceSummaryRecord
+	// Cursor for next page (trace ID)
+	NextCursor *string
+}
+
 // Pagination metadata for list responses
 type PaginationResponse struct {
 	// Number of items per page
@@ -174,6 +273,48 @@ type PaginationResponse struct {
 	HasNextPage *bool
 	// Cursor for next page
 	NextPageCursor *string
+}
+
+// OpenTelemetry log record
+type TelemetryLogRecord struct {
+	// Log record ID
+	ID string
+	// Unix time in nanoseconds when event occurred
+	TimeUnixNano int64
+	// Unix time in nanoseconds when event was observed
+	ObservedTimeUnixNano int64
+	// Text representation of severity
+	SeverityText *string
+	// The primary log message
+	Body string
+	// W3C trace ID (32 hex characters)
+	TraceID *string
+	// W3C span ID (16 hex characters)
+	SpanID *string
+	// Log attributes as JSON object
+	Attributes any
+	// Resource attributes as JSON object
+	ResourceAttributes any
+	// Project ID
+	GramProjectID string
+	// Deployment ID
+	GramDeploymentID *string
+	// Function ID
+	GramFunctionID *string
+	// Gram URN
+	GramUrn string
+	// Service name
+	ServiceName string
+	// Service version
+	ServiceVersion *string
+	// HTTP method (null for non-HTTP logs)
+	HTTPRequestMethod *string
+	// HTTP status code (null for non-HTTP logs)
+	HTTPResponseStatusCode *int32
+	// HTTP route (null for non-HTTP logs)
+	HTTPRoute *string
+	// HTTP server URL (null for non-HTTP logs)
+	HTTPServerURL *string
 }
 
 // Structured log entry from a tool execution
@@ -204,6 +345,20 @@ type ToolExecutionLog struct {
 
 // Type of tool being logged
 type ToolType string
+
+// Summary information for a distributed trace
+type TraceSummaryRecord struct {
+	// Trace ID (32 hex characters)
+	TraceID string
+	// Earliest log timestamp in Unix nanoseconds
+	StartTimeUnixNano int64
+	// Total number of logs in this trace
+	LogCount uint64
+	// HTTP status code (if applicable)
+	HTTPStatusCode *int32
+	// Gram URN associated with this trace
+	GramUrn string
+}
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
 func MakeUnauthorized(err error) *goa.ServiceError {

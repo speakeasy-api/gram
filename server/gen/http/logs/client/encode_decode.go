@@ -557,6 +557,783 @@ func DecodeListToolExecutionLogsResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildListTelemetryLogsRequest instantiates a HTTP request object with method
+// and path set to call the "logs" service "listTelemetryLogs" endpoint
+func (c *Client) BuildListTelemetryLogsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListTelemetryLogsLogsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("logs", "listTelemetryLogs", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListTelemetryLogsRequest returns an encoder for requests sent to the
+// logs listTelemetryLogs server.
+func EncodeListTelemetryLogsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*logs.ListTelemetryLogsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("logs", "listTelemetryLogs", "*logs.ListTelemetryLogsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		if p.TimeStart != nil {
+			values.Add("time_start", fmt.Sprintf("%v", *p.TimeStart))
+		}
+		if p.TimeEnd != nil {
+			values.Add("time_end", fmt.Sprintf("%v", *p.TimeEnd))
+		}
+		if p.GramUrn != nil {
+			values.Add("gram_urn", *p.GramUrn)
+		}
+		if p.TraceID != nil {
+			values.Add("trace_id", *p.TraceID)
+		}
+		if p.DeploymentID != nil {
+			values.Add("deployment_id", *p.DeploymentID)
+		}
+		if p.FunctionID != nil {
+			values.Add("function_id", *p.FunctionID)
+		}
+		if p.SeverityText != nil {
+			values.Add("severity_text", *p.SeverityText)
+		}
+		if p.HTTPStatusCode != nil {
+			values.Add("http_status_code", fmt.Sprintf("%v", *p.HTTPStatusCode))
+		}
+		if p.HTTPRoute != nil {
+			values.Add("http_route", *p.HTTPRoute)
+		}
+		if p.HTTPMethod != nil {
+			values.Add("http_method", *p.HTTPMethod)
+		}
+		if p.ServiceName != nil {
+			values.Add("service_name", *p.ServiceName)
+		}
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		values.Add("sort", p.Sort)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListTelemetryLogsResponse returns a decoder for responses returned by
+// the logs listTelemetryLogs endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListTelemetryLogsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListTelemetryLogsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListTelemetryLogsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listTelemetryLogs", err)
+			}
+			err = ValidateListTelemetryLogsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listTelemetryLogs", err)
+			}
+			res := NewListTelemetryLogsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListTelemetryLogsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listTelemetryLogs", err)
+			}
+			err = ValidateListTelemetryLogsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listTelemetryLogs", err)
+			}
+			return nil, NewListTelemetryLogsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListTelemetryLogsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listTelemetryLogs", err)
+			}
+			err = ValidateListTelemetryLogsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listTelemetryLogs", err)
+			}
+			return nil, NewListTelemetryLogsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListTelemetryLogsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listTelemetryLogs", err)
+			}
+			err = ValidateListTelemetryLogsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listTelemetryLogs", err)
+			}
+			return nil, NewListTelemetryLogsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListTelemetryLogsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listTelemetryLogs", err)
+			}
+			err = ValidateListTelemetryLogsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listTelemetryLogs", err)
+			}
+			return nil, NewListTelemetryLogsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListTelemetryLogsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listTelemetryLogs", err)
+			}
+			err = ValidateListTelemetryLogsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listTelemetryLogs", err)
+			}
+			return nil, NewListTelemetryLogsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListTelemetryLogsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listTelemetryLogs", err)
+			}
+			err = ValidateListTelemetryLogsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listTelemetryLogs", err)
+			}
+			return nil, NewListTelemetryLogsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListTelemetryLogsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listTelemetryLogs", err)
+			}
+			err = ValidateListTelemetryLogsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listTelemetryLogs", err)
+			}
+			return nil, NewListTelemetryLogsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListTelemetryLogsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("logs", "listTelemetryLogs", err)
+				}
+				err = ValidateListTelemetryLogsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("logs", "listTelemetryLogs", err)
+				}
+				return nil, NewListTelemetryLogsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListTelemetryLogsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("logs", "listTelemetryLogs", err)
+				}
+				err = ValidateListTelemetryLogsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("logs", "listTelemetryLogs", err)
+				}
+				return nil, NewListTelemetryLogsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("logs", "listTelemetryLogs", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListTelemetryLogsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listTelemetryLogs", err)
+			}
+			err = ValidateListTelemetryLogsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listTelemetryLogs", err)
+			}
+			return nil, NewListTelemetryLogsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("logs", "listTelemetryLogs", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListTracesRequest instantiates a HTTP request object with method and
+// path set to call the "logs" service "listTraces" endpoint
+func (c *Client) BuildListTracesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListTracesLogsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("logs", "listTraces", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListTracesRequest returns an encoder for requests sent to the logs
+// listTraces server.
+func EncodeListTracesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*logs.ListTracesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("logs", "listTraces", "*logs.ListTracesPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		if p.TimeStart != nil {
+			values.Add("time_start", fmt.Sprintf("%v", *p.TimeStart))
+		}
+		if p.TimeEnd != nil {
+			values.Add("time_end", fmt.Sprintf("%v", *p.TimeEnd))
+		}
+		if p.DeploymentID != nil {
+			values.Add("deployment_id", *p.DeploymentID)
+		}
+		if p.FunctionID != nil {
+			values.Add("function_id", *p.FunctionID)
+		}
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		values.Add("sort", p.Sort)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListTracesResponse returns a decoder for responses returned by the
+// logs listTraces endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeListTracesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListTracesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListTracesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listTraces", err)
+			}
+			err = ValidateListTracesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listTraces", err)
+			}
+			res := NewListTracesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListTracesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listTraces", err)
+			}
+			err = ValidateListTracesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listTraces", err)
+			}
+			return nil, NewListTracesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListTracesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listTraces", err)
+			}
+			err = ValidateListTracesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listTraces", err)
+			}
+			return nil, NewListTracesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListTracesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listTraces", err)
+			}
+			err = ValidateListTracesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listTraces", err)
+			}
+			return nil, NewListTracesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListTracesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listTraces", err)
+			}
+			err = ValidateListTracesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listTraces", err)
+			}
+			return nil, NewListTracesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListTracesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listTraces", err)
+			}
+			err = ValidateListTracesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listTraces", err)
+			}
+			return nil, NewListTracesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListTracesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listTraces", err)
+			}
+			err = ValidateListTracesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listTraces", err)
+			}
+			return nil, NewListTracesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListTracesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listTraces", err)
+			}
+			err = ValidateListTracesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listTraces", err)
+			}
+			return nil, NewListTracesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListTracesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("logs", "listTraces", err)
+				}
+				err = ValidateListTracesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("logs", "listTraces", err)
+				}
+				return nil, NewListTracesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListTracesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("logs", "listTraces", err)
+				}
+				err = ValidateListTracesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("logs", "listTraces", err)
+				}
+				return nil, NewListTracesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("logs", "listTraces", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListTracesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listTraces", err)
+			}
+			err = ValidateListTracesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listTraces", err)
+			}
+			return nil, NewListTracesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("logs", "listTraces", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListLogsForTraceRequest instantiates a HTTP request object with method
+// and path set to call the "logs" service "listLogsForTrace" endpoint
+func (c *Client) BuildListLogsForTraceRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListLogsForTraceLogsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("logs", "listLogsForTrace", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListLogsForTraceRequest returns an encoder for requests sent to the
+// logs listLogsForTrace server.
+func EncodeListLogsForTraceRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*logs.ListLogsForTracePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("logs", "listLogsForTrace", "*logs.ListLogsForTracePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("trace_id", p.TraceID)
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListLogsForTraceResponse returns a decoder for responses returned by
+// the logs listLogsForTrace endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListLogsForTraceResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListLogsForTraceResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListLogsForTraceResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listLogsForTrace", err)
+			}
+			err = ValidateListLogsForTraceResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listLogsForTrace", err)
+			}
+			res := NewListLogsForTraceResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListLogsForTraceUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listLogsForTrace", err)
+			}
+			err = ValidateListLogsForTraceUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listLogsForTrace", err)
+			}
+			return nil, NewListLogsForTraceUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListLogsForTraceForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listLogsForTrace", err)
+			}
+			err = ValidateListLogsForTraceForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listLogsForTrace", err)
+			}
+			return nil, NewListLogsForTraceForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListLogsForTraceBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listLogsForTrace", err)
+			}
+			err = ValidateListLogsForTraceBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listLogsForTrace", err)
+			}
+			return nil, NewListLogsForTraceBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListLogsForTraceNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listLogsForTrace", err)
+			}
+			err = ValidateListLogsForTraceNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listLogsForTrace", err)
+			}
+			return nil, NewListLogsForTraceNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListLogsForTraceConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listLogsForTrace", err)
+			}
+			err = ValidateListLogsForTraceConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listLogsForTrace", err)
+			}
+			return nil, NewListLogsForTraceConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListLogsForTraceUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listLogsForTrace", err)
+			}
+			err = ValidateListLogsForTraceUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listLogsForTrace", err)
+			}
+			return nil, NewListLogsForTraceUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListLogsForTraceInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listLogsForTrace", err)
+			}
+			err = ValidateListLogsForTraceInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listLogsForTrace", err)
+			}
+			return nil, NewListLogsForTraceInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListLogsForTraceInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("logs", "listLogsForTrace", err)
+				}
+				err = ValidateListLogsForTraceInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("logs", "listLogsForTrace", err)
+				}
+				return nil, NewListLogsForTraceInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListLogsForTraceUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("logs", "listLogsForTrace", err)
+				}
+				err = ValidateListLogsForTraceUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("logs", "listLogsForTrace", err)
+				}
+				return nil, NewListLogsForTraceUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("logs", "listLogsForTrace", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListLogsForTraceGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("logs", "listLogsForTrace", err)
+			}
+			err = ValidateListLogsForTraceGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("logs", "listLogsForTrace", err)
+			}
+			return nil, NewListLogsForTraceGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("logs", "listLogsForTrace", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog builds a value of type
 // *logs.HTTPToolLog from a value of type *HTTPToolLogResponseBody.
 func unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog(v *HTTPToolLogResponseBody) *logs.HTTPToolLog {
@@ -632,6 +1409,50 @@ func unmarshalToolExecutionLogResponseBodyToLogsToolExecutionLog(v *ToolExecutio
 		ProjectID:    *v.ProjectID,
 		DeploymentID: *v.DeploymentID,
 		FunctionID:   *v.FunctionID,
+	}
+
+	return res
+}
+
+// unmarshalTelemetryLogRecordResponseBodyToLogsTelemetryLogRecord builds a
+// value of type *logs.TelemetryLogRecord from a value of type
+// *TelemetryLogRecordResponseBody.
+func unmarshalTelemetryLogRecordResponseBodyToLogsTelemetryLogRecord(v *TelemetryLogRecordResponseBody) *logs.TelemetryLogRecord {
+	res := &logs.TelemetryLogRecord{
+		ID:                     *v.ID,
+		TimeUnixNano:           *v.TimeUnixNano,
+		ObservedTimeUnixNano:   *v.ObservedTimeUnixNano,
+		SeverityText:           v.SeverityText,
+		Body:                   *v.Body,
+		TraceID:                v.TraceID,
+		SpanID:                 v.SpanID,
+		Attributes:             v.Attributes,
+		ResourceAttributes:     v.ResourceAttributes,
+		GramProjectID:          *v.GramProjectID,
+		GramDeploymentID:       v.GramDeploymentID,
+		GramFunctionID:         v.GramFunctionID,
+		GramUrn:                *v.GramUrn,
+		ServiceName:            *v.ServiceName,
+		ServiceVersion:         v.ServiceVersion,
+		HTTPRequestMethod:      v.HTTPRequestMethod,
+		HTTPResponseStatusCode: v.HTTPResponseStatusCode,
+		HTTPRoute:              v.HTTPRoute,
+		HTTPServerURL:          v.HTTPServerURL,
+	}
+
+	return res
+}
+
+// unmarshalTraceSummaryRecordResponseBodyToLogsTraceSummaryRecord builds a
+// value of type *logs.TraceSummaryRecord from a value of type
+// *TraceSummaryRecordResponseBody.
+func unmarshalTraceSummaryRecordResponseBodyToLogsTraceSummaryRecord(v *TraceSummaryRecordResponseBody) *logs.TraceSummaryRecord {
+	res := &logs.TraceSummaryRecord{
+		TraceID:           *v.TraceID,
+		StartTimeUnixNano: *v.StartTimeUnixNano,
+		LogCount:          *v.LogCount,
+		HTTPStatusCode:    v.HTTPStatusCode,
+		GramUrn:           *v.GramUrn,
 	}
 
 	return res

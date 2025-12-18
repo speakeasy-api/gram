@@ -16,3 +16,18 @@ func ListLogsLogsPath() string {
 func ListToolExecutionLogsLogsPath() string {
 	return "/rpc/logs.listToolExecutionLogs"
 }
+
+// ListTelemetryLogsLogsPath returns the URL path to the logs service listTelemetryLogs HTTP endpoint.
+func ListTelemetryLogsLogsPath() string {
+	return "/rpc/logs.listTelemetryLogs"
+}
+
+// ListTracesLogsPath returns the URL path to the logs service listTraces HTTP endpoint.
+func ListTracesLogsPath() string {
+	return "/rpc/logs.listTraces"
+}
+
+// ListLogsForTraceLogsPath returns the URL path to the logs service listLogsForTrace HTTP endpoint.
+func ListLogsForTraceLogsPath() string {
+	return "/rpc/logs.listLogsForTrace"
+}
