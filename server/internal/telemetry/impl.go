@@ -323,15 +323,20 @@ func (s *Service) ListTelemetryLogs(ctx context.Context, payload *gen.ListTeleme
 
 	// Empty string cursor for first page
 	cursor := ""
-	if payload.Cursor != nil  {
+	if payload.Cursor != nil {
 		cursor = *payload.Cursor
 	}
+
+	// Default time range: all time if not specified
+	now := time.Now()
+	timeStart := conv.PtrValOr(payload.TimeStart, int64(0)) // Beginning of time (epoch)
+	timeEnd := conv.PtrValOr(payload.TimeEnd, now.UnixNano())
 
 	// Query with limit+1 to detect if there are more results
 	items, err := s.tcm.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
 		GramProjectID:          projectID.String(),
-		TimeStart:              conv.PtrValOr(payload.TimeStart, 0),
-		TimeEnd:                conv.PtrValOr(payload.TimeEnd, 0),
+		TimeStart:              timeStart,
+		TimeEnd:                timeEnd,
 		GramURN:                conv.PtrValOr(payload.GramUrn, ""),
 		TraceID:                conv.PtrValOr(payload.TraceID, ""),
 		GramDeploymentID:       conv.PtrValOr(payload.DeploymentID, ""),
@@ -405,11 +410,16 @@ func (s *Service) ListTraces(ctx context.Context, payload *gen.ListTracesPayload
 		cursor = *payload.Cursor
 	}
 
+	// Default time range: all time if not specified
+	now := time.Now()
+	timeStart := conv.PtrValOr(payload.TimeStart, int64(0)) // Beginning of time (epoch)
+	timeEnd := conv.PtrValOr(payload.TimeEnd, now.UnixNano())
+
 	// Query with limit+1 to detect if there are more results
 	items, err := s.tcm.ListTraces(ctx, repo.ListTracesParams{
 		GramProjectID:    projectID.String(),
-		TimeStart:        conv.PtrValOr(payload.TimeStart, 0),
-		TimeEnd:          conv.PtrValOr(payload.TimeEnd, 0),
+		TimeStart:        timeStart,
+		TimeEnd:          timeEnd,
 		GramDeploymentID: conv.PtrValOr(payload.DeploymentID, ""),
 		GramFunctionID:   conv.PtrValOr(payload.FunctionID, ""),
 		SortOrder:        sortOrder,
@@ -455,16 +465,11 @@ func (s *Service) ListLogsForTrace(ctx context.Context, payload *gen.ListLogsFor
 
 	projectID := authCtx.ProjectID
 
-	// Validate limit (defaults handled by Goa)
-	limit := payload.Limit
-	if limit < 1 || limit > 1000 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "limit must be between 1 and 1000")
-	}
-
+	// Fetch all logs for the trace (no pagination - traces typically have limited logs)
 	logs, err := s.tcm.ListLogsForTrace(ctx, repo.ListLogsForTraceParams{
 		GramProjectID: projectID.String(),
 		TraceID:       payload.TraceID,
-		Limit:         limit,
+		Limit:         1000, // Hard limit to prevent abuse
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing logs for trace")
@@ -500,24 +505,18 @@ func toTelemetryLogPayload(log repo.TelemetryLog) (*gen.TelemetryLogRecord, erro
 	}
 
 	return &gen.TelemetryLogRecord{
-		ID:                     log.ID,
-		TimeUnixNano:           log.TimeUnixNano,
-		ObservedTimeUnixNano:   log.ObservedTimeUnixNano,
-		SeverityText:           log.SeverityText,
-		Body:                   log.Body,
-		TraceID:                log.TraceID,
-		SpanID:                 log.SpanID,
-		Attributes:             attributes,
-		ResourceAttributes:     resourceAttributes,
-		GramProjectID:          log.GramProjectID,
-		GramDeploymentID:       log.GramDeploymentID,
-		GramFunctionID:         log.GramFunctionID,
-		GramUrn:                log.GramURN,
-		ServiceName:            log.ServiceName,
-		ServiceVersion:         log.ServiceVersion,
-		HTTPRequestMethod:      log.HTTPRequestMethod,
-		HTTPResponseStatusCode: log.HTTPResponseStatusCode,
-		HTTPRoute:              log.HTTPRoute,
-		HTTPServerURL:          log.HTTPServerURL,
+		ID:                   log.ID,
+		TimeUnixNano:         log.TimeUnixNano,
+		ObservedTimeUnixNano: log.ObservedTimeUnixNano,
+		SeverityText:         log.SeverityText,
+		Body:                 log.Body,
+		TraceID:              log.TraceID,
+		SpanID:               log.SpanID,
+		Attributes:           attributes,
+		ResourceAttributes:   resourceAttributes,
+		Service: &gen.ServiceInfo{
+			Name:    log.ServiceName,
+			Version: log.ServiceVersion,
+		},
 	}, nil
 }

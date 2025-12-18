@@ -212,7 +212,6 @@ var _ = Service("logs", func() {
 			security.ProjectHeader()
 
 			Param("trace_id")
-			Param("limit")
 		})
 
 		Meta("openapi:operationId", "listLogsForTrace")
@@ -498,22 +497,7 @@ var TelemetryLogRecord = Type("TelemetryLogRecord", func() {
 	Attribute("span_id", String, "W3C span ID (16 hex characters)")
 	Attribute("attributes", Any, "Log attributes as JSON object")
 	Attribute("resource_attributes", Any, "Resource attributes as JSON object")
-	Attribute("gram_project_id", String, "Project ID", func() {
-		Format(FormatUUID)
-	})
-	Attribute("gram_deployment_id", String, "Deployment ID", func() {
-		Format(FormatUUID)
-	})
-	Attribute("gram_function_id", String, "Function ID", func() {
-		Format(FormatUUID)
-	})
-	Attribute("gram_urn", String, "Gram URN")
-	Attribute("service_name", String, "Service name")
-	Attribute("service_version", String, "Service version")
-	Attribute("http_request_method", String, "HTTP method (null for non-HTTP logs)")
-	Attribute("http_response_status_code", Int32, "HTTP status code (null for non-HTTP logs)")
-	Attribute("http_route", String, "HTTP route (null for non-HTTP logs)")
-	Attribute("http_server_url", String, "HTTP server URL (null for non-HTTP logs)")
+	Attribute("service", ServiceInfo, "Service information")
 
 	Required(
 		"id",
@@ -522,10 +506,17 @@ var TelemetryLogRecord = Type("TelemetryLogRecord", func() {
 		"body",
 		"attributes",
 		"resource_attributes",
-		"gram_project_id",
-		"gram_urn",
-		"service_name",
+		"service",
 	)
+})
+
+var ServiceInfo = Type("ServiceInfo", func() {
+	Description("Service information")
+
+	Attribute("name", String, "Service name")
+	Attribute("version", String, "Service version")
+
+	Required("name")
 })
 
 var ListTracesPayload = Type("ListTracesPayload", func() {
@@ -588,11 +579,6 @@ var ListLogsForTracePayload = Type("ListLogsForTracePayload", func() {
 
 	Attribute("trace_id", String, "Trace ID (32 hex characters)", func() {
 		Pattern("^[a-f0-9]{32}$")
-	})
-	Attribute("limit", Int, "Number of items to return (1-1000)", func() {
-		Minimum(1)
-		Maximum(1000)
-		Default(100)
 	})
 
 	Required("trace_id")

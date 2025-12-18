@@ -296,7 +296,6 @@ func TestService_ListLogsForTrace_Empty(t *testing.T) {
 
 	result, err := ti.service.ListLogsForTrace(ctx, &gen.ListLogsForTracePayload{
 		TraceID: traceID,
-		Limit:   100,
 	})
 
 	require.NoError(t, err)
@@ -328,7 +327,6 @@ func TestService_ListLogsForTrace_SortedAscending(t *testing.T) {
 
 	result, err := ti.service.ListLogsForTrace(ctx, &gen.ListLogsForTracePayload{
 		TraceID: traceID,
-		Limit:   100,
 	})
 
 	require.NoError(t, err)
@@ -355,7 +353,7 @@ func TestService_ListLogsForTrace_SortedAscending(t *testing.T) {
 	}
 }
 
-func TestService_ListLogsForTrace_RespectsLimit(t *testing.T) {
+func TestService_ListLogsForTrace_ReturnsAllLogs(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
@@ -374,12 +372,11 @@ func TestService_ListLogsForTrace_RespectsLimit(t *testing.T) {
 
 	result, err := ti.service.ListLogsForTrace(ctx, &gen.ListLogsForTracePayload{
 		TraceID: traceID,
-		Limit:   5,
 	})
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Len(t, result.Logs, 5, "should respect limit parameter")
+	require.Len(t, result.Logs, 10, "should return all logs for the trace")
 }
 
 func insertTestTelemetryLogs(t *testing.T, ctx context.Context, projectID, deploymentID string, count int) {
