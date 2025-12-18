@@ -24,7 +24,7 @@ func BuildCreatePackagePayload(packagesCreatePackageBody string, packagesCreateP
 	{
 		err = json.Unmarshal([]byte(packagesCreatePackageBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"jp0\",\n      \"image_asset_id\": \"ykq\",\n      \"keywords\": [\n         \"Molestiae quos vel.\",\n         \"Esse cumque qui.\",\n         \"Facere ipsum architecto consectetur.\"\n      ],\n      \"name\": \"25s\",\n      \"summary\": \"l79\",\n      \"title\": \"1sd\",\n      \"url\": \"wqj\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"506\",\n      \"image_asset_id\": \"alm\",\n      \"keywords\": [\n         \"Et ipsam.\",\n         \"Perspiciatis odio exercitationem sapiente mollitia quis perferendis.\",\n         \"Autem et blanditiis.\"\n      ],\n      \"name\": \"509\",\n      \"summary\": \"mix\",\n      \"title\": \"fsj\",\n      \"url\": \"5td\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.Name) > 100 {
@@ -105,7 +105,7 @@ func BuildUpdatePackagePayload(packagesUpdatePackageBody string, packagesUpdateP
 	{
 		err = json.Unmarshal([]byte(packagesUpdatePackageBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"dm8\",\n      \"id\": \"f2c\",\n      \"image_asset_id\": \"3zz\",\n      \"keywords\": [\n         \"Itaque molestiae et in rerum sunt natus.\",\n         \"Officia harum ipsa deserunt quia praesentium nemo.\",\n         \"Voluptatem dolorum accusamus qui qui.\"\n      ],\n      \"summary\": \"aln\",\n      \"title\": \"h0h\",\n      \"url\": \"v9u\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"rn5\",\n      \"id\": \"eza\",\n      \"image_asset_id\": \"ch0\",\n      \"keywords\": [\n         \"Neque quae deleniti.\",\n         \"Et occaecati laborum eius.\",\n         \"Atque dolorem iusto commodi qui recusandae.\"\n      ],\n      \"summary\": \"ep2\",\n      \"title\": \"14k\",\n      \"url\": \"r26\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.ID) > 50 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 50, false))
@@ -252,7 +252,7 @@ func BuildPublishPayload(packagesPublishBody string, packagesPublishApikeyToken 
 	{
 		err = json.Unmarshal([]byte(packagesPublishBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Excepturi molestiae accusantium.\",\n      \"name\": \"Quae assumenda.\",\n      \"version\": \"Sint et.\",\n      \"visibility\": \"public\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Exercitationem non perferendis aut natus incidunt.\",\n      \"name\": \"Ullam adipisci tempore praesentium eum excepturi magnam.\",\n      \"version\": \"Sunt labore modi perspiciatis repellendus excepturi.\",\n      \"visibility\": \"public\"\n   }'")
 		}
 		if !(body.Visibility == "public" || body.Visibility == "private") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", body.Visibility, []any{"public", "private"}))

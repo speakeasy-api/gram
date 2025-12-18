@@ -1333,36 +1333,16 @@ func DecodeListLogsForTraceRequest(mux goahttp.Muxer, decoder func(*http.Request
 	return func(r *http.Request) (*logs.ListLogsForTracePayload, error) {
 		var (
 			traceID          string
-			limit            int
 			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
 			err              error
 		)
-		qp := r.URL.Query()
-		traceID = qp.Get("trace_id")
+		traceID = r.URL.Query().Get("trace_id")
 		if traceID == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("trace_id", "query string"))
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("trace_id", traceID, "^[a-f0-9]{32}$"))
-		{
-			limitRaw := qp.Get("limit")
-			if limitRaw == "" {
-				limit = 100
-			} else {
-				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
-				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
-				}
-				limit = int(v)
-			}
-		}
-		if limit < 1 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
-		}
-		if limit > 1000 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1000, false))
-		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -1378,7 +1358,7 @@ func DecodeListLogsForTraceRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if err != nil {
 			return nil, err
 		}
-		payload := NewListLogsForTracePayload(traceID, limit, apikeyToken, sessionToken, projectSlugInput)
+		payload := NewListLogsForTracePayload(traceID, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1646,25 +1626,29 @@ func marshalLogsToolExecutionLogToToolExecutionLogResponseBody(v *logs.ToolExecu
 // *logs.TelemetryLogRecord.
 func marshalLogsTelemetryLogRecordToTelemetryLogRecordResponseBody(v *logs.TelemetryLogRecord) *TelemetryLogRecordResponseBody {
 	res := &TelemetryLogRecordResponseBody{
-		ID:                     v.ID,
-		TimeUnixNano:           v.TimeUnixNano,
-		ObservedTimeUnixNano:   v.ObservedTimeUnixNano,
-		SeverityText:           v.SeverityText,
-		Body:                   v.Body,
-		TraceID:                v.TraceID,
-		SpanID:                 v.SpanID,
-		Attributes:             v.Attributes,
-		ResourceAttributes:     v.ResourceAttributes,
-		GramProjectID:          v.GramProjectID,
-		GramDeploymentID:       v.GramDeploymentID,
-		GramFunctionID:         v.GramFunctionID,
-		GramUrn:                v.GramUrn,
-		ServiceName:            v.ServiceName,
-		ServiceVersion:         v.ServiceVersion,
-		HTTPRequestMethod:      v.HTTPRequestMethod,
-		HTTPResponseStatusCode: v.HTTPResponseStatusCode,
-		HTTPRoute:              v.HTTPRoute,
-		HTTPServerURL:          v.HTTPServerURL,
+		ID:                   v.ID,
+		TimeUnixNano:         v.TimeUnixNano,
+		ObservedTimeUnixNano: v.ObservedTimeUnixNano,
+		SeverityText:         v.SeverityText,
+		Body:                 v.Body,
+		TraceID:              v.TraceID,
+		SpanID:               v.SpanID,
+		Attributes:           v.Attributes,
+		ResourceAttributes:   v.ResourceAttributes,
+	}
+	if v.Service != nil {
+		res.Service = marshalLogsServiceInfoToServiceInfoResponseBody(v.Service)
+	}
+
+	return res
+}
+
+// marshalLogsServiceInfoToServiceInfoResponseBody builds a value of type
+// *ServiceInfoResponseBody from a value of type *logs.ServiceInfo.
+func marshalLogsServiceInfoToServiceInfoResponseBody(v *logs.ServiceInfo) *ServiceInfoResponseBody {
+	res := &ServiceInfoResponseBody{
+		Name:    v.Name,
+		Version: v.Version,
 	}
 
 	return res

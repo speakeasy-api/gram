@@ -1070,26 +1070,16 @@ type TelemetryLogRecordResponseBody struct {
 	Attributes any `form:"attributes,omitempty" json:"attributes,omitempty" xml:"attributes,omitempty"`
 	// Resource attributes as JSON object
 	ResourceAttributes any `form:"resource_attributes,omitempty" json:"resource_attributes,omitempty" xml:"resource_attributes,omitempty"`
-	// Project ID
-	GramProjectID *string `form:"gram_project_id,omitempty" json:"gram_project_id,omitempty" xml:"gram_project_id,omitempty"`
-	// Deployment ID
-	GramDeploymentID *string `form:"gram_deployment_id,omitempty" json:"gram_deployment_id,omitempty" xml:"gram_deployment_id,omitempty"`
-	// Function ID
-	GramFunctionID *string `form:"gram_function_id,omitempty" json:"gram_function_id,omitempty" xml:"gram_function_id,omitempty"`
-	// Gram URN
-	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
+	// Service information
+	Service *ServiceInfoResponseBody `form:"service,omitempty" json:"service,omitempty" xml:"service,omitempty"`
+}
+
+// ServiceInfoResponseBody is used to define fields on response body types.
+type ServiceInfoResponseBody struct {
 	// Service name
-	ServiceName *string `form:"service_name,omitempty" json:"service_name,omitempty" xml:"service_name,omitempty"`
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Service version
-	ServiceVersion *string `form:"service_version,omitempty" json:"service_version,omitempty" xml:"service_version,omitempty"`
-	// HTTP method (null for non-HTTP logs)
-	HTTPRequestMethod *string `form:"http_request_method,omitempty" json:"http_request_method,omitempty" xml:"http_request_method,omitempty"`
-	// HTTP status code (null for non-HTTP logs)
-	HTTPResponseStatusCode *int32 `form:"http_response_status_code,omitempty" json:"http_response_status_code,omitempty" xml:"http_response_status_code,omitempty"`
-	// HTTP route (null for non-HTTP logs)
-	HTTPRoute *string `form:"http_route,omitempty" json:"http_route,omitempty" xml:"http_route,omitempty"`
-	// HTTP server URL (null for non-HTTP logs)
-	HTTPServerURL *string `form:"http_server_url,omitempty" json:"http_server_url,omitempty" xml:"http_server_url,omitempty"`
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
 // TraceSummaryRecordResponseBody is used to define fields on response body
@@ -3393,26 +3383,25 @@ func ValidateTelemetryLogRecordResponseBody(body *TelemetryLogRecordResponseBody
 	if body.ResourceAttributes == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_attributes", "body"))
 	}
-	if body.GramProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("gram_project_id", "body"))
-	}
-	if body.GramUrn == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("gram_urn", "body"))
-	}
-	if body.ServiceName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("service_name", "body"))
+	if body.Service == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("service", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
-	if body.GramProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.gram_project_id", *body.GramProjectID, goa.FormatUUID))
+	if body.Service != nil {
+		if err2 := ValidateServiceInfoResponseBody(body.Service); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
-	if body.GramDeploymentID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.gram_deployment_id", *body.GramDeploymentID, goa.FormatUUID))
-	}
-	if body.GramFunctionID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.gram_function_id", *body.GramFunctionID, goa.FormatUUID))
+	return
+}
+
+// ValidateServiceInfoResponseBody runs the validations defined on
+// ServiceInfoResponseBody
+func ValidateServiceInfoResponseBody(body *ServiceInfoResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	return
 }

@@ -38,10 +38,6 @@ export type ListLogsForTraceRequest = {
    */
   traceId: string;
   /**
-   * Number of items to return (1-1000)
-   */
-  limit?: number | undefined;
-  /**
    * API Key header
    */
   gramKey?: string | undefined;
@@ -221,7 +217,6 @@ export function listLogsForTraceSecurityToJSON(
 /** @internal */
 export type ListLogsForTraceRequest$Outbound = {
   trace_id: string;
-  limit: number;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -234,7 +229,6 @@ export const ListLogsForTraceRequest$outboundSchema: z.ZodType<
   ListLogsForTraceRequest
 > = z.object({
   traceId: z.string(),
-  limit: z.number().int().default(100),
   gramKey: z.string().optional(),
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),

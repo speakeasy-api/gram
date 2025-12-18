@@ -5056,17 +5056,6 @@ paths:
             pattern: ^[a-f0-9]{32}$
             type: string
         - allowEmptyValue: true
-          description: Number of items to return (1-1000)
-          in: query
-          name: limit
-          schema:
-            default: 100
-            description: Number of items to return (1-1000)
-            format: int64
-            maximum: 1000
-            minimum: 1
-            type: integer
-        - allowEmptyValue: true
           description: API Key header
           in: header
           name: Gram-Key
@@ -12722,13 +12711,6 @@ components:
     ListLogsForTracePayload:
       type: object
       properties:
-        limit:
-          type: integer
-          description: Number of items to return (1-1000)
-          default: 100
-          format: int64
-          minimum: 1
-          maximum: 1000
         trace_id:
           type: string
           description: Trace ID (32 hex characters)
@@ -13961,6 +13943,18 @@ components:
       required:
         - description
         - env_variables
+    ServiceInfo:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Service name
+        version:
+          type: string
+          description: Service version
+      description: Service information
+      required:
+        - name
     SetMcpMetadataRequestBody:
       type: object
       properties:
@@ -14078,34 +14072,6 @@ components:
         body:
           type: string
           description: The primary log message
-        gram_deployment_id:
-          type: string
-          description: Deployment ID
-          format: uuid
-        gram_function_id:
-          type: string
-          description: Function ID
-          format: uuid
-        gram_project_id:
-          type: string
-          description: Project ID
-          format: uuid
-        gram_urn:
-          type: string
-          description: Gram URN
-        http_request_method:
-          type: string
-          description: HTTP method (null for non-HTTP logs)
-        http_response_status_code:
-          type: integer
-          description: HTTP status code (null for non-HTTP logs)
-          format: int32
-        http_route:
-          type: string
-          description: HTTP route (null for non-HTTP logs)
-        http_server_url:
-          type: string
-          description: HTTP server URL (null for non-HTTP logs)
         id:
           type: string
           description: Log record ID
@@ -14116,12 +14082,8 @@ components:
           format: int64
         resource_attributes:
           description: Resource attributes as JSON object
-        service_name:
-          type: string
-          description: Service name
-        service_version:
-          type: string
-          description: Service version
+        service:
+          $ref: '#/components/schemas/ServiceInfo'
         severity_text:
           type: string
           description: Text representation of severity
@@ -14143,9 +14105,7 @@ components:
         - body
         - attributes
         - resource_attributes
-        - gram_project_id
-        - gram_urn
-        - service_name
+        - service
     TierLimits:
       type: object
       properties:

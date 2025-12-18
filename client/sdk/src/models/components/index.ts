@@ -123,6 +123,7 @@ export * from "./resourceentry.js";
 export * from "./responsefilter.js";
 export * from "./securityvariable.js";
 export * from "./servervariable.js";
+export * from "./serviceinfo.js";
 export * from "./setmcpmetadatarequestbody.js";
 export * from "./setproductfeaturerequestbody.js";
 export * from "./setprojectlogoresult.js";

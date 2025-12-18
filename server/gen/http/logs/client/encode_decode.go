@@ -1129,7 +1129,6 @@ func EncodeListLogsForTraceRequest(encoder func(*http.Request) goahttp.Encoder) 
 		}
 		values := req.URL.Query()
 		values.Add("trace_id", p.TraceID)
-		values.Add("limit", fmt.Sprintf("%v", p.Limit))
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -1419,25 +1418,27 @@ func unmarshalToolExecutionLogResponseBodyToLogsToolExecutionLog(v *ToolExecutio
 // *TelemetryLogRecordResponseBody.
 func unmarshalTelemetryLogRecordResponseBodyToLogsTelemetryLogRecord(v *TelemetryLogRecordResponseBody) *logs.TelemetryLogRecord {
 	res := &logs.TelemetryLogRecord{
-		ID:                     *v.ID,
-		TimeUnixNano:           *v.TimeUnixNano,
-		ObservedTimeUnixNano:   *v.ObservedTimeUnixNano,
-		SeverityText:           v.SeverityText,
-		Body:                   *v.Body,
-		TraceID:                v.TraceID,
-		SpanID:                 v.SpanID,
-		Attributes:             v.Attributes,
-		ResourceAttributes:     v.ResourceAttributes,
-		GramProjectID:          *v.GramProjectID,
-		GramDeploymentID:       v.GramDeploymentID,
-		GramFunctionID:         v.GramFunctionID,
-		GramUrn:                *v.GramUrn,
-		ServiceName:            *v.ServiceName,
-		ServiceVersion:         v.ServiceVersion,
-		HTTPRequestMethod:      v.HTTPRequestMethod,
-		HTTPResponseStatusCode: v.HTTPResponseStatusCode,
-		HTTPRoute:              v.HTTPRoute,
-		HTTPServerURL:          v.HTTPServerURL,
+		ID:                   *v.ID,
+		TimeUnixNano:         *v.TimeUnixNano,
+		ObservedTimeUnixNano: *v.ObservedTimeUnixNano,
+		SeverityText:         v.SeverityText,
+		Body:                 *v.Body,
+		TraceID:              v.TraceID,
+		SpanID:               v.SpanID,
+		Attributes:           v.Attributes,
+		ResourceAttributes:   v.ResourceAttributes,
+	}
+	res.Service = unmarshalServiceInfoResponseBodyToLogsServiceInfo(v.Service)
+
+	return res
+}
+
+// unmarshalServiceInfoResponseBodyToLogsServiceInfo builds a value of type
+// *logs.ServiceInfo from a value of type *ServiceInfoResponseBody.
+func unmarshalServiceInfoResponseBodyToLogsServiceInfo(v *ServiceInfoResponseBody) *logs.ServiceInfo {
+	res := &logs.ServiceInfo{
+		Name:    *v.Name,
+		Version: v.Version,
 	}
 
 	return res

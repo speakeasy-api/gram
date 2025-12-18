@@ -102,8 +102,6 @@ type ListLogsForTracePayload struct {
 	ProjectSlugInput *string
 	// Trace ID (32 hex characters)
 	TraceID string
-	// Number of items to return (1-1000)
-	Limit int
 }
 
 // ListLogsForTraceResult is the result type of the logs service
@@ -275,6 +273,14 @@ type PaginationResponse struct {
 	NextPageCursor *string
 }
 
+// Service information
+type ServiceInfo struct {
+	// Service name
+	Name string
+	// Service version
+	Version *string
+}
+
 // OpenTelemetry log record
 type TelemetryLogRecord struct {
 	// Log record ID
@@ -295,26 +301,8 @@ type TelemetryLogRecord struct {
 	Attributes any
 	// Resource attributes as JSON object
 	ResourceAttributes any
-	// Project ID
-	GramProjectID string
-	// Deployment ID
-	GramDeploymentID *string
-	// Function ID
-	GramFunctionID *string
-	// Gram URN
-	GramUrn string
-	// Service name
-	ServiceName string
-	// Service version
-	ServiceVersion *string
-	// HTTP method (null for non-HTTP logs)
-	HTTPRequestMethod *string
-	// HTTP status code (null for non-HTTP logs)
-	HTTPResponseStatusCode *int32
-	// HTTP route (null for non-HTTP logs)
-	HTTPRoute *string
-	// HTTP server URL (null for non-HTTP logs)
-	HTTPServerURL *string
+	// Service information
+	Service *ServiceInfo
 }
 
 // Structured log entry from a tool execution

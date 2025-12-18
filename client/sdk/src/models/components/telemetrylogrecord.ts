@@ -7,6 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import { ServiceInfo, ServiceInfo$inboundSchema } from "./serviceinfo.js";
 
 /**
  * OpenTelemetry log record
@@ -21,38 +22,6 @@ export type TelemetryLogRecord = {
    */
   body: string;
   /**
-   * Deployment ID
-   */
-  gramDeploymentId?: string | undefined;
-  /**
-   * Function ID
-   */
-  gramFunctionId?: string | undefined;
-  /**
-   * Project ID
-   */
-  gramProjectId: string;
-  /**
-   * Gram URN
-   */
-  gramUrn: string;
-  /**
-   * HTTP method (null for non-HTTP logs)
-   */
-  httpRequestMethod?: string | undefined;
-  /**
-   * HTTP status code (null for non-HTTP logs)
-   */
-  httpResponseStatusCode?: number | undefined;
-  /**
-   * HTTP route (null for non-HTTP logs)
-   */
-  httpRoute?: string | undefined;
-  /**
-   * HTTP server URL (null for non-HTTP logs)
-   */
-  httpServerUrl?: string | undefined;
-  /**
    * Log record ID
    */
   id: string;
@@ -65,13 +34,9 @@ export type TelemetryLogRecord = {
    */
   resourceAttributes?: any | undefined;
   /**
-   * Service name
+   * Service information
    */
-  serviceName: string;
-  /**
-   * Service version
-   */
-  serviceVersion?: string | undefined;
+  service: ServiceInfo;
   /**
    * Text representation of severity
    */
@@ -98,37 +63,18 @@ export const TelemetryLogRecord$inboundSchema: z.ZodType<
 > = z.object({
   attributes: z.any().optional(),
   body: z.string(),
-  gram_deployment_id: z.string().optional(),
-  gram_function_id: z.string().optional(),
-  gram_project_id: z.string(),
-  gram_urn: z.string(),
-  http_request_method: z.string().optional(),
-  http_response_status_code: z.number().int().optional(),
-  http_route: z.string().optional(),
-  http_server_url: z.string().optional(),
   id: z.string(),
   observed_time_unix_nano: z.number().int(),
   resource_attributes: z.any().optional(),
-  service_name: z.string(),
-  service_version: z.string().optional(),
+  service: ServiceInfo$inboundSchema,
   severity_text: z.string().optional(),
   span_id: z.string().optional(),
   time_unix_nano: z.number().int(),
   trace_id: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    "gram_deployment_id": "gramDeploymentId",
-    "gram_function_id": "gramFunctionId",
-    "gram_project_id": "gramProjectId",
-    "gram_urn": "gramUrn",
-    "http_request_method": "httpRequestMethod",
-    "http_response_status_code": "httpResponseStatusCode",
-    "http_route": "httpRoute",
-    "http_server_url": "httpServerUrl",
     "observed_time_unix_nano": "observedTimeUnixNano",
     "resource_attributes": "resourceAttributes",
-    "service_name": "serviceName",
-    "service_version": "serviceVersion",
     "severity_text": "severityText",
     "span_id": "spanId",
     "time_unix_nano": "timeUnixNano",

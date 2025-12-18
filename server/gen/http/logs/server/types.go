@@ -1070,26 +1070,16 @@ type TelemetryLogRecordResponseBody struct {
 	Attributes any `form:"attributes" json:"attributes" xml:"attributes"`
 	// Resource attributes as JSON object
 	ResourceAttributes any `form:"resource_attributes" json:"resource_attributes" xml:"resource_attributes"`
-	// Project ID
-	GramProjectID string `form:"gram_project_id" json:"gram_project_id" xml:"gram_project_id"`
-	// Deployment ID
-	GramDeploymentID *string `form:"gram_deployment_id,omitempty" json:"gram_deployment_id,omitempty" xml:"gram_deployment_id,omitempty"`
-	// Function ID
-	GramFunctionID *string `form:"gram_function_id,omitempty" json:"gram_function_id,omitempty" xml:"gram_function_id,omitempty"`
-	// Gram URN
-	GramUrn string `form:"gram_urn" json:"gram_urn" xml:"gram_urn"`
+	// Service information
+	Service *ServiceInfoResponseBody `form:"service" json:"service" xml:"service"`
+}
+
+// ServiceInfoResponseBody is used to define fields on response body types.
+type ServiceInfoResponseBody struct {
 	// Service name
-	ServiceName string `form:"service_name" json:"service_name" xml:"service_name"`
+	Name string `form:"name" json:"name" xml:"name"`
 	// Service version
-	ServiceVersion *string `form:"service_version,omitempty" json:"service_version,omitempty" xml:"service_version,omitempty"`
-	// HTTP method (null for non-HTTP logs)
-	HTTPRequestMethod *string `form:"http_request_method,omitempty" json:"http_request_method,omitempty" xml:"http_request_method,omitempty"`
-	// HTTP status code (null for non-HTTP logs)
-	HTTPResponseStatusCode *int32 `form:"http_response_status_code,omitempty" json:"http_response_status_code,omitempty" xml:"http_response_status_code,omitempty"`
-	// HTTP route (null for non-HTTP logs)
-	HTTPRoute *string `form:"http_route,omitempty" json:"http_route,omitempty" xml:"http_route,omitempty"`
-	// HTTP server URL (null for non-HTTP logs)
-	HTTPServerURL *string `form:"http_server_url,omitempty" json:"http_server_url,omitempty" xml:"http_server_url,omitempty"`
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
 // TraceSummaryRecordResponseBody is used to define fields on response body
@@ -2014,10 +2004,9 @@ func NewListTracesPayload(timeStart *int64, timeEnd *int64, deploymentID *string
 
 // NewListLogsForTracePayload builds a logs service listLogsForTrace endpoint
 // payload.
-func NewListLogsForTracePayload(traceID string, limit int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *logs.ListLogsForTracePayload {
+func NewListLogsForTracePayload(traceID string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *logs.ListLogsForTracePayload {
 	v := &logs.ListLogsForTracePayload{}
 	v.TraceID = traceID
-	v.Limit = limit
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

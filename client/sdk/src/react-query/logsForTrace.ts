@@ -94,7 +94,6 @@ export function setLogsForTraceData(
   queryKeyBase: [
     parameters: {
       traceId: string;
-      limit?: number | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -112,7 +111,6 @@ export function invalidateLogsForTrace(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       traceId: string;
-      limit?: number | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -148,7 +146,6 @@ export function buildLogsForTraceQuery(
   return {
     queryKey: queryKeyLogsForTrace({
       traceId: request.traceId,
-      limit: request.limit,
       gramKey: request.gramKey,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
@@ -175,7 +172,6 @@ export function buildLogsForTraceQuery(
 export function queryKeyLogsForTrace(
   parameters: {
     traceId: string;
-    limit?: number | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;

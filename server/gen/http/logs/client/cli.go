@@ -663,7 +663,7 @@ func BuildListTracesPayload(logsListTracesTimeStart string, logsListTracesTimeEn
 
 // BuildListLogsForTracePayload builds the payload for the logs
 // listLogsForTrace endpoint from CLI flags.
-func BuildListLogsForTracePayload(logsListLogsForTraceTraceID string, logsListLogsForTraceLimit string, logsListLogsForTraceApikeyToken string, logsListLogsForTraceSessionToken string, logsListLogsForTraceProjectSlugInput string) (*logs.ListLogsForTracePayload, error) {
+func BuildListLogsForTracePayload(logsListLogsForTraceTraceID string, logsListLogsForTraceApikeyToken string, logsListLogsForTraceSessionToken string, logsListLogsForTraceProjectSlugInput string) (*logs.ListLogsForTracePayload, error) {
 	var err error
 	var traceID string
 	{
@@ -671,26 +671,6 @@ func BuildListLogsForTracePayload(logsListLogsForTraceTraceID string, logsListLo
 		err = goa.MergeErrors(err, goa.ValidatePattern("trace_id", traceID, "^[a-f0-9]{32}$"))
 		if err != nil {
 			return nil, err
-		}
-	}
-	var limit int
-	{
-		if logsListLogsForTraceLimit != "" {
-			var v int64
-			v, err = strconv.ParseInt(logsListLogsForTraceLimit, 10, strconv.IntSize)
-			limit = int(v)
-			if err != nil {
-				return nil, fmt.Errorf("invalid value for limit, must be INT")
-			}
-			if limit < 1 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
-			}
-			if limit > 1000 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1000, false))
-			}
-			if err != nil {
-				return nil, err
-			}
 		}
 	}
 	var apikeyToken *string
@@ -713,7 +693,6 @@ func BuildListLogsForTracePayload(logsListLogsForTraceTraceID string, logsListLo
 	}
 	v := &logs.ListLogsForTracePayload{}
 	v.TraceID = traceID
-	v.Limit = limit
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

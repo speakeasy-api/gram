@@ -95,7 +95,6 @@ async function $do(
   const path = pathToFunc("/rpc/logs.listLogsForTrace")();
 
   const query = encodeFormQuery({
-    "limit": payload.limit,
     "trace_id": payload.trace_id,
   });
 
