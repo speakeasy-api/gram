@@ -635,7 +635,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		return oops.E(oops.CodeBadRequest, err, "failed to build authorization response").Log(ctx, s.logger)
 	}
 
-	if provider.ProviderType != string(OAuthProxyProviderTypeGram) {
+	if provider.ProviderType == string(OAuthProxyProviderTypeGram) {
 		data := gramOAuthResultPageData{
 			RedirectURL:      template.URL(responseURL), // #nosec G203 // This has been checked and escaped
 			ScriptHash:       s.oauthStatusPageScriptHash,
