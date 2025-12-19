@@ -12,97 +12,44 @@
       rel="stylesheet"
     />
     <style>
-      /**************/
-      /* PAGE SETUP */
-      /**************/
+      * {
+        box-sizing: border-box;
+      }
 
       html,
       body {
-        /* Font Families */
         --font-diatype:
           "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
           Helvetica, Arial, sans-serif;
-        --font-diatype-mono:
-          "Geist Mono", SFMono-Regular, Menlo, Monaco, Consolas,
-          "Liberation Mono", "Courier New", monospace;
-
-        /* Color Values */
 
         --color-base-white: hsl(0 0% 100%);
         --color-base-black: hsl(0 0% 0%);
-
-        --color-neutral-50: hsl(0, 0%, 99%);
         --color-neutral-100: hsl(0, 0%, 98%);
-        --color-neutral-200: hsl(0, 0%, 92%);
         --color-neutral-700: hsl(0, 0%, 33%);
-        --color-neutral-800: hsl(0, 0%, 20%);
-
         --color-feedback-green-100: hsl(102, 35%, 93%);
         --color-feedback-green-300: hsl(99, 30%, 73%);
         --color-feedback-green-700: hsl(105, 24%, 27%);
         --color-brand-blue-600: hsl(215, 71%, 40%);
         --color-feedback-violet-600: hsl(268, 75%, 31%);
 
-        /* Color Tokens */
-
+        --text-default: var(--color-neutral-700);
         --text-default-success: var(--color-feedback-green-700);
+        --bg-surface-secondary-default: var(--color-neutral-100);
+        --bg-surface-primary-default: var(--color-base-white);
+        --bg-success-softest: var(--color-feedback-green-100);
         --border-success-softest: var(--color-feedback-green-300);
-
         --color-link-default: var(--color-brand-blue-600);
         --color-link-visited-primary: var(--color-feedback-violet-600);
-
         --fill-neutral-highlight: var(--color-base-black);
-        --fill-neutral-default: var(--color-neutral-800);
-        --fill-neutral-highlight-inverse: var(--color-base-white);
-        --fill-neutral-default-inverse: var(--color-neutral-50);
-
-        --bg-surface-primary-default: var(--color-base-white);
-        --bg-surface-secondary-default: var(--color-neutral-100);
-        --bg-surface-primary-inverse: var(--color-base-black);
-        --bg-success-softest: var(--color-feedback-green-100);
-
-        --bg-surface-primary-fixed-dark: var(--color-base-black);
-        --bg-surface-transparent: hsl(0, 0%, 0%, 0.5);
-
-        --border-neutral-softest: var(--color-neutral-200);
-
-        --text-default: var(--color-neutral-700);
-        --text-default-inverse: var(--color-neutral-100);
-
-        --z-index-modal: 200;
-        --z-index-hover: 100;
-
         --ease-in-out-quad: cubic-bezier(0.455, 0.03, 0.515, 0.955);
-
-        font-family: var(--font-diatype);
-        color: var(--text-default);
-        background: var(--bg-surface-secondary-default);
 
         margin: 0;
         padding: 0;
         min-height: 100vh;
-        display: flex;
-        flex-direction: column;
+        font-family: var(--font-diatype);
         font-weight: 300;
-      }
-
-      @keyframes fade-in {
-        from {
-          opacity: 0;
-        }
-
-        to {
-          opacity: 1;
-        }
-      }
-
-      .fade-in {
-        animation: fade-in 200ms var(--ease-in-out-quad) forwards;
-        animation-iteration-count: 1;
-      }
-
-      .fade-out {
-        opacity: 0;
+        color: var(--text-default);
+        background: var(--bg-surface-secondary-default);
       }
 
       .main {
@@ -121,568 +68,14 @@
         }
       }
 
-      /**************/
-      /* PAGE TITLE */
-      /**************/
-
-      .content-container {
-        display: flex;
-        flex-direction: column;
-        gap: 2rem;
-      }
-
-      section.header {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-        width: 100%;
-        align-items: flex-start;
-      }
-
-      .header.container {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: space-between;
-        align-items: center;
-        width: 100%;
-        gap: 1.5rem;
-      }
-
-      .mcp-meta {
-        display: flex;
-        gap: 1.5rem;
-      }
-
-      .header-content {
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-      }
-
-      .section-description {
-        margin-bottom: 1rem;
-      }
-
-      .logo-container {
-        width: 5rem;
-        height: 5rem;
-        border-radius: 0.5rem;
-        padding: 0.625rem;
-        border: solid 1px var(--border-neutral-softest);
-
-        & svg {
-          width: 100%;
-          height: 100%;
-        }
-
-        & img {
-          width: 100%;
-          height: 100%;
-          object-fit: contain;
-        }
-      }
-
-      .badge-private {
-        display: inline-block;
-      }
-
-      .mcp-name {
-        font-size: 2rem;
-        line-height: 150%;
-        text-wrap-style: balance;
-      }
-
-      .mcp-description {
-        font-size: 1rem;
-        line-height: 175%;
-        text-wrap-style: balance;
-      }
-
-      .popover {
-        position: relative;
-      }
-
-      .action-button {
-        background: var(--fill-neutral-default);
-        color: var(--text-default-inverse);
-      }
-
-      .header-right {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-        align-items: flex-end;
-      }
-
-      .header-actions {
-        display: flex;
-        gap: 0.5rem;
-        font-weight: 400;
-        font-size: calc(1rem - 2px);
-        text-transform: uppercase;
-      }
-
-      .header-action {
-        border-radius: 6px;
-        padding: 0.5rem 1rem;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        transition: background-color 300ms var(--ease-in-out-quad);
-        text-transform: uppercase;
-      }
-
-      .action-button:hover {
-        background: var(--fill-neutral-highlight);
-      }
-
-      .popover-menu {
-        position: absolute;
-        overflow: hidden;
-        top: calc(100% + 0.25rem);
-        left: 0;
-        display: flex;
-        flex-direction: column;
-        width: 100%;
-        align-items: stretch;
-
-        border-radius: 0.5rem;
-        background: var(--fill-neutral-default);
-        color: var(--text-default-inverse);
-        box-shadow: 0 4px 4px 0 rgba(0, 0, 0, 0.25);
-      }
-
-      .popover-menu.hidden {
-        display: none;
-      }
-
-      .popover-button {
-        padding: 0.75rem 1rem;
-        transition: background-color 300ms var(--ease-in-out-quad);
-      }
-
-      .popover-button:hover {
-        background: var(--fill-neutral-highlight);
-      }
-
-      .external-docs {
-        background: var(--color-neutral-200);
-        text-transform: uppercase;
-        color: var(--color-neutral-900);
-        box-shadow:
-          rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-          rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-          rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-          rgba(0, 0, 0, 0) 0px 0px 0px 0px,
-          rgba(255, 255, 255, 0.2) 0px 2px 1px 0px inset,
-          rgba(0, 0, 0, 0.15) 0px -2px 1px 0px inset;
-      }
-
-      /***********/
-      /* INSTALL */
-      /***********/
-
-      .install.container {
-        display: flex;
-        flex-direction: column;
-      }
-
-      .install-targets {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 1.25rem;
-      }
-
-      @media (max-width: 768px) {
-        .install-targets {
-          grid-template-columns: 1fr;
-        }
-      }
-
-      .install-target {
-        font-weight: 400;
-        display: flex;
-        cursor: pointer;
-        gap: 1rem;
-      }
-
-      .install-target .target {
-        grid-area: target;
-        display: flex;
-        gap: 1rem;
-        align-items: center;
-      }
-
-      .install-target svg,
-      .install-target img {
-        width: 1.5rem;
-        height: 1.5rem;
-      }
-
-      /******************
-    * AVAILABLE TOOLS *
-    *******************/
-
-      .tool-names {
-        display: flex;
-        gap: 0.75rem;
-        row-gap: 0.5rem;
-        flex-wrap: wrap;
-      }
-
-      .badge {
-        font-family: var(--font-diatype-mono);
-        font-weight: 300;
-        display: inline-block;
-        border-radius: 0.125rem;
-        background: var(--bg-surface-primary-default);
-        border: solid 1px var(--border-neutral-softest);
-        padding: 0.125rem 0.25rem;
-        text-transform: UPPERCASE;
-      }
-
-      .tool-name.hidden {
-        display: none;
-      }
-
-      /******************
-    * CODE CONTAINERS *
-    ******************/
-
-      .code-container {
-        position: relative;
-        cursor: pointer;
-        max-width: 100%;
-      }
-
-      .code-container code {
-        user-select: all;
-        overflow: auto;
-        max-width: 100%;
-        padding-right: 4rem;
-      }
-
-      .copy-button {
-        --transition-length: 1000ms;
-        position: absolute;
-        top: 1.5rem;
-        right: 1.5rem;
-        border-radius: 4px;
-        border: 1px var(--border-neutral-softest) solid;
-        cursor: pointer;
-        z-index: 10;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 1.5rem;
-        height: 1.5rem;
-        padding: 4px;
-        background: var(--bg-surface-primary-default);
-        transition:
-          border var(--transition-length) var(--ease-in-out-quad),
-          background-color var(--transition-length) var(--ease-in-out-quad);
-      }
-
-      .copy-button.success {
-        border: 1px var(--border-success-softest) solid;
-        background: var(--bg-success-softest);
-      }
-
-      .copy-button svg {
-        pointer-events: none;
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        height: calc(100% - 8px);
-        aspect-ratio: 1 / 1;
-      }
-
-      .icon {
-        transition:
-          opacity var(--transition-length) var(--ease-in-out-quad),
-          color var(--transition-length) var(--ease-in-out-quad);
-      }
-
-      .copy-button.success .icon-copy-success {
-        opacity: 1;
-        color: var(--text-default-success);
-      }
-
-      .copy-button.waiting .icon-copy {
-        opacity: 1;
-      }
-
-      .copy-button.waiting .icon-copy-success {
-        opacity: 0;
-      }
-
-      .copy-button.success .icon-copy {
-        opacity: 0;
-      }
-
-      pre,
-      code {
-        white-space: pre;
-        font-size: 1rem;
-        line-height: 150%;
-        font-family: var(--font-diatype-mono);
-        overflow-x: auto;
-        margin: 0;
-      }
-
-      .code-snippet {
-        display: inline-block;
-      }
-
-      /********
-    * MODAL *
-    ********/
-
-      .modal {
-        position: fixed;
-        left: 50%;
-        top: 8rem;
-        transform: translateX(-50%);
-        background-color: var(--bg-surface-primary-default);
-        max-height: calc(100% - 16rem);
-        max-width: min(calc(100% - 4rem), 54rem);
-        z-index: var(--z-index-modal);
-
-        padding: 1.5rem;
-        border-radius: 0.5rem;
-        border: 1px solid var(--border-neutral-softest);
-        display: flex;
-        flex-direction: column;
-        transition: opacity 200ms var(--ease-in-out-quad);
-
-        & h1 {
-          font-size: 26px;
-          line-height: 42px;
-          margin: 0;
-        }
-
-        & li {
-          line-height: 175%;
-          font-weight: 400;
-          margin: 0;
-        }
-
-        & ol {
-          padding: 0;
-          list-style-position: inside;
-        }
-
-        & .code-container {
-          margin: 1rem 0;
-        }
-      }
-
-      .content-slot {
-        flex: 1 1 auto;
-        overflow: auto;
-      }
-
-      .modal-backdrop {
-        width: 100%;
-        height: 100%;
-        position: fixed;
-        z-index: calc(var(--z-index-modal) - 1);
-        background: var(--bg-surface-transparent);
-        transition: opacity 200ms var(--ease-in-out-quad);
-      }
-
-      .modal-close {
-        position: absolute;
-        top: 1.5rem;
-        right: 1.5rem;
-        padding: 0.5rem;
-        z-index: var(--z-index-hover);
-        border-radius: 4px;
-        transition:
-          background-color 300ms var(--ease-in-out-quad),
-          color 300ms var(--ease-in-out-quad) border 300ms
-            var(--ease-in-out-quad);
-        border: 1px #00000000 solid;
-
-        & svg {
-          display: block;
-          width: 1.5rem;
-          height: 1.5rem;
-        }
-      }
-
-      .modal-close:hover {
-        color: var(--fill-neutral-highlight);
-        background: var(--fill-neutral-highlight-inverse);
-        border: 1px var(--border-neutral-softest) solid;
-      }
-
-      .instruction-item {
-        margin: 1rem 0;
-      }
-
-      .instruction-item svg {
-        width: 1rem;
-        height: 1rem;
-      }
-
-      .section-title {
-        font-size: 26px;
-        font-weight: 300;
-        margin-bottom: 0.5em;
-      }
-
-      h1 {
-        font-weight: 300;
-      }
-
-      h2,
-      .modal-sub-heading {
-        font-weight: 300;
-      }
-
-      /***************
-    * Brand Button *
-    ***************/
-      @property --gradient-rotation {
-        syntax: "<angle>";
-        inherits: true;
-        initial-value: 0deg;
-      }
-
-      .gram-brand-badge::before {
-        position: absolute;
-        content: "";
-        background: conic-gradient(
-          from var(--gradient-rotation),
-          var(--gradient-stops)
-        );
-        z-index: -1;
-        border-radius: var(--border-radius-px);
-        width: calc(100% + 2 * var(--border-px));
-        height: calc(100% + 2 * var(--border-px));
-        left: calc(-1 * var(--border-px));
-        top: calc(-1 * var(--border-px));
-      }
-
-      .gram-brand-badge {
-        position: fixed;
-        bottom: 1.25rem;
-        right: 1rem;
-        transition: --gradient-rotation 250ms var(--ease-in-out-quad);
-        & div {
-          display: flex;
-          gap: 4px;
-          align-items: center;
-          background: var(--bg-surface-primary-default);
-          z-index: 0;
-          width: 100%;
-          height: 100%;
-          border-radius: var(--border-radius-px);
-          padding: 0.25rem 0.5rem;
-        }
-
-        --mouse-center-offset-x: 0;
-        --mouse-center-offset-y: 0;
-        --gradient-rotation: calc(
-          -1 *
-            atan2(var(--mouse-center-offset-x), var(--mouse-center-offset-y)) -
-            90deg
-        );
-
-        --border-radius-px: 2px;
-        --border-px: 1px;
-        --gradient-stops:
-          hsl(334, 54%, 13%), hsl(4, 67%, 47%), hsl(23, 96%, 62%),
-          hsl(68, 52%, 72%), hsl(108, 24%, 41%), hsl(154, 100%, 7%),
-          hsl(220, 100%, 12%), hsl(214, 69%, 50%), hsl(216, 100%, 80%),
-          hsl(334, 54%, 13%);
-      }
-
-      .gram-brand-badge:hover::after {
-        filter: blur(2px);
-      }
-
-      .gram-brand-badge::after {
-        content: "";
-        position: absolute;
-        border-radius: var(--border-radius-px);
-        width: calc(100% + 2 * var(--border-px));
-        height: calc(100% + 2 * var(--border-px));
-        left: calc(-1 * var(--border-px));
-        top: calc(-1 * var(--border-px));
-
-        background: conic-gradient(
-          from var(--gradient-rotation),
-          var(--gradient-stops)
-        );
-        filter: blur(0px);
-        transition: filter 250ms var(--ease-in-out-quad);
-        z-index: -2;
-      }
-
-      /********
-    * SHARE *
-    *********/
-
-      .card {
-        border-radius: 0.5rem;
-        background: var(--fill-neutral-default-inverse);
-        border: solid 1px var(--border-neutral-softest);
-        padding: 1.5rem;
-        transition: background-color 300ms var(--ease-in-out-quad);
-      }
-
-      .card:hover {
-        background: var(--fill-neutral-highlight-inverse);
-      }
-
-      button {
-        border: none;
-        margin: 0;
-        padding: 0;
-        width: auto;
-        overflow: visible;
-        cursor: pointer;
-        text-align: inherit;
-
-        background: transparent;
-
-        color: inherit;
-        font: inherit;
-
-        -webkit-font-smoothing: inherit;
-        -moz-osx-font-smoothing: inherit;
-
-        -webkit-appearance: none;
-      }
-
       a {
-        text-decoration: unset;
+        text-decoration: none;
         color: var(--color-link-default);
       }
 
       a:visited {
         color: var(--color-link-visited-primary);
       }
-
-      .install-link {
-        text-decoration: unset;
-        color: unset;
-      }
-
-      .install-link:visited {
-        color: unset;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      /***************
-    * OAuth Success *
-    ***************/
 
       .success-container {
         max-width: 600px;
@@ -733,23 +126,6 @@
         line-height: 1.6;
       }
 
-      .next-steps-card {
-        text-align: left;
-        width: 100%;
-      }
-
-      .next-steps-card h2 {
-        margin: 0 0 1rem 0;
-        font-size: 1.25rem;
-        font-weight: 400;
-      }
-
-      .next-steps-card ol {
-        margin: 0;
-        padding-left: 1.5rem;
-        line-height: 1.75;
-      }
-
       .redirect-container {
         display: flex;
         flex-direction: column;
@@ -774,6 +150,81 @@
       .redirect-link {
         font-size: 0.875rem;
         text-decoration: underline;
+      }
+
+      @property --gradient-rotation {
+        syntax: "<angle>";
+        inherits: true;
+        initial-value: 0deg;
+      }
+
+      .gram-brand-badge {
+        position: fixed;
+        bottom: 1.25rem;
+        right: 1rem;
+        transition: --gradient-rotation 250ms var(--ease-in-out-quad);
+        --mouse-center-offset-x: 0;
+        --mouse-center-offset-y: 0;
+        --gradient-rotation: calc(
+          -1 *
+            atan2(var(--mouse-center-offset-x), var(--mouse-center-offset-y)) -
+            90deg
+        );
+        --border-radius-px: 2px;
+        --border-px: 1px;
+        --gradient-stops:
+          hsl(334, 54%, 13%), hsl(4, 67%, 47%), hsl(23, 96%, 62%),
+          hsl(68, 52%, 72%), hsl(108, 24%, 41%), hsl(154, 100%, 7%),
+          hsl(220, 100%, 12%), hsl(214, 69%, 50%), hsl(216, 100%, 80%),
+          hsl(334, 54%, 13%);
+      }
+
+      .gram-brand-badge::before {
+        position: absolute;
+        content: "";
+        background: conic-gradient(
+          from var(--gradient-rotation),
+          var(--gradient-stops)
+        );
+        z-index: -1;
+        border-radius: var(--border-radius-px);
+        width: calc(100% + 2 * var(--border-px));
+        height: calc(100% + 2 * var(--border-px));
+        left: calc(-1 * var(--border-px));
+        top: calc(-1 * var(--border-px));
+      }
+
+      .gram-brand-badge::after {
+        content: "";
+        position: absolute;
+        border-radius: var(--border-radius-px);
+        width: calc(100% + 2 * var(--border-px));
+        height: calc(100% + 2 * var(--border-px));
+        left: calc(-1 * var(--border-px));
+        top: calc(-1 * var(--border-px));
+        background: conic-gradient(
+          from var(--gradient-rotation),
+          var(--gradient-stops)
+        );
+        filter: blur(0px);
+        transition: filter 250ms var(--ease-in-out-quad);
+        z-index: -2;
+      }
+
+      .gram-brand-badge:hover::after {
+        filter: blur(2px);
+      }
+
+      .gram-brand-badge div {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        background: var(--bg-surface-primary-default);
+        z-index: 0;
+        width: 100%;
+        height: 100%;
+        border-radius: var(--border-radius-px);
+        padding: 0.25rem 0.5rem;
       }
     </style>
   </head>
