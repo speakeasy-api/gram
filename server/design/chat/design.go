@@ -8,7 +8,10 @@ import (
 
 var _ = Service("chat", func() {
 	Description("Managed chats for gram AI consumers.")
+
 	Security(security.Session, security.ProjectSlug)
+	Security(security.ChatSessionsToken)
+
 	shared.DeclareErrorResponses()
 
 	Method("listChats", func() {
@@ -17,6 +20,7 @@ var _ = Service("chat", func() {
 		Payload(func() {
 			security.SessionPayload()
 			security.ProjectPayload()
+			security.ChatSessionsTokenPayload()
 		})
 
 		Result(ListChatsResult)
@@ -25,6 +29,7 @@ var _ = Service("chat", func() {
 			GET("/rpc/chat.list")
 			security.SessionHeader()
 			security.ProjectHeader()
+			security.ChatSessionsTokenHeader()
 			Response(StatusOK)
 		})
 
@@ -39,6 +44,7 @@ var _ = Service("chat", func() {
 		Payload(func() {
 			security.SessionPayload()
 			security.ProjectPayload()
+			security.ChatSessionsTokenPayload()
 			Attribute("id", String, "The ID of the chat")
 			Required("id")
 		})
@@ -50,6 +56,7 @@ var _ = Service("chat", func() {
 			Param("id")
 			security.SessionHeader()
 			security.ProjectHeader()
+			security.ChatSessionsTokenHeader()
 			Response(StatusOK)
 		})
 
@@ -64,6 +71,7 @@ var _ = Service("chat", func() {
 		Payload(func() {
 			security.SessionPayload()
 			security.ProjectPayload()
+			security.ChatSessionsTokenPayload()
 		})
 
 		Result(func() {
@@ -76,6 +84,7 @@ var _ = Service("chat", func() {
 			GET("/rpc/chat.creditUsage")
 			security.SessionHeader()
 			security.ProjectHeader()
+			security.ChatSessionsTokenHeader()
 			Response(StatusOK)
 		})
 

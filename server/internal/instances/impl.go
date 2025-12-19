@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -42,8 +43,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
-	tm_repo  "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
 const toolUrnQueryParam = "tool_urn"
@@ -54,6 +55,7 @@ type Service struct {
 	tracer            trace.Tracer
 	db                *pgxpool.Pool
 	auth              *auth.Auth
+	chatSessions      *chatsessions.Manager
 	toolset           *toolsets.Toolsets
 	environmentsRepo  *environments_repo.Queries
 	env               *environments.EnvironmentEntries
@@ -66,6 +68,7 @@ type Service struct {
 }
 
 var _ gen.Service = (*Service)(nil)
+var _ gen.Auther = (*Service)(nil)
 
 func NewService(
 	logger *slog.Logger,
@@ -73,6 +76,7 @@ func NewService(
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
+	chatSessions *chatsessions.Manager,
 	env *environments.EnvironmentEntries,
 	enc *encryption.Client,
 	cacheImpl cache.Cache,
@@ -91,6 +95,7 @@ func NewService(
 		tracer:           tracer,
 		db:               db,
 		auth:             auth.New(logger, db, sessions),
+		chatSessions:     chatSessions,
 		toolset:          toolsets.NewToolsets(db),
 		environmentsRepo: envRepo,
 		env:              env,
@@ -484,4 +489,8 @@ func (w *responseInterceptor) Write(b []byte) (int, error) {
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JWTScheme) (context.Context, error) {
+	return s.chatSessions.Authorize(ctx, token)
 }

@@ -5,27 +5,30 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { toolsetsCheckMCPSlugAvailability } from "../funcs/toolsetsCheckMCPSlugAvailability.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
-
-export type CheckMCPSlugAvailabilityQueryData = boolean;
+import {
+  buildCheckMCPSlugAvailabilityQuery,
+  CheckMCPSlugAvailabilityQueryData,
+  prefetchCheckMCPSlugAvailability,
+  queryKeyCheckMCPSlugAvailability,
+} from "./checkMCPSlugAvailability.core.js";
+export {
+  buildCheckMCPSlugAvailabilityQuery,
+  type CheckMCPSlugAvailabilityQueryData,
+  prefetchCheckMCPSlugAvailability,
+  queryKeyCheckMCPSlugAvailability,
+};
 
 /**
  * checkMCPSlugAvailability toolsets
@@ -70,21 +73,6 @@ export function useCheckMCPSlugAvailabilitySuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchCheckMCPSlugAvailability(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request: operations.CheckMCPSlugAvailabilityRequest,
-  security?: operations.CheckMCPSlugAvailabilitySecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildCheckMCPSlugAvailabilityQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -136,52 +124,4 @@ export function invalidateAllCheckMCPSlugAvailability(
     ...filters,
     queryKey: ["@gram/client", "toolsets", "checkMCPSlugAvailability"],
   });
-}
-
-export function buildCheckMCPSlugAvailabilityQuery(
-  client$: GramCore,
-  request: operations.CheckMCPSlugAvailabilityRequest,
-  security?: operations.CheckMCPSlugAvailabilitySecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<CheckMCPSlugAvailabilityQueryData>;
-} {
-  return {
-    queryKey: queryKeyCheckMCPSlugAvailability({
-      slug: request.slug,
-      gramSession: request.gramSession,
-      gramKey: request.gramKey,
-      gramProject: request.gramProject,
-    }),
-    queryFn: async function checkMCPSlugAvailabilityQueryFn(
-      ctx,
-    ): Promise<CheckMCPSlugAvailabilityQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(toolsetsCheckMCPSlugAvailability(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyCheckMCPSlugAvailability(
-  parameters: {
-    slug: string;
-    gramSession?: string | undefined;
-    gramKey?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "toolsets", "checkMCPSlugAvailability", parameters];
 }

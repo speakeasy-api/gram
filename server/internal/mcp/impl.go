@@ -29,6 +29,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -58,30 +59,31 @@ import (
 )
 
 type Service struct {
-	logger            *slog.Logger
-	tracer            trace.Tracer
-	metrics           *metrics
-	db                *pgxpool.Pool
-	authRepo          *auth_repo.Queries
-	toolsetsRepo      *toolsets_repo.Queries
-	mcpMetadataRepo   *metadata_repo.Queries
-	orgsRepo          *organizations_repo.Queries
-	deploymentsRepo   *deployments_repo.Queries
-	externalmcpRepo   *externalmcp_repo.Queries
-	auth              *auth.Auth
-	env               gateway.EnvironmentLoader
-	serverURL         *url.URL
-	posthog           *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
-	toolProxy         *gateway.ToolProxy
-	oauthService      OAuthService
-	oauthRepo         *oauth_repo.Queries
-	billingTracker    billing.Tracker
-	billingRepository billing.Repository
-	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
-	tcm               tm.ToolMetricsProvider
-	vectorToolStore   *rag.ToolsetVectorStore
-	temporal          temporal_client.Client
-	sessions          *sessions.Manager
+	logger              *slog.Logger
+	tracer              trace.Tracer
+	metrics             *metrics
+	db                  *pgxpool.Pool
+	authRepo            *auth_repo.Queries
+	toolsetsRepo        *toolsets_repo.Queries
+	mcpMetadataRepo     *metadata_repo.Queries
+	orgsRepo            *organizations_repo.Queries
+	auth                *auth.Auth
+	env                 gateway.EnvironmentLoader
+	serverURL           *url.URL
+	posthog             *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	toolProxy           *gateway.ToolProxy
+	oauthService        OAuthService
+	oauthRepo           *oauth_repo.Queries
+	billingTracker      billing.Tracker
+	billingRepository   billing.Repository
+	toolsetCache        cache.TypedCacheObject[mv.ToolsetBaseContents]
+	tcm                 tm.ToolMetricsProvider
+	vectorToolStore     *rag.ToolsetVectorStore
+	temporal            temporal_client.Client
+	sessions            *sessions.Manager
+	chatSessionsManager *chatsessions.Manager
+	externalmcpRepo     *externalmcp_repo.Queries
+	deploymentsRepo     *deployments_repo.Queries
 }
 
 type oauthTokenInputs struct {
@@ -113,6 +115,7 @@ func NewService(
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
+	chatSessionsManager *chatsessions.Manager,
 	env gateway.EnvironmentLoader,
 	posthog *posthog.Posthog,
 	serverURL *url.URL,
@@ -156,15 +159,16 @@ func NewService(
 			guardianPolicy,
 			funcCaller,
 		),
-		oauthService:      oauthService,
-		oauthRepo:         oauth_repo.New(db),
-		billingTracker:    billingTracker,
-		billingRepository: billingRepository,
-		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
-		tcm:               tcm,
-		vectorToolStore:   vectorToolStore,
-		temporal:          temporal,
-		sessions:          sessions,
+		oauthService:        oauthService,
+		oauthRepo:           oauth_repo.New(db),
+		billingTracker:      billingTracker,
+		billingRepository:   billingRepository,
+		toolsetCache:        cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
+		tcm:                 tcm,
+		vectorToolStore:     vectorToolStore,
+		temporal:            temporal,
+		sessions:            sessions,
+		chatSessionsManager: chatSessionsManager,
 	}
 }
 
@@ -274,7 +278,7 @@ func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *h
 		}
 
 		proxy := &httputil.ReverseProxy{
-			Director:       nil,
+			Director: nil,
 			Rewrite: func(pr *httputil.ProxyRequest) {
 				pr.SetURL(target)
 			},
@@ -854,10 +858,16 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 		Scopes:         []string{},
 	}
 	ctx, err = s.auth.Authorize(ctx, token, &sc)
-	if err != nil {
-		// All strategies failed
-		return ctx, oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, s.logger)
+	if err == nil {
+		return ctx, nil
 	}
 
-	return ctx, nil
+	// Strategy 4: Try Chat Sessions Token authentication
+	ctx, err = s.chatSessionsManager.Authorize(ctx, token)
+	if err == nil {
+		return ctx, nil
+	}
+
+	// All strategies failed
+	return ctx, oops.E(oops.CodeUnauthorized, nil, "failed to authorize").Log(ctx, s.logger)
 }

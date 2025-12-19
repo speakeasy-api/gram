@@ -1102,29 +1102,32 @@ func NewCreditUsageGatewayErrorResponseBody(res *goa.ServiceError) *CreditUsageG
 }
 
 // NewListChatsPayload builds a chat service listChats endpoint payload.
-func NewListChatsPayload(sessionToken *string, projectSlugInput *string) *chat.ListChatsPayload {
+func NewListChatsPayload(sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
 	v := &chat.ListChatsPayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
 
 	return v
 }
 
 // NewLoadChatPayload builds a chat service loadChat endpoint payload.
-func NewLoadChatPayload(id string, sessionToken *string, projectSlugInput *string) *chat.LoadChatPayload {
+func NewLoadChatPayload(id string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.LoadChatPayload {
 	v := &chat.LoadChatPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
 
 	return v
 }
 
 // NewCreditUsagePayload builds a chat service creditUsage endpoint payload.
-func NewCreditUsagePayload(sessionToken *string, projectSlugInput *string) *chat.CreditUsagePayload {
+func NewCreditUsagePayload(sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.CreditUsagePayload {
 	v := &chat.CreditUsagePayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
 
 	return v
 }

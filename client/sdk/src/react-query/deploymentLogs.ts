@@ -5,28 +5,30 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { deploymentsLogs } from "../funcs/deploymentsLogs.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
-
-export type DeploymentLogsQueryData = components.GetDeploymentLogsResult;
+import {
+  buildDeploymentLogsQuery,
+  DeploymentLogsQueryData,
+  prefetchDeploymentLogs,
+  queryKeyDeploymentLogs,
+} from "./deploymentLogs.core.js";
+export {
+  buildDeploymentLogsQuery,
+  type DeploymentLogsQueryData,
+  prefetchDeploymentLogs,
+  queryKeyDeploymentLogs,
+};
 
 /**
  * getDeploymentLogs deployments
@@ -71,21 +73,6 @@ export function useDeploymentLogsSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchDeploymentLogs(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request: operations.GetDeploymentLogsRequest,
-  security?: operations.GetDeploymentLogsSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildDeploymentLogsQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -134,52 +121,4 @@ export function invalidateAllDeploymentLogs(
     ...filters,
     queryKey: ["@gram/client", "deployments", "logs"],
   });
-}
-
-export function buildDeploymentLogsQuery(
-  client$: GramCore,
-  request: operations.GetDeploymentLogsRequest,
-  security?: operations.GetDeploymentLogsSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<DeploymentLogsQueryData>;
-} {
-  return {
-    queryKey: queryKeyDeploymentLogs({
-      deploymentId: request.deploymentId,
-      cursor: request.cursor,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
-    queryFn: async function deploymentLogsQueryFn(
-      ctx,
-    ): Promise<DeploymentLogsQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(deploymentsLogs(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyDeploymentLogs(
-  parameters: {
-    deploymentId: string;
-    cursor?: string | undefined;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "deployments", "logs", parameters];
 }

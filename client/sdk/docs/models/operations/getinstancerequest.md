@@ -18,3 +18,4 @@ let value: GetInstanceRequest = {
 | `gramSession`                   | *string*                        | :heavy_minus_sign:              | Session header                  |
 | `gramProject`                   | *string*                        | :heavy_minus_sign:              | project header                  |
 | `gramKey`                       | *string*                        | :heavy_minus_sign:              | API Key header                  |
+| `gramChatSession`               | *string*                        | :heavy_minus_sign:              | Chat Sessions token header      |

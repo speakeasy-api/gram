@@ -26,6 +26,8 @@ type Service interface {
 type Auther interface {
 	// APIKeyAuth implements the authorization logic for the APIKey security scheme.
 	APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error)
+	// JWTAuth implements the authorization logic for the JWT security scheme.
+	JWTAuth(ctx context.Context, token string, schema *security.JWTScheme) (context.Context, error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -47,9 +49,10 @@ var MethodNames = [1]string{"getInstance"}
 // GetInstanceForm is the payload type of the instances service getInstance
 // method.
 type GetInstanceForm struct {
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	SessionToken      *string
+	ApikeyToken       *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
 	// The slug of the toolset to load
 	ToolsetSlug types.Slug
 }

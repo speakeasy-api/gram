@@ -5,28 +5,30 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { chatList } from "../funcs/chatList.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
-
-export type ListChatsQueryData = components.ListChatsResult;
+import {
+  buildListChatsQuery,
+  ListChatsQueryData,
+  prefetchListChats,
+  queryKeyListChats,
+} from "./listChats.core.js";
+export {
+  buildListChatsQuery,
+  type ListChatsQueryData,
+  prefetchListChats,
+  queryKeyListChats,
+};
 
 /**
  * listChats chat
@@ -74,27 +76,13 @@ export function useListChatsSuspense(
   });
 }
 
-export function prefetchListChats(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request?: operations.ListChatsRequest | undefined,
-  security?: operations.ListChatsSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildListChatsQuery(
-      client$,
-      request,
-      security,
-    ),
-  });
-}
-
 export function setListChatsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
       gramSession?: string | undefined;
       gramProject?: string | undefined;
+      gramChatSession?: string | undefined;
     },
   ],
   data: ListChatsQueryData,
@@ -110,6 +98,7 @@ export function invalidateListChats(
     [parameters: {
       gramSession?: string | undefined;
       gramProject?: string | undefined;
+      gramChatSession?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
@@ -128,44 +117,4 @@ export function invalidateAllListChats(
     ...filters,
     queryKey: ["@gram/client", "chat", "list"],
   });
-}
-
-export function buildListChatsQuery(
-  client$: GramCore,
-  request?: operations.ListChatsRequest | undefined,
-  security?: operations.ListChatsSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<ListChatsQueryData>;
-} {
-  return {
-    queryKey: queryKeyListChats({
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
-    queryFn: async function listChatsQueryFn(ctx): Promise<ListChatsQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(chatList(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyListChats(
-  parameters: {
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "chat", "list", parameters];
 }

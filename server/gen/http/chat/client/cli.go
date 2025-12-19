@@ -13,7 +13,7 @@ import (
 
 // BuildListChatsPayload builds the payload for the chat listChats endpoint
 // from CLI flags.
-func BuildListChatsPayload(chatListChatsSessionToken string, chatListChatsProjectSlugInput string) (*chat.ListChatsPayload, error) {
+func BuildListChatsPayload(chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
 	var sessionToken *string
 	{
 		if chatListChatsSessionToken != "" {
@@ -26,16 +26,23 @@ func BuildListChatsPayload(chatListChatsSessionToken string, chatListChatsProjec
 			projectSlugInput = &chatListChatsProjectSlugInput
 		}
 	}
+	var chatSessionsToken *string
+	{
+		if chatListChatsChatSessionsToken != "" {
+			chatSessionsToken = &chatListChatsChatSessionsToken
+		}
+	}
 	v := &chat.ListChatsPayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
 
 	return v, nil
 }
 
 // BuildLoadChatPayload builds the payload for the chat loadChat endpoint from
 // CLI flags.
-func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string) (*chat.LoadChatPayload, error) {
+func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
 	var id string
 	{
 		id = chatLoadChatID
@@ -52,17 +59,24 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatSessionToken string
 			projectSlugInput = &chatLoadChatProjectSlugInput
 		}
 	}
+	var chatSessionsToken *string
+	{
+		if chatLoadChatChatSessionsToken != "" {
+			chatSessionsToken = &chatLoadChatChatSessionsToken
+		}
+	}
 	v := &chat.LoadChatPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
 
 	return v, nil
 }
 
 // BuildCreditUsagePayload builds the payload for the chat creditUsage endpoint
 // from CLI flags.
-func BuildCreditUsagePayload(chatCreditUsageSessionToken string, chatCreditUsageProjectSlugInput string) (*chat.CreditUsagePayload, error) {
+func BuildCreditUsagePayload(chatCreditUsageSessionToken string, chatCreditUsageProjectSlugInput string, chatCreditUsageChatSessionsToken string) (*chat.CreditUsagePayload, error) {
 	var sessionToken *string
 	{
 		if chatCreditUsageSessionToken != "" {
@@ -75,9 +89,16 @@ func BuildCreditUsagePayload(chatCreditUsageSessionToken string, chatCreditUsage
 			projectSlugInput = &chatCreditUsageProjectSlugInput
 		}
 	}
+	var chatSessionsToken *string
+	{
+		if chatCreditUsageChatSessionsToken != "" {
+			chatSessionsToken = &chatCreditUsageChatSessionsToken
+		}
+	}
 	v := &chat.CreditUsagePayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
 
 	return v, nil
 }

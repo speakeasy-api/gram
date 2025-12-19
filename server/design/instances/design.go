@@ -16,6 +16,7 @@ var _ = Service("instances", func() {
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("chat")
 	})
+	Security(security.ChatSessionsToken)
 	shared.DeclareErrorResponses()
 
 	Method("getInstance", func() {
@@ -31,6 +32,7 @@ var _ = Service("instances", func() {
 			security.SessionHeader()
 			security.ProjectHeader()
 			security.ByKeyHeader()
+			security.ChatSessionsTokenHeader()
 			Response(StatusOK)
 		})
 
@@ -44,6 +46,7 @@ var GetInstanceForm = Type("GetInstanceForm", func() {
 	security.SessionPayload()
 	security.ByKeyPayload()
 	security.ProjectPayload()
+	security.ChatSessionsTokenPayload()
 	Attribute("toolset_slug", shared.Slug, "The slug of the toolset to load")
 	Required("toolset_slug")
 })

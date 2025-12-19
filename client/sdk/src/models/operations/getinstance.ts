@@ -20,10 +20,15 @@ export type GetInstanceSecurityOption3 = {
   projectSlugHeaderGramProject: string;
 };
 
+export type GetInstanceSecurityOption4 = {
+  chatSessionsTokenHeaderGramChatSession: string;
+};
+
 export type GetInstanceSecurity = {
   option1?: GetInstanceSecurityOption1 | undefined;
   option2?: GetInstanceSecurityOption2 | undefined;
   option3?: GetInstanceSecurityOption3 | undefined;
+  option4?: GetInstanceSecurityOption4 | undefined;
 };
 
 export type GetInstanceRequest = {
@@ -43,6 +48,10 @@ export type GetInstanceRequest = {
    * API Key header
    */
   gramKey?: string | undefined;
+  /**
+   * Chat Sessions token header
+   */
+  gramChatSession?: string | undefined;
 };
 
 /** @internal */
@@ -133,10 +142,38 @@ export function getInstanceSecurityOption3ToJSON(
 }
 
 /** @internal */
+export type GetInstanceSecurityOption4$Outbound = {
+  "chat_sessions_token_header_Gram-Chat-Session": string;
+};
+
+/** @internal */
+export const GetInstanceSecurityOption4$outboundSchema: z.ZodType<
+  GetInstanceSecurityOption4$Outbound,
+  z.ZodTypeDef,
+  GetInstanceSecurityOption4
+> = z.object({
+  chatSessionsTokenHeaderGramChatSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    chatSessionsTokenHeaderGramChatSession:
+      "chat_sessions_token_header_Gram-Chat-Session",
+  });
+});
+
+export function getInstanceSecurityOption4ToJSON(
+  getInstanceSecurityOption4: GetInstanceSecurityOption4,
+): string {
+  return JSON.stringify(
+    GetInstanceSecurityOption4$outboundSchema.parse(getInstanceSecurityOption4),
+  );
+}
+
+/** @internal */
 export type GetInstanceSecurity$Outbound = {
   Option1?: GetInstanceSecurityOption1$Outbound | undefined;
   Option2?: GetInstanceSecurityOption2$Outbound | undefined;
   Option3?: GetInstanceSecurityOption3$Outbound | undefined;
+  Option4?: GetInstanceSecurityOption4$Outbound | undefined;
 };
 
 /** @internal */
@@ -148,11 +185,13 @@ export const GetInstanceSecurity$outboundSchema: z.ZodType<
   option1: z.lazy(() => GetInstanceSecurityOption1$outboundSchema).optional(),
   option2: z.lazy(() => GetInstanceSecurityOption2$outboundSchema).optional(),
   option3: z.lazy(() => GetInstanceSecurityOption3$outboundSchema).optional(),
+  option4: z.lazy(() => GetInstanceSecurityOption4$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
     option1: "Option1",
     option2: "Option2",
     option3: "Option3",
+    option4: "Option4",
   });
 });
 
@@ -170,6 +209,7 @@ export type GetInstanceRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Key"?: string | undefined;
+  "Gram-Chat-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -182,12 +222,14 @@ export const GetInstanceRequest$outboundSchema: z.ZodType<
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),
   gramKey: z.string().optional(),
+  gramChatSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     toolsetSlug: "toolset_slug",
     gramSession: "Gram-Session",
     gramProject: "Gram-Project",
     gramKey: "Gram-Key",
+    gramChatSession: "Gram-Chat-Session",
   });
 });
 

@@ -28,6 +28,8 @@ type Service interface {
 type Auther interface {
 	// APIKeyAuth implements the authorization logic for the APIKey security scheme.
 	APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error)
+	// JWTAuth implements the authorization logic for the JWT security scheme.
+	JWTAuth(ctx context.Context, token string, schema *security.JWTScheme) (context.Context, error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -103,8 +105,9 @@ type ChatOverview struct {
 // CreditUsagePayload is the payload type of the chat service creditUsage
 // method.
 type CreditUsagePayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
 }
 
 // CreditUsageResult is the result type of the chat service creditUsage method.
@@ -117,8 +120,9 @@ type CreditUsageResult struct {
 
 // ListChatsPayload is the payload type of the chat service listChats method.
 type ListChatsPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
 }
 
 // ListChatsResult is the result type of the chat service listChats method.
@@ -129,8 +133,9 @@ type ListChatsResult struct {
 
 // LoadChatPayload is the payload type of the chat service loadChat method.
 type LoadChatPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
 	// The ID of the chat
 	ID string
 }

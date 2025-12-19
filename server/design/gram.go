@@ -9,6 +9,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/assets"
 	_ "github.com/speakeasy-api/gram/server/design/auth"
 	_ "github.com/speakeasy-api/gram/server/design/chat"
+	_ "github.com/speakeasy-api/gram/server/design/chatsessions"
 	_ "github.com/speakeasy-api/gram/server/design/deployments"
 	_ "github.com/speakeasy-api/gram/server/design/domains"
 	_ "github.com/speakeasy-api/gram/server/design/environments"

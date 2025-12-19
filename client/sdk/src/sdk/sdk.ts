@@ -7,6 +7,7 @@ import { Agents } from "./agents.js";
 import { Assets } from "./assets.js";
 import { Auth } from "./auth.js";
 import { Chat } from "./chat.js";
+import { ChatSessions } from "./chatsessions.js";
 import { Deployments } from "./deployments.js";
 import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
@@ -51,6 +52,11 @@ export class Gram extends ClientSDK {
   private _chat?: Chat;
   get chat(): Chat {
     return (this._chat ??= new Chat(this._options));
+  }
+
+  private _chatSessions?: ChatSessions;
+  get chatSessions(): ChatSessions {
+    return (this._chatSessions ??= new ChatSessions(this._options));
   }
 
   private _deployments?: Deployments;
