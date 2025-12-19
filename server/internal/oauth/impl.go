@@ -213,22 +213,6 @@ func (s *Service) loadToolsetForProjectAndMCPSlug(ctx context.Context, projectID
 	return &toolset, mcpURL, nil
 }
 
-// func (s *Service) ServeOAuthResultPage(w http.ResponseWriter, r *http.Request) error {
-// 	ctx := r.Context()
-//
-// 	successPageTempl, err := template.New("hosted_page").Parse(oauthSuccessPageTmplData)
-// 	if err != nil {
-// 		return oops.E(oops.CodeUnexpected, err, "failed to parse hosted oauth success page template").Log(ctx, s.logger)
-// 	}
-//
-// 	failurePageTempl, err := template.New("hosted_page").Parse(oauthFailurePageTmpl)
-// 	if err != nil {
-// 		return oops.E(oops.CodeUnexpected, err, "failed to parse hosted oauth failure page template").Log(ctx, s.logger)
-// 	}
-//
-// 	return nil
-// }
-
 // handleAuthorize handles OAuth 2.1 authorization requests
 func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
