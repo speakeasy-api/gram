@@ -12,6 +12,32 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// SearchLogsRequestBody is the type of the "logs" service "searchLogs"
+// endpoint HTTP request body.
+type SearchLogsRequestBody struct {
+	// Filter criteria for the search
+	Filter *SearchLogsFilterRequestBody `form:"filter,omitempty" json:"filter,omitempty" xml:"filter,omitempty"`
+	// Cursor for pagination
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
+	// Sort order
+	Sort string `form:"sort" json:"sort" xml:"sort"`
+	// Number of items to return (1-1000)
+	Limit int `form:"limit" json:"limit" xml:"limit"`
+}
+
+// SearchToolCallsRequestBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP request body.
+type SearchToolCallsRequestBody struct {
+	// Filter criteria for the search
+	Filter *SearchToolCallsFilterRequestBody `form:"filter,omitempty" json:"filter,omitempty" xml:"filter,omitempty"`
+	// Cursor for pagination
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
+	// Sort order
+	Sort string `form:"sort" json:"sort" xml:"sort"`
+	// Number of items to return (1-1000)
+	Limit int `form:"limit" json:"limit" xml:"limit"`
+}
+
 // ListLogsResponseBody is the type of the "logs" service "listLogs" endpoint
 // HTTP response body.
 type ListLogsResponseBody struct {
@@ -28,6 +54,24 @@ type ListToolExecutionLogsResponseBody struct {
 	Logs []*ToolExecutionLogResponseBody `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
 	// Pagination metadata
 	Pagination *PaginationResponseResponseBody `form:"pagination,omitempty" json:"pagination,omitempty" xml:"pagination,omitempty"`
+}
+
+// SearchLogsResponseBody is the type of the "logs" service "searchLogs"
+// endpoint HTTP response body.
+type SearchLogsResponseBody struct {
+	// List of telemetry log records
+	Logs []*TelemetryLogRecordResponseBody `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
+	// Cursor for next page
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// SearchToolCallsResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body.
+type SearchToolCallsResponseBody struct {
+	// List of tool call summaries
+	ToolCalls []*ToolCallSummaryResponseBody `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
+	// Cursor for next page
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // ListLogsUnauthorizedResponseBody is the type of the "logs" service
@@ -398,6 +442,368 @@ type ListToolExecutionLogsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// SearchLogsUnauthorizedResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "unauthorized" error.
+type SearchLogsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchLogsForbiddenResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "forbidden" error.
+type SearchLogsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchLogsBadRequestResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "bad_request" error.
+type SearchLogsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchLogsNotFoundResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "not_found" error.
+type SearchLogsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchLogsConflictResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "conflict" error.
+type SearchLogsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchLogsUnsupportedMediaResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "unsupported_media" error.
+type SearchLogsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchLogsInvalidResponseBody is the type of the "logs" service "searchLogs"
+// endpoint HTTP response body for the "invalid" error.
+type SearchLogsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchLogsInvariantViolationResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "invariant_violation" error.
+type SearchLogsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchLogsUnexpectedResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "unexpected" error.
+type SearchLogsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchLogsGatewayErrorResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "gateway_error" error.
+type SearchLogsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchToolCallsUnauthorizedResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "unauthorized" error.
+type SearchToolCallsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchToolCallsForbiddenResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "forbidden" error.
+type SearchToolCallsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchToolCallsBadRequestResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "bad_request" error.
+type SearchToolCallsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchToolCallsNotFoundResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "not_found" error.
+type SearchToolCallsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchToolCallsConflictResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "conflict" error.
+type SearchToolCallsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchToolCallsUnsupportedMediaResponseBody is the type of the "logs"
+// service "searchToolCalls" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SearchToolCallsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchToolCallsInvalidResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "invalid" error.
+type SearchToolCallsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchToolCallsInvariantViolationResponseBody is the type of the "logs"
+// service "searchToolCalls" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SearchToolCallsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchToolCallsUnexpectedResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "unexpected" error.
+type SearchToolCallsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchToolCallsGatewayErrorResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "gateway_error" error.
+type SearchToolCallsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // HTTPToolLogResponseBody is used to define fields on response body types.
 type HTTPToolLogResponseBody struct {
 	// Id of the request
@@ -477,6 +883,146 @@ type ToolExecutionLogResponseBody struct {
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 	// Function UUID
 	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
+}
+
+// SearchLogsFilterRequestBody is used to define fields on request body types.
+type SearchLogsFilterRequestBody struct {
+	// Trace ID filter (32 hex characters)
+	TraceID *string `form:"trace_id,omitempty" json:"trace_id,omitempty" xml:"trace_id,omitempty"`
+	// Severity level filter
+	SeverityText *string `form:"severity_text,omitempty" json:"severity_text,omitempty" xml:"severity_text,omitempty"`
+	// HTTP status code filter
+	HTTPStatusCode *int32 `form:"http_status_code,omitempty" json:"http_status_code,omitempty" xml:"http_status_code,omitempty"`
+	// HTTP route filter
+	HTTPRoute *string `form:"http_route,omitempty" json:"http_route,omitempty" xml:"http_route,omitempty"`
+	// HTTP method filter
+	HTTPMethod *string `form:"http_method,omitempty" json:"http_method,omitempty" xml:"http_method,omitempty"`
+	// Service name filter
+	ServiceName *string `form:"service_name,omitempty" json:"service_name,omitempty" xml:"service_name,omitempty"`
+	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Deployment ID filter
+	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// Function ID filter
+	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
+	// Gram URN filter
+	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
+}
+
+// TelemetryLogRecordResponseBody is used to define fields on response body
+// types.
+type TelemetryLogRecordResponseBody struct {
+	// Log record ID
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Unix time in nanoseconds when event occurred
+	TimeUnixNano *int64 `form:"time_unix_nano,omitempty" json:"time_unix_nano,omitempty" xml:"time_unix_nano,omitempty"`
+	// Unix time in nanoseconds when event was observed
+	ObservedTimeUnixNano *int64 `form:"observed_time_unix_nano,omitempty" json:"observed_time_unix_nano,omitempty" xml:"observed_time_unix_nano,omitempty"`
+	// Text representation of severity
+	SeverityText *string `form:"severity_text,omitempty" json:"severity_text,omitempty" xml:"severity_text,omitempty"`
+	// The primary log message
+	Body *string `form:"body,omitempty" json:"body,omitempty" xml:"body,omitempty"`
+	// W3C trace ID (32 hex characters)
+	TraceID *string `form:"trace_id,omitempty" json:"trace_id,omitempty" xml:"trace_id,omitempty"`
+	// W3C span ID (16 hex characters)
+	SpanID *string `form:"span_id,omitempty" json:"span_id,omitempty" xml:"span_id,omitempty"`
+	// Log attributes as JSON object
+	Attributes any `form:"attributes,omitempty" json:"attributes,omitempty" xml:"attributes,omitempty"`
+	// Resource attributes as JSON object
+	ResourceAttributes any `form:"resource_attributes,omitempty" json:"resource_attributes,omitempty" xml:"resource_attributes,omitempty"`
+	// Service information
+	Service *ServiceInfoResponseBody `form:"service,omitempty" json:"service,omitempty" xml:"service,omitempty"`
+}
+
+// ServiceInfoResponseBody is used to define fields on response body types.
+type ServiceInfoResponseBody struct {
+	// Service name
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Service version
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+}
+
+// SearchToolCallsFilterRequestBody is used to define fields on request body
+// types.
+type SearchToolCallsFilterRequestBody struct {
+	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Deployment ID filter
+	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// Function ID filter
+	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
+	// Gram URN filter
+	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
+}
+
+// ToolCallSummaryResponseBody is used to define fields on response body types.
+type ToolCallSummaryResponseBody struct {
+	// Trace ID (32 hex characters)
+	TraceID *string `form:"trace_id,omitempty" json:"trace_id,omitempty" xml:"trace_id,omitempty"`
+	// Earliest log timestamp in Unix nanoseconds
+	StartTimeUnixNano *int64 `form:"start_time_unix_nano,omitempty" json:"start_time_unix_nano,omitempty" xml:"start_time_unix_nano,omitempty"`
+	// Total number of logs in this tool call
+	LogCount *uint64 `form:"log_count,omitempty" json:"log_count,omitempty" xml:"log_count,omitempty"`
+	// HTTP status code (if applicable)
+	HTTPStatusCode *int32 `form:"http_status_code,omitempty" json:"http_status_code,omitempty" xml:"http_status_code,omitempty"`
+	// Gram URN associated with this tool call
+	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
+}
+
+// NewSearchLogsRequestBody builds the HTTP request body from the payload of
+// the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsRequestBody(p *logs.SearchLogsPayload) *SearchLogsRequestBody {
+	body := &SearchLogsRequestBody{
+		Cursor: p.Cursor,
+		Sort:   p.Sort,
+		Limit:  p.Limit,
+	}
+	if p.Filter != nil {
+		body.Filter = marshalLogsSearchLogsFilterToSearchLogsFilterRequestBody(p.Filter)
+	}
+	{
+		var zero string
+		if body.Sort == zero {
+			body.Sort = "desc"
+		}
+	}
+	{
+		var zero int
+		if body.Limit == zero {
+			body.Limit = 50
+		}
+	}
+	return body
+}
+
+// NewSearchToolCallsRequestBody builds the HTTP request body from the payload
+// of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsRequestBody(p *logs.SearchToolCallsPayload) *SearchToolCallsRequestBody {
+	body := &SearchToolCallsRequestBody{
+		Cursor: p.Cursor,
+		Sort:   p.Sort,
+		Limit:  p.Limit,
+	}
+	if p.Filter != nil {
+		body.Filter = marshalLogsSearchToolCallsFilterToSearchToolCallsFilterRequestBody(p.Filter)
+	}
+	{
+		var zero string
+		if body.Sort == zero {
+			body.Sort = "desc"
+		}
+	}
+	{
+		var zero int
+		if body.Limit == zero {
+			body.Limit = 50
+		}
+	}
+	return body
 }
 
 // NewListLogsListToolLogResponseOK builds a "logs" service "listLogs" endpoint
@@ -815,6 +1361,341 @@ func NewListToolExecutionLogsGatewayError(body *ListToolExecutionLogsGatewayErro
 	return v
 }
 
+// NewSearchLogsResultOK builds a "logs" service "searchLogs" endpoint result
+// from a HTTP "OK" response.
+func NewSearchLogsResultOK(body *SearchLogsResponseBody) *logs.SearchLogsResult {
+	v := &logs.SearchLogsResult{
+		NextCursor: body.NextCursor,
+	}
+	v.Logs = make([]*logs.TelemetryLogRecord, len(body.Logs))
+	for i, val := range body.Logs {
+		if val == nil {
+			v.Logs[i] = nil
+			continue
+		}
+		v.Logs[i] = unmarshalTelemetryLogRecordResponseBodyToLogsTelemetryLogRecord(val)
+	}
+
+	return v
+}
+
+// NewSearchLogsUnauthorized builds a logs service searchLogs endpoint
+// unauthorized error.
+func NewSearchLogsUnauthorized(body *SearchLogsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchLogsForbidden builds a logs service searchLogs endpoint forbidden
+// error.
+func NewSearchLogsForbidden(body *SearchLogsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchLogsBadRequest builds a logs service searchLogs endpoint
+// bad_request error.
+func NewSearchLogsBadRequest(body *SearchLogsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchLogsNotFound builds a logs service searchLogs endpoint not_found
+// error.
+func NewSearchLogsNotFound(body *SearchLogsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchLogsConflict builds a logs service searchLogs endpoint conflict
+// error.
+func NewSearchLogsConflict(body *SearchLogsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchLogsUnsupportedMedia builds a logs service searchLogs endpoint
+// unsupported_media error.
+func NewSearchLogsUnsupportedMedia(body *SearchLogsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchLogsInvalid builds a logs service searchLogs endpoint invalid error.
+func NewSearchLogsInvalid(body *SearchLogsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchLogsInvariantViolation builds a logs service searchLogs endpoint
+// invariant_violation error.
+func NewSearchLogsInvariantViolation(body *SearchLogsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchLogsUnexpected builds a logs service searchLogs endpoint unexpected
+// error.
+func NewSearchLogsUnexpected(body *SearchLogsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchLogsGatewayError builds a logs service searchLogs endpoint
+// gateway_error error.
+func NewSearchLogsGatewayError(body *SearchLogsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchToolCallsResultOK builds a "logs" service "searchToolCalls"
+// endpoint result from a HTTP "OK" response.
+func NewSearchToolCallsResultOK(body *SearchToolCallsResponseBody) *logs.SearchToolCallsResult {
+	v := &logs.SearchToolCallsResult{
+		NextCursor: body.NextCursor,
+	}
+	v.ToolCalls = make([]*logs.ToolCallSummary, len(body.ToolCalls))
+	for i, val := range body.ToolCalls {
+		if val == nil {
+			v.ToolCalls[i] = nil
+			continue
+		}
+		v.ToolCalls[i] = unmarshalToolCallSummaryResponseBodyToLogsToolCallSummary(val)
+	}
+
+	return v
+}
+
+// NewSearchToolCallsUnauthorized builds a logs service searchToolCalls
+// endpoint unauthorized error.
+func NewSearchToolCallsUnauthorized(body *SearchToolCallsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchToolCallsForbidden builds a logs service searchToolCalls endpoint
+// forbidden error.
+func NewSearchToolCallsForbidden(body *SearchToolCallsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchToolCallsBadRequest builds a logs service searchToolCalls endpoint
+// bad_request error.
+func NewSearchToolCallsBadRequest(body *SearchToolCallsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchToolCallsNotFound builds a logs service searchToolCalls endpoint
+// not_found error.
+func NewSearchToolCallsNotFound(body *SearchToolCallsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchToolCallsConflict builds a logs service searchToolCalls endpoint
+// conflict error.
+func NewSearchToolCallsConflict(body *SearchToolCallsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchToolCallsUnsupportedMedia builds a logs service searchToolCalls
+// endpoint unsupported_media error.
+func NewSearchToolCallsUnsupportedMedia(body *SearchToolCallsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchToolCallsInvalid builds a logs service searchToolCalls endpoint
+// invalid error.
+func NewSearchToolCallsInvalid(body *SearchToolCallsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchToolCallsInvariantViolation builds a logs service searchToolCalls
+// endpoint invariant_violation error.
+func NewSearchToolCallsInvariantViolation(body *SearchToolCallsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchToolCallsUnexpected builds a logs service searchToolCalls endpoint
+// unexpected error.
+func NewSearchToolCallsUnexpected(body *SearchToolCallsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchToolCallsGatewayError builds a logs service searchToolCalls
+// endpoint gateway_error error.
+func NewSearchToolCallsGatewayError(body *SearchToolCallsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateListLogsResponseBody runs the validations defined on
 // ListLogsResponseBody
 func ValidateListLogsResponseBody(body *ListLogsResponseBody) (err error) {
@@ -855,6 +1736,38 @@ func ValidateListToolExecutionLogsResponseBody(body *ListToolExecutionLogsRespon
 	if body.Pagination != nil {
 		if err2 := ValidatePaginationResponseResponseBody(body.Pagination); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateSearchLogsResponseBody runs the validations defined on
+// SearchLogsResponseBody
+func ValidateSearchLogsResponseBody(body *SearchLogsResponseBody) (err error) {
+	if body.Logs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("logs", "body"))
+	}
+	for _, e := range body.Logs {
+		if e != nil {
+			if err2 := ValidateTelemetryLogRecordResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateSearchToolCallsResponseBody runs the validations defined on
+// SearchToolCallsResponseBody
+func ValidateSearchToolCallsResponseBody(body *SearchToolCallsResponseBody) (err error) {
+	if body.ToolCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))
+	}
+	for _, e := range body.ToolCalls {
+		if e != nil {
+			if err2 := ValidateToolCallSummaryResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -1341,6 +2254,486 @@ func ValidateListToolExecutionLogsGatewayErrorResponseBody(body *ListToolExecuti
 	return
 }
 
+// ValidateSearchLogsUnauthorizedResponseBody runs the validations defined on
+// searchLogs_unauthorized_response_body
+func ValidateSearchLogsUnauthorizedResponseBody(body *SearchLogsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchLogsForbiddenResponseBody runs the validations defined on
+// searchLogs_forbidden_response_body
+func ValidateSearchLogsForbiddenResponseBody(body *SearchLogsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchLogsBadRequestResponseBody runs the validations defined on
+// searchLogs_bad_request_response_body
+func ValidateSearchLogsBadRequestResponseBody(body *SearchLogsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchLogsNotFoundResponseBody runs the validations defined on
+// searchLogs_not_found_response_body
+func ValidateSearchLogsNotFoundResponseBody(body *SearchLogsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchLogsConflictResponseBody runs the validations defined on
+// searchLogs_conflict_response_body
+func ValidateSearchLogsConflictResponseBody(body *SearchLogsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchLogsUnsupportedMediaResponseBody runs the validations defined
+// on searchLogs_unsupported_media_response_body
+func ValidateSearchLogsUnsupportedMediaResponseBody(body *SearchLogsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchLogsInvalidResponseBody runs the validations defined on
+// searchLogs_invalid_response_body
+func ValidateSearchLogsInvalidResponseBody(body *SearchLogsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchLogsInvariantViolationResponseBody runs the validations
+// defined on searchLogs_invariant_violation_response_body
+func ValidateSearchLogsInvariantViolationResponseBody(body *SearchLogsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchLogsUnexpectedResponseBody runs the validations defined on
+// searchLogs_unexpected_response_body
+func ValidateSearchLogsUnexpectedResponseBody(body *SearchLogsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchLogsGatewayErrorResponseBody runs the validations defined on
+// searchLogs_gateway_error_response_body
+func ValidateSearchLogsGatewayErrorResponseBody(body *SearchLogsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchToolCallsUnauthorizedResponseBody runs the validations defined
+// on searchToolCalls_unauthorized_response_body
+func ValidateSearchToolCallsUnauthorizedResponseBody(body *SearchToolCallsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchToolCallsForbiddenResponseBody runs the validations defined on
+// searchToolCalls_forbidden_response_body
+func ValidateSearchToolCallsForbiddenResponseBody(body *SearchToolCallsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchToolCallsBadRequestResponseBody runs the validations defined
+// on searchToolCalls_bad_request_response_body
+func ValidateSearchToolCallsBadRequestResponseBody(body *SearchToolCallsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchToolCallsNotFoundResponseBody runs the validations defined on
+// searchToolCalls_not_found_response_body
+func ValidateSearchToolCallsNotFoundResponseBody(body *SearchToolCallsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchToolCallsConflictResponseBody runs the validations defined on
+// searchToolCalls_conflict_response_body
+func ValidateSearchToolCallsConflictResponseBody(body *SearchToolCallsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchToolCallsUnsupportedMediaResponseBody runs the validations
+// defined on searchToolCalls_unsupported_media_response_body
+func ValidateSearchToolCallsUnsupportedMediaResponseBody(body *SearchToolCallsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchToolCallsInvalidResponseBody runs the validations defined on
+// searchToolCalls_invalid_response_body
+func ValidateSearchToolCallsInvalidResponseBody(body *SearchToolCallsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchToolCallsInvariantViolationResponseBody runs the validations
+// defined on searchToolCalls_invariant_violation_response_body
+func ValidateSearchToolCallsInvariantViolationResponseBody(body *SearchToolCallsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchToolCallsUnexpectedResponseBody runs the validations defined
+// on searchToolCalls_unexpected_response_body
+func ValidateSearchToolCallsUnexpectedResponseBody(body *SearchToolCallsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchToolCallsGatewayErrorResponseBody runs the validations defined
+// on searchToolCalls_gateway_error_response_body
+func ValidateSearchToolCallsGatewayErrorResponseBody(body *SearchToolCallsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateHTTPToolLogResponseBody runs the validations defined on
 // HTTPToolLogResponseBody
 func ValidateHTTPToolLogResponseBody(body *HTTPToolLogResponseBody) (err error) {
@@ -1465,6 +2858,120 @@ func ValidateToolExecutionLogResponseBody(body *ToolExecutionLogResponseBody) (e
 	}
 	if body.FunctionID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.function_id", *body.FunctionID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSearchLogsFilterRequestBody runs the validations defined on
+// SearchLogsFilterRequestBody
+func ValidateSearchLogsFilterRequestBody(body *SearchLogsFilterRequestBody) (err error) {
+	if body.TraceID != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.trace_id", *body.TraceID, "^[a-f0-9]{32}$"))
+	}
+	if body.SeverityText != nil {
+		if !(*body.SeverityText == "DEBUG" || *body.SeverityText == "INFO" || *body.SeverityText == "WARN" || *body.SeverityText == "ERROR" || *body.SeverityText == "FATAL") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.severity_text", *body.SeverityText, []any{"DEBUG", "INFO", "WARN", "ERROR", "FATAL"}))
+		}
+	}
+	if body.HTTPMethod != nil {
+		if !(*body.HTTPMethod == "GET" || *body.HTTPMethod == "POST" || *body.HTTPMethod == "PUT" || *body.HTTPMethod == "PATCH" || *body.HTTPMethod == "DELETE" || *body.HTTPMethod == "HEAD" || *body.HTTPMethod == "OPTIONS") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.http_method", *body.HTTPMethod, []any{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}))
+		}
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	if body.DeploymentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.deployment_id", *body.DeploymentID, goa.FormatUUID))
+	}
+	if body.FunctionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.function_id", *body.FunctionID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateTelemetryLogRecordResponseBody runs the validations defined on
+// TelemetryLogRecordResponseBody
+func ValidateTelemetryLogRecordResponseBody(body *TelemetryLogRecordResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.TimeUnixNano == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("time_unix_nano", "body"))
+	}
+	if body.ObservedTimeUnixNano == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_time_unix_nano", "body"))
+	}
+	if body.Body == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("body", "body"))
+	}
+	if body.Attributes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attributes", "body"))
+	}
+	if body.ResourceAttributes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_attributes", "body"))
+	}
+	if body.Service == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("service", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Service != nil {
+		if err2 := ValidateServiceInfoResponseBody(body.Service); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateServiceInfoResponseBody runs the validations defined on
+// ServiceInfoResponseBody
+func ValidateServiceInfoResponseBody(body *ServiceInfoResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	return
+}
+
+// ValidateSearchToolCallsFilterRequestBody runs the validations defined on
+// SearchToolCallsFilterRequestBody
+func ValidateSearchToolCallsFilterRequestBody(body *SearchToolCallsFilterRequestBody) (err error) {
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	if body.DeploymentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.deployment_id", *body.DeploymentID, goa.FormatUUID))
+	}
+	if body.FunctionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.function_id", *body.FunctionID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateToolCallSummaryResponseBody runs the validations defined on
+// ToolCallSummaryResponseBody
+func ValidateToolCallSummaryResponseBody(body *ToolCallSummaryResponseBody) (err error) {
+	if body.TraceID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trace_id", "body"))
+	}
+	if body.StartTimeUnixNano == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("start_time_unix_nano", "body"))
+	}
+	if body.LogCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("log_count", "body"))
+	}
+	if body.GramUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gram_urn", "body"))
+	}
+	if body.TraceID != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.trace_id", *body.TraceID, "^[a-f0-9]{32}$"))
 	}
 	return
 }

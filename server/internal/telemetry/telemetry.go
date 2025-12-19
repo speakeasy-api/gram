@@ -25,6 +25,12 @@ type ToolMetricsProvider interface {
 	ListHTTPRequests(ctx context.Context, opts repo.ListToolLogsOptions) (*repo.ListResult, error)
 	// List structured tool logs
 	ListToolLogs(ctx context.Context, params repo.ListToolLogsParams) (*repo.ToolLogsListResult, error)
+	// List unified telemetry logs (new OTel-based table)
+	ListTelemetryLogs(ctx context.Context, params repo.ListTelemetryLogsParams) ([]repo.TelemetryLog, error)
+	// List trace summaries for distributed tracing
+	ListTraces(ctx context.Context, params repo.ListTracesParams) ([]repo.TraceSummary, error)
+	// List all logs for a specific trace ID
+	ListLogsForTrace(ctx context.Context, params repo.ListLogsForTraceParams) ([]repo.TelemetryLog, error)
 	// Log tool call request/response
 	LogHTTPRequest(context.Context, repo.ToolHTTPRequest) error
 	// ShouldLog returns true if the tool call should be logged

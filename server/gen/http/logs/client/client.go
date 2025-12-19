@@ -25,6 +25,14 @@ type Client struct {
 	// listToolExecutionLogs endpoint.
 	ListToolExecutionLogsDoer goahttp.Doer
 
+	// SearchLogs Doer is the HTTP client used to make requests to the searchLogs
+	// endpoint.
+	SearchLogsDoer goahttp.Doer
+
+	// SearchToolCalls Doer is the HTTP client used to make requests to the
+	// searchToolCalls endpoint.
+	SearchToolCallsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -47,6 +55,8 @@ func NewClient(
 	return &Client{
 		ListLogsDoer:              doer,
 		ListToolExecutionLogsDoer: doer,
+		SearchLogsDoer:            doer,
+		SearchToolCallsDoer:       doer,
 		RestoreResponseBody:       restoreBody,
 		scheme:                    scheme,
 		host:                      host,
@@ -98,6 +108,54 @@ func (c *Client) ListToolExecutionLogs() goa.Endpoint {
 		resp, err := c.ListToolExecutionLogsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("logs", "listToolExecutionLogs", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SearchLogs returns an endpoint that makes HTTP requests to the logs service
+// searchLogs server.
+func (c *Client) SearchLogs() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSearchLogsRequest(c.encoder)
+		decodeResponse = DecodeSearchLogsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSearchLogsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SearchLogsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("logs", "searchLogs", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SearchToolCalls returns an endpoint that makes HTTP requests to the logs
+// service searchToolCalls server.
+func (c *Client) SearchToolCalls() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSearchToolCallsRequest(c.encoder)
+		decodeResponse = DecodeSearchToolCallsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSearchToolCallsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SearchToolCallsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("logs", "searchToolCalls", err)
 		}
 		return decodeResponse(resp)
 	}

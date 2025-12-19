@@ -213,6 +213,8 @@ run();
 
 * [list](docs/sdks/logs/README.md#list) - listLogs logs
 * [listToolExecutionLogs](docs/sdks/logs/README.md#listtoolexecutionlogs) - listToolExecutionLogs logs
+* [searchLogs](docs/sdks/logs/README.md#searchlogs) - searchLogs logs
+* [searchToolCalls](docs/sdks/logs/README.md#searchtoolcalls) - searchToolCalls logs
 
 ### [McpMetadata](docs/sdks/mcpmetadata/README.md)
 
@@ -362,6 +364,8 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`keysValidate`](docs/sdks/keys/README.md#validate) - verifyKey keys
 - [`logsList`](docs/sdks/logs/README.md#list) - listLogs logs
 - [`logsListToolExecutionLogs`](docs/sdks/logs/README.md#listtoolexecutionlogs) - listToolExecutionLogs logs
+- [`logsSearchLogs`](docs/sdks/logs/README.md#searchlogs) - searchLogs logs
+- [`logsSearchToolCalls`](docs/sdks/logs/README.md#searchtoolcalls) - searchToolCalls logs
 - [`mcpMetadataGet`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 - [`mcpMetadataSet`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`mcpRegistriesListCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
@@ -502,6 +506,8 @@ To learn about this feature and how to get started, check
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
+- [`useSearchLogsMutation`](docs/sdks/logs/README.md#searchlogs) - searchLogs logs
+- [`useSearchToolCallsMutation`](docs/sdks/logs/README.md#searchtoolcalls) - searchToolCalls logs
 - [`useServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets

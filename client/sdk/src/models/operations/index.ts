@@ -75,6 +75,8 @@ export * from "./rendertemplate.js";
 export * from "./rendertemplatebyid.js";
 export * from "./revokeapikey.js";
 export * from "./revokechatsession.js";
+export * from "./searchlogs.js";
+export * from "./searchtoolcalls.js";
 export * from "./servefunction.js";
 export * from "./serveimage.js";
 export * from "./serveopenapiv3.js";

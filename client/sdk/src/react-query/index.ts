@@ -75,6 +75,8 @@ export * from "./removeOAuthServer.js";
 export * from "./renderTemplate.js";
 export * from "./renderTemplateByID.js";
 export * from "./revokeAPIKey.js";
+export * from "./searchLogs.js";
+export * from "./searchToolCalls.js";
 export * from "./serveFunction.js";
 export * from "./serveImage.js";
 export * from "./serveOpenAPIv3.js";
