@@ -184,27 +184,33 @@ type EnvironmentEntry struct {
 }
 
 type ExternalMcpAttachment struct {
-	ID           uuid.UUID
-	DeploymentID uuid.UUID
-	RegistryID   uuid.UUID
-	Name         string
-	Slug         string
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	DeletedAt    pgtype.Timestamptz
-	Deleted      bool
-}
-
-type ExternalMcpToolDefinition struct {
 	ID                      uuid.UUID
-	ExternalMcpAttachmentID uuid.UUID
-	ToolUrn                 string
-	RemoteUrl               string
-	RequiresOauth           bool
+	DeploymentID            uuid.UUID
+	RegistryID              uuid.UUID
+	Name                    string
+	Slug                    string
+	RegistryServerSpecifier string
 	CreatedAt               pgtype.Timestamptz
 	UpdatedAt               pgtype.Timestamptz
 	DeletedAt               pgtype.Timestamptz
 	Deleted                 bool
+}
+
+type ExternalMcpToolDefinition struct {
+	ID                         uuid.UUID
+	ExternalMcpAttachmentID    uuid.UUID
+	ToolUrn                    string
+	RemoteUrl                  string
+	RequiresOauth              bool
+	OauthVersion               string
+	OauthAuthorizationEndpoint pgtype.Text
+	OauthTokenEndpoint         pgtype.Text
+	OauthRegistrationEndpoint  pgtype.Text
+	OauthScopesSupported       []string
+	CreatedAt                  pgtype.Timestamptz
+	UpdatedAt                  pgtype.Timestamptz
+	DeletedAt                  pgtype.Timestamptz
+	Deleted                    bool
 }
 
 type ExternalOauthServerMetadatum struct {

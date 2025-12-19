@@ -1085,6 +1085,7 @@ CREATE TABLE IF NOT EXISTS external_mcp_attachments (
   registry_id uuid NOT NULL,
   name TEXT NOT NULL CHECK (name <> ''),
   slug TEXT NOT NULL CHECK (slug <> ''),
+  registry_server_specifier TEXT NOT NULL CHECK (registry_server_specifier <> ''),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1110,6 +1111,16 @@ CREATE TABLE IF NOT EXISTS external_mcp_tool_definitions (
   tool_urn TEXT NOT NULL CHECK (tool_urn <> ''),
   remote_url TEXT NOT NULL CHECK (remote_url <> ''),
   requires_oauth BOOLEAN NOT NULL DEFAULT FALSE,
+
+  -- OAuth metadata
+  -- '2.1' = MCP OAuth with RFC 8414 discovery + dynamic registration
+  -- '2.0' = legacy OAuth 2.0 (no AS discovery, requires static client config)
+  -- 'none' = no OAuth required
+  oauth_version TEXT NOT NULL DEFAULT 'none',
+  oauth_authorization_endpoint TEXT,
+  oauth_token_endpoint TEXT,
+  oauth_registration_endpoint TEXT,
+  oauth_scopes_supported TEXT[],
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
