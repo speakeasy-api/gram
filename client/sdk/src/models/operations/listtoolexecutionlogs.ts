@@ -74,16 +74,14 @@ export type QueryParamDirection = ClosedEnum<typeof QueryParamDirection>;
 /**
  * Sort order
  */
-export const ListToolExecutionLogsQueryParamSort = {
+export const QueryParamSort = {
   Asc: "asc",
   Desc: "desc",
 } as const;
 /**
  * Sort order
  */
-export type ListToolExecutionLogsQueryParamSort = ClosedEnum<
-  typeof ListToolExecutionLogsQueryParamSort
->;
+export type QueryParamSort = ClosedEnum<typeof QueryParamSort>;
 
 export type ListToolExecutionLogsRequest = {
   /**
@@ -129,7 +127,7 @@ export type ListToolExecutionLogsRequest = {
   /**
    * Sort order
    */
-  sort?: ListToolExecutionLogsQueryParamSort | undefined;
+  sort?: QueryParamSort | undefined;
   /**
    * API Key header
    */
@@ -324,10 +322,9 @@ export const QueryParamDirection$outboundSchema: z.ZodNativeEnum<
 > = z.nativeEnum(QueryParamDirection);
 
 /** @internal */
-export const ListToolExecutionLogsQueryParamSort$outboundSchema:
-  z.ZodNativeEnum<typeof ListToolExecutionLogsQueryParamSort> = z.nativeEnum(
-    ListToolExecutionLogsQueryParamSort,
-  );
+export const QueryParamSort$outboundSchema: z.ZodNativeEnum<
+  typeof QueryParamSort
+> = z.nativeEnum(QueryParamSort);
 
 /** @internal */
 export type ListToolExecutionLogsRequest$Outbound = {
@@ -363,7 +360,7 @@ export const ListToolExecutionLogsRequest$outboundSchema: z.ZodType<
   cursor: z.string().optional(),
   perPage: z.number().int().default(20),
   direction: QueryParamDirection$outboundSchema.default("next"),
-  sort: ListToolExecutionLogsQueryParamSort$outboundSchema.default("desc"),
+  sort: QueryParamSort$outboundSchema.default("desc"),
   gramKey: z.string().optional(),
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),

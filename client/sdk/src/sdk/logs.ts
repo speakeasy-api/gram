@@ -3,10 +3,9 @@
  */
 
 import { logsList } from "../funcs/logsList.js";
-import { logsListLogsForTrace } from "../funcs/logsListLogsForTrace.js";
-import { logsListTelemetryLogs } from "../funcs/logsListTelemetryLogs.js";
 import { logsListToolExecutionLogs } from "../funcs/logsListToolExecutionLogs.js";
-import { logsListTraces } from "../funcs/logsListTraces.js";
+import { logsSearchLogs } from "../funcs/logsSearchLogs.js";
+import { logsSearchToolCalls } from "../funcs/logsSearchToolCalls.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -25,44 +24,6 @@ export class Logs extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListToolLogResponse> {
     return unwrapAsync(logsList(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * listLogsForTrace logs
-   *
-   * @remarks
-   * List all logs for a specific trace ID.
-   */
-  async listLogsForTrace(
-    request: operations.ListLogsForTraceRequest,
-    security?: operations.ListLogsForTraceSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.ListLogsForTraceResult> {
-    return unwrapAsync(logsListLogsForTrace(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * listTelemetryLogs logs
-   *
-   * @remarks
-   * List unified telemetry logs following OpenTelemetry Logs Data Model.
-   */
-  async listTelemetryLogs(
-    request?: operations.ListTelemetryLogsRequest | undefined,
-    security?: operations.ListTelemetryLogsSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.ListTelemetryLogsResult> {
-    return unwrapAsync(logsListTelemetryLogs(
       this,
       request,
       security,
@@ -90,17 +51,36 @@ export class Logs extends ClientSDK {
   }
 
   /**
-   * listTraces logs
+   * searchLogs logs
    *
    * @remarks
-   * List trace summaries for distributed tracing.
+   * Search unified telemetry logs following OpenTelemetry Logs Data Model.
    */
-  async listTraces(
-    request?: operations.ListTracesRequest | undefined,
-    security?: operations.ListTracesSecurity | undefined,
+  async searchLogs(
+    request: operations.SearchLogsRequest,
+    security?: operations.SearchLogsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListTracesResult> {
-    return unwrapAsync(logsListTraces(
+  ): Promise<components.SearchLogsResult> {
+    return unwrapAsync(logsSearchLogs(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * searchToolCalls logs
+   *
+   * @remarks
+   * Search tool call summaries.
+   */
+  async searchToolCalls(
+    request: operations.SearchToolCallsRequest,
+    security?: operations.SearchToolCallsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.SearchToolCallsResult> {
+    return unwrapAsync(logsSearchToolCalls(
       this,
       request,
       security,

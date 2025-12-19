@@ -212,10 +212,9 @@ run();
 ### [Logs](docs/sdks/logs/README.md)
 
 * [list](docs/sdks/logs/README.md#list) - listLogs logs
-* [listLogsForTrace](docs/sdks/logs/README.md#listlogsfortrace) - listLogsForTrace logs
-* [listTelemetryLogs](docs/sdks/logs/README.md#listtelemetrylogs) - listTelemetryLogs logs
 * [listToolExecutionLogs](docs/sdks/logs/README.md#listtoolexecutionlogs) - listToolExecutionLogs logs
-* [listTraces](docs/sdks/logs/README.md#listtraces) - listTraces logs
+* [searchLogs](docs/sdks/logs/README.md#searchlogs) - searchLogs logs
+* [searchToolCalls](docs/sdks/logs/README.md#searchtoolcalls) - searchToolCalls logs
 
 ### [McpMetadata](docs/sdks/mcpmetadata/README.md)
 
@@ -364,10 +363,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`keysValidate`](docs/sdks/keys/README.md#validate) - verifyKey keys
 - [`logsList`](docs/sdks/logs/README.md#list) - listLogs logs
-- [`logsListLogsForTrace`](docs/sdks/logs/README.md#listlogsfortrace) - listLogsForTrace logs
-- [`logsListTelemetryLogs`](docs/sdks/logs/README.md#listtelemetrylogs) - listTelemetryLogs logs
 - [`logsListToolExecutionLogs`](docs/sdks/logs/README.md#listtoolexecutionlogs) - listToolExecutionLogs logs
-- [`logsListTraces`](docs/sdks/logs/README.md#listtraces) - listTraces logs
+- [`logsSearchLogs`](docs/sdks/logs/README.md#searchlogs) - searchLogs logs
+- [`logsSearchToolCalls`](docs/sdks/logs/README.md#searchtoolcalls) - searchToolCalls logs
 - [`mcpMetadataGet`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 - [`mcpMetadataSet`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`mcpRegistriesListCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
@@ -499,7 +497,6 @@ To learn about this feature and how to get started, check
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
-- [`useLogsForTrace`](docs/sdks/logs/README.md#listlogsfortrace) - listLogsForTrace logs
 - [`useMcpMetadataSetMutation`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
@@ -509,6 +506,8 @@ To learn about this feature and how to get started, check
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
+- [`useSearchLogsMutation`](docs/sdks/logs/README.md#searchlogs) - searchLogs logs
+- [`useSearchToolCallsMutation`](docs/sdks/logs/README.md#searchtoolcalls) - searchToolCalls logs
 - [`useServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
@@ -517,12 +516,10 @@ To learn about this feature and how to get started, check
 - [`useSetSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`useSetToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
-- [`useTelemetryLogs`](docs/sdks/logs/README.md#listtelemetrylogs) - listTelemetryLogs logs
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates
 - [`useTemplates`](docs/sdks/templates/README.md#list) - listTemplates templates
 - [`useToolExecutionLogs`](docs/sdks/logs/README.md#listtoolexecutionlogs) - listToolExecutionLogs logs
 - [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
-- [`useTraces`](docs/sdks/logs/README.md#listtraces) - listTraces logs
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages
 - [`useUpdateSlackConnectionMutation`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack

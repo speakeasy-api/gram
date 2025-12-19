@@ -3,7 +3,7 @@
  */
 
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -27,19 +27,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listTelemetryLogs logs
+ * searchLogs logs
  *
  * @remarks
- * List unified telemetry logs following OpenTelemetry Logs Data Model.
+ * Search unified telemetry logs following OpenTelemetry Logs Data Model.
  */
-export function logsListTelemetryLogs(
+export function logsSearchLogs(
   client: GramCore,
-  request?: operations.ListTelemetryLogsRequest | undefined,
-  security?: operations.ListTelemetryLogsSecurity | undefined,
+  request: operations.SearchLogsRequest,
+  security?: operations.SearchLogsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.ListTelemetryLogsResult,
+    components.SearchLogsResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -61,13 +61,13 @@ export function logsListTelemetryLogs(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListTelemetryLogsRequest | undefined,
-  security?: operations.ListTelemetryLogsSecurity | undefined,
+  request: operations.SearchLogsRequest,
+  security?: operations.SearchLogsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.ListTelemetryLogsResult,
+      components.SearchLogsResult,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -83,48 +83,29 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      operations.ListTelemetryLogsRequest$outboundSchema.optional().parse(
-        value,
-      ),
+    (value) => operations.SearchLogsRequest$outboundSchema.parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON("body", payload.SearchLogsPayload, { explode: true });
 
-  const path = pathToFunc("/rpc/logs.listTelemetryLogs")();
-
-  const query = encodeFormQuery({
-    "cursor": payload?.cursor,
-    "deployment_id": payload?.deployment_id,
-    "function_id": payload?.function_id,
-    "gram_urn": payload?.gram_urn,
-    "http_method": payload?.http_method,
-    "http_route": payload?.http_route,
-    "http_status_code": payload?.http_status_code,
-    "limit": payload?.limit,
-    "service_name": payload?.service_name,
-    "severity_text": payload?.severity_text,
-    "sort": payload?.sort,
-    "time_end": payload?.time_end,
-    "time_start": payload?.time_start,
-    "trace_id": payload?.trace_id,
-  });
+  const path = pathToFunc("/rpc/logs.searchLogs")();
 
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -184,7 +165,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listTelemetryLogs",
+    operationID: "searchLogs",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -198,11 +179,10 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -240,7 +220,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.ListTelemetryLogsResult,
+    components.SearchLogsResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -251,7 +231,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.ListTelemetryLogsResult$inboundSchema),
+    M.json(200, components.SearchLogsResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,
