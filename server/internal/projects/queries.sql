@@ -53,6 +53,14 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
 ORDER BY created_at DESC;
 
+-- name: ListApprovedOriginsByProjectID :many
+SELECT origin
+FROM project_allowed_origins
+WHERE project_id = @project_id
+  AND status = 'approved'
+  AND deleted IS FALSE
+ORDER BY created_at DESC;
+
 -- name: UpsertAllowedOrigin :one
 INSERT INTO project_allowed_origins (
     project_id

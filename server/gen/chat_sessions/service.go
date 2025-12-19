@@ -48,6 +48,8 @@ var MethodNames = [2]string{"create", "revoke"}
 type CreatePayload struct {
 	// Optional free-form user identifier
 	UserIdentifier *string
+	// The origin from which the token will be used
+	EmbedOrigin string
 	// Token expiration in seconds (max / default 3600)
 	ExpiresAfter     int
 	ApikeyToken      *string
@@ -58,6 +60,8 @@ type CreatePayload struct {
 type CreateResult struct {
 	// JWT token for chat session
 	ClientToken string
+	// The origin from which the token will be used
+	EmbedOrigin string
 	// Token expiration in seconds
 	ExpiresAfter int
 	// User identifier if provided

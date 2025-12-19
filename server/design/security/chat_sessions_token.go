@@ -3,12 +3,12 @@ package security
 import (
 	"fmt"
 
-	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	. "goa.design/goa/v3/dsl"
 )
 
 // ChatSessionsToken defines the security scheme for chat sessions token-based authentication
-var ChatSessionsToken = JWTSecurity(auth.ChatSessionsTokenSecurityScheme, func() {
+var ChatSessionsToken = JWTSecurity(constants.ChatSessionsTokenSecurityScheme, func() {
 	Description("Gram Chat Sessions token based auth.")
 })
 
@@ -17,7 +17,7 @@ var ChatSessionsTokenPayload = func() {
 }
 
 var ChatSessionsTokenHeader = func() {
-	Header(fmt.Sprintf("chat_sessions_token:%s", auth.ChatSessionsTokenHeader), String, "Chat Sessions token header")
+	Header(fmt.Sprintf("chat_sessions_token:%s", constants.ChatSessionsTokenHeader), String, "Chat Sessions token header")
 }
 
 var ChatSessionsTokenNamedHeader = func(name string) {
