@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import { Toaster } from "@/components/ui/sonner";
 import App from "./App.tsx";
 
-// boop
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <style>
