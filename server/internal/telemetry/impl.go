@@ -297,8 +297,10 @@ func toToolExecutionLog(r repo.ToolLog) *gen.ToolExecutionLog {
 	}
 }
 
-// ListTelemetryLogs retrieves unified telemetry logs with pagination.
-func (s *Service) ListTelemetryLogs(ctx context.Context, payload *gen.ListTelemetryLogsPayload) (res *gen.ListTelemetryLogsResult, err error) {
+
+
+// SearchLogs retrieves unified telemetry logs with pagination.
+func (s *Service) SearchLogs(ctx context.Context, payload *gen.SearchLogsPayload) (res *gen.SearchLogsResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -327,25 +329,43 @@ func (s *Service) ListTelemetryLogs(ctx context.Context, payload *gen.ListTeleme
 		cursor = *payload.Cursor
 	}
 
-	// Default time range: all time if not specified
-	now := time.Now()
-	timeStart := conv.PtrValOr(payload.TimeStart, int64(0)) // Beginning of time (epoch)
-	timeEnd := conv.PtrValOr(payload.TimeEnd, now.UnixNano())
+	from := int64(0)
+	to := time.Now().UnixNano()
+	
+	// Extract filter values
+	var gramURN, traceID, deploymentID, functionID, severityText, httpRoute, httpMethod, serviceName string
+	var httpStatusCode int32
+	if payload.Filter != nil {
+		from, to, err = parseTimeRange(payload.Filter.From, payload.Filter.To)
+		if err != nil {
+			return nil, err
+		}
+
+		gramURN = conv.PtrValOr(payload.Filter.GramUrn, "")
+		traceID = conv.PtrValOr(payload.Filter.TraceID, "")
+		deploymentID = conv.PtrValOr(payload.Filter.DeploymentID, "")
+		functionID = conv.PtrValOr(payload.Filter.FunctionID, "")
+		severityText = conv.PtrValOr(payload.Filter.SeverityText, "")
+		httpStatusCode = conv.PtrValOr(payload.Filter.HTTPStatusCode, 0)
+		httpRoute = conv.PtrValOr(payload.Filter.HTTPRoute, "")
+		httpMethod = conv.PtrValOr(payload.Filter.HTTPMethod, "")
+		serviceName = conv.PtrValOr(payload.Filter.ServiceName, "")
+	}
 
 	// Query with limit+1 to detect if there are more results
 	items, err := s.tcm.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
 		GramProjectID:          projectID.String(),
-		TimeStart:              timeStart,
-		TimeEnd:                timeEnd,
-		GramURN:                conv.PtrValOr(payload.GramUrn, ""),
-		TraceID:                conv.PtrValOr(payload.TraceID, ""),
-		GramDeploymentID:       conv.PtrValOr(payload.DeploymentID, ""),
-		GramFunctionID:         conv.PtrValOr(payload.FunctionID, ""),
-		SeverityText:           conv.PtrValOr(payload.SeverityText, ""),
-		HTTPResponseStatusCode: conv.PtrValOr(payload.HTTPStatusCode, 0),
-		HTTPRoute:              conv.PtrValOr(payload.HTTPRoute, ""),
-		HTTPRequestMethod:      conv.PtrValOr(payload.HTTPMethod, ""),
-		ServiceName:            conv.PtrValOr(payload.ServiceName, ""),
+		TimeStart:              from,
+		TimeEnd:                to,
+		GramURN:                gramURN,
+		TraceID:                traceID,
+		GramDeploymentID:       deploymentID,
+		GramFunctionID:         functionID,
+		SeverityText:           severityText,
+		HTTPResponseStatusCode: httpStatusCode,
+		HTTPRoute:              httpRoute,
+		HTTPRequestMethod:      httpMethod,
+		ServiceName:            serviceName,
 		SortOrder:              sortOrder,
 		Cursor:                 cursor,
 		Limit:                  limit + 1, // +1 for overflow detection
@@ -373,14 +393,14 @@ func (s *Service) ListTelemetryLogs(ctx context.Context, payload *gen.ListTeleme
 		telemetryLogs[i] = record
 	}
 
-	return &gen.ListTelemetryLogsResult{
+	return &gen.SearchLogsResult{
 		Logs:       telemetryLogs,
 		NextCursor: nextCursor,
 	}, nil
 }
 
-// ListTraces retrieves trace summaries with pagination.
-func (s *Service) ListTraces(ctx context.Context, payload *gen.ListTracesPayload) (res *gen.ListTracesResult, err error) {
+// SearchToolCalls retrieves tool call summaries with pagination.
+func (s *Service) SearchToolCalls(ctx context.Context, payload *gen.SearchToolCallsPayload) (res *gen.SearchToolCallsResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -388,7 +408,6 @@ func (s *Service) ListTraces(ctx context.Context, payload *gen.ListTracesPayload
 
 	projectID := authCtx.ProjectID
 
-	// Validate and set limit (defaults handled by Goa)
 	limit := payload.Limit
 	if limit < 1 || limit > 1000 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "limit must be between 1 and 1000")
@@ -406,22 +425,32 @@ func (s *Service) ListTraces(ctx context.Context, payload *gen.ListTracesPayload
 
 	// Empty string cursor for first page
 	cursor := ""
-	if payload.Cursor != nil && *payload.Cursor != "" {
+	if payload.Cursor != nil {
 		cursor = *payload.Cursor
 	}
 
-	// Default time range: all time if not specified
-	now := time.Now()
-	timeStart := conv.PtrValOr(payload.TimeStart, int64(0)) // Beginning of time (epoch)
-	timeEnd := conv.PtrValOr(payload.TimeEnd, now.UnixNano())
+	from := int64(0)
+	to := time.Now().UnixNano()
+
+	// Extract filter values
+	var deploymentID, functionID string
+	if payload.Filter != nil {
+		from, to, err = parseTimeRange(payload.Filter.From, payload.Filter.To)
+		if err != nil {
+			return nil, err
+		}
+		deploymentID = conv.PtrValOr(payload.Filter.DeploymentID, "")
+		functionID = conv.PtrValOr(payload.Filter.FunctionID, "")
+		// TODO: gram_urn filtering not yet supported for tool calls aggregation
+	}
 
 	// Query with limit+1 to detect if there are more results
 	items, err := s.tcm.ListTraces(ctx, repo.ListTracesParams{
 		GramProjectID:    projectID.String(),
-		TimeStart:        timeStart,
-		TimeEnd:          timeEnd,
-		GramDeploymentID: conv.PtrValOr(payload.DeploymentID, ""),
-		GramFunctionID:   conv.PtrValOr(payload.FunctionID, ""),
+		TimeStart:        from,
+		TimeEnd:          to,
+		GramDeploymentID: deploymentID,
+		GramFunctionID:   functionID,
 		SortOrder:        sortOrder,
 		Cursor:           cursor,
 		Limit:            limit + 1, // +1 for overflow detection
@@ -439,9 +468,9 @@ func (s *Service) ListTraces(ctx context.Context, payload *gen.ListTracesPayload
 	}
 
 	// Convert repo models to Goa types
-	traces := make([]*gen.TraceSummaryRecord, len(items))
+	toolCalls := make([]*gen.ToolCallSummary, len(items))
 	for i, item := range items {
-		traces[i] = &gen.TraceSummaryRecord{
+		toolCalls[i] = &gen.ToolCallSummary{
 			TraceID:           item.TraceID,
 			StartTimeUnixNano: item.StartTimeUnixNano,
 			LogCount:          item.LogCount,
@@ -450,44 +479,36 @@ func (s *Service) ListTraces(ctx context.Context, payload *gen.ListTracesPayload
 		}
 	}
 
-	return &gen.ListTracesResult{
-		Traces:     traces,
+	return &gen.SearchToolCallsResult{
+		ToolCalls:  toolCalls,
 		NextCursor: nextCursor,
 	}, nil
 }
 
-// ListLogsForTrace retrieves all logs for a specific trace ID.
-func (s *Service) ListLogsForTrace(ctx context.Context, payload *gen.ListLogsForTracePayload) (res *gen.ListLogsForTraceResult, err error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
+// parseTimeRange extracts and parses the time range from a telemetry filter.
+// Returns Unix nanoseconds for start and end times.
+// Defaults: start=0 (epoch), end=now
+func parseTimeRange(from, to *string) (timeStart, timeEnd int64, err error) {
+	timeStart = 0
+	timeEnd = time.Now().UnixNano()
 
-	projectID := authCtx.ProjectID
-
-	// Fetch all logs for the trace (no pagination - traces typically have limited logs)
-	logs, err := s.tcm.ListLogsForTrace(ctx, repo.ListLogsForTraceParams{
-		GramProjectID: projectID.String(),
-		TraceID:       payload.TraceID,
-		Limit:         1000, // Hard limit to prevent abuse
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing logs for trace")
-	}
-
-	// Convert repo models to Goa types
-	telemetryLogs := make([]*gen.TelemetryLogRecord, len(logs))
-	for i, log := range logs {
-		record, err := toTelemetryLogPayload(log)
-		if err != nil {
-			return nil, err
+	if from != nil && *from != "" {
+		fromTime, parseErr := time.Parse(time.RFC3339, *from)
+		if parseErr != nil {
+			return 0, 0, oops.E(oops.CodeBadRequest, parseErr, "invalid 'from' time format, expected ISO 8601 (e.g., '2025-12-19T10:00:00Z')")
 		}
-		telemetryLogs[i] = record
+		timeStart = fromTime.UnixNano()
+	} 
+
+	if to != nil && *to != "" {
+		toTime, parseErr := time.Parse(time.RFC3339, *to)
+		if parseErr != nil {
+			return 0, 0, oops.E(oops.CodeBadRequest, parseErr, "invalid 'to' time format, expected ISO 8601 (e.g., '2025-12-19T11:00:00Z')")
+		}
+		timeEnd = toTime.UnixNano()
 	}
 
-	return &gen.ListLogsForTraceResult{
-		Logs: telemetryLogs,
-	}, nil
+	return timeStart, timeEnd, nil
 }
 
 // toTelemetryLogPayload converts a ClickHouse telemetry log record to the API response format.
