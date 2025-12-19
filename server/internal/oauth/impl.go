@@ -3,9 +3,12 @@ package oauth
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"io"
 	"log/slog"
 	"net/http"
@@ -19,6 +22,8 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
+
+	_ "embed"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -36,24 +41,46 @@ import (
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
+//go:embed hosted_oauth_success_page.html.tmpl
+var oauthSuccessPageTmplData string
+
+//go:embed hosted_oauth_failure_page.html.tmpl
+var oauthFailurePageTmplData string
+
+//go:embed hosted_oauth_status_script.js
+var oauthSuccessScriptData []byte
+
+type gramOAuthResultPageData struct {
+	RedirectURL template.URL
+	ScriptHash  string
+
+	// Error fields for failure page
+	ErrorDescription string
+	ErrorCode        string
+}
+
 type Service struct {
-	logger             *slog.Logger
-	tracer             trace.Tracer
-	meter              metric.Meter
-	db                 *pgxpool.Pool
-	toolsetsRepo       *toolsets_repo.Queries
-	customDomainsRepo  *customdomains_repo.Queries
-	environments       *environments.EnvironmentEntries
-	serverURL          *url.URL
-	clientRegistration *ClientRegistrationService
-	grantManager       *GrantManager
-	tokenService       *TokenService
-	pkceService        *PKCEService
-	oauthRepo          *repo.Queries
-	enc                *encryption.Client
-	sessions           *sessions.Manager
-	gramProvider       *providers.GramProvider
-	customProvider     *providers.CustomProvider
+	logger                    *slog.Logger
+	tracer                    trace.Tracer
+	meter                     metric.Meter
+	db                        *pgxpool.Pool
+	toolsetsRepo              *toolsets_repo.Queries
+	customDomainsRepo         *customdomains_repo.Queries
+	environments              *environments.EnvironmentEntries
+	serverURL                 *url.URL
+	clientRegistration        *ClientRegistrationService
+	grantManager              *GrantManager
+	tokenService              *TokenService
+	pkceService               *PKCEService
+	oauthRepo                 *repo.Queries
+	enc                       *encryption.Client
+	sessions                  *sessions.Manager
+	gramProvider              *providers.GramProvider
+	customProvider            *providers.CustomProvider
+	successPageTmpl           *template.Template
+	failurePageTmpl           *template.Template
+	oauthStatusPageScriptHash string
+	oauthStatusPageScriptData []byte
 }
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, serverURL *url.URL, cacheImpl cache.Cache, enc *encryption.Client, env *environments.EnvironmentEntries, sessions *sessions.Manager) *Service {
@@ -69,6 +96,14 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 	// Initialize OAuth providers
 	gramProvider := providers.NewGramProvider(logger, sessions)
 	customProvider := providers.NewCustomProvider(logger, env)
+
+	// Parse templates once during initialization
+	successPageTmpl := template.Must(template.New("oauth_success").Parse(oauthSuccessPageTmplData))
+	failurePageTmpl := template.Must(template.New("oauth_failure").Parse(oauthFailurePageTmplData))
+
+	// Calculate content hash for success script (for cache busting)
+	hash := sha256.Sum256(oauthSuccessScriptData)
+	scriptHash := hex.EncodeToString(hash[:])[:8] // Use first 8 chars like hosted page
 
 	return &Service{
 		logger:            logger,
@@ -92,6 +127,14 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		// OAuth providers
 		gramProvider:   gramProvider,
 		customProvider: customProvider,
+
+		// HTML templates
+		successPageTmpl: successPageTmpl,
+		failurePageTmpl: failurePageTmpl,
+
+		// Success page script with hash for cache busting
+		oauthStatusPageScriptHash: scriptHash,
+		oauthStatusPageScriptData: oauthSuccessScriptData,
 	}
 }
 
@@ -114,6 +157,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// OAuth 2.1 Token Endpoint
 	o11y.AttachHandler(mux, "POST", "/oauth/{mcpSlug}/token", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.handleToken).ServeHTTP(w, r)
+	})
+
+	// OAuth success page script (with cache busting hash)
+	o11y.AttachHandler(mux, "GET", "/oauth/oauth_success-{hash}.js", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.serveSuccessScript).ServeHTTP(w, r)
 	})
 }
 
@@ -493,10 +541,10 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 
 		// Determine error code based on error type
 		errorCode := "server_error"
-		errorDescription := "Failed to exchange authorization code"
+		errorDescription := "Failed to authorize. Please try again."
 		if providers.IsAccessDeniedError(err) {
 			errorCode = "access_denied"
-			errorDescription = "User does not have access to the requested organization"
+			errorDescription = "User does not have access to the requested organization."
 		}
 
 		errorURL, buildErr := s.grantManager.BuildErrorResponse(
@@ -510,7 +558,28 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 			s.logger.ErrorContext(ctx, "failed to build error response URL", attr.SlogError(buildErr))
 			return oops.E(oops.CodeUnexpected, buildErr, "failed to build error response").Log(ctx, s.logger)
 		}
-		http.Redirect(w, r, errorURL, http.StatusFound)
+
+		// Add defensive check for empty error description
+		if errorDescription == "" {
+			errorDescription = "Authorization failed. Please try again."
+		}
+
+		if provider.ProviderType == string(OAuthProxyProviderTypeGram) {
+			data := gramOAuthResultPageData{
+				RedirectURL:      template.URL(errorURL), // #nosec G203 // This has been checked and escaped
+				ErrorDescription: errorDescription,
+				ErrorCode:        errorCode,
+				ScriptHash:       s.oauthStatusPageScriptHash,
+			}
+
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			if err := s.failurePageTmpl.Execute(w, data); err != nil {
+				return oops.E(oops.CodeUnexpected, err, "failed to render oauth failure page").Log(ctx, s.logger)
+			}
+		} else {
+			http.Redirect(w, r, errorURL, http.StatusFound)
+		}
+
 		return nil
 	}
 
@@ -550,8 +619,51 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		return oops.E(oops.CodeBadRequest, err, "failed to build authorization response").Log(ctx, s.logger)
 	}
 
-	// Redirect back to client with the authorization code
-	http.Redirect(w, r, responseURL, http.StatusFound)
+	if provider.ProviderType == string(OAuthProxyProviderTypeGram) {
+		data := gramOAuthResultPageData{
+			RedirectURL:      template.URL(responseURL), // #nosec G203 // This has been checked and escaped
+			ScriptHash:       s.oauthStatusPageScriptHash,
+			ErrorDescription: "",
+			ErrorCode:        "",
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := s.successPageTmpl.Execute(w, data); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to render oauth success page").Log(ctx, s.logger)
+		}
+	} else {
+		http.Redirect(w, r, responseURL, http.StatusFound)
+	}
+
+	return nil
+}
+
+// serveSuccessScript serves the OAuth success page JavaScript file with cache headers
+func (s *Service) serveSuccessScript(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	defer o11y.LogDefer(ctx, s.logger, func() error {
+		return r.Body.Close()
+	})
+
+	// Get hash from URL
+	hash := chi.URLParam(r, "hash")
+
+	// Validate hash matches our current script hash
+	if hash != s.oauthStatusPageScriptHash {
+		w.WriteHeader(http.StatusNotFound)
+		return nil
+	}
+
+	// Set cache headers (immutable since hash is in filename)
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.WriteHeader(http.StatusOK)
+
+	_, err := w.Write(s.oauthStatusPageScriptData)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to write script response").Log(ctx, s.logger)
+	}
+
 	return nil
 }
 
