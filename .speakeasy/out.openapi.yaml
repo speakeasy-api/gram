@@ -5464,224 +5464,6 @@ paths:
       x-speakeasy-name-override: listToolExecutionLogs
       x-speakeasy-react-hook:
         name: ToolExecutionLogs
-  /rpc/logs.searchLogs:
-    post:
-      description: Search unified telemetry logs following OpenTelemetry Logs Data Model.
-      operationId: searchLogs
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SearchLogsPayload'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SearchLogsResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: searchLogs logs
-      tags:
-        - logs
-      x-speakeasy-name-override: searchLogs
-      x-speakeasy-react-hook:
-        name: SearchLogs
-  /rpc/logs.searchToolCalls:
-    post:
-      description: Search tool call summaries.
-      operationId: searchToolCalls
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SearchToolCallsPayload'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SearchToolCallsResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: searchToolCalls logs
-      tags:
-        - logs
-      x-speakeasy-name-override: searchToolCalls
-      x-speakeasy-react-hook:
-        name: SearchToolCalls
   /rpc/mcpMetadata.get:
     get:
       description: Fetch the metadata that powers the MCP install page.
@@ -7591,6 +7373,224 @@ paths:
       x-speakeasy-name-override: updateSlackConnection
       x-speakeasy-react-hook:
         name: updateSlackConnection
+  /rpc/telemetry.searchLogs:
+    post:
+      description: Search and list telemetry logs that match a search filter
+      operationId: searchLogs
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchLogsPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchLogsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: searchLogs telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: searchLogs
+      x-speakeasy-react-hook:
+        name: SearchLogs
+  /rpc/telemetry.searchToolCalls:
+    post:
+      description: Search and list tool calls that match a search filter
+      operationId: searchToolCalls
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchToolCallsPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchToolCallsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: searchToolCalls telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: searchToolCalls
+      x-speakeasy-react-hook:
+        name: SearchToolCalls
   /rpc/templates.create:
     post:
       description: Create a new prompt template.
@@ -13689,7 +13689,7 @@ components:
           enum:
             - asc
             - desc
-      description: Payload for searching unified telemetry logs following OpenTelemetry Logs Data Model
+      description: Payload for searching telemetry logs
     SearchLogsResult:
       type: object
       properties:
@@ -13701,7 +13701,7 @@ components:
         next_cursor:
           type: string
           description: Cursor for next page
-      description: Result of searching unified telemetry logs
+      description: Result of searching telemetry logs
       required:
         - logs
     SearchToolCallsFilter:
@@ -15081,6 +15081,8 @@ tags:
     description: Dashboard API for interacting with resources.
   - name: slack
     description: Auth and interactions for the Gram Slack App.
+  - name: telemetry
+    description: Fetch telemetry data for tools in Gram.
   - name: templates
     description: Manages re-usable prompt templates and higher-order tools for a project.
   - name: logs

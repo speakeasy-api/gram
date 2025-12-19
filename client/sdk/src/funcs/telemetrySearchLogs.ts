@@ -27,12 +27,12 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * searchLogs logs
+ * searchLogs telemetry
  *
  * @remarks
- * Search unified telemetry logs following OpenTelemetry Logs Data Model.
+ * Search and list telemetry logs that match a search filter
  */
-export function logsSearchLogs(
+export function telemetrySearchLogs(
   client: GramCore,
   request: operations.SearchLogsRequest,
   security?: operations.SearchLogsSecurity | undefined,
@@ -92,7 +92,7 @@ async function $do(
   const payload = parsed.value;
   const body = encodeJSON("body", payload.SearchLogsPayload, { explode: true });
 
-  const path = pathToFunc("/rpc/logs.searchLogs")();
+  const path = pathToFunc("/rpc/telemetry.searchLogs")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",

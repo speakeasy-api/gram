@@ -1,30 +1,34 @@
-# Logs
+# Telemetry
 
 ## Overview
 
-Call logs for a toolset.
+Fetch telemetry data for tools in Gram.
 
 ### Available Operations
 
-* [list](#list) - listLogs logs
-* [listToolExecutionLogs](#listtoolexecutionlogs) - listToolExecutionLogs logs
+* [searchLogs](#searchlogs) - searchLogs telemetry
+* [searchToolCalls](#searchtoolcalls) - searchToolCalls telemetry
 
-## list
+## searchLogs
 
-List call logs for a toolset.
+Search and list telemetry logs that match a search filter
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="listToolLogs" method="get" path="/rpc/logs.list" -->
+<!-- UsageSnippet language="typescript" operationID="searchLogs" method="post" path="/rpc/telemetry.searchLogs" -->
 ```typescript
 import { Gram } from "@gram/client";
 
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.logs.list({
-    status: "success",
-    toolType: "http",
+  const result = await gram.telemetry.searchLogs({
+    searchLogsPayload: {
+      filter: {
+        from: new Date("2025-12-19T10:00:00Z"),
+        to: new Date("2025-12-19T11:00:00Z"),
+      },
+    },
   });
 
   console.log(result);
@@ -39,22 +43,26 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { logsList } from "@gram/client/funcs/logsList.js";
+import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await logsList(gram, {
-    status: "success",
-    toolType: "http",
+  const res = await telemetrySearchLogs(gram, {
+    searchLogsPayload: {
+      filter: {
+        from: new Date("2025-12-19T10:00:00Z"),
+        to: new Date("2025-12-19T11:00:00Z"),
+      },
+    },
   });
   if (res.ok) {
     const { value: result } = res;
     console.log(result);
   } else {
-    console.log("logsList failed:", res.error);
+    console.log("telemetrySearchLogs failed:", res.error);
   }
 }
 
@@ -73,35 +81,24 @@ associated utilities.
 
 ```tsx
 import {
-  // Query hooks for fetching data.
-  useListToolLogs,
-  useListToolLogsSuspense,
-
-  // Utility for prefetching data during server-side rendering and in React
-  // Server Components that will be immediately available to client components
-  // using the hooks.
-  prefetchListToolLogs,
-  
-  // Utilities to invalidate the query cache for this query in response to
-  // mutations and other user actions.
-  invalidateListToolLogs,
-  invalidateAllListToolLogs,
-} from "@gram/client/react-query/logsList.js";
+  // Mutation hook for triggering the API call.
+  useSearchLogsMutation
+} from "@gram/client/react-query/telemetrySearchLogs.js";
 ```
 
 ### Parameters
 
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.ListToolLogsRequest](../../models/operations/listtoollogsrequest.md)                                                                                               | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.ListToolLogsSecurity](../../models/operations/listtoollogssecurity.md)                                                                                             | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
+| `request`                                                                                                                                                                      | [operations.SearchLogsRequest](../../models/operations/searchlogsrequest.md)                                                                                                   | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `security`                                                                                                                                                                     | [operations.SearchLogsSecurity](../../models/operations/searchlogssecurity.md)                                                                                                 | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
-**Promise\<[components.ListToolLogResponse](../../models/components/listtoollogresponse.md)\>**
+**Promise\<[components.SearchLogsResult](../../models/components/searchlogsresult.md)\>**
 
 ### Errors
 
@@ -111,20 +108,27 @@ import {
 | errors.ServiceError               | 500, 502                          | application/json                  |
 | errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
 
-## listToolExecutionLogs
+## searchToolCalls
 
-List structured logs from tool executions.
+Search and list tool calls that match a search filter
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="listToolExecutionLogs" method="get" path="/rpc/logs.listToolExecutionLogs" -->
+<!-- UsageSnippet language="typescript" operationID="searchToolCalls" method="post" path="/rpc/telemetry.searchToolCalls" -->
 ```typescript
 import { Gram } from "@gram/client";
 
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.logs.listToolExecutionLogs({});
+  const result = await gram.telemetry.searchToolCalls({
+    searchToolCallsPayload: {
+      filter: {
+        from: new Date("2025-12-19T10:00:00Z"),
+        to: new Date("2025-12-19T11:00:00Z"),
+      },
+    },
+  });
 
   console.log(result);
 }
@@ -138,19 +142,26 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { logsListToolExecutionLogs } from "@gram/client/funcs/logsListToolExecutionLogs.js";
+import { telemetrySearchToolCalls } from "@gram/client/funcs/telemetrySearchToolCalls.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await logsListToolExecutionLogs(gram, {});
+  const res = await telemetrySearchToolCalls(gram, {
+    searchToolCallsPayload: {
+      filter: {
+        from: new Date("2025-12-19T10:00:00Z"),
+        to: new Date("2025-12-19T11:00:00Z"),
+      },
+    },
+  });
   if (res.ok) {
     const { value: result } = res;
     console.log(result);
   } else {
-    console.log("logsListToolExecutionLogs failed:", res.error);
+    console.log("telemetrySearchToolCalls failed:", res.error);
   }
 }
 
@@ -169,35 +180,24 @@ associated utilities.
 
 ```tsx
 import {
-  // Query hooks for fetching data.
-  useToolExecutionLogs,
-  useToolExecutionLogsSuspense,
-
-  // Utility for prefetching data during server-side rendering and in React
-  // Server Components that will be immediately available to client components
-  // using the hooks.
-  prefetchToolExecutionLogs,
-  
-  // Utilities to invalidate the query cache for this query in response to
-  // mutations and other user actions.
-  invalidateToolExecutionLogs,
-  invalidateAllToolExecutionLogs,
-} from "@gram/client/react-query/logsListToolExecutionLogs.js";
+  // Mutation hook for triggering the API call.
+  useSearchToolCallsMutation
+} from "@gram/client/react-query/telemetrySearchToolCalls.js";
 ```
 
 ### Parameters
 
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.ListToolExecutionLogsRequest](../../models/operations/listtoolexecutionlogsrequest.md)                                                                             | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.ListToolExecutionLogsSecurity](../../models/operations/listtoolexecutionlogssecurity.md)                                                                           | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
+| `request`                                                                                                                                                                      | [operations.SearchToolCallsRequest](../../models/operations/searchtoolcallsrequest.md)                                                                                         | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `security`                                                                                                                                                                     | [operations.SearchToolCallsSecurity](../../models/operations/searchtoolcallssecurity.md)                                                                                       | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
-**Promise\<[components.ListToolExecutionLogsResult](../../models/components/listtoolexecutionlogsresult.md)\>**
+**Promise\<[components.SearchToolCallsResult](../../models/components/searchtoolcallsresult.md)\>**
 
 ### Errors
 

@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { logsSearchLogs } from "../funcs/logsSearchLogs.js";
+import { telemetrySearchLogs } from "../funcs/telemetrySearchLogs.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -26,10 +26,10 @@ export type SearchLogsMutationVariables = {
 export type SearchLogsMutationData = components.SearchLogsResult;
 
 /**
- * searchLogs logs
+ * searchLogs telemetry
  *
  * @remarks
- * Search unified telemetry logs following OpenTelemetry Logs Data Model.
+ * Search and list telemetry logs that match a search filter
  */
 export function useSearchLogsMutation(
   options?: MutationHookOptions<
@@ -50,7 +50,7 @@ export function useSearchLogsMutation(
 }
 
 export function mutationKeySearchLogs(): MutationKey {
-  return ["@gram/client", "logs", "searchLogs"];
+  return ["@gram/client", "telemetry", "searchLogs"];
 }
 
 export function buildSearchLogsMutation(
@@ -81,7 +81,7 @@ export function buildSearchLogsMutation(
           ),
         },
       };
-      return unwrapAsync(logsSearchLogs(
+      return unwrapAsync(telemetrySearchLogs(
         client$,
         request,
         security,

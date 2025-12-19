@@ -23,7 +23,7 @@ export const Sort = {
 export type Sort = ClosedEnum<typeof Sort>;
 
 /**
- * Payload for searching unified telemetry logs following OpenTelemetry Logs Data Model
+ * Payload for searching telemetry logs
  */
 export type SearchLogsPayload = {
   /**

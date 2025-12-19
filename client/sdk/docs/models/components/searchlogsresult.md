@@ -1,6 +1,6 @@
 # SearchLogsResult
 
-Result of searching unified telemetry logs
+Result of searching telemetry logs
 
 ## Example Usage
 
