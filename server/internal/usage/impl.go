@@ -106,13 +106,16 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 		return oops.E(oops.CodeUnexpected, err, "failed to validate and parse webhook event").Log(ctx, s.logger)
 	}
 
+	s.logger = s.logger.With(attr.SlogEvent(webhookPayload.Type))
+
 	if !slices.Contains(acceptedEvents, webhookPayload.Type) {
-		s.logger.InfoContext(ctx, "skipping unsupported webhook event", attr.SlogEvent(webhookPayload.Type))
+		s.logger.InfoContext(ctx, "skipping unsupported webhook event")
 		return nil
 	}
 
 	if webhookPayload.Data.Customer == nil || webhookPayload.Data.Customer.ExternalID == "" {
-		return oops.E(oops.CodeUnexpected, errors.New("missing customer external id in webhook payload"), "missing customer external id in webhook payload").Log(ctx, s.logger)
+		s.logger.WarnContext(ctx, "skipping webhook: missing customer external id in webhook payload")
+		return nil
 	}
 
 	existingOrgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, webhookPayload.Data.Customer.ExternalID)
