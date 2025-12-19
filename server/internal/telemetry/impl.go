@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	srv "github.com/speakeasy-api/gram/server/gen/http/logs/server"
+	telem_srv "github.com/speakeasy-api/gram/server/gen/http/telemetry/server"
 	gen "github.com/speakeasy-api/gram/server/gen/logs"
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -50,11 +51,21 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
+
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
+
 	srv.Mount(
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
+	)
+
+	telemEndpoints := telem_gen.NewEndpoints(service)
+	telemEndpoints.Use(middleware.MapErrors())
+	telemEndpoints.Use(middleware.TraceMethods(service.tracer))
+	telem_srv.Mount(
+		mux,
+		telem_srv.New(telemEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
 }
 
@@ -298,8 +309,6 @@ func toToolExecutionLog(r repo.ToolLog) *gen.ToolExecutionLog {
 	}
 }
 
-
-
 // SearchLogs retrieves unified telemetry logs with pagination.
 func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsPayload) (res *telem_gen.SearchLogsResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -332,7 +341,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 
 	from := int64(0)
 	to := time.Now().UnixNano()
-	
+
 	// Extract filter values
 	var gramURN, traceID, deploymentID, functionID, severityText, httpRoute, httpMethod, serviceName string
 	var httpStatusCode int32
@@ -499,7 +508,7 @@ func parseTimeRange(from, to *string) (timeStart, timeEnd int64, err error) {
 			return 0, 0, oops.E(oops.CodeBadRequest, parseErr, "invalid 'from' time format, expected ISO 8601 (e.g., '2025-12-19T10:00:00Z')")
 		}
 		timeStart = fromTime.UnixNano()
-	} 
+	}
 
 	if to != nil && *to != "" {
 		toTime, parseErr := time.Parse(time.RFC3339, *to)
