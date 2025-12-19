@@ -136,7 +136,7 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 		token := r.Header.Get(constants.ChatSessionsTokenHeader)
 		authorizedCtx, err = s.chatSessions.Authorize(ctx, token)
 		if err != nil {
-			return authorizedCtx, nil, oops.E(oops.CodeUnauthorized, err, "%s", "unauthorized access (chat)"+err.Error())
+			return authorizedCtx, nil, oops.E(oops.CodeUnauthorized, err, "unauthorized access")
 		}
 	}
 
