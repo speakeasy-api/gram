@@ -10774,6 +10774,9 @@ components:
         CreateRequestBody:
             type: object
             properties:
+                embed_origin:
+                    type: string
+                    description: The origin from which the token will be used
                 expires_after:
                     type: integer
                     description: Token expiration in seconds (max / default 3600)
@@ -10784,12 +10787,17 @@ components:
                 user_identifier:
                     type: string
                     description: Optional free-form user identifier
+            required:
+                - embed_origin
         CreateResponseBody:
             type: object
             properties:
                 client_token:
                     type: string
                     description: JWT token for chat session
+                embed_origin:
+                    type: string
+                    description: The origin from which the token will be used
                 expires_after:
                     type: integer
                     description: Token expiration in seconds
@@ -10801,6 +10809,7 @@ components:
                     type: string
                     description: User identifier if provided
             required:
+                - embed_origin
                 - client_token
                 - expires_after
                 - status

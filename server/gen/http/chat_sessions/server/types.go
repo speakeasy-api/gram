@@ -17,6 +17,8 @@ import (
 type CreateRequestBody struct {
 	// Optional free-form user identifier
 	UserIdentifier *string `form:"user_identifier,omitempty" json:"user_identifier,omitempty" xml:"user_identifier,omitempty"`
+	// The origin from which the token will be used
+	EmbedOrigin *string `form:"embed_origin,omitempty" json:"embed_origin,omitempty" xml:"embed_origin,omitempty"`
 	// Token expiration in seconds (max / default 3600)
 	ExpiresAfter *int `form:"expires_after,omitempty" json:"expires_after,omitempty" xml:"expires_after,omitempty"`
 }
@@ -26,6 +28,8 @@ type CreateRequestBody struct {
 type CreateResponseBody struct {
 	// JWT token for chat session
 	ClientToken string `form:"client_token" json:"client_token" xml:"client_token"`
+	// The origin from which the token will be used
+	EmbedOrigin string `form:"embed_origin" json:"embed_origin" xml:"embed_origin"`
 	// Token expiration in seconds
 	ExpiresAfter int `form:"expires_after" json:"expires_after" xml:"expires_after"`
 	// User identifier if provided
@@ -401,6 +405,7 @@ type RevokeGatewayErrorResponseBody struct {
 func NewCreateResponseBody(res *chatsessions.CreateResult) *CreateResponseBody {
 	body := &CreateResponseBody{
 		ClientToken:    res.ClientToken,
+		EmbedOrigin:    res.EmbedOrigin,
 		ExpiresAfter:   res.ExpiresAfter,
 		UserIdentifier: res.UserIdentifier,
 		Status:         res.Status,
@@ -692,6 +697,7 @@ func NewRevokeGatewayErrorResponseBody(res *goa.ServiceError) *RevokeGatewayErro
 func NewCreatePayload(body *CreateRequestBody, apikeyToken *string, projectSlugInput *string) *chatsessions.CreatePayload {
 	v := &chatsessions.CreatePayload{
 		UserIdentifier: body.UserIdentifier,
+		EmbedOrigin:    *body.EmbedOrigin,
 	}
 	if body.ExpiresAfter != nil {
 		v.ExpiresAfter = *body.ExpiresAfter
@@ -717,6 +723,9 @@ func NewRevokePayload(token string, apikeyToken *string, projectSlugInput *strin
 
 // ValidateCreateRequestBody runs the validations defined on CreateRequestBody
 func ValidateCreateRequestBody(body *CreateRequestBody) (err error) {
+	if body.EmbedOrigin == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("embed_origin", "body"))
+	}
 	if body.ExpiresAfter != nil {
 		if *body.ExpiresAfter < 1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expires_after", *body.ExpiresAfter, 1, true))

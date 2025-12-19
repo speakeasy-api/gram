@@ -3,7 +3,7 @@ package security
 import (
 	"fmt"
 
-	"github.com/speakeasy-api/gram/server/internal/auth/constants"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	. "goa.design/goa/v3/dsl"
 )
 

@@ -5,7 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
-	"github.com/speakeasy-api/gram/server/internal/auth/constants"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 )
 
 var _ = Service("slack", func() {

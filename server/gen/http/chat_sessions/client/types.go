@@ -17,6 +17,8 @@ import (
 type CreateRequestBody struct {
 	// Optional free-form user identifier
 	UserIdentifier *string `form:"user_identifier,omitempty" json:"user_identifier,omitempty" xml:"user_identifier,omitempty"`
+	// The origin from which the token will be used
+	EmbedOrigin string `form:"embed_origin" json:"embed_origin" xml:"embed_origin"`
 	// Token expiration in seconds (max / default 3600)
 	ExpiresAfter int `form:"expires_after" json:"expires_after" xml:"expires_after"`
 }
@@ -26,6 +28,8 @@ type CreateRequestBody struct {
 type CreateResponseBody struct {
 	// JWT token for chat session
 	ClientToken *string `form:"client_token,omitempty" json:"client_token,omitempty" xml:"client_token,omitempty"`
+	// The origin from which the token will be used
+	EmbedOrigin *string `form:"embed_origin,omitempty" json:"embed_origin,omitempty" xml:"embed_origin,omitempty"`
 	// Token expiration in seconds
 	ExpiresAfter *int `form:"expires_after,omitempty" json:"expires_after,omitempty" xml:"expires_after,omitempty"`
 	// User identifier if provided
@@ -401,6 +405,7 @@ type RevokeGatewayErrorResponseBody struct {
 func NewCreateRequestBody(p *chatsessions.CreatePayload) *CreateRequestBody {
 	body := &CreateRequestBody{
 		UserIdentifier: p.UserIdentifier,
+		EmbedOrigin:    p.EmbedOrigin,
 		ExpiresAfter:   p.ExpiresAfter,
 	}
 	{
@@ -417,6 +422,7 @@ func NewCreateRequestBody(p *chatsessions.CreatePayload) *CreateRequestBody {
 func NewCreateResultOK(body *CreateResponseBody) *chatsessions.CreateResult {
 	v := &chatsessions.CreateResult{
 		ClientToken:    *body.ClientToken,
+		EmbedOrigin:    *body.EmbedOrigin,
 		ExpiresAfter:   *body.ExpiresAfter,
 		UserIdentifier: body.UserIdentifier,
 		Status:         *body.Status,
@@ -725,6 +731,9 @@ func NewRevokeGatewayError(body *RevokeGatewayErrorResponseBody) *goa.ServiceErr
 
 // ValidateCreateResponseBody runs the validations defined on CreateResponseBody
 func ValidateCreateResponseBody(body *CreateResponseBody) (err error) {
+	if body.EmbedOrigin == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("embed_origin", "body"))
+	}
 	if body.ClientToken == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_token", "body"))
 	}

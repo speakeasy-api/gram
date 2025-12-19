@@ -20,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"go.opentelemetry.io/otel/metric"
@@ -30,11 +31,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
-	"github.com/speakeasy-api/gram/server/internal/auth/constants"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
@@ -174,29 +175,25 @@ func NewService(
 }
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
-	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, service.ServePublic).ServeHTTP(w, r)
-	})
-	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
-			return service.HandleGetServer(w, r, metadataService)
-		}).ServeHTTP(w, r)
-	})
-	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP(w, r)
-	})
-	o11y.AttachHandler(mux, "POST", "/mcp/{project}/{toolset}/{environment}", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, service.ServeAuthenticated).ServeHTTP(w, r)
-	})
+	chatSessionMiddleware := middleware.ChatSessionMiddleware(service.chatSessionsManager)
+
+	// Wraps handler functions with chat session middleware
+	withMiddleware := func(handler http.Handler) http.Handler {
+		return chatSessionMiddleware(handler)
+	}
+
+	handler := withMiddleware(oops.ErrHandle(service.logger, service.ServePublic))
+	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", handler.ServeHTTP)
+
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", withMiddleware(oops.ErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
+		return service.HandleGetServer(w, r, metadataService)
+	})).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", withMiddleware(oops.ErrHandle(service.logger, metadataService.ServeInstallPage)).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", "/mcp/{project}/{toolset}/{environment}", withMiddleware(oops.ErrHandle(service.logger, service.ServeAuthenticated)).ServeHTTP)
 
 	// OAuth 2.1 Authorization Server Metadata
-	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-authorization-server/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata).ServeHTTP(w, r)
-	})
-
-	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-protected-resource/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, service.HandleWellKnownOAuthProtectedResourceMetadata).ServeHTTP(w, r)
-	})
+	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-authorization-server/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-protected-resource/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthProtectedResourceMetadata).ServeHTTP)
 }
 
 // HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests

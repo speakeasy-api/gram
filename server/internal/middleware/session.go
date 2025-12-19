@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/speakeasy-api/gram/server/internal/auth/constants"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 

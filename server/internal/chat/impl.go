@@ -30,10 +30,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
-	"github.com/speakeasy-api/gram/server/internal/auth/constants"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -62,7 +62,14 @@ type Service struct {
 	fallbackUsageTracker FallbackModelUsageTracker
 }
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, chatSessions *chatsessions.Manager, openRouter openrouter.Provisioner, fallbackUsageTracker FallbackModelUsageTracker) *Service {
+func NewService(
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	chatSessions *chatsessions.Manager,
+	openRouter openrouter.Provisioner,
+	fallbackUsageTracker FallbackModelUsageTracker,
+) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
@@ -82,13 +89,15 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
-	o11y.AttachHandler(mux, "POST", "/chat/completions", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, service.HandleCompletion).ServeHTTP(w, r)
-	})
+
+	chatSessionMiddleware := middleware.ChatSessionMiddleware(service.chatSessions)
+
+	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	server.Use(chatSessionMiddleware)
+	srv.Mount(mux, server)
+
+	wrappedHandler := chatSessionMiddleware(oops.ErrHandle(service.logger, service.HandleCompletion))
+	o11y.AttachHandler(mux, "POST", "/chat/completions", wrappedHandler.ServeHTTP)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
