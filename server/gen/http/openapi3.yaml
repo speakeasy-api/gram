@@ -5210,346 +5210,6 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListToolLogs
-    /rpc/logs.listLogsForTrace:
-        get:
-            description: List all logs for a specific trace ID.
-            operationId: listLogsForTrace
-            parameters:
-                - allowEmptyValue: true
-                  description: Trace ID (32 hex characters)
-                  in: query
-                  name: trace_id
-                  required: true
-                  schema:
-                    description: Trace ID (32 hex characters)
-                    pattern: ^[a-f0-9]{32}$
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListLogsForTraceResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-            summary: listLogsForTrace logs
-            tags:
-                - logs
-            x-speakeasy-name-override: listLogsForTrace
-            x-speakeasy-react-hook:
-                name: LogsForTrace
-    /rpc/logs.listTelemetryLogs:
-        get:
-            description: List unified telemetry logs following OpenTelemetry Logs Data Model.
-            operationId: listTelemetryLogs
-            parameters:
-                - allowEmptyValue: true
-                  description: Start time in Unix nanoseconds
-                  in: query
-                  name: time_start
-                  schema:
-                    description: Start time in Unix nanoseconds
-                    format: int64
-                    type: integer
-                - allowEmptyValue: true
-                  description: End time in Unix nanoseconds
-                  in: query
-                  name: time_end
-                  schema:
-                    description: End time in Unix nanoseconds
-                    format: int64
-                    type: integer
-                - allowEmptyValue: true
-                  description: Gram URN filter
-                  in: query
-                  name: gram_urn
-                  schema:
-                    description: Gram URN filter
-                    type: string
-                - allowEmptyValue: true
-                  description: Trace ID filter (32 hex characters)
-                  in: query
-                  name: trace_id
-                  schema:
-                    description: Trace ID filter (32 hex characters)
-                    pattern: ^[a-f0-9]{32}$
-                    type: string
-                - allowEmptyValue: true
-                  description: Deployment ID filter
-                  in: query
-                  name: deployment_id
-                  schema:
-                    description: Deployment ID filter
-                    format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  description: Function ID filter
-                  in: query
-                  name: function_id
-                  schema:
-                    description: Function ID filter
-                    format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  description: Severity level filter
-                  in: query
-                  name: severity_text
-                  schema:
-                    description: Severity level filter
-                    enum:
-                        - DEBUG
-                        - INFO
-                        - WARN
-                        - ERROR
-                        - FATAL
-                    type: string
-                - allowEmptyValue: true
-                  description: HTTP status code filter
-                  in: query
-                  name: http_status_code
-                  schema:
-                    description: HTTP status code filter
-                    format: int32
-                    type: integer
-                - allowEmptyValue: true
-                  description: HTTP route filter
-                  in: query
-                  name: http_route
-                  schema:
-                    description: HTTP route filter
-                    type: string
-                - allowEmptyValue: true
-                  description: HTTP method filter
-                  in: query
-                  name: http_method
-                  schema:
-                    description: HTTP method filter
-                    enum:
-                        - GET
-                        - POST
-                        - PUT
-                        - PATCH
-                        - DELETE
-                        - HEAD
-                        - OPTIONS
-                    type: string
-                - allowEmptyValue: true
-                  description: Service name filter
-                  in: query
-                  name: service_name
-                  schema:
-                    description: Service name filter
-                    type: string
-                - allowEmptyValue: true
-                  description: Cursor for pagination
-                  in: query
-                  name: cursor
-                  schema:
-                    description: Cursor for pagination
-                    format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  description: Number of items to return (1-1000)
-                  in: query
-                  name: limit
-                  schema:
-                    default: 50
-                    description: Number of items to return (1-1000)
-                    format: int64
-                    maximum: 1000
-                    minimum: 1
-                    type: integer
-                - allowEmptyValue: true
-                  description: Sort order
-                  in: query
-                  name: sort
-                  schema:
-                    default: desc
-                    description: Sort order
-                    enum:
-                        - asc
-                        - desc
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListTelemetryLogsResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-            summary: listTelemetryLogs logs
-            tags:
-                - logs
-            x-speakeasy-name-override: listTelemetryLogs
-            x-speakeasy-react-hook:
-                name: TelemetryLogs
     /rpc/logs.listToolExecutionLogs:
         get:
             description: List structured logs from tool executions.
@@ -5754,73 +5414,11 @@ paths:
             x-speakeasy-name-override: listToolExecutionLogs
             x-speakeasy-react-hook:
                 name: ToolExecutionLogs
-    /rpc/logs.listTraces:
-        get:
-            description: List trace summaries for distributed tracing.
-            operationId: listTraces
+    /rpc/logs.searchLogs:
+        post:
+            description: Search unified telemetry logs following OpenTelemetry Logs Data Model.
+            operationId: searchLogs
             parameters:
-                - allowEmptyValue: true
-                  description: Start time in Unix nanoseconds
-                  in: query
-                  name: time_start
-                  schema:
-                    description: Start time in Unix nanoseconds
-                    format: int64
-                    type: integer
-                - allowEmptyValue: true
-                  description: End time in Unix nanoseconds
-                  in: query
-                  name: time_end
-                  schema:
-                    description: End time in Unix nanoseconds
-                    format: int64
-                    type: integer
-                - allowEmptyValue: true
-                  description: Deployment ID filter
-                  in: query
-                  name: deployment_id
-                  schema:
-                    description: Deployment ID filter
-                    format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  description: Function ID filter
-                  in: query
-                  name: function_id
-                  schema:
-                    description: Function ID filter
-                    format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  description: Cursor for pagination (trace ID)
-                  in: query
-                  name: cursor
-                  schema:
-                    description: Cursor for pagination (trace ID)
-                    pattern: ^[a-f0-9]{32}$
-                    type: string
-                - allowEmptyValue: true
-                  description: Number of items to return (1-1000)
-                  in: query
-                  name: limit
-                  schema:
-                    default: 50
-                    description: Number of items to return (1-1000)
-                    format: int64
-                    maximum: 1000
-                    minimum: 1
-                    type: integer
-                - allowEmptyValue: true
-                  description: Sort order
-                  in: query
-                  name: sort
-                  schema:
-                    default: desc
-                    description: Sort order
-                    enum:
-                        - asc
-                        - desc
-                    type: string
                 - allowEmptyValue: true
                   description: API Key header
                   in: header
@@ -5842,12 +5440,18 @@ paths:
                   schema:
                     description: project header
                     type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SearchLogsPayload'
+                required: true
             responses:
                 "200":
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/ListTracesResult'
+                                $ref: '#/components/schemas/SearchLogsResult'
                     description: OK response.
                 "400":
                     content:
@@ -5912,12 +5516,120 @@ paths:
                   project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-            summary: listTraces logs
+            summary: searchLogs logs
             tags:
                 - logs
-            x-speakeasy-name-override: listTraces
+            x-speakeasy-name-override: searchLogs
             x-speakeasy-react-hook:
-                name: Traces
+                name: SearchLogs
+    /rpc/logs.searchToolCalls:
+        post:
+            description: Search tool call summaries.
+            operationId: searchToolCalls
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SearchToolCallsPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SearchToolCallsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: searchToolCalls logs
+            tags:
+                - logs
+            x-speakeasy-name-override: searchToolCalls
+            x-speakeasy-react-hook:
+                name: SearchToolCalls
     /rpc/mcpMetadata.get:
         get:
             description: Fetch the metadata that powers the MCP install page.
@@ -12865,27 +12577,6 @@ components:
                         $ref: '#/components/schemas/Key'
             required:
                 - keys
-        ListLogsForTracePayload:
-            type: object
-            properties:
-                trace_id:
-                    type: string
-                    description: Trace ID (32 hex characters)
-                    pattern: ^[a-f0-9]{32}$
-            description: Payload for listing all logs for a specific trace
-            required:
-                - trace_id
-        ListLogsForTraceResult:
-            type: object
-            properties:
-                logs:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/TelemetryLogRecord'
-                    description: List of telemetry log records for this trace
-            description: Result of listing logs for a trace
-            required:
-                - logs
         ListPackagesResult:
             type: object
             properties:
@@ -12941,96 +12632,6 @@ components:
                     description: The list of resources
             required:
                 - resources
-        ListTelemetryLogsPayload:
-            type: object
-            properties:
-                cursor:
-                    type: string
-                    description: Cursor for pagination
-                    format: uuid
-                deployment_id:
-                    type: string
-                    description: Deployment ID filter
-                    format: uuid
-                function_id:
-                    type: string
-                    description: Function ID filter
-                    format: uuid
-                gram_urn:
-                    type: string
-                    description: Gram URN filter
-                http_method:
-                    type: string
-                    description: HTTP method filter
-                    enum:
-                        - GET
-                        - POST
-                        - PUT
-                        - PATCH
-                        - DELETE
-                        - HEAD
-                        - OPTIONS
-                http_route:
-                    type: string
-                    description: HTTP route filter
-                http_status_code:
-                    type: integer
-                    description: HTTP status code filter
-                    format: int32
-                limit:
-                    type: integer
-                    description: Number of items to return (1-1000)
-                    default: 50
-                    format: int64
-                    minimum: 1
-                    maximum: 1000
-                service_name:
-                    type: string
-                    description: Service name filter
-                severity_text:
-                    type: string
-                    description: Severity level filter
-                    enum:
-                        - DEBUG
-                        - INFO
-                        - WARN
-                        - ERROR
-                        - FATAL
-                sort:
-                    type: string
-                    description: Sort order
-                    default: desc
-                    enum:
-                        - asc
-                        - desc
-                time_end:
-                    type: integer
-                    description: End time in Unix nanoseconds
-                    format: int64
-                time_start:
-                    type: integer
-                    description: Start time in Unix nanoseconds
-                    format: int64
-                trace_id:
-                    type: string
-                    description: Trace ID filter (32 hex characters)
-                    pattern: ^[a-f0-9]{32}$
-            description: Payload for listing unified telemetry logs following OpenTelemetry Logs Data Model
-        ListTelemetryLogsResult:
-            type: object
-            properties:
-                logs:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/TelemetryLogRecord'
-                    description: List of telemetry log records
-                next_cursor:
-                    type: string
-                    description: Cursor for next page
-                    format: uuid
-            description: Result of listing unified telemetry logs
-            required:
-                - logs
         ListToolExecutionLogsPayload:
             type: object
             properties:
@@ -13208,59 +12809,6 @@ components:
                     description: The list of toolsets
             required:
                 - toolsets
-        ListTracesPayload:
-            type: object
-            properties:
-                cursor:
-                    type: string
-                    description: Cursor for pagination (trace ID)
-                    pattern: ^[a-f0-9]{32}$
-                deployment_id:
-                    type: string
-                    description: Deployment ID filter
-                    format: uuid
-                function_id:
-                    type: string
-                    description: Function ID filter
-                    format: uuid
-                limit:
-                    type: integer
-                    description: Number of items to return (1-1000)
-                    default: 50
-                    format: int64
-                    minimum: 1
-                    maximum: 1000
-                sort:
-                    type: string
-                    description: Sort order
-                    default: desc
-                    enum:
-                        - asc
-                        - desc
-                time_end:
-                    type: integer
-                    description: End time in Unix nanoseconds
-                    format: int64
-                time_start:
-                    type: integer
-                    description: Start time in Unix nanoseconds
-                    format: int64
-            description: Payload for listing trace summaries
-        ListTracesResult:
-            type: object
-            properties:
-                next_cursor:
-                    type: string
-                    description: Cursor for next page (trace ID)
-                    pattern: ^[a-f0-9]{32}$
-                traces:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/TraceSummaryRecord'
-                    description: List of trace summaries
-            description: Result of listing trace summaries
-            required:
-                - traces
         ListVariationsResult:
             type: object
             properties:
@@ -13965,6 +13513,168 @@ components:
                 - type
                 - status_codes
                 - content_types
+        SearchLogsFilter:
+            type: object
+            properties:
+                deployment_id:
+                    type: string
+                    description: Deployment ID filter
+                    format: uuid
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                function_id:
+                    type: string
+                    description: Function ID filter
+                    format: uuid
+                gram_urn:
+                    type: string
+                    description: Gram URN filter
+                http_method:
+                    type: string
+                    description: HTTP method filter
+                    enum:
+                        - GET
+                        - POST
+                        - PUT
+                        - PATCH
+                        - DELETE
+                        - HEAD
+                        - OPTIONS
+                http_route:
+                    type: string
+                    description: HTTP route filter
+                http_status_code:
+                    type: integer
+                    description: HTTP status code filter
+                    format: int32
+                service_name:
+                    type: string
+                    description: Service name filter
+                severity_text:
+                    type: string
+                    description: Severity level filter
+                    enum:
+                        - DEBUG
+                        - INFO
+                        - WARN
+                        - ERROR
+                        - FATAL
+                to:
+                    type: string
+                    description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+                    example: "2025-12-19T11:00:00Z"
+                    format: date-time
+                trace_id:
+                    type: string
+                    description: Trace ID filter (32 hex characters)
+                    pattern: ^[a-f0-9]{32}$
+            description: Filter criteria for searching logs
+        SearchLogsPayload:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: Cursor for pagination (UUID)
+                    format: uuid
+                filter:
+                    $ref: '#/components/schemas/SearchLogsFilter'
+                limit:
+                    type: integer
+                    description: Number of items to return (1-1000)
+                    default: 50
+                    format: int64
+                    minimum: 1
+                    maximum: 1000
+                sort:
+                    type: string
+                    description: Sort order
+                    default: desc
+                    enum:
+                        - asc
+                        - desc
+            description: Payload for searching unified telemetry logs following OpenTelemetry Logs Data Model
+        SearchLogsResult:
+            type: object
+            properties:
+                logs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TelemetryLogRecord'
+                    description: List of telemetry log records
+                next_cursor:
+                    type: string
+                    description: Cursor for next page
+                    format: uuid
+            description: Result of searching unified telemetry logs
+            required:
+                - logs
+        SearchToolCallsFilter:
+            type: object
+            properties:
+                deployment_id:
+                    type: string
+                    description: Deployment ID filter
+                    format: uuid
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                function_id:
+                    type: string
+                    description: Function ID filter
+                    format: uuid
+                gram_urn:
+                    type: string
+                    description: Gram URN filter
+                to:
+                    type: string
+                    description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+                    example: "2025-12-19T11:00:00Z"
+                    format: date-time
+            description: Filter criteria for searching tool calls
+        SearchToolCallsPayload:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: Cursor for pagination (trace ID)
+                    pattern: ^[a-f0-9]{32}$
+                filter:
+                    $ref: '#/components/schemas/SearchToolCallsFilter'
+                limit:
+                    type: integer
+                    description: Number of items to return (1-1000)
+                    default: 50
+                    format: int64
+                    minimum: 1
+                    maximum: 1000
+                sort:
+                    type: string
+                    description: Sort order
+                    default: desc
+                    enum:
+                        - asc
+                        - desc
+            description: Payload for searching tool call summaries
+        SearchToolCallsResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for next page (trace ID)
+                    pattern: ^[a-f0-9]{32}$
+                tool_calls:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolCallSummary'
+                    description: List of tool call summaries
+            description: Result of searching tool call summaries
+            required:
+                - tool_calls
         SecurityVariable:
             type: object
             properties:
@@ -14221,6 +13931,31 @@ components:
                 - source_kind
                 - source_slug
                 - environment_id
+        TelemetryFilter:
+            type: object
+            properties:
+                deployment_id:
+                    type: string
+                    description: Deployment ID filter
+                    format: uuid
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                function_id:
+                    type: string
+                    description: Function ID filter
+                    format: uuid
+                gram_urn:
+                    type: string
+                    description: Gram URN filter
+                to:
+                    type: string
+                    description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+                    example: "2025-12-19T11:00:00Z"
+                    format: date-time
+            description: Filter criteria for telemetry queries
         TelemetryLogRecord:
             type: object
             properties:
@@ -14326,6 +14061,34 @@ components:
                 prompt_template:
                     $ref: '#/components/schemas/PromptTemplate'
             description: A polymorphic tool - can be an HTTP tool, function tool, prompt template, or external MCP proxy
+        ToolCallSummary:
+            type: object
+            properties:
+                gram_urn:
+                    type: string
+                    description: Gram URN associated with this tool call
+                http_status_code:
+                    type: integer
+                    description: HTTP status code (if applicable)
+                    format: int32
+                log_count:
+                    type: integer
+                    description: Total number of logs in this tool call
+                    format: int64
+                start_time_unix_nano:
+                    type: integer
+                    description: Earliest log timestamp in Unix nanoseconds
+                    format: int64
+                trace_id:
+                    type: string
+                    description: Trace ID (32 hex characters)
+                    pattern: ^[a-f0-9]{32}$
+            description: Summary information for a tool call
+            required:
+                - trace_id
+                - start_time_unix_nano
+                - log_count
+                - gram_urn
         ToolEntry:
             type: object
             properties:
@@ -14695,34 +14458,6 @@ components:
                 - id
                 - toolset_id
                 - environment_id
-        TraceSummaryRecord:
-            type: object
-            properties:
-                gram_urn:
-                    type: string
-                    description: Gram URN associated with this trace
-                http_status_code:
-                    type: integer
-                    description: HTTP status code (if applicable)
-                    format: int32
-                log_count:
-                    type: integer
-                    description: Total number of logs in this trace
-                    format: int64
-                start_time_unix_nano:
-                    type: integer
-                    description: Earliest log timestamp in Unix nanoseconds
-                    format: int64
-                trace_id:
-                    type: string
-                    description: Trace ID (32 hex characters)
-                    pattern: ^[a-f0-9]{32}$
-            description: Summary information for a distributed trace
-            required:
-                - trace_id
-                - start_time_unix_nano
-                - log_count
-                - gram_urn
         UpdateEnvironmentForm:
             type: object
             properties:

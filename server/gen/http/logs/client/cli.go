@@ -101,7 +101,7 @@ func BuildListLogsPayload(logsListLogsToolID string, logsListLogsTsStart string,
 		if logsListLogsToolUrns != "" {
 			err = json.Unmarshal([]byte(logsListLogsToolUrns), &toolUrns)
 			if err != nil {
-				return nil, fmt.Errorf("invalid JSON for toolUrns, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"Illum quaerat unde officiis incidunt et.\",\n      \"Voluptates officiis nostrum eaque ratione.\"\n   ]'")
+				return nil, fmt.Errorf("invalid JSON for toolUrns, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"Voluptatem ut ipsum dolores.\",\n      \"Sapiente eveniet eaque.\"\n   ]'")
 			}
 		}
 	}
@@ -345,6 +345,118 @@ func BuildListToolExecutionLogsPayload(logsListToolExecutionLogsTsStart string, 
 	v.PerPage = perPage
 	v.Direction = direction
 	v.Sort = sort
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSearchLogsPayload builds the payload for the logs searchLogs endpoint
+// from CLI flags.
+func BuildSearchLogsPayload(logsSearchLogsBody string, logsSearchLogsApikeyToken string, logsSearchLogsSessionToken string, logsSearchLogsProjectSlugInput string) (*logs.SearchLogsPayload, error) {
+	var err error
+	var body SearchLogsRequestBody
+	{
+		err = json.Unmarshal([]byte(logsSearchLogsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"0a5a2d27-c414-4361-b1b8-201223b3b708\",\n      \"filter\": {\n         \"deployment_id\": \"912267ac-8b59-4f90-bb32-6afcc9c8f1eb\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"a0ea0241-fd7e-4180-ac35-3efae0bfd299\",\n         \"gram_urn\": \"Doloremque ducimus fugiat est.\",\n         \"http_method\": \"HEAD\",\n         \"http_route\": \"Vero ut fuga veritatis et repudiandae nihil.\",\n         \"http_status_code\": 658207726,\n         \"service_name\": \"Deserunt fugiat autem voluptas voluptatem.\",\n         \"severity_text\": \"ERROR\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"8efbd4a2a2a7f3beacc776a4cb3cef87\"\n      },\n      \"limit\": 841,\n      \"sort\": \"asc\"\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if logsSearchLogsApikeyToken != "" {
+			apikeyToken = &logsSearchLogsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if logsSearchLogsSessionToken != "" {
+			sessionToken = &logsSearchLogsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if logsSearchLogsProjectSlugInput != "" {
+			projectSlugInput = &logsSearchLogsProjectSlugInput
+		}
+	}
+	v := &logs.SearchLogsPayload{
+		Cursor: body.Cursor,
+		Sort:   body.Sort,
+		Limit:  body.Limit,
+	}
+	if body.Filter != nil {
+		v.Filter = marshalSearchLogsFilterRequestBodyToLogsSearchLogsFilter(body.Filter)
+	}
+	{
+		var zero string
+		if v.Sort == zero {
+			v.Sort = "desc"
+		}
+	}
+	{
+		var zero int
+		if v.Limit == zero {
+			v.Limit = 50
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSearchToolCallsPayload builds the payload for the logs searchToolCalls
+// endpoint from CLI flags.
+func BuildSearchToolCallsPayload(logsSearchToolCallsBody string, logsSearchToolCallsApikeyToken string, logsSearchToolCallsSessionToken string, logsSearchToolCallsProjectSlugInput string) (*logs.SearchToolCallsPayload, error) {
+	var err error
+	var body SearchToolCallsRequestBody
+	{
+		err = json.Unmarshal([]byte(logsSearchToolCallsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"c0516b24b4f6533d67f9611a3a855a5d\",\n      \"filter\": {\n         \"deployment_id\": \"a6d57cf8-6991-4070-8162-ff16bcefc176\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"d58b697b-2f33-4a80-9740-dd06415e6d7a\",\n         \"gram_urn\": \"Sed illum eum sapiente aut omnis.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 682,\n      \"sort\": \"asc\"\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if logsSearchToolCallsApikeyToken != "" {
+			apikeyToken = &logsSearchToolCallsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if logsSearchToolCallsSessionToken != "" {
+			sessionToken = &logsSearchToolCallsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if logsSearchToolCallsProjectSlugInput != "" {
+			projectSlugInput = &logsSearchToolCallsProjectSlugInput
+		}
+	}
+	v := &logs.SearchToolCallsPayload{
+		Cursor: body.Cursor,
+		Sort:   body.Sort,
+		Limit:  body.Limit,
+	}
+	if body.Filter != nil {
+		v.Filter = marshalSearchToolCallsFilterRequestBodyToLogsSearchToolCallsFilter(body.Filter)
+	}
+	{
+		var zero string
+		if v.Sort == zero {
+			v.Sort = "desc"
+		}
+	}
+	{
+		var zero int
+		if v.Limit == zero {
+			v.Limit = 50
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

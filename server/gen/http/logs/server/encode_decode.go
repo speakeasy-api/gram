@@ -10,6 +10,7 @@ package server
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -668,159 +669,47 @@ func EncodeListToolExecutionLogsError(encoder func(context.Context, http.Respons
 	}
 }
 
-// EncodeListTelemetryLogsResponse returns an encoder for responses returned by
-// the logs listTelemetryLogs endpoint.
-func EncodeListTelemetryLogsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeSearchLogsResponse returns an encoder for responses returned by the
+// logs searchLogs endpoint.
+func EncodeSearchLogsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*logs.ListTelemetryLogsResult)
+		res, _ := v.(*logs.SearchLogsResult)
 		enc := encoder(ctx, w)
-		body := NewListTelemetryLogsResponseBody(res)
+		body := NewSearchLogsResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeListTelemetryLogsRequest returns a decoder for requests sent to the
-// logs listTelemetryLogs endpoint.
-func DecodeListTelemetryLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*logs.ListTelemetryLogsPayload, error) {
-	return func(r *http.Request) (*logs.ListTelemetryLogsPayload, error) {
+// DecodeSearchLogsRequest returns a decoder for requests sent to the logs
+// searchLogs endpoint.
+func DecodeSearchLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*logs.SearchLogsPayload, error) {
+	return func(r *http.Request) (*logs.SearchLogsPayload, error) {
 		var (
-			timeStart        *int64
-			timeEnd          *int64
-			gramUrn          *string
-			traceID          *string
-			deploymentID     *string
-			functionID       *string
-			severityText     *string
-			httpStatusCode   *int32
-			httpRoute        *string
-			httpMethod       *string
-			serviceName      *string
-			cursor           *string
-			limit            int
-			sort             string
+			body SearchLogsRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return nil, gerr
+			}
+			return nil, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateSearchLogsRequestBody(&body)
+		if err != nil {
+			return nil, err
+		}
+
+		var (
 			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
-			err              error
 		)
-		qp := r.URL.Query()
-		{
-			timeStartRaw := qp.Get("time_start")
-			if timeStartRaw != "" {
-				v, err2 := strconv.ParseInt(timeStartRaw, 10, 64)
-				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("time_start", timeStartRaw, "integer"))
-				}
-				timeStart = &v
-			}
-		}
-		{
-			timeEndRaw := qp.Get("time_end")
-			if timeEndRaw != "" {
-				v, err2 := strconv.ParseInt(timeEndRaw, 10, 64)
-				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("time_end", timeEndRaw, "integer"))
-				}
-				timeEnd = &v
-			}
-		}
-		gramUrnRaw := qp.Get("gram_urn")
-		if gramUrnRaw != "" {
-			gramUrn = &gramUrnRaw
-		}
-		traceIDRaw := qp.Get("trace_id")
-		if traceIDRaw != "" {
-			traceID = &traceIDRaw
-		}
-		if traceID != nil {
-			err = goa.MergeErrors(err, goa.ValidatePattern("trace_id", *traceID, "^[a-f0-9]{32}$"))
-		}
-		deploymentIDRaw := qp.Get("deployment_id")
-		if deploymentIDRaw != "" {
-			deploymentID = &deploymentIDRaw
-		}
-		if deploymentID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("deployment_id", *deploymentID, goa.FormatUUID))
-		}
-		functionIDRaw := qp.Get("function_id")
-		if functionIDRaw != "" {
-			functionID = &functionIDRaw
-		}
-		if functionID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("function_id", *functionID, goa.FormatUUID))
-		}
-		severityTextRaw := qp.Get("severity_text")
-		if severityTextRaw != "" {
-			severityText = &severityTextRaw
-		}
-		if severityText != nil {
-			if !(*severityText == "DEBUG" || *severityText == "INFO" || *severityText == "WARN" || *severityText == "ERROR" || *severityText == "FATAL") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("severity_text", *severityText, []any{"DEBUG", "INFO", "WARN", "ERROR", "FATAL"}))
-			}
-		}
-		{
-			httpStatusCodeRaw := qp.Get("http_status_code")
-			if httpStatusCodeRaw != "" {
-				v, err2 := strconv.ParseInt(httpStatusCodeRaw, 10, 32)
-				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("http_status_code", httpStatusCodeRaw, "integer"))
-				}
-				pv := int32(v)
-				httpStatusCode = &pv
-			}
-		}
-		httpRouteRaw := qp.Get("http_route")
-		if httpRouteRaw != "" {
-			httpRoute = &httpRouteRaw
-		}
-		httpMethodRaw := qp.Get("http_method")
-		if httpMethodRaw != "" {
-			httpMethod = &httpMethodRaw
-		}
-		if httpMethod != nil {
-			if !(*httpMethod == "GET" || *httpMethod == "POST" || *httpMethod == "PUT" || *httpMethod == "PATCH" || *httpMethod == "DELETE" || *httpMethod == "HEAD" || *httpMethod == "OPTIONS") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("http_method", *httpMethod, []any{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}))
-			}
-		}
-		serviceNameRaw := qp.Get("service_name")
-		if serviceNameRaw != "" {
-			serviceName = &serviceNameRaw
-		}
-		cursorRaw := qp.Get("cursor")
-		if cursorRaw != "" {
-			cursor = &cursorRaw
-		}
-		if cursor != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
-		}
-		{
-			limitRaw := qp.Get("limit")
-			if limitRaw == "" {
-				limit = 50
-			} else {
-				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
-				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
-				}
-				limit = int(v)
-			}
-		}
-		if limit < 1 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
-		}
-		if limit > 1000 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1000, false))
-		}
-		sortRaw := qp.Get("sort")
-		if sortRaw != "" {
-			sort = sortRaw
-		} else {
-			sort = "desc"
-		}
-		if !(sort == "asc" || sort == "desc") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"asc", "desc"}))
-		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -833,10 +722,7 @@ func DecodeListTelemetryLogsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		if err != nil {
-			return nil, err
-		}
-		payload := NewListTelemetryLogsPayload(timeStart, timeEnd, gramUrn, traceID, deploymentID, functionID, severityText, httpStatusCode, httpRoute, httpMethod, serviceName, cursor, limit, sort, apikeyToken, sessionToken, projectSlugInput)
+		payload := NewSearchLogsPayload(&body, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -863,9 +749,9 @@ func DecodeListTelemetryLogsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 	}
 }
 
-// EncodeListTelemetryLogsError returns an encoder for errors returned by the
-// listTelemetryLogs logs endpoint.
-func EncodeListTelemetryLogsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeSearchLogsError returns an encoder for errors returned by the
+// searchLogs logs endpoint.
+func EncodeSearchLogsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -882,7 +768,7 @@ func EncodeListTelemetryLogsError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTelemetryLogsUnauthorizedResponseBody(res)
+				body = NewSearchLogsUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -896,7 +782,7 @@ func EncodeListTelemetryLogsError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTelemetryLogsForbiddenResponseBody(res)
+				body = NewSearchLogsForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -910,7 +796,7 @@ func EncodeListTelemetryLogsError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTelemetryLogsBadRequestResponseBody(res)
+				body = NewSearchLogsBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -924,7 +810,7 @@ func EncodeListTelemetryLogsError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTelemetryLogsNotFoundResponseBody(res)
+				body = NewSearchLogsNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -938,7 +824,7 @@ func EncodeListTelemetryLogsError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTelemetryLogsConflictResponseBody(res)
+				body = NewSearchLogsConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -952,7 +838,7 @@ func EncodeListTelemetryLogsError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTelemetryLogsUnsupportedMediaResponseBody(res)
+				body = NewSearchLogsUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -966,7 +852,7 @@ func EncodeListTelemetryLogsError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTelemetryLogsInvalidResponseBody(res)
+				body = NewSearchLogsInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -980,7 +866,7 @@ func EncodeListTelemetryLogsError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTelemetryLogsInvariantViolationResponseBody(res)
+				body = NewSearchLogsInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -994,7 +880,7 @@ func EncodeListTelemetryLogsError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTelemetryLogsUnexpectedResponseBody(res)
+				body = NewSearchLogsUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -1008,7 +894,7 @@ func EncodeListTelemetryLogsError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTelemetryLogsGatewayErrorResponseBody(res)
+				body = NewSearchLogsGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -1019,104 +905,47 @@ func EncodeListTelemetryLogsError(encoder func(context.Context, http.ResponseWri
 	}
 }
 
-// EncodeListTracesResponse returns an encoder for responses returned by the
-// logs listTraces endpoint.
-func EncodeListTracesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeSearchToolCallsResponse returns an encoder for responses returned by
+// the logs searchToolCalls endpoint.
+func EncodeSearchToolCallsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*logs.ListTracesResult)
+		res, _ := v.(*logs.SearchToolCallsResult)
 		enc := encoder(ctx, w)
-		body := NewListTracesResponseBody(res)
+		body := NewSearchToolCallsResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeListTracesRequest returns a decoder for requests sent to the logs
-// listTraces endpoint.
-func DecodeListTracesRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*logs.ListTracesPayload, error) {
-	return func(r *http.Request) (*logs.ListTracesPayload, error) {
+// DecodeSearchToolCallsRequest returns a decoder for requests sent to the logs
+// searchToolCalls endpoint.
+func DecodeSearchToolCallsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*logs.SearchToolCallsPayload, error) {
+	return func(r *http.Request) (*logs.SearchToolCallsPayload, error) {
 		var (
-			timeStart        *int64
-			timeEnd          *int64
-			deploymentID     *string
-			functionID       *string
-			cursor           *string
-			limit            int
-			sort             string
+			body SearchToolCallsRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return nil, gerr
+			}
+			return nil, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateSearchToolCallsRequestBody(&body)
+		if err != nil {
+			return nil, err
+		}
+
+		var (
 			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
-			err              error
 		)
-		qp := r.URL.Query()
-		{
-			timeStartRaw := qp.Get("time_start")
-			if timeStartRaw != "" {
-				v, err2 := strconv.ParseInt(timeStartRaw, 10, 64)
-				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("time_start", timeStartRaw, "integer"))
-				}
-				timeStart = &v
-			}
-		}
-		{
-			timeEndRaw := qp.Get("time_end")
-			if timeEndRaw != "" {
-				v, err2 := strconv.ParseInt(timeEndRaw, 10, 64)
-				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("time_end", timeEndRaw, "integer"))
-				}
-				timeEnd = &v
-			}
-		}
-		deploymentIDRaw := qp.Get("deployment_id")
-		if deploymentIDRaw != "" {
-			deploymentID = &deploymentIDRaw
-		}
-		if deploymentID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("deployment_id", *deploymentID, goa.FormatUUID))
-		}
-		functionIDRaw := qp.Get("function_id")
-		if functionIDRaw != "" {
-			functionID = &functionIDRaw
-		}
-		if functionID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("function_id", *functionID, goa.FormatUUID))
-		}
-		cursorRaw := qp.Get("cursor")
-		if cursorRaw != "" {
-			cursor = &cursorRaw
-		}
-		if cursor != nil {
-			err = goa.MergeErrors(err, goa.ValidatePattern("cursor", *cursor, "^[a-f0-9]{32}$"))
-		}
-		{
-			limitRaw := qp.Get("limit")
-			if limitRaw == "" {
-				limit = 50
-			} else {
-				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
-				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
-				}
-				limit = int(v)
-			}
-		}
-		if limit < 1 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
-		}
-		if limit > 1000 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1000, false))
-		}
-		sortRaw := qp.Get("sort")
-		if sortRaw != "" {
-			sort = sortRaw
-		} else {
-			sort = "desc"
-		}
-		if !(sort == "asc" || sort == "desc") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"asc", "desc"}))
-		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -1129,10 +958,7 @@ func DecodeListTracesRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		if err != nil {
-			return nil, err
-		}
-		payload := NewListTracesPayload(timeStart, timeEnd, deploymentID, functionID, cursor, limit, sort, apikeyToken, sessionToken, projectSlugInput)
+		payload := NewSearchToolCallsPayload(&body, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1159,9 +985,9 @@ func DecodeListTracesRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 	}
 }
 
-// EncodeListTracesError returns an encoder for errors returned by the
-// listTraces logs endpoint.
-func EncodeListTracesError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeSearchToolCallsError returns an encoder for errors returned by the
+// searchToolCalls logs endpoint.
+func EncodeSearchToolCallsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -1178,7 +1004,7 @@ func EncodeListTracesError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTracesUnauthorizedResponseBody(res)
+				body = NewSearchToolCallsUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -1192,7 +1018,7 @@ func EncodeListTracesError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTracesForbiddenResponseBody(res)
+				body = NewSearchToolCallsForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -1206,7 +1032,7 @@ func EncodeListTracesError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTracesBadRequestResponseBody(res)
+				body = NewSearchToolCallsBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -1220,7 +1046,7 @@ func EncodeListTracesError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTracesNotFoundResponseBody(res)
+				body = NewSearchToolCallsNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -1234,7 +1060,7 @@ func EncodeListTracesError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTracesConflictResponseBody(res)
+				body = NewSearchToolCallsConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -1248,7 +1074,7 @@ func EncodeListTracesError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTracesUnsupportedMediaResponseBody(res)
+				body = NewSearchToolCallsUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -1262,7 +1088,7 @@ func EncodeListTracesError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTracesInvalidResponseBody(res)
+				body = NewSearchToolCallsInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -1276,7 +1102,7 @@ func EncodeListTracesError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTracesInvariantViolationResponseBody(res)
+				body = NewSearchToolCallsInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -1290,7 +1116,7 @@ func EncodeListTracesError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTracesUnexpectedResponseBody(res)
+				body = NewSearchToolCallsUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -1304,233 +1130,7 @@ func EncodeListTracesError(encoder func(context.Context, http.ResponseWriter) go
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListTracesGatewayErrorResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusBadGateway)
-			return enc.Encode(body)
-		default:
-			return encodeError(ctx, w, v)
-		}
-	}
-}
-
-// EncodeListLogsForTraceResponse returns an encoder for responses returned by
-// the logs listLogsForTrace endpoint.
-func EncodeListLogsForTraceResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
-	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*logs.ListLogsForTraceResult)
-		enc := encoder(ctx, w)
-		body := NewListLogsForTraceResponseBody(res)
-		w.WriteHeader(http.StatusOK)
-		return enc.Encode(body)
-	}
-}
-
-// DecodeListLogsForTraceRequest returns a decoder for requests sent to the
-// logs listLogsForTrace endpoint.
-func DecodeListLogsForTraceRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*logs.ListLogsForTracePayload, error) {
-	return func(r *http.Request) (*logs.ListLogsForTracePayload, error) {
-		var (
-			traceID          string
-			apikeyToken      *string
-			sessionToken     *string
-			projectSlugInput *string
-			err              error
-		)
-		traceID = r.URL.Query().Get("trace_id")
-		if traceID == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("trace_id", "query string"))
-		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("trace_id", traceID, "^[a-f0-9]{32}$"))
-		apikeyTokenRaw := r.Header.Get("Gram-Key")
-		if apikeyTokenRaw != "" {
-			apikeyToken = &apikeyTokenRaw
-		}
-		sessionTokenRaw := r.Header.Get("Gram-Session")
-		if sessionTokenRaw != "" {
-			sessionToken = &sessionTokenRaw
-		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		if err != nil {
-			return nil, err
-		}
-		payload := NewListLogsForTracePayload(traceID, apikeyToken, sessionToken, projectSlugInput)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
-			}
-		}
-		if payload.SessionToken != nil {
-			if strings.Contains(*payload.SessionToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
-				payload.SessionToken = &cred
-			}
-		}
-
-		return payload, nil
-	}
-}
-
-// EncodeListLogsForTraceError returns an encoder for errors returned by the
-// listLogsForTrace logs endpoint.
-func EncodeListLogsForTraceError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
-	encodeError := goahttp.ErrorEncoder(encoder, formatter)
-	return func(ctx context.Context, w http.ResponseWriter, v error) error {
-		var en goa.GoaErrorNamer
-		if !errors.As(v, &en) {
-			return encodeError(ctx, w, v)
-		}
-		switch en.GoaErrorName() {
-		case "unauthorized":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListLogsForTraceUnauthorizedResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnauthorized)
-			return enc.Encode(body)
-		case "forbidden":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListLogsForTraceForbiddenResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
-			return enc.Encode(body)
-		case "bad_request":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListLogsForTraceBadRequestResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusBadRequest)
-			return enc.Encode(body)
-		case "not_found":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListLogsForTraceNotFoundResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusNotFound)
-			return enc.Encode(body)
-		case "conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListLogsForTraceConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "unsupported_media":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListLogsForTraceUnsupportedMediaResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnsupportedMediaType)
-			return enc.Encode(body)
-		case "invalid":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListLogsForTraceInvalidResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			return enc.Encode(body)
-		case "invariant_violation":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListLogsForTraceInvariantViolationResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusInternalServerError)
-			return enc.Encode(body)
-		case "unexpected":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListLogsForTraceUnexpectedResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusInternalServerError)
-			return enc.Encode(body)
-		case "gateway_error":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListLogsForTraceGatewayErrorResponseBody(res)
+				body = NewSearchToolCallsGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -1621,6 +1221,30 @@ func marshalLogsToolExecutionLogToToolExecutionLogResponseBody(v *logs.ToolExecu
 	return res
 }
 
+// unmarshalSearchLogsFilterRequestBodyToLogsSearchLogsFilter builds a value of
+// type *logs.SearchLogsFilter from a value of type
+// *SearchLogsFilterRequestBody.
+func unmarshalSearchLogsFilterRequestBodyToLogsSearchLogsFilter(v *SearchLogsFilterRequestBody) *logs.SearchLogsFilter {
+	if v == nil {
+		return nil
+	}
+	res := &logs.SearchLogsFilter{
+		TraceID:        v.TraceID,
+		SeverityText:   v.SeverityText,
+		HTTPStatusCode: v.HTTPStatusCode,
+		HTTPRoute:      v.HTTPRoute,
+		HTTPMethod:     v.HTTPMethod,
+		ServiceName:    v.ServiceName,
+		From:           v.From,
+		To:             v.To,
+		DeploymentID:   v.DeploymentID,
+		FunctionID:     v.FunctionID,
+		GramUrn:        v.GramUrn,
+	}
+
+	return res
+}
+
 // marshalLogsTelemetryLogRecordToTelemetryLogRecordResponseBody builds a value
 // of type *TelemetryLogRecordResponseBody from a value of type
 // *logs.TelemetryLogRecord.
@@ -1654,11 +1278,28 @@ func marshalLogsServiceInfoToServiceInfoResponseBody(v *logs.ServiceInfo) *Servi
 	return res
 }
 
-// marshalLogsTraceSummaryRecordToTraceSummaryRecordResponseBody builds a value
-// of type *TraceSummaryRecordResponseBody from a value of type
-// *logs.TraceSummaryRecord.
-func marshalLogsTraceSummaryRecordToTraceSummaryRecordResponseBody(v *logs.TraceSummaryRecord) *TraceSummaryRecordResponseBody {
-	res := &TraceSummaryRecordResponseBody{
+// unmarshalSearchToolCallsFilterRequestBodyToLogsSearchToolCallsFilter builds
+// a value of type *logs.SearchToolCallsFilter from a value of type
+// *SearchToolCallsFilterRequestBody.
+func unmarshalSearchToolCallsFilterRequestBodyToLogsSearchToolCallsFilter(v *SearchToolCallsFilterRequestBody) *logs.SearchToolCallsFilter {
+	if v == nil {
+		return nil
+	}
+	res := &logs.SearchToolCallsFilter{
+		From:         v.From,
+		To:           v.To,
+		DeploymentID: v.DeploymentID,
+		FunctionID:   v.FunctionID,
+		GramUrn:      v.GramUrn,
+	}
+
+	return res
+}
+
+// marshalLogsToolCallSummaryToToolCallSummaryResponseBody builds a value of
+// type *ToolCallSummaryResponseBody from a value of type *logs.ToolCallSummary.
+func marshalLogsToolCallSummaryToToolCallSummaryResponseBody(v *logs.ToolCallSummary) *ToolCallSummaryResponseBody {
+	res := &ToolCallSummaryResponseBody{
 		TraceID:           v.TraceID,
 		StartTimeUnixNano: v.StartTimeUnixNano,
 		LogCount:          v.LogCount,

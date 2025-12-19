@@ -12,6 +12,32 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// SearchLogsRequestBody is the type of the "logs" service "searchLogs"
+// endpoint HTTP request body.
+type SearchLogsRequestBody struct {
+	// Filter criteria for the search
+	Filter *SearchLogsFilterRequestBody `form:"filter,omitempty" json:"filter,omitempty" xml:"filter,omitempty"`
+	// Cursor for pagination (UUID)
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
+	// Sort order
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty" xml:"sort,omitempty"`
+	// Number of items to return (1-1000)
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
+}
+
+// SearchToolCallsRequestBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP request body.
+type SearchToolCallsRequestBody struct {
+	// Filter criteria for the search
+	Filter *SearchToolCallsFilterRequestBody `form:"filter,omitempty" json:"filter,omitempty" xml:"filter,omitempty"`
+	// Cursor for pagination (trace ID)
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
+	// Sort order
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty" xml:"sort,omitempty"`
+	// Number of items to return (1-1000)
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
+}
+
 // ListLogsResponseBody is the type of the "logs" service "listLogs" endpoint
 // HTTP response body.
 type ListLogsResponseBody struct {
@@ -30,29 +56,22 @@ type ListToolExecutionLogsResponseBody struct {
 	Pagination *PaginationResponseResponseBody `form:"pagination,omitempty" json:"pagination,omitempty" xml:"pagination,omitempty"`
 }
 
-// ListTelemetryLogsResponseBody is the type of the "logs" service
-// "listTelemetryLogs" endpoint HTTP response body.
-type ListTelemetryLogsResponseBody struct {
+// SearchLogsResponseBody is the type of the "logs" service "searchLogs"
+// endpoint HTTP response body.
+type SearchLogsResponseBody struct {
 	// List of telemetry log records
 	Logs []*TelemetryLogRecordResponseBody `form:"logs" json:"logs" xml:"logs"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
-// ListTracesResponseBody is the type of the "logs" service "listTraces"
-// endpoint HTTP response body.
-type ListTracesResponseBody struct {
-	// List of trace summaries
-	Traces []*TraceSummaryRecordResponseBody `form:"traces" json:"traces" xml:"traces"`
+// SearchToolCallsResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body.
+type SearchToolCallsResponseBody struct {
+	// List of tool call summaries
+	ToolCalls []*ToolCallSummaryResponseBody `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
 	// Cursor for next page (trace ID)
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
-}
-
-// ListLogsForTraceResponseBody is the type of the "logs" service
-// "listLogsForTrace" endpoint HTTP response body.
-type ListLogsForTraceResponseBody struct {
-	// List of telemetry log records for this trace
-	Logs []*TelemetryLogRecordResponseBody `form:"logs" json:"logs" xml:"logs"`
 }
 
 // ListLogsUnauthorizedResponseBody is the type of the "logs" service
@@ -423,9 +442,9 @@ type ListToolExecutionLogsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListTelemetryLogsUnauthorizedResponseBody is the type of the "logs" service
-// "listTelemetryLogs" endpoint HTTP response body for the "unauthorized" error.
-type ListTelemetryLogsUnauthorizedResponseBody struct {
+// SearchLogsUnauthorizedResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "unauthorized" error.
+type SearchLogsUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -441,9 +460,9 @@ type ListTelemetryLogsUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListTelemetryLogsForbiddenResponseBody is the type of the "logs" service
-// "listTelemetryLogs" endpoint HTTP response body for the "forbidden" error.
-type ListTelemetryLogsForbiddenResponseBody struct {
+// SearchLogsForbiddenResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "forbidden" error.
+type SearchLogsForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -459,9 +478,9 @@ type ListTelemetryLogsForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListTelemetryLogsBadRequestResponseBody is the type of the "logs" service
-// "listTelemetryLogs" endpoint HTTP response body for the "bad_request" error.
-type ListTelemetryLogsBadRequestResponseBody struct {
+// SearchLogsBadRequestResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "bad_request" error.
+type SearchLogsBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -477,9 +496,9 @@ type ListTelemetryLogsBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListTelemetryLogsNotFoundResponseBody is the type of the "logs" service
-// "listTelemetryLogs" endpoint HTTP response body for the "not_found" error.
-type ListTelemetryLogsNotFoundResponseBody struct {
+// SearchLogsNotFoundResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "not_found" error.
+type SearchLogsNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -495,9 +514,9 @@ type ListTelemetryLogsNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListTelemetryLogsConflictResponseBody is the type of the "logs" service
-// "listTelemetryLogs" endpoint HTTP response body for the "conflict" error.
-type ListTelemetryLogsConflictResponseBody struct {
+// SearchLogsConflictResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "conflict" error.
+type SearchLogsConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -513,10 +532,9 @@ type ListTelemetryLogsConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListTelemetryLogsUnsupportedMediaResponseBody is the type of the "logs"
-// service "listTelemetryLogs" endpoint HTTP response body for the
-// "unsupported_media" error.
-type ListTelemetryLogsUnsupportedMediaResponseBody struct {
+// SearchLogsUnsupportedMediaResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "unsupported_media" error.
+type SearchLogsUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -532,191 +550,9 @@ type ListTelemetryLogsUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListTelemetryLogsInvalidResponseBody is the type of the "logs" service
-// "listTelemetryLogs" endpoint HTTP response body for the "invalid" error.
-type ListTelemetryLogsInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListTelemetryLogsInvariantViolationResponseBody is the type of the "logs"
-// service "listTelemetryLogs" endpoint HTTP response body for the
-// "invariant_violation" error.
-type ListTelemetryLogsInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListTelemetryLogsUnexpectedResponseBody is the type of the "logs" service
-// "listTelemetryLogs" endpoint HTTP response body for the "unexpected" error.
-type ListTelemetryLogsUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListTelemetryLogsGatewayErrorResponseBody is the type of the "logs" service
-// "listTelemetryLogs" endpoint HTTP response body for the "gateway_error"
-// error.
-type ListTelemetryLogsGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListTracesUnauthorizedResponseBody is the type of the "logs" service
-// "listTraces" endpoint HTTP response body for the "unauthorized" error.
-type ListTracesUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListTracesForbiddenResponseBody is the type of the "logs" service
-// "listTraces" endpoint HTTP response body for the "forbidden" error.
-type ListTracesForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListTracesBadRequestResponseBody is the type of the "logs" service
-// "listTraces" endpoint HTTP response body for the "bad_request" error.
-type ListTracesBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListTracesNotFoundResponseBody is the type of the "logs" service
-// "listTraces" endpoint HTTP response body for the "not_found" error.
-type ListTracesNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListTracesConflictResponseBody is the type of the "logs" service
-// "listTraces" endpoint HTTP response body for the "conflict" error.
-type ListTracesConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListTracesUnsupportedMediaResponseBody is the type of the "logs" service
-// "listTraces" endpoint HTTP response body for the "unsupported_media" error.
-type ListTracesUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListTracesInvalidResponseBody is the type of the "logs" service "listTraces"
+// SearchLogsInvalidResponseBody is the type of the "logs" service "searchLogs"
 // endpoint HTTP response body for the "invalid" error.
-type ListTracesInvalidResponseBody struct {
+type SearchLogsInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -732,9 +568,9 @@ type ListTracesInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListTracesInvariantViolationResponseBody is the type of the "logs" service
-// "listTraces" endpoint HTTP response body for the "invariant_violation" error.
-type ListTracesInvariantViolationResponseBody struct {
+// SearchLogsInvariantViolationResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "invariant_violation" error.
+type SearchLogsInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -750,9 +586,9 @@ type ListTracesInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListTracesUnexpectedResponseBody is the type of the "logs" service
-// "listTraces" endpoint HTTP response body for the "unexpected" error.
-type ListTracesUnexpectedResponseBody struct {
+// SearchLogsUnexpectedResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "unexpected" error.
+type SearchLogsUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -768,9 +604,9 @@ type ListTracesUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListTracesGatewayErrorResponseBody is the type of the "logs" service
-// "listTraces" endpoint HTTP response body for the "gateway_error" error.
-type ListTracesGatewayErrorResponseBody struct {
+// SearchLogsGatewayErrorResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "gateway_error" error.
+type SearchLogsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -786,9 +622,9 @@ type ListTracesGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListLogsForTraceUnauthorizedResponseBody is the type of the "logs" service
-// "listLogsForTrace" endpoint HTTP response body for the "unauthorized" error.
-type ListLogsForTraceUnauthorizedResponseBody struct {
+// SearchToolCallsUnauthorizedResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "unauthorized" error.
+type SearchToolCallsUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -804,9 +640,9 @@ type ListLogsForTraceUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListLogsForTraceForbiddenResponseBody is the type of the "logs" service
-// "listLogsForTrace" endpoint HTTP response body for the "forbidden" error.
-type ListLogsForTraceForbiddenResponseBody struct {
+// SearchToolCallsForbiddenResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "forbidden" error.
+type SearchToolCallsForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -822,9 +658,9 @@ type ListLogsForTraceForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListLogsForTraceBadRequestResponseBody is the type of the "logs" service
-// "listLogsForTrace" endpoint HTTP response body for the "bad_request" error.
-type ListLogsForTraceBadRequestResponseBody struct {
+// SearchToolCallsBadRequestResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "bad_request" error.
+type SearchToolCallsBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -840,9 +676,9 @@ type ListLogsForTraceBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListLogsForTraceNotFoundResponseBody is the type of the "logs" service
-// "listLogsForTrace" endpoint HTTP response body for the "not_found" error.
-type ListLogsForTraceNotFoundResponseBody struct {
+// SearchToolCallsNotFoundResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "not_found" error.
+type SearchToolCallsNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -858,9 +694,9 @@ type ListLogsForTraceNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListLogsForTraceConflictResponseBody is the type of the "logs" service
-// "listLogsForTrace" endpoint HTTP response body for the "conflict" error.
-type ListLogsForTraceConflictResponseBody struct {
+// SearchToolCallsConflictResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "conflict" error.
+type SearchToolCallsConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -876,10 +712,10 @@ type ListLogsForTraceConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListLogsForTraceUnsupportedMediaResponseBody is the type of the "logs"
-// service "listLogsForTrace" endpoint HTTP response body for the
+// SearchToolCallsUnsupportedMediaResponseBody is the type of the "logs"
+// service "searchToolCalls" endpoint HTTP response body for the
 // "unsupported_media" error.
-type ListLogsForTraceUnsupportedMediaResponseBody struct {
+type SearchToolCallsUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -895,9 +731,9 @@ type ListLogsForTraceUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListLogsForTraceInvalidResponseBody is the type of the "logs" service
-// "listLogsForTrace" endpoint HTTP response body for the "invalid" error.
-type ListLogsForTraceInvalidResponseBody struct {
+// SearchToolCallsInvalidResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "invalid" error.
+type SearchToolCallsInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -913,10 +749,10 @@ type ListLogsForTraceInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListLogsForTraceInvariantViolationResponseBody is the type of the "logs"
-// service "listLogsForTrace" endpoint HTTP response body for the
+// SearchToolCallsInvariantViolationResponseBody is the type of the "logs"
+// service "searchToolCalls" endpoint HTTP response body for the
 // "invariant_violation" error.
-type ListLogsForTraceInvariantViolationResponseBody struct {
+type SearchToolCallsInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -932,9 +768,9 @@ type ListLogsForTraceInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListLogsForTraceUnexpectedResponseBody is the type of the "logs" service
-// "listLogsForTrace" endpoint HTTP response body for the "unexpected" error.
-type ListLogsForTraceUnexpectedResponseBody struct {
+// SearchToolCallsUnexpectedResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "unexpected" error.
+type SearchToolCallsUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -950,9 +786,9 @@ type ListLogsForTraceUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListLogsForTraceGatewayErrorResponseBody is the type of the "logs" service
-// "listLogsForTrace" endpoint HTTP response body for the "gateway_error" error.
-type ListLogsForTraceGatewayErrorResponseBody struct {
+// SearchToolCallsGatewayErrorResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "gateway_error" error.
+type SearchToolCallsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1082,19 +918,59 @@ type ServiceInfoResponseBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
-// TraceSummaryRecordResponseBody is used to define fields on response body
-// types.
-type TraceSummaryRecordResponseBody struct {
+// ToolCallSummaryResponseBody is used to define fields on response body types.
+type ToolCallSummaryResponseBody struct {
 	// Trace ID (32 hex characters)
 	TraceID string `form:"trace_id" json:"trace_id" xml:"trace_id"`
 	// Earliest log timestamp in Unix nanoseconds
 	StartTimeUnixNano int64 `form:"start_time_unix_nano" json:"start_time_unix_nano" xml:"start_time_unix_nano"`
-	// Total number of logs in this trace
+	// Total number of logs in this tool call
 	LogCount uint64 `form:"log_count" json:"log_count" xml:"log_count"`
 	// HTTP status code (if applicable)
 	HTTPStatusCode *int32 `form:"http_status_code,omitempty" json:"http_status_code,omitempty" xml:"http_status_code,omitempty"`
-	// Gram URN associated with this trace
+	// Gram URN associated with this tool call
 	GramUrn string `form:"gram_urn" json:"gram_urn" xml:"gram_urn"`
+}
+
+// SearchLogsFilterRequestBody is used to define fields on request body types.
+type SearchLogsFilterRequestBody struct {
+	// Trace ID filter (32 hex characters)
+	TraceID *string `form:"trace_id,omitempty" json:"trace_id,omitempty" xml:"trace_id,omitempty"`
+	// Severity level filter
+	SeverityText *string `form:"severity_text,omitempty" json:"severity_text,omitempty" xml:"severity_text,omitempty"`
+	// HTTP status code filter
+	HTTPStatusCode *int32 `form:"http_status_code,omitempty" json:"http_status_code,omitempty" xml:"http_status_code,omitempty"`
+	// HTTP route filter
+	HTTPRoute *string `form:"http_route,omitempty" json:"http_route,omitempty" xml:"http_route,omitempty"`
+	// HTTP method filter
+	HTTPMethod *string `form:"http_method,omitempty" json:"http_method,omitempty" xml:"http_method,omitempty"`
+	// Service name filter
+	ServiceName *string `form:"service_name,omitempty" json:"service_name,omitempty" xml:"service_name,omitempty"`
+	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Deployment ID filter
+	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// Function ID filter
+	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
+	// Gram URN filter
+	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
+}
+
+// SearchToolCallsFilterRequestBody is used to define fields on request body
+// types.
+type SearchToolCallsFilterRequestBody struct {
+	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Deployment ID filter
+	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// Function ID filter
+	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
+	// Gram URN filter
+	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
 }
 
 // NewListLogsResponseBody builds the HTTP response body from the result of the
@@ -1141,10 +1017,10 @@ func NewListToolExecutionLogsResponseBody(res *logs.ListToolExecutionLogsResult)
 	return body
 }
 
-// NewListTelemetryLogsResponseBody builds the HTTP response body from the
-// result of the "listTelemetryLogs" endpoint of the "logs" service.
-func NewListTelemetryLogsResponseBody(res *logs.ListTelemetryLogsResult) *ListTelemetryLogsResponseBody {
-	body := &ListTelemetryLogsResponseBody{
+// NewSearchLogsResponseBody builds the HTTP response body from the result of
+// the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsResponseBody(res *logs.SearchLogsResult) *SearchLogsResponseBody {
+	body := &SearchLogsResponseBody{
 		NextCursor: res.NextCursor,
 	}
 	if res.Logs != nil {
@@ -1162,42 +1038,23 @@ func NewListTelemetryLogsResponseBody(res *logs.ListTelemetryLogsResult) *ListTe
 	return body
 }
 
-// NewListTracesResponseBody builds the HTTP response body from the result of
-// the "listTraces" endpoint of the "logs" service.
-func NewListTracesResponseBody(res *logs.ListTracesResult) *ListTracesResponseBody {
-	body := &ListTracesResponseBody{
+// NewSearchToolCallsResponseBody builds the HTTP response body from the result
+// of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsResponseBody(res *logs.SearchToolCallsResult) *SearchToolCallsResponseBody {
+	body := &SearchToolCallsResponseBody{
 		NextCursor: res.NextCursor,
 	}
-	if res.Traces != nil {
-		body.Traces = make([]*TraceSummaryRecordResponseBody, len(res.Traces))
-		for i, val := range res.Traces {
+	if res.ToolCalls != nil {
+		body.ToolCalls = make([]*ToolCallSummaryResponseBody, len(res.ToolCalls))
+		for i, val := range res.ToolCalls {
 			if val == nil {
-				body.Traces[i] = nil
+				body.ToolCalls[i] = nil
 				continue
 			}
-			body.Traces[i] = marshalLogsTraceSummaryRecordToTraceSummaryRecordResponseBody(val)
+			body.ToolCalls[i] = marshalLogsToolCallSummaryToToolCallSummaryResponseBody(val)
 		}
 	} else {
-		body.Traces = []*TraceSummaryRecordResponseBody{}
-	}
-	return body
-}
-
-// NewListLogsForTraceResponseBody builds the HTTP response body from the
-// result of the "listLogsForTrace" endpoint of the "logs" service.
-func NewListLogsForTraceResponseBody(res *logs.ListLogsForTraceResult) *ListLogsForTraceResponseBody {
-	body := &ListLogsForTraceResponseBody{}
-	if res.Logs != nil {
-		body.Logs = make([]*TelemetryLogRecordResponseBody, len(res.Logs))
-		for i, val := range res.Logs {
-			if val == nil {
-				body.Logs[i] = nil
-				continue
-			}
-			body.Logs[i] = marshalLogsTelemetryLogRecordToTelemetryLogRecordResponseBody(val)
-		}
-	} else {
-		body.Logs = []*TelemetryLogRecordResponseBody{}
+		body.ToolCalls = []*ToolCallSummaryResponseBody{}
 	}
 	return body
 }
@@ -1492,10 +1349,10 @@ func NewListToolExecutionLogsGatewayErrorResponseBody(res *goa.ServiceError) *Li
 	return body
 }
 
-// NewListTelemetryLogsUnauthorizedResponseBody builds the HTTP response body
-// from the result of the "listTelemetryLogs" endpoint of the "logs" service.
-func NewListTelemetryLogsUnauthorizedResponseBody(res *goa.ServiceError) *ListTelemetryLogsUnauthorizedResponseBody {
-	body := &ListTelemetryLogsUnauthorizedResponseBody{
+// NewSearchLogsUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsUnauthorizedResponseBody(res *goa.ServiceError) *SearchLogsUnauthorizedResponseBody {
+	body := &SearchLogsUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1506,10 +1363,10 @@ func NewListTelemetryLogsUnauthorizedResponseBody(res *goa.ServiceError) *ListTe
 	return body
 }
 
-// NewListTelemetryLogsForbiddenResponseBody builds the HTTP response body from
-// the result of the "listTelemetryLogs" endpoint of the "logs" service.
-func NewListTelemetryLogsForbiddenResponseBody(res *goa.ServiceError) *ListTelemetryLogsForbiddenResponseBody {
-	body := &ListTelemetryLogsForbiddenResponseBody{
+// NewSearchLogsForbiddenResponseBody builds the HTTP response body from the
+// result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsForbiddenResponseBody(res *goa.ServiceError) *SearchLogsForbiddenResponseBody {
+	body := &SearchLogsForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1520,10 +1377,10 @@ func NewListTelemetryLogsForbiddenResponseBody(res *goa.ServiceError) *ListTelem
 	return body
 }
 
-// NewListTelemetryLogsBadRequestResponseBody builds the HTTP response body
-// from the result of the "listTelemetryLogs" endpoint of the "logs" service.
-func NewListTelemetryLogsBadRequestResponseBody(res *goa.ServiceError) *ListTelemetryLogsBadRequestResponseBody {
-	body := &ListTelemetryLogsBadRequestResponseBody{
+// NewSearchLogsBadRequestResponseBody builds the HTTP response body from the
+// result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsBadRequestResponseBody(res *goa.ServiceError) *SearchLogsBadRequestResponseBody {
+	body := &SearchLogsBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1534,10 +1391,10 @@ func NewListTelemetryLogsBadRequestResponseBody(res *goa.ServiceError) *ListTele
 	return body
 }
 
-// NewListTelemetryLogsNotFoundResponseBody builds the HTTP response body from
-// the result of the "listTelemetryLogs" endpoint of the "logs" service.
-func NewListTelemetryLogsNotFoundResponseBody(res *goa.ServiceError) *ListTelemetryLogsNotFoundResponseBody {
-	body := &ListTelemetryLogsNotFoundResponseBody{
+// NewSearchLogsNotFoundResponseBody builds the HTTP response body from the
+// result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsNotFoundResponseBody(res *goa.ServiceError) *SearchLogsNotFoundResponseBody {
+	body := &SearchLogsNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1548,10 +1405,10 @@ func NewListTelemetryLogsNotFoundResponseBody(res *goa.ServiceError) *ListTeleme
 	return body
 }
 
-// NewListTelemetryLogsConflictResponseBody builds the HTTP response body from
-// the result of the "listTelemetryLogs" endpoint of the "logs" service.
-func NewListTelemetryLogsConflictResponseBody(res *goa.ServiceError) *ListTelemetryLogsConflictResponseBody {
-	body := &ListTelemetryLogsConflictResponseBody{
+// NewSearchLogsConflictResponseBody builds the HTTP response body from the
+// result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsConflictResponseBody(res *goa.ServiceError) *SearchLogsConflictResponseBody {
+	body := &SearchLogsConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1562,11 +1419,10 @@ func NewListTelemetryLogsConflictResponseBody(res *goa.ServiceError) *ListTeleme
 	return body
 }
 
-// NewListTelemetryLogsUnsupportedMediaResponseBody builds the HTTP response
-// body from the result of the "listTelemetryLogs" endpoint of the "logs"
-// service.
-func NewListTelemetryLogsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListTelemetryLogsUnsupportedMediaResponseBody {
-	body := &ListTelemetryLogsUnsupportedMediaResponseBody{
+// NewSearchLogsUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsUnsupportedMediaResponseBody(res *goa.ServiceError) *SearchLogsUnsupportedMediaResponseBody {
+	body := &SearchLogsUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1577,10 +1433,10 @@ func NewListTelemetryLogsUnsupportedMediaResponseBody(res *goa.ServiceError) *Li
 	return body
 }
 
-// NewListTelemetryLogsInvalidResponseBody builds the HTTP response body from
-// the result of the "listTelemetryLogs" endpoint of the "logs" service.
-func NewListTelemetryLogsInvalidResponseBody(res *goa.ServiceError) *ListTelemetryLogsInvalidResponseBody {
-	body := &ListTelemetryLogsInvalidResponseBody{
+// NewSearchLogsInvalidResponseBody builds the HTTP response body from the
+// result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsInvalidResponseBody(res *goa.ServiceError) *SearchLogsInvalidResponseBody {
+	body := &SearchLogsInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1591,11 +1447,10 @@ func NewListTelemetryLogsInvalidResponseBody(res *goa.ServiceError) *ListTelemet
 	return body
 }
 
-// NewListTelemetryLogsInvariantViolationResponseBody builds the HTTP response
-// body from the result of the "listTelemetryLogs" endpoint of the "logs"
-// service.
-func NewListTelemetryLogsInvariantViolationResponseBody(res *goa.ServiceError) *ListTelemetryLogsInvariantViolationResponseBody {
-	body := &ListTelemetryLogsInvariantViolationResponseBody{
+// NewSearchLogsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsInvariantViolationResponseBody(res *goa.ServiceError) *SearchLogsInvariantViolationResponseBody {
+	body := &SearchLogsInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1606,10 +1461,10 @@ func NewListTelemetryLogsInvariantViolationResponseBody(res *goa.ServiceError) *
 	return body
 }
 
-// NewListTelemetryLogsUnexpectedResponseBody builds the HTTP response body
-// from the result of the "listTelemetryLogs" endpoint of the "logs" service.
-func NewListTelemetryLogsUnexpectedResponseBody(res *goa.ServiceError) *ListTelemetryLogsUnexpectedResponseBody {
-	body := &ListTelemetryLogsUnexpectedResponseBody{
+// NewSearchLogsUnexpectedResponseBody builds the HTTP response body from the
+// result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsUnexpectedResponseBody(res *goa.ServiceError) *SearchLogsUnexpectedResponseBody {
+	body := &SearchLogsUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1620,10 +1475,10 @@ func NewListTelemetryLogsUnexpectedResponseBody(res *goa.ServiceError) *ListTele
 	return body
 }
 
-// NewListTelemetryLogsGatewayErrorResponseBody builds the HTTP response body
-// from the result of the "listTelemetryLogs" endpoint of the "logs" service.
-func NewListTelemetryLogsGatewayErrorResponseBody(res *goa.ServiceError) *ListTelemetryLogsGatewayErrorResponseBody {
-	body := &ListTelemetryLogsGatewayErrorResponseBody{
+// NewSearchLogsGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsGatewayErrorResponseBody(res *goa.ServiceError) *SearchLogsGatewayErrorResponseBody {
+	body := &SearchLogsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1634,10 +1489,10 @@ func NewListTelemetryLogsGatewayErrorResponseBody(res *goa.ServiceError) *ListTe
 	return body
 }
 
-// NewListTracesUnauthorizedResponseBody builds the HTTP response body from the
-// result of the "listTraces" endpoint of the "logs" service.
-func NewListTracesUnauthorizedResponseBody(res *goa.ServiceError) *ListTracesUnauthorizedResponseBody {
-	body := &ListTracesUnauthorizedResponseBody{
+// NewSearchToolCallsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsUnauthorizedResponseBody(res *goa.ServiceError) *SearchToolCallsUnauthorizedResponseBody {
+	body := &SearchToolCallsUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1648,10 +1503,10 @@ func NewListTracesUnauthorizedResponseBody(res *goa.ServiceError) *ListTracesUna
 	return body
 }
 
-// NewListTracesForbiddenResponseBody builds the HTTP response body from the
-// result of the "listTraces" endpoint of the "logs" service.
-func NewListTracesForbiddenResponseBody(res *goa.ServiceError) *ListTracesForbiddenResponseBody {
-	body := &ListTracesForbiddenResponseBody{
+// NewSearchToolCallsForbiddenResponseBody builds the HTTP response body from
+// the result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsForbiddenResponseBody(res *goa.ServiceError) *SearchToolCallsForbiddenResponseBody {
+	body := &SearchToolCallsForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1662,10 +1517,10 @@ func NewListTracesForbiddenResponseBody(res *goa.ServiceError) *ListTracesForbid
 	return body
 }
 
-// NewListTracesBadRequestResponseBody builds the HTTP response body from the
-// result of the "listTraces" endpoint of the "logs" service.
-func NewListTracesBadRequestResponseBody(res *goa.ServiceError) *ListTracesBadRequestResponseBody {
-	body := &ListTracesBadRequestResponseBody{
+// NewSearchToolCallsBadRequestResponseBody builds the HTTP response body from
+// the result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsBadRequestResponseBody(res *goa.ServiceError) *SearchToolCallsBadRequestResponseBody {
+	body := &SearchToolCallsBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1676,10 +1531,10 @@ func NewListTracesBadRequestResponseBody(res *goa.ServiceError) *ListTracesBadRe
 	return body
 }
 
-// NewListTracesNotFoundResponseBody builds the HTTP response body from the
-// result of the "listTraces" endpoint of the "logs" service.
-func NewListTracesNotFoundResponseBody(res *goa.ServiceError) *ListTracesNotFoundResponseBody {
-	body := &ListTracesNotFoundResponseBody{
+// NewSearchToolCallsNotFoundResponseBody builds the HTTP response body from
+// the result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsNotFoundResponseBody(res *goa.ServiceError) *SearchToolCallsNotFoundResponseBody {
+	body := &SearchToolCallsNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1690,10 +1545,10 @@ func NewListTracesNotFoundResponseBody(res *goa.ServiceError) *ListTracesNotFoun
 	return body
 }
 
-// NewListTracesConflictResponseBody builds the HTTP response body from the
-// result of the "listTraces" endpoint of the "logs" service.
-func NewListTracesConflictResponseBody(res *goa.ServiceError) *ListTracesConflictResponseBody {
-	body := &ListTracesConflictResponseBody{
+// NewSearchToolCallsConflictResponseBody builds the HTTP response body from
+// the result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsConflictResponseBody(res *goa.ServiceError) *SearchToolCallsConflictResponseBody {
+	body := &SearchToolCallsConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1704,10 +1559,10 @@ func NewListTracesConflictResponseBody(res *goa.ServiceError) *ListTracesConflic
 	return body
 }
 
-// NewListTracesUnsupportedMediaResponseBody builds the HTTP response body from
-// the result of the "listTraces" endpoint of the "logs" service.
-func NewListTracesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListTracesUnsupportedMediaResponseBody {
-	body := &ListTracesUnsupportedMediaResponseBody{
+// NewSearchToolCallsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsUnsupportedMediaResponseBody(res *goa.ServiceError) *SearchToolCallsUnsupportedMediaResponseBody {
+	body := &SearchToolCallsUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1718,10 +1573,10 @@ func NewListTracesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListTrace
 	return body
 }
 
-// NewListTracesInvalidResponseBody builds the HTTP response body from the
-// result of the "listTraces" endpoint of the "logs" service.
-func NewListTracesInvalidResponseBody(res *goa.ServiceError) *ListTracesInvalidResponseBody {
-	body := &ListTracesInvalidResponseBody{
+// NewSearchToolCallsInvalidResponseBody builds the HTTP response body from the
+// result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsInvalidResponseBody(res *goa.ServiceError) *SearchToolCallsInvalidResponseBody {
+	body := &SearchToolCallsInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1732,10 +1587,10 @@ func NewListTracesInvalidResponseBody(res *goa.ServiceError) *ListTracesInvalidR
 	return body
 }
 
-// NewListTracesInvariantViolationResponseBody builds the HTTP response body
-// from the result of the "listTraces" endpoint of the "logs" service.
-func NewListTracesInvariantViolationResponseBody(res *goa.ServiceError) *ListTracesInvariantViolationResponseBody {
-	body := &ListTracesInvariantViolationResponseBody{
+// NewSearchToolCallsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsInvariantViolationResponseBody(res *goa.ServiceError) *SearchToolCallsInvariantViolationResponseBody {
+	body := &SearchToolCallsInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1746,10 +1601,10 @@ func NewListTracesInvariantViolationResponseBody(res *goa.ServiceError) *ListTra
 	return body
 }
 
-// NewListTracesUnexpectedResponseBody builds the HTTP response body from the
-// result of the "listTraces" endpoint of the "logs" service.
-func NewListTracesUnexpectedResponseBody(res *goa.ServiceError) *ListTracesUnexpectedResponseBody {
-	body := &ListTracesUnexpectedResponseBody{
+// NewSearchToolCallsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsUnexpectedResponseBody(res *goa.ServiceError) *SearchToolCallsUnexpectedResponseBody {
+	body := &SearchToolCallsUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1760,152 +1615,10 @@ func NewListTracesUnexpectedResponseBody(res *goa.ServiceError) *ListTracesUnexp
 	return body
 }
 
-// NewListTracesGatewayErrorResponseBody builds the HTTP response body from the
-// result of the "listTraces" endpoint of the "logs" service.
-func NewListTracesGatewayErrorResponseBody(res *goa.ServiceError) *ListTracesGatewayErrorResponseBody {
-	body := &ListTracesGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListLogsForTraceUnauthorizedResponseBody builds the HTTP response body
-// from the result of the "listLogsForTrace" endpoint of the "logs" service.
-func NewListLogsForTraceUnauthorizedResponseBody(res *goa.ServiceError) *ListLogsForTraceUnauthorizedResponseBody {
-	body := &ListLogsForTraceUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListLogsForTraceForbiddenResponseBody builds the HTTP response body from
-// the result of the "listLogsForTrace" endpoint of the "logs" service.
-func NewListLogsForTraceForbiddenResponseBody(res *goa.ServiceError) *ListLogsForTraceForbiddenResponseBody {
-	body := &ListLogsForTraceForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListLogsForTraceBadRequestResponseBody builds the HTTP response body from
-// the result of the "listLogsForTrace" endpoint of the "logs" service.
-func NewListLogsForTraceBadRequestResponseBody(res *goa.ServiceError) *ListLogsForTraceBadRequestResponseBody {
-	body := &ListLogsForTraceBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListLogsForTraceNotFoundResponseBody builds the HTTP response body from
-// the result of the "listLogsForTrace" endpoint of the "logs" service.
-func NewListLogsForTraceNotFoundResponseBody(res *goa.ServiceError) *ListLogsForTraceNotFoundResponseBody {
-	body := &ListLogsForTraceNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListLogsForTraceConflictResponseBody builds the HTTP response body from
-// the result of the "listLogsForTrace" endpoint of the "logs" service.
-func NewListLogsForTraceConflictResponseBody(res *goa.ServiceError) *ListLogsForTraceConflictResponseBody {
-	body := &ListLogsForTraceConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListLogsForTraceUnsupportedMediaResponseBody builds the HTTP response
-// body from the result of the "listLogsForTrace" endpoint of the "logs"
-// service.
-func NewListLogsForTraceUnsupportedMediaResponseBody(res *goa.ServiceError) *ListLogsForTraceUnsupportedMediaResponseBody {
-	body := &ListLogsForTraceUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListLogsForTraceInvalidResponseBody builds the HTTP response body from
-// the result of the "listLogsForTrace" endpoint of the "logs" service.
-func NewListLogsForTraceInvalidResponseBody(res *goa.ServiceError) *ListLogsForTraceInvalidResponseBody {
-	body := &ListLogsForTraceInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListLogsForTraceInvariantViolationResponseBody builds the HTTP response
-// body from the result of the "listLogsForTrace" endpoint of the "logs"
-// service.
-func NewListLogsForTraceInvariantViolationResponseBody(res *goa.ServiceError) *ListLogsForTraceInvariantViolationResponseBody {
-	body := &ListLogsForTraceInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListLogsForTraceUnexpectedResponseBody builds the HTTP response body from
-// the result of the "listLogsForTrace" endpoint of the "logs" service.
-func NewListLogsForTraceUnexpectedResponseBody(res *goa.ServiceError) *ListLogsForTraceUnexpectedResponseBody {
-	body := &ListLogsForTraceUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListLogsForTraceGatewayErrorResponseBody builds the HTTP response body
-// from the result of the "listLogsForTrace" endpoint of the "logs" service.
-func NewListLogsForTraceGatewayErrorResponseBody(res *goa.ServiceError) *ListLogsForTraceGatewayErrorResponseBody {
-	body := &ListLogsForTraceGatewayErrorResponseBody{
+// NewSearchToolCallsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsGatewayErrorResponseBody(res *goa.ServiceError) *SearchToolCallsGatewayErrorResponseBody {
+	body := &SearchToolCallsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1960,24 +1673,26 @@ func NewListToolExecutionLogsPayload(tsStart *string, tsEnd *string, deploymentI
 	return v
 }
 
-// NewListTelemetryLogsPayload builds a logs service listTelemetryLogs endpoint
-// payload.
-func NewListTelemetryLogsPayload(timeStart *int64, timeEnd *int64, gramUrn *string, traceID *string, deploymentID *string, functionID *string, severityText *string, httpStatusCode *int32, httpRoute *string, httpMethod *string, serviceName *string, cursor *string, limit int, sort string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *logs.ListTelemetryLogsPayload {
-	v := &logs.ListTelemetryLogsPayload{}
-	v.TimeStart = timeStart
-	v.TimeEnd = timeEnd
-	v.GramUrn = gramUrn
-	v.TraceID = traceID
-	v.DeploymentID = deploymentID
-	v.FunctionID = functionID
-	v.SeverityText = severityText
-	v.HTTPStatusCode = httpStatusCode
-	v.HTTPRoute = httpRoute
-	v.HTTPMethod = httpMethod
-	v.ServiceName = serviceName
-	v.Cursor = cursor
-	v.Limit = limit
-	v.Sort = sort
+// NewSearchLogsPayload builds a logs service searchLogs endpoint payload.
+func NewSearchLogsPayload(body *SearchLogsRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *logs.SearchLogsPayload {
+	v := &logs.SearchLogsPayload{
+		Cursor: body.Cursor,
+	}
+	if body.Sort != nil {
+		v.Sort = *body.Sort
+	}
+	if body.Limit != nil {
+		v.Limit = *body.Limit
+	}
+	if body.Filter != nil {
+		v.Filter = unmarshalSearchLogsFilterRequestBodyToLogsSearchLogsFilter(body.Filter)
+	}
+	if body.Sort == nil {
+		v.Sort = "desc"
+	}
+	if body.Limit == nil {
+		v.Limit = 50
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1985,16 +1700,27 @@ func NewListTelemetryLogsPayload(timeStart *int64, timeEnd *int64, gramUrn *stri
 	return v
 }
 
-// NewListTracesPayload builds a logs service listTraces endpoint payload.
-func NewListTracesPayload(timeStart *int64, timeEnd *int64, deploymentID *string, functionID *string, cursor *string, limit int, sort string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *logs.ListTracesPayload {
-	v := &logs.ListTracesPayload{}
-	v.TimeStart = timeStart
-	v.TimeEnd = timeEnd
-	v.DeploymentID = deploymentID
-	v.FunctionID = functionID
-	v.Cursor = cursor
-	v.Limit = limit
-	v.Sort = sort
+// NewSearchToolCallsPayload builds a logs service searchToolCalls endpoint
+// payload.
+func NewSearchToolCallsPayload(body *SearchToolCallsRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *logs.SearchToolCallsPayload {
+	v := &logs.SearchToolCallsPayload{
+		Cursor: body.Cursor,
+	}
+	if body.Sort != nil {
+		v.Sort = *body.Sort
+	}
+	if body.Limit != nil {
+		v.Limit = *body.Limit
+	}
+	if body.Filter != nil {
+		v.Filter = unmarshalSearchToolCallsFilterRequestBodyToLogsSearchToolCallsFilter(body.Filter)
+	}
+	if body.Sort == nil {
+		v.Sort = "desc"
+	}
+	if body.Limit == nil {
+		v.Limit = 50
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -2002,14 +1728,109 @@ func NewListTracesPayload(timeStart *int64, timeEnd *int64, deploymentID *string
 	return v
 }
 
-// NewListLogsForTracePayload builds a logs service listLogsForTrace endpoint
-// payload.
-func NewListLogsForTracePayload(traceID string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *logs.ListLogsForTracePayload {
-	v := &logs.ListLogsForTracePayload{}
-	v.TraceID = traceID
-	v.ApikeyToken = apikeyToken
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
+// ValidateSearchLogsRequestBody runs the validations defined on
+// SearchLogsRequestBody
+func ValidateSearchLogsRequestBody(body *SearchLogsRequestBody) (err error) {
+	if body.Filter != nil {
+		if err2 := ValidateSearchLogsFilterRequestBody(body.Filter); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Cursor != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.cursor", *body.Cursor, goa.FormatUUID))
+	}
+	if body.Sort != nil {
+		if !(*body.Sort == "asc" || *body.Sort == "desc") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort", *body.Sort, []any{"asc", "desc"}))
+		}
+	}
+	if body.Limit != nil {
+		if *body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1, true))
+		}
+	}
+	if body.Limit != nil {
+		if *body.Limit > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1000, false))
+		}
+	}
+	return
+}
 
-	return v
+// ValidateSearchToolCallsRequestBody runs the validations defined on
+// SearchToolCallsRequestBody
+func ValidateSearchToolCallsRequestBody(body *SearchToolCallsRequestBody) (err error) {
+	if body.Filter != nil {
+		if err2 := ValidateSearchToolCallsFilterRequestBody(body.Filter); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Cursor != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.cursor", *body.Cursor, "^[a-f0-9]{32}$"))
+	}
+	if body.Sort != nil {
+		if !(*body.Sort == "asc" || *body.Sort == "desc") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort", *body.Sort, []any{"asc", "desc"}))
+		}
+	}
+	if body.Limit != nil {
+		if *body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1, true))
+		}
+	}
+	if body.Limit != nil {
+		if *body.Limit > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1000, false))
+		}
+	}
+	return
+}
+
+// ValidateSearchLogsFilterRequestBody runs the validations defined on
+// SearchLogsFilterRequestBody
+func ValidateSearchLogsFilterRequestBody(body *SearchLogsFilterRequestBody) (err error) {
+	if body.TraceID != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.trace_id", *body.TraceID, "^[a-f0-9]{32}$"))
+	}
+	if body.SeverityText != nil {
+		if !(*body.SeverityText == "DEBUG" || *body.SeverityText == "INFO" || *body.SeverityText == "WARN" || *body.SeverityText == "ERROR" || *body.SeverityText == "FATAL") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.severity_text", *body.SeverityText, []any{"DEBUG", "INFO", "WARN", "ERROR", "FATAL"}))
+		}
+	}
+	if body.HTTPMethod != nil {
+		if !(*body.HTTPMethod == "GET" || *body.HTTPMethod == "POST" || *body.HTTPMethod == "PUT" || *body.HTTPMethod == "PATCH" || *body.HTTPMethod == "DELETE" || *body.HTTPMethod == "HEAD" || *body.HTTPMethod == "OPTIONS") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.http_method", *body.HTTPMethod, []any{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}))
+		}
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	if body.DeploymentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.deployment_id", *body.DeploymentID, goa.FormatUUID))
+	}
+	if body.FunctionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.function_id", *body.FunctionID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSearchToolCallsFilterRequestBody runs the validations defined on
+// SearchToolCallsFilterRequestBody
+func ValidateSearchToolCallsFilterRequestBody(body *SearchToolCallsFilterRequestBody) (err error) {
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	if body.DeploymentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.deployment_id", *body.DeploymentID, goa.FormatUUID))
+	}
+	if body.FunctionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.function_id", *body.FunctionID, goa.FormatUUID))
+	}
+	return
 }

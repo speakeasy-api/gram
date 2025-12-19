@@ -17,19 +17,17 @@ import (
 type Client struct {
 	ListLogsEndpoint              goa.Endpoint
 	ListToolExecutionLogsEndpoint goa.Endpoint
-	ListTelemetryLogsEndpoint     goa.Endpoint
-	ListTracesEndpoint            goa.Endpoint
-	ListLogsForTraceEndpoint      goa.Endpoint
+	SearchLogsEndpoint            goa.Endpoint
+	SearchToolCallsEndpoint       goa.Endpoint
 }
 
 // NewClient initializes a "logs" service client given the endpoints.
-func NewClient(listLogs, listToolExecutionLogs, listTelemetryLogs, listTraces, listLogsForTrace goa.Endpoint) *Client {
+func NewClient(listLogs, listToolExecutionLogs, searchLogs, searchToolCalls goa.Endpoint) *Client {
 	return &Client{
 		ListLogsEndpoint:              listLogs,
 		ListToolExecutionLogsEndpoint: listToolExecutionLogs,
-		ListTelemetryLogsEndpoint:     listTelemetryLogs,
-		ListTracesEndpoint:            listTraces,
-		ListLogsForTraceEndpoint:      listLogsForTrace,
+		SearchLogsEndpoint:            searchLogs,
+		SearchToolCallsEndpoint:       searchToolCalls,
 	}
 }
 
@@ -78,9 +76,8 @@ func (c *Client) ListToolExecutionLogs(ctx context.Context, p *ListToolExecution
 	return ires.(*ListToolExecutionLogsResult), nil
 }
 
-// ListTelemetryLogs calls the "listTelemetryLogs" endpoint of the "logs"
-// service.
-// ListTelemetryLogs may return the following errors:
+// SearchLogs calls the "searchLogs" endpoint of the "logs" service.
+// SearchLogs may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -92,17 +89,17 @@ func (c *Client) ListToolExecutionLogs(ctx context.Context, p *ListToolExecution
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) ListTelemetryLogs(ctx context.Context, p *ListTelemetryLogsPayload) (res *ListTelemetryLogsResult, err error) {
+func (c *Client) SearchLogs(ctx context.Context, p *SearchLogsPayload) (res *SearchLogsResult, err error) {
 	var ires any
-	ires, err = c.ListTelemetryLogsEndpoint(ctx, p)
+	ires, err = c.SearchLogsEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ListTelemetryLogsResult), nil
+	return ires.(*SearchLogsResult), nil
 }
 
-// ListTraces calls the "listTraces" endpoint of the "logs" service.
-// ListTraces may return the following errors:
+// SearchToolCalls calls the "searchToolCalls" endpoint of the "logs" service.
+// SearchToolCalls may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -114,33 +111,11 @@ func (c *Client) ListTelemetryLogs(ctx context.Context, p *ListTelemetryLogsPayl
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) ListTraces(ctx context.Context, p *ListTracesPayload) (res *ListTracesResult, err error) {
+func (c *Client) SearchToolCalls(ctx context.Context, p *SearchToolCallsPayload) (res *SearchToolCallsResult, err error) {
 	var ires any
-	ires, err = c.ListTracesEndpoint(ctx, p)
+	ires, err = c.SearchToolCallsEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ListTracesResult), nil
-}
-
-// ListLogsForTrace calls the "listLogsForTrace" endpoint of the "logs" service.
-// ListLogsForTrace may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) ListLogsForTrace(ctx context.Context, p *ListLogsForTracePayload) (res *ListLogsForTraceResult, err error) {
-	var ires any
-	ires, err = c.ListLogsForTraceEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*ListLogsForTraceResult), nil
+	return ires.(*SearchToolCallsResult), nil
 }

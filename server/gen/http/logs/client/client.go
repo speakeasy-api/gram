@@ -25,17 +25,13 @@ type Client struct {
 	// listToolExecutionLogs endpoint.
 	ListToolExecutionLogsDoer goahttp.Doer
 
-	// ListTelemetryLogs Doer is the HTTP client used to make requests to the
-	// listTelemetryLogs endpoint.
-	ListTelemetryLogsDoer goahttp.Doer
-
-	// ListTraces Doer is the HTTP client used to make requests to the listTraces
+	// SearchLogs Doer is the HTTP client used to make requests to the searchLogs
 	// endpoint.
-	ListTracesDoer goahttp.Doer
+	SearchLogsDoer goahttp.Doer
 
-	// ListLogsForTrace Doer is the HTTP client used to make requests to the
-	// listLogsForTrace endpoint.
-	ListLogsForTraceDoer goahttp.Doer
+	// SearchToolCalls Doer is the HTTP client used to make requests to the
+	// searchToolCalls endpoint.
+	SearchToolCallsDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -59,9 +55,8 @@ func NewClient(
 	return &Client{
 		ListLogsDoer:              doer,
 		ListToolExecutionLogsDoer: doer,
-		ListTelemetryLogsDoer:     doer,
-		ListTracesDoer:            doer,
-		ListLogsForTraceDoer:      doer,
+		SearchLogsDoer:            doer,
+		SearchToolCallsDoer:       doer,
 		RestoreResponseBody:       restoreBody,
 		scheme:                    scheme,
 		host:                      host,
@@ -118,15 +113,15 @@ func (c *Client) ListToolExecutionLogs() goa.Endpoint {
 	}
 }
 
-// ListTelemetryLogs returns an endpoint that makes HTTP requests to the logs
-// service listTelemetryLogs server.
-func (c *Client) ListTelemetryLogs() goa.Endpoint {
+// SearchLogs returns an endpoint that makes HTTP requests to the logs service
+// searchLogs server.
+func (c *Client) SearchLogs() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeListTelemetryLogsRequest(c.encoder)
-		decodeResponse = DecodeListTelemetryLogsResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeSearchLogsRequest(c.encoder)
+		decodeResponse = DecodeSearchLogsResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildListTelemetryLogsRequest(ctx, v)
+		req, err := c.BuildSearchLogsRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -134,23 +129,23 @@ func (c *Client) ListTelemetryLogs() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.ListTelemetryLogsDoer.Do(req)
+		resp, err := c.SearchLogsDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("logs", "listTelemetryLogs", err)
+			return nil, goahttp.ErrRequestError("logs", "searchLogs", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// ListTraces returns an endpoint that makes HTTP requests to the logs service
-// listTraces server.
-func (c *Client) ListTraces() goa.Endpoint {
+// SearchToolCalls returns an endpoint that makes HTTP requests to the logs
+// service searchToolCalls server.
+func (c *Client) SearchToolCalls() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeListTracesRequest(c.encoder)
-		decodeResponse = DecodeListTracesResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeSearchToolCallsRequest(c.encoder)
+		decodeResponse = DecodeSearchToolCallsResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildListTracesRequest(ctx, v)
+		req, err := c.BuildSearchToolCallsRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -158,33 +153,9 @@ func (c *Client) ListTraces() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.ListTracesDoer.Do(req)
+		resp, err := c.SearchToolCallsDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("logs", "listTraces", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// ListLogsForTrace returns an endpoint that makes HTTP requests to the logs
-// service listLogsForTrace server.
-func (c *Client) ListLogsForTrace() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeListLogsForTraceRequest(c.encoder)
-		decodeResponse = DecodeListLogsForTraceResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildListLogsForTraceRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.ListLogsForTraceDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("logs", "listLogsForTrace", err)
+			return nil, goahttp.ErrRequestError("logs", "searchToolCalls", err)
 		}
 		return decodeResponse(resp)
 	}

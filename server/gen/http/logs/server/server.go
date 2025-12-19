@@ -22,9 +22,8 @@ type Server struct {
 	Mounts                []*MountPoint
 	ListLogs              http.Handler
 	ListToolExecutionLogs http.Handler
-	ListTelemetryLogs     http.Handler
-	ListTraces            http.Handler
-	ListLogsForTrace      http.Handler
+	SearchLogs            http.Handler
+	SearchToolCalls       http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -56,15 +55,13 @@ func New(
 		Mounts: []*MountPoint{
 			{"ListLogs", "GET", "/rpc/logs.list"},
 			{"ListToolExecutionLogs", "GET", "/rpc/logs.listToolExecutionLogs"},
-			{"ListTelemetryLogs", "GET", "/rpc/logs.listTelemetryLogs"},
-			{"ListTraces", "GET", "/rpc/logs.listTraces"},
-			{"ListLogsForTrace", "GET", "/rpc/logs.listLogsForTrace"},
+			{"SearchLogs", "POST", "/rpc/logs.searchLogs"},
+			{"SearchToolCalls", "POST", "/rpc/logs.searchToolCalls"},
 		},
 		ListLogs:              NewListLogsHandler(e.ListLogs, mux, decoder, encoder, errhandler, formatter),
 		ListToolExecutionLogs: NewListToolExecutionLogsHandler(e.ListToolExecutionLogs, mux, decoder, encoder, errhandler, formatter),
-		ListTelemetryLogs:     NewListTelemetryLogsHandler(e.ListTelemetryLogs, mux, decoder, encoder, errhandler, formatter),
-		ListTraces:            NewListTracesHandler(e.ListTraces, mux, decoder, encoder, errhandler, formatter),
-		ListLogsForTrace:      NewListLogsForTraceHandler(e.ListLogsForTrace, mux, decoder, encoder, errhandler, formatter),
+		SearchLogs:            NewSearchLogsHandler(e.SearchLogs, mux, decoder, encoder, errhandler, formatter),
+		SearchToolCalls:       NewSearchToolCallsHandler(e.SearchToolCalls, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -75,9 +72,8 @@ func (s *Server) Service() string { return "logs" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListLogs = m(s.ListLogs)
 	s.ListToolExecutionLogs = m(s.ListToolExecutionLogs)
-	s.ListTelemetryLogs = m(s.ListTelemetryLogs)
-	s.ListTraces = m(s.ListTraces)
-	s.ListLogsForTrace = m(s.ListLogsForTrace)
+	s.SearchLogs = m(s.SearchLogs)
+	s.SearchToolCalls = m(s.SearchToolCalls)
 }
 
 // MethodNames returns the methods served.
@@ -87,9 +83,8 @@ func (s *Server) MethodNames() []string { return logs.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountListLogsHandler(mux, h.ListLogs)
 	MountListToolExecutionLogsHandler(mux, h.ListToolExecutionLogs)
-	MountListTelemetryLogsHandler(mux, h.ListTelemetryLogs)
-	MountListTracesHandler(mux, h.ListTraces)
-	MountListLogsForTraceHandler(mux, h.ListLogsForTrace)
+	MountSearchLogsHandler(mux, h.SearchLogs)
+	MountSearchToolCallsHandler(mux, h.SearchToolCalls)
 }
 
 // Mount configures the mux to serve the logs endpoints.
@@ -203,21 +198,21 @@ func NewListToolExecutionLogsHandler(
 	})
 }
 
-// MountListTelemetryLogsHandler configures the mux to serve the "logs" service
-// "listTelemetryLogs" endpoint.
-func MountListTelemetryLogsHandler(mux goahttp.Muxer, h http.Handler) {
+// MountSearchLogsHandler configures the mux to serve the "logs" service
+// "searchLogs" endpoint.
+func MountSearchLogsHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/logs.listTelemetryLogs", otelhttp.WithRouteTag("/rpc/logs.listTelemetryLogs", f).ServeHTTP)
+	mux.Handle("POST", "/rpc/logs.searchLogs", otelhttp.WithRouteTag("/rpc/logs.searchLogs", f).ServeHTTP)
 }
 
-// NewListTelemetryLogsHandler creates a HTTP handler which loads the HTTP
-// request and calls the "logs" service "listTelemetryLogs" endpoint.
-func NewListTelemetryLogsHandler(
+// NewSearchLogsHandler creates a HTTP handler which loads the HTTP request and
+// calls the "logs" service "searchLogs" endpoint.
+func NewSearchLogsHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -226,13 +221,13 @@ func NewListTelemetryLogsHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeListTelemetryLogsRequest(mux, decoder)
-		encodeResponse = EncodeListTelemetryLogsResponse(encoder)
-		encodeError    = EncodeListTelemetryLogsError(encoder, formatter)
+		decodeRequest  = DecodeSearchLogsRequest(mux, decoder)
+		encodeResponse = EncodeSearchLogsResponse(encoder)
+		encodeError    = EncodeSearchLogsError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "listTelemetryLogs")
+		ctx = context.WithValue(ctx, goa.MethodKey, "searchLogs")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "logs")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -256,21 +251,21 @@ func NewListTelemetryLogsHandler(
 	})
 }
 
-// MountListTracesHandler configures the mux to serve the "logs" service
-// "listTraces" endpoint.
-func MountListTracesHandler(mux goahttp.Muxer, h http.Handler) {
+// MountSearchToolCallsHandler configures the mux to serve the "logs" service
+// "searchToolCalls" endpoint.
+func MountSearchToolCallsHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/logs.listTraces", otelhttp.WithRouteTag("/rpc/logs.listTraces", f).ServeHTTP)
+	mux.Handle("POST", "/rpc/logs.searchToolCalls", otelhttp.WithRouteTag("/rpc/logs.searchToolCalls", f).ServeHTTP)
 }
 
-// NewListTracesHandler creates a HTTP handler which loads the HTTP request and
-// calls the "logs" service "listTraces" endpoint.
-func NewListTracesHandler(
+// NewSearchToolCallsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "logs" service "searchToolCalls" endpoint.
+func NewSearchToolCallsHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -279,66 +274,13 @@ func NewListTracesHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeListTracesRequest(mux, decoder)
-		encodeResponse = EncodeListTracesResponse(encoder)
-		encodeError    = EncodeListTracesError(encoder, formatter)
+		decodeRequest  = DecodeSearchToolCallsRequest(mux, decoder)
+		encodeResponse = EncodeSearchToolCallsResponse(encoder)
+		encodeError    = EncodeSearchToolCallsError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "listTraces")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "logs")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountListLogsForTraceHandler configures the mux to serve the "logs" service
-// "listLogsForTrace" endpoint.
-func MountListLogsForTraceHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("GET", "/rpc/logs.listLogsForTrace", otelhttp.WithRouteTag("/rpc/logs.listLogsForTrace", f).ServeHTTP)
-}
-
-// NewListLogsForTraceHandler creates a HTTP handler which loads the HTTP
-// request and calls the "logs" service "listLogsForTrace" endpoint.
-func NewListLogsForTraceHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeListLogsForTraceRequest(mux, decoder)
-		encodeResponse = EncodeListLogsForTraceResponse(encoder)
-		encodeError    = EncodeListLogsForTraceError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "listLogsForTrace")
+		ctx = context.WithValue(ctx, goa.MethodKey, "searchToolCalls")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "logs")
 		payload, err := decodeRequest(r)
 		if err != nil {

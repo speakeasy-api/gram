@@ -12,6 +12,32 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// SearchLogsRequestBody is the type of the "logs" service "searchLogs"
+// endpoint HTTP request body.
+type SearchLogsRequestBody struct {
+	// Filter criteria for the search
+	Filter *SearchLogsFilterRequestBody `form:"filter,omitempty" json:"filter,omitempty" xml:"filter,omitempty"`
+	// Cursor for pagination (UUID)
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
+	// Sort order
+	Sort string `form:"sort" json:"sort" xml:"sort"`
+	// Number of items to return (1-1000)
+	Limit int `form:"limit" json:"limit" xml:"limit"`
+}
+
+// SearchToolCallsRequestBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP request body.
+type SearchToolCallsRequestBody struct {
+	// Filter criteria for the search
+	Filter *SearchToolCallsFilterRequestBody `form:"filter,omitempty" json:"filter,omitempty" xml:"filter,omitempty"`
+	// Cursor for pagination (trace ID)
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
+	// Sort order
+	Sort string `form:"sort" json:"sort" xml:"sort"`
+	// Number of items to return (1-1000)
+	Limit int `form:"limit" json:"limit" xml:"limit"`
+}
+
 // ListLogsResponseBody is the type of the "logs" service "listLogs" endpoint
 // HTTP response body.
 type ListLogsResponseBody struct {
@@ -30,29 +56,22 @@ type ListToolExecutionLogsResponseBody struct {
 	Pagination *PaginationResponseResponseBody `form:"pagination,omitempty" json:"pagination,omitempty" xml:"pagination,omitempty"`
 }
 
-// ListTelemetryLogsResponseBody is the type of the "logs" service
-// "listTelemetryLogs" endpoint HTTP response body.
-type ListTelemetryLogsResponseBody struct {
+// SearchLogsResponseBody is the type of the "logs" service "searchLogs"
+// endpoint HTTP response body.
+type SearchLogsResponseBody struct {
 	// List of telemetry log records
 	Logs []*TelemetryLogRecordResponseBody `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
-// ListTracesResponseBody is the type of the "logs" service "listTraces"
-// endpoint HTTP response body.
-type ListTracesResponseBody struct {
-	// List of trace summaries
-	Traces []*TraceSummaryRecordResponseBody `form:"traces,omitempty" json:"traces,omitempty" xml:"traces,omitempty"`
+// SearchToolCallsResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body.
+type SearchToolCallsResponseBody struct {
+	// List of tool call summaries
+	ToolCalls []*ToolCallSummaryResponseBody `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
 	// Cursor for next page (trace ID)
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
-}
-
-// ListLogsForTraceResponseBody is the type of the "logs" service
-// "listLogsForTrace" endpoint HTTP response body.
-type ListLogsForTraceResponseBody struct {
-	// List of telemetry log records for this trace
-	Logs []*TelemetryLogRecordResponseBody `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
 }
 
 // ListLogsUnauthorizedResponseBody is the type of the "logs" service
@@ -423,9 +442,9 @@ type ListToolExecutionLogsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListTelemetryLogsUnauthorizedResponseBody is the type of the "logs" service
-// "listTelemetryLogs" endpoint HTTP response body for the "unauthorized" error.
-type ListTelemetryLogsUnauthorizedResponseBody struct {
+// SearchLogsUnauthorizedResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "unauthorized" error.
+type SearchLogsUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -441,9 +460,9 @@ type ListTelemetryLogsUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListTelemetryLogsForbiddenResponseBody is the type of the "logs" service
-// "listTelemetryLogs" endpoint HTTP response body for the "forbidden" error.
-type ListTelemetryLogsForbiddenResponseBody struct {
+// SearchLogsForbiddenResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "forbidden" error.
+type SearchLogsForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -459,9 +478,9 @@ type ListTelemetryLogsForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListTelemetryLogsBadRequestResponseBody is the type of the "logs" service
-// "listTelemetryLogs" endpoint HTTP response body for the "bad_request" error.
-type ListTelemetryLogsBadRequestResponseBody struct {
+// SearchLogsBadRequestResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "bad_request" error.
+type SearchLogsBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -477,9 +496,9 @@ type ListTelemetryLogsBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListTelemetryLogsNotFoundResponseBody is the type of the "logs" service
-// "listTelemetryLogs" endpoint HTTP response body for the "not_found" error.
-type ListTelemetryLogsNotFoundResponseBody struct {
+// SearchLogsNotFoundResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "not_found" error.
+type SearchLogsNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -495,9 +514,9 @@ type ListTelemetryLogsNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListTelemetryLogsConflictResponseBody is the type of the "logs" service
-// "listTelemetryLogs" endpoint HTTP response body for the "conflict" error.
-type ListTelemetryLogsConflictResponseBody struct {
+// SearchLogsConflictResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "conflict" error.
+type SearchLogsConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -513,10 +532,9 @@ type ListTelemetryLogsConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListTelemetryLogsUnsupportedMediaResponseBody is the type of the "logs"
-// service "listTelemetryLogs" endpoint HTTP response body for the
-// "unsupported_media" error.
-type ListTelemetryLogsUnsupportedMediaResponseBody struct {
+// SearchLogsUnsupportedMediaResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "unsupported_media" error.
+type SearchLogsUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -532,191 +550,9 @@ type ListTelemetryLogsUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListTelemetryLogsInvalidResponseBody is the type of the "logs" service
-// "listTelemetryLogs" endpoint HTTP response body for the "invalid" error.
-type ListTelemetryLogsInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTelemetryLogsInvariantViolationResponseBody is the type of the "logs"
-// service "listTelemetryLogs" endpoint HTTP response body for the
-// "invariant_violation" error.
-type ListTelemetryLogsInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTelemetryLogsUnexpectedResponseBody is the type of the "logs" service
-// "listTelemetryLogs" endpoint HTTP response body for the "unexpected" error.
-type ListTelemetryLogsUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTelemetryLogsGatewayErrorResponseBody is the type of the "logs" service
-// "listTelemetryLogs" endpoint HTTP response body for the "gateway_error"
-// error.
-type ListTelemetryLogsGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTracesUnauthorizedResponseBody is the type of the "logs" service
-// "listTraces" endpoint HTTP response body for the "unauthorized" error.
-type ListTracesUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTracesForbiddenResponseBody is the type of the "logs" service
-// "listTraces" endpoint HTTP response body for the "forbidden" error.
-type ListTracesForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTracesBadRequestResponseBody is the type of the "logs" service
-// "listTraces" endpoint HTTP response body for the "bad_request" error.
-type ListTracesBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTracesNotFoundResponseBody is the type of the "logs" service
-// "listTraces" endpoint HTTP response body for the "not_found" error.
-type ListTracesNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTracesConflictResponseBody is the type of the "logs" service
-// "listTraces" endpoint HTTP response body for the "conflict" error.
-type ListTracesConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTracesUnsupportedMediaResponseBody is the type of the "logs" service
-// "listTraces" endpoint HTTP response body for the "unsupported_media" error.
-type ListTracesUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTracesInvalidResponseBody is the type of the "logs" service "listTraces"
+// SearchLogsInvalidResponseBody is the type of the "logs" service "searchLogs"
 // endpoint HTTP response body for the "invalid" error.
-type ListTracesInvalidResponseBody struct {
+type SearchLogsInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -732,9 +568,9 @@ type ListTracesInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListTracesInvariantViolationResponseBody is the type of the "logs" service
-// "listTraces" endpoint HTTP response body for the "invariant_violation" error.
-type ListTracesInvariantViolationResponseBody struct {
+// SearchLogsInvariantViolationResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "invariant_violation" error.
+type SearchLogsInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -750,9 +586,9 @@ type ListTracesInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListTracesUnexpectedResponseBody is the type of the "logs" service
-// "listTraces" endpoint HTTP response body for the "unexpected" error.
-type ListTracesUnexpectedResponseBody struct {
+// SearchLogsUnexpectedResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "unexpected" error.
+type SearchLogsUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -768,9 +604,9 @@ type ListTracesUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListTracesGatewayErrorResponseBody is the type of the "logs" service
-// "listTraces" endpoint HTTP response body for the "gateway_error" error.
-type ListTracesGatewayErrorResponseBody struct {
+// SearchLogsGatewayErrorResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "gateway_error" error.
+type SearchLogsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -786,9 +622,9 @@ type ListTracesGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListLogsForTraceUnauthorizedResponseBody is the type of the "logs" service
-// "listLogsForTrace" endpoint HTTP response body for the "unauthorized" error.
-type ListLogsForTraceUnauthorizedResponseBody struct {
+// SearchToolCallsUnauthorizedResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "unauthorized" error.
+type SearchToolCallsUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -804,9 +640,9 @@ type ListLogsForTraceUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListLogsForTraceForbiddenResponseBody is the type of the "logs" service
-// "listLogsForTrace" endpoint HTTP response body for the "forbidden" error.
-type ListLogsForTraceForbiddenResponseBody struct {
+// SearchToolCallsForbiddenResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "forbidden" error.
+type SearchToolCallsForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -822,9 +658,9 @@ type ListLogsForTraceForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListLogsForTraceBadRequestResponseBody is the type of the "logs" service
-// "listLogsForTrace" endpoint HTTP response body for the "bad_request" error.
-type ListLogsForTraceBadRequestResponseBody struct {
+// SearchToolCallsBadRequestResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "bad_request" error.
+type SearchToolCallsBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -840,9 +676,9 @@ type ListLogsForTraceBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListLogsForTraceNotFoundResponseBody is the type of the "logs" service
-// "listLogsForTrace" endpoint HTTP response body for the "not_found" error.
-type ListLogsForTraceNotFoundResponseBody struct {
+// SearchToolCallsNotFoundResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "not_found" error.
+type SearchToolCallsNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -858,9 +694,9 @@ type ListLogsForTraceNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListLogsForTraceConflictResponseBody is the type of the "logs" service
-// "listLogsForTrace" endpoint HTTP response body for the "conflict" error.
-type ListLogsForTraceConflictResponseBody struct {
+// SearchToolCallsConflictResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "conflict" error.
+type SearchToolCallsConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -876,10 +712,10 @@ type ListLogsForTraceConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListLogsForTraceUnsupportedMediaResponseBody is the type of the "logs"
-// service "listLogsForTrace" endpoint HTTP response body for the
+// SearchToolCallsUnsupportedMediaResponseBody is the type of the "logs"
+// service "searchToolCalls" endpoint HTTP response body for the
 // "unsupported_media" error.
-type ListLogsForTraceUnsupportedMediaResponseBody struct {
+type SearchToolCallsUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -895,9 +731,9 @@ type ListLogsForTraceUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListLogsForTraceInvalidResponseBody is the type of the "logs" service
-// "listLogsForTrace" endpoint HTTP response body for the "invalid" error.
-type ListLogsForTraceInvalidResponseBody struct {
+// SearchToolCallsInvalidResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "invalid" error.
+type SearchToolCallsInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -913,10 +749,10 @@ type ListLogsForTraceInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListLogsForTraceInvariantViolationResponseBody is the type of the "logs"
-// service "listLogsForTrace" endpoint HTTP response body for the
+// SearchToolCallsInvariantViolationResponseBody is the type of the "logs"
+// service "searchToolCalls" endpoint HTTP response body for the
 // "invariant_violation" error.
-type ListLogsForTraceInvariantViolationResponseBody struct {
+type SearchToolCallsInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -932,9 +768,9 @@ type ListLogsForTraceInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListLogsForTraceUnexpectedResponseBody is the type of the "logs" service
-// "listLogsForTrace" endpoint HTTP response body for the "unexpected" error.
-type ListLogsForTraceUnexpectedResponseBody struct {
+// SearchToolCallsUnexpectedResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "unexpected" error.
+type SearchToolCallsUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -950,9 +786,9 @@ type ListLogsForTraceUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListLogsForTraceGatewayErrorResponseBody is the type of the "logs" service
-// "listLogsForTrace" endpoint HTTP response body for the "gateway_error" error.
-type ListLogsForTraceGatewayErrorResponseBody struct {
+// SearchToolCallsGatewayErrorResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "gateway_error" error.
+type SearchToolCallsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1049,6 +885,32 @@ type ToolExecutionLogResponseBody struct {
 	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
 }
 
+// SearchLogsFilterRequestBody is used to define fields on request body types.
+type SearchLogsFilterRequestBody struct {
+	// Trace ID filter (32 hex characters)
+	TraceID *string `form:"trace_id,omitempty" json:"trace_id,omitempty" xml:"trace_id,omitempty"`
+	// Severity level filter
+	SeverityText *string `form:"severity_text,omitempty" json:"severity_text,omitempty" xml:"severity_text,omitempty"`
+	// HTTP status code filter
+	HTTPStatusCode *int32 `form:"http_status_code,omitempty" json:"http_status_code,omitempty" xml:"http_status_code,omitempty"`
+	// HTTP route filter
+	HTTPRoute *string `form:"http_route,omitempty" json:"http_route,omitempty" xml:"http_route,omitempty"`
+	// HTTP method filter
+	HTTPMethod *string `form:"http_method,omitempty" json:"http_method,omitempty" xml:"http_method,omitempty"`
+	// Service name filter
+	ServiceName *string `form:"service_name,omitempty" json:"service_name,omitempty" xml:"service_name,omitempty"`
+	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Deployment ID filter
+	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// Function ID filter
+	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
+	// Gram URN filter
+	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
+}
+
 // TelemetryLogRecordResponseBody is used to define fields on response body
 // types.
 type TelemetryLogRecordResponseBody struct {
@@ -1082,19 +944,85 @@ type ServiceInfoResponseBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
-// TraceSummaryRecordResponseBody is used to define fields on response body
+// SearchToolCallsFilterRequestBody is used to define fields on request body
 // types.
-type TraceSummaryRecordResponseBody struct {
+type SearchToolCallsFilterRequestBody struct {
+	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Deployment ID filter
+	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// Function ID filter
+	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
+	// Gram URN filter
+	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
+}
+
+// ToolCallSummaryResponseBody is used to define fields on response body types.
+type ToolCallSummaryResponseBody struct {
 	// Trace ID (32 hex characters)
 	TraceID *string `form:"trace_id,omitempty" json:"trace_id,omitempty" xml:"trace_id,omitempty"`
 	// Earliest log timestamp in Unix nanoseconds
 	StartTimeUnixNano *int64 `form:"start_time_unix_nano,omitempty" json:"start_time_unix_nano,omitempty" xml:"start_time_unix_nano,omitempty"`
-	// Total number of logs in this trace
+	// Total number of logs in this tool call
 	LogCount *uint64 `form:"log_count,omitempty" json:"log_count,omitempty" xml:"log_count,omitempty"`
 	// HTTP status code (if applicable)
 	HTTPStatusCode *int32 `form:"http_status_code,omitempty" json:"http_status_code,omitempty" xml:"http_status_code,omitempty"`
-	// Gram URN associated with this trace
+	// Gram URN associated with this tool call
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
+}
+
+// NewSearchLogsRequestBody builds the HTTP request body from the payload of
+// the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsRequestBody(p *logs.SearchLogsPayload) *SearchLogsRequestBody {
+	body := &SearchLogsRequestBody{
+		Cursor: p.Cursor,
+		Sort:   p.Sort,
+		Limit:  p.Limit,
+	}
+	if p.Filter != nil {
+		body.Filter = marshalLogsSearchLogsFilterToSearchLogsFilterRequestBody(p.Filter)
+	}
+	{
+		var zero string
+		if body.Sort == zero {
+			body.Sort = "desc"
+		}
+	}
+	{
+		var zero int
+		if body.Limit == zero {
+			body.Limit = 50
+		}
+	}
+	return body
+}
+
+// NewSearchToolCallsRequestBody builds the HTTP request body from the payload
+// of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsRequestBody(p *logs.SearchToolCallsPayload) *SearchToolCallsRequestBody {
+	body := &SearchToolCallsRequestBody{
+		Cursor: p.Cursor,
+		Sort:   p.Sort,
+		Limit:  p.Limit,
+	}
+	if p.Filter != nil {
+		body.Filter = marshalLogsSearchToolCallsFilterToSearchToolCallsFilterRequestBody(p.Filter)
+	}
+	{
+		var zero string
+		if body.Sort == zero {
+			body.Sort = "desc"
+		}
+	}
+	{
+		var zero int
+		if body.Limit == zero {
+			body.Limit = 50
+		}
+	}
+	return body
 }
 
 // NewListLogsListToolLogResponseOK builds a "logs" service "listLogs" endpoint
@@ -1433,345 +1361,12 @@ func NewListToolExecutionLogsGatewayError(body *ListToolExecutionLogsGatewayErro
 	return v
 }
 
-// NewListTelemetryLogsResultOK builds a "logs" service "listTelemetryLogs"
-// endpoint result from a HTTP "OK" response.
-func NewListTelemetryLogsResultOK(body *ListTelemetryLogsResponseBody) *logs.ListTelemetryLogsResult {
-	v := &logs.ListTelemetryLogsResult{
-		NextCursor: body.NextCursor,
-	}
-	v.Logs = make([]*logs.TelemetryLogRecord, len(body.Logs))
-	for i, val := range body.Logs {
-		if val == nil {
-			v.Logs[i] = nil
-			continue
-		}
-		v.Logs[i] = unmarshalTelemetryLogRecordResponseBodyToLogsTelemetryLogRecord(val)
-	}
-
-	return v
-}
-
-// NewListTelemetryLogsUnauthorized builds a logs service listTelemetryLogs
-// endpoint unauthorized error.
-func NewListTelemetryLogsUnauthorized(body *ListTelemetryLogsUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTelemetryLogsForbidden builds a logs service listTelemetryLogs
-// endpoint forbidden error.
-func NewListTelemetryLogsForbidden(body *ListTelemetryLogsForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTelemetryLogsBadRequest builds a logs service listTelemetryLogs
-// endpoint bad_request error.
-func NewListTelemetryLogsBadRequest(body *ListTelemetryLogsBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTelemetryLogsNotFound builds a logs service listTelemetryLogs
-// endpoint not_found error.
-func NewListTelemetryLogsNotFound(body *ListTelemetryLogsNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTelemetryLogsConflict builds a logs service listTelemetryLogs
-// endpoint conflict error.
-func NewListTelemetryLogsConflict(body *ListTelemetryLogsConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTelemetryLogsUnsupportedMedia builds a logs service listTelemetryLogs
-// endpoint unsupported_media error.
-func NewListTelemetryLogsUnsupportedMedia(body *ListTelemetryLogsUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTelemetryLogsInvalid builds a logs service listTelemetryLogs endpoint
-// invalid error.
-func NewListTelemetryLogsInvalid(body *ListTelemetryLogsInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTelemetryLogsInvariantViolation builds a logs service
-// listTelemetryLogs endpoint invariant_violation error.
-func NewListTelemetryLogsInvariantViolation(body *ListTelemetryLogsInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTelemetryLogsUnexpected builds a logs service listTelemetryLogs
-// endpoint unexpected error.
-func NewListTelemetryLogsUnexpected(body *ListTelemetryLogsUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTelemetryLogsGatewayError builds a logs service listTelemetryLogs
-// endpoint gateway_error error.
-func NewListTelemetryLogsGatewayError(body *ListTelemetryLogsGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTracesResultOK builds a "logs" service "listTraces" endpoint result
+// NewSearchLogsResultOK builds a "logs" service "searchLogs" endpoint result
 // from a HTTP "OK" response.
-func NewListTracesResultOK(body *ListTracesResponseBody) *logs.ListTracesResult {
-	v := &logs.ListTracesResult{
+func NewSearchLogsResultOK(body *SearchLogsResponseBody) *logs.SearchLogsResult {
+	v := &logs.SearchLogsResult{
 		NextCursor: body.NextCursor,
 	}
-	v.Traces = make([]*logs.TraceSummaryRecord, len(body.Traces))
-	for i, val := range body.Traces {
-		if val == nil {
-			v.Traces[i] = nil
-			continue
-		}
-		v.Traces[i] = unmarshalTraceSummaryRecordResponseBodyToLogsTraceSummaryRecord(val)
-	}
-
-	return v
-}
-
-// NewListTracesUnauthorized builds a logs service listTraces endpoint
-// unauthorized error.
-func NewListTracesUnauthorized(body *ListTracesUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTracesForbidden builds a logs service listTraces endpoint forbidden
-// error.
-func NewListTracesForbidden(body *ListTracesForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTracesBadRequest builds a logs service listTraces endpoint
-// bad_request error.
-func NewListTracesBadRequest(body *ListTracesBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTracesNotFound builds a logs service listTraces endpoint not_found
-// error.
-func NewListTracesNotFound(body *ListTracesNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTracesConflict builds a logs service listTraces endpoint conflict
-// error.
-func NewListTracesConflict(body *ListTracesConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTracesUnsupportedMedia builds a logs service listTraces endpoint
-// unsupported_media error.
-func NewListTracesUnsupportedMedia(body *ListTracesUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTracesInvalid builds a logs service listTraces endpoint invalid error.
-func NewListTracesInvalid(body *ListTracesInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTracesInvariantViolation builds a logs service listTraces endpoint
-// invariant_violation error.
-func NewListTracesInvariantViolation(body *ListTracesInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTracesUnexpected builds a logs service listTraces endpoint unexpected
-// error.
-func NewListTracesUnexpected(body *ListTracesUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTracesGatewayError builds a logs service listTraces endpoint
-// gateway_error error.
-func NewListTracesGatewayError(body *ListTracesGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListLogsForTraceResultOK builds a "logs" service "listLogsForTrace"
-// endpoint result from a HTTP "OK" response.
-func NewListLogsForTraceResultOK(body *ListLogsForTraceResponseBody) *logs.ListLogsForTraceResult {
-	v := &logs.ListLogsForTraceResult{}
 	v.Logs = make([]*logs.TelemetryLogRecord, len(body.Logs))
 	for i, val := range body.Logs {
 		if val == nil {
@@ -1784,9 +1379,176 @@ func NewListLogsForTraceResultOK(body *ListLogsForTraceResponseBody) *logs.ListL
 	return v
 }
 
-// NewListLogsForTraceUnauthorized builds a logs service listLogsForTrace
+// NewSearchLogsUnauthorized builds a logs service searchLogs endpoint
+// unauthorized error.
+func NewSearchLogsUnauthorized(body *SearchLogsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchLogsForbidden builds a logs service searchLogs endpoint forbidden
+// error.
+func NewSearchLogsForbidden(body *SearchLogsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchLogsBadRequest builds a logs service searchLogs endpoint
+// bad_request error.
+func NewSearchLogsBadRequest(body *SearchLogsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchLogsNotFound builds a logs service searchLogs endpoint not_found
+// error.
+func NewSearchLogsNotFound(body *SearchLogsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchLogsConflict builds a logs service searchLogs endpoint conflict
+// error.
+func NewSearchLogsConflict(body *SearchLogsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchLogsUnsupportedMedia builds a logs service searchLogs endpoint
+// unsupported_media error.
+func NewSearchLogsUnsupportedMedia(body *SearchLogsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchLogsInvalid builds a logs service searchLogs endpoint invalid error.
+func NewSearchLogsInvalid(body *SearchLogsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchLogsInvariantViolation builds a logs service searchLogs endpoint
+// invariant_violation error.
+func NewSearchLogsInvariantViolation(body *SearchLogsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchLogsUnexpected builds a logs service searchLogs endpoint unexpected
+// error.
+func NewSearchLogsUnexpected(body *SearchLogsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchLogsGatewayError builds a logs service searchLogs endpoint
+// gateway_error error.
+func NewSearchLogsGatewayError(body *SearchLogsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchToolCallsResultOK builds a "logs" service "searchToolCalls"
+// endpoint result from a HTTP "OK" response.
+func NewSearchToolCallsResultOK(body *SearchToolCallsResponseBody) *logs.SearchToolCallsResult {
+	v := &logs.SearchToolCallsResult{
+		NextCursor: body.NextCursor,
+	}
+	v.ToolCalls = make([]*logs.ToolCallSummary, len(body.ToolCalls))
+	for i, val := range body.ToolCalls {
+		if val == nil {
+			v.ToolCalls[i] = nil
+			continue
+		}
+		v.ToolCalls[i] = unmarshalToolCallSummaryResponseBodyToLogsToolCallSummary(val)
+	}
+
+	return v
+}
+
+// NewSearchToolCallsUnauthorized builds a logs service searchToolCalls
 // endpoint unauthorized error.
-func NewListLogsForTraceUnauthorized(body *ListLogsForTraceUnauthorizedResponseBody) *goa.ServiceError {
+func NewSearchToolCallsUnauthorized(body *SearchToolCallsUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1799,9 +1561,9 @@ func NewListLogsForTraceUnauthorized(body *ListLogsForTraceUnauthorizedResponseB
 	return v
 }
 
-// NewListLogsForTraceForbidden builds a logs service listLogsForTrace endpoint
+// NewSearchToolCallsForbidden builds a logs service searchToolCalls endpoint
 // forbidden error.
-func NewListLogsForTraceForbidden(body *ListLogsForTraceForbiddenResponseBody) *goa.ServiceError {
+func NewSearchToolCallsForbidden(body *SearchToolCallsForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1814,9 +1576,9 @@ func NewListLogsForTraceForbidden(body *ListLogsForTraceForbiddenResponseBody) *
 	return v
 }
 
-// NewListLogsForTraceBadRequest builds a logs service listLogsForTrace
-// endpoint bad_request error.
-func NewListLogsForTraceBadRequest(body *ListLogsForTraceBadRequestResponseBody) *goa.ServiceError {
+// NewSearchToolCallsBadRequest builds a logs service searchToolCalls endpoint
+// bad_request error.
+func NewSearchToolCallsBadRequest(body *SearchToolCallsBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1829,9 +1591,9 @@ func NewListLogsForTraceBadRequest(body *ListLogsForTraceBadRequestResponseBody)
 	return v
 }
 
-// NewListLogsForTraceNotFound builds a logs service listLogsForTrace endpoint
+// NewSearchToolCallsNotFound builds a logs service searchToolCalls endpoint
 // not_found error.
-func NewListLogsForTraceNotFound(body *ListLogsForTraceNotFoundResponseBody) *goa.ServiceError {
+func NewSearchToolCallsNotFound(body *SearchToolCallsNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1844,9 +1606,9 @@ func NewListLogsForTraceNotFound(body *ListLogsForTraceNotFoundResponseBody) *go
 	return v
 }
 
-// NewListLogsForTraceConflict builds a logs service listLogsForTrace endpoint
+// NewSearchToolCallsConflict builds a logs service searchToolCalls endpoint
 // conflict error.
-func NewListLogsForTraceConflict(body *ListLogsForTraceConflictResponseBody) *goa.ServiceError {
+func NewSearchToolCallsConflict(body *SearchToolCallsConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1859,9 +1621,9 @@ func NewListLogsForTraceConflict(body *ListLogsForTraceConflictResponseBody) *go
 	return v
 }
 
-// NewListLogsForTraceUnsupportedMedia builds a logs service listLogsForTrace
+// NewSearchToolCallsUnsupportedMedia builds a logs service searchToolCalls
 // endpoint unsupported_media error.
-func NewListLogsForTraceUnsupportedMedia(body *ListLogsForTraceUnsupportedMediaResponseBody) *goa.ServiceError {
+func NewSearchToolCallsUnsupportedMedia(body *SearchToolCallsUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1874,9 +1636,9 @@ func NewListLogsForTraceUnsupportedMedia(body *ListLogsForTraceUnsupportedMediaR
 	return v
 }
 
-// NewListLogsForTraceInvalid builds a logs service listLogsForTrace endpoint
+// NewSearchToolCallsInvalid builds a logs service searchToolCalls endpoint
 // invalid error.
-func NewListLogsForTraceInvalid(body *ListLogsForTraceInvalidResponseBody) *goa.ServiceError {
+func NewSearchToolCallsInvalid(body *SearchToolCallsInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1889,9 +1651,9 @@ func NewListLogsForTraceInvalid(body *ListLogsForTraceInvalidResponseBody) *goa.
 	return v
 }
 
-// NewListLogsForTraceInvariantViolation builds a logs service listLogsForTrace
+// NewSearchToolCallsInvariantViolation builds a logs service searchToolCalls
 // endpoint invariant_violation error.
-func NewListLogsForTraceInvariantViolation(body *ListLogsForTraceInvariantViolationResponseBody) *goa.ServiceError {
+func NewSearchToolCallsInvariantViolation(body *SearchToolCallsInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1904,9 +1666,9 @@ func NewListLogsForTraceInvariantViolation(body *ListLogsForTraceInvariantViolat
 	return v
 }
 
-// NewListLogsForTraceUnexpected builds a logs service listLogsForTrace
-// endpoint unexpected error.
-func NewListLogsForTraceUnexpected(body *ListLogsForTraceUnexpectedResponseBody) *goa.ServiceError {
+// NewSearchToolCallsUnexpected builds a logs service searchToolCalls endpoint
+// unexpected error.
+func NewSearchToolCallsUnexpected(body *SearchToolCallsUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1919,9 +1681,9 @@ func NewListLogsForTraceUnexpected(body *ListLogsForTraceUnexpectedResponseBody)
 	return v
 }
 
-// NewListLogsForTraceGatewayError builds a logs service listLogsForTrace
+// NewSearchToolCallsGatewayError builds a logs service searchToolCalls
 // endpoint gateway_error error.
-func NewListLogsForTraceGatewayError(body *ListLogsForTraceGatewayErrorResponseBody) *goa.ServiceError {
+func NewSearchToolCallsGatewayError(body *SearchToolCallsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1979,9 +1741,9 @@ func ValidateListToolExecutionLogsResponseBody(body *ListToolExecutionLogsRespon
 	return
 }
 
-// ValidateListTelemetryLogsResponseBody runs the validations defined on
-// ListTelemetryLogsResponseBody
-func ValidateListTelemetryLogsResponseBody(body *ListTelemetryLogsResponseBody) (err error) {
+// ValidateSearchLogsResponseBody runs the validations defined on
+// SearchLogsResponseBody
+func ValidateSearchLogsResponseBody(body *SearchLogsResponseBody) (err error) {
 	if body.Logs == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("logs", "body"))
 	}
@@ -1998,37 +1760,21 @@ func ValidateListTelemetryLogsResponseBody(body *ListTelemetryLogsResponseBody) 
 	return
 }
 
-// ValidateListTracesResponseBody runs the validations defined on
-// ListTracesResponseBody
-func ValidateListTracesResponseBody(body *ListTracesResponseBody) (err error) {
-	if body.Traces == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("traces", "body"))
+// ValidateSearchToolCallsResponseBody runs the validations defined on
+// SearchToolCallsResponseBody
+func ValidateSearchToolCallsResponseBody(body *SearchToolCallsResponseBody) (err error) {
+	if body.ToolCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))
 	}
-	for _, e := range body.Traces {
+	for _, e := range body.ToolCalls {
 		if e != nil {
-			if err2 := ValidateTraceSummaryRecordResponseBody(e); err2 != nil {
+			if err2 := ValidateToolCallSummaryResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
 	}
 	if body.NextCursor != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.next_cursor", *body.NextCursor, "^[a-f0-9]{32}$"))
-	}
-	return
-}
-
-// ValidateListLogsForTraceResponseBody runs the validations defined on
-// ListLogsForTraceResponseBody
-func ValidateListLogsForTraceResponseBody(body *ListLogsForTraceResponseBody) (err error) {
-	if body.Logs == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("logs", "body"))
-	}
-	for _, e := range body.Logs {
-		if e != nil {
-			if err2 := ValidateTelemetryLogRecordResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
 	}
 	return
 }
@@ -2514,9 +2260,9 @@ func ValidateListToolExecutionLogsGatewayErrorResponseBody(body *ListToolExecuti
 	return
 }
 
-// ValidateListTelemetryLogsUnauthorizedResponseBody runs the validations
-// defined on listTelemetryLogs_unauthorized_response_body
-func ValidateListTelemetryLogsUnauthorizedResponseBody(body *ListTelemetryLogsUnauthorizedResponseBody) (err error) {
+// ValidateSearchLogsUnauthorizedResponseBody runs the validations defined on
+// searchLogs_unauthorized_response_body
+func ValidateSearchLogsUnauthorizedResponseBody(body *SearchLogsUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2538,9 +2284,9 @@ func ValidateListTelemetryLogsUnauthorizedResponseBody(body *ListTelemetryLogsUn
 	return
 }
 
-// ValidateListTelemetryLogsForbiddenResponseBody runs the validations defined
-// on listTelemetryLogs_forbidden_response_body
-func ValidateListTelemetryLogsForbiddenResponseBody(body *ListTelemetryLogsForbiddenResponseBody) (err error) {
+// ValidateSearchLogsForbiddenResponseBody runs the validations defined on
+// searchLogs_forbidden_response_body
+func ValidateSearchLogsForbiddenResponseBody(body *SearchLogsForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2562,9 +2308,9 @@ func ValidateListTelemetryLogsForbiddenResponseBody(body *ListTelemetryLogsForbi
 	return
 }
 
-// ValidateListTelemetryLogsBadRequestResponseBody runs the validations defined
-// on listTelemetryLogs_bad_request_response_body
-func ValidateListTelemetryLogsBadRequestResponseBody(body *ListTelemetryLogsBadRequestResponseBody) (err error) {
+// ValidateSearchLogsBadRequestResponseBody runs the validations defined on
+// searchLogs_bad_request_response_body
+func ValidateSearchLogsBadRequestResponseBody(body *SearchLogsBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2586,9 +2332,9 @@ func ValidateListTelemetryLogsBadRequestResponseBody(body *ListTelemetryLogsBadR
 	return
 }
 
-// ValidateListTelemetryLogsNotFoundResponseBody runs the validations defined
-// on listTelemetryLogs_not_found_response_body
-func ValidateListTelemetryLogsNotFoundResponseBody(body *ListTelemetryLogsNotFoundResponseBody) (err error) {
+// ValidateSearchLogsNotFoundResponseBody runs the validations defined on
+// searchLogs_not_found_response_body
+func ValidateSearchLogsNotFoundResponseBody(body *SearchLogsNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2610,9 +2356,9 @@ func ValidateListTelemetryLogsNotFoundResponseBody(body *ListTelemetryLogsNotFou
 	return
 }
 
-// ValidateListTelemetryLogsConflictResponseBody runs the validations defined
-// on listTelemetryLogs_conflict_response_body
-func ValidateListTelemetryLogsConflictResponseBody(body *ListTelemetryLogsConflictResponseBody) (err error) {
+// ValidateSearchLogsConflictResponseBody runs the validations defined on
+// searchLogs_conflict_response_body
+func ValidateSearchLogsConflictResponseBody(body *SearchLogsConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2634,9 +2380,9 @@ func ValidateListTelemetryLogsConflictResponseBody(body *ListTelemetryLogsConfli
 	return
 }
 
-// ValidateListTelemetryLogsUnsupportedMediaResponseBody runs the validations
-// defined on listTelemetryLogs_unsupported_media_response_body
-func ValidateListTelemetryLogsUnsupportedMediaResponseBody(body *ListTelemetryLogsUnsupportedMediaResponseBody) (err error) {
+// ValidateSearchLogsUnsupportedMediaResponseBody runs the validations defined
+// on searchLogs_unsupported_media_response_body
+func ValidateSearchLogsUnsupportedMediaResponseBody(body *SearchLogsUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2658,9 +2404,9 @@ func ValidateListTelemetryLogsUnsupportedMediaResponseBody(body *ListTelemetryLo
 	return
 }
 
-// ValidateListTelemetryLogsInvalidResponseBody runs the validations defined on
-// listTelemetryLogs_invalid_response_body
-func ValidateListTelemetryLogsInvalidResponseBody(body *ListTelemetryLogsInvalidResponseBody) (err error) {
+// ValidateSearchLogsInvalidResponseBody runs the validations defined on
+// searchLogs_invalid_response_body
+func ValidateSearchLogsInvalidResponseBody(body *SearchLogsInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2682,9 +2428,9 @@ func ValidateListTelemetryLogsInvalidResponseBody(body *ListTelemetryLogsInvalid
 	return
 }
 
-// ValidateListTelemetryLogsInvariantViolationResponseBody runs the validations
-// defined on listTelemetryLogs_invariant_violation_response_body
-func ValidateListTelemetryLogsInvariantViolationResponseBody(body *ListTelemetryLogsInvariantViolationResponseBody) (err error) {
+// ValidateSearchLogsInvariantViolationResponseBody runs the validations
+// defined on searchLogs_invariant_violation_response_body
+func ValidateSearchLogsInvariantViolationResponseBody(body *SearchLogsInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2706,9 +2452,9 @@ func ValidateListTelemetryLogsInvariantViolationResponseBody(body *ListTelemetry
 	return
 }
 
-// ValidateListTelemetryLogsUnexpectedResponseBody runs the validations defined
-// on listTelemetryLogs_unexpected_response_body
-func ValidateListTelemetryLogsUnexpectedResponseBody(body *ListTelemetryLogsUnexpectedResponseBody) (err error) {
+// ValidateSearchLogsUnexpectedResponseBody runs the validations defined on
+// searchLogs_unexpected_response_body
+func ValidateSearchLogsUnexpectedResponseBody(body *SearchLogsUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2730,9 +2476,9 @@ func ValidateListTelemetryLogsUnexpectedResponseBody(body *ListTelemetryLogsUnex
 	return
 }
 
-// ValidateListTelemetryLogsGatewayErrorResponseBody runs the validations
-// defined on listTelemetryLogs_gateway_error_response_body
-func ValidateListTelemetryLogsGatewayErrorResponseBody(body *ListTelemetryLogsGatewayErrorResponseBody) (err error) {
+// ValidateSearchLogsGatewayErrorResponseBody runs the validations defined on
+// searchLogs_gateway_error_response_body
+func ValidateSearchLogsGatewayErrorResponseBody(body *SearchLogsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2754,9 +2500,9 @@ func ValidateListTelemetryLogsGatewayErrorResponseBody(body *ListTelemetryLogsGa
 	return
 }
 
-// ValidateListTracesUnauthorizedResponseBody runs the validations defined on
-// listTraces_unauthorized_response_body
-func ValidateListTracesUnauthorizedResponseBody(body *ListTracesUnauthorizedResponseBody) (err error) {
+// ValidateSearchToolCallsUnauthorizedResponseBody runs the validations defined
+// on searchToolCalls_unauthorized_response_body
+func ValidateSearchToolCallsUnauthorizedResponseBody(body *SearchToolCallsUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2778,9 +2524,9 @@ func ValidateListTracesUnauthorizedResponseBody(body *ListTracesUnauthorizedResp
 	return
 }
 
-// ValidateListTracesForbiddenResponseBody runs the validations defined on
-// listTraces_forbidden_response_body
-func ValidateListTracesForbiddenResponseBody(body *ListTracesForbiddenResponseBody) (err error) {
+// ValidateSearchToolCallsForbiddenResponseBody runs the validations defined on
+// searchToolCalls_forbidden_response_body
+func ValidateSearchToolCallsForbiddenResponseBody(body *SearchToolCallsForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2802,9 +2548,9 @@ func ValidateListTracesForbiddenResponseBody(body *ListTracesForbiddenResponseBo
 	return
 }
 
-// ValidateListTracesBadRequestResponseBody runs the validations defined on
-// listTraces_bad_request_response_body
-func ValidateListTracesBadRequestResponseBody(body *ListTracesBadRequestResponseBody) (err error) {
+// ValidateSearchToolCallsBadRequestResponseBody runs the validations defined
+// on searchToolCalls_bad_request_response_body
+func ValidateSearchToolCallsBadRequestResponseBody(body *SearchToolCallsBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2826,9 +2572,9 @@ func ValidateListTracesBadRequestResponseBody(body *ListTracesBadRequestResponse
 	return
 }
 
-// ValidateListTracesNotFoundResponseBody runs the validations defined on
-// listTraces_not_found_response_body
-func ValidateListTracesNotFoundResponseBody(body *ListTracesNotFoundResponseBody) (err error) {
+// ValidateSearchToolCallsNotFoundResponseBody runs the validations defined on
+// searchToolCalls_not_found_response_body
+func ValidateSearchToolCallsNotFoundResponseBody(body *SearchToolCallsNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2850,9 +2596,9 @@ func ValidateListTracesNotFoundResponseBody(body *ListTracesNotFoundResponseBody
 	return
 }
 
-// ValidateListTracesConflictResponseBody runs the validations defined on
-// listTraces_conflict_response_body
-func ValidateListTracesConflictResponseBody(body *ListTracesConflictResponseBody) (err error) {
+// ValidateSearchToolCallsConflictResponseBody runs the validations defined on
+// searchToolCalls_conflict_response_body
+func ValidateSearchToolCallsConflictResponseBody(body *SearchToolCallsConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2874,9 +2620,9 @@ func ValidateListTracesConflictResponseBody(body *ListTracesConflictResponseBody
 	return
 }
 
-// ValidateListTracesUnsupportedMediaResponseBody runs the validations defined
-// on listTraces_unsupported_media_response_body
-func ValidateListTracesUnsupportedMediaResponseBody(body *ListTracesUnsupportedMediaResponseBody) (err error) {
+// ValidateSearchToolCallsUnsupportedMediaResponseBody runs the validations
+// defined on searchToolCalls_unsupported_media_response_body
+func ValidateSearchToolCallsUnsupportedMediaResponseBody(body *SearchToolCallsUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2898,9 +2644,9 @@ func ValidateListTracesUnsupportedMediaResponseBody(body *ListTracesUnsupportedM
 	return
 }
 
-// ValidateListTracesInvalidResponseBody runs the validations defined on
-// listTraces_invalid_response_body
-func ValidateListTracesInvalidResponseBody(body *ListTracesInvalidResponseBody) (err error) {
+// ValidateSearchToolCallsInvalidResponseBody runs the validations defined on
+// searchToolCalls_invalid_response_body
+func ValidateSearchToolCallsInvalidResponseBody(body *SearchToolCallsInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2922,9 +2668,9 @@ func ValidateListTracesInvalidResponseBody(body *ListTracesInvalidResponseBody) 
 	return
 }
 
-// ValidateListTracesInvariantViolationResponseBody runs the validations
-// defined on listTraces_invariant_violation_response_body
-func ValidateListTracesInvariantViolationResponseBody(body *ListTracesInvariantViolationResponseBody) (err error) {
+// ValidateSearchToolCallsInvariantViolationResponseBody runs the validations
+// defined on searchToolCalls_invariant_violation_response_body
+func ValidateSearchToolCallsInvariantViolationResponseBody(body *SearchToolCallsInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2946,9 +2692,9 @@ func ValidateListTracesInvariantViolationResponseBody(body *ListTracesInvariantV
 	return
 }
 
-// ValidateListTracesUnexpectedResponseBody runs the validations defined on
-// listTraces_unexpected_response_body
-func ValidateListTracesUnexpectedResponseBody(body *ListTracesUnexpectedResponseBody) (err error) {
+// ValidateSearchToolCallsUnexpectedResponseBody runs the validations defined
+// on searchToolCalls_unexpected_response_body
+func ValidateSearchToolCallsUnexpectedResponseBody(body *SearchToolCallsUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2970,249 +2716,9 @@ func ValidateListTracesUnexpectedResponseBody(body *ListTracesUnexpectedResponse
 	return
 }
 
-// ValidateListTracesGatewayErrorResponseBody runs the validations defined on
-// listTraces_gateway_error_response_body
-func ValidateListTracesGatewayErrorResponseBody(body *ListTracesGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListLogsForTraceUnauthorizedResponseBody runs the validations
-// defined on listLogsForTrace_unauthorized_response_body
-func ValidateListLogsForTraceUnauthorizedResponseBody(body *ListLogsForTraceUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListLogsForTraceForbiddenResponseBody runs the validations defined
-// on listLogsForTrace_forbidden_response_body
-func ValidateListLogsForTraceForbiddenResponseBody(body *ListLogsForTraceForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListLogsForTraceBadRequestResponseBody runs the validations defined
-// on listLogsForTrace_bad_request_response_body
-func ValidateListLogsForTraceBadRequestResponseBody(body *ListLogsForTraceBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListLogsForTraceNotFoundResponseBody runs the validations defined on
-// listLogsForTrace_not_found_response_body
-func ValidateListLogsForTraceNotFoundResponseBody(body *ListLogsForTraceNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListLogsForTraceConflictResponseBody runs the validations defined on
-// listLogsForTrace_conflict_response_body
-func ValidateListLogsForTraceConflictResponseBody(body *ListLogsForTraceConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListLogsForTraceUnsupportedMediaResponseBody runs the validations
-// defined on listLogsForTrace_unsupported_media_response_body
-func ValidateListLogsForTraceUnsupportedMediaResponseBody(body *ListLogsForTraceUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListLogsForTraceInvalidResponseBody runs the validations defined on
-// listLogsForTrace_invalid_response_body
-func ValidateListLogsForTraceInvalidResponseBody(body *ListLogsForTraceInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListLogsForTraceInvariantViolationResponseBody runs the validations
-// defined on listLogsForTrace_invariant_violation_response_body
-func ValidateListLogsForTraceInvariantViolationResponseBody(body *ListLogsForTraceInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListLogsForTraceUnexpectedResponseBody runs the validations defined
-// on listLogsForTrace_unexpected_response_body
-func ValidateListLogsForTraceUnexpectedResponseBody(body *ListLogsForTraceUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListLogsForTraceGatewayErrorResponseBody runs the validations
-// defined on listLogsForTrace_gateway_error_response_body
-func ValidateListLogsForTraceGatewayErrorResponseBody(body *ListLogsForTraceGatewayErrorResponseBody) (err error) {
+// ValidateSearchToolCallsGatewayErrorResponseBody runs the validations defined
+// on searchToolCalls_gateway_error_response_body
+func ValidateSearchToolCallsGatewayErrorResponseBody(body *SearchToolCallsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3362,6 +2868,37 @@ func ValidateToolExecutionLogResponseBody(body *ToolExecutionLogResponseBody) (e
 	return
 }
 
+// ValidateSearchLogsFilterRequestBody runs the validations defined on
+// SearchLogsFilterRequestBody
+func ValidateSearchLogsFilterRequestBody(body *SearchLogsFilterRequestBody) (err error) {
+	if body.TraceID != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.trace_id", *body.TraceID, "^[a-f0-9]{32}$"))
+	}
+	if body.SeverityText != nil {
+		if !(*body.SeverityText == "DEBUG" || *body.SeverityText == "INFO" || *body.SeverityText == "WARN" || *body.SeverityText == "ERROR" || *body.SeverityText == "FATAL") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.severity_text", *body.SeverityText, []any{"DEBUG", "INFO", "WARN", "ERROR", "FATAL"}))
+		}
+	}
+	if body.HTTPMethod != nil {
+		if !(*body.HTTPMethod == "GET" || *body.HTTPMethod == "POST" || *body.HTTPMethod == "PUT" || *body.HTTPMethod == "PATCH" || *body.HTTPMethod == "DELETE" || *body.HTTPMethod == "HEAD" || *body.HTTPMethod == "OPTIONS") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.http_method", *body.HTTPMethod, []any{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}))
+		}
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	if body.DeploymentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.deployment_id", *body.DeploymentID, goa.FormatUUID))
+	}
+	if body.FunctionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.function_id", *body.FunctionID, goa.FormatUUID))
+	}
+	return
+}
+
 // ValidateTelemetryLogRecordResponseBody runs the validations defined on
 // TelemetryLogRecordResponseBody
 func ValidateTelemetryLogRecordResponseBody(body *TelemetryLogRecordResponseBody) (err error) {
@@ -3406,9 +2943,27 @@ func ValidateServiceInfoResponseBody(body *ServiceInfoResponseBody) (err error) 
 	return
 }
 
-// ValidateTraceSummaryRecordResponseBody runs the validations defined on
-// TraceSummaryRecordResponseBody
-func ValidateTraceSummaryRecordResponseBody(body *TraceSummaryRecordResponseBody) (err error) {
+// ValidateSearchToolCallsFilterRequestBody runs the validations defined on
+// SearchToolCallsFilterRequestBody
+func ValidateSearchToolCallsFilterRequestBody(body *SearchToolCallsFilterRequestBody) (err error) {
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	if body.DeploymentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.deployment_id", *body.DeploymentID, goa.FormatUUID))
+	}
+	if body.FunctionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.function_id", *body.FunctionID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateToolCallSummaryResponseBody runs the validations defined on
+// ToolCallSummaryResponseBody
+func ValidateToolCallSummaryResponseBody(body *ToolCallSummaryResponseBody) (err error) {
 	if body.TraceID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("trace_id", "body"))
 	}
