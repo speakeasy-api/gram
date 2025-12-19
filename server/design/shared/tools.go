@@ -112,6 +112,14 @@ var ExternalMCPToolDefinition = Type("ExternalMCPToolDefinition", func() {
 	Attribute("slug", String, "The slug used for tool prefixing (e.g., github)")
 	Attribute("remote_url", String, "The URL to connect to the MCP server")
 	Attribute("requires_oauth", Boolean, "Whether the external MCP server requires OAuth authentication")
+
+	// OAuth metadata
+	Attribute("oauth_version", String, "OAuth version: '2.1' (MCP OAuth), '2.0' (legacy), or 'none'")
+	Attribute("oauth_authorization_endpoint", String, "The OAuth authorization endpoint URL")
+	Attribute("oauth_token_endpoint", String, "The OAuth token endpoint URL")
+	Attribute("oauth_registration_endpoint", String, "The OAuth dynamic client registration endpoint URL")
+	Attribute("oauth_scopes_supported", ArrayOf(String), "The OAuth scopes supported by the server")
+
 	Attribute("created_at", String, func() {
 		Description("When the tool definition was created.")
 		Format(FormatDateTime)
@@ -121,7 +129,7 @@ var ExternalMCPToolDefinition = Type("ExternalMCPToolDefinition", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "tool_urn", "deployment_external_mcp_id", "deployment_id", "registry_id", "name", "slug", "remote_url", "requires_oauth", "created_at", "updated_at")
+	Required("id", "tool_urn", "deployment_external_mcp_id", "deployment_id", "registry_id", "name", "slug", "remote_url", "requires_oauth", "oauth_version", "created_at", "updated_at")
 })
 
 // Tool is a discriminated union of HTTP tools and prompt templates.

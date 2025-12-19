@@ -444,6 +444,16 @@ type ExternalMCPToolDefinitionResponseBody struct {
 	RemoteURL string `form:"remote_url" json:"remote_url" xml:"remote_url"`
 	// Whether the external MCP server requires OAuth authentication
 	RequiresOauth bool `form:"requires_oauth" json:"requires_oauth" xml:"requires_oauth"`
+	// OAuth version: '2.1' (MCP OAuth), '2.0' (legacy), or 'none'
+	OauthVersion string `form:"oauth_version" json:"oauth_version" xml:"oauth_version"`
+	// The OAuth authorization endpoint URL
+	OauthAuthorizationEndpoint *string `form:"oauth_authorization_endpoint,omitempty" json:"oauth_authorization_endpoint,omitempty" xml:"oauth_authorization_endpoint,omitempty"`
+	// The OAuth token endpoint URL
+	OauthTokenEndpoint *string `form:"oauth_token_endpoint,omitempty" json:"oauth_token_endpoint,omitempty" xml:"oauth_token_endpoint,omitempty"`
+	// The OAuth dynamic client registration endpoint URL
+	OauthRegistrationEndpoint *string `form:"oauth_registration_endpoint,omitempty" json:"oauth_registration_endpoint,omitempty" xml:"oauth_registration_endpoint,omitempty"`
+	// The OAuth scopes supported by the server
+	OauthScopesSupported []string `form:"oauth_scopes_supported,omitempty" json:"oauth_scopes_supported,omitempty" xml:"oauth_scopes_supported,omitempty"`
 	// When the tool definition was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the tool definition was last updated.

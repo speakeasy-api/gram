@@ -7,23 +7,45 @@ ORDER BY name ASC;
 -- name: GetMCPRegistryByID :one
 SELECT id, name, url, created_at, updated_at
 FROM mcp_registries
-WHERE id = $1 AND deleted IS FALSE;
+WHERE id = @id AND deleted IS FALSE;
 
 -- name: CreateExternalMCPAttachment :one
 INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug)
-VALUES ($1, $2, $3, $4)
+VALUES (@deployment_id, @registry_id, @name, @slug)
 RETURNING id, deployment_id, registry_id, name, slug, created_at, updated_at;
 
 -- name: ListExternalMCPAttachments :many
 SELECT id, deployment_id, registry_id, name, slug, created_at, updated_at
 FROM external_mcp_attachments
-WHERE deployment_id = $1 AND deleted IS FALSE
+WHERE deployment_id = @deployment_id AND deleted IS FALSE
 ORDER BY created_at ASC;
 
 -- name: CreateExternalMCPToolDefinition :one
-INSERT INTO external_mcp_tool_definitions (external_mcp_attachment_id, tool_urn, remote_url, requires_oauth)
-VALUES ($1, $2, $3, $4)
-RETURNING id, external_mcp_attachment_id, tool_urn, remote_url, requires_oauth, created_at, updated_at;
+INSERT INTO external_mcp_tool_definitions (
+  external_mcp_attachment_id,
+  tool_urn,
+  remote_url,
+  requires_oauth,
+  oauth_version,
+  oauth_authorization_endpoint,
+  oauth_token_endpoint,
+  oauth_registration_endpoint,
+  oauth_scopes_supported
+)
+VALUES (
+  @external_mcp_attachment_id,
+  @tool_urn,
+  @remote_url,
+  @requires_oauth,
+  @oauth_version,
+  @oauth_authorization_endpoint,
+  @oauth_token_endpoint,
+  @oauth_registration_endpoint,
+  @oauth_scopes_supported
+)
+RETURNING id, external_mcp_attachment_id, tool_urn, remote_url, requires_oauth,
+  oauth_version, oauth_authorization_endpoint, oauth_token_endpoint,
+  oauth_registration_endpoint, oauth_scopes_supported, created_at, updated_at;
 
 -- name: ListExternalMCPToolDefinitions :many
 SELECT
@@ -32,6 +54,11 @@ SELECT
   t.tool_urn,
   t.remote_url,
   t.requires_oauth,
+  t.oauth_version,
+  t.oauth_authorization_endpoint,
+  t.oauth_token_endpoint,
+  t.oauth_registration_endpoint,
+  t.oauth_scopes_supported,
   t.created_at,
   t.updated_at,
   e.deployment_id,
@@ -40,7 +67,7 @@ SELECT
   e.slug
 FROM external_mcp_tool_definitions t
 JOIN external_mcp_attachments e ON t.external_mcp_attachment_id = e.id
-WHERE e.deployment_id = $1
+WHERE e.deployment_id = @deployment_id
   AND t.deleted IS FALSE
   AND e.deleted IS FALSE
 ORDER BY e.slug ASC;
@@ -52,6 +79,11 @@ SELECT
   t.tool_urn,
   t.remote_url,
   t.requires_oauth,
+  t.oauth_version,
+  t.oauth_authorization_endpoint,
+  t.oauth_token_endpoint,
+  t.oauth_registration_endpoint,
+  t.oauth_scopes_supported,
   t.created_at,
   t.updated_at,
   e.deployment_id,
@@ -60,7 +92,7 @@ SELECT
   e.slug
 FROM external_mcp_tool_definitions t
 JOIN external_mcp_attachments e ON t.external_mcp_attachment_id = e.id
-WHERE t.tool_urn = $1
+WHERE t.tool_urn = @tool_urn
   AND t.deleted IS FALSE
   AND e.deleted IS FALSE;
 
@@ -71,6 +103,11 @@ SELECT
   t.tool_urn,
   t.remote_url,
   t.requires_oauth,
+  t.oauth_version,
+  t.oauth_authorization_endpoint,
+  t.oauth_token_endpoint,
+  t.oauth_registration_endpoint,
+  t.oauth_scopes_supported,
   t.created_at,
   t.updated_at,
   e.deployment_id,
@@ -79,7 +116,7 @@ SELECT
   e.slug
 FROM external_mcp_tool_definitions t
 JOIN external_mcp_attachments e ON t.external_mcp_attachment_id = e.id
-WHERE e.deployment_id = $1
+WHERE e.deployment_id = @deployment_id
   AND t.requires_oauth = TRUE
   AND t.deleted IS FALSE
   AND e.deleted IS FALSE;

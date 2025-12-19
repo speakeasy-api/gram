@@ -325,24 +325,21 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
 	}
 
-	hasOAuth, err := wellknown.IsToolsetOAuthProtected(
+	metadata, err := wellknown.ResolveOAuthProtectedResourceFromToolset(
 		ctx,
 		s.logger,
 		s.db,
 		&s.toolsetCache,
 		toolset,
+		baseURL,
+		mcpSlug,
 	)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to check OAuth protection").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth protected resource metadata").Log(ctx, s.logger)
 	}
 
-	if !hasOAuth {
+	if metadata == nil {
 		return oops.E(oops.CodeNotFound, nil, "not found").Log(ctx, s.logger)
-	}
-
-	metadata := map[string]any{
-		"issuer":                baseURL + "/mcp/" + mcpSlug,
-		"authorization_servers": []string{baseURL + "/.well-known/oauth-authorization-server/mcp/" + mcpSlug},
 	}
 
 	w.Header().Set("Content-Type", "application/json")

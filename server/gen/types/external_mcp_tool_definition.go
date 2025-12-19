@@ -27,6 +27,16 @@ type ExternalMCPToolDefinition struct {
 	RemoteURL string
 	// Whether the external MCP server requires OAuth authentication
 	RequiresOauth bool
+	// OAuth version: '2.1' (MCP OAuth), '2.0' (legacy), or 'none'
+	OauthVersion string
+	// The OAuth authorization endpoint URL
+	OauthAuthorizationEndpoint *string
+	// The OAuth token endpoint URL
+	OauthTokenEndpoint *string
+	// The OAuth dynamic client registration endpoint URL
+	OauthRegistrationEndpoint *string
+	// The OAuth scopes supported by the server
+	OauthScopesSupported []string
 	// When the tool definition was created.
 	CreatedAt string
 	// When the tool definition was last updated.

@@ -14,6 +14,10 @@ export type CreateResponseBody = {
    */
   clientToken: string;
   /**
+   * The origin from which the token will be used
+   */
+  embedOrigin: string;
+  /**
    * Token expiration in seconds
    */
   expiresAfter: number;
@@ -34,12 +38,14 @@ export const CreateResponseBody$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   client_token: z.string(),
+  embed_origin: z.string(),
   expires_after: z.number().int(),
   status: z.string(),
   user_identifier: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "client_token": "clientToken",
+    "embed_origin": "embedOrigin",
     "expires_after": "expiresAfter",
     "user_identifier": "userIdentifier",
   });
