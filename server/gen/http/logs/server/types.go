@@ -17,7 +17,7 @@ import (
 type SearchLogsRequestBody struct {
 	// Filter criteria for the search
 	Filter *SearchLogsFilterRequestBody `form:"filter,omitempty" json:"filter,omitempty" xml:"filter,omitempty"`
-	// Cursor for pagination (UUID)
+	// Cursor for pagination
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
 	// Sort order
 	Sort *string `form:"sort,omitempty" json:"sort,omitempty" xml:"sort,omitempty"`
@@ -30,7 +30,7 @@ type SearchLogsRequestBody struct {
 type SearchToolCallsRequestBody struct {
 	// Filter criteria for the search
 	Filter *SearchToolCallsFilterRequestBody `form:"filter,omitempty" json:"filter,omitempty" xml:"filter,omitempty"`
-	// Cursor for pagination (trace ID)
+	// Cursor for pagination
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
 	// Sort order
 	Sort *string `form:"sort,omitempty" json:"sort,omitempty" xml:"sort,omitempty"`
@@ -70,7 +70,7 @@ type SearchLogsResponseBody struct {
 type SearchToolCallsResponseBody struct {
 	// List of tool call summaries
 	ToolCalls []*ToolCallSummaryResponseBody `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
-	// Cursor for next page (trace ID)
+	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
@@ -1736,9 +1736,6 @@ func ValidateSearchLogsRequestBody(body *SearchLogsRequestBody) (err error) {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
-	if body.Cursor != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.cursor", *body.Cursor, goa.FormatUUID))
-	}
 	if body.Sort != nil {
 		if !(*body.Sort == "asc" || *body.Sort == "desc") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort", *body.Sort, []any{"asc", "desc"}))
@@ -1764,9 +1761,6 @@ func ValidateSearchToolCallsRequestBody(body *SearchToolCallsRequestBody) (err e
 		if err2 := ValidateSearchToolCallsFilterRequestBody(body.Filter); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
-	}
-	if body.Cursor != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.cursor", *body.Cursor, "^[a-f0-9]{32}$"))
 	}
 	if body.Sort != nil {
 		if !(*body.Sort == "asc" || *body.Sort == "desc") {

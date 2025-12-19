@@ -421,9 +421,7 @@ var SearchLogsPayload = Type("SearchLogsPayload", func() {
 	Description("Payload for searching unified telemetry logs following OpenTelemetry Logs Data Model")
 
 	Attribute("filter", SearchLogsFilter, "Filter criteria for the search")
-	Attribute("cursor", String, "Cursor for pagination (UUID)", func() {
-		Format(FormatUUID)
-	})
+	Attribute("cursor", String, "Cursor for pagination")
 	Attribute("sort", String, "Sort order", func() {
 		Enum("asc", "desc")
 		Default("desc")
@@ -439,9 +437,7 @@ var SearchLogsResult = Type("SearchLogsResult", func() {
 	Description("Result of searching unified telemetry logs")
 
 	Attribute("logs", ArrayOf(TelemetryLogRecord), "List of telemetry log records")
-	Attribute("next_cursor", String, "Cursor for next page", func() {
-		Format(FormatUUID)
-	})
+	Attribute("next_cursor", String, "Cursor for next page")
 
 	Required("logs")
 })
@@ -493,9 +489,7 @@ var SearchToolCallsPayload = Type("SearchToolCallsPayload", func() {
 	Description("Payload for searching tool call summaries")
 
 	Attribute("filter", SearchToolCallsFilter, "Filter criteria for the search")
-	Attribute("cursor", String, "Cursor for pagination (trace ID)", func() {
-		Pattern("^[a-f0-9]{32}$")
-	})
+	Attribute("cursor", String, "Cursor for pagination")
 	Attribute("sort", String, "Sort order", func() {
 		Enum("asc", "desc")
 		Default("desc")
@@ -511,9 +505,7 @@ var SearchToolCallsResult = Type("SearchToolCallsResult", func() {
 	Description("Result of searching tool call summaries")
 
 	Attribute("tool_calls", ArrayOf(ToolCallSummary), "List of tool call summaries")
-	Attribute("next_cursor", String, "Cursor for next page (trace ID)", func() {
-		Pattern("^[a-f0-9]{32}$")
-	})
+	Attribute("next_cursor", String, "Cursor for next page")
 
 	Required("tool_calls")
 })

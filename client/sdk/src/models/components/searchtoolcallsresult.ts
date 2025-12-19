@@ -17,7 +17,7 @@ import {
  */
 export type SearchToolCallsResult = {
   /**
-   * Cursor for next page (trace ID)
+   * Cursor for next page
    */
   nextCursor?: string | undefined;
   /**

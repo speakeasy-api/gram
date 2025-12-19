@@ -13672,8 +13672,7 @@ components:
       properties:
         cursor:
           type: string
-          description: Cursor for pagination (UUID)
-          format: uuid
+          description: Cursor for pagination
         filter:
           $ref: '#/components/schemas/SearchLogsFilter'
         limit:
@@ -13702,7 +13701,6 @@ components:
         next_cursor:
           type: string
           description: Cursor for next page
-          format: uuid
       description: Result of searching unified telemetry logs
       required:
         - logs
@@ -13736,8 +13734,7 @@ components:
       properties:
         cursor:
           type: string
-          description: Cursor for pagination (trace ID)
-          pattern: ^[a-f0-9]{32}$
+          description: Cursor for pagination
         filter:
           $ref: '#/components/schemas/SearchToolCallsFilter'
         limit:
@@ -13760,8 +13757,7 @@ components:
       properties:
         next_cursor:
           type: string
-          description: Cursor for next page (trace ID)
-          pattern: ^[a-f0-9]{32}$
+          description: Cursor for next page
         tool_calls:
           type: array
           items:

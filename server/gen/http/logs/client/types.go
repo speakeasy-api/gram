@@ -17,7 +17,7 @@ import (
 type SearchLogsRequestBody struct {
 	// Filter criteria for the search
 	Filter *SearchLogsFilterRequestBody `form:"filter,omitempty" json:"filter,omitempty" xml:"filter,omitempty"`
-	// Cursor for pagination (UUID)
+	// Cursor for pagination
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
 	// Sort order
 	Sort string `form:"sort" json:"sort" xml:"sort"`
@@ -30,7 +30,7 @@ type SearchLogsRequestBody struct {
 type SearchToolCallsRequestBody struct {
 	// Filter criteria for the search
 	Filter *SearchToolCallsFilterRequestBody `form:"filter,omitempty" json:"filter,omitempty" xml:"filter,omitempty"`
-	// Cursor for pagination (trace ID)
+	// Cursor for pagination
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
 	// Sort order
 	Sort string `form:"sort" json:"sort" xml:"sort"`
@@ -70,7 +70,7 @@ type SearchLogsResponseBody struct {
 type SearchToolCallsResponseBody struct {
 	// List of tool call summaries
 	ToolCalls []*ToolCallSummaryResponseBody `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
-	// Cursor for next page (trace ID)
+	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
@@ -1754,9 +1754,6 @@ func ValidateSearchLogsResponseBody(body *SearchLogsResponseBody) (err error) {
 			}
 		}
 	}
-	if body.NextCursor != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.next_cursor", *body.NextCursor, goa.FormatUUID))
-	}
 	return
 }
 
@@ -1772,9 +1769,6 @@ func ValidateSearchToolCallsResponseBody(body *SearchToolCallsResponseBody) (err
 				err = goa.MergeErrors(err, err2)
 			}
 		}
-	}
-	if body.NextCursor != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.next_cursor", *body.NextCursor, "^[a-f0-9]{32}$"))
 	}
 	return
 }

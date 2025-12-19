@@ -213,7 +213,7 @@ type SearchLogsPayload struct {
 	ProjectSlugInput *string
 	// Filter criteria for the search
 	Filter *SearchLogsFilter
-	// Cursor for pagination (UUID)
+	// Cursor for pagination
 	Cursor *string
 	// Sort order
 	Sort string
@@ -251,7 +251,7 @@ type SearchToolCallsPayload struct {
 	ProjectSlugInput *string
 	// Filter criteria for the search
 	Filter *SearchToolCallsFilter
-	// Cursor for pagination (trace ID)
+	// Cursor for pagination
 	Cursor *string
 	// Sort order
 	Sort string
@@ -264,7 +264,7 @@ type SearchToolCallsPayload struct {
 type SearchToolCallsResult struct {
 	// List of tool call summaries
 	ToolCalls []*ToolCallSummary
-	// Cursor for next page (trace ID)
+	// Cursor for next page
 	NextCursor *string
 }
 

@@ -29,7 +29,7 @@ export type SearchToolCallsPayloadSort = ClosedEnum<
  */
 export type SearchToolCallsPayload = {
   /**
-   * Cursor for pagination (trace ID)
+   * Cursor for pagination
    */
   cursor?: string | undefined;
   /**

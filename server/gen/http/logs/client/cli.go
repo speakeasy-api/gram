@@ -101,7 +101,7 @@ func BuildListLogsPayload(logsListLogsToolID string, logsListLogsTsStart string,
 		if logsListLogsToolUrns != "" {
 			err = json.Unmarshal([]byte(logsListLogsToolUrns), &toolUrns)
 			if err != nil {
-				return nil, fmt.Errorf("invalid JSON for toolUrns, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"Voluptatem ut ipsum dolores.\",\n      \"Sapiente eveniet eaque.\"\n   ]'")
+				return nil, fmt.Errorf("invalid JSON for toolUrns, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"Consequatur dolor eos aut et.\",\n      \"Rerum repellat amet ipsam consequatur fuga magnam.\",\n      \"Et qui libero nihil et magnam dolor.\",\n      \"Possimus cum vero natus et eum.\"\n   ]'")
 			}
 		}
 	}
@@ -360,7 +360,7 @@ func BuildSearchLogsPayload(logsSearchLogsBody string, logsSearchLogsApikeyToken
 	{
 		err = json.Unmarshal([]byte(logsSearchLogsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"0a5a2d27-c414-4361-b1b8-201223b3b708\",\n      \"filter\": {\n         \"deployment_id\": \"912267ac-8b59-4f90-bb32-6afcc9c8f1eb\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"a0ea0241-fd7e-4180-ac35-3efae0bfd299\",\n         \"gram_urn\": \"Doloremque ducimus fugiat est.\",\n         \"http_method\": \"HEAD\",\n         \"http_route\": \"Vero ut fuga veritatis et repudiandae nihil.\",\n         \"http_status_code\": 658207726,\n         \"service_name\": \"Deserunt fugiat autem voluptas voluptatem.\",\n         \"severity_text\": \"ERROR\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"8efbd4a2a2a7f3beacc776a4cb3cef87\"\n      },\n      \"limit\": 841,\n      \"sort\": \"asc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Voluptatum optio aut dolore ex.\",\n      \"filter\": {\n         \"deployment_id\": \"d901177b-a7b7-47ba-85e2-dad02598e3e4\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"77f98452-a06d-4003-837c-31e378a2b84c\",\n         \"gram_urn\": \"Molestiae molestiae consectetur fugit aspernatur pariatur esse.\",\n         \"http_method\": \"HEAD\",\n         \"http_route\": \"Aspernatur laborum sed blanditiis amet.\",\n         \"http_status_code\": 1919514860,\n         \"service_name\": \"Maxime aliquid sit exercitationem consequatur.\",\n         \"severity_text\": \"FATAL\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"dd9404d5463eac6b6347f70a8c638a3f\"\n      },\n      \"limit\": 524,\n      \"sort\": \"asc\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -416,7 +416,7 @@ func BuildSearchToolCallsPayload(logsSearchToolCallsBody string, logsSearchToolC
 	{
 		err = json.Unmarshal([]byte(logsSearchToolCallsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"c0516b24b4f6533d67f9611a3a855a5d\",\n      \"filter\": {\n         \"deployment_id\": \"a6d57cf8-6991-4070-8162-ff16bcefc176\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"d58b697b-2f33-4a80-9740-dd06415e6d7a\",\n         \"gram_urn\": \"Sed illum eum sapiente aut omnis.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 682,\n      \"sort\": \"asc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Nesciunt et fuga nemo quasi voluptas.\",\n      \"filter\": {\n         \"deployment_id\": \"24fe6b1c-dbc3-4dda-9113-7232b32d2215\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"179726d1-3968-46e5-bb76-7759bdb52aec\",\n         \"gram_urn\": \"A rerum quam.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 210,\n      \"sort\": \"asc\"\n   }'")
 		}
 	}
 	var apikeyToken *string

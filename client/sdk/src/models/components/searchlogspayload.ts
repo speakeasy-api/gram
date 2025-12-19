@@ -27,7 +27,7 @@ export type Sort = ClosedEnum<typeof Sort>;
  */
 export type SearchLogsPayload = {
   /**
-   * Cursor for pagination (UUID)
+   * Cursor for pagination
    */
   cursor?: string | undefined;
   /**
