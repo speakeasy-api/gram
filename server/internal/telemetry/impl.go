@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	srv "github.com/speakeasy-api/gram/server/gen/http/logs/server"
 	gen "github.com/speakeasy-api/gram/server/gen/logs"
+	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -300,7 +301,7 @@ func toToolExecutionLog(r repo.ToolLog) *gen.ToolExecutionLog {
 
 
 // SearchLogs retrieves unified telemetry logs with pagination.
-func (s *Service) SearchLogs(ctx context.Context, payload *gen.SearchLogsPayload) (res *gen.SearchLogsResult, err error) {
+func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsPayload) (res *telem_gen.SearchLogsResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -384,7 +385,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *gen.SearchLogsPayload
 	}
 
 	// Convert repo models to Goa types
-	telemetryLogs := make([]*gen.TelemetryLogRecord, len(items))
+	telemetryLogs := make([]*telem_gen.TelemetryLogRecord, len(items))
 	for i, log := range items {
 		record, err := toTelemetryLogPayload(log)
 		if err != nil {
@@ -393,14 +394,14 @@ func (s *Service) SearchLogs(ctx context.Context, payload *gen.SearchLogsPayload
 		telemetryLogs[i] = record
 	}
 
-	return &gen.SearchLogsResult{
+	return &telem_gen.SearchLogsResult{
 		Logs:       telemetryLogs,
 		NextCursor: nextCursor,
 	}, nil
 }
 
 // SearchToolCalls retrieves tool call summaries with pagination.
-func (s *Service) SearchToolCalls(ctx context.Context, payload *gen.SearchToolCallsPayload) (res *gen.SearchToolCallsResult, err error) {
+func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.SearchToolCallsPayload) (res *telem_gen.SearchToolCallsResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -468,9 +469,9 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *gen.SearchToolCa
 	}
 
 	// Convert repo models to Goa types
-	toolCalls := make([]*gen.ToolCallSummary, len(items))
+	toolCalls := make([]*telem_gen.ToolCallSummary, len(items))
 	for i, item := range items {
-		toolCalls[i] = &gen.ToolCallSummary{
+		toolCalls[i] = &telem_gen.ToolCallSummary{
 			TraceID:           item.TraceID,
 			StartTimeUnixNano: item.StartTimeUnixNano,
 			LogCount:          item.LogCount,
@@ -479,7 +480,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *gen.SearchToolCa
 		}
 	}
 
-	return &gen.SearchToolCallsResult{
+	return &telem_gen.SearchToolCallsResult{
 		ToolCalls:  toolCalls,
 		NextCursor: nextCursor,
 	}, nil
@@ -513,7 +514,7 @@ func parseTimeRange(from, to *string) (timeStart, timeEnd int64, err error) {
 
 // toTelemetryLogPayload converts a ClickHouse telemetry log record to the API response format.
 // It parses the JSON-encoded attributes and resource_attributes fields into proper JSON objects.
-func toTelemetryLogPayload(log repo.TelemetryLog) (*gen.TelemetryLogRecord, error) {
+func toTelemetryLogPayload(log repo.TelemetryLog) (*telem_gen.TelemetryLogRecord, error) {
 	// Parse JSON attributes into objects
 	var attributes any
 	var resourceAttributes any
@@ -525,7 +526,7 @@ func toTelemetryLogPayload(log repo.TelemetryLog) (*gen.TelemetryLogRecord, erro
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse resource attributes")
 	}
 
-	return &gen.TelemetryLogRecord{
+	return &telem_gen.TelemetryLogRecord{
 		ID:                   log.ID,
 		TimeUnixNano:         log.TimeUnixNano,
 		ObservedTimeUnixNano: log.ObservedTimeUnixNano,
@@ -535,7 +536,7 @@ func toTelemetryLogPayload(log repo.TelemetryLog) (*gen.TelemetryLogRecord, erro
 		SpanID:               log.SpanID,
 		Attributes:           attributes,
 		ResourceAttributes:   resourceAttributes,
-		Service: &gen.ServiceInfo{
+		Service: &telem_gen.ServiceInfo{
 			Name:    log.ServiceName,
 			Version: log.ServiceVersion,
 		},

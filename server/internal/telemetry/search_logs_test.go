@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	gen "github.com/speakeasy-api/gram/server/gen/logs"
+	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/stretchr/testify/require"
 )
