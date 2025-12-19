@@ -16,6 +16,10 @@ func (n *StubToolMetricsClient) ListToolLogs(_ context.Context, _ repo.ListToolL
 	return nil, nil
 }
 
+func (n *StubToolMetricsClient) ListTelemetryLogs(_ context.Context, _ repo.ListTelemetryLogsParams) ([]repo.TelemetryLog, error) {
+	return nil, nil
+}
+
 func (n *StubToolMetricsClient) LogHTTPRequest(_ context.Context, _ repo.ToolHTTPRequest) error {
 	return nil
 }

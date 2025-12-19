@@ -1,0 +1,24 @@
+# ListTracesRequest
+
+## Example Usage
+
+```typescript
+import { ListTracesRequest } from "@gram/client/models/operations";
+
+let value: ListTracesRequest = {};
+```
+
+## Fields
+
+| Field                                                                                      | Type                                                                                       | Required                                                                                   | Description                                                                                |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `timeStart`                                                                                | *number*                                                                                   | :heavy_minus_sign:                                                                         | Start time in Unix nanoseconds                                                             |
+| `timeEnd`                                                                                  | *number*                                                                                   | :heavy_minus_sign:                                                                         | End time in Unix nanoseconds                                                               |
+| `deploymentId`                                                                             | *string*                                                                                   | :heavy_minus_sign:                                                                         | Deployment ID filter                                                                       |
+| `functionId`                                                                               | *string*                                                                                   | :heavy_minus_sign:                                                                         | Function ID filter                                                                         |
+| `cursor`                                                                                   | *string*                                                                                   | :heavy_minus_sign:                                                                         | Cursor for pagination (trace ID)                                                           |
+| `limit`                                                                                    | *number*                                                                                   | :heavy_minus_sign:                                                                         | Number of items to return (1-1000)                                                         |
+| `sort`                                                                                     | [operations.ListTracesQueryParamSort](../../models/operations/listtracesqueryparamsort.md) | :heavy_minus_sign:                                                                         | Sort order                                                                                 |
+| `gramKey`                                                                                  | *string*                                                                                   | :heavy_minus_sign:                                                                         | API Key header                                                                             |
+| `gramSession`                                                                              | *string*                                                                                   | :heavy_minus_sign:                                                                         | Session header                                                                             |
+| `gramProject`                                                                              | *string*                                                                                   | :heavy_minus_sign:                                                                         | project header                                                                             |

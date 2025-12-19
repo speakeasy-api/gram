@@ -8,7 +8,7 @@
 "aqua:ariga/atlas" = "0.38.0"
 "aqua:pvolok/mprocs" = "0.7.2"
 "ubi:sbdchd/squawk" = "1.6.1"
-"ubi:speakeasy-api/speakeasy" = "1.673.1"
+"ubi:speakeasy-api/speakeasy" = "1.680.0"
 "ubi:FiloSottile/mkcert" = "1.4.4"
 apko = "0.30.29"
 flyctl = "0.3.189"
