@@ -79,7 +79,7 @@ func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, opts 
 	transport := &mcp.StreamableClientTransport{
 		Endpoint:   remoteURL,
 		HTTPClient: httpClient,
-		MaxRetries: 0,
+		MaxRetries: 3,
 	}
 
 	session, err := client.Connect(ctx, transport, nil)

@@ -6,7 +6,9 @@
 import { CreateChatSessionRequest } from "@gram/client/models/operations";
 
 let value: CreateChatSessionRequest = {
-  createRequestBody: {},
+  createRequestBody: {
+    embedOrigin: "<value>",
+  },
 };
 ```
 

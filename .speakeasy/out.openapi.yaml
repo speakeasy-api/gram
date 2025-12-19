@@ -11084,6 +11084,9 @@ components:
     CreateRequestBody:
       type: object
       properties:
+        embed_origin:
+          type: string
+          description: The origin from which the token will be used
         expires_after:
           type: integer
           description: Token expiration in seconds (max / default 3600)
@@ -11094,12 +11097,17 @@ components:
         user_identifier:
           type: string
           description: Optional free-form user identifier
+      required:
+        - embed_origin
     CreateResponseBody:
       type: object
       properties:
         client_token:
           type: string
           description: JWT token for chat session
+        embed_origin:
+          type: string
+          description: The origin from which the token will be used
         expires_after:
           type: integer
           description: Token expiration in seconds
@@ -11111,6 +11119,7 @@ components:
           type: string
           description: User identifier if provided
       required:
+        - embed_origin
         - client_token
         - expires_after
         - status
@@ -11679,6 +11688,23 @@ components:
         name:
           type: string
           description: The reverse-DNS name of the external MCP server (e.g., ai.exa/exa)
+        oauth_authorization_endpoint:
+          type: string
+          description: The OAuth authorization endpoint URL
+        oauth_registration_endpoint:
+          type: string
+          description: The OAuth dynamic client registration endpoint URL
+        oauth_scopes_supported:
+          type: array
+          items:
+            type: string
+          description: The OAuth scopes supported by the server
+        oauth_token_endpoint:
+          type: string
+          description: The OAuth token endpoint URL
+        oauth_version:
+          type: string
+          description: 'OAuth version: ''2.1'' (MCP OAuth), ''2.0'' (legacy), or ''none'''
         registry_id:
           type: string
           description: The ID of the MCP registry
@@ -11709,6 +11735,7 @@ components:
         - slug
         - remote_url
         - requires_oauth
+        - oauth_version
         - created_at
         - updated_at
     ExternalOAuthServer:

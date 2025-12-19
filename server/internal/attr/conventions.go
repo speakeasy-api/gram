@@ -116,14 +116,18 @@ const (
 	McpURLKey                      = attribute.Key("gram.mcp.url")
 	MetricNameKey                  = attribute.Key("gram.metric.name")
 	MimeTypeKey                    = attribute.Key("mime.type")
+	OAuthAuthorizationEndpointKey  = attribute.Key("gram.oauth.authorization_endpoint")
 	OAuthClientIDKey               = attribute.Key("gram.oauth.client_id")
 	OAuthCodeKey                   = attribute.Key("gram.oauth.code")
 	OAuthExternalCodeKey           = attribute.Key("gram.oauth.external_code")
 	OAuthGrantKey                  = attribute.Key("gram.oauth.grant")
 	OAuthProviderKey               = attribute.Key("gram.oauth.provider")
 	OAuthRedirectURIFullKey        = attribute.Key("gram.oauth.redirect_uri.full")
+	OAuthRegistrationEndpointKey   = attribute.Key("gram.oauth.registration_endpoint")
 	OAuthRequiredKey               = attribute.Key("gram.oauth.required")
 	OAuthScopeKey                  = attribute.Key("gram.oauth.scope")
+	OAuthTokenEndpointKey          = attribute.Key("gram.oauth.token_endpoint")
+	OAuthVersionKey                = attribute.Key("gram.oauth.version")
 	OpenAPIMethodKey               = attribute.Key("gram.openapi.method")
 	OpenAPIOperationIDKey          = attribute.Key("gram.openapi.operation_id")
 	OpenAPIPathKey                 = attribute.Key("gram.openapi.path")
@@ -494,6 +498,13 @@ func SlogIngressName(v string) slog.Attr      { return slog.String(string(Ingres
 func MetricName(v string) attribute.KeyValue { return MetricNameKey.String(v) }
 func SlogMetricName(v string) slog.Attr      { return slog.String(string(MetricNameKey), v) }
 
+func OAuthAuthorizationEndpoint(v string) attribute.KeyValue {
+	return OAuthAuthorizationEndpointKey.String(v)
+}
+func SlogOAuthAuthorizationEndpoint(v string) slog.Attr {
+	return slog.String(string(OAuthAuthorizationEndpointKey), v)
+}
+
 func OAuthClientID(v string) attribute.KeyValue { return OAuthClientIDKey.String(v) }
 func SlogOAuthClientID(v string) slog.Attr      { return slog.String(string(OAuthClientIDKey), v) }
 
@@ -514,11 +525,26 @@ func SlogOAuthRedirectURIFull(v string) slog.Attr {
 	return slog.String(string(OAuthRedirectURIFullKey), v)
 }
 
+func OAuthRegistrationEndpoint(v string) attribute.KeyValue {
+	return OAuthRegistrationEndpointKey.String(v)
+}
+func SlogOAuthRegistrationEndpoint(v string) slog.Attr {
+	return slog.String(string(OAuthRegistrationEndpointKey), v)
+}
+
 func OAuthRequired(v bool) attribute.KeyValue { return OAuthRequiredKey.Bool(v) }
 func SlogOAuthRequired(v bool) slog.Attr      { return slog.Bool(string(OAuthRequiredKey), v) }
 
 func OAuthScope(v string) attribute.KeyValue { return OAuthScopeKey.String(v) }
 func SlogOAuthScope(v string) slog.Attr      { return slog.String(string(OAuthScopeKey), v) }
+
+func OAuthTokenEndpoint(v string) attribute.KeyValue { return OAuthTokenEndpointKey.String(v) }
+func SlogOAuthTokenEndpoint(v string) slog.Attr {
+	return slog.String(string(OAuthTokenEndpointKey), v)
+}
+
+func OAuthVersion(v string) attribute.KeyValue { return OAuthVersionKey.String(v) }
+func SlogOAuthVersion(v string) slog.Attr      { return slog.String(string(OAuthVersionKey), v) }
 
 func OpenAPIMethod(v string) attribute.KeyValue { return OpenAPIMethodKey.String(v) }
 func SlogOpenAPIMethod(v string) slog.Attr      { return slog.String(string(OpenAPIMethodKey), v) }

@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type CreateRequestBody = {
   /**
+   * The origin from which the token will be used
+   */
+  embedOrigin: string;
+  /**
    * Token expiration in seconds (max / default 3600)
    */
   expiresAfter?: number | undefined;
@@ -18,6 +22,7 @@ export type CreateRequestBody = {
 
 /** @internal */
 export type CreateRequestBody$Outbound = {
+  embed_origin: string;
   expires_after: number;
   user_identifier?: string | undefined;
 };
@@ -28,10 +33,12 @@ export const CreateRequestBody$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   CreateRequestBody
 > = z.object({
+  embedOrigin: z.string(),
   expiresAfter: z.number().int().default(3600),
   userIdentifier: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    embedOrigin: "embed_origin",
     expiresAfter: "expires_after",
     userIdentifier: "user_identifier",
   });

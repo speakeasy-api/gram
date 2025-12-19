@@ -753,17 +753,22 @@ func readToolsetTools(
 
 			tools = append(tools, &types.Tool{
 				ExternalMcpToolDefinition: &types.ExternalMCPToolDefinition{
-					ID:                      def.ID.String(),
-					ToolUrn:                 def.ToolUrn,
-					DeploymentExternalMcpID: def.ExternalMcpAttachmentID.String(),
-					DeploymentID:            def.DeploymentID.String(),
-					RegistryID:              def.RegistryID.String(),
-					Name:                    def.Name,
-					Slug:                    def.Slug,
-					RemoteURL:               def.RemoteUrl,
-					RequiresOauth:           def.RequiresOauth,
-					CreatedAt:               def.CreatedAt.Time.Format(time.RFC3339),
-					UpdatedAt:               def.UpdatedAt.Time.Format(time.RFC3339),
+					ID:                         def.ID.String(),
+					ToolUrn:                    def.ToolUrn,
+					DeploymentExternalMcpID:    def.ExternalMcpAttachmentID.String(),
+					DeploymentID:               def.DeploymentID.String(),
+					RegistryID:                 def.RegistryID.String(),
+					Name:                       def.Name,
+					Slug:                       def.Slug,
+					RemoteURL:                  def.RemoteUrl,
+					RequiresOauth:              def.RequiresOauth,
+					OauthVersion:               def.OauthVersion,
+					OauthAuthorizationEndpoint: conv.FromPGText[string](def.OauthAuthorizationEndpoint),
+					OauthTokenEndpoint:         conv.FromPGText[string](def.OauthTokenEndpoint),
+					OauthRegistrationEndpoint:  conv.FromPGText[string](def.OauthRegistrationEndpoint),
+					OauthScopesSupported:       def.OauthScopesSupported,
+					CreatedAt:                  def.CreatedAt.Time.Format(time.RFC3339),
+					UpdatedAt:                  def.UpdatedAt.Time.Format(time.RFC3339),
 				},
 			})
 		}

@@ -11593,6 +11593,23 @@ components:
                 name:
                     type: string
                     description: The reverse-DNS name of the external MCP server (e.g., ai.exa/exa)
+                oauth_authorization_endpoint:
+                    type: string
+                    description: The OAuth authorization endpoint URL
+                oauth_registration_endpoint:
+                    type: string
+                    description: The OAuth dynamic client registration endpoint URL
+                oauth_scopes_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: The OAuth scopes supported by the server
+                oauth_token_endpoint:
+                    type: string
+                    description: The OAuth token endpoint URL
+                oauth_version:
+                    type: string
+                    description: 'OAuth version: ''2.1'' (MCP OAuth), ''2.0'' (legacy), or ''none'''
                 registry_id:
                     type: string
                     description: The ID of the MCP registry
@@ -11623,6 +11640,7 @@ components:
                 - slug
                 - remote_url
                 - requires_oauth
+                - oauth_version
                 - created_at
                 - updated_at
         ExternalOAuthServer:

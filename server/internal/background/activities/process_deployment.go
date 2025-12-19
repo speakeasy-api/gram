@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sourcegraph/conc/pool"
 	"go.opentelemetry.io/otel/codes"
@@ -438,12 +439,33 @@ func (p *ProcessDeployment) doExternalMCPs(
 
 			// Attempt to connect to detect OAuth requirements
 			var requiresOAuth bool
+			var oauthDiscovery *externalmcp.OAuthDiscoveryResult
 			mcpClient, err := externalmcp.NewClient(ctx, logger, serverDetails.RemoteURL, nil)
-			if _, ok := externalmcp.IsAuthRequiredError(err); ok {
+			if authErr, ok := externalmcp.IsAuthRequiredError(err); ok {
 				requiresOAuth = true
 				logger.InfoContext(ctx, "external MCP server requires OAuth",
 					attr.SlogURL(serverDetails.RemoteURL),
 				)
+
+				// Discover OAuth metadata
+				oauthDiscovery, err = externalmcp.DiscoverOAuthMetadata(ctx, logger, authErr.WWWAuthenticate, serverDetails.RemoteURL)
+				if err != nil {
+					return oops.E(oops.CodeUnexpected, err, "error discovering OAuth metadata").Log(ctx, logger)
+				}
+
+				logger.InfoContext(ctx, "discovered OAuth metadata",
+					attr.SlogOAuthVersion(oauthDiscovery.Version),
+					attr.SlogOAuthAuthorizationEndpoint(oauthDiscovery.AuthorizationEndpoint),
+					attr.SlogOAuthTokenEndpoint(oauthDiscovery.TokenEndpoint),
+					attr.SlogOAuthRegistrationEndpoint(oauthDiscovery.RegistrationEndpoint),
+				)
+
+				// Fail deployment if legacy OAuth 2.0 is detected
+				if oauthDiscovery.Version == externalmcp.OAuthVersion20 {
+					return oops.E(oops.CodeUnexpected, nil,
+						"external MCP server uses legacy OAuth 2.0 which requires static client registration; "+
+							"dynamic client registration is not supported").Log(ctx, logger)
+				}
 			} else if err != nil {
 				return oops.E(oops.CodeUnexpected, err, "external mcp server unavailable").Log(ctx, logger)
 			} else {
@@ -458,12 +480,35 @@ func (p *ProcessDeployment) doExternalMCPs(
 				Name:   "proxy",
 			}
 
+			// Build OAuth metadata params
+			oauthVersion := externalmcp.OAuthVersionNone
+			var oauthAuthEndpoint, oauthTokenEndpoint, oauthRegEndpoint pgtype.Text
+			var oauthScopes []string
+			if oauthDiscovery != nil {
+				oauthVersion = oauthDiscovery.Version
+				if oauthDiscovery.AuthorizationEndpoint != "" {
+					oauthAuthEndpoint = pgtype.Text{String: oauthDiscovery.AuthorizationEndpoint, Valid: true}
+				}
+				if oauthDiscovery.TokenEndpoint != "" {
+					oauthTokenEndpoint = pgtype.Text{String: oauthDiscovery.TokenEndpoint, Valid: true}
+				}
+				if oauthDiscovery.RegistrationEndpoint != "" {
+					oauthRegEndpoint = pgtype.Text{String: oauthDiscovery.RegistrationEndpoint, Valid: true}
+				}
+				oauthScopes = oauthDiscovery.ScopesSupported
+			}
+
 			// Create the proxy tool definition with the remote URL and OAuth info
 			_, err = p.externalmcp.CreateExternalMCPToolDefinition(ctx, externalmcpRepo.CreateExternalMCPToolDefinitionParams{
-				ExternalMcpAttachmentID: mcp.ID,
-				ToolUrn:                 toolURN.String(),
-				RemoteUrl:               serverDetails.RemoteURL,
-				RequiresOauth:           requiresOAuth,
+				ExternalMcpAttachmentID:    mcp.ID,
+				ToolUrn:                    toolURN.String(),
+				RemoteUrl:                  serverDetails.RemoteURL,
+				RequiresOauth:              requiresOAuth,
+				OauthVersion:               oauthVersion,
+				OauthAuthorizationEndpoint: oauthAuthEndpoint,
+				OauthTokenEndpoint:         oauthTokenEndpoint,
+				OauthRegistrationEndpoint:  oauthRegEndpoint,
+				OauthScopesSupported:       oauthScopes,
 			})
 			if err != nil {
 				return oops.E(oops.CodeUnexpected, err, "error creating external mcp tool definition").Log(ctx, logger)
@@ -472,6 +517,7 @@ func (p *ProcessDeployment) doExternalMCPs(
 			logger.InfoContext(ctx, "created external mcp proxy tool",
 				attr.SlogToolURN(toolURN.String()),
 				attr.SlogOAuthRequired(requiresOAuth),
+				attr.SlogOAuthVersion(oauthVersion),
 			)
 
 			return nil
