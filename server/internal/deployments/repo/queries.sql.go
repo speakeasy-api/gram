@@ -67,17 +67,18 @@ func (q *Queries) CloneDeployment(ctx context.Context, arg CloneDeploymentParams
 }
 
 const cloneDeploymentExternalMCPs = `-- name: CloneDeploymentExternalMCPs :many
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug)
+INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
 SELECT
   $1
   , current.registry_id
   , current.name
   , current.slug
+  , current.registry_server_specifier
 FROM external_mcp_attachments as current
 WHERE current.deployment_id = $2
   AND current.deleted IS FALSE
   AND current.slug <> ALL ($3::text[])
-RETURNING id, deployment_id, registry_id, name, slug
+RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier
 `
 
 type CloneDeploymentExternalMCPsParams struct {
@@ -87,11 +88,12 @@ type CloneDeploymentExternalMCPsParams struct {
 }
 
 type CloneDeploymentExternalMCPsRow struct {
-	ID           uuid.UUID
-	DeploymentID uuid.UUID
-	RegistryID   uuid.UUID
-	Name         string
-	Slug         string
+	ID                      uuid.UUID
+	DeploymentID            uuid.UUID
+	RegistryID              uuid.UUID
+	Name                    string
+	Slug                    string
+	RegistryServerSpecifier string
 }
 
 func (q *Queries) CloneDeploymentExternalMCPs(ctx context.Context, arg CloneDeploymentExternalMCPsParams) ([]CloneDeploymentExternalMCPsRow, error) {
@@ -109,6 +111,7 @@ func (q *Queries) CloneDeploymentExternalMCPs(ctx context.Context, arg CloneDepl
 			&i.RegistryID,
 			&i.Name,
 			&i.Slug,
+			&i.RegistryServerSpecifier,
 		); err != nil {
 			return nil, err
 		}
@@ -1260,7 +1263,8 @@ SELECT
   external_mcp_attachments.id as external_mcp_id,
   external_mcp_attachments.registry_id as external_mcp_registry_id,
   external_mcp_attachments.name as external_mcp_name,
-  external_mcp_attachments.slug as external_mcp_slug
+  external_mcp_attachments.slug as external_mcp_slug,
+  external_mcp_attachments.registry_server_specifier as external_mcp_registry_server_specifier
 FROM deployments
 LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
 LEFT JOIN deployments_functions ON deployments.id = deployments_functions.deployment_id
@@ -1280,30 +1284,31 @@ type GetDeploymentWithAssetsParams struct {
 }
 
 type GetDeploymentWithAssetsRow struct {
-	Deployment                       Deployment
-	Status                           string
-	DeploymentsOpenapiv3AssetID      uuid.NullUUID
-	DeploymentsOpenapiv3AssetStoreID uuid.NullUUID
-	DeploymentsOpenapiv3AssetName    pgtype.Text
-	DeploymentsOpenapiv3AssetSlug    pgtype.Text
-	DeploymentsFunctionsID           uuid.NullUUID
-	DeploymentsFunctionsAssetID      uuid.NullUUID
-	DeploymentsFunctionsName         pgtype.Text
-	DeploymentsFunctionsSlug         pgtype.Text
-	DeploymentsFunctionsRuntime      pgtype.Text
-	DeploymentPackageID              uuid.NullUUID
-	PackageName                      pgtype.Text
-	PackageVersionMajor              pgtype.Int8
-	PackageVersionMinor              pgtype.Int8
-	PackageVersionPatch              pgtype.Int8
-	PackageVersionPrerelease         pgtype.Text
-	PackageVersionBuild              pgtype.Text
-	Openapiv3ToolCount               int64
-	FunctionsToolCount               int64
-	ExternalMcpID                    uuid.NullUUID
-	ExternalMcpRegistryID            uuid.NullUUID
-	ExternalMcpName                  pgtype.Text
-	ExternalMcpSlug                  pgtype.Text
+	Deployment                         Deployment
+	Status                             string
+	DeploymentsOpenapiv3AssetID        uuid.NullUUID
+	DeploymentsOpenapiv3AssetStoreID   uuid.NullUUID
+	DeploymentsOpenapiv3AssetName      pgtype.Text
+	DeploymentsOpenapiv3AssetSlug      pgtype.Text
+	DeploymentsFunctionsID             uuid.NullUUID
+	DeploymentsFunctionsAssetID        uuid.NullUUID
+	DeploymentsFunctionsName           pgtype.Text
+	DeploymentsFunctionsSlug           pgtype.Text
+	DeploymentsFunctionsRuntime        pgtype.Text
+	DeploymentPackageID                uuid.NullUUID
+	PackageName                        pgtype.Text
+	PackageVersionMajor                pgtype.Int8
+	PackageVersionMinor                pgtype.Int8
+	PackageVersionPatch                pgtype.Int8
+	PackageVersionPrerelease           pgtype.Text
+	PackageVersionBuild                pgtype.Text
+	Openapiv3ToolCount                 int64
+	FunctionsToolCount                 int64
+	ExternalMcpID                      uuid.NullUUID
+	ExternalMcpRegistryID              uuid.NullUUID
+	ExternalMcpName                    pgtype.Text
+	ExternalMcpSlug                    pgtype.Text
+	ExternalMcpRegistryServerSpecifier pgtype.Text
 }
 
 func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeploymentWithAssetsParams) ([]GetDeploymentWithAssetsRow, error) {
@@ -1353,6 +1358,7 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 			&i.ExternalMcpRegistryID,
 			&i.ExternalMcpName,
 			&i.ExternalMcpSlug,
+			&i.ExternalMcpRegistryServerSpecifier,
 		); err != nil {
 			return nil, err
 		}
@@ -1432,20 +1438,21 @@ func (q *Queries) GetLatestDeploymentID(ctx context.Context, projectID uuid.UUID
 }
 
 const listDeploymentExternalMCPs = `-- name: ListDeploymentExternalMCPs :many
-SELECT id, deployment_id, registry_id, name, slug, created_at, updated_at
+SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at
 FROM external_mcp_attachments
 WHERE deployment_id = $1 AND deleted IS FALSE
 ORDER BY created_at ASC
 `
 
 type ListDeploymentExternalMCPsRow struct {
-	ID           uuid.UUID
-	DeploymentID uuid.UUID
-	RegistryID   uuid.UUID
-	Name         string
-	Slug         string
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
+	ID                      uuid.UUID
+	DeploymentID            uuid.UUID
+	RegistryID              uuid.UUID
+	Name                    string
+	Slug                    string
+	RegistryServerSpecifier string
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
 }
 
 func (q *Queries) ListDeploymentExternalMCPs(ctx context.Context, deploymentID uuid.UUID) ([]ListDeploymentExternalMCPsRow, error) {
@@ -1463,6 +1470,7 @@ func (q *Queries) ListDeploymentExternalMCPs(ctx context.Context, deploymentID u
 			&i.RegistryID,
 			&i.Name,
 			&i.Slug,
+			&i.RegistryServerSpecifier,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -1655,31 +1663,34 @@ func (q *Queries) TransitionDeployment(ctx context.Context, arg TransitionDeploy
 }
 
 const upsertDeploymentExternalMCP = `-- name: UpsertDeploymentExternalMCP :one
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug)
-VALUES ($1, $2, $3, $4)
+INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (deployment_id, slug) WHERE deleted IS FALSE
 DO UPDATE SET
   registry_id = EXCLUDED.registry_id,
   name = EXCLUDED.name,
+  registry_server_specifier = EXCLUDED.registry_server_specifier,
   updated_at = clock_timestamp()
-RETURNING id, deployment_id, registry_id, name, slug, created_at, updated_at
+RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at
 `
 
 type UpsertDeploymentExternalMCPParams struct {
-	DeploymentID uuid.UUID
-	RegistryID   uuid.UUID
-	Name         string
-	Slug         string
+	DeploymentID            uuid.UUID
+	RegistryID              uuid.UUID
+	Name                    string
+	Slug                    string
+	RegistryServerSpecifier string
 }
 
 type UpsertDeploymentExternalMCPRow struct {
-	ID           uuid.UUID
-	DeploymentID uuid.UUID
-	RegistryID   uuid.UUID
-	Name         string
-	Slug         string
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
+	ID                      uuid.UUID
+	DeploymentID            uuid.UUID
+	RegistryID              uuid.UUID
+	Name                    string
+	Slug                    string
+	RegistryServerSpecifier string
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
 }
 
 func (q *Queries) UpsertDeploymentExternalMCP(ctx context.Context, arg UpsertDeploymentExternalMCPParams) (UpsertDeploymentExternalMCPRow, error) {
@@ -1688,6 +1699,7 @@ func (q *Queries) UpsertDeploymentExternalMCP(ctx context.Context, arg UpsertDep
 		arg.RegistryID,
 		arg.Name,
 		arg.Slug,
+		arg.RegistryServerSpecifier,
 	)
 	var i UpsertDeploymentExternalMCPRow
 	err := row.Scan(
@@ -1696,6 +1708,7 @@ func (q *Queries) UpsertDeploymentExternalMCP(ctx context.Context, arg UpsertDep
 		&i.RegistryID,
 		&i.Name,
 		&i.Slug,
+		&i.RegistryServerSpecifier,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

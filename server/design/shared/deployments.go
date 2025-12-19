@@ -138,7 +138,7 @@ var DeploymentPackage = Type("DeploymentPackage", func() {
 })
 
 var DeploymentExternalMCP = Type("DeploymentExternalMCP", func() {
-	Required("id", "registry_id", "name", "slug")
+	Required("id", "registry_id", "name", "slug", "registry_server_specifier")
 
 	Attribute("id", String, func() {
 		Description("The ID of the deployment external MCP record.")
@@ -147,10 +147,13 @@ var DeploymentExternalMCP = Type("DeploymentExternalMCP", func() {
 		Description("The ID of the MCP registry the server is from.")
 	})
 	Attribute("name", String, func() {
-		Description("The reverse-DNS name of the external MCP server.")
+		Description("The display name for the external MCP server.")
 	})
 	Attribute("slug", Slug, func() {
 		Description("A URL-friendly identifier used for tool prefixing.")
+	})
+	Attribute("registry_server_specifier", String, func() {
+		Description("The canonical server name used to look up the server in the registry.")
 	})
 
 	Meta("struct:pkg:path", "types")

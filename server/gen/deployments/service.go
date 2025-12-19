@@ -67,10 +67,13 @@ type AddDeploymentPackageForm struct {
 type AddExternalMCPForm struct {
 	// The ID of the MCP registry the server is from.
 	RegistryID string
-	// The reverse-DNS name of the external MCP server (e.g., 'ai.exa/exa').
+	// The display name for the external MCP server.
 	Name string
 	// A URL-friendly identifier used for tool prefixing (e.g., 'exa').
 	Slug types.Slug
+	// The canonical server name used to look up the server in the registry (e.g.,
+	// 'slack', 'ai.exa/exa').
+	RegistryServerSpecifier string
 }
 
 type AddFunctionsForm struct {

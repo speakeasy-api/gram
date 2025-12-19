@@ -428,7 +428,7 @@ func (p *ProcessDeployment) doExternalMCPs(
 			serverDetails, err := p.registryClient.GetServerDetails(ctx, externalmcp.Registry{
 				ID:  registry.ID,
 				URL: registry.Url,
-			}, mcp.Name)
+			}, mcp.RegistryServerSpecifier)
 			if err != nil {
 				return oops.E(oops.CodeUnexpected, err, "error fetching server details from registry").Log(ctx, logger)
 			}

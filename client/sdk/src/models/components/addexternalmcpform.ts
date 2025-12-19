@@ -7,13 +7,17 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type AddExternalMCPForm = {
   /**
-   * The reverse-DNS name of the external MCP server (e.g., 'ai.exa/exa').
+   * The display name for the external MCP server.
    */
   name: string;
   /**
    * The ID of the MCP registry the server is from.
    */
   registryId: string;
+  /**
+   * The canonical server name used to look up the server in the registry (e.g., 'slack', 'ai.exa/exa').
+   */
+  registryServerSpecifier: string;
   /**
    * A short url-friendly label that uniquely identifies a resource.
    */
@@ -24,6 +28,7 @@ export type AddExternalMCPForm = {
 export type AddExternalMCPForm$Outbound = {
   name: string;
   registry_id: string;
+  registry_server_specifier: string;
   slug: string;
 };
 
@@ -35,10 +40,12 @@ export const AddExternalMCPForm$outboundSchema: z.ZodType<
 > = z.object({
   name: z.string(),
   registryId: z.string(),
+  registryServerSpecifier: z.string(),
   slug: z.string(),
 }).transform((v) => {
   return remap$(v, {
     registryId: "registry_id",
+    registryServerSpecifier: "registry_server_specifier",
   });
 });
 

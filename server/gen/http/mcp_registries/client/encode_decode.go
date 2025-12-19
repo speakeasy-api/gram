@@ -273,13 +273,13 @@ func DecodeListCatalogResponse(decoder func(*http.Response) goahttp.Decoder, res
 // *ExternalMCPServerResponseBody.
 func unmarshalExternalMCPServerResponseBodyToTypesExternalMCPServer(v *ExternalMCPServerResponseBody) *types.ExternalMCPServer {
 	res := &types.ExternalMCPServer{
-		Name:        *v.Name,
-		Version:     *v.Version,
-		Description: *v.Description,
-		RegistryID:  *v.RegistryID,
-		Title:       v.Title,
-		IconURL:     v.IconURL,
-		Meta:        v.Meta,
+		RegistrySpecifier: *v.RegistrySpecifier,
+		Version:           *v.Version,
+		Description:       *v.Description,
+		RegistryID:        *v.RegistryID,
+		Title:             v.Title,
+		IconURL:           v.IconURL,
+		Meta:              v.Meta,
 	}
 
 	return res
