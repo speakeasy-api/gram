@@ -12,6 +12,32 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// SearchLogsRequestBody is the type of the "logs" service "searchLogs"
+// endpoint HTTP request body.
+type SearchLogsRequestBody struct {
+	// Filter criteria for the search
+	Filter *SearchLogsFilterRequestBody `form:"filter,omitempty" json:"filter,omitempty" xml:"filter,omitempty"`
+	// Cursor for pagination
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
+	// Sort order
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty" xml:"sort,omitempty"`
+	// Number of items to return (1-1000)
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
+}
+
+// SearchToolCallsRequestBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP request body.
+type SearchToolCallsRequestBody struct {
+	// Filter criteria for the search
+	Filter *SearchToolCallsFilterRequestBody `form:"filter,omitempty" json:"filter,omitempty" xml:"filter,omitempty"`
+	// Cursor for pagination
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
+	// Sort order
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty" xml:"sort,omitempty"`
+	// Number of items to return (1-1000)
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
+}
+
 // ListLogsResponseBody is the type of the "logs" service "listLogs" endpoint
 // HTTP response body.
 type ListLogsResponseBody struct {
@@ -28,6 +54,24 @@ type ListToolExecutionLogsResponseBody struct {
 	Logs []*ToolExecutionLogResponseBody `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
 	// Pagination metadata
 	Pagination *PaginationResponseResponseBody `form:"pagination,omitempty" json:"pagination,omitempty" xml:"pagination,omitempty"`
+}
+
+// SearchLogsResponseBody is the type of the "logs" service "searchLogs"
+// endpoint HTTP response body.
+type SearchLogsResponseBody struct {
+	// List of telemetry log records
+	Logs []*TelemetryLogRecordResponseBody `form:"logs" json:"logs" xml:"logs"`
+	// Cursor for next page
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// SearchToolCallsResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body.
+type SearchToolCallsResponseBody struct {
+	// List of tool call summaries
+	ToolCalls []*ToolCallSummaryResponseBody `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
+	// Cursor for next page
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // ListLogsUnauthorizedResponseBody is the type of the "logs" service
@@ -398,6 +442,368 @@ type ListToolExecutionLogsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SearchLogsUnauthorizedResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "unauthorized" error.
+type SearchLogsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchLogsForbiddenResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "forbidden" error.
+type SearchLogsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchLogsBadRequestResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "bad_request" error.
+type SearchLogsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchLogsNotFoundResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "not_found" error.
+type SearchLogsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchLogsConflictResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "conflict" error.
+type SearchLogsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchLogsUnsupportedMediaResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "unsupported_media" error.
+type SearchLogsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchLogsInvalidResponseBody is the type of the "logs" service "searchLogs"
+// endpoint HTTP response body for the "invalid" error.
+type SearchLogsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchLogsInvariantViolationResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "invariant_violation" error.
+type SearchLogsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchLogsUnexpectedResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "unexpected" error.
+type SearchLogsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchLogsGatewayErrorResponseBody is the type of the "logs" service
+// "searchLogs" endpoint HTTP response body for the "gateway_error" error.
+type SearchLogsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchToolCallsUnauthorizedResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "unauthorized" error.
+type SearchToolCallsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchToolCallsForbiddenResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "forbidden" error.
+type SearchToolCallsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchToolCallsBadRequestResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "bad_request" error.
+type SearchToolCallsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchToolCallsNotFoundResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "not_found" error.
+type SearchToolCallsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchToolCallsConflictResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "conflict" error.
+type SearchToolCallsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchToolCallsUnsupportedMediaResponseBody is the type of the "logs"
+// service "searchToolCalls" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SearchToolCallsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchToolCallsInvalidResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "invalid" error.
+type SearchToolCallsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchToolCallsInvariantViolationResponseBody is the type of the "logs"
+// service "searchToolCalls" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SearchToolCallsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchToolCallsUnexpectedResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "unexpected" error.
+type SearchToolCallsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchToolCallsGatewayErrorResponseBody is the type of the "logs" service
+// "searchToolCalls" endpoint HTTP response body for the "gateway_error" error.
+type SearchToolCallsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // HTTPToolLogResponseBody is used to define fields on response body types.
 type HTTPToolLogResponseBody struct {
 	// Id of the request
@@ -479,6 +885,94 @@ type ToolExecutionLogResponseBody struct {
 	FunctionID string `form:"function_id" json:"function_id" xml:"function_id"`
 }
 
+// TelemetryLogRecordResponseBody is used to define fields on response body
+// types.
+type TelemetryLogRecordResponseBody struct {
+	// Log record ID
+	ID string `form:"id" json:"id" xml:"id"`
+	// Unix time in nanoseconds when event occurred
+	TimeUnixNano int64 `form:"time_unix_nano" json:"time_unix_nano" xml:"time_unix_nano"`
+	// Unix time in nanoseconds when event was observed
+	ObservedTimeUnixNano int64 `form:"observed_time_unix_nano" json:"observed_time_unix_nano" xml:"observed_time_unix_nano"`
+	// Text representation of severity
+	SeverityText *string `form:"severity_text,omitempty" json:"severity_text,omitempty" xml:"severity_text,omitempty"`
+	// The primary log message
+	Body string `form:"body" json:"body" xml:"body"`
+	// W3C trace ID (32 hex characters)
+	TraceID *string `form:"trace_id,omitempty" json:"trace_id,omitempty" xml:"trace_id,omitempty"`
+	// W3C span ID (16 hex characters)
+	SpanID *string `form:"span_id,omitempty" json:"span_id,omitempty" xml:"span_id,omitempty"`
+	// Log attributes as JSON object
+	Attributes any `form:"attributes" json:"attributes" xml:"attributes"`
+	// Resource attributes as JSON object
+	ResourceAttributes any `form:"resource_attributes" json:"resource_attributes" xml:"resource_attributes"`
+	// Service information
+	Service *ServiceInfoResponseBody `form:"service" json:"service" xml:"service"`
+}
+
+// ServiceInfoResponseBody is used to define fields on response body types.
+type ServiceInfoResponseBody struct {
+	// Service name
+	Name string `form:"name" json:"name" xml:"name"`
+	// Service version
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+}
+
+// ToolCallSummaryResponseBody is used to define fields on response body types.
+type ToolCallSummaryResponseBody struct {
+	// Trace ID (32 hex characters)
+	TraceID string `form:"trace_id" json:"trace_id" xml:"trace_id"`
+	// Earliest log timestamp in Unix nanoseconds
+	StartTimeUnixNano int64 `form:"start_time_unix_nano" json:"start_time_unix_nano" xml:"start_time_unix_nano"`
+	// Total number of logs in this tool call
+	LogCount uint64 `form:"log_count" json:"log_count" xml:"log_count"`
+	// HTTP status code (if applicable)
+	HTTPStatusCode *int32 `form:"http_status_code,omitempty" json:"http_status_code,omitempty" xml:"http_status_code,omitempty"`
+	// Gram URN associated with this tool call
+	GramUrn string `form:"gram_urn" json:"gram_urn" xml:"gram_urn"`
+}
+
+// SearchLogsFilterRequestBody is used to define fields on request body types.
+type SearchLogsFilterRequestBody struct {
+	// Trace ID filter (32 hex characters)
+	TraceID *string `form:"trace_id,omitempty" json:"trace_id,omitempty" xml:"trace_id,omitempty"`
+	// Severity level filter
+	SeverityText *string `form:"severity_text,omitempty" json:"severity_text,omitempty" xml:"severity_text,omitempty"`
+	// HTTP status code filter
+	HTTPStatusCode *int32 `form:"http_status_code,omitempty" json:"http_status_code,omitempty" xml:"http_status_code,omitempty"`
+	// HTTP route filter
+	HTTPRoute *string `form:"http_route,omitempty" json:"http_route,omitempty" xml:"http_route,omitempty"`
+	// HTTP method filter
+	HTTPMethod *string `form:"http_method,omitempty" json:"http_method,omitempty" xml:"http_method,omitempty"`
+	// Service name filter
+	ServiceName *string `form:"service_name,omitempty" json:"service_name,omitempty" xml:"service_name,omitempty"`
+	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Deployment ID filter
+	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// Function ID filter
+	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
+	// Gram URN filter
+	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
+}
+
+// SearchToolCallsFilterRequestBody is used to define fields on request body
+// types.
+type SearchToolCallsFilterRequestBody struct {
+	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Deployment ID filter
+	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// Function ID filter
+	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
+	// Gram URN filter
+	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
+}
+
 // NewListLogsResponseBody builds the HTTP response body from the result of the
 // "listLogs" endpoint of the "logs" service.
 func NewListLogsResponseBody(res *logs.ListToolLogResponse) *ListLogsResponseBody {
@@ -519,6 +1013,48 @@ func NewListToolExecutionLogsResponseBody(res *logs.ListToolExecutionLogsResult)
 	}
 	if res.Pagination != nil {
 		body.Pagination = marshalLogsPaginationResponseToPaginationResponseResponseBody(res.Pagination)
+	}
+	return body
+}
+
+// NewSearchLogsResponseBody builds the HTTP response body from the result of
+// the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsResponseBody(res *logs.SearchLogsResult) *SearchLogsResponseBody {
+	body := &SearchLogsResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Logs != nil {
+		body.Logs = make([]*TelemetryLogRecordResponseBody, len(res.Logs))
+		for i, val := range res.Logs {
+			if val == nil {
+				body.Logs[i] = nil
+				continue
+			}
+			body.Logs[i] = marshalLogsTelemetryLogRecordToTelemetryLogRecordResponseBody(val)
+		}
+	} else {
+		body.Logs = []*TelemetryLogRecordResponseBody{}
+	}
+	return body
+}
+
+// NewSearchToolCallsResponseBody builds the HTTP response body from the result
+// of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsResponseBody(res *logs.SearchToolCallsResult) *SearchToolCallsResponseBody {
+	body := &SearchToolCallsResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.ToolCalls != nil {
+		body.ToolCalls = make([]*ToolCallSummaryResponseBody, len(res.ToolCalls))
+		for i, val := range res.ToolCalls {
+			if val == nil {
+				body.ToolCalls[i] = nil
+				continue
+			}
+			body.ToolCalls[i] = marshalLogsToolCallSummaryToToolCallSummaryResponseBody(val)
+		}
+	} else {
+		body.ToolCalls = []*ToolCallSummaryResponseBody{}
 	}
 	return body
 }
@@ -813,6 +1349,286 @@ func NewListToolExecutionLogsGatewayErrorResponseBody(res *goa.ServiceError) *Li
 	return body
 }
 
+// NewSearchLogsUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsUnauthorizedResponseBody(res *goa.ServiceError) *SearchLogsUnauthorizedResponseBody {
+	body := &SearchLogsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchLogsForbiddenResponseBody builds the HTTP response body from the
+// result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsForbiddenResponseBody(res *goa.ServiceError) *SearchLogsForbiddenResponseBody {
+	body := &SearchLogsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchLogsBadRequestResponseBody builds the HTTP response body from the
+// result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsBadRequestResponseBody(res *goa.ServiceError) *SearchLogsBadRequestResponseBody {
+	body := &SearchLogsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchLogsNotFoundResponseBody builds the HTTP response body from the
+// result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsNotFoundResponseBody(res *goa.ServiceError) *SearchLogsNotFoundResponseBody {
+	body := &SearchLogsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchLogsConflictResponseBody builds the HTTP response body from the
+// result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsConflictResponseBody(res *goa.ServiceError) *SearchLogsConflictResponseBody {
+	body := &SearchLogsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchLogsUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsUnsupportedMediaResponseBody(res *goa.ServiceError) *SearchLogsUnsupportedMediaResponseBody {
+	body := &SearchLogsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchLogsInvalidResponseBody builds the HTTP response body from the
+// result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsInvalidResponseBody(res *goa.ServiceError) *SearchLogsInvalidResponseBody {
+	body := &SearchLogsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchLogsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsInvariantViolationResponseBody(res *goa.ServiceError) *SearchLogsInvariantViolationResponseBody {
+	body := &SearchLogsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchLogsUnexpectedResponseBody builds the HTTP response body from the
+// result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsUnexpectedResponseBody(res *goa.ServiceError) *SearchLogsUnexpectedResponseBody {
+	body := &SearchLogsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchLogsGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "searchLogs" endpoint of the "logs" service.
+func NewSearchLogsGatewayErrorResponseBody(res *goa.ServiceError) *SearchLogsGatewayErrorResponseBody {
+	body := &SearchLogsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchToolCallsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsUnauthorizedResponseBody(res *goa.ServiceError) *SearchToolCallsUnauthorizedResponseBody {
+	body := &SearchToolCallsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchToolCallsForbiddenResponseBody builds the HTTP response body from
+// the result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsForbiddenResponseBody(res *goa.ServiceError) *SearchToolCallsForbiddenResponseBody {
+	body := &SearchToolCallsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchToolCallsBadRequestResponseBody builds the HTTP response body from
+// the result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsBadRequestResponseBody(res *goa.ServiceError) *SearchToolCallsBadRequestResponseBody {
+	body := &SearchToolCallsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchToolCallsNotFoundResponseBody builds the HTTP response body from
+// the result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsNotFoundResponseBody(res *goa.ServiceError) *SearchToolCallsNotFoundResponseBody {
+	body := &SearchToolCallsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchToolCallsConflictResponseBody builds the HTTP response body from
+// the result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsConflictResponseBody(res *goa.ServiceError) *SearchToolCallsConflictResponseBody {
+	body := &SearchToolCallsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchToolCallsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsUnsupportedMediaResponseBody(res *goa.ServiceError) *SearchToolCallsUnsupportedMediaResponseBody {
+	body := &SearchToolCallsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchToolCallsInvalidResponseBody builds the HTTP response body from the
+// result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsInvalidResponseBody(res *goa.ServiceError) *SearchToolCallsInvalidResponseBody {
+	body := &SearchToolCallsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchToolCallsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsInvariantViolationResponseBody(res *goa.ServiceError) *SearchToolCallsInvariantViolationResponseBody {
+	body := &SearchToolCallsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchToolCallsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsUnexpectedResponseBody(res *goa.ServiceError) *SearchToolCallsUnexpectedResponseBody {
+	body := &SearchToolCallsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchToolCallsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "searchToolCalls" endpoint of the "logs" service.
+func NewSearchToolCallsGatewayErrorResponseBody(res *goa.ServiceError) *SearchToolCallsGatewayErrorResponseBody {
+	body := &SearchToolCallsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListLogsPayload builds a logs service listLogs endpoint payload.
 func NewListLogsPayload(toolID *string, tsStart *string, tsEnd *string, cursor *string, status *string, serverName *string, toolName *string, toolType *string, toolUrns []string, perPage int, direction string, sort string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *logs.ListLogsPayload {
 	v := &logs.ListLogsPayload{}
@@ -855,4 +1671,160 @@ func NewListToolExecutionLogsPayload(tsStart *string, tsEnd *string, deploymentI
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
+}
+
+// NewSearchLogsPayload builds a logs service searchLogs endpoint payload.
+func NewSearchLogsPayload(body *SearchLogsRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *logs.SearchLogsPayload {
+	v := &logs.SearchLogsPayload{
+		Cursor: body.Cursor,
+	}
+	if body.Sort != nil {
+		v.Sort = *body.Sort
+	}
+	if body.Limit != nil {
+		v.Limit = *body.Limit
+	}
+	if body.Filter != nil {
+		v.Filter = unmarshalSearchLogsFilterRequestBodyToLogsSearchLogsFilter(body.Filter)
+	}
+	if body.Sort == nil {
+		v.Sort = "desc"
+	}
+	if body.Limit == nil {
+		v.Limit = 50
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewSearchToolCallsPayload builds a logs service searchToolCalls endpoint
+// payload.
+func NewSearchToolCallsPayload(body *SearchToolCallsRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *logs.SearchToolCallsPayload {
+	v := &logs.SearchToolCallsPayload{
+		Cursor: body.Cursor,
+	}
+	if body.Sort != nil {
+		v.Sort = *body.Sort
+	}
+	if body.Limit != nil {
+		v.Limit = *body.Limit
+	}
+	if body.Filter != nil {
+		v.Filter = unmarshalSearchToolCallsFilterRequestBodyToLogsSearchToolCallsFilter(body.Filter)
+	}
+	if body.Sort == nil {
+		v.Sort = "desc"
+	}
+	if body.Limit == nil {
+		v.Limit = 50
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// ValidateSearchLogsRequestBody runs the validations defined on
+// SearchLogsRequestBody
+func ValidateSearchLogsRequestBody(body *SearchLogsRequestBody) (err error) {
+	if body.Filter != nil {
+		if err2 := ValidateSearchLogsFilterRequestBody(body.Filter); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Sort != nil {
+		if !(*body.Sort == "asc" || *body.Sort == "desc") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort", *body.Sort, []any{"asc", "desc"}))
+		}
+	}
+	if body.Limit != nil {
+		if *body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1, true))
+		}
+	}
+	if body.Limit != nil {
+		if *body.Limit > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1000, false))
+		}
+	}
+	return
+}
+
+// ValidateSearchToolCallsRequestBody runs the validations defined on
+// SearchToolCallsRequestBody
+func ValidateSearchToolCallsRequestBody(body *SearchToolCallsRequestBody) (err error) {
+	if body.Filter != nil {
+		if err2 := ValidateSearchToolCallsFilterRequestBody(body.Filter); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Sort != nil {
+		if !(*body.Sort == "asc" || *body.Sort == "desc") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort", *body.Sort, []any{"asc", "desc"}))
+		}
+	}
+	if body.Limit != nil {
+		if *body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1, true))
+		}
+	}
+	if body.Limit != nil {
+		if *body.Limit > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1000, false))
+		}
+	}
+	return
+}
+
+// ValidateSearchLogsFilterRequestBody runs the validations defined on
+// SearchLogsFilterRequestBody
+func ValidateSearchLogsFilterRequestBody(body *SearchLogsFilterRequestBody) (err error) {
+	if body.TraceID != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.trace_id", *body.TraceID, "^[a-f0-9]{32}$"))
+	}
+	if body.SeverityText != nil {
+		if !(*body.SeverityText == "DEBUG" || *body.SeverityText == "INFO" || *body.SeverityText == "WARN" || *body.SeverityText == "ERROR" || *body.SeverityText == "FATAL") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.severity_text", *body.SeverityText, []any{"DEBUG", "INFO", "WARN", "ERROR", "FATAL"}))
+		}
+	}
+	if body.HTTPMethod != nil {
+		if !(*body.HTTPMethod == "GET" || *body.HTTPMethod == "POST" || *body.HTTPMethod == "PUT" || *body.HTTPMethod == "PATCH" || *body.HTTPMethod == "DELETE" || *body.HTTPMethod == "HEAD" || *body.HTTPMethod == "OPTIONS") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.http_method", *body.HTTPMethod, []any{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}))
+		}
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	if body.DeploymentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.deployment_id", *body.DeploymentID, goa.FormatUUID))
+	}
+	if body.FunctionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.function_id", *body.FunctionID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSearchToolCallsFilterRequestBody runs the validations defined on
+// SearchToolCallsFilterRequestBody
+func ValidateSearchToolCallsFilterRequestBody(body *SearchToolCallsFilterRequestBody) (err error) {
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	if body.DeploymentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.deployment_id", *body.DeploymentID, goa.FormatUUID))
+	}
+	if body.FunctionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.function_id", *body.FunctionID, goa.FormatUUID))
+	}
+	return
 }

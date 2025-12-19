@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -79,6 +80,7 @@ func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.Create
 		OrganizationSlug: authCtx.OrganizationSlug,
 		ProjectSlug:      *authCtx.ProjectSlug,
 		UserIdentifier:   p.UserIdentifier,
+		RegisteredClaims: jwt.RegisteredClaims{}, //nolint:exhaustruct // to be populated by chatSessionsManager
 	}
 
 	token, _, err := s.chatSessionsManager.GenerateToken(
