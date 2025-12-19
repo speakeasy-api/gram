@@ -201,7 +201,7 @@ const UsageTiers = () => {
       return (
         <Page.Section.CTA>
           <div className="isolate">
-            <Button asChild variant="brand">
+            <Button asChild variant="primary">
               <a
                 href="mailto:gram@speakeasyapi.dev?subject=Upgrade%20Account"
                 className="inline-flex"
@@ -219,7 +219,7 @@ const UsageTiers = () => {
       <Page.Section.CTA>
         {/* Isolate is needed to get the rainbow working */}
         <div className="isolate">
-          <Button disabled={isLoadingCheckout} asChild variant="brand">
+          <Button disabled={isLoadingCheckout} asChild variant="primary">
             <a
               href={checkoutLink}
               data-polar-checkout
