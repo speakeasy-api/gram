@@ -1,5 +1,29 @@
 # server
 
+## 0.15.0
+
+### Minor Changes
+
+- 3ab2e40: Follow OAuth metadata discovery flow to better resolve authorization servers from external MCPs
+- 8c865e1: Introduce the ability to browse entries from MCP-spec conformant registries from Gram Dashboard source import modal
+
+### Patch Changes
+
+- 811989e: Enable private MCP servers with Gram account authentication
+
+  This change allows private MCP servers to require users to authenticate
+  with their Gram account. When enabled, only users with access to the
+  server's organization can utilize it.
+
+  This is ideal for MCP servers that require sensitive credentials (such as API
+  keys), as it allows organizations to:
+  - Secure access to servers handling sensitive secrets (via Gram Environments)
+  - Eliminate the need for individual users to configure credentials during installation
+  - Centralize authentication and access control at the organization level
+
+- 9479883: Adds new API endpoints to query for telemetry logs and traces
+- 6e84b55: Allow external mcp sources to be renamed in the Gram UI
+
 ## 0.14.2
 
 ### Patch Changes
