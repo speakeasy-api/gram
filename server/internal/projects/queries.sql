@@ -80,4 +80,5 @@ RETURNING *;
 -- name: DeleteProject :exec
 UPDATE projects
 SET deleted_at = clock_timestamp()
-WHERE id = @id;
+WHERE id = @id
+  AND deleted_at IS NULL;
