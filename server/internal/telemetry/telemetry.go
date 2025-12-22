@@ -33,6 +33,8 @@ type ToolMetricsProvider interface {
 	ListLogsForTrace(ctx context.Context, params repo.ListLogsForTraceParams) ([]repo.TelemetryLog, error)
 	// Log tool call request/response
 	LogHTTPRequest(context.Context, repo.ToolHTTPRequest) error
+	// Insert telemetry log
+	InsertTelemetryLog(ctx context.Context, params repo.InsertTelemetryLogParams) error
 	// ShouldLog returns true if the tool call should be logged
 	ShouldLog(context.Context, string) (bool, error)
 }
@@ -109,6 +111,10 @@ func (l *toolCallLogger) Emit(ctx context.Context, logger *slog.Logger) {
 		return
 	}
 	EmitHTTPRequestLog(ctx, logger, l.provider, l.toolName, *l.entry)
+
+
+	params := toolReqToTelemetryLog(*l.entry)
+	createTelemetryLog(ctx, logger, l.provider, params)
 }
 
 func (l *toolCallLogger) RecordHTTPMethod(method string) {
@@ -305,6 +311,38 @@ func EmitHTTPRequestLog(
 	}()
 }
 
+// createTelemetryLog logs a telemetry entry using the tool metrics provider.
+// Errors are reported through the supplied logger. Logging happens asynchronously to
+// avoid blocking the caller and the params struct is copied to prevent data races.
+func createTelemetryLog(
+	ctx context.Context,
+	logger *slog.Logger,
+	provider ToolMetricsProvider,
+	params repo.InsertTelemetryLogParams,
+) {
+	if provider == nil || params.ID == "" {
+		return
+	}
+
+	go func() {
+		logCtx := context.WithoutCancel(ctx)
+
+		if err := provider.InsertTelemetryLog(logCtx, params); err != nil {
+			logger.ErrorContext(logCtx,
+				"failed to insert telemetry log to ClickHouse",
+				attr.SlogError(err),
+				attr.SlogToolURN(params.GramURN),
+			)
+			return
+		}
+
+		logger.DebugContext(logCtx,
+			"logged telemetry entry to ClickHouse",
+			attr.SlogToolURN(params.GramURN),
+		)
+	}()
+}
+
 // reasonable redaction of tokens function for tool call logs
 func redactToken(token string) string {
 	trimmed := strings.TrimSpace(token)
@@ -329,4 +367,118 @@ func redactToken(token string) string {
 	}
 
 	return trimmed[:redactRevealPrefixLen] + "***"
+}
+
+// toolReqToTelemetryLog converts a ToolHTTPRequest to InsertTelemetryLogParams
+// for inserting into the telemetry_logs table.
+func toolReqToTelemetryLog(req repo.ToolHTTPRequest) repo.InsertTelemetryLogParams {
+	// Convert timestamp to Unix nanoseconds
+	timeUnixNano := req.Ts.UnixNano()
+
+	// Determine severity based on status code
+	var severityText *string
+	errorText := "ERROR"
+	warnText := "WARN"
+	infoText := "INFO"
+	if req.StatusCode >= 500 {
+		severityText = &errorText
+	} else if req.StatusCode >= 400 {
+		severityText = &warnText
+	} else {
+		severityText = &infoText
+	}
+
+	// Create body message
+	body := fmt.Sprintf("%s %s -> %d (%.2fms)", req.HTTPMethod, req.HTTPRoute, req.StatusCode, req.DurationMs)
+
+	// Build request headers JSON
+	var requestHeadersJSON string
+	if len(req.RequestHeaders) > 0 {
+		// Headers are already redacted when recorded
+		headerPairs := make([]string, 0, len(req.RequestHeaders))
+		for k, v := range req.RequestHeaders {
+			headerPairs = append(headerPairs, fmt.Sprintf("%q: %q", k, v))
+		}
+		requestHeadersJSON = "{" + strings.Join(headerPairs, ", ") + "}"
+	} else {
+		requestHeadersJSON = "{}"
+	}
+
+	// Build response headers JSON
+	var responseHeadersJSON string
+	if len(req.ResponseHeaders) > 0 {
+		headerPairs := make([]string, 0, len(req.ResponseHeaders))
+		for k, v := range req.ResponseHeaders {
+			headerPairs = append(headerPairs, fmt.Sprintf("%q: %q", k, v))
+		}
+		responseHeadersJSON = "{" + strings.Join(headerPairs, ", ") + "}"
+	} else {
+		responseHeadersJSON = "{}"
+	}
+
+	// Build attributes JSON (escape strings properly)
+	attributes := fmt.Sprintf(`{
+		"http.server.url": %q,
+		"http.route": %q,
+		"http.request.method": %q,
+		"http.request.body.bytes": %d,
+		"http.request.headers": %s,
+		"http.response.status_code": %d,
+		"http.response.body.bytes": %d,
+		"http.response.headers": %s,
+		"http.duration_ms": %.2f,
+		"user_agent": %q
+	}`, req.HTTPServerURL, req.HTTPRoute, req.HTTPMethod,
+		req.RequestBodyBytes, requestHeadersJSON,
+		req.StatusCode, req.ResponseBodyBytes, responseHeadersJSON,
+		req.DurationMs, req.UserAgent)
+
+	// Build resource attributes JSON (escape strings properly)
+	resourceAttributes := fmt.Sprintf(`{
+		"service.name": "gram-server",
+		"gram.project.id": %q,
+		"gram.deployment.id": %q,
+		"gram.tool.id": %q,
+		"gram.tool.urn": %q,
+		"gram.tool.type": %q,
+		"gram.organization.id": %q
+	}`, req.ProjectID, req.DeploymentID, req.ToolID, req.ToolURN, req.ToolType, req.OrganizationID)
+
+	var traceID, spanID *string
+	if req.TraceID != "" {
+		traceID = &req.TraceID
+	}
+	if req.SpanID != "" {
+		spanID = &req.SpanID
+	}
+
+	var deploymentID *string
+	if req.DeploymentID != "" {
+		deploymentID = &req.DeploymentID
+	}
+
+	// #nosec G115 -- StatusCode is validated to be within HTTP status code range (0-599)
+	statusCode := int32(req.StatusCode)
+
+	return repo.InsertTelemetryLogParams{
+		ID:                     req.ID,
+		TimeUnixNano:           timeUnixNano,
+		ObservedTimeUnixNano:   timeUnixNano,
+		SeverityText:           severityText,
+		Body:                   body,
+		TraceID:                traceID,
+		SpanID:                 spanID,
+		Attributes:             attributes,
+		ResourceAttributes:     resourceAttributes,
+		GramProjectID:          req.ProjectID,
+		GramDeploymentID:       deploymentID,
+		GramFunctionID:         nil, // HTTP logs don't have function IDs
+		GramURN:                req.ToolURN,
+		ServiceName:            "gram-server",
+		ServiceVersion:         nil,
+		HTTPRequestMethod:      &req.HTTPMethod,
+		HTTPResponseStatusCode: &statusCode,
+		HTTPRoute:              &req.HTTPRoute,
+		HTTPServerURL:          &req.HTTPServerURL,
+	}
 }
