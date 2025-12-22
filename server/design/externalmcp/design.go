@@ -58,7 +58,7 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 
 	Description("An MCP server from an external registry")
 
-	Attribute("name", String, "Server name in reverse-DNS format (e.g., 'io.github.user/server')", func() {
+	Attribute("registry_specifier", String, "Server specifier used to look up in the registry (e.g., 'io.github.user/server')", func() {
 		Example("io.modelcontextprotocol.anonymous/exa")
 	})
 	Attribute("version", String, "Semantic version of the server", func() {
@@ -74,5 +74,5 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 	})
 	Attribute("meta", Any, "Opaque metadata from the registry")
 
-	Required("name", "version", "description", "registry_id")
+	Required("registry_specifier", "version", "description", "registry_id")
 })

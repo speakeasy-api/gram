@@ -1720,10 +1720,12 @@ type DeploymentExternalMCPResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The ID of the MCP registry the server is from.
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// The reverse-DNS name of the external MCP server.
+	// The display name for the external MCP server.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-friendly identifier used for tool prefixing.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The canonical server name used to look up the server in the registry.
+	RegistryServerSpecifier *string `form:"registry_server_specifier,omitempty" json:"registry_server_specifier,omitempty" xml:"registry_server_specifier,omitempty"`
 }
 
 // DeploymentResponseBody is used to define fields on response body types.
@@ -1810,10 +1812,13 @@ type AddDeploymentPackageFormRequestBody struct {
 type AddExternalMCPFormRequestBody struct {
 	// The ID of the MCP registry the server is from.
 	RegistryID string `form:"registry_id" json:"registry_id" xml:"registry_id"`
-	// The reverse-DNS name of the external MCP server (e.g., 'ai.exa/exa').
+	// The display name for the external MCP server.
 	Name string `form:"name" json:"name" xml:"name"`
 	// A URL-friendly identifier used for tool prefixing (e.g., 'exa').
 	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The canonical server name used to look up the server in the registry (e.g.,
+	// 'slack', 'ai.exa/exa').
+	RegistryServerSpecifier string `form:"registry_server_specifier" json:"registry_server_specifier" xml:"registry_server_specifier"`
 }
 
 // AddPackageFormRequestBody is used to define fields on request body types.
@@ -5511,6 +5516,9 @@ func ValidateDeploymentExternalMCPResponseBody(body *DeploymentExternalMCPRespon
 	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.RegistryServerSpecifier == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("registry_server_specifier", "body"))
 	}
 	if body.Slug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))

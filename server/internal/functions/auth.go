@@ -14,7 +14,7 @@ import (
 	"goa.design/goa/v3/security"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	deprepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -23,7 +23,7 @@ import (
 type TokenRequestV1 struct {
 	ID      string `json:"id"`
 	Exp     int64  `json:"exp"`
-	Subject string  `json:"sub"`
+	Subject string `json:"sub"`
 }
 
 func TokenV1(enc *encryption.Client, req TokenRequestV1) (string, error) {
@@ -55,7 +55,7 @@ type ReadResourcePayload struct {
 func jwtAuth(ctx context.Context, logger *slog.Logger, db deprepo.DBTX, enc *encryption.Client, token string, scheme *security.JWTScheme) (context.Context, error) {
 	logger = logger.With(attr.SlogComponent("functions-auth"))
 
-	if scheme == nil || scheme.Name != auth.FunctionTokenSecurityScheme {
+	if scheme == nil || scheme.Name != constants.FunctionTokenSecurityScheme {
 		return ctx, oops.E(oops.CodeUnauthorized, nil, "auth scheme not supported")
 	}
 

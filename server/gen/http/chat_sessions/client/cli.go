@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	chatsessions "github.com/speakeasy-api/gram/server/gen/chat_sessions"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildCreatePayload builds the payload for the chatSessions create endpoint
@@ -22,7 +23,16 @@ func BuildCreatePayload(chatSessionsCreateBody string, chatSessionsCreateApikeyT
 	{
 		err = json.Unmarshal([]byte(chatSessionsCreateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"expires_after\": 612,\n      \"user_identifier\": \"Voluptatem quas.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"embed_origin\": \"Magni eveniet.\",\n      \"expires_after\": 569,\n      \"user_identifier\": \"Labore qui sequi qui aut enim sit.\"\n   }'")
+		}
+		if body.ExpiresAfter < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expires_after", body.ExpiresAfter, 1, true))
+		}
+		if body.ExpiresAfter > 3600 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expires_after", body.ExpiresAfter, 3600, false))
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var apikeyToken *string
@@ -39,6 +49,7 @@ func BuildCreatePayload(chatSessionsCreateBody string, chatSessionsCreateApikeyT
 	}
 	v := &chatsessions.CreatePayload{
 		UserIdentifier: body.UserIdentifier,
+		EmbedOrigin:    body.EmbedOrigin,
 		ExpiresAfter:   body.ExpiresAfter,
 	}
 	{

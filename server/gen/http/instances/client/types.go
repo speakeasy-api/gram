@@ -459,6 +459,16 @@ type ExternalMCPToolDefinitionResponseBody struct {
 	RemoteURL *string `form:"remote_url,omitempty" json:"remote_url,omitempty" xml:"remote_url,omitempty"`
 	// Whether the external MCP server requires OAuth authentication
 	RequiresOauth *bool `form:"requires_oauth,omitempty" json:"requires_oauth,omitempty" xml:"requires_oauth,omitempty"`
+	// OAuth version: '2.1' (MCP OAuth), '2.0' (legacy), or 'none'
+	OauthVersion *string `form:"oauth_version,omitempty" json:"oauth_version,omitempty" xml:"oauth_version,omitempty"`
+	// The OAuth authorization endpoint URL
+	OauthAuthorizationEndpoint *string `form:"oauth_authorization_endpoint,omitempty" json:"oauth_authorization_endpoint,omitempty" xml:"oauth_authorization_endpoint,omitempty"`
+	// The OAuth token endpoint URL
+	OauthTokenEndpoint *string `form:"oauth_token_endpoint,omitempty" json:"oauth_token_endpoint,omitempty" xml:"oauth_token_endpoint,omitempty"`
+	// The OAuth dynamic client registration endpoint URL
+	OauthRegistrationEndpoint *string `form:"oauth_registration_endpoint,omitempty" json:"oauth_registration_endpoint,omitempty" xml:"oauth_registration_endpoint,omitempty"`
+	// The OAuth scopes supported by the server
+	OauthScopesSupported []string `form:"oauth_scopes_supported,omitempty" json:"oauth_scopes_supported,omitempty" xml:"oauth_scopes_supported,omitempty"`
 	// When the tool definition was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the tool definition was last updated.
@@ -1346,6 +1356,9 @@ func ValidateExternalMCPToolDefinitionResponseBody(body *ExternalMCPToolDefiniti
 	}
 	if body.RequiresOauth == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("requires_oauth", "body"))
+	}
+	if body.OauthVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oauth_version", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))

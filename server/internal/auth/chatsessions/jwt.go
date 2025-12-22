@@ -20,26 +20,19 @@ type ChatSessionClaims struct {
 }
 
 // GenerateToken creates a new JWT token for a chat session
-func (m *Manager) GenerateToken(ctx context.Context, orgID, projectID, organizationSlug, projectSlug string, userIdentifier *string, expiresAfter int) (string, string, error) {
+func (m *Manager) GenerateToken(ctx context.Context, claims ChatSessionClaims, embedOrigin string, expiresAfter int) (string, string, error) {
 	now := time.Now()
 	expiry := now.Add(time.Duration(expiresAfter) * time.Second)
 	jti := uuid.New().String()
 
-	claims := ChatSessionClaims{
-		OrgID:            orgID,
-		ProjectID:        projectID,
-		OrganizationSlug: organizationSlug,
-		ProjectSlug:      projectSlug,
-		UserIdentifier:   userIdentifier,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(expiry),
-			IssuedAt:  jwt.NewNumericDate(now),
-			ID:        jti,
-			Issuer:    "",
-			Subject:   "",
-			Audience:  nil,
-			NotBefore: nil,
-		},
+	claims.RegisteredClaims = jwt.RegisteredClaims{
+		ID:        jti,
+		Audience:  jwt.ClaimStrings{embedOrigin},
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(expiry),
+		Issuer:    "",
+		Subject:   "",
+		NotBefore: nil,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

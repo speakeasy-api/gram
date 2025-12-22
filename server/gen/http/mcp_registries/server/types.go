@@ -208,8 +208,9 @@ type ListCatalogGatewayErrorResponseBody struct {
 // ExternalMCPServerResponseBody is used to define fields on response body
 // types.
 type ExternalMCPServerResponseBody struct {
-	// Server name in reverse-DNS format (e.g., 'io.github.user/server')
-	Name string `form:"name" json:"name" xml:"name"`
+	// Server specifier used to look up in the registry (e.g.,
+	// 'io.github.user/server')
+	RegistrySpecifier string `form:"registry_specifier" json:"registry_specifier" xml:"registry_specifier"`
 	// Semantic version of the server
 	Version string `form:"version" json:"version" xml:"version"`
 	// Description of what the server does

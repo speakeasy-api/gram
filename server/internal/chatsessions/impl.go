@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -73,14 +74,19 @@ func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.Create
 		return nil, oops.C(oops.CodeUnauthorized).Log(ctx, s.logger)
 	}
 
-	// Generate JWT token
+	claims := chatsessions.ChatSessionClaims{
+		OrgID:            authCtx.ActiveOrganizationID,
+		ProjectID:        authCtx.ProjectID.String(),
+		OrganizationSlug: authCtx.OrganizationSlug,
+		ProjectSlug:      *authCtx.ProjectSlug,
+		UserIdentifier:   p.UserIdentifier,
+		RegisteredClaims: jwt.RegisteredClaims{}, //nolint:exhaustruct // to be populated by chatSessionsManager
+	}
+
 	token, _, err := s.chatSessionsManager.GenerateToken(
 		ctx,
-		authCtx.ActiveOrganizationID,
-		authCtx.ProjectID.String(),
-		authCtx.OrganizationSlug,
-		*authCtx.ProjectSlug,
-		p.UserIdentifier,
+		claims,
+		p.EmbedOrigin,
 		p.ExpiresAfter, // Min/max validated by Goa
 	)
 	if err != nil {
@@ -92,6 +98,7 @@ func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.Create
 		ExpiresAfter:   p.ExpiresAfter,
 		Status:         "active",
 		UserIdentifier: p.UserIdentifier,
+		EmbedOrigin:    p.EmbedOrigin,
 	}
 
 	s.logger.InfoContext(ctx, "created chat session",

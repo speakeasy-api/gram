@@ -33,6 +33,26 @@ export type ExternalMCPToolDefinition = {
    */
   name: string;
   /**
+   * The OAuth authorization endpoint URL
+   */
+  oauthAuthorizationEndpoint?: string | undefined;
+  /**
+   * The OAuth dynamic client registration endpoint URL
+   */
+  oauthRegistrationEndpoint?: string | undefined;
+  /**
+   * The OAuth scopes supported by the server
+   */
+  oauthScopesSupported?: Array<string> | undefined;
+  /**
+   * The OAuth token endpoint URL
+   */
+  oauthTokenEndpoint?: string | undefined;
+  /**
+   * OAuth version: '2.1' (MCP OAuth), '2.0' (legacy), or 'none'
+   */
+  oauthVersion: string;
+  /**
    * The ID of the MCP registry
    */
   registryId: string;
@@ -69,6 +89,11 @@ export const ExternalMCPToolDefinition$inboundSchema: z.ZodType<
   deployment_id: z.string(),
   id: z.string(),
   name: z.string(),
+  oauth_authorization_endpoint: z.string().optional(),
+  oauth_registration_endpoint: z.string().optional(),
+  oauth_scopes_supported: z.array(z.string()).optional(),
+  oauth_token_endpoint: z.string().optional(),
+  oauth_version: z.string(),
   registry_id: z.string(),
   remote_url: z.string(),
   requires_oauth: z.boolean(),
@@ -80,6 +105,11 @@ export const ExternalMCPToolDefinition$inboundSchema: z.ZodType<
     "created_at": "createdAt",
     "deployment_external_mcp_id": "deploymentExternalMcpId",
     "deployment_id": "deploymentId",
+    "oauth_authorization_endpoint": "oauthAuthorizationEndpoint",
+    "oauth_registration_endpoint": "oauthRegistrationEndpoint",
+    "oauth_scopes_supported": "oauthScopesSupported",
+    "oauth_token_endpoint": "oauthTokenEndpoint",
+    "oauth_version": "oauthVersion",
     "registry_id": "registryId",
     "remote_url": "remoteUrl",
     "requires_oauth": "requiresOauth",

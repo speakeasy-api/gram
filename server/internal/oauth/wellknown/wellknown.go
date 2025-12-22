@@ -32,6 +32,14 @@ import (
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
+// OAuthProtectedResourceMetadata represents OAuth 2.0 Protected Resource Metadata (RFC 9728).
+type OAuthProtectedResourceMetadata struct {
+	Resource             string   `json:"resource"`
+	AuthorizationServers []string `json:"authorization_servers"`
+	ScopesSupported      []string `json:"scopes_supported,omitempty"`
+}
+
+// OAuthServerMetadata represents OAuth 2.0 Authorization Server Metadata (RFC 8414).
 type OAuthServerMetadata struct {
 	Issuer                        string   `json:"issuer"`
 	AuthorizationEndpoint         string   `json:"authorization_endpoint"`
@@ -112,31 +120,59 @@ func ResolveOAuthServerMetadataFromToolset(
 	}
 
 	if oauthConfig := externalmcp.ResolveOAuthConfig(fullToolset); oauthConfig != nil {
+		// Return static metadata with upstream OAuth endpoints passed through directly.
+		// The issuer is Gram's URL, but auth/token/registration endpoints point to the upstream server.
 		return &OAuthServerMetadataResult{
-			Kind:     OAuthServerMetadataResultKindProxy,
-			Static:   nil,
-			ProxyURL: oauthConfig.WellKnownOAuthServerURL(),
+			Kind: OAuthServerMetadataResultKindStatic,
+			Static: &OAuthServerMetadata{
+				Issuer:                        baseURL + "/mcp/" + mcpSlug,
+				AuthorizationEndpoint:         oauthConfig.AuthorizationEndpoint,
+				TokenEndpoint:                 oauthConfig.TokenEndpoint,
+				RegistrationEndpoint:          oauthConfig.RegistrationEndpoint,
+				ResponseTypesSupported:        []string{"code"},
+				GrantTypesSupported:           []string{"authorization_code", "refresh_token"},
+				CodeChallengeMethodsSupported: []string{"S256"},
+			},
+			ProxyURL: "",
 		}, nil
 	}
 
 	return nil, nil
 }
 
-func IsToolsetOAuthProtected(
+// ResolveOAuthProtectedResourceFromToolset returns OAuth Protected Resource Metadata for a toolset,
+// or nil if the toolset is not OAuth-protected.
+func ResolveOAuthProtectedResourceFromToolset(
 	ctx context.Context,
 	logger *slog.Logger,
 	db mv.DBTX,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	toolset *toolsets_repo.Toolset,
-) (bool, error) {
+	baseURL string,
+	mcpSlug string,
+) (*OAuthProtectedResourceMetadata, error) {
+	// Check for OAuth proxy server or external OAuth server configuration
 	if toolset.OauthProxyServerID.Valid || toolset.ExternalOauthServerID.Valid {
-		return true, nil
+		return &OAuthProtectedResourceMetadata{
+			Resource:             baseURL + "/mcp/" + mcpSlug,
+			AuthorizationServers: []string{baseURL + "/mcp/" + mcpSlug},
+			ScopesSupported:      nil,
+		}, nil
 	}
 
+	// Check for external MCP tools that require OAuth
 	fullToolset, err := mv.DescribeToolset(ctx, logger, db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), toolsetCache)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
-	return externalmcp.ResolveOAuthConfig(fullToolset) != nil, nil
+	if oauthConfig := externalmcp.ResolveOAuthConfig(fullToolset); oauthConfig != nil {
+		return &OAuthProtectedResourceMetadata{
+			Resource:             baseURL + "/mcp/" + mcpSlug,
+			AuthorizationServers: []string{baseURL + "/mcp/" + mcpSlug},
+			ScopesSupported:      oauthConfig.ScopesSupported,
+		}, nil
+	}
+
+	return nil, nil
 }

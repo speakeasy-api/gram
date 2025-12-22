@@ -60,7 +60,7 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 	{
 		err = json.Unmarshal([]byte(mcpMetadataSetMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_documentation_url\": \"Dolores quaerat rerum error.\",\n      \"instructions\": \"Expedita dignissimos saepe qui.\",\n      \"logo_asset_id\": \"Ea eius rerum.\",\n      \"toolset_slug\": \"zvi\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_documentation_url\": \"Fugit suscipit.\",\n      \"instructions\": \"Accusamus sint et autem sed voluptates.\",\n      \"logo_asset_id\": \"Quisquam id.\",\n      \"toolset_slug\": \"vy4\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.ToolsetSlug) > 40 {

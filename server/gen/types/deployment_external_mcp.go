@@ -12,8 +12,10 @@ type DeploymentExternalMCP struct {
 	ID string
 	// The ID of the MCP registry the server is from.
 	RegistryID string
-	// The reverse-DNS name of the external MCP server.
+	// The display name for the external MCP server.
 	Name string
 	// A URL-friendly identifier used for tool prefixing.
 	Slug Slug
+	// The canonical server name used to look up the server in the registry.
+	RegistryServerSpecifier string
 }

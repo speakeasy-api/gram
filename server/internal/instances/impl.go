@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -121,10 +122,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
+
+	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	server.Use(middleware.ChatSessionMiddleware(service.chatSessions))
+	srv.Mount(mux, server)
+
 	o11y.AttachHandler(mux, "POST", "/rpc/instances.invoke/tool", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.ExecuteInstanceTool).ServeHTTP(w, r)
 	})
@@ -203,26 +205,26 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	// TODO: Handling security, we can probably factor this out into something smarter like a proxy
 	sc := security.APIKeyScheme{
-		Name:           auth.SessionSecurityScheme,
+		Name:           constants.SessionSecurityScheme,
 		Scopes:         []string{},
 		RequiredScopes: []string{},
 	}
 
-	ctx, err := s.auth.Authorize(r.Context(), r.Header.Get(auth.SessionHeader), &sc)
+	ctx, err := s.auth.Authorize(r.Context(), r.Header.Get(constants.SessionHeader), &sc)
 	if err != nil {
 		sc := security.APIKeyScheme{
-			Name:           auth.KeySecurityScheme,
+			Name:           constants.KeySecurityScheme,
 			RequiredScopes: []string{"consumer"},
 			Scopes:         []string{},
 		}
-		ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(auth.APIKeyHeader), &sc)
+		ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(constants.APIKeyHeader), &sc)
 		if err != nil {
 			sc := security.APIKeyScheme{
-				Name:           auth.KeySecurityScheme,
+				Name:           constants.KeySecurityScheme,
 				RequiredScopes: []string{"chat"},
 				Scopes:         []string{},
 			}
-			ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(auth.APIKeyHeader), &sc)
+			ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(constants.APIKeyHeader), &sc)
 			if err != nil {
 				return oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, logger)
 			}
@@ -230,12 +232,12 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	}
 
 	sc = security.APIKeyScheme{
-		Name:           auth.ProjectSlugSecuritySchema,
+		Name:           constants.ProjectSlugSecuritySchema,
 		Scopes:         []string{},
 		RequiredScopes: []string{},
 	}
 
-	ctx, err = s.auth.Authorize(ctx, r.Header.Get(auth.ProjectHeader), &sc)
+	ctx, err = s.auth.Authorize(ctx, r.Header.Get(constants.ProjectHeader), &sc)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, logger)
 	}

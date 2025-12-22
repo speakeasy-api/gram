@@ -9,8 +9,9 @@ package types
 
 // An MCP server from an external registry
 type ExternalMCPServer struct {
-	// Server name in reverse-DNS format (e.g., 'io.github.user/server')
-	Name string
+	// Server specifier used to look up in the registry (e.g.,
+	// 'io.github.user/server')
+	RegistrySpecifier string
 	// Semantic version of the server
 	Version string
 	// Description of what the server does

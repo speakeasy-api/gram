@@ -4,12 +4,13 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 func SessionMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie("gram_session")
+		cookie, err := r.Cookie(constants.SessionCookie)
 		if err == nil {
 			ctx := contextvalues.SetSessionTokenInContext(r.Context(), cookie.Value)
 			r = r.WithContext(ctx)

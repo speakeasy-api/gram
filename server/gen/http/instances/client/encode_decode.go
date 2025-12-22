@@ -495,17 +495,27 @@ func unmarshalExternalMCPToolDefinitionResponseBodyToTypesExternalMCPToolDefinit
 		return nil
 	}
 	res := &types.ExternalMCPToolDefinition{
-		ID:                      *v.ID,
-		ToolUrn:                 *v.ToolUrn,
-		DeploymentExternalMcpID: *v.DeploymentExternalMcpID,
-		DeploymentID:            *v.DeploymentID,
-		RegistryID:              *v.RegistryID,
-		Name:                    *v.Name,
-		Slug:                    *v.Slug,
-		RemoteURL:               *v.RemoteURL,
-		RequiresOauth:           *v.RequiresOauth,
-		CreatedAt:               *v.CreatedAt,
-		UpdatedAt:               *v.UpdatedAt,
+		ID:                         *v.ID,
+		ToolUrn:                    *v.ToolUrn,
+		DeploymentExternalMcpID:    *v.DeploymentExternalMcpID,
+		DeploymentID:               *v.DeploymentID,
+		RegistryID:                 *v.RegistryID,
+		Name:                       *v.Name,
+		Slug:                       *v.Slug,
+		RemoteURL:                  *v.RemoteURL,
+		RequiresOauth:              *v.RequiresOauth,
+		OauthVersion:               *v.OauthVersion,
+		OauthAuthorizationEndpoint: v.OauthAuthorizationEndpoint,
+		OauthTokenEndpoint:         v.OauthTokenEndpoint,
+		OauthRegistrationEndpoint:  v.OauthRegistrationEndpoint,
+		CreatedAt:                  *v.CreatedAt,
+		UpdatedAt:                  *v.UpdatedAt,
+	}
+	if v.OauthScopesSupported != nil {
+		res.OauthScopesSupported = make([]string, len(v.OauthScopesSupported))
+		for i, val := range v.OauthScopesSupported {
+			res.OauthScopesSupported[i] = val
+		}
 	}
 
 	return res

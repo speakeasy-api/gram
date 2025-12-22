@@ -343,19 +343,23 @@ var AddDeploymentPackageForm = Type("AddDeploymentPackageForm", func() {
 })
 
 var AddExternalMCPForm = Type("AddExternalMCPForm", func() {
-	Required("registry_id", "name", "slug")
+	Required("registry_id", "name", "slug", "registry_server_specifier")
 
 	Attribute("registry_id", String, func() {
 		Description("The ID of the MCP registry the server is from.")
 		Format(FormatUUID)
 	})
 	Attribute("name", String, func() {
-		Description("The reverse-DNS name of the external MCP server (e.g., 'ai.exa/exa').")
-		Example("ai.exa/exa")
+		Description("The display name for the external MCP server.")
+		Example("My Slack Integration")
 	})
 	Attribute("slug", shared.Slug, func() {
 		Description("A URL-friendly identifier used for tool prefixing (e.g., 'exa').")
 		Example("exa")
+	})
+	Attribute("registry_server_specifier", String, func() {
+		Description("The canonical server name used to look up the server in the registry (e.g., 'slack', 'ai.exa/exa').")
+		Example("slack")
 	})
 })
 

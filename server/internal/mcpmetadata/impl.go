@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
@@ -318,7 +319,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	sessionToken, _ := contextvalues.GetSessionTokenFromContext(ctx)
 
 	ctx, _ = s.auth.Authorize(ctx, sessionToken, &security.APIKeyScheme{
-		Name:           auth.SessionSecurityScheme,
+		Name:           constants.SessionSecurityScheme,
 		Scopes:         []string{},
 		RequiredScopes: []string{},
 	})

@@ -23,7 +23,9 @@ const gram = new Gram();
 
 async function run() {
   const result = await gram.chatSessions.create({
-    createRequestBody: {},
+    createRequestBody: {
+      embedOrigin: "<value>",
+    },
   });
 
   console.log(result);
@@ -46,7 +48,9 @@ const gram = new GramCore();
 
 async function run() {
   const res = await chatSessionsCreate(gram, {
-    createRequestBody: {},
+    createRequestBody: {
+      embedOrigin: "<value>",
+    },
   });
   if (res.ok) {
     const { value: result } = res;

@@ -1,5 +1,31 @@
 # dashboard
 
+## 0.23.0
+
+### Minor Changes
+
+- 8c865e1: Introduce the ability to browse entries from MCP-spec conformant registries from Gram Dashboard source import modal
+
+### Patch Changes
+
+- 811989e: Enable private MCP servers with Gram account authentication
+
+  This change allows private MCP servers to require users to authenticate
+  with their Gram account. When enabled, only users with access to the
+  server's organization can utilize it.
+
+  This is ideal for MCP servers that require sensitive credentials (such as API
+  keys), as it allows organizations to:
+  - Secure access to servers handling sensitive secrets (via Gram Environments)
+  - Eliminate the need for individual users to configure credentials during installation
+  - Centralize authentication and access control at the organization level
+
+- 6e84b55: Allow external mcp sources to be renamed in the Gram UI
+- Updated dependencies [811989e]
+- Updated dependencies [76beb93]
+- Updated dependencies [8c865e1]
+  - @gram/client@0.24.0
+
 ## 0.22.3
 
 ### Patch Changes

@@ -9,8 +9,8 @@ let value: ListCatalogResponseBody = {
   servers: [
     {
       description: "finally word tall",
-      name: "io.modelcontextprotocol.anonymous/exa",
       registryId: "bb0ff565-978d-483e-b197-ab1951c837b1",
+      registrySpecifier: "io.modelcontextprotocol.anonymous/exa",
       version: "1.0.0",
     },
   ],

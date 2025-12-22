@@ -20,7 +20,9 @@ var _ = Service("chatSessions", func() {
 		Description("Creates a new chat session token")
 
 		Payload(func() {
+			Required("embed_origin")
 			Attribute("user_identifier", String, "Optional free-form user identifier")
+			Attribute("embed_origin", String, "The origin from which the token will be used")
 			Attribute("expires_after", Int, "Token expiration in seconds (max / default 3600)", func() {
 				Minimum(1)
 				Maximum(3600)
@@ -32,10 +34,11 @@ var _ = Service("chatSessions", func() {
 
 		Result(func() {
 			Attribute("client_token", String, "JWT token for chat session")
+			Attribute("embed_origin", String, "The origin from which the token will be used")
 			Attribute("expires_after", Int, "Token expiration in seconds")
 			Attribute("user_identifier", String, "User identifier if provided")
 			Attribute("status", String, "Session status")
-			Required("client_token", "expires_after", "status")
+			Required("embed_origin", "client_token", "expires_after", "status")
 		})
 
 		HTTP(func() {
