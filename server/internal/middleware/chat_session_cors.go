@@ -1,8 +1,10 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -40,10 +42,11 @@ func chatSessionsCORS(chatSessionsManager *chatsessions.Manager) func(next http.
 			}
 
 			// If the request origin is in the allowed origins, set the allowed origin in the context to be used in the CORS middleware
-			if slices.Contains(claims.Audience, r.Header.Get("Origin")) {
+			if !slices.Contains(claims.Audience, r.Header.Get("Origin")) {
 				w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
 			} else {
 				w.WriteHeader(http.StatusForbidden)
+				w.Write(fmt.Appendf(nil, "Origin %s does not match audience claim: %s", r.Header.Get("Origin"), strings.Join(claims.Audience, ", ")))
 				return
 			}
 
