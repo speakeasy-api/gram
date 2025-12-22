@@ -35,6 +35,7 @@ func TestToolCallLogger_EmitCreatesHTTPAndTelemetryLogs(t *testing.T) {
 	toolURN := "tools:http:test-source:test-tool"
 	toolName := "test-tool"
 
+	
 	// Create a tool call logger
 	toolCallLogger, err := telemetry.NewToolCallLogger(
 		ctx,
@@ -72,20 +73,20 @@ func TestToolCallLogger_EmitCreatesHTTPAndTelemetryLogs(t *testing.T) {
 	toolCallLogger.Emit(ctx, logger)
 
 	// Wait for async writes to complete (ClickHouse eventual consistency)
-	time.Sleep(100 * time.Millisecond)
-
-	// Query the database to verify the telemetry log was inserted
-	logs, err := chClient.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
-		GramProjectID: projectID,
-		TimeStart:     now.Add(-1 * time.Minute).UnixNano(),
-		TimeEnd:       now.Add(1 * time.Minute).UnixNano(),
-		GramURN:       toolURN,
-		SortOrder:     "desc",
-		Cursor:        "",
-		Limit:         10,
-	})
-	require.NoError(t, err)
-	require.Len(t, logs, 1, "Expected 1 log in telemetry_logs table")
+	var logs []repo.TelemetryLog
+	require.Eventually(t, func() bool {
+		var err error
+		logs, err = chClient.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
+			GramProjectID: projectID,
+			TimeStart:     now.Add(-1 * time.Minute).UnixNano(),
+			TimeEnd:       now.Add(1 * time.Minute).UnixNano(),
+			GramURN:       toolURN,
+			SortOrder:     "desc",
+			Cursor:        "",
+			Limit:         10,
+		})
+		return err == nil && len(logs) == 1
+	}, 2*time.Second, 50*time.Millisecond, "Expected 1 log in telemetry_logs table")
 
 	// Verify the inserted log
 	log := logs[0]
@@ -167,21 +168,21 @@ func TestToolCallLogger_404ErrorLogsWithWarnSeverity(t *testing.T) {
 	// Emit the logs
 	toolCallLogger.Emit(ctx, logger)
 
-	// Wait for async write
-	time.Sleep(100 * time.Millisecond)
-
-	// Verify the log was inserted with correct conversion
-	logs, err := chClient.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
-		GramProjectID: projectID,
-		TimeStart:     now.Add(-1 * time.Minute).UnixNano(),
-		TimeEnd:       now.Add(1 * time.Minute).UnixNano(),
-		GramURN:       toolURN,
-		SortOrder:     "desc",
-		Cursor:        "",
-		Limit:         10,
-	})
-	require.NoError(t, err)
-	require.Len(t, logs, 1)
+	// Wait for async write (ClickHouse eventual consistency)
+	var logs []repo.TelemetryLog
+	require.Eventually(t, func() bool {
+		var err error
+		logs, err = chClient.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
+			GramProjectID: projectID,
+			TimeStart:     now.Add(-1 * time.Minute).UnixNano(),
+			TimeEnd:       now.Add(1 * time.Minute).UnixNano(),
+			GramURN:       toolURN,
+			SortOrder:     "desc",
+			Cursor:        "",
+			Limit:         10,
+		})
+		return err == nil && len(logs) == 1
+	}, 2*time.Second, 50*time.Millisecond, "Expected 1 log in telemetry_logs table")
 
 	log := logs[0]
 	// Verify 404 was converted to WARN severity
