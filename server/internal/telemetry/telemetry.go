@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -391,58 +392,65 @@ func toolReqToTelemetryLog(req repo.ToolHTTPRequest) repo.InsertTelemetryLogPara
 	// Create body message
 	body := fmt.Sprintf("%s %s -> %d (%.2fms)", req.HTTPMethod, req.HTTPRoute, req.StatusCode, req.DurationMs)
 
-	// Build request headers JSON
-	var requestHeadersJSON string
-	if len(req.RequestHeaders) > 0 {
-		// Headers are already redacted when recorded
-		headerPairs := make([]string, 0, len(req.RequestHeaders))
-		for k, v := range req.RequestHeaders {
-			headerPairs = append(headerPairs, fmt.Sprintf("%q: %q", k, v))
-		}
-		requestHeadersJSON = "{" + strings.Join(headerPairs, ", ") + "}"
-	} else {
-		requestHeadersJSON = "{}"
+	// Build attributes struct and marshal to JSON
+	type attributes struct {
+		HTTPServerURL        string            `json:"http.server.url"`
+		HTTPRoute            string            `json:"http.route"`
+		HTTPRequestMethod    string            `json:"http.request.method"`
+		HTTPRequestBodyBytes int64             `json:"http.request.body.bytes"`
+		HTTPRequestHeaders   map[string]string `json:"http.request.headers"`
+		HTTPStatusCode       int64             `json:"http.response.status_code"`
+		HTTPResponseBytes    int64             `json:"http.response.body.bytes"`
+		HTTPResponseHeaders  map[string]string `json:"http.response.headers"`
+		HTTPDurationMs       float64           `json:"http.duration_ms"`
+		UserAgent            string            `json:"user_agent"`
 	}
 
-	// Build response headers JSON
-	var responseHeadersJSON string
-	if len(req.ResponseHeaders) > 0 {
-		headerPairs := make([]string, 0, len(req.ResponseHeaders))
-		for k, v := range req.ResponseHeaders {
-			headerPairs = append(headerPairs, fmt.Sprintf("%q: %q", k, v))
-		}
-		responseHeadersJSON = "{" + strings.Join(headerPairs, ", ") + "}"
-	} else {
-		responseHeadersJSON = "{}"
+	attrs := attributes{
+		HTTPServerURL:        req.HTTPServerURL,
+		HTTPRoute:            req.HTTPRoute,
+		HTTPRequestMethod:    req.HTTPMethod,
+		HTTPRequestBodyBytes: req.RequestBodyBytes,
+		HTTPRequestHeaders:   req.RequestHeaders,
+		HTTPStatusCode:       req.StatusCode,
+		HTTPResponseBytes:    req.ResponseBodyBytes,
+		HTTPResponseHeaders:  req.ResponseHeaders,
+		HTTPDurationMs:       req.DurationMs,
+		UserAgent:            req.UserAgent,
 	}
 
-	// Build attributes JSON (escape strings properly)
-	attributes := fmt.Sprintf(`{
-		"http.server.url": %q,
-		"http.route": %q,
-		"http.request.method": %q,
-		"http.request.body.bytes": %d,
-		"http.request.headers": %s,
-		"http.response.status_code": %d,
-		"http.response.body.bytes": %d,
-		"http.response.headers": %s,
-		"http.duration_ms": %.2f,
-		"user_agent": %q
-	}`, req.HTTPServerURL, req.HTTPRoute, req.HTTPMethod,
-		req.RequestBodyBytes, requestHeadersJSON,
-		req.StatusCode, req.ResponseBodyBytes, responseHeadersJSON,
-		req.DurationMs, req.UserAgent)
+	attrsB, err := json.Marshal(attrs)
+	if err != nil {
+		// Fallback to empty JSON object if marshalling fails
+		attrsB = []byte("{}")
+	}
 
-	// Build resource attributes JSON (escape strings properly)
-	resourceAttributes := fmt.Sprintf(`{
-		"service.name": "gram-server",
-		"gram.project.id": %q,
-		"gram.deployment.id": %q,
-		"gram.tool.id": %q,
-		"gram.tool.urn": %q,
-		"gram.tool.type": %q,
-		"gram.organization.id": %q
-	}`, req.ProjectID, req.DeploymentID, req.ToolID, req.ToolURN, req.ToolType, req.OrganizationID)
+	// Build resource attributes struct and marshal to JSON
+	type resourceAttributes struct {
+		ServiceName    string `json:"service.name"`
+		ProjectID      string `json:"gram.project.id"`
+		DeploymentID   string `json:"gram.deployment.id"`
+		ToolID         string `json:"gram.tool.id"`
+		ToolURN        string `json:"gram.tool.urn"`
+		ToolType       string `json:"gram.tool.type"`
+		OrganizationID string `json:"gram.organization.id"`
+	}
+
+	resAttrs := resourceAttributes{
+		ServiceName:    "gram-server",
+		ProjectID:      req.ProjectID,
+		DeploymentID:   req.DeploymentID,
+		ToolID:         req.ToolID,
+		ToolURN:        req.ToolURN,
+		ToolType:       string(req.ToolType),
+		OrganizationID: req.OrganizationID,
+	}
+
+	resAttrsB, err := json.Marshal(resAttrs)
+	if err != nil {
+		// Fallback to empty JSON object if marshalling fails
+		resAttrsB = []byte("{}")
+	}
 
 	var traceID, spanID *string
 	if req.TraceID != "" {
@@ -468,8 +476,8 @@ func toolReqToTelemetryLog(req repo.ToolHTTPRequest) repo.InsertTelemetryLogPara
 		Body:                   body,
 		TraceID:                traceID,
 		SpanID:                 spanID,
-		Attributes:             attributes,
-		ResourceAttributes:     resourceAttributes,
+		Attributes:             string(attrsB),
+		ResourceAttributes:     string(resAttrsB),
 		GramProjectID:          req.ProjectID,
 		GramDeploymentID:       deploymentID,
 		GramFunctionID:         nil, // HTTP logs don't have function IDs
