@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.24.2
+
+### Patch Changes
+
+- 7e5e7c8: Adds a new telemetry endpoint to the Gram API
+
 ## 0.24.0
 
 ### Minor Changes

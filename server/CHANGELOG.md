@@ -1,5 +1,11 @@
 # server
 
+## 0.15.1
+
+### Patch Changes
+
+- 7e5e7c8: Adds a new telemetry endpoint to the Gram API
+
 ## 0.15.0
 
 ### Minor Changes
