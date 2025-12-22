@@ -37,16 +37,15 @@ func chatSessionsCORS(chatSessionsManager *chatsessions.Manager) func(next http.
 
 			claims, err := chatSessionsManager.ValidateToken(r.Context(), chatSession)
 			if err != nil {
-				w.WriteHeader(http.StatusUnauthorized)
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
 
 			// If the request origin is in the allowed origins, set the allowed origin in the context to be used in the CORS middleware
-			if !slices.Contains(claims.Audience, r.Header.Get("Origin")) {
+			if slices.Contains(claims.Audience, r.Header.Get("Origin")) {
 				w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
 			} else {
-				w.WriteHeader(http.StatusForbidden)
-				w.Write(fmt.Appendf(nil, "Origin %s does not match audience claim: %s", r.Header.Get("Origin"), strings.Join(claims.Audience, ", ")))
+				http.Error(w, fmt.Sprintf("Origin %s does not match audience claim: %s", r.Header.Get("Origin"), strings.Join(claims.Audience, ", ")), http.StatusForbidden)
 				return
 			}
 
