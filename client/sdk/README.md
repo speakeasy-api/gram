@@ -233,6 +233,7 @@ run();
 
 ### [Projects](docs/sdks/projects/README.md)
 
+* [deleteById](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
 * [create](docs/sdks/projects/README.md#create) - createProject projects
 * [list](docs/sdks/projects/README.md#list) - listProjects projects
 * [listAllowedOrigins](docs/sdks/projects/README.md#listallowedorigins) - listAllowedOrigins projects
@@ -376,6 +377,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`packagesPublish`](docs/sdks/packages/README.md#publish) - publish packages
 - [`packagesUpdate`](docs/sdks/packages/README.md#update) - updatePackage packages
 - [`projectsCreate`](docs/sdks/projects/README.md#create) - createProject projects
+- [`projectsDeleteById`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
 - [`projectsList`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`projectsListAllowedOrigins`](docs/sdks/projects/README.md#listallowedorigins) - listAllowedOrigins projects
 - [`projectsSetLogo`](docs/sdks/projects/README.md#setlogo) - setLogo projects
@@ -466,6 +468,7 @@ To learn about this feature and how to get started, check
 - [`useDeleteTemplateMutation`](docs/sdks/templates/README.md#delete) - deleteTemplate templates
 - [`useDeleteToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletetoolsetlink) - deleteToolsetEnvironmentLink environments
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
+- [`useDeletProjectMutation`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments

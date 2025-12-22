@@ -282,6 +282,17 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 		return oops.E(oops.CodeForbidden, err, "forbidden")
 	}
 
+	// Check if this is the default project
+	projects, err := s.repo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to list projects").Log(ctx, s.logger)
+	}
+
+	// The first project (ordered by id ASC) is the default project
+	if len(projects) > 0 && projects[0].ID == projectID {
+		return oops.E(oops.CodeInvalid, nil, "cannot delete the default project")
+	}
+
 	err = s.repo.DeleteProject(ctx, projectID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error deleting project").Log(ctx, s.logger, attr.SlogProjectID(payload.ID))

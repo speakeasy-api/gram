@@ -32,6 +32,7 @@ export * from "./deleteSourceEnvironmentLink.js";
 export * from "./deleteTemplate.js";
 export * from "./deleteToolset.js";
 export * from "./deleteToolsetEnvironmentLink.js";
+export * from "./deletProject.js";
 export * from "./deployment.js";
 export * from "./deploymentLogs.js";
 export * from "./evolveDeployment.js";

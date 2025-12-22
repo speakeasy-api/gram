@@ -24,6 +24,7 @@ export * from "./deleteagentresponse.js";
 export * from "./deletedomain.js";
 export * from "./deleteenvironment.js";
 export * from "./deleteglobalvariation.js";
+export * from "./deleteproject.js";
 export * from "./deleteslackconnection.js";
 export * from "./deletesourceenvironmentlink.js";
 export * from "./deletetemplate.js";
