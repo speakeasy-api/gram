@@ -7,13 +7,13 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { ProjectEntry } from "@gram/client/models/components";
-import { useDeletProjectMutation } from "@gram/client/react-query/deletProject";
+import { useDeleteProjectMutation } from "@gram/client/react-query/deleteProject";
 import {
   invalidateListProjects,
   useListProjectsSuspense,
 } from "@gram/client/react-query/listProjects";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
@@ -27,25 +27,37 @@ export function SettingsProjectsTable() {
     null,
   );
   const [confirmationInput, setConfirmationInput] = useState("");
+  const isDeletingCurrentProject = useRef(false);
 
   const { data: projectsData } = useListProjectsSuspense({
     organizationId: organization.id,
   });
 
-  const deleteProjectMutation = useDeletProjectMutation({
+  const deleteProjectMutation = useDeleteProjectMutation({
     onSuccess: async () => {
+      const shouldNavigate = isDeletingCurrentProject.current;
+
       setProjectToDelete(null);
       setConfirmationInput("");
+      isDeletingCurrentProject.current = false;
+
       await invalidateListProjects(queryClient, [
         {
           organizationId: organization.id,
         },
       ]);
+
       toast.success("Project deleted successfully");
+
+      if (shouldNavigate) {
+        // Navigate to the default project after deleting the current project
+        navigate(`/${organization.slug}/default/settings`);
+      }
     },
     onError: (error) => {
       console.error("Failed to delete project:", error);
       toast.error("Failed to delete project");
+      isDeletingCurrentProject.current = false;
     },
   });
 
@@ -56,26 +68,20 @@ export function SettingsProjectsTable() {
 
   const handleDeleteProject = () => {
     if (!projectToDelete) return;
-    const isCurrentProject = projectToDelete.slug === currentProject.slug;
 
-    deleteProjectMutation.mutate(
-      {
-        request: {
-          id: projectToDelete.id,
-        },
+    // Track if we're deleting the current project for post-deletion navigation
+    isDeletingCurrentProject.current =
+      projectToDelete.slug === currentProject.slug;
+
+    deleteProjectMutation.mutate({
+      request: {
+        id: projectToDelete.id,
       },
-      {
-        onSuccess: () => {
-          if (isCurrentProject) {
-            // Navigate to the default project using react-router
-            navigate(`/${organization.slug}/default/settings`);
-          }
-        },
-      },
-    );
+    });
   };
 
-  // Determine the default project (first in the list)
+  // The first project (ordered by created_at/id) is always the default project
+  // and cannot be deleted per backend validation
   const defaultProject = projectsData?.projects?.[0];
 
   const projectColumns: Column<ProjectEntry>[] = [
