@@ -993,6 +993,188 @@ type UpsertAllowedOriginGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DeleteProjectUnauthorizedResponseBody is the type of the "projects" service
+// "deleteProject" endpoint HTTP response body for the "unauthorized" error.
+type DeleteProjectUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteProjectForbiddenResponseBody is the type of the "projects" service
+// "deleteProject" endpoint HTTP response body for the "forbidden" error.
+type DeleteProjectForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteProjectBadRequestResponseBody is the type of the "projects" service
+// "deleteProject" endpoint HTTP response body for the "bad_request" error.
+type DeleteProjectBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteProjectNotFoundResponseBody is the type of the "projects" service
+// "deleteProject" endpoint HTTP response body for the "not_found" error.
+type DeleteProjectNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteProjectConflictResponseBody is the type of the "projects" service
+// "deleteProject" endpoint HTTP response body for the "conflict" error.
+type DeleteProjectConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteProjectUnsupportedMediaResponseBody is the type of the "projects"
+// service "deleteProject" endpoint HTTP response body for the
+// "unsupported_media" error.
+type DeleteProjectUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteProjectInvalidResponseBody is the type of the "projects" service
+// "deleteProject" endpoint HTTP response body for the "invalid" error.
+type DeleteProjectInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteProjectInvariantViolationResponseBody is the type of the "projects"
+// service "deleteProject" endpoint HTTP response body for the
+// "invariant_violation" error.
+type DeleteProjectInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteProjectUnexpectedResponseBody is the type of the "projects" service
+// "deleteProject" endpoint HTTP response body for the "unexpected" error.
+type DeleteProjectUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteProjectGatewayErrorResponseBody is the type of the "projects" service
+// "deleteProject" endpoint HTTP response body for the "gateway_error" error.
+type DeleteProjectGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ProjectResponseBody is used to define fields on response body types.
 type ProjectResponseBody struct {
 	// The ID of the project
@@ -1820,6 +2002,146 @@ func NewUpsertAllowedOriginGatewayErrorResponseBody(res *goa.ServiceError) *Upse
 	return body
 }
 
+// NewDeleteProjectUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "deleteProject" endpoint of the "projects" service.
+func NewDeleteProjectUnauthorizedResponseBody(res *goa.ServiceError) *DeleteProjectUnauthorizedResponseBody {
+	body := &DeleteProjectUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteProjectForbiddenResponseBody builds the HTTP response body from the
+// result of the "deleteProject" endpoint of the "projects" service.
+func NewDeleteProjectForbiddenResponseBody(res *goa.ServiceError) *DeleteProjectForbiddenResponseBody {
+	body := &DeleteProjectForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteProjectBadRequestResponseBody builds the HTTP response body from
+// the result of the "deleteProject" endpoint of the "projects" service.
+func NewDeleteProjectBadRequestResponseBody(res *goa.ServiceError) *DeleteProjectBadRequestResponseBody {
+	body := &DeleteProjectBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteProjectNotFoundResponseBody builds the HTTP response body from the
+// result of the "deleteProject" endpoint of the "projects" service.
+func NewDeleteProjectNotFoundResponseBody(res *goa.ServiceError) *DeleteProjectNotFoundResponseBody {
+	body := &DeleteProjectNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteProjectConflictResponseBody builds the HTTP response body from the
+// result of the "deleteProject" endpoint of the "projects" service.
+func NewDeleteProjectConflictResponseBody(res *goa.ServiceError) *DeleteProjectConflictResponseBody {
+	body := &DeleteProjectConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteProjectUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "deleteProject" endpoint of the "projects" service.
+func NewDeleteProjectUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteProjectUnsupportedMediaResponseBody {
+	body := &DeleteProjectUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteProjectInvalidResponseBody builds the HTTP response body from the
+// result of the "deleteProject" endpoint of the "projects" service.
+func NewDeleteProjectInvalidResponseBody(res *goa.ServiceError) *DeleteProjectInvalidResponseBody {
+	body := &DeleteProjectInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteProjectInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "deleteProject" endpoint of the "projects" service.
+func NewDeleteProjectInvariantViolationResponseBody(res *goa.ServiceError) *DeleteProjectInvariantViolationResponseBody {
+	body := &DeleteProjectInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteProjectUnexpectedResponseBody builds the HTTP response body from
+// the result of the "deleteProject" endpoint of the "projects" service.
+func NewDeleteProjectUnexpectedResponseBody(res *goa.ServiceError) *DeleteProjectUnexpectedResponseBody {
+	body := &DeleteProjectUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteProjectGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "deleteProject" endpoint of the "projects" service.
+func NewDeleteProjectGatewayErrorResponseBody(res *goa.ServiceError) *DeleteProjectGatewayErrorResponseBody {
+	body := &DeleteProjectGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateProjectPayload builds a projects service createProject endpoint
 // payload.
 func NewCreateProjectPayload(body *CreateProjectRequestBody, apikeyToken *string, sessionToken *string) *projects.CreateProjectPayload {
@@ -1882,6 +2204,17 @@ func NewUpsertAllowedOriginPayload(body *UpsertAllowedOriginRequestBody, apikeyT
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewDeleteProjectPayload builds a projects service deleteProject endpoint
+// payload.
+func NewDeleteProjectPayload(id string, apikeyToken *string, sessionToken *string) *projects.DeleteProjectPayload {
+	v := &projects.DeleteProjectPayload{}
+	v.ID = id
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
 
 	return v
 }

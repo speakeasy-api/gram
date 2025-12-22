@@ -22,7 +22,7 @@ func BuildSearchLogsPayload(telemetrySearchLogsBody string, telemetrySearchLogsA
 	{
 		err = json.Unmarshal([]byte(telemetrySearchLogsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Ut ducimus aut dignissimos.\",\n      \"filter\": {\n         \"deployment_id\": \"4ccc9305-be69-48f6-87b6-d9d0e3be5d1f\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"600dc287-dc1e-414d-8e53-e775a2ab1352\",\n         \"gram_urn\": \"Temporibus ea quia.\",\n         \"http_method\": \"GET\",\n         \"http_route\": \"Omnis cum ratione hic voluptatem iure corrupti.\",\n         \"http_status_code\": 2114515943,\n         \"service_name\": \"Quasi quia omnis qui quisquam.\",\n         \"severity_text\": \"WARN\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"184b61053e50f8ce50a1931545d975a2\"\n      },\n      \"limit\": 661,\n      \"sort\": \"asc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Quisquam minus inventore quis voluptate.\",\n      \"filter\": {\n         \"deployment_id\": \"4572d2ed-798c-43fc-a5f4-e1c7b41ea54b\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"5c4ecd80-0e2e-49fb-965b-a99b0b34c0f6\",\n         \"gram_urn\": \"Non ea a ipsum in provident doloremque.\",\n         \"http_method\": \"POST\",\n         \"http_route\": \"Nihil ducimus eos laborum qui sed odio.\",\n         \"http_status_code\": 1828604165,\n         \"service_name\": \"Quo voluptatem.\",\n         \"severity_text\": \"INFO\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"c0dd498841dfb6be198c0f5b98bbd855\"\n      },\n      \"limit\": 764,\n      \"sort\": \"desc\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -78,7 +78,7 @@ func BuildSearchToolCallsPayload(telemetrySearchToolCallsBody string, telemetryS
 	{
 		err = json.Unmarshal([]byte(telemetrySearchToolCallsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Quos molestiae maxime sed qui quis.\",\n      \"filter\": {\n         \"deployment_id\": \"c7ae03f2-6abc-4b03-9285-800e2ec9fb16\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"5bb0ff4c-f993-40c8-a6dd-935553dbdfba\",\n         \"gram_urn\": \"Consequatur nisi quia amet voluptates.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 192,\n      \"sort\": \"asc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Alias cumque omnis.\",\n      \"filter\": {\n         \"deployment_id\": \"62b6f132-da2c-4407-a47a-181b88a56ef1\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"9b9d3d43-c8d4-4038-93bc-2569bb1c924c\",\n         \"gram_urn\": \"Dolor repudiandae possimus.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 243,\n      \"sort\": \"desc\"\n   }'")
 		}
 	}
 	var apikeyToken *string

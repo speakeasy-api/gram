@@ -27,6 +27,8 @@ type Service interface {
 	ListAllowedOrigins(context.Context, *ListAllowedOriginsPayload) (res *ListAllowedOriginsResult, err error)
 	// Upsert an allowed origin for a project.
 	UpsertAllowedOrigin(context.Context, *UpsertAllowedOriginPayload) (res *UpsertAllowedOriginResult, err error)
+	// Delete a project by its ID
+	DeleteProject(context.Context, *DeleteProjectPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -49,7 +51,7 @@ const ServiceName = "projects"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"createProject", "listProjects", "setLogo", "listAllowedOrigins", "upsertAllowedOrigin"}
+var MethodNames = [6]string{"createProject", "listProjects", "setLogo", "listAllowedOrigins", "upsertAllowedOrigin", "deleteProject"}
 
 type AllowedOrigin struct {
 	// The ID of the allowed origin
@@ -81,6 +83,15 @@ type CreateProjectPayload struct {
 type CreateProjectResult struct {
 	// The created project
 	Project *Project
+}
+
+// DeleteProjectPayload is the payload type of the projects service
+// deleteProject method.
+type DeleteProjectPayload struct {
+	// The id of the project to delete
+	ID           string
+	ApikeyToken  *string
+	SessionToken *string
 }
 
 // ListAllowedOriginsPayload is the payload type of the projects service

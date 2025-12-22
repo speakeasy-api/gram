@@ -21,6 +21,7 @@ type Endpoints struct {
 	SetLogo             goa.Endpoint
 	ListAllowedOrigins  goa.Endpoint
 	UpsertAllowedOrigin goa.Endpoint
+	DeleteProject       goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "projects" service with endpoints.
@@ -33,6 +34,7 @@ func NewEndpoints(s Service) *Endpoints {
 		SetLogo:             NewSetLogoEndpoint(s, a.APIKeyAuth),
 		ListAllowedOrigins:  NewListAllowedOriginsEndpoint(s, a.APIKeyAuth),
 		UpsertAllowedOrigin: NewUpsertAllowedOriginEndpoint(s, a.APIKeyAuth),
+		DeleteProject:       NewDeleteProjectEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -43,6 +45,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SetLogo = m(e.SetLogo)
 	e.ListAllowedOrigins = m(e.ListAllowedOrigins)
 	e.UpsertAllowedOrigin = m(e.UpsertAllowedOrigin)
+	e.DeleteProject = m(e.DeleteProject)
 }
 
 // NewCreateProjectEndpoint returns an endpoint function that calls the method
@@ -289,5 +292,28 @@ func NewUpsertAllowedOriginEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 			return nil, err
 		}
 		return s.UpsertAllowedOrigin(ctx, p)
+	}
+}
+
+// NewDeleteProjectEndpoint returns an endpoint function that calls the method
+// "deleteProject" of service "projects".
+func NewDeleteProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteProjectPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteProject(ctx, p)
 	}
 }

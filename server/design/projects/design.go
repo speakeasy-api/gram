@@ -138,6 +138,34 @@ var _ = Service("projects", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "upsertAllowedOrigin")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertAllowedOrigin"}`)
 	})
+
+	Method("deleteProject", func() {
+		Description("Delete a project by its ID")
+
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Required("id")
+			Attribute("id", String, "The id of the project to delete", func() { Format(FormatUUID) })
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		HTTP(func() {
+			Param("id")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			DELETE("/rpc/projects.delete")
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "deleteProject")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteById")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteProject"}`)
+	})
 })
 
 var CreateProjectForm = Type("CreateProjectForm", func() {
