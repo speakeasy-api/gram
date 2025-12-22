@@ -90,14 +90,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 
-	chatSessionMiddleware := middleware.ChatSessionMiddleware(service.chatSessions)
-
 	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
-	server.Use(chatSessionMiddleware)
 	srv.Mount(mux, server)
 
-	wrappedHandler := chatSessionMiddleware(oops.ErrHandle(service.logger, service.HandleCompletion))
-	o11y.AttachHandler(mux, "POST", "/chat/completions", wrappedHandler.ServeHTTP)
+	o11y.AttachHandler(mux, "POST", "/chat/completions", oops.ErrHandle(service.logger, service.HandleCompletion).ServeHTTP)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -165,17 +161,24 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 
 func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) (*gen.ListChatsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil || authCtx.SessionID == nil {
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
+	isAdmin := false
+
+	if authCtx.SessionID != nil {
+		userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
+		}
+		if userInfo.Admin {
+			isAdmin = true
+		}
 	}
 
 	result := make([]*gen.ChatOverview, 0)
-	if userInfo.Admin {
+	if isAdmin {
 		chats, err := s.repo.ListChats(ctx, *authCtx.ProjectID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats").Log(ctx, s.logger)
@@ -194,7 +197,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	} else {
 		chats, err := s.repo.ListChatsForUser(ctx, repo.ListChatsForUserParams{
 			ProjectID: *authCtx.ProjectID,
-			UserID:    conv.ToPGText(authCtx.UserID),
+			UserID:    conv.ToPGText(authCtx.UserID), // TODO: make this work for external user ids (Elements)
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats").Log(ctx, s.logger)
