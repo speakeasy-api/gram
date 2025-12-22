@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -33,6 +34,8 @@ type ToolMetricsProvider interface {
 	ListLogsForTrace(ctx context.Context, params repo.ListLogsForTraceParams) ([]repo.TelemetryLog, error)
 	// Log tool call request/response
 	LogHTTPRequest(context.Context, repo.ToolHTTPRequest) error
+	// Insert telemetry log
+	InsertTelemetryLog(ctx context.Context, params repo.InsertTelemetryLogParams) error
 	// ShouldLog returns true if the tool call should be logged
 	ShouldLog(context.Context, string) (bool, error)
 }
@@ -109,6 +112,10 @@ func (l *toolCallLogger) Emit(ctx context.Context, logger *slog.Logger) {
 		return
 	}
 	EmitHTTPRequestLog(ctx, logger, l.provider, l.toolName, *l.entry)
+
+
+	params := toolReqToTelemetryLog(*l.entry)
+	createTelemetryLog(ctx, logger, l.provider, params)
 }
 
 func (l *toolCallLogger) RecordHTTPMethod(method string) {
@@ -305,6 +312,38 @@ func EmitHTTPRequestLog(
 	}()
 }
 
+// createTelemetryLog logs a telemetry entry using the tool metrics provider.
+// Errors are reported through the supplied logger. Logging happens asynchronously to
+// avoid blocking the caller and the params struct is copied to prevent data races.
+func createTelemetryLog(
+	ctx context.Context,
+	logger *slog.Logger,
+	provider ToolMetricsProvider,
+	params repo.InsertTelemetryLogParams,
+) {
+	if provider == nil || params.ID == "" {
+		return
+	}
+
+	go func() {
+		logCtx := context.WithoutCancel(ctx)
+
+		if err := provider.InsertTelemetryLog(logCtx, params); err != nil {
+			logger.ErrorContext(logCtx,
+				"failed to insert telemetry log to ClickHouse",
+				attr.SlogError(err),
+				attr.SlogToolURN(params.GramURN),
+			)
+			return
+		}
+
+		logger.DebugContext(logCtx,
+			"logged telemetry entry to ClickHouse",
+			attr.SlogToolURN(params.GramURN),
+		)
+	}()
+}
+
 // reasonable redaction of tokens function for tool call logs
 func redactToken(token string) string {
 	trimmed := strings.TrimSpace(token)
@@ -329,4 +368,125 @@ func redactToken(token string) string {
 	}
 
 	return trimmed[:redactRevealPrefixLen] + "***"
+}
+
+// toolReqToTelemetryLog converts a ToolHTTPRequest to InsertTelemetryLogParams
+// for inserting into the telemetry_logs table.
+func toolReqToTelemetryLog(req repo.ToolHTTPRequest) repo.InsertTelemetryLogParams {
+	// Convert timestamp to Unix nanoseconds
+	timeUnixNano := req.Ts.UnixNano()
+
+	// Determine severity based on status code
+	var severityText *string
+	errorText := "ERROR"
+	warnText := "WARN"
+	infoText := "INFO"
+	if req.StatusCode >= 500 {
+		severityText = &errorText
+	} else if req.StatusCode >= 400 {
+		severityText = &warnText
+	} else {
+		severityText = &infoText
+	}
+
+	// Create body message
+	body := fmt.Sprintf("%s %s -> %d (%.2fms)", req.HTTPMethod, req.HTTPRoute, req.StatusCode, req.DurationMs)
+
+	// Build attributes struct and marshal to JSON
+	type attributes struct {
+		HTTPServerURL        string            `json:"http.server.url"`
+		HTTPRoute            string            `json:"http.route"`
+		HTTPRequestMethod    string            `json:"http.request.method"`
+		HTTPRequestBodyBytes int64             `json:"http.request.body.bytes"`
+		HTTPRequestHeaders   map[string]string `json:"http.request.headers"`
+		HTTPStatusCode       int64             `json:"http.response.status_code"`
+		HTTPResponseBytes    int64             `json:"http.response.body.bytes"`
+		HTTPResponseHeaders  map[string]string `json:"http.response.headers"`
+		HTTPDurationMs       float64           `json:"http.duration_ms"`
+		UserAgent            string            `json:"user_agent"`
+	}
+
+	attrs := attributes{
+		HTTPServerURL:        req.HTTPServerURL,
+		HTTPRoute:            req.HTTPRoute,
+		HTTPRequestMethod:    req.HTTPMethod,
+		HTTPRequestBodyBytes: req.RequestBodyBytes,
+		HTTPRequestHeaders:   req.RequestHeaders,
+		HTTPStatusCode:       req.StatusCode,
+		HTTPResponseBytes:    req.ResponseBodyBytes,
+		HTTPResponseHeaders:  req.ResponseHeaders,
+		HTTPDurationMs:       req.DurationMs,
+		UserAgent:            req.UserAgent,
+	}
+
+	attrsB, err := json.Marshal(attrs)
+	if err != nil {
+		// Fallback to empty JSON object if marshalling fails
+		attrsB = []byte("{}")
+	}
+
+	// Build resource attributes struct and marshal to JSON
+	type resourceAttributes struct {
+		ServiceName    string `json:"service.name"`
+		ProjectID      string `json:"gram.project.id"`
+		DeploymentID   string `json:"gram.deployment.id"`
+		ToolID         string `json:"gram.tool.id"`
+		ToolURN        string `json:"gram.tool.urn"`
+		ToolType       string `json:"gram.tool.type"`
+		OrganizationID string `json:"gram.organization.id"`
+	}
+
+	resAttrs := resourceAttributes{
+		ServiceName:    "gram-server",
+		ProjectID:      req.ProjectID,
+		DeploymentID:   req.DeploymentID,
+		ToolID:         req.ToolID,
+		ToolURN:        req.ToolURN,
+		ToolType:       string(req.ToolType),
+		OrganizationID: req.OrganizationID,
+	}
+
+	resAttrsB, err := json.Marshal(resAttrs)
+	if err != nil {
+		// Fallback to empty JSON object if marshalling fails
+		resAttrsB = []byte("{}")
+	}
+
+	var traceID, spanID *string
+	if req.TraceID != "" {
+		traceID = &req.TraceID
+	}
+	if req.SpanID != "" {
+		spanID = &req.SpanID
+	}
+
+	var deploymentID *string
+	if req.DeploymentID != "" {
+		deploymentID = &req.DeploymentID
+	}
+
+	// #nosec G115 -- StatusCode is validated to be within HTTP status code range (0-599)
+	statusCode := int32(req.StatusCode)
+
+	return repo.InsertTelemetryLogParams{
+		ID:                     req.ID,
+		TimeUnixNano:           timeUnixNano,
+		ObservedTimeUnixNano:   timeUnixNano,
+		SeverityText:           severityText,
+		Body:                   body,
+		TraceID:                traceID,
+		SpanID:                 spanID,
+		Attributes:             string(attrsB),
+		ResourceAttributes:     string(resAttrsB),
+		GramProjectID:          req.ProjectID,
+		GramDeploymentID:       deploymentID,
+		GramFunctionID:         nil, // HTTP logs don't have function IDs
+		GramURN:                req.ToolURN,
+		ServiceName:            "gram-server",
+		ServiceVersion:         nil,
+		HTTPRequestMethod:      &req.HTTPMethod,
+		HTTPResponseStatusCode: &statusCode,
+		HTTPRoute:              &req.HTTPRoute,
+		HTTPServerURL:          &req.HTTPServerURL,
+	}
 }
