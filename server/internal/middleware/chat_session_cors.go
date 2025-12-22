@@ -20,8 +20,9 @@ var chatSessionsAllowedRoutes = []string{
 func chatSessionsCORS(chatSessionsManager *chatsessions.Manager) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == "OPTIONS" {
-				w.Header().Set("Access-Control-Allow-Origin", "*") // Allow all origins for OPTIONS requests because we don't know what origins to allow until we get the token on the actual request
+			if r.Method == http.MethodOptions {
+				// Slightly non-ideal, but later in the file we validate the origin of the request against the audience claim
+				w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin")) // Allow the origin of the request for OPTIONS requests because we don't know what origins to allow until we get the token on the actual request
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
