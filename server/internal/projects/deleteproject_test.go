@@ -63,4 +63,21 @@ func TestProjectsService_DeleteProject(t *testing.T) {
 		require.ErrorAs(t, err, &oopsErr)
 		require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 	})
+
+	t.Run("it rejects deleting a default project", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestProjectsService(t)
+
+		// Try to delete a default project, which should be forbidden
+		err := ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{
+			ID: "00000000-0000-0000-0000-000000000000", // Assuming 0000-0000-0000-0000-000000000000 is the ID for the default project
+		})
+
+		// Should return a forbidden error
+		require.Error(t, err)
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr)
+		require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	})
 }
