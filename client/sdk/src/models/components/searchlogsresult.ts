@@ -13,7 +13,7 @@ import {
 } from "./telemetrylogrecord.js";
 
 /**
- * Result of searching unified telemetry logs
+ * Result of searching telemetry logs
  */
 export type SearchLogsResult = {
   /**

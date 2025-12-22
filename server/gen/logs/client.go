@@ -17,17 +17,13 @@ import (
 type Client struct {
 	ListLogsEndpoint              goa.Endpoint
 	ListToolExecutionLogsEndpoint goa.Endpoint
-	SearchLogsEndpoint            goa.Endpoint
-	SearchToolCallsEndpoint       goa.Endpoint
 }
 
 // NewClient initializes a "logs" service client given the endpoints.
-func NewClient(listLogs, listToolExecutionLogs, searchLogs, searchToolCalls goa.Endpoint) *Client {
+func NewClient(listLogs, listToolExecutionLogs goa.Endpoint) *Client {
 	return &Client{
 		ListLogsEndpoint:              listLogs,
 		ListToolExecutionLogsEndpoint: listToolExecutionLogs,
-		SearchLogsEndpoint:            searchLogs,
-		SearchToolCallsEndpoint:       searchToolCalls,
 	}
 }
 
@@ -74,48 +70,4 @@ func (c *Client) ListToolExecutionLogs(ctx context.Context, p *ListToolExecution
 		return
 	}
 	return ires.(*ListToolExecutionLogsResult), nil
-}
-
-// SearchLogs calls the "searchLogs" endpoint of the "logs" service.
-// SearchLogs may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) SearchLogs(ctx context.Context, p *SearchLogsPayload) (res *SearchLogsResult, err error) {
-	var ires any
-	ires, err = c.SearchLogsEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*SearchLogsResult), nil
-}
-
-// SearchToolCalls calls the "searchToolCalls" endpoint of the "logs" service.
-// SearchToolCalls may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) SearchToolCalls(ctx context.Context, p *SearchToolCallsPayload) (res *SearchToolCallsResult, err error) {
-	var ires any
-	ires, err = c.SearchToolCallsEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*SearchToolCallsResult), nil
 }

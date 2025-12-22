@@ -16,13 +16,3 @@ func ListLogsLogsPath() string {
 func ListToolExecutionLogsLogsPath() string {
 	return "/rpc/logs.listToolExecutionLogs"
 }
-
-// SearchLogsLogsPath returns the URL path to the logs service searchLogs HTTP endpoint.
-func SearchLogsLogsPath() string {
-	return "/rpc/logs.searchLogs"
-}
-
-// SearchToolCallsLogsPath returns the URL path to the logs service searchToolCalls HTTP endpoint.
-func SearchToolCallsLogsPath() string {
-	return "/rpc/logs.searchToolCalls"
-}

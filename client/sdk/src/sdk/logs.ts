@@ -4,8 +4,6 @@
 
 import { logsList } from "../funcs/logsList.js";
 import { logsListToolExecutionLogs } from "../funcs/logsListToolExecutionLogs.js";
-import { logsSearchLogs } from "../funcs/logsSearchLogs.js";
-import { logsSearchToolCalls } from "../funcs/logsSearchToolCalls.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -43,44 +41,6 @@ export class Logs extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListToolExecutionLogsResult> {
     return unwrapAsync(logsListToolExecutionLogs(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * searchLogs logs
-   *
-   * @remarks
-   * Search unified telemetry logs following OpenTelemetry Logs Data Model.
-   */
-  async searchLogs(
-    request: operations.SearchLogsRequest,
-    security?: operations.SearchLogsSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.SearchLogsResult> {
-    return unwrapAsync(logsSearchLogs(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * searchToolCalls logs
-   *
-   * @remarks
-   * Search tool call summaries.
-   */
-  async searchToolCalls(
-    request: operations.SearchToolCallsRequest,
-    security?: operations.SearchToolCallsSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.SearchToolCallsResult> {
-    return unwrapAsync(logsSearchToolCalls(
       this,
       request,
       security,

@@ -27,12 +27,12 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * searchToolCalls logs
+ * searchToolCalls telemetry
  *
  * @remarks
- * Search tool call summaries.
+ * Search and list tool calls that match a search filter
  */
-export function logsSearchToolCalls(
+export function telemetrySearchToolCalls(
   client: GramCore,
   request: operations.SearchToolCallsRequest,
   security?: operations.SearchToolCallsSecurity | undefined,
@@ -94,7 +94,7 @@ async function $do(
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/logs.searchToolCalls")();
+  const path = pathToFunc("/rpc/telemetry.searchToolCalls")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",

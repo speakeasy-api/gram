@@ -20,10 +20,6 @@ type Service interface {
 	ListLogs(context.Context, *ListLogsPayload) (res *ListToolLogResponse, err error)
 	// List structured logs from tool executions.
 	ListToolExecutionLogs(context.Context, *ListToolExecutionLogsPayload) (res *ListToolExecutionLogsResult, err error)
-	// Search unified telemetry logs following OpenTelemetry Logs Data Model.
-	SearchLogs(context.Context, *SearchLogsPayload) (res *SearchLogsResult, err error)
-	// Search tool call summaries.
-	SearchToolCalls(context.Context, *SearchToolCallsPayload) (res *SearchToolCallsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -46,7 +42,7 @@ const ServiceName = "logs"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"listLogs", "listToolExecutionLogs", "searchLogs", "searchToolCalls"}
+var MethodNames = [2]string{"listLogs", "listToolExecutionLogs"}
 
 // HTTP tool request and response log entry
 type HTTPToolLog struct {
@@ -178,140 +174,6 @@ type PaginationResponse struct {
 	HasNextPage *bool
 	// Cursor for next page
 	NextPageCursor *string
-}
-
-// Filter criteria for searching logs
-type SearchLogsFilter struct {
-	// Trace ID filter (32 hex characters)
-	TraceID *string
-	// Severity level filter
-	SeverityText *string
-	// HTTP status code filter
-	HTTPStatusCode *int32
-	// HTTP route filter
-	HTTPRoute *string
-	// HTTP method filter
-	HTTPMethod *string
-	// Service name filter
-	ServiceName *string
-	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
-	From *string
-	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
-	To *string
-	// Deployment ID filter
-	DeploymentID *string
-	// Function ID filter
-	FunctionID *string
-	// Gram URN filter
-	GramUrn *string
-}
-
-// SearchLogsPayload is the payload type of the logs service searchLogs method.
-type SearchLogsPayload struct {
-	ApikeyToken      *string
-	SessionToken     *string
-	ProjectSlugInput *string
-	// Filter criteria for the search
-	Filter *SearchLogsFilter
-	// Cursor for pagination
-	Cursor *string
-	// Sort order
-	Sort string
-	// Number of items to return (1-1000)
-	Limit int
-}
-
-// SearchLogsResult is the result type of the logs service searchLogs method.
-type SearchLogsResult struct {
-	// List of telemetry log records
-	Logs []*TelemetryLogRecord
-	// Cursor for next page
-	NextCursor *string
-}
-
-// Filter criteria for searching tool calls
-type SearchToolCallsFilter struct {
-	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
-	From *string
-	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
-	To *string
-	// Deployment ID filter
-	DeploymentID *string
-	// Function ID filter
-	FunctionID *string
-	// Gram URN filter
-	GramUrn *string
-}
-
-// SearchToolCallsPayload is the payload type of the logs service
-// searchToolCalls method.
-type SearchToolCallsPayload struct {
-	ApikeyToken      *string
-	SessionToken     *string
-	ProjectSlugInput *string
-	// Filter criteria for the search
-	Filter *SearchToolCallsFilter
-	// Cursor for pagination
-	Cursor *string
-	// Sort order
-	Sort string
-	// Number of items to return (1-1000)
-	Limit int
-}
-
-// SearchToolCallsResult is the result type of the logs service searchToolCalls
-// method.
-type SearchToolCallsResult struct {
-	// List of tool call summaries
-	ToolCalls []*ToolCallSummary
-	// Cursor for next page
-	NextCursor *string
-}
-
-// Service information
-type ServiceInfo struct {
-	// Service name
-	Name string
-	// Service version
-	Version *string
-}
-
-// OpenTelemetry log record
-type TelemetryLogRecord struct {
-	// Log record ID
-	ID string
-	// Unix time in nanoseconds when event occurred
-	TimeUnixNano int64
-	// Unix time in nanoseconds when event was observed
-	ObservedTimeUnixNano int64
-	// Text representation of severity
-	SeverityText *string
-	// The primary log message
-	Body string
-	// W3C trace ID (32 hex characters)
-	TraceID *string
-	// W3C span ID (16 hex characters)
-	SpanID *string
-	// Log attributes as JSON object
-	Attributes any
-	// Resource attributes as JSON object
-	ResourceAttributes any
-	// Service information
-	Service *ServiceInfo
-}
-
-// Summary information for a tool call
-type ToolCallSummary struct {
-	// Trace ID (32 hex characters)
-	TraceID string
-	// Earliest log timestamp in Unix nanoseconds
-	StartTimeUnixNano int64
-	// Total number of logs in this tool call
-	LogCount uint64
-	// HTTP status code (if applicable)
-	HTTPStatusCode *int32
-	// Gram URN associated with this tool call
-	GramUrn string
 }
 
 // Structured log entry from a tool execution

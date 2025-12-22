@@ -1,6 +1,6 @@
 # SearchLogsPayload
 
-Payload for searching unified telemetry logs following OpenTelemetry Logs Data Model
+Payload for searching telemetry logs
 
 ## Example Usage
 

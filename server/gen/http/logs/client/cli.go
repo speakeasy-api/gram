@@ -101,7 +101,7 @@ func BuildListLogsPayload(logsListLogsToolID string, logsListLogsTsStart string,
 		if logsListLogsToolUrns != "" {
 			err = json.Unmarshal([]byte(logsListLogsToolUrns), &toolUrns)
 			if err != nil {
-				return nil, fmt.Errorf("invalid JSON for toolUrns, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"Natus sunt.\",\n      \"Cumque minima aliquam distinctio sapiente pariatur et.\",\n      \"Officiis aperiam doloribus cumque debitis.\"\n   ]'")
+				return nil, fmt.Errorf("invalid JSON for toolUrns, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"Vel quia.\",\n      \"Rerum rerum impedit.\"\n   ]'")
 			}
 		}
 	}
@@ -345,118 +345,6 @@ func BuildListToolExecutionLogsPayload(logsListToolExecutionLogsTsStart string, 
 	v.PerPage = perPage
 	v.Direction = direction
 	v.Sort = sort
-	v.ApikeyToken = apikeyToken
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildSearchLogsPayload builds the payload for the logs searchLogs endpoint
-// from CLI flags.
-func BuildSearchLogsPayload(logsSearchLogsBody string, logsSearchLogsApikeyToken string, logsSearchLogsSessionToken string, logsSearchLogsProjectSlugInput string) (*logs.SearchLogsPayload, error) {
-	var err error
-	var body SearchLogsRequestBody
-	{
-		err = json.Unmarshal([]byte(logsSearchLogsBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Delectus a qui.\",\n      \"filter\": {\n         \"deployment_id\": \"cacec167-3d67-4c7e-a53e-27cd3fd3b6e4\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"483d4313-5382-4339-900b-d4c289fdc85f\",\n         \"gram_urn\": \"Ut animi.\",\n         \"http_method\": \"HEAD\",\n         \"http_route\": \"Autem porro laudantium et aut.\",\n         \"http_status_code\": 378302167,\n         \"service_name\": \"Quia reiciendis itaque recusandae nihil.\",\n         \"severity_text\": \"DEBUG\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"e6a22f69a399bfe6643133e4750864b5\"\n      },\n      \"limit\": 784,\n      \"sort\": \"desc\"\n   }'")
-		}
-	}
-	var apikeyToken *string
-	{
-		if logsSearchLogsApikeyToken != "" {
-			apikeyToken = &logsSearchLogsApikeyToken
-		}
-	}
-	var sessionToken *string
-	{
-		if logsSearchLogsSessionToken != "" {
-			sessionToken = &logsSearchLogsSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if logsSearchLogsProjectSlugInput != "" {
-			projectSlugInput = &logsSearchLogsProjectSlugInput
-		}
-	}
-	v := &logs.SearchLogsPayload{
-		Cursor: body.Cursor,
-		Sort:   body.Sort,
-		Limit:  body.Limit,
-	}
-	if body.Filter != nil {
-		v.Filter = marshalSearchLogsFilterRequestBodyToLogsSearchLogsFilter(body.Filter)
-	}
-	{
-		var zero string
-		if v.Sort == zero {
-			v.Sort = "desc"
-		}
-	}
-	{
-		var zero int
-		if v.Limit == zero {
-			v.Limit = 50
-		}
-	}
-	v.ApikeyToken = apikeyToken
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildSearchToolCallsPayload builds the payload for the logs searchToolCalls
-// endpoint from CLI flags.
-func BuildSearchToolCallsPayload(logsSearchToolCallsBody string, logsSearchToolCallsApikeyToken string, logsSearchToolCallsSessionToken string, logsSearchToolCallsProjectSlugInput string) (*logs.SearchToolCallsPayload, error) {
-	var err error
-	var body SearchToolCallsRequestBody
-	{
-		err = json.Unmarshal([]byte(logsSearchToolCallsBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Sequi fugiat voluptas consequuntur quibusdam repellat.\",\n      \"filter\": {\n         \"deployment_id\": \"0817e108-f9b5-4a2f-b9ba-b523d8879b04\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"72bd0d83-8bbe-4b9b-ac9a-28e3f5fd0119\",\n         \"gram_urn\": \"Quia error.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 797,\n      \"sort\": \"desc\"\n   }'")
-		}
-	}
-	var apikeyToken *string
-	{
-		if logsSearchToolCallsApikeyToken != "" {
-			apikeyToken = &logsSearchToolCallsApikeyToken
-		}
-	}
-	var sessionToken *string
-	{
-		if logsSearchToolCallsSessionToken != "" {
-			sessionToken = &logsSearchToolCallsSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if logsSearchToolCallsProjectSlugInput != "" {
-			projectSlugInput = &logsSearchToolCallsProjectSlugInput
-		}
-	}
-	v := &logs.SearchToolCallsPayload{
-		Cursor: body.Cursor,
-		Sort:   body.Sort,
-		Limit:  body.Limit,
-	}
-	if body.Filter != nil {
-		v.Filter = marshalSearchToolCallsFilterRequestBodyToLogsSearchToolCallsFilter(body.Filter)
-	}
-	{
-		var zero string
-		if v.Sort == zero {
-			v.Sort = "desc"
-		}
-	}
-	{
-		var zero int
-		if v.Limit == zero {
-			v.Limit = 50
-		}
-	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
