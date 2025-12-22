@@ -60,7 +60,7 @@ func New(
 			{"SetLogo", "POST", "/rpc/projects.setLogo"},
 			{"ListAllowedOrigins", "GET", "/rpc/projects.listAllowedOrigins"},
 			{"UpsertAllowedOrigin", "POST", "/rpc/projects.upsertAllowedOrigin"},
-			{"DeleteProject", "DELETE", "/rpc/project.delete"},
+			{"DeleteProject", "DELETE", "/rpc/projects.delete"},
 		},
 		CreateProject:       NewCreateProjectHandler(e.CreateProject, mux, decoder, encoder, errhandler, formatter),
 		ListProjects:        NewListProjectsHandler(e.ListProjects, mux, decoder, encoder, errhandler, formatter),
@@ -376,7 +376,7 @@ func MountDeleteProjectHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("DELETE", "/rpc/project.delete", otelhttp.WithRouteTag("/rpc/project.delete", f).ServeHTTP)
+	mux.Handle("DELETE", "/rpc/projects.delete", otelhttp.WithRouteTag("/rpc/projects.delete", f).ServeHTTP)
 }
 
 // NewDeleteProjectHandler creates a HTTP handler which loads the HTTP request

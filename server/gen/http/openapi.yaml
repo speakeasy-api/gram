@@ -5147,80 +5147,6 @@ paths:
             tags:
                 - features
             x-speakeasy-name-override: set
-    /rpc/project.delete:
-        delete:
-            description: |-
-                Delete a project by its ID
-
-                **Required security scopes for apikey**:
-                  * `producer`
-            operationId: projects#deleteProject
-            parameters:
-                - description: The id of the project to delete
-                  format: uuid
-                  in: query
-                  name: id
-                  required: true
-                  type: string
-                - description: API Key header
-                  in: header
-                  name: Gram-Key
-                  required: false
-                  type: string
-                - description: Session header
-                  in: header
-                  name: Gram-Session
-                  required: false
-                  type: string
-            responses:
-                "204":
-                    description: No Content response.
-                "400":
-                    description: Bad Request response.
-                    schema:
-                        $ref: '#/definitions/ProjectsDeleteProjectBadRequestResponseBody'
-                "401":
-                    description: Unauthorized response.
-                    schema:
-                        $ref: '#/definitions/ProjectsDeleteProjectUnauthorizedResponseBody'
-                "403":
-                    description: Forbidden response.
-                    schema:
-                        $ref: '#/definitions/ProjectsDeleteProjectForbiddenResponseBody'
-                "404":
-                    description: Not Found response.
-                    schema:
-                        $ref: '#/definitions/ProjectsDeleteProjectNotFoundResponseBody'
-                "409":
-                    description: Conflict response.
-                    schema:
-                        $ref: '#/definitions/ProjectsDeleteProjectConflictResponseBody'
-                "415":
-                    description: Unsupported Media Type response.
-                    schema:
-                        $ref: '#/definitions/ProjectsDeleteProjectUnsupportedMediaResponseBody'
-                "422":
-                    description: Unprocessable Entity response.
-                    schema:
-                        $ref: '#/definitions/ProjectsDeleteProjectInvalidResponseBody'
-                "500":
-                    description: Internal Server Error response.
-                    schema:
-                        $ref: '#/definitions/ProjectsDeleteProjectUnexpectedResponseBody'
-                "502":
-                    description: Bad Gateway response.
-                    schema:
-                        $ref: '#/definitions/ProjectsDeleteProjectGatewayErrorResponseBody'
-            schemes:
-                - http
-            security:
-                - apikey_header_Gram-Key: []
-            summary: deleteProject projects
-            tags:
-                - projects
-            x-speakeasy-name-override: deleteById
-            x-speakeasy-react-hook:
-                name: DeletProject
     /rpc/projects.create:
         post:
             description: |-
@@ -5302,6 +5228,81 @@ paths:
             x-speakeasy-name-override: create
             x-speakeasy-react-hook:
                 name: CreateProject
+    /rpc/projects.delete:
+        delete:
+            description: |-
+                Delete a project by its ID
+
+                **Required security scopes for apikey**:
+                  * `producer`
+            operationId: projects#deleteProject
+            parameters:
+                - description: The id of the project to delete
+                  format: uuid
+                  in: query
+                  name: id
+                  required: true
+                  type: string
+                - description: API Key header
+                  in: header
+                  name: Gram-Key
+                  required: false
+                  type: string
+                - description: Session header
+                  in: header
+                  name: Gram-Session
+                  required: false
+                  type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    description: Bad Request response.
+                    schema:
+                        $ref: '#/definitions/ProjectsDeleteProjectBadRequestResponseBody'
+                "401":
+                    description: Unauthorized response.
+                    schema:
+                        $ref: '#/definitions/ProjectsDeleteProjectUnauthorizedResponseBody'
+                "403":
+                    description: Forbidden response.
+                    schema:
+                        $ref: '#/definitions/ProjectsDeleteProjectForbiddenResponseBody'
+                "404":
+                    description: Not Found response.
+                    schema:
+                        $ref: '#/definitions/ProjectsDeleteProjectNotFoundResponseBody'
+                "409":
+                    description: Conflict response.
+                    schema:
+                        $ref: '#/definitions/ProjectsDeleteProjectConflictResponseBody'
+                "415":
+                    description: Unsupported Media Type response.
+                    schema:
+                        $ref: '#/definitions/ProjectsDeleteProjectUnsupportedMediaResponseBody'
+                "422":
+                    description: Unprocessable Entity response.
+                    schema:
+                        $ref: '#/definitions/ProjectsDeleteProjectInvalidResponseBody'
+                "500":
+                    description: Internal Server Error response.
+                    schema:
+                        $ref: '#/definitions/ProjectsDeleteProjectUnexpectedResponseBody'
+                "502":
+                    description: Bad Gateway response.
+                    schema:
+                        $ref: '#/definitions/ProjectsDeleteProjectGatewayErrorResponseBody'
+            schemes:
+                - http
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: deleteProject projects
+            tags:
+                - projects
+            x-speakeasy-name-override: deleteById
+            x-speakeasy-react-hook:
+                name: DeleteProject
     /rpc/projects.list:
         get:
             description: |-

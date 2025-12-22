@@ -7,6 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type DeleteProjectSecurity = {
   apikeyHeaderGramKey?: string | undefined;
+  sessionHeaderGramSession?: string | undefined;
 };
 
 export type DeleteProjectRequest = {
@@ -27,6 +28,7 @@ export type DeleteProjectRequest = {
 /** @internal */
 export type DeleteProjectSecurity$Outbound = {
   "apikey_header_Gram-Key"?: string | undefined;
+  "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -36,9 +38,11 @@ export const DeleteProjectSecurity$outboundSchema: z.ZodType<
   DeleteProjectSecurity
 > = z.object({
   apikeyHeaderGramKey: z.string().optional(),
+  sessionHeaderGramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    sessionHeaderGramSession: "session_header_Gram-Session",
   });
 });
 

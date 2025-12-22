@@ -92,7 +92,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/project.delete")();
+  const path = pathToFunc("/rpc/projects.delete")();
 
   const query = encodeFormQuery({
     "id": payload.id,
@@ -116,6 +116,13 @@ async function $do(
         fieldName: "Gram-Key",
         type: "apiKey:header",
         value: security?.apikeyHeaderGramKey,
+      },
+    ],
+    [
+      {
+        fieldName: "Gram-Session",
+        type: "apiKey:header",
+        value: security?.sessionHeaderGramSession,
       },
     ],
   );

@@ -34,5 +34,5 @@ func UpsertAllowedOriginProjectsPath() string {
 
 // DeleteProjectProjectsPath returns the URL path to the projects service deleteProject HTTP endpoint.
 func DeleteProjectProjectsPath() string {
-	return "/rpc/project.delete"
+	return "/rpc/projects.delete"
 }

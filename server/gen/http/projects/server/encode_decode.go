@@ -1187,6 +1187,13 @@ func DecodeDeleteProjectRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 				payload.ApikeyToken = &cred
 			}
 		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
 
 		return payload, nil
 	}

@@ -15,25 +15,6 @@ import { unwrapAsync } from "../types/fp.js";
 
 export class Projects extends ClientSDK {
   /**
-   * deleteProject projects
-   *
-   * @remarks
-   * Delete a project by its ID
-   */
-  async deleteById(
-    request: operations.DeleteProjectRequest,
-    security?: operations.DeleteProjectSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<void> {
-    return unwrapAsync(projectsDeleteById(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
    * createProject projects
    *
    * @remarks
@@ -45,6 +26,25 @@ export class Projects extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.CreateProjectResult> {
     return unwrapAsync(projectsCreate(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * deleteProject projects
+   *
+   * @remarks
+   * Delete a project by its ID
+   */
+  async deleteById(
+    request: operations.DeleteProjectRequest,
+    security?: operations.DeleteProjectSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(projectsDeleteById(
       this,
       request,
       security,

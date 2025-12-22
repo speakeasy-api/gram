@@ -13,17 +13,12 @@ import { Type } from "@/components/ui/type";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
 import { assert, cn } from "@/lib/utils";
-import { Key, ProjectEntry } from "@gram/client/models/components";
+import { Key } from "@gram/client/models/components";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
-import { useDeletProjectMutation } from "@gram/client/react-query/deletProject";
 import {
   invalidateListAPIKeys,
   useListAPIKeysSuspense,
 } from "@gram/client/react-query/listAPIKeys";
-import {
-  invalidateListProjects,
-  useListProjectsSuspense,
-} from "@gram/client/react-query/listProjects";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 import { Column, Stack, Table } from "@speakeasy-api/moonshine";
@@ -31,6 +26,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Check, CheckCircle2, Copy, Globe, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useCustomDomain } from "../mcp/MCPDetails";
+import { SettingsProjectsTable } from "./SettingsProjectsTable";
 
 export default function Settings() {
   const organization = useOrganization();
@@ -46,10 +42,6 @@ export default function Settings() {
   const [isCustomDomainModalOpen, setIsCustomDomainModalOpen] = useState(false);
   const [domainInput, setDomainInput] = useState("");
   const [domainError, setDomainError] = useState("");
-  const [projectToDelete, setProjectToDelete] = useState<ProjectEntry | null>(
-    null,
-  );
-  const [confirmationInput, setConfirmationInput] = useState("");
   const CNAME_VALUE = "cname.getgram.ai.";
 
   // Dynamic values based on domain input
@@ -58,9 +50,6 @@ export default function Settings() {
   const txtValue = `gram-domain-verify=${subdomain},${organization.id}`;
 
   const { data: keysData } = useListAPIKeysSuspense();
-  const { data: projectsData } = useListProjectsSuspense({
-    organizationId: organization.id,
-  });
   const {
     domain,
     isLoading: domainIsLoading,
@@ -130,21 +119,6 @@ export default function Settings() {
     },
     onError: (error) => {
       setDomainError(error.message || "Failed to register domain");
-    },
-  });
-
-  const deleteProjectMutation = useDeletProjectMutation({
-    onSuccess: async () => {
-      setProjectToDelete(null);
-      setConfirmationInput("");
-      await invalidateListProjects(queryClient, [
-        {
-          organizationId: organization.id,
-        },
-      ]);
-    },
-    onError: (error) => {
-      console.error("Failed to delete project:", error);
     },
   });
 
@@ -222,22 +196,6 @@ export default function Settings() {
     });
   };
 
-  const handleCloseDeleteProjectDialog = () => {
-    setProjectToDelete(null);
-    setConfirmationInput("");
-  };
-
-  const handleDeleteProject = () => {
-    if (!projectToDelete) return;
-
-    deleteProjectMutation.mutate({
-      request: {
-        id: projectToDelete.id,
-        gramSession: "",
-      },
-    });
-  };
-
   const apiKeyColumns: Column<Key>[] = [
     {
       key: "name",
@@ -282,63 +240,6 @@ export default function Settings() {
     },
   ];
 
-  // Determine the default project (first in the list)
-  const defaultProject = projectsData?.projects?.[0];
-
-  const projectColumns: Column<ProjectEntry>[] = [
-    {
-      key: "name",
-      header: "Name",
-      width: "1fr",
-      render: (project: ProjectEntry) => (
-        <Type variant="body">{project.name}</Type>
-      ),
-    },
-    {
-      key: "slug",
-      header: "Slug",
-      width: "1fr",
-      render: (project: ProjectEntry) => (
-        <Type variant="body">{project.slug}</Type>
-      ),
-    },
-    {
-      key: "actions",
-      header: "",
-      width: "80px",
-      render: (project: ProjectEntry) => {
-        const isDefault = project.id === defaultProject?.id;
-        const tooltipText = isDefault
-          ? "The default project cannot be deleted"
-          : "";
-
-        const DeleteButton = () => (
-          <Button
-            variant="tertiary"
-            size="sm"
-            onClick={() => setProjectToDelete(project)}
-            disabled={isDefault}
-            className={isDefault ? "" : "hover:text-destructive"}
-          >
-            <Button.Text>
-              <Icon name="trash-2" className="h-4 w-4" />
-            </Button.Text>
-          </Button>
-        );
-
-        if (isDefault) {
-          return (
-            <SimpleTooltip tooltip={tooltipText}>
-              <DeleteButton />
-            </SimpleTooltip>
-          );
-        }
-
-        return <DeleteButton />;
-      },
-    },
-  ];
-
   // refetch as domain is being verified
   useEffect(() => {
     if (!domain?.isUpdating) return;
@@ -354,81 +255,7 @@ export default function Settings() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Stack direction="horizontal" justify="space-between" align="center">
-          <Heading variant="h4">Projects</Heading>
-        </Stack>
-        <Table
-          columns={projectColumns}
-          data={projectsData?.projects ?? []}
-          rowKey={(row) => row.id}
-          className="min-h-fit max-h-[500px] overflow-y-auto"
-          noResultsMessage={
-            <Stack
-              gap={2}
-              className="h-full p-4 bg-background"
-              align="center"
-              justify="center"
-            >
-              <Type variant="body">No projects yet</Type>
-            </Stack>
-          }
-        />
-
-        <Dialog
-          open={!!projectToDelete}
-          onOpenChange={(open) => !open && handleCloseDeleteProjectDialog()}
-        >
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>Delete Project</Dialog.Title>
-            </Dialog.Header>
-            <div className="space-y-4 py-4">
-              <Type variant="body">
-                Are you sure you want to delete the project{" "}
-                <code className="font-mono font-bold px-1 py-0.5 bg-muted rounded">
-                  {projectToDelete?.name}
-                </code>
-                ? This action cannot be undone.
-              </Type>
-
-              <div className="space-y-2">
-                <Label htmlFor="confirm-project-name">
-                  Type the project name to confirm:
-                </Label>
-                <Input
-                  id="confirm-project-name"
-                  value={confirmationInput}
-                  onChange={setConfirmationInput}
-                  placeholder={projectToDelete?.name}
-                  autoComplete="off"
-                  autoFocus
-                />
-              </div>
-
-              <div className="flex justify-end space-x-2">
-                <Button
-                  variant="secondary"
-                  onClick={handleCloseDeleteProjectDialog}
-                  disabled={deleteProjectMutation.isPending}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive-primary"
-                  onClick={handleDeleteProject}
-                  disabled={
-                    confirmationInput.trim() !== projectToDelete?.name ||
-                    deleteProjectMutation.isPending
-                  }
-                >
-                  {deleteProjectMutation.isPending
-                    ? "Deleting..."
-                    : "Delete Project"}
-                </Button>
-              </div>
-            </div>
-          </Dialog.Content>
-        </Dialog>
+        <SettingsProjectsTable />
 
         <Stack
           direction="horizontal"
