@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -34,7 +33,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	temporal_client "go.temporal.io/sdk/client"
 )
 
@@ -54,7 +55,7 @@ func handleToolsCall(
 	logger *slog.Logger,
 	metrics *metrics,
 	db *pgxpool.Pool,
-	env gateway.EnvironmentLoader,
+	env toolconfig.EnvironmentLoader,
 	payload *mcpInputs,
 	req *rawRequest,
 	toolProxy *gateway.ToolProxy,
@@ -106,54 +107,77 @@ func handleToolsCall(
 		metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, mcpURL, params.Name)
 	}
 
-	// Special handling for PROXY external MCP tools.
-	// External MCP tools that can be unfolded will proceed below
-	// TODO: Remove me? This functionality should be redundant with proxy.doExternalMCPToolCall()
-	if proxyTool, externalToolName, ok := findExternalMCPTool(toolset.Tools, params.Name); ok {
-		return handleExternalMCPToolCall(ctx, logger, req.ID, proxyTool, externalToolName, params.Arguments, payload.oauthTokenInputs)
+	toolsetHelpers := toolsets.NewToolsets(db)
+
+	toolsetID, err := uuid.Parse(toolset.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").Log(ctx, logger)
 	}
 
-	toolsetHelpers := toolsets.NewToolsets(db)
+	executor := externalmcp.BuildProxyToolExecutor(logger, toolset.Tools)
+
+	var plan *gateway.ToolCallPlan
+	var toolURN urn.Tool
+
+	// Try proxy tool match first - captures full plan via closure
+	var matchedPlan *gateway.ToolCallPlan
+	resolve := func(ctx context.Context, u urn.Tool, pid uuid.UUID) (*externalmcp.ToolCallPlan, error) {
+		fullPlan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, u, pid)
+		if err != nil {
+			return nil, fmt.Errorf("get tool call plan by URN: %w", err)
+		}
+		matchedPlan = fullPlan
+		return fullPlan.ExternalMCP, nil
+	}
+
+	planInputs, err := executor.MatchPlanInputs(ctx, params.Name, uuid.UUID(projectID), resolve)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to match proxy tool").Log(ctx, logger)
+	}
+
 	var tool *types.Tool
 
-	for _, t := range toolset.Tools {
-		// Skip proxy tools - they should be unfolded before being called
-		if conv.IsProxyTool(t) {
-			continue
+	if planInputs != nil {
+		// Matched a proxy tool - use captured plan with updated tool name
+		matchedPlan.ExternalMCP.ToolName = planInputs.ToolName
+		plan = matchedPlan
+		toolURN = plan.Descriptor.URN
+	} else {
+		// Fall through to materialized tool handling
+		for _, t := range toolset.Tools {
+			if conv.IsProxyTool(t) {
+				continue
+			}
+
+			baseTool, err := conv.ToBaseTool(t)
+			if err != nil {
+				continue
+			}
+			if baseTool.Name == params.Name {
+				tool = t
+				break
+			}
 		}
 
-		baseTool, err := conv.ToBaseTool(t)
+		if tool == nil {
+			return nil, oops.E(oops.CodeNotFound, errors.New("tool not found"), "tool not found").Log(ctx, logger)
+		}
+
+		urn, err := conv.GetToolURN(*tool)
 		if err != nil {
-			continue
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
 		}
-		if baseTool.Name == params.Name {
-			tool = t
-			break
+		toolURN = *urn
+
+		plan, err = toolsetHelpers.GetToolCallPlanByURN(ctx, toolURN, uuid.UUID(projectID))
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed get tool call plan").Log(ctx, logger)
 		}
-	}
-
-	if tool == nil {
-		return nil, oops.E(oops.CodeNotFound, errors.New("tool not found"), "tool not found").Log(ctx, logger)
-	}
-
-	toolURN, err := conv.GetToolURN(*tool)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
-	}
-
-	plan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, *toolURN, uuid.UUID(projectID))
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed get tool call plan").Log(ctx, logger)
 	}
 
 	userConfig, err := resolveUserConfiguration(ctx, logger, env, payload, plan)
 	if err != nil {
 		return nil, err
-	}
-
-	toolsetID, err := uuid.Parse(toolset.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").Log(ctx, logger)
 	}
 
 	systemConfig, err := env.LoadSystemEnv(ctx, payload.projectID, toolsetID, string(toolURN.Kind), toolURN.Source)
@@ -226,8 +250,17 @@ func handleToolsCall(
 		telemSvc.CreateLog(params)
 	}()
 
-	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), gateway.ToolCallEnv{
-		UserConfig: userConfig, SystemEnv: systemConfig}, plan, logAttrs)
+	// Extract OAuth token for external MCP servers (token with no security keys = general token)
+	var oauthToken string
+	for _, t := range payload.oauthTokenInputs {
+		if len(t.securityKeys) == 0 && t.Token != "" {
+			oauthToken = t.Token
+			break
+		}
+	}
+
+	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), toolconfig.ToolCallEnv{
+		UserConfig: userConfig, SystemEnv: systemConfig, OAuthToken: oauthToken}, plan, logAttrs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
 	}
@@ -252,18 +285,18 @@ func handleToolsCall(
 	}
 
 	var meta map[string]any
-	if tool.FunctionToolDefinition != nil {
+	if tool != nil && tool.FunctionToolDefinition != nil {
 		meta = tool.FunctionToolDefinition.Meta
 	}
 
-	if isMCPPassthrough(meta) {
-		// For MCP passthrough tools, return the raw result we get from the underlying mcp server
+	// External MCP tools and MCP passthrough tools already return properly formatted responses
+	if plan.Kind == gateway.ToolKindExternalMCP || isMCPPassthrough(meta) {
 		bs, err := json.Marshal(result[json.RawMessage]{
 			ID:     req.ID,
 			Result: json.RawMessage(rw.body.Bytes()),
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP passthrough result").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP result").Log(ctx, logger)
 		}
 
 		return bs, nil
@@ -291,18 +324,18 @@ func handleToolsCall(
 func resolveUserConfiguration(
 	ctx context.Context,
 	logger *slog.Logger,
-	env gateway.EnvironmentLoader,
+	env toolconfig.EnvironmentLoader,
 	payload *mcpInputs,
 	plan *gateway.ToolCallPlan,
-) (*gateway.CaseInsensitiveEnv, error) {
-	userConfig := gateway.NewCaseInsensitiveEnv()
+) (*toolconfig.CaseInsensitiveEnv, error) {
+	userConfig := toolconfig.NewCaseInsensitiveEnv()
 
 	// IMPORTANT: we must only attach gram environments to authenticated payloads. Gram environments contain
 	// secrets owned by Gram projects and should not be usable by public clients
 	if payload.environment != "" && payload.authenticated {
-		storedEnvVars, err := env.Load(ctx, payload.projectID, gateway.Slug(payload.environment))
+		storedEnvVars, err := env.Load(ctx, payload.projectID, toolconfig.Slug(payload.environment))
 		switch {
-		case errors.Is(err, gateway.ErrNotFound):
+		case errors.Is(err, toolconfig.ErrNotFound):
 			return nil, oops.E(oops.CodeBadRequest, err, "environment not found").Log(ctx, logger)
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, logger)
@@ -337,15 +370,6 @@ func resolveUserConfiguration(
 		for _, token := range payload.oauthTokenInputs {
 			if plan.Function.AuthInput.Type == "oauth2" {
 				userConfig.Set(plan.Function.AuthInput.Variable, token.Token)
-			}
-		}
-	}
-
-	// Process OAuth tokens for External MCP tools
-	if plan != nil && plan.Kind == gateway.ToolKindExternalMCP {
-		for _, token := range payload.oauthTokenInputs {
-			if plan.ExternalMCP.RequiresOAuth && len(token.securityKeys) == 0 && token.Token != "" {
-				userConfig.Set(gateway.ExternalMCPOAuthTokenKey, token.Token)
 			}
 		}
 	}
@@ -525,80 +549,4 @@ type contentChunk[T any, D any] struct {
 type toolCallResult struct {
 	Content []json.RawMessage `json:"content"`
 	IsError bool              `json:"isError,omitzero"`
-}
-
-func findExternalMCPTool(tools []*types.Tool, toolName string) (*types.ExternalMCPToolDefinition, string, bool) {
-	parts := strings.SplitN(toolName, "--", 2)
-	if len(parts) != 2 {
-		return nil, "", false
-	}
-
-	slug := parts[0]
-	externalToolName := parts[1]
-
-	for _, t := range tools {
-		if !conv.IsProxyTool(t) {
-			continue
-		}
-		if t.ExternalMcpToolDefinition.Slug == slug {
-			return t.ExternalMcpToolDefinition, externalToolName, true
-		}
-	}
-
-	return nil, "", false
-}
-
-// handleExternalMCPToolCall proxies a tool call to an external MCP server.
-func handleExternalMCPToolCall(
-	ctx context.Context,
-	logger *slog.Logger,
-	reqID msgID,
-	proxy *types.ExternalMCPToolDefinition,
-	toolName string,
-	arguments json.RawMessage,
-	tokenInputs []oauthTokenInputs,
-) (json.RawMessage, error) {
-	// Extract OAuth token for external MCP servers
-	var oauthToken string
-	for _, t := range tokenInputs {
-		if len(t.securityKeys) == 0 && t.Token != "" {
-			oauthToken = t.Token
-			break
-		}
-	}
-
-	// Build client options with OAuth token if the proxy requires it
-	var opts *externalmcp.ClientOptions
-	if proxy.RequiresOauth && oauthToken != "" {
-		opts = &externalmcp.ClientOptions{
-			Authorization: "Bearer " + oauthToken,
-			TransportType: externalmcptypes.TransportType(proxy.TransportType),
-		}
-	}
-
-	// Create client and call tool
-	client, err := externalmcp.NewClient(ctx, logger, proxy.RemoteURL, externalmcptypes.TransportType(proxy.TransportType), opts)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").Log(ctx, logger)
-	}
-	defer o11y.LogDefer(ctx, logger, client.Close)
-
-	callResult, err := client.CallTool(ctx, toolName, arguments)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to call external MCP tool").Log(ctx, logger)
-	}
-
-	// Return the result in MCP format - Content is already a JSON array from the external server
-	bs, err := json.Marshal(result[toolCallResult]{
-		ID: reqID,
-		Result: toolCallResult{
-			Content: callResult.Content,
-			IsError: callResult.IsError,
-		},
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize external MCP tool result").Log(ctx, logger)
-	}
-
-	return bs, nil
 }

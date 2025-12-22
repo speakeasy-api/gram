@@ -75,7 +75,8 @@ INSERT INTO external_mcp_tool_definitions (
   oauth_authorization_endpoint,
   oauth_token_endpoint,
   oauth_registration_endpoint,
-  oauth_scopes_supported
+  oauth_scopes_supported,
+  header_definitions
 )
 VALUES (
   $1,
@@ -91,11 +92,12 @@ VALUES (
   $11,
   $12,
   $13,
-  $14
+  $14,
+  $15
 )
 RETURNING id, external_mcp_attachment_id, tool_urn, type, name, description, schema, remote_url, requires_oauth,
   oauth_version, oauth_authorization_endpoint, oauth_token_endpoint,
-  oauth_registration_endpoint, oauth_scopes_supported, created_at, updated_at
+  oauth_registration_endpoint, oauth_scopes_supported, header_definitions, created_at, updated_at
 `
 
 type CreateExternalMCPToolDefinitionParams struct {
@@ -113,6 +115,7 @@ type CreateExternalMCPToolDefinitionParams struct {
 	OauthTokenEndpoint         pgtype.Text
 	OauthRegistrationEndpoint  pgtype.Text
 	OauthScopesSupported       []string
+	HeaderDefinitions          []byte
 }
 
 type CreateExternalMCPToolDefinitionRow struct {
@@ -130,6 +133,7 @@ type CreateExternalMCPToolDefinitionRow struct {
 	OauthTokenEndpoint         pgtype.Text
 	OauthRegistrationEndpoint  pgtype.Text
 	OauthScopesSupported       []string
+	HeaderDefinitions          []byte
 	CreatedAt                  pgtype.Timestamptz
 	UpdatedAt                  pgtype.Timestamptz
 }
@@ -150,6 +154,7 @@ func (q *Queries) CreateExternalMCPToolDefinition(ctx context.Context, arg Creat
 		arg.OauthTokenEndpoint,
 		arg.OauthRegistrationEndpoint,
 		arg.OauthScopesSupported,
+		arg.HeaderDefinitions,
 	)
 	var i CreateExternalMCPToolDefinitionRow
 	err := row.Scan(
@@ -167,6 +172,7 @@ func (q *Queries) CreateExternalMCPToolDefinition(ctx context.Context, arg Creat
 		&i.OauthTokenEndpoint,
 		&i.OauthRegistrationEndpoint,
 		&i.OauthScopesSupported,
+		&i.HeaderDefinitions,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -190,6 +196,7 @@ SELECT
   t.oauth_token_endpoint,
   t.oauth_registration_endpoint,
   t.oauth_scopes_supported,
+  t.header_definitions,
   t.created_at,
   t.updated_at,
   e.deployment_id,
@@ -220,6 +227,7 @@ type GetExternalMCPToolDefinitionByURNRow struct {
 	OauthTokenEndpoint         pgtype.Text
 	OauthRegistrationEndpoint  pgtype.Text
 	OauthScopesSupported       []string
+	HeaderDefinitions          []byte
 	CreatedAt                  pgtype.Timestamptz
 	UpdatedAt                  pgtype.Timestamptz
 	DeploymentID               uuid.UUID
@@ -248,6 +256,7 @@ func (q *Queries) GetExternalMCPToolDefinitionByURN(ctx context.Context, toolUrn
 		&i.OauthTokenEndpoint,
 		&i.OauthRegistrationEndpoint,
 		&i.OauthScopesSupported,
+		&i.HeaderDefinitions,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeploymentID,
@@ -275,6 +284,7 @@ SELECT
   t.oauth_token_endpoint,
   t.oauth_registration_endpoint,
   t.oauth_scopes_supported,
+  t.header_definitions,
   t.created_at,
   t.updated_at,
   e.deployment_id,
@@ -305,6 +315,7 @@ type GetExternalMCPToolsRequiringOAuthRow struct {
 	OauthTokenEndpoint         pgtype.Text
 	OauthRegistrationEndpoint  pgtype.Text
 	OauthScopesSupported       []string
+	HeaderDefinitions          []byte
 	CreatedAt                  pgtype.Timestamptz
 	UpdatedAt                  pgtype.Timestamptz
 	DeploymentID               uuid.UUID
@@ -338,6 +349,7 @@ func (q *Queries) GetExternalMCPToolsRequiringOAuth(ctx context.Context, deploym
 			&i.OauthTokenEndpoint,
 			&i.OauthRegistrationEndpoint,
 			&i.OauthScopesSupported,
+			&i.HeaderDefinitions,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeploymentID,
@@ -447,6 +459,7 @@ SELECT
   t.oauth_token_endpoint,
   t.oauth_registration_endpoint,
   t.oauth_scopes_supported,
+  t.header_definitions,
   t.created_at,
   t.updated_at,
   e.deployment_id,
@@ -478,6 +491,7 @@ type ListExternalMCPToolDefinitionsRow struct {
 	OauthTokenEndpoint         pgtype.Text
 	OauthRegistrationEndpoint  pgtype.Text
 	OauthScopesSupported       []string
+	HeaderDefinitions          []byte
 	CreatedAt                  pgtype.Timestamptz
 	UpdatedAt                  pgtype.Timestamptz
 	DeploymentID               uuid.UUID
@@ -512,6 +526,7 @@ func (q *Queries) ListExternalMCPToolDefinitions(ctx context.Context, deployment
 			&i.OauthTokenEndpoint,
 			&i.OauthRegistrationEndpoint,
 			&i.OauthScopesSupported,
+			&i.HeaderDefinitions,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeploymentID,

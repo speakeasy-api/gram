@@ -34,6 +34,9 @@ export function getAuthStatus(
     ) ?? []),
     ...(toolset?.functionEnvironmentVariables?.map((fnVar) => fnVar.name) ??
       []),
+    ...(toolset?.externalMcpHeaderDefinitions?.map(
+      (headerDef) => headerDef.name,
+    ) ?? []),
   ];
 
   const missingCount = relevantEnvVars.filter((varName) => {
@@ -63,12 +66,22 @@ export function PlaygroundAuth({ toolset, environment }: PlaygroundAuthProps) {
       ) ?? [];
     const functionEnvVars =
       toolset?.functionEnvironmentVariables?.map((fnVar) => fnVar.name) ?? [];
+    const externalMcpHeaderVars =
+      toolset?.externalMcpHeaderDefinitions?.map(
+        (headerDef) => headerDef.name,
+      ) ?? [];
 
-    return [...securityVars, ...serverVars, ...functionEnvVars];
+    return [
+      ...securityVars,
+      ...serverVars,
+      ...functionEnvVars,
+      ...externalMcpHeaderVars,
+    ];
   }, [
     toolset?.securityVariables,
     toolset?.serverVariables,
     toolset.functionEnvironmentVariables,
+    toolset.externalMcpHeaderDefinitions,
   ]);
 
   if (relevantEnvVars.length === 0) {

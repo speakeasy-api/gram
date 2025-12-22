@@ -165,7 +165,7 @@ func BuildFetchOpenAPIv3FromURLPayload(assetsFetchOpenAPIv3FromURLBody string, a
 	{
 		err = json.Unmarshal([]byte(assetsFetchOpenAPIv3FromURLBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"url\": \"Eum ut quidem libero sed repellendus aliquid.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"url\": \"Ab ut magnam.\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -386,7 +386,7 @@ func BuildCreateSignedChatAttachmentURLPayload(assetsCreateSignedChatAttachmentU
 	{
 		err = json.Unmarshal([]byte(assetsCreateSignedChatAttachmentURLBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"Sed aliquam veniam ut quaerat reiciendis.\",\n      \"project_id\": \"Eius veritatis facilis qui iste ut.\",\n      \"ttl_seconds\": 1270081244790422711\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"Quod corrupti provident sed.\",\n      \"project_id\": \"Est maxime vel placeat ab.\",\n      \"ttl_seconds\": 8094360867162342995\n   }'")
 		}
 	}
 	var apikeyToken *string

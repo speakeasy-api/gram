@@ -60,7 +60,7 @@ export default function Catalog() {
       server: Server;
       toolsetName: string;
     }) => {
-      const slug = generateSlug(server.registrySpecifier);
+      const slug = generateSlug(toolsetName);
       let toolUrns = [`tools:externalmcp:${slug}:proxy`];
       if (server.tools && server.tools.length > 0) {
         toolUrns = server.tools.map(

@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments/repo"
-	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
 // EnvironmentEntries should be directly accessed through this interface to handle encryption and redaction.
@@ -29,7 +29,7 @@ func NewEnvironmentEntries(logger *slog.Logger, db repo.DBTX, enc *encryption.Cl
 	}
 }
 
-func (e *EnvironmentEntries) Load(ctx context.Context, projectID uuid.UUID, envIDOrSlug gateway.SlugOrID) (map[string]string, error) {
+func (e *EnvironmentEntries) Load(ctx context.Context, projectID uuid.UUID, envIDOrSlug toolconfig.SlugOrID) (map[string]string, error) {
 	environmentID := envIDOrSlug.ID
 	if envIDOrSlug.IsEmpty() {
 		return nil, fmt.Errorf("environment id or slug is required")
@@ -42,7 +42,7 @@ func (e *EnvironmentEntries) Load(ctx context.Context, projectID uuid.UUID, envI
 		})
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
-			return nil, gateway.ErrNotFound
+			return nil, toolconfig.ErrNotFound
 		case err != nil:
 			return nil, fmt.Errorf("get environment by slug: %w", err)
 		}
@@ -118,7 +118,7 @@ func (e *EnvironmentEntries) LoadToolsetEnv(ctx context.Context, projectID uuid.
 // LoadSystemEnv loads and merges source and toolset environments.
 // Merges in order: source env (base) -> toolset env (override).
 // Returns empty map if neither environment exists.
-func (e *EnvironmentEntries) LoadSystemEnv(ctx context.Context, projectID uuid.UUID, toolsetID uuid.UUID, sourceKind string, sourceSlug string) (*gateway.CaseInsensitiveEnv, error) {
+func (e *EnvironmentEntries) LoadSystemEnv(ctx context.Context, projectID uuid.UUID, toolsetID uuid.UUID, sourceKind string, sourceSlug string) (*toolconfig.CaseInsensitiveEnv, error) {
 	// Load source environment (tool-specific)
 	sourceEnv, err := e.LoadSourceEnv(ctx, projectID, sourceKind, sourceSlug)
 	if err != nil {
@@ -132,7 +132,7 @@ func (e *EnvironmentEntries) LoadSystemEnv(ctx context.Context, projectID uuid.U
 	}
 
 	// Merge: source env (base) + toolset env (override)
-	systemEnv := gateway.NewCaseInsensitiveEnv()
+	systemEnv := toolconfig.NewCaseInsensitiveEnv()
 	for k, v := range sourceEnv {
 		systemEnv.Set(k, v)
 	}

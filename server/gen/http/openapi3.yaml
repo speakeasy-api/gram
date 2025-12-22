@@ -12322,6 +12322,32 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        ExternalMCPHeaderDefinition:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Description of the header
+                header_name:
+                    type: string
+                    description: The actual HTTP header name to send (e.g., X-Api-Key)
+                name:
+                    type: string
+                    description: The prefixed environment variable name (e.g., SLACK_X_API_KEY)
+                placeholder:
+                    type: string
+                    description: Placeholder value for the header
+                required:
+                    type: boolean
+                    description: Whether the header is required
+                secret:
+                    type: boolean
+                    description: Whether the header value is secret
+            required:
+                - name
+                - header_name
+                - required
+                - secret
         ExternalMCPServer:
             type: object
             properties:
@@ -12878,6 +12904,11 @@ components:
                 description:
                     type: string
                     description: The description of the toolset
+                external_mcp_header_definitions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExternalMCPHeaderDefinition'
+                    description: The external MCP header definitions that are relevant to the toolset
                 function_environment_variables:
                     type: array
                     items:
@@ -15048,6 +15079,11 @@ components:
                 description:
                     type: string
                     description: Description of the toolset
+                external_mcp_header_definitions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExternalMCPHeaderDefinition'
+                    description: The external MCP header definitions that are relevant to the toolset
                 external_oauth_server:
                     $ref: '#/components/schemas/ExternalOAuthServer'
                 function_environment_variables:
@@ -15168,6 +15204,11 @@ components:
                 description:
                     type: string
                     description: Description of the toolset
+                external_mcp_header_definitions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExternalMCPHeaderDefinition'
+                    description: The external MCP header definitions that are relevant to the toolset
                 function_environment_variables:
                     type: array
                     items:
