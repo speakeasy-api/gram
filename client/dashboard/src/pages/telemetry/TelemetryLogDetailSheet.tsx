@@ -43,7 +43,7 @@ function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
         </div>
 
         {/* Metadata badges */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap gap-2">
           <MetadataBadge
             label="Service"
             value={log.service?.name || "Unknown"}
@@ -190,7 +190,7 @@ function MetadataBadge({
 }) {
   return (
     <button
-      className="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-tertiary-default hover:bg-surface-secondary-default transition-colors text-sm w-full text-left"
+      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-tertiary-default hover:bg-surface-secondary-default transition-colors text-sm"
       onClick={() => {
         if (copyValue) {
           void navigator.clipboard.writeText(copyValue);
@@ -198,10 +198,8 @@ function MetadataBadge({
       }}
       disabled={!copyValue}
     >
-      <span className="text-muted-foreground shrink-0 w-20">{label}</span>
-      <span
-        className={`${mono ? "font-mono text-xs" : "font-medium"} break-all`}
-      >
+      <span className="text-muted-foreground shrink-0">{label}:</span>
+      <span className={mono ? "font-mono text-xs" : "font-medium"}>
         {value}
       </span>
     </button>
