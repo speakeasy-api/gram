@@ -13,8 +13,7 @@ import (
 var chatSessionsAllowedRoutes = []string{
 	"/chat/completions",
 	"/mcp",
-	"/rpc/instances",
-	"/rpc/chat",
+	// "/rpc/chat", // TODO: Support listing / creating chats for elements
 }
 
 // This isn't practical to do as a proper middleware because it needs to interoperate with the CORSMiddleware which does things like returning early for OPTIONS requests.

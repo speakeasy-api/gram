@@ -161,24 +161,17 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 
 func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) (*gen.ListChatsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+	if !ok || authCtx == nil || authCtx.ProjectID == nil || authCtx.SessionID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	isAdmin := false
-
-	if authCtx.SessionID != nil {
-		userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
-		}
-		if userInfo.Admin {
-			isAdmin = true
-		}
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
 	}
 
 	result := make([]*gen.ChatOverview, 0)
-	if isAdmin {
+	if userInfo.Admin {
 		chats, err := s.repo.ListChats(ctx, *authCtx.ProjectID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats").Log(ctx, s.logger)
