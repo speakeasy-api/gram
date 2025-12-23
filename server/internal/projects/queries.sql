@@ -76,3 +76,9 @@ DO UPDATE SET
     status = EXCLUDED.status,
     updated_at = clock_timestamp()
 RETURNING *;
+
+-- name: DeleteProject :exec
+UPDATE projects
+SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND deleted_at IS NULL;

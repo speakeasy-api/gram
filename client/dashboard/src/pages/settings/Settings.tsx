@@ -26,6 +26,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Check, CheckCircle2, Copy, Globe, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useCustomDomain } from "../mcp/MCPDetails";
+import { SettingsProjectsTable } from "./SettingsProjectsTable";
 
 export default function Settings() {
   const organization = useOrganization();
@@ -254,7 +255,14 @@ export default function Settings() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Stack direction="horizontal" justify="space-between" align="center">
+        <SettingsProjectsTable />
+
+        <Stack
+          direction="horizontal"
+          justify="space-between"
+          align="center"
+          className="mt-8"
+        >
           <Heading variant="h4">API Keys</Heading>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             New API Key

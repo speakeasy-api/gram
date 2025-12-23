@@ -20,16 +20,18 @@ type Client struct {
 	SetLogoEndpoint             goa.Endpoint
 	ListAllowedOriginsEndpoint  goa.Endpoint
 	UpsertAllowedOriginEndpoint goa.Endpoint
+	DeleteProjectEndpoint       goa.Endpoint
 }
 
 // NewClient initializes a "projects" service client given the endpoints.
-func NewClient(createProject, listProjects, setLogo, listAllowedOrigins, upsertAllowedOrigin goa.Endpoint) *Client {
+func NewClient(createProject, listProjects, setLogo, listAllowedOrigins, upsertAllowedOrigin, deleteProject goa.Endpoint) *Client {
 	return &Client{
 		CreateProjectEndpoint:       createProject,
 		ListProjectsEndpoint:        listProjects,
 		SetLogoEndpoint:             setLogo,
 		ListAllowedOriginsEndpoint:  listAllowedOrigins,
 		UpsertAllowedOriginEndpoint: upsertAllowedOrigin,
+		DeleteProjectEndpoint:       deleteProject,
 	}
 }
 
@@ -143,4 +145,22 @@ func (c *Client) UpsertAllowedOrigin(ctx context.Context, p *UpsertAllowedOrigin
 		return
 	}
 	return ires.(*UpsertAllowedOriginResult), nil
+}
+
+// DeleteProject calls the "deleteProject" endpoint of the "projects" service.
+// DeleteProject may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteProject(ctx context.Context, p *DeleteProjectPayload) (err error) {
+	_, err = c.DeleteProjectEndpoint(ctx, p)
+	return
 }

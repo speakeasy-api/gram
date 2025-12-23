@@ -265,3 +265,37 @@ func (s *Service) UpsertAllowedOrigin(ctx context.Context, payload *gen.UpsertAl
 		},
 	}, nil
 }
+
+func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	projectID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeInvalid, err, "invalid project id").Log(ctx, s.logger)
+	}
+
+	err = s.auth.CheckProjectAccess(ctx, s.logger, projectID)
+	if err != nil {
+		return oops.E(oops.CodeForbidden, err, "forbidden")
+	}
+
+	project, err := s.repo.GetProjectByID(ctx, projectID)
+	if err != nil {
+		return oops.E(oops.CodeInvariantViolation, err, "cannot delete the default project").Log(ctx, s.logger)
+	}
+
+	// The first project (ordered by id ASC) is the default project
+	if project.Slug == "default" {
+		return oops.E(oops.CodeInvalid, nil, "cannot delete the default project")
+	}
+
+	err = s.repo.DeleteProject(ctx, projectID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error deleting project").Log(ctx, s.logger, attr.SlogProjectID(payload.ID))
+	}
+
+	return nil
+}

@@ -27,6 +27,7 @@ export * from "./createToolset.js";
 export * from "./deleteDomain.js";
 export * from "./deleteEnvironment.js";
 export * from "./deleteGlobalVariation.js";
+export * from "./deleteProject.js";
 export * from "./deleteSlackConnection.js";
 export * from "./deleteSourceEnvironmentLink.js";
 export * from "./deleteTemplate.js";

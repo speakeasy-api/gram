@@ -3,6 +3,7 @@
  */
 
 import { projectsCreate } from "../funcs/projectsCreate.js";
+import { projectsDeleteById } from "../funcs/projectsDeleteById.js";
 import { projectsList } from "../funcs/projectsList.js";
 import { projectsListAllowedOrigins } from "../funcs/projectsListAllowedOrigins.js";
 import { projectsSetLogo } from "../funcs/projectsSetLogo.js";
@@ -25,6 +26,25 @@ export class Projects extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.CreateProjectResult> {
     return unwrapAsync(projectsCreate(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * deleteProject projects
+   *
+   * @remarks
+   * Delete a project by its ID
+   */
+  async deleteById(
+    request: operations.DeleteProjectRequest,
+    security?: operations.DeleteProjectSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(projectsDeleteById(
       this,
       request,
       security,

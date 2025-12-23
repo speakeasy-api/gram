@@ -1218,6 +1218,230 @@ func DecodeUpsertAllowedOriginResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// BuildDeleteProjectRequest instantiates a HTTP request object with method and
+// path set to call the "projects" service "deleteProject" endpoint
+func (c *Client) BuildDeleteProjectRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteProjectProjectsPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("projects", "deleteProject", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeleteProjectRequest returns an encoder for requests sent to the
+// projects deleteProject server.
+func EncodeDeleteProjectRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*projects.DeleteProjectPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("projects", "deleteProject", "*projects.DeleteProjectPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDeleteProjectResponse returns a decoder for responses returned by the
+// projects deleteProject endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeDeleteProjectResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDeleteProjectResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeleteProjectUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "deleteProject", err)
+			}
+			err = ValidateDeleteProjectUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "deleteProject", err)
+			}
+			return nil, NewDeleteProjectUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeleteProjectForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "deleteProject", err)
+			}
+			err = ValidateDeleteProjectForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "deleteProject", err)
+			}
+			return nil, NewDeleteProjectForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeleteProjectBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "deleteProject", err)
+			}
+			err = ValidateDeleteProjectBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "deleteProject", err)
+			}
+			return nil, NewDeleteProjectBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeleteProjectNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "deleteProject", err)
+			}
+			err = ValidateDeleteProjectNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "deleteProject", err)
+			}
+			return nil, NewDeleteProjectNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeleteProjectConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "deleteProject", err)
+			}
+			err = ValidateDeleteProjectConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "deleteProject", err)
+			}
+			return nil, NewDeleteProjectConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeleteProjectUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "deleteProject", err)
+			}
+			err = ValidateDeleteProjectUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "deleteProject", err)
+			}
+			return nil, NewDeleteProjectUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeleteProjectInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "deleteProject", err)
+			}
+			err = ValidateDeleteProjectInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "deleteProject", err)
+			}
+			return nil, NewDeleteProjectInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeleteProjectInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "deleteProject", err)
+				}
+				err = ValidateDeleteProjectInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "deleteProject", err)
+				}
+				return nil, NewDeleteProjectInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeleteProjectUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "deleteProject", err)
+				}
+				err = ValidateDeleteProjectUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "deleteProject", err)
+				}
+				return nil, NewDeleteProjectUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("projects", "deleteProject", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DeleteProjectGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "deleteProject", err)
+			}
+			err = ValidateDeleteProjectGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "deleteProject", err)
+			}
+			return nil, NewDeleteProjectGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("projects", "deleteProject", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalProjectResponseBodyToProjectsProject builds a value of type
 // *projects.Project from a value of type *ProjectResponseBody.
 func unmarshalProjectResponseBodyToProjectsProject(v *ProjectResponseBody) *projects.Project {

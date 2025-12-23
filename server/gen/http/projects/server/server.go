@@ -25,6 +25,7 @@ type Server struct {
 	SetLogo             http.Handler
 	ListAllowedOrigins  http.Handler
 	UpsertAllowedOrigin http.Handler
+	DeleteProject       http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -59,12 +60,14 @@ func New(
 			{"SetLogo", "POST", "/rpc/projects.setLogo"},
 			{"ListAllowedOrigins", "GET", "/rpc/projects.listAllowedOrigins"},
 			{"UpsertAllowedOrigin", "POST", "/rpc/projects.upsertAllowedOrigin"},
+			{"DeleteProject", "DELETE", "/rpc/projects.delete"},
 		},
 		CreateProject:       NewCreateProjectHandler(e.CreateProject, mux, decoder, encoder, errhandler, formatter),
 		ListProjects:        NewListProjectsHandler(e.ListProjects, mux, decoder, encoder, errhandler, formatter),
 		SetLogo:             NewSetLogoHandler(e.SetLogo, mux, decoder, encoder, errhandler, formatter),
 		ListAllowedOrigins:  NewListAllowedOriginsHandler(e.ListAllowedOrigins, mux, decoder, encoder, errhandler, formatter),
 		UpsertAllowedOrigin: NewUpsertAllowedOriginHandler(e.UpsertAllowedOrigin, mux, decoder, encoder, errhandler, formatter),
+		DeleteProject:       NewDeleteProjectHandler(e.DeleteProject, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -78,6 +81,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.SetLogo = m(s.SetLogo)
 	s.ListAllowedOrigins = m(s.ListAllowedOrigins)
 	s.UpsertAllowedOrigin = m(s.UpsertAllowedOrigin)
+	s.DeleteProject = m(s.DeleteProject)
 }
 
 // MethodNames returns the methods served.
@@ -90,6 +94,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountSetLogoHandler(mux, h.SetLogo)
 	MountListAllowedOriginsHandler(mux, h.ListAllowedOrigins)
 	MountUpsertAllowedOriginHandler(mux, h.UpsertAllowedOrigin)
+	MountDeleteProjectHandler(mux, h.DeleteProject)
 }
 
 // Mount configures the mux to serve the projects endpoints.
@@ -339,6 +344,59 @@ func NewUpsertAllowedOriginHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "upsertAllowedOrigin")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "projects")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteProjectHandler configures the mux to serve the "projects" service
+// "deleteProject" endpoint.
+func MountDeleteProjectHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/projects.delete", otelhttp.WithRouteTag("/rpc/projects.delete", f).ServeHTTP)
+}
+
+// NewDeleteProjectHandler creates a HTTP handler which loads the HTTP request
+// and calls the "projects" service "deleteProject" endpoint.
+func NewDeleteProjectHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteProjectRequest(mux, decoder)
+		encodeResponse = EncodeDeleteProjectResponse(encoder)
+		encodeError    = EncodeDeleteProjectError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteProject")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "projects")
 		payload, err := decodeRequest(r)
 		if err != nil {
