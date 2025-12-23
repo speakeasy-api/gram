@@ -1,6 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
+import { Heading } from "@/components/ui/heading";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
@@ -10,7 +11,7 @@ import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { Badge, Button, Input, Stack } from "@speakeasy-api/moonshine";
 import { useMutation } from "@tanstack/react-query";
-import { CheckCircle, Loader2, Search } from "lucide-react";
+import { CheckCircle, Loader2, Search, SearchXIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet } from "react-router";
 
@@ -274,11 +275,7 @@ export default function Catalog() {
               )}
 
               {!isLoading && allServers?.length === 0 && (
-                <div className="text-center py-12">
-                  <Type variant="subheading" className="text-muted-foreground">
-                    No MCP servers found matching "{searchQuery}"
-                  </Type>
-                </div>
+                <EmptySearchResult onClear={() => setSearchQuery("")} />
               )}
             </Stack>
             {addToProjectDialog}
@@ -286,6 +283,33 @@ export default function Catalog() {
         </Page.Section>
       </Page.Body>
     </Page>
+  );
+}
+
+function EmptySearchResult({ onClear }: { onClear: () => void }) {
+  return (
+    <div className="w-full  flex items-center justify-center bg-background rounded-xl border-1 py-8">
+      <Stack
+        gap={1}
+        className="w-full max-w-sm m-8"
+        align="center"
+        justify="center"
+      >
+        <div className="py-6">
+          <SearchXIcon className="size-16 text-foreground" />
+        </div>
+        <Heading variant="h5" className="font-medium">
+          No matching entries
+        </Heading>
+        <Type small muted className="mb-4 text-center">
+          No MCP servers match your query. Try adjusting or clearing your
+          search.
+        </Type>
+        <Button onClick={onClear} size="sm">
+          Clear Search
+        </Button>
+      </Stack>
+    </div>
   );
 }
 
