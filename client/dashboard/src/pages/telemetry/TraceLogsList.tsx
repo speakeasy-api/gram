@@ -1,0 +1,143 @@
+import { TelemetryLogRecord } from "@gram/client/models/components";
+import { useSearchLogsMutation } from "@gram/client/react-query";
+import { Icon } from "@speakeasy-api/moonshine";
+import { useEffect } from "react";
+import { formatNanoTimestamp, formatLogBody } from "./utils";
+
+interface TraceLogsListProps {
+  traceId: string;
+  toolName: string;
+  isExpanded: boolean;
+  onLogClick: (log: TelemetryLogRecord) => void;
+}
+
+export function TraceLogsList({
+  traceId,
+  toolName: _toolName,
+  isExpanded,
+  onLogClick,
+}: TraceLogsListProps) {
+  const { mutate, data, isPending, error } = useSearchLogsMutation();
+
+  useEffect(() => {
+    if (isExpanded && !data && !isPending) {
+      mutate({
+        request: {
+          searchLogsPayload: {
+            filter: {
+              traceId,
+            },
+            limit: 100,
+            sort: "asc",
+          },
+        },
+      });
+    }
+  }, [isExpanded, traceId, data, isPending, mutate]);
+
+  if (!isExpanded) {
+    return null;
+  }
+
+  if (isPending) {
+    return (
+      <div className="flex items-center gap-2 px-4 py-3 pl-12 text-muted-foreground bg-surface-secondary-default">
+        <Icon name="loader-circle" className="size-4 animate-spin" />
+        <span className="text-sm">Loading spans...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="px-4 py-3 pl-12 bg-surface-secondary-default">
+        <span className="text-sm text-destructive-default">
+          Failed to load spans: {error.message}
+        </span>
+      </div>
+    );
+  }
+
+  const logs = data?.logs ?? [];
+
+  if (logs.length === 0) {
+    return (
+      <div className="px-4 py-3 pl-12 text-sm text-muted-foreground bg-surface-secondary-default">
+        No spans found for this trace
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-surface-secondary-default">
+      {logs.map((log, index) => (
+        <ChildLogRow
+          key={log.id}
+          log={log}
+          isLast={index === logs.length - 1}
+          onClick={() => onLogClick(log)}
+        />
+      ))}
+    </div>
+  );
+}
+
+interface ChildLogRowProps {
+  log: TelemetryLogRecord;
+  isLast: boolean;
+  onClick: () => void;
+}
+
+function ChildLogRow({ log, isLast, onClick }: ChildLogRowProps) {
+  return (
+    <div
+      className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-surface-default transition-colors group"
+      onClick={onClick}
+    >
+      {/* Timestamp - same width as parent for alignment */}
+      <div className="shrink-0 w-[150px] text-sm text-muted-foreground font-mono">
+        {formatNanoTimestamp(log.timeUnixNano)}
+      </div>
+
+      {/* Tree line area - aligns with parent's chevron */}
+      <div className="shrink-0 w-5 flex justify-center relative h-6">
+        {/* Vertical line */}
+        <div
+          className={`absolute left-1/2 -translate-x-1/2 w-px bg-border ${
+            isLast ? "-top-2 h-5" : "-top-2 -bottom-2"
+          }`}
+        />
+        {/* Horizontal connector */}
+        <div className="absolute top-1/2 left-1/2 w-3 h-px bg-border" />
+      </div>
+
+      {/* Severity badge inline */}
+      <span
+        className={`shrink-0 px-1.5 py-0.5 text-xs font-medium rounded ${getSeverityBadgeClass(log.severityText)}`}
+      >
+        {log.severityText?.toLowerCase() || "info"}
+      </span>
+
+      {/* Message - takes remaining space */}
+      <span className="flex-1 min-w-0 text-sm text-muted-foreground truncate">
+        {formatLogBody(log)}
+      </span>
+    </div>
+  );
+}
+
+function getSeverityBadgeClass(severity?: string): string {
+  switch (severity?.toUpperCase()) {
+    case "ERROR":
+    case "FATAL":
+      return "bg-destructive-softest text-destructive-default";
+    case "WARN":
+    case "WARNING":
+      return "bg-warning-softest text-warning-default";
+    case "DEBUG":
+      return "bg-surface-secondary-default text-muted-foreground";
+    case "INFO":
+    default:
+      return "bg-primary-softest text-primary-default";
+  }
+}
