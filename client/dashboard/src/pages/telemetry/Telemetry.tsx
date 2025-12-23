@@ -10,9 +10,16 @@ import {
 import {
   ToolCallSummary,
   TelemetryLogRecord,
+  FeatureName,
 } from "@gram/client/models/components";
-import { useSearchToolCallsMutation } from "@gram/client/react-query";
-import { Icon } from "@speakeasy-api/moonshine";
+import {
+  useSearchToolCallsMutation,
+  useFeaturesSetMutation,
+  useListToolLogs,
+  invalidateAllListToolLogs,
+} from "@gram/client/react-query";
+import { Button, Icon } from "@speakeasy-api/moonshine";
+import { useQueryClient } from "@tanstack/react-query";
 import { XIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TraceRow } from "./TraceRow";
@@ -45,6 +52,53 @@ export default function TelemetryPage() {
   const perPage = 25;
 
   const { mutate, data, isPending, error } = useSearchToolCallsMutation();
+
+  // Check if logs are enabled using the logs list endpoint
+  const queryClient = useQueryClient();
+  const { data: logsData, refetch: refetchLogs } = useListToolLogs(
+    { perPage: 1 },
+    undefined,
+    { staleTime: 0, refetchOnWindowFocus: false },
+  );
+  const logsEnabled = logsData?.enabled ?? true;
+
+  const [logsMutationError, setLogsMutationError] = useState<string | null>(
+    null,
+  );
+  const { mutateAsync: setLogsFeature, status: logsMutationStatus } =
+    useFeaturesSetMutation({
+      onSuccess: async () => {
+        setLogsMutationError(null);
+        await invalidateAllListToolLogs(queryClient);
+        setCurrentCursor(undefined);
+        lastProcessedCursorRef.current = undefined;
+        setAllTraces([]);
+        await refetchLogs();
+      },
+      onError: (err) => {
+        const message =
+          err instanceof Error ? err.message : "Failed to update logs";
+        setLogsMutationError(message);
+      },
+    });
+
+  const isMutatingLogs = logsMutationStatus === "pending";
+
+  const handleSetLogs = async (enabled: boolean) => {
+    setLogsMutationError(null);
+    try {
+      await setLogsFeature({
+        request: {
+          setProductFeatureRequestBody: {
+            featureName: FeatureName.Logs,
+            enabled,
+          },
+        },
+      });
+    } catch {
+      // error state handled in onError callback
+    }
+  };
 
   // Debounce search input
   useEffect(() => {
@@ -249,7 +303,38 @@ export default function TelemetryPage() {
                     </div>
                   ) : allTraces.length === 0 ? (
                     <div className="py-12 text-center text-muted-foreground">
-                      No traces found
+                      {logsEnabled ? (
+                        "No traces found"
+                      ) : (
+                        <div className="flex flex-col items-center gap-3">
+                          <span>
+                            Logs are disabled for your organization.
+                          </span>
+                          <Button
+                            onClick={() => handleSetLogs(true)}
+                            disabled={isMutatingLogs}
+                            size="sm"
+                            variant="secondary"
+                          >
+                            <Button.LeftIcon>
+                              <Icon
+                                name="test-tube-diagonal"
+                                className="size-4"
+                              />
+                            </Button.LeftIcon>
+                            <Button.Text>
+                              {isMutatingLogs
+                                ? "Updating Logs"
+                                : "Enable Logs"}
+                            </Button.Text>
+                          </Button>
+                          {logsMutationError && (
+                            <span className="text-sm text-destructive-default">
+                              {logsMutationError}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <>
@@ -286,6 +371,32 @@ export default function TelemetryPage() {
                       {allTraces.length === 1 ? "trace" : "traces"}
                       {hasNextPage && " • Scroll to load more"}
                     </span>
+                    {logsEnabled ? (
+                      <Button
+                        onClick={() => handleSetLogs(false)}
+                        disabled={isMutatingLogs}
+                        size="sm"
+                        variant="secondary"
+                      >
+                        <Button.Text>
+                          {isMutatingLogs ? "Updating Logs" : "Disable Logs"}
+                        </Button.Text>
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={() => handleSetLogs(true)}
+                        disabled={isMutatingLogs}
+                        size="sm"
+                        variant="secondary"
+                      >
+                        <Button.LeftIcon>
+                          <Icon name="test-tube-diagonal" className="size-4" />
+                        </Button.LeftIcon>
+                        <Button.Text>
+                          {isMutatingLogs ? "Updating Logs" : "Enable Logs"}
+                        </Button.Text>
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
