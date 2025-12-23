@@ -80,9 +80,9 @@ export function SettingsProjectsTable() {
     });
   };
 
-  // The first project (ordered by created_at/id) is always the default project
-  // and cannot be deleted per backend validation
-  const defaultProject = projectsData?.projects?.[0];
+  const defaultProject = projectsData.projects.find(
+    (p) => p.slug === "default",
+  );
 
   const projectColumns: Column<ProjectEntry>[] = [
     {
