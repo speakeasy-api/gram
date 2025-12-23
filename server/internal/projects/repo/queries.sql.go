@@ -53,6 +53,7 @@ const deleteProject = `-- name: DeleteProject :exec
 UPDATE projects
 SET deleted_at = clock_timestamp()
 WHERE id = $1
+  AND deleted_at IS NULL
 `
 
 func (q *Queries) DeleteProject(ctx context.Context, id uuid.UUID) error {
