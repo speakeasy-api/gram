@@ -307,9 +307,7 @@ export default function TelemetryPage() {
                         "No traces found"
                       ) : (
                         <div className="flex flex-col items-center gap-3">
-                          <span>
-                            Logs are disabled for your organization.
-                          </span>
+                          <span>Logs are disabled for your organization.</span>
                           <Button
                             onClick={() => handleSetLogs(true)}
                             disabled={isMutatingLogs}
@@ -323,9 +321,7 @@ export default function TelemetryPage() {
                               />
                             </Button.LeftIcon>
                             <Button.Text>
-                              {isMutatingLogs
-                                ? "Updating Logs"
-                                : "Enable Logs"}
+                              {isMutatingLogs ? "Updating Logs" : "Enable Logs"}
                             </Button.Text>
                           </Button>
                           {logsMutationError && (
