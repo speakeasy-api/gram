@@ -286,8 +286,7 @@ export default function Catalog() {
   );
 }
 
-function EmptySearchResult({ onClear }: { onClear?: () => void }) {
-  // <div className="w-full h-[600px] flex items-center justify-center bg-background rounded-xl border-1">
+function EmptySearchResult({ onClear }: { onClear: () => void }) {
   return (
     <div className="w-full  flex items-center justify-center bg-background rounded-xl border-1 py-8">
       <Stack
