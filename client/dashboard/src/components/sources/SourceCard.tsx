@@ -176,15 +176,6 @@ export function SourceCard({
   const cardClassName =
     "bg-secondary max-w-sm text-card-foreground flex flex-col rounded-md border px-3 py-3 hover:brightness-95 transition-colors hover:no-underline";
 
-  // External MCPs don't have a details page yet, so render as a div
-  if (asset.type === "externalmcp") {
-    return (
-      <div key={asset.id} className={cardClassName}>
-        {cardContent}
-      </div>
-    );
-  }
-
   return (
     <routes.sources.source.Link
       key={asset.id}
