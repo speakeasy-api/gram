@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 )
 
 var mcpOpenAccessControlRoutes = []string{
@@ -12,7 +14,7 @@ var mcpOpenAccessControlRoutes = []string{
 	"/.well-known/oauth-protected-resource/mcp",
 }
 
-func CORSMiddleware(env string, serverURL string) func(next http.Handler) http.Handler {
+func CORSMiddleware(env string, serverURL string, chatSessionsManager *chatsessions.Manager) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch env {
@@ -29,8 +31,6 @@ func CORSMiddleware(env string, serverURL string) func(next http.Handler) http.H
 				// No CORS headers set for unspecified environments
 			}
 
-			// NOTE: The chatSession middleware may also set the Access-Control-Allow-Origin header for chat sessions.
-
 			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 			w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, Authorization, User-Agent, Gram-Session, Gram-Project, Gram-Token, idempotency-key, Gram-Admin-Override, Gram-Chat-ID, Gram-Chat-Session, MCP-Protocol-Version")
 			w.Header().Set("Access-Control-Expose-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, x-trace-id, Gram-Session, Gram-Chat-ID, Gram-Chat-Session")
@@ -44,6 +44,14 @@ func CORSMiddleware(env string, serverURL string) func(next http.Handler) http.H
 				w.Header().Set("Access-Control-Allow-Origin", "*")
 				w.Header().Set("Access-Control-Allow-Methods", "GET")
 				w.Header().Del("Access-Control-Allow-Credentials")
+			}
+
+			// Special CORS handling for chat sessions-enabled routes
+			if slices.ContainsFunc(chatSessionsAllowedRoutes, func(route string) bool {
+				return strings.HasPrefix(r.URL.Path, route)
+			}) {
+				chatSessionsCORS(chatSessionsManager)(next).ServeHTTP(w, r)
+				return
 			}
 
 			if r.Method == "OPTIONS" {

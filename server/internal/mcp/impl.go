@@ -20,7 +20,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"go.opentelemetry.io/otel/metric"
@@ -175,21 +174,12 @@ func NewService(
 }
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
-	chatSessionMiddleware := middleware.ChatSessionMiddleware(service.chatSessionsManager)
-
-	// Wraps handler functions with chat session middleware
-	withMiddleware := func(handler http.Handler) http.Handler {
-		return chatSessionMiddleware(handler)
-	}
-
-	handler := withMiddleware(oops.ErrHandle(service.logger, service.ServePublic))
-	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", handler.ServeHTTP)
-
-	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", withMiddleware(oops.ErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
+	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.ServePublic).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", oops.ErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
 		return service.HandleGetServer(w, r, metadataService)
-	})).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", withMiddleware(oops.ErrHandle(service.logger, metadataService.ServeInstallPage)).ServeHTTP)
-	o11y.AttachHandler(mux, "POST", "/mcp/{project}/{toolset}/{environment}", withMiddleware(oops.ErrHandle(service.logger, service.ServeAuthenticated)).ServeHTTP)
+	}).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", "/mcp/{project}/{toolset}/{environment}", oops.ErrHandle(service.logger, service.ServeAuthenticated).ServeHTTP)
 
 	// OAuth 2.1 Authorization Server Metadata
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-authorization-server/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata).ServeHTTP)
