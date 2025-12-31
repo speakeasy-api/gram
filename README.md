@@ -17,8 +17,8 @@
   </a>
     <a href="#Support"><strong>Documentation</strong></a> ·
     <a href="#Techstack"><strong>Tech Stack</strong></a> ·
-    <a href="#Contributing"><strong>Contributing</strong></a> ·
-    <a href="https://app.getgram.ai/"><strong>Login</strong></a> ·
+    <a href="/CONTRIBUTING.md"><strong>Contributing</strong></a> ·
+    <a href="https://app.getgram.ai/"><strong>Login</strong></a>
 </p>
 
 <p align="center">
@@ -29,13 +29,13 @@
 
 # Introduction
 
-Gram is a platform for creating, curating, and hosting MCP servers. Curate and scope toolsets for every use case. Host and secure MCP servers with ease.
+[Gram](https://app.getgram.ai) is a platform for creating, curating, and hosting Model Context Protocol (MCP) servers with ease. We currently support both OpenAPI documents as well as custom TypeScript functions as sources for tools.
 
 ## What can you do with Gram?
 
 With Gram you can empower your LLM and Agents to access the right data at the right time. Gram provides a high-level TypeScript SDK and OpenAPI support to define tools, compose higher order custom tools and group tools together into toolsets. Every toolset is instantly available as a hosted and secure MCP server.
 
-If you are looking to get started on the hosted platform you can do that [here](https://app.getgram.ai/) or check out the [quickstart guide](https://www.speakeasy.com/docs/gram/introduction).
+If you are looking to get started on the hosted platform you can [Sign up](https://app.getgram.ai/), or check out the [Quickstart guide](https://www.getgram.ai/docs/introduction).
 
 ## Features
 
@@ -46,22 +46,22 @@ If you are looking to get started on the hosted platform you can do that [here](
 └ First class support for OpenAPI `3.0.X` and `3.1.X`.  
 └ Follows the [MCP](https://modelcontextprotocol.io/docs/getting-started/intro) specification.
 
-## Getting started with Gram Functions
+## Gram Functions
 
-Create agentic tools from simple TypeScript code using the [Gram Functions Framework](https://www.speakeasy.com/docs/gram/gram-functions/introduction). See the getting started [guide](https://www.speakeasy.com/docs/gram/getting-started/typescript) to learn more.
+Create agentic tools from simple TypeScript code using the [Gram Functions Framework](https://www.getgram.ai/docs/gram-functions/introduction). Refer to the [Getting Started](https://www.getgram.ai/docs/getting-started/typescript) guide to learn more.
 
 The fastest way to get started is with the `npm create @gram-ai/function@latest` command, which creates a complete TypeScript project with a working Gram function. Deployable and runnable locally as a MCP server.
 
 ```bash
-# Install the CLI and Create a new project
+# Install the CLI and follow the prompts
 npm create @gram-ai/function@latest
+
+# Once created, move into your newly created function directory
+cd my_function
 
 # Build and Deploy
 npm run build
 npm run push
-
-# Check out your first function
-cd my_function/src/gram.ts
 ```
 
 A default function is created for you.
@@ -87,7 +87,7 @@ In addition you get a:
 - A `server.ts` is created so you can run the tool locally as a MCP server with MCP inspector with `pnpm run dev`
 - A `README` and `CONTRIBUTING` guide for next steps on building out your custom tool.
 
-## Common use cases include:
+### Common use cases include:
 
 └ Host one or more remote MCP servers at a custom domain like `mcp.{your-company}.com`.  
 └ Power your in-application chat by exposing context from your internal APIs or 3rd Party APIs through tools.  
@@ -96,59 +96,32 @@ In addition you get a:
 
 Check out the `examples` folder in this repo for working examples. Or open a pull request if you have one to share!
 
-## `gram` CLI
+## Gram CLI
 
-The `gram` CLI a tool for programmatic access to Gram. Get started with documentation [here](https://docs.getgram.ai/command-line/installation).
-
-### Local development
-
-Quickstart:
+The CLI allows for programmatic access to Gram, enabling you to manage the process of pushing sources (either OpenAPI documents or Gram Functions) for your MCP servers. Get started with documentation [here](https://www.getgram.ai/docs/command-line).
 
 ```bash
-cd cli
-go run . --help
+curl -fsSL https://go.getgram.ai/cli.sh | bash
 ```
 
-### Releases
+And then:
 
-> [!NOTE]  
-> All CLI updates must follow the [changeset process](./docs/runbooks/version-management-with-changesets.md).
-
-New versions of the CLI are released automatically with [GoReleaser](./.goreleaser.yaml).
-
-Version bumps are determined by the git commit's prefix:
-
-| Prefix   | Version bump | Example commit message                  |
-| -------- | ------------ | --------------------------------------- |
-| `feat!:` | Major        | `feat!: breaking change to deployments` |
-| `feat:`  | Minor        | `feat: new status fields`               |
-| `fix:`   | Patch        | `patch: update help docs`               |
+```bash
+gram auth
+```
 
 ## Support
 
 - Slack: [Join our slack](https://join.slack.com/t/speakeasy-dev/shared_invite/zt-3hudfoj4y-9EPqMmHIFhNiTtannqiV3Q) for support and discussions
 - In-App: When using the [application](https://app.getgram.ai/) you can engage with the core maintainers of the product.
 - GitHub: Contribute or report issues [on this repository](https://github.com/speakeasy-api/gram/issues/new).
-- Documentation for Gram is also open source. View it [here](https://www.speakeasy.com/docs/gram/introduction) and contribute [here](https://github.com/speakeasy-api/developer-docs/tree/main/docs/gram).
+- Documentation for Gram is also open source. View it [here](https://www.getgram.ai/docs/introduction) and contribute [here](https://github.com/speakeasy-api/developer-docs/tree/main/docs/gram).
 
 ## Contributing
 
-Contributions are welcome! Please open an issue or discussion for questions or suggestions before starting significant work!
-Here's how you can develop on the stack and contribute to the project.
+Contributions are welcome! Please open an issue or discussion for questions or suggestions before starting significant work.
 
-### Development
-
-Run `./zero` until it succeeds. This script is what you will use to run the dashboard and services for local development. It will also handle installing dependencies and running pending database migrations before starting everything up.
-
-The main dependencies for this project are Mise and Docker. The `./zero` script will guide you to install these if they are not found.
-
-### Coding guidelines
-
-All AI coding guidelines are written out in [CLAUDE.md](./CLAUDE.md). Please make sure you read the [contributing guidelines](./CONTRIBUTING.md) before submitting changes to this project.
-
-### Putting up pull requests
-
-Please have a good title and description for your PR. Go nuts with streams of commits but invest in a reviewable PR with good context.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and detailed contribution guidelines.
 
 ## Techstack
 
