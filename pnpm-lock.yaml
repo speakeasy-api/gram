@@ -4,36 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-catalogs:
-  default:
-    '@ai-sdk/openai':
-      specifier: ^2.0.0
-      version: 2.0.74
-    '@ai-sdk/react':
-      specifier: ^2.0.0
-      version: 2.0.104
-    '@ai-sdk/ui-utils':
-      specifier: ^1.2.0
-      version: 1.2.11
-    '@modelcontextprotocol/sdk':
-      specifier: ^1.20.1
-      version: 1.20.1
-    '@tanstack/react-query':
-      specifier: ^5.90.10
-      version: 5.90.10
-    '@types/react':
-      specifier: ^19.2.7
-      version: 19.2.7
-    '@types/react-dom':
-      specifier: ^19.2.3
-      version: 19.2.3
-    ai:
-      specifier: 5.0.66
-      version: 5.0.66
-    typescript:
-      specifier: 5.9.3
-      version: 5.9.3
-
 overrides:
   glob@>=10.0 <10.5.0: 10.5.0
 
@@ -486,9 +456,6 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.1.13
         version: 4.1.17(vite@7.2.4(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))
-      '@types/d3':
-        specifier: ^7.4.3
-        version: 7.4.3
       '@types/lodash.merge':
         specifier: ^4.6.9
         version: 4.6.9
