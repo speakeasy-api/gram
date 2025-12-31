@@ -1,0 +1,154 @@
+{
+  "name": "@gram-ai/elements",
+  "description": "Gram Elements is a library of UI primitives for building chat-like experiences for MCP Servers.",
+  "type": "module",
+  "version": "1.15.0",
+  "main": "dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/elements.js",
+      "require": "./dist/elements.cjs"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js",
+      "require": "./dist/server.cjs"
+    },
+    "./plugins": {
+      "types": "./dist/plugins/index.d.ts",
+      "import": "./dist/plugins.js",
+      "require": "./dist/plugins.cjs"
+    },
+    "./elements.css": "./dist/elements.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/speakeasy-api/gram.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vite build",
+    "lint": "eslint src",
+    "analyze": "pnpm dlx vite-bundle-visualizer",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
+    "type-check": "tsc --noEmit",
+    "docs": "typedoc",
+    "docs:watch": "typedoc --watch"
+  },
+  "keywords": [],
+  "author": "Adam Bull <adam@speakeasy.com>",
+  "license": "ISC",
+  "packageManager": "pnpm@10.18.2",
+  "peerDependencies": {
+    "@assistant-ui/react": "^0.11.0",
+    "@assistant-ui/react-markdown": "^0.11.0",
+    "@types/react": ">=18 <20",
+    "@types/react-dom": ">=18 <20",
+    "motion": "^12.0.0",
+    "react": ">=18 <20",
+    "react-dom": ">=18 <20",
+    "remark-gfm": "^4.0.0",
+    "shiki": "^3.20.0",
+    "vega": "^6.2.0",
+    "zustand": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@assistant-ui/react": {
+      "optional": true
+    },
+    "@assistant-ui/react-markdown": {
+      "optional": true
+    },
+    "@types/react": {
+      "optional": true
+    },
+    "@types/react-dom": {
+      "optional": true
+    },
+    "motion": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "remark-gfm": {
+      "optional": true
+    },
+    "vega": {
+      "optional": true
+    },
+    "zustand": {
+      "optional": true
+    },
+    "shiki": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@ai-sdk/mcp": "^0.0.11",
+    "@openrouter/ai-sdk-provider": "^1.4.1",
+    "@radix-ui/react-avatar": "^1.1.10",
+    "@radix-ui/react-collapsible": "^1.1.12",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-popover": "^1.1.15",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "ai": "5.0.90",
+    "assistant-stream": "^0.2.42",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.544.0",
+    "tailwind-merge": "^3.3.1",
+    "tw-shimmer": "^0.4.0",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@ai-sdk/openai": "^2.0.0-beta.5",
+    "@assistant-ui/react": "^0.11.53",
+    "@assistant-ui/react-ai-sdk": "^1.1.16",
+    "@assistant-ui/react-markdown": "^0.11.4",
+    "@eslint/compat": "^2.0.0",
+    "@eslint/js": "^9.39.1",
+    "@modelcontextprotocol/sdk": "^1.24.3",
+    "@storybook/addon-docs": "^10.0.8",
+    "@storybook/react-vite": "^10.0.8",
+    "@tailwindcss/vite": "^4.1.13",
+    "@types/d3": "^7.4.3",
+    "@types/lodash.merge": "^4.6.9",
+    "@types/node": "^24.10.1",
+    "@vitejs/plugin-react": "^5.0.3",
+    "chromatic": "^13.3.3",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-js": "github:eslint/js",
+    "eslint-plugin-prettier": "^5.5.4",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "eslint-plugin-storybook": "^10.1.4",
+    "eslint-plugin-unused-imports": "^4.3.0",
+    "lodash.merge": "^4.6.2",
+    "motion": "^12.23.14",
+    "openai": "^6.9.1",
+    "prettier": "^3.7.4",
+    "prettier-plugin-tailwindcss": "^0.7.2",
+    "remark-gfm": "^4.0.1",
+    "storybook": "^10.0.8",
+    "tailwindcss": "^4.1.13",
+    "tw-animate-css": "^1.3.8",
+    "typedoc": "^0.28.15",
+    "typedoc-plugin-markdown": "^4.9.0",
+    "typescript-eslint": "^8.48.1",
+    "vite": "^7.1.6",
+    "vite-plugin-dts": "^4.5.4",
+    "zustand": "^5.0.8"
+  }
+}

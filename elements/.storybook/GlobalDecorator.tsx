@@ -1,0 +1,65 @@
+import React, { useMemo } from 'react'
+import { ElementsProvider } from '../src/contexts/ElementsProvider'
+import { ElementsConfig } from '../src/types'
+import merge from 'lodash.merge'
+import { recommended } from '../src/plugins'
+
+interface ElementsDecoratorProps {
+  children: React.ReactNode
+  // Partial so stories can override only what they need
+  config?: Partial<ElementsConfig>
+}
+
+const DEFAULT_ELEMENTS_CONFIG: ElementsConfig = {
+  projectSlug: 'adamtest',
+  mcp: 'https://chat.speakeasy.com/mcp/speakeasy-team-my_api',
+  variant: 'widget',
+  welcome: {
+    title: 'Hello there!',
+    subtitle: 'How can I help you today?',
+    suggestions: [
+      {
+        title: 'Discover available tools',
+        label: 'Find out what tools are available',
+        action: 'Call all tools available',
+      },
+    ],
+  },
+  composer: {
+    placeholder: 'Ask me anything...',
+    attachments: true,
+  },
+  modal: {
+    defaultOpen: true,
+    expandable: true,
+    defaultExpanded: true,
+    title: 'Gram Elements Demo',
+  },
+  tools: {
+    expandToolGroupsByDefault: true,
+  },
+  plugins: recommended,
+}
+
+/**
+ * Global decorator that wraps all stories in the AssistantRuntimeProvider,
+ * which provides the chat runtime to the story.
+ * Note: This assumes that all stories require a chat runtime, but we move back to
+ * per story decorator in the future.
+ * @param children - The children to render.
+ * @returns
+ */
+export const ElementsDecorator: React.FC<ElementsDecoratorProps> = ({
+  children,
+  config,
+}) => {
+  const finalConfig = useMemo(
+    () => merge({}, DEFAULT_ELEMENTS_CONFIG, config ?? {}),
+    [config]
+  )
+  return (
+    <ElementsProvider config={finalConfig}>
+      <div className="h-screen bg-zinc-50">{children}</div>
+    </ElementsProvider>
+  )
+}
