@@ -40,7 +40,8 @@
     "build-storybook": "storybook build",
     "type-check": "tsc --noEmit",
     "docs": "typedoc",
-    "docs:watch": "typedoc --watch"
+    "docs:watch": "typedoc --watch",
+    "prepare": "pnpm build"
   },
   "keywords": [],
   "author": "Adam Bull <adam@speakeasy.com>",
