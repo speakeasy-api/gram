@@ -1,5 +1,15 @@
 # dashboard
 
+## 0.24.0
+
+### Minor Changes
+
+- 0341739: Add a new telemetry page to view logs grouped by tool calls
+
+### Patch Changes
+
+- b73b92d: Added empty state component for catalog search results
+
 ## 0.23.1
 
 ### Patch Changes
