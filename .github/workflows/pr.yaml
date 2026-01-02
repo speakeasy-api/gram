@@ -28,6 +28,7 @@ jobs:
       cli: ${{ steps.gates.outputs.cli }}
       functions: ${{ steps.gates.outputs.functions }}
       tsframework: ${{ steps.gates.outputs.tsframework }}
+      elements: ${{ steps.gates.outputs.elements }}
     steps:
       - name: Checkout source code
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
@@ -72,6 +73,13 @@ jobs:
             echo "TypeScript framework jobs will run."
           else
             echo "TypeScript framework jobs will be skipped."
+          fi
+
+          if [[ "${{ steps.filter.outputs.elements }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" ]]; then
+            echo "elements=true" >> $GITHUB_OUTPUT
+            echo "Elements jobs will run."
+          else
+            echo "Elements jobs will be skipped."
           fi
 
   docker-build-server:
@@ -866,4 +874,62 @@ jobs:
 
       - name: Prune PNPM store
         if: ${{ needs.changes.outputs.tsframework == 'true' && success() }}
+        run: pnpm store prune
+
+  elements-build-lint:
+    runs-on: ubicloud-standard-4
+    needs: changes
+    steps:
+      - name: Skip if no elements changes exist
+        if: ${{ needs.changes.outputs.elements != 'true' }}
+        run: echo "No elements changes detected — skipping elements-build-lint."
+
+      - name: Checkout
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+
+      - name: Setup Mise
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3.5.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: mise run github
+
+      - name: Cache PNPM
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+        with:
+          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_PNPM_KEY }}
+            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+          path: |
+            ${{ env.PNPM_STORE_PATH }}
+
+      - name: Install dependencies
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: pnpm build
+        working-directory: elements
+
+      - name: Lint
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: pnpm lint
+        working-directory: elements
+
+      - name: Type check
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: pnpm type-check
+        working-directory: elements
+
+      - name: Prune PNPM store
+        if: ${{ needs.changes.outputs.elements == 'true' && success() }}
         run: pnpm store prune

@@ -9,6 +9,7 @@ packages:
   - functions
   - docs
   - evaluation
+  - elements
 
 overrides:
   # CVE-2025-64756 / GHSA-5j98-mcp5-4vw2
