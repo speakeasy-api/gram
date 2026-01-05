@@ -36,6 +36,7 @@ import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { toast } from "sonner";
 import { SourceToolsetsCard } from "@/components/sources/SourceToolsetsCard";
 import { ViewSourceDialogContent } from "@/components/sources/ViewSourceDialogContent";
+import ExternalMCPDetails from "./external-mcp/ExternalMCPDetails";
 
 export default function SourceDetails() {
   const { sourceKind, sourceSlug } = useParams<{
@@ -232,6 +233,11 @@ export default function SourceDetails() {
     link.click();
     document.body.removeChild(link);
   };
+
+  // Redirect to ExternalMCPDetails for external MCP servers
+  if (sourceKind === "externalmcp") {
+    return <ExternalMCPDetails />;
+  }
 
   // If source not found, redirect to home
   if (!isLoadingDeployment && !source) {
