@@ -23,14 +23,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { XIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TraceRow } from "./TraceRow";
-import { TelemetryLogDetailSheet } from "./TelemetryLogDetailSheet";
+import { LogDetailSheet } from "./LogDetailSheet";
 
 interface Filters {
   searchQuery: string | null;
   statusFilter: string | null;
 }
 
-export default function TelemetryPage() {
+export default function LogsPage() {
   const [filters, setFilters] = useState<Filters>({
     searchQuery: null,
     statusFilter: null,
@@ -402,7 +402,7 @@ export default function TelemetryPage() {
       </Page.Body>
 
       {/* Log Detail Sheet */}
-      <TelemetryLogDetailSheet
+      <LogDetailSheet
         log={selectedLog}
         open={!!selectedLog}
         onOpenChange={(open) => !open && setSelectedLog(null)}

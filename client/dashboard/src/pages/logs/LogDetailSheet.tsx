@@ -4,17 +4,17 @@ import { TelemetryLogRecord } from "@gram/client/models/components";
 import { Copy } from "lucide-react";
 import { formatNanoTimestamp, getSeverityColorClass } from "./utils";
 
-interface TelemetryLogDetailSheetProps {
+interface LogDetailSheetProps {
   log: TelemetryLogRecord | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function TelemetryLogDetailSheet({
+export function LogDetailSheet({
   log,
   open,
   onOpenChange,
-}: TelemetryLogDetailSheetProps) {
+}: LogDetailSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="!w-[33vw] !min-w-[400px] !max-w-none sm:!max-w-none h-full max-h-screen overflow-y-auto">
