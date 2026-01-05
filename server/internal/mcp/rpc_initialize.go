@@ -46,7 +46,7 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, req *rawRequest,
 	result := &result[initializeResult]{
 		ID: req.ID,
 		Result: initializeResult{
-			ProtocolVersion: "2024-11-05",
+			ProtocolVersion: "2025-03-26",
 			Capabilities: map[string]json.RawMessage{
 				"tools":     json.RawMessage("{}"),
 				"prompts":   json.RawMessage("{}"),

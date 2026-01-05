@@ -66,7 +66,7 @@ func TestService_ServePublic(t *testing.T) {
 				"id":      1,
 				"method":  "initialize",
 				"params": map[string]any{
-					"protocolVersion": "2024-11-05",
+					"protocolVersion": "2025-03-26",
 					"capabilities":    map[string]any{},
 					"clientInfo": map[string]any{
 						"name":    "test-client",
@@ -105,7 +105,7 @@ func TestService_ServePublic(t *testing.T) {
 
 		result, ok := response["result"].(map[string]any)
 		require.True(t, ok, "result should be a map")
-		require.Equal(t, "2024-11-05", result["protocolVersion"])
+		require.Equal(t, "2025-03-26", result["protocolVersion"])
 		require.NotNil(t, result["capabilities"])
 		require.NotNil(t, result["serverInfo"])
 	})
@@ -209,7 +209,7 @@ func TestService_ServePublic(t *testing.T) {
 				"id":      1,
 				"method":  "initialize",
 				"params": map[string]any{
-					"protocolVersion": "2024-11-05",
+					"protocolVersion": "2025-03-26",
 					"capabilities":    map[string]any{},
 					"clientInfo": map[string]any{
 						"name":    "test-client",
@@ -244,7 +244,7 @@ func TestService_ServePublic(t *testing.T) {
 
 		result, ok := response["result"].(map[string]any)
 		require.True(t, ok, "result should be a map")
-		require.Equal(t, "2024-11-05", result["protocolVersion"])
+		require.Equal(t, "2025-03-26", result["protocolVersion"])
 		require.NotNil(t, result["capabilities"])
 		require.NotNil(t, result["serverInfo"])
 		require.Equal(t, instructions, result["instructions"])
@@ -264,7 +264,7 @@ func TestService_ServePublic_PrivateMCP_WithOAuth(t *testing.T) {
 				"id":      1,
 				"method":  "initialize",
 				"params": map[string]any{
-					"protocolVersion": "2024-11-05",
+					"protocolVersion": "2025-03-26",
 					"capabilities":    map[string]any{},
 					"clientInfo": map[string]any{
 						"name":    "test-client",
@@ -546,7 +546,7 @@ func TestService_ServePublic_PrivateMCP_WithoutOAuth(t *testing.T) {
 				"id":      1,
 				"method":  "initialize",
 				"params": map[string]any{
-					"protocolVersion": "2024-11-05",
+					"protocolVersion": "2025-03-26",
 					"capabilities":    map[string]any{},
 					"clientInfo": map[string]any{
 						"name":    "test-client",
