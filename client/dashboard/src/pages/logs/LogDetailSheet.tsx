@@ -1,27 +1,11 @@
-import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { HTTPToolLog } from "@gram/client/models/components";
-import { CheckIcon, Copy, XIcon } from "lucide-react";
-import { formatDuration } from "@/lib/dates";
-import {
-  formatDetailTimestamp,
-  getHttpMethodVariant,
-  getSourceFromUrn,
-  getToolIcon,
-  getToolNameFromUrn,
-  isSuccessfulCall,
-} from "./utils";
-
-function StatusIcon({ isSuccess }: { isSuccess: boolean }) {
-  if (isSuccess) {
-    return <CheckIcon className="size-4 stroke-success-default" />;
-  }
-  return <XIcon className="size-4 stroke-destructive-default" />;
-}
+import { TelemetryLogRecord } from "@gram/client/models/components";
+import { Copy } from "lucide-react";
+import { formatNanoTimestamp, getSeverityColorClass } from "./utils";
 
 interface LogDetailSheetProps {
-  log: HTTPToolLog | null;
+  log: TelemetryLogRecord | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -33,217 +17,191 @@ export function LogDetailSheet({
 }: LogDetailSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-[1040px] max-w-[1040px] h-full max-h-screen overflow-y-auto">
-        {log && (
-          <div className="flex flex-col gap-8 pt-8 px-6 pb-6">
-            {/* Header */}
-            <div className="flex flex-col gap-6">
-              <div className="flex items-center gap-3">
-                {(() => {
-                  const ToolIcon = getToolIcon(log.toolUrn);
-                  return (
-                    <ToolIcon className="size-5 shrink-0" strokeWidth={1.5} />
-                  );
-                })()}
-                <SheetTitle className="text-2xl font-light tracking-tight">
-                  {getToolNameFromUrn(log.toolUrn)}
-                </SheetTitle>
-                <div className="flex items-center justify-center rounded-full size-6">
-                  <StatusIcon isSuccess={isSuccessfulCall(log)} />
-                </div>
-              </div>
-
-              {/* Tabs */}
-              <Tabs defaultValue="request" className="w-full">
-                <TabsList className="w-full">
-                  <TabsTrigger value="request" className="flex-1">
-                    Request
-                  </TabsTrigger>
-                  <TabsTrigger value="response" className="flex-1">
-                    Response
-                  </TabsTrigger>
-                </TabsList>
-                <TabsContent
-                  value="request"
-                  className="flex flex-col gap-6 mt-6"
-                >
-                  {log.toolType === "http" && (
-                    <div className="flex flex-col gap-3">
-                      <h3 className="text-sm">Server URL</h3>
-                      <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4 font-mono text-xs break-all">
-                        {log.httpServerUrl}
-                      </div>
-                    </div>
-                  )}
-                  {/* Endpoint */}
-                  {log.httpRoute && (
-                    <div className="flex flex-col gap-3">
-                      <h3 className="text-sm">Endpoint</h3>
-                      <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4 flex items-center gap-3 max-h-[100px] overflow-y-auto border-hidden">
-                        <Badge variant={getHttpMethodVariant(log.httpMethod)}>
-                          {log.httpMethod}
-                        </Badge>
-                        <span className="font-mono text-xs">
-                          {log.httpRoute}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Request Headers */}
-                  <div className="flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm">Request Headers</h3>
-                      {log.requestHeaders &&
-                        Object.keys(log.requestHeaders).length > 0 && (
-                          <button
-                            className="p-1 rounded hover:bg-surface-secondary-default"
-                            onClick={() => {
-                              void navigator.clipboard.writeText(
-                                JSON.stringify(log.requestHeaders, null, 2),
-                              );
-                            }}
-                          >
-                            <Copy className="size-4" />
-                          </button>
-                        )}
-                    </div>
-                    <div className="bg-surface-secondary-default border border-neutral-softest flex rounded-lg p-4 max-h-[400px] overflow-y-auto overflow-x-hidden">
-                      {log.requestHeaders &&
-                      Object.keys(log.requestHeaders).length > 0 ? (
-                        <pre className="font-mono text-xs text-default whitespace-pre-wrap">
-                          {JSON.stringify(log.requestHeaders, null, 2)}
-                        </pre>
-                      ) : (
-                        <div className="text-sm text-muted-foreground">
-                          No request headers logged
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </TabsContent>
-                <TabsContent
-                  value="response"
-                  className="flex flex-col gap-6 mt-6"
-                >
-                  {/* Response Headers */}
-                  <div className="flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm">Response Headers</h3>
-                      {log.responseHeaders &&
-                        Object.keys(log.responseHeaders).length > 0 && (
-                          <button
-                            className="p-1 rounded hover:bg-surface-secondary-default"
-                            onClick={() => {
-                              void navigator.clipboard.writeText(
-                                JSON.stringify(log.responseHeaders, null, 2),
-                              );
-                            }}
-                          >
-                            <Copy className="size-4" />
-                          </button>
-                        )}
-                    </div>
-                    <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4 max-h-[400px] overflow-y-auto overflow-x-hidden">
-                      {log.responseHeaders &&
-                      Object.keys(log.responseHeaders).length > 0 ? (
-                        <pre className="font-mono text-xs text-default whitespace-pre-wrap break-all">
-                          {JSON.stringify(log.responseHeaders, null, 2)}
-                        </pre>
-                      ) : (
-                        <div className="text-sm text-muted-foreground">
-                          No response headers logged
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </div>
-
-            {/* Properties */}
-            <div className="flex flex-col gap-4 border-t border-neutral-softest pt-4">
-              <h3 className="text-sm">Properties</h3>
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <div className="text-xs font-mono uppercase text-muted-foreground">
-                    Created
-                  </div>
-                  <div className="text-sm">{formatDetailTimestamp(log.ts)}</div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <div className="text-xs font-mono uppercase text-muted-foreground">
-                    Duration
-                  </div>
-                  <div className="text-sm">
-                    {formatDuration(log.durationMs)}
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <div className="text-xs font-mono uppercase text-muted-foreground">
-                    Source
-                  </div>
-                  <div className="text-sm">{getSourceFromUrn(log.toolUrn)}</div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <div className="text-xs font-mono uppercase text-muted-foreground">
-                    Tool Type
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {(() => {
-                      const ToolIcon = getToolIcon(log.toolUrn);
-                      return (
-                        <ToolIcon
-                          className="size-4 shrink-0"
-                          strokeWidth={1.5}
-                        />
-                      );
-                    })()}
-                    <span className="text-sm">
-                      {log.toolUrn.includes(":http:") ? "OpenAPI" : "Function"}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <div className="text-xs font-mono uppercase text-muted-foreground">
-                    Status
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <StatusIcon isSuccess={isSuccessfulCall(log)} />
-                    <span className="text-sm">
-                      {isSuccessfulCall(log) ? "Success" : "Failed"}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <div className="text-xs font-mono uppercase text-muted-foreground">
-                    Status Code
-                  </div>
-                  <div className="text-sm">{log.statusCode}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex flex-col gap-3 border-t border-neutral-softest pt-4">
-              <h3 className="text-sm">Actions</h3>
-              <div className="flex flex-col gap-2">
-                {log.id && (
-                  <button
-                    className="flex items-center gap-1 text-sm hover:underline"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(log.id!);
-                    }}
-                  >
-                    <Copy className="size-3" />
-                    <span>Copy log ID</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+      <SheetContent className="!w-[33vw] !min-w-[400px] !max-w-none sm:!max-w-none h-full max-h-screen overflow-y-auto">
+        {log && <LogDetailContent log={log} />}
       </SheetContent>
     </Sheet>
+  );
+}
+
+function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
+  const severityClass = getSeverityColorClass(log.severityText);
+
+  return (
+    <div className="flex flex-col gap-6 pt-6 px-5 pb-6">
+      {/* Header with span info */}
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <div
+            className={`text-xs font-semibold uppercase px-2 py-1 rounded ${severityClass} bg-surface-secondary-default`}
+          >
+            {log.severityText || "INFO"}
+          </div>
+          <SheetTitle className="text-base font-medium tracking-tight">
+            {log.body?.slice(0, 80) || "(no message)"}
+          </SheetTitle>
+        </div>
+
+        {/* Metadata badges */}
+        <div className="flex flex-wrap gap-2">
+          <MetadataBadge
+            label="Service"
+            value={log.service?.name || "Unknown"}
+          />
+          {log.traceId && (
+            <MetadataBadge
+              label="Trace ID"
+              value={log.traceId}
+              mono
+              copyValue={log.traceId}
+            />
+          )}
+          {log.spanId && (
+            <MetadataBadge
+              label="Span ID"
+              value={log.spanId}
+              mono
+              copyValue={log.spanId}
+            />
+          )}
+          <MetadataBadge
+            label="Time"
+            value={formatNanoTimestamp(log.timeUnixNano)}
+          />
+        </div>
+      </div>
+
+      {/* Tabs: Details / Raw Data */}
+      <Tabs defaultValue="details" className="w-full flex-1">
+        <TabsList className="w-full">
+          <TabsTrigger value="details" className="flex-1">
+            Details
+          </TabsTrigger>
+          <TabsTrigger value="raw" className="flex-1">
+            Raw Data
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="details" className="flex flex-col gap-5 mt-5">
+          {/* Message */}
+          <div className="flex flex-col gap-2">
+            <div className="text-xs font-medium uppercase text-muted-foreground tracking-wide">
+              Message
+            </div>
+            <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4">
+              <pre className="font-mono text-sm whitespace-pre-wrap break-words">
+                {log.body || "(no message)"}
+              </pre>
+            </div>
+          </div>
+
+          {/* Attributes */}
+          {log.attributes &&
+            Object.keys(log.attributes as object).length > 0 && (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-medium uppercase text-muted-foreground tracking-wide">
+                    Attributes
+                  </div>
+                  <button
+                    className="p-1.5 rounded hover:bg-surface-secondary-default"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(
+                        JSON.stringify(log.attributes, null, 2),
+                      );
+                    }}
+                  >
+                    <Copy className="size-4" />
+                  </button>
+                </div>
+                <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4 max-h-[300px] overflow-y-auto">
+                  <pre className="font-mono text-sm whitespace-pre-wrap break-all">
+                    {JSON.stringify(log.attributes, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            )}
+
+          {/* Resource */}
+          {log.resourceAttributes &&
+            Object.keys(log.resourceAttributes as object).length > 0 && (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-medium uppercase text-muted-foreground tracking-wide">
+                    Resource
+                  </div>
+                  <button
+                    className="p-1.5 rounded hover:bg-surface-secondary-default"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(
+                        JSON.stringify(log.resourceAttributes, null, 2),
+                      );
+                    }}
+                  >
+                    <Copy className="size-4" />
+                  </button>
+                </div>
+                <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4 max-h-[250px] overflow-y-auto">
+                  <pre className="font-mono text-sm whitespace-pre-wrap break-all">
+                    {JSON.stringify(log.resourceAttributes, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            )}
+        </TabsContent>
+
+        <TabsContent value="raw" className="flex flex-col gap-3 mt-5">
+          <div className="flex items-center justify-between">
+            <div className="text-xs font-medium uppercase text-muted-foreground tracking-wide">
+              Full Log Record
+            </div>
+            <button
+              className="p-1.5 rounded hover:bg-surface-secondary-default"
+              onClick={() => {
+                void navigator.clipboard.writeText(
+                  JSON.stringify(log, null, 2),
+                );
+              }}
+            >
+              <Copy className="size-4" />
+            </button>
+          </div>
+          <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4 overflow-y-auto flex-1">
+            <pre className="font-mono text-sm whitespace-pre-wrap break-all">
+              {JSON.stringify(log, null, 2)}
+            </pre>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function MetadataBadge({
+  label,
+  value,
+  mono = false,
+  copyValue,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  copyValue?: string;
+}) {
+  return (
+    <button
+      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-tertiary-default hover:bg-surface-secondary-default transition-colors text-sm"
+      onClick={() => {
+        if (copyValue) {
+          void navigator.clipboard.writeText(copyValue);
+        }
+      }}
+      disabled={!copyValue}
+    >
+      <span className="text-muted-foreground shrink-0">{label}:</span>
+      <span className={mono ? "font-mono text-xs" : "font-medium"}>
+        {value}
+      </span>
+    </button>
   );
 }

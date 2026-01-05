@@ -1,25 +1,105 @@
-import { HTTPToolLog } from "@gram/client/models/components";
-import { FileCode, PencilRuler, SquareFunction } from "lucide-react";
+import {
+  ToolCallSummary,
+  TelemetryLogRecord,
+} from "@gram/client/models/components";
 import { dateTimeFormatters } from "@/lib/dates";
+import {
+  FileCode,
+  PencilRuler,
+  SquareFunction,
+  LucideIcon,
+} from "lucide-react";
 
-export interface ParsedUrn {
+/**
+ * Format Unix nanoseconds to a readable timestamp
+ */
+export function formatNanoTimestamp(nanos: number): string {
+  const ms = nanos / 1_000_000;
+  return dateTimeFormatters.logTimestamp.format(new Date(ms));
+}
+
+/**
+ * Format Unix nanoseconds to human-readable relative time
+ */
+export function formatRelativeTime(nanos: number): string {
+  const ms = nanos / 1_000_000;
+  return dateTimeFormatters.humanize(new Date(ms));
+}
+
+/**
+ * Get status indicator for a tool call
+ */
+export function getStatusInfo(toolCall: ToolCallSummary): {
+  isSuccess: boolean;
+  statusText: string;
+} {
+  if (toolCall.httpStatusCode) {
+    const isSuccess =
+      toolCall.httpStatusCode >= 200 && toolCall.httpStatusCode < 400;
+    return {
+      isSuccess,
+      statusText: String(toolCall.httpStatusCode),
+    };
+  }
+  return { isSuccess: true, statusText: "OK" };
+}
+
+/**
+ * Get severity color class
+ */
+export function getSeverityColorClass(severity?: string): string {
+  switch (severity?.toUpperCase()) {
+    case "ERROR":
+    case "FATAL":
+      return "text-destructive-default";
+    case "WARN":
+      return "text-warning-default";
+    case "DEBUG":
+      return "text-muted-foreground";
+    case "INFO":
+    default:
+      return "text-foreground";
+  }
+}
+
+/**
+ * Parse the tool/source name from a gram URN
+ * Format: tools:{kind}:{source}:{name}
+ */
+export function parseGramUrn(urn: string): {
   kind: string;
   source: string;
   name: string;
-}
-
-// Parse URN format: tools:{kind}:{source}:{name}
-export const parseUrn = (toolUrn: string): ParsedUrn => {
-  const parts = toolUrn.split(":");
+} {
+  const parts = urn.split(":");
   return {
     kind: parts[1] || "",
     source: parts[2] || "",
-    name: parts[3] || "",
+    name: parts[3] || urn,
   };
-};
+}
 
-export const getToolIcon = (toolUrn: string) => {
-  const { kind } = parseUrn(toolUrn);
+/**
+ * Get the source name from a gram URN
+ */
+export function getSourceFromUrn(urn: string): string {
+  const { source } = parseGramUrn(urn);
+  return source || urn;
+}
+
+/**
+ * Get the tool name from a gram URN
+ */
+export function getToolNameFromUrn(urn: string): string {
+  const { name } = parseGramUrn(urn);
+  return name || urn;
+}
+
+/**
+ * Get the appropriate icon for a tool based on its URN
+ */
+export function getToolIcon(urn: string): LucideIcon {
+  const { kind } = parseGramUrn(urn);
   if (kind === "http") {
     return FileCode;
   }
@@ -28,39 +108,24 @@ export const getToolIcon = (toolUrn: string) => {
   }
   // Otherwise it's a function tool
   return SquareFunction;
-};
+}
 
-export const getSourceFromUrn = (toolUrn: string) => {
-  const { source } = parseUrn(toolUrn);
-  return source || toolUrn;
-};
+/**
+ * Format a log record body for display
+ */
+export function formatLogBody(log: TelemetryLogRecord): string {
+  return log.body || "(no message)";
+}
 
-export const getToolNameFromUrn = (toolUrn: string) => {
-  const { name } = parseUrn(toolUrn);
-  return name || toolUrn;
-};
-
-export const isSuccessfulCall = (log: HTTPToolLog) => {
-  // For HTTP tools, check status code
-  if (log.httpMethod && log.statusCode) {
-    return log.statusCode >= 200 && log.statusCode < 300;
-  }
-  // For function tools, check success field (when available)
-  // For now, default to success for functions
-  return true;
-};
-
-export const formatTimestamp = (date: Date) => {
-  return dateTimeFormatters.logTimestamp.format(date);
-};
-
-export const formatDetailTimestamp = (date: Date) => {
-  return dateTimeFormatters.full.format(date);
-};
-
-export const getHttpMethodVariant = (
-  method: string,
-): "default" | "secondary" => {
-  if (method === "POST") return "default";
-  return "secondary";
-};
+/**
+ * Get attributes as a formatted string for preview
+ */
+export function formatAttributesPreview(attributes: unknown): string {
+  if (!attributes || typeof attributes !== "object") return "";
+  const entries = Object.entries(attributes as Record<string, unknown>);
+  if (entries.length === 0) return "";
+  return entries
+    .slice(0, 3)
+    .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
+    .join(", ");
+}
