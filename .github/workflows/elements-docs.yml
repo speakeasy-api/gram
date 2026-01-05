@@ -14,6 +14,8 @@ permissions:
 jobs:
   generate-docs:
     runs-on: ubuntu-latest
+    # Don't retrigger if the commit is made by the gram-bot[bot] (auto-generated commits by this job)
+    if: github.actor != 'gram-bot[bot]'
     steps:
       - name: Generate a token
         id: generate-token
@@ -57,8 +59,16 @@ jobs:
 
       - name: Commit and push if changed
         run: |
+          git config user.name "gram-bot[bot]"
+          git config user.email "gram-bot[bot]@users.noreply.github.com"
+
           git add elements/docs/
-          git diff --quiet && git diff --staged --quiet || (git commit -m "docs: update TypeDoc API documentation [skip ci]" && git push)
+
+          # Exit if nothing staged
+          git diff --cached --quiet && exit 0
+
+          git commit -m "docs: update TypeDoc API documentation [skip ci]"
+          git push
 
       - name: Prune PNPM store
         if: success()
