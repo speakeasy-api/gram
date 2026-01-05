@@ -14,8 +14,6 @@ permissions:
 jobs:
   generate-docs:
     runs-on: ubuntu-latest
-    # Don't retrigger if the commit is made by the gram-bot[bot] (auto-generated commits by this job)
-    if: github.actor != 'gram-bot[bot]'
     steps:
       - name: Generate a token
         id: generate-token
