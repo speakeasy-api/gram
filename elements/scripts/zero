@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+#
+# script/zero - Bootstrap the development environment
+#
+# Usage: script/zero
+#
+# This script sets up everything you need to start developing on this project.
+# Run it after cloning the repo or whenever you need to reset your environment.
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+echo "🔧 Bootstrapping gram-elements development environment..."
+echo ""
+
+# Check for mise
+if ! command -v mise &> /dev/null; then
+  echo "❌ mise is not installed."
+  echo ""
+  echo "Install mise first:"
+  echo "  curl https://mise.run | sh"
+  echo ""
+  echo "Then add to your shell profile and restart your terminal."
+  exit 1
+fi
+
+echo "📦 Installing mise tools (node, pnpm, gum)..."
+mise install
+
+echo ""
+echo "📥 Installing npm dependencies..."
+pnpm install
+
+echo ""
+echo "✅ Setup complete!"
+echo ""
+echo "Available commands:"
+echo "  pnpm storybook       - Start Storybook dev server"
+echo "  pnpm build           - Build the library"
+echo "  pnpm lint            - Run linting"
+echo "  pnpm type-check      - Run TypeScript type checking"
+echo ""
+
+
+

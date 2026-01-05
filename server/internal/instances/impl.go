@@ -124,7 +124,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 
 	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
-	server.Use(middleware.ChatSessionMiddleware(service.chatSessions))
 	srv.Mount(mux, server)
 
 	o11y.AttachHandler(mux, "POST", "/rpc/instances.invoke/tool", func(w http.ResponseWriter, r *http.Request) {

@@ -90,14 +90,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 
-	chatSessionMiddleware := middleware.ChatSessionMiddleware(service.chatSessions)
-
 	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
-	server.Use(chatSessionMiddleware)
 	srv.Mount(mux, server)
 
-	wrappedHandler := chatSessionMiddleware(oops.ErrHandle(service.logger, service.HandleCompletion))
-	o11y.AttachHandler(mux, "POST", "/chat/completions", wrappedHandler.ServeHTTP)
+	o11y.AttachHandler(mux, "POST", "/chat/completions", oops.ErrHandle(service.logger, service.HandleCompletion).ServeHTTP)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -194,7 +190,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	} else {
 		chats, err := s.repo.ListChatsForUser(ctx, repo.ListChatsForUserParams{
 			ProjectID: *authCtx.ProjectID,
-			UserID:    conv.ToPGText(authCtx.UserID),
+			UserID:    conv.ToPGText(authCtx.UserID), // TODO: make this work for external user ids (Elements)
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats").Log(ctx, s.logger)

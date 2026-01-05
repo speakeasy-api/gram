@@ -1,0 +1,54 @@
+[**@gram-ai/elements v1.16.2**](../README.md)
+
+***
+
+[@gram-ai/elements](../README.md) / AttachmentsConfig
+
+# Interface: AttachmentsConfig
+
+AttachmentsConfig provides fine-grained control over file attachments.
+Inspired by OpenAI ChatKit's attachment options.
+
+Note: not yet implemented on the Gram side.
+
+## Properties
+
+### accept?
+
+> `optional` **accept**: `string`[]
+
+Accepted file types. Can be MIME types or file extensions.
+
+#### Example
+
+```ts
+['image/*', '.pdf', '.docx']
+```
+
+***
+
+### maxCount?
+
+> `optional` **maxCount**: `number`
+
+Maximum number of files that can be attached at once.
+
+#### Default
+
+```ts
+10
+```
+
+***
+
+### maxSize?
+
+> `optional` **maxSize**: `number`
+
+Maximum file size in bytes.
+
+#### Default
+
+```ts
+104857600 (100MB)
+```

@@ -1,0 +1,31 @@
+[**@gram-ai/elements v1.16.2**](../README.md)
+
+***
+
+[@gram-ai/elements](../README.md) / WelcomeConfig
+
+# Interface: WelcomeConfig
+
+## Properties
+
+### title
+
+> **title**: `string`
+
+The welcome message to display when the thread is empty.
+
+***
+
+### subtitle
+
+> **subtitle**: `string`
+
+The subtitle to display when the thread is empty.
+
+***
+
+### suggestions?
+
+> `optional` **suggestions**: [`Suggestion`](Suggestion.md)[]
+
+The suggestions to display when the thread is empty.

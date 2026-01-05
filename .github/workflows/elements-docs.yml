@@ -1,0 +1,73 @@
+name: Generate Elements TypeDoc Documentation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "elements/**"
+  workflow_dispatch: # Allow manual triggering
+
+permissions:
+  contents: write
+
+jobs:
+  generate-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate a token
+        id: generate-token
+        uses: actions/create-github-app-token@b96fde71c0080358ed6e2d162f11c612c92a97d1 # v2.1.4
+        with:
+          app-id: ${{ vars.GRAM_BOT_APP_ID }}
+          private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        with:
+          fetch-depth: 0
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: Setup Mise
+        uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3.5.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache PNPM
+        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+        with:
+          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_PNPM_KEY }}
+            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+          path: |
+            ${{ env.PNPM_STORE_PATH }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate TypeDoc
+        working-directory: elements
+        run: pnpm run docs
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "gram-bot[bot]"
+          git config user.email "gram-bot[bot]@users.noreply.github.com"
+
+          git add elements/docs/
+
+          # Exit if nothing staged
+          git diff --cached --quiet && exit 0
+
+          git commit -m "docs: update TypeDoc API documentation [skip ci]"
+          git push
+
+      - name: Prune PNPM store
+        if: success()
+        run: pnpm store prune
