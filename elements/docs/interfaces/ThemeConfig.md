@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../globals.md) / ThemeConfig
+[@gram-ai/elements](../README.md) / ThemeConfig
 
 # Interface: ThemeConfig
 

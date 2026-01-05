@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../globals.md) / ModelConfig
+[@gram-ai/elements](../README.md) / ModelConfig
 
 # Interface: ModelConfig
 

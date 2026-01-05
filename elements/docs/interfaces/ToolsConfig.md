@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../globals.md) / ToolsConfig
+[@gram-ai/elements](../README.md) / ToolsConfig
 
 # Interface: ToolsConfig
 

@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../globals.md) / Chat
+[@gram-ai/elements](../README.md) / Chat
 
 # Function: Chat()
 

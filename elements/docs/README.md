@@ -2,29 +2,36 @@
 
 ***
 
-# @gram-ai/elements
+# @gram-ai/elements v1.16.2
 
-## First time setup
+## Interfaces
 
-Please follow the [Setup Instructions](_media/README.md#setup) in the main README to get started.
+- [ElementsConfig](interfaces/ElementsConfig.md)
+- [ModelConfig](interfaces/ModelConfig.md)
+- [ThemeConfig](interfaces/ThemeConfig.md)
+- [ToolsConfig](interfaces/ToolsConfig.md)
+- [WelcomeConfig](interfaces/WelcomeConfig.md)
+- [Suggestion](interfaces/Suggestion.md)
+- [Dimensions](interfaces/Dimensions.md)
+- [Dimension](interfaces/Dimension.md)
+- [ModalConfig](interfaces/ModalConfig.md)
+- [ComposerConfig](interfaces/ComposerConfig.md)
+- [AttachmentsConfig](interfaces/AttachmentsConfig.md)
+- [SidecarConfig](interfaces/SidecarConfig.md)
+- [Plugin](interfaces/Plugin.md)
 
-## Elements Configuration
+## Type Aliases
 
-The minimal configuration required to get Elements setup is demonstrated below:
+- [FrontendTool](type-aliases/FrontendTool.md)
+- [Variant](type-aliases/Variant.md)
+- [Model](type-aliases/Model.md)
+- [Density](type-aliases/Density.md)
+- [ColorScheme](type-aliases/ColorScheme.md)
+- [Radius](type-aliases/Radius.md)
+- [ModalTriggerPosition](type-aliases/ModalTriggerPosition.md)
 
-```ts
-import type { ElementsConfig } from '@gram-ai/elements'
+## Functions
 
-const config: ElementsConfig = {
-  mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
-  projectSlug: 'your-project-slug',
-}
-```
-
-The `mcp` and `projectSlug` values can be retrieved from the MCP and project pages respectively.
-
-## API Documentation
-
-`ElementsConfig` is the top level configuration object for the Elements library. Please refer the [ElementsConfig](_media/ElementsConfig.md) interface documentation for more details on how to configure Elements.
-
-For an overview of all the available types and functions, please refer to the [Globals](_media/globals.md) documentation.
+- [Chat](functions/Chat.md)
+- [GramElementsProvider](functions/GramElementsProvider.md)
+- [defineFrontendTool](functions/defineFrontendTool.md)

@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../globals.md) / ComposerConfig
+[@gram-ai/elements](../README.md) / ComposerConfig
 
 # Interface: ComposerConfig
 

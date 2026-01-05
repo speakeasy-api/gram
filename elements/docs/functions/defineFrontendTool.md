@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../globals.md) / defineFrontendTool
+[@gram-ai/elements](../README.md) / defineFrontendTool
 
 # Function: defineFrontendTool()
 

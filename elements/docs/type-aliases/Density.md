@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../globals.md) / Density
+[@gram-ai/elements](../README.md) / Density
 
 # Type Alias: Density
 

@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../globals.md) / Radius
+[@gram-ai/elements](../README.md) / Radius
 
 # Type Alias: Radius
 

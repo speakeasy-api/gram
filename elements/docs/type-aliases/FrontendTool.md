@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../globals.md) / FrontendTool
+[@gram-ai/elements](../README.md) / FrontendTool
 
 # Type Alias: FrontendTool\<TArgs, TResult\>
 

@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../globals.md) / Suggestion
+[@gram-ai/elements](../README.md) / Suggestion
 
 # Interface: Suggestion
 

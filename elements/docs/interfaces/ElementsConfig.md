@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../globals.md) / ElementsConfig
+[@gram-ai/elements](../README.md) / ElementsConfig
 
 # Interface: ElementsConfig
 
@@ -12,8 +12,6 @@ The top level configuration object for the Elements library.
 
 ```ts
 const config: ElementsConfig = {
-  mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
-  projectSlug: 'my-project',
   systemPrompt: 'You are a helpful assistant.',
 }
 ```
@@ -44,7 +42,7 @@ import { recommended } from '@gram-ai/elements/plugins'
 
 ### components?
 
-> `optional` **components**: [`ComponentOverrides`](ComponentOverrides.md)
+> `optional` **components**: `ComponentOverrides`
 
 Override the default components used by the Elements library.
 
@@ -203,9 +201,9 @@ const config: ElementsConfig = {
 
 ***
 
-### welcome?
+### welcome
 
-> `optional` **welcome**: [`WelcomeConfig`](WelcomeConfig.md)
+> **welcome**: [`WelcomeConfig`](WelcomeConfig.md)
 
 The configuration for the welcome message and initial suggestions.
 
