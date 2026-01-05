@@ -106,3 +106,20 @@ Receives the current state of the modal window.
 #### Returns
 
 `ReactNode`
+
+#### Example
+
+```ts
+import { MessageCircleIcon } from 'lucide-react'
+import { cn } from '@/lib/utils'
+
+const config: ElementsConfig = {
+  modal: {
+    icon: (state) => {
+      return <div className={cn('size-6', state === 'open' ? 'rotate-90' : 'rotate-0')}>
+        <MessageCircleIcon className="size-6" />
+      </div>
+    },
+  },
+}
+```

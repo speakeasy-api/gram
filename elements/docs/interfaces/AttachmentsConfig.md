@@ -7,9 +7,8 @@
 # Interface: AttachmentsConfig
 
 AttachmentsConfig provides fine-grained control over file attachments.
-Inspired by OpenAI ChatKit's attachment options.
 
-Note: not yet implemented on the Gram side.
+Note: not yet implemented. Attachments are not supported yet.
 
 ## Properties
 

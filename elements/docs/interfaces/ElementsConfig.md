@@ -174,7 +174,7 @@ LLM model configuration.
 ```ts
 const config: ElementsConfig = {
   model: {
-    availableModels: ['gpt-4o-mini', 'gpt-4o'],
+    defaultModel: 'openai/gpt-4o',
     showModelPicker: true,
   },
 }
@@ -257,12 +257,14 @@ const config: ElementsConfig = {
   modal: {
     title: 'Chat',
     position: 'bottom-right',
-  },
-  expandable: true,
-  defaultExpanded: false,
-  dimensions: {
-    width: 400,
-    height: 600,
+    expandable: true,
+    defaultExpanded: false,
+    dimensions: {
+      default: {
+        width: 400,
+        height: 600,
+      },
+    },
   },
 }
 ```
@@ -282,12 +284,14 @@ Only applies if variant is 'sidecar'.
 const config: ElementsConfig = {
   sidecar: {
     title: 'Chat',
-  },
-  expandable: true,
-  defaultExpanded: false,
-  dimensions: {
-    width: 400,
-    height: 600,
+    expandable: true,
+    defaultExpanded: false,
+    dimensions: {
+      default: {
+        width: 400,
+        height: 600,
+      },
+    },
   },
 }
 ```
@@ -306,15 +310,12 @@ The configuration for the tools.
 const config: ElementsConfig = {
   tools: {
     expandToolGroupsByDefault: true,
-  },
-  components: {
-    ToolFallback: CustomToolFallbackComponent,
-  },
-  frontendTools: {
-    fetchUrl: FetchTool,
-  },
-  components: {
-    fetchUrl: FetchToolComponent,
+    frontendTools: {
+      fetchUrl: FetchTool,
+    },
+    components: {
+      fetchUrl: FetchToolComponent,
+    },
   },
 }
 ```

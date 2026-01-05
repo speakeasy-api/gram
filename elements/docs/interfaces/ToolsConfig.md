@@ -87,8 +87,10 @@ const FetchTool = defineFrontendTool<{ url: string }, string>(
   'fetchUrl'
 )
 const config: ElementsConfig = {
-  frontendTools: {
-    fetchUrl: FetchTool,
+  tools: {
+    frontendTools: {
+      fetchUrl: FetchTool,
+    },
   },
 }
 ```
