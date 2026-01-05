@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.16.1
+
+### Patch Changes
+
+- fc327c8: fixes release workflow
+
 ## 1.16.0
 
 ### Minor Changes
