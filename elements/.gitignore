@@ -1,0 +1,18 @@
+dist
+node_modules
+*storybook.log
+storybook-static
+*.env
+.env.*
+
+# Allow the local environment template file
+!.env.local.template
+
+# mise local overrides
+.mise.local.toml
+
+# Ignore tgz files
+*.tgz
+
+# Ignore .DS_Store
+.DS_Store
