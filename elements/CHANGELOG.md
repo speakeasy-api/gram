@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.16.3
+
+### Patch Changes
+
+- 45035de: Fix tsdoc comments for several types within Elements library
+
 ## 1.16.2
 
 ### Patch Changes

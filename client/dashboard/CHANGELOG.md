@@ -1,5 +1,15 @@
 # dashboard
 
+## 0.25.0
+
+### Minor Changes
+
+- 01932db: Removes legacy logs page, replaced with a new page for improved user experience
+
+### Patch Changes
+
+- c8c45b5: add a source detail page for imported mcp servers
+
 ## 0.24.0
 
 ### Minor Changes
