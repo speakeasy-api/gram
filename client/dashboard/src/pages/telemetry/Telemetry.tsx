@@ -270,7 +270,7 @@ export default function TelemetryPage() {
                 <div className="flex items-center gap-3 px-3 py-2.5 bg-surface-secondary-default border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   <div className="shrink-0 w-[150px]">Timestamp</div>
                   <div className="shrink-0 w-5" />
-                  <div className="flex-1">Span</div>
+                  <div className="flex-1">Source / Tool</div>
                   <div className="shrink-0 w-16 text-right">Status</div>
                 </div>
 

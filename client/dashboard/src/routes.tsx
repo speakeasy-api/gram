@@ -32,7 +32,6 @@ import {
 import ToolsetPage, { ToolsetRoot } from "./pages/toolsets/Toolset";
 import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
 import Billing from "./pages/billing/Billing";
-import Logs from "./pages/logs/Logs.tsx";
 import Telemetry from "./pages/telemetry/Telemetry";
 import { SourcesRoot, SourcesPage } from "./pages/sources/Sources";
 import SourceDetails from "./pages/sources/SourceDetails";
@@ -231,12 +230,6 @@ const ROUTE_STRUCTURE = {
   logs: {
     title: "Logs",
     url: "logs",
-    icon: "test-tube-diagonal",
-    component: Logs,
-  },
-  telemetry: {
-    title: "Telemetry",
-    url: "telemetry",
     icon: "activity",
     component: Telemetry,
   },
