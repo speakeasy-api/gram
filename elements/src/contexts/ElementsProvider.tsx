@@ -15,7 +15,7 @@ import {
   type ChatTransport,
   type UIMessage,
 } from 'ai'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ElementsContext } from './elementsContextType'
 
 const GRAM_API_URL = 'https://app.getgram.ai'
@@ -58,30 +58,12 @@ function transformEnvironmentToHeaders(environment: Record<string, unknown>) {
   )
 }
 
-const useSession = () => {
-  const [session, setSession] = useState<string | null>(null)
-  useEffect(() => {
-    fetch(`/session`, {
-      method: 'POST',
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        setSession(data.client_token)
-      })
-      .catch((error) => {
-        console.error('Error creating session:', error)
-      })
-  }, [])
-
-  return session
-}
-
 export const ElementsProvider = ({
   children,
   config,
 }: ElementsProviderProps) => {
-  const session = useSession()
-
+  const session = config.clientToken
+  
   const [model, setModel] = useState<Model>(
     config.model?.defaultModel ?? MODELS[0]
   )

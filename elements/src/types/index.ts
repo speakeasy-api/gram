@@ -45,6 +45,11 @@ export type Variant = (typeof VARIANTS)[number]
  */
 export interface ElementsConfig {
   /**
+   * The client token to use for the Elements library. Retrieved from app.getgram.ai/rpc/chatSessions.create
+   */
+  clientToken: string | null
+
+  /**
    * The system prompt to use for the Elements library.
    */
   systemPrompt?: string
