@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../README.md) / SidecarConfig
+[@gram-ai/elements](../globals.md) / SidecarConfig
 
 # Interface: SidecarConfig
 

@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../README.md) / WelcomeConfig
+[@gram-ai/elements](../globals.md) / WelcomeConfig
 
 # Interface: WelcomeConfig
 

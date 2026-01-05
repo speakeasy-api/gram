@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../README.md) / ColorScheme
+[@gram-ai/elements](../globals.md) / ColorScheme
 
 # Type Alias: ColorScheme
 

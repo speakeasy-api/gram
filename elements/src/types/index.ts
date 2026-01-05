@@ -38,6 +38,8 @@ export type Variant = (typeof VARIANTS)[number]
  *
  * @example
  * const config: ElementsConfig = {
+ *   mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
+ *   projectSlug: 'my-project',
  *   systemPrompt: 'You are a helpful assistant.',
  * }
  */
@@ -179,7 +181,7 @@ export interface ElementsConfig {
    *   },
    * }
    */
-  welcome: WelcomeConfig
+  welcome?: WelcomeConfig
 
   /**
    * The configuration for the composer.

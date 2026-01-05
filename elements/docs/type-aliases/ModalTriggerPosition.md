@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../README.md) / ModalTriggerPosition
+[@gram-ai/elements](../globals.md) / ModalTriggerPosition
 
 # Type Alias: ModalTriggerPosition
 

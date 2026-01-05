@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../README.md) / Dimensions
+[@gram-ai/elements](../globals.md) / Dimensions
 
 # Interface: Dimensions
 
