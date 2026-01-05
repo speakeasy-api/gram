@@ -41,7 +41,7 @@
     "type-check": "tsc --noEmit",
     "docs": "typedoc",
     "docs:watch": "typedoc --watch",
-    "prepare": "pnpm build"
+    "prepack": "pnpm build"
   },
   "keywords": [],
   "author": "Adam Bull <adam@speakeasy.com>",
