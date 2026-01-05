@@ -65,6 +65,7 @@ jobs:
           publish: pnpm changeset publish
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Prune PNPM store
         run: pnpm store prune
