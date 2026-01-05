@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../README.md) / ModalConfig
+[@gram-ai/elements](../globals.md) / ModalConfig
 
 # Interface: ModalConfig
 

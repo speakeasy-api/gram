@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../README.md) / Plugin
+[@gram-ai/elements](../globals.md) / Plugin
 
 # Interface: Plugin
 

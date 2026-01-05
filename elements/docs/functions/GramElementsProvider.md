@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../README.md) / GramElementsProvider
+[@gram-ai/elements](../globals.md) / GramElementsProvider
 
 # Function: GramElementsProvider()
 
@@ -12,7 +12,7 @@
 
 ### \_\_namedParameters
 
-`ElementsProviderProps`
+[`ElementsProviderProps`](../interfaces/ElementsProviderProps.md)
 
 ## Returns
 

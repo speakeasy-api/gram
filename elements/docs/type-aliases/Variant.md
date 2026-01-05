@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../README.md) / Variant
+[@gram-ai/elements](../globals.md) / Variant
 
 # Type Alias: Variant
 
