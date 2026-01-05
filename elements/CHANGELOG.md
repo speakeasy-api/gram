@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.16.2
+
+### Patch Changes
+
+- 990cc9e: Fix typedoc generation
+
 ## 1.16.1
 
 ### Patch Changes
