@@ -145,7 +145,7 @@ export interface ElementsConfig {
    * @example
    * const config: ElementsConfig = {
    *   model: {
-   *     availableModels: ['gpt-4o-mini', 'gpt-4o'],
+   *     defaultModel: 'openai/gpt-4o',
    *     showModelPicker: true,
    *   },
    * }
@@ -204,12 +204,14 @@ export interface ElementsConfig {
    *   modal: {
    *     title: 'Chat',
    *     position: 'bottom-right',
-   *   },
-   *   expandable: true,
-   *   defaultExpanded: false,
-   *   dimensions: {
-   *     width: 400,
-   *     height: 600,
+   *     expandable: true,
+   *     defaultExpanded: false,
+   *     dimensions: {
+   *       default: {
+   *         width: 400,
+   *         height: 600,
+   *       },
+   *     },
    *   },
    * }
    */
@@ -223,12 +225,14 @@ export interface ElementsConfig {
    * const config: ElementsConfig = {
    *   sidecar: {
    *     title: 'Chat',
-   *   },
-   *   expandable: true,
-   *   defaultExpanded: false,
-   *   dimensions: {
-   *     width: 400,
-   *     height: 600,
+   *     expandable: true,
+   *     defaultExpanded: false,
+   *     dimensions: {
+   *       default: {
+   *         width: 400,
+   *         height: 600,
+   *       },
+   *     },
    *   },
    * }
    */
@@ -241,15 +245,12 @@ export interface ElementsConfig {
    * const config: ElementsConfig = {
    *   tools: {
    *     expandToolGroupsByDefault: true,
-   *   },
-   *   components: {
-   *     ToolFallback: CustomToolFallbackComponent,
-   *   },
-   *   frontendTools: {
-   *     fetchUrl: FetchTool,
-   *   },
-   *   components: {
-   *     fetchUrl: FetchToolComponent,
+   *     frontendTools: {
+   *       fetchUrl: FetchTool,
+   *     },
+   *     components: {
+   *       fetchUrl: FetchToolComponent,
+   *     },
    *   },
    * }
    */
@@ -447,8 +448,10 @@ export interface ToolsConfig {
    *   'fetchUrl'
    * )
    * const config: ElementsConfig = {
-   *   frontendTools: {
-   *     fetchUrl: FetchTool,
+   *   tools: {
+   *     frontendTools: {
+   *       fetchUrl: FetchTool,
+   *     },
    *   },
    * }
    * ```
@@ -560,6 +563,22 @@ export interface ModalConfig extends ExpandableConfig {
   /**
    * The icon to use for the modal window.
    * Receives the current state of the modal window.
+   *
+   * @example
+   * ```ts
+   * import { MessageCircleIcon } from 'lucide-react'
+   * import { cn } from '@/lib/utils'
+   *
+   * const config: ElementsConfig = {
+   *   modal: {
+   *     icon: (state) => {
+   *       return <div className={cn('size-6', state === 'open' ? 'rotate-90' : 'rotate-0')}>
+   *         <MessageCircleIcon className="size-6" />
+   *       </div>
+   *     },
+   *   },
+   * }
+   * ```
    */
   icon?: (state: 'open' | 'closed' | undefined) => ReactNode
 }
@@ -583,9 +602,8 @@ export interface ComposerConfig {
 
 /**
  * AttachmentsConfig provides fine-grained control over file attachments.
- * Inspired by OpenAI ChatKit's attachment options.
  *
- * Note: not yet implemented on the Gram side.
+ * Note: not yet implemented. Attachments are not supported yet.
  */
 export interface AttachmentsConfig {
   /**
@@ -615,6 +633,9 @@ export interface SidecarConfig extends ExpandableConfig {
   title?: string
 }
 
+/**
+ * @internal
+ */
 export type ElementsContextType = {
   config: ElementsConfig
   setModel: (model: Model) => void
