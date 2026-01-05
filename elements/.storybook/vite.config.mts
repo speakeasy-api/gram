@@ -11,7 +11,7 @@ const apiMiddlewarePlugin = () => ({
   name: 'chat-api-middleware',
   configureServer(server: ViteDevServer) {
     const handlers = createElementsServerHandlers()
-    server.middlewares.use('/chat/completions', handlers.chat)
+    server.middlewares.use('/session', handlers.session)
   },
 })
 

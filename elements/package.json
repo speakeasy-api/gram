@@ -97,6 +97,7 @@
   },
   "dependencies": {
     "@ai-sdk/mcp": "^0.0.11",
+    "@ai-sdk/react": "catalog:",
     "@openrouter/ai-sdk-provider": "^1.4.1",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-collapsible": "^1.1.12",
