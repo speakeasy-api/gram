@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../README.md) / AttachmentsConfig
+[@gram-ai/elements](../globals.md) / AttachmentsConfig
 
 # Interface: AttachmentsConfig
 

@@ -2,7 +2,7 @@
 
 ***
 
-[@gram-ai/elements](../README.md) / Model
+[@gram-ai/elements](../globals.md) / Model
 
 # Type Alias: Model
 

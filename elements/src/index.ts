@@ -14,6 +14,7 @@ export type { FrontendTool } from './lib/tools'
 
 // Types
 export type {
+  ElementsProviderProps,
   ElementsConfig,
   ComposerConfig,
   AttachmentsConfig,
@@ -32,6 +33,7 @@ export type {
   Variant,
   Dimensions,
   Dimension,
+  ComponentOverrides,
 } from './types'
 
 export type { Plugin } from './types/plugins'
