@@ -1,5 +1,8 @@
 import { Page } from "@/components/page-layout";
-import { ExternalMCPServerCard } from "@/components/sources/ExternalMCPServerCard";
+import {
+  ExternalMCPServerCard,
+  ExternalMCPServerCardLoading,
+} from "@/components/sources/ExternalMCPServerCard";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
@@ -117,10 +120,11 @@ export default function ExternalMCPDetails() {
           </div>
 
           {/* MCP Server Relationship Card */}
-          <ExternalMCPServerCard
-            toolset={associatedToolset}
-            isLoading={isLoadingToolsets}
-          />
+          {isLoadingToolsets ? (
+            <ExternalMCPServerCardLoading />
+          ) : associatedToolset !== undefined ? (
+            <ExternalMCPServerCard toolset={associatedToolset} />
+          ) : null}
         </div>
       </Page.Body>
     </Page>

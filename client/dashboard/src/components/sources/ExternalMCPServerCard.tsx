@@ -5,29 +5,12 @@ import { Badge } from "@speakeasy-api/moonshine";
 import { ChevronRight, Globe, Lock, Power, Server } from "lucide-react";
 
 interface ExternalMCPServerCardProps {
-  toolset: ToolsetEntry | undefined;
+  toolset: ToolsetEntry;
   isLoading?: boolean;
 }
 
-export function ExternalMCPServerCard({
-  toolset,
-  isLoading = false,
-}: ExternalMCPServerCardProps) {
+export function ExternalMCPServerCard({ toolset }: ExternalMCPServerCardProps) {
   const routes = useRoutes();
-
-  if (isLoading || !toolset) {
-    return (
-      <div className="rounded-lg border bg-card p-6">
-        <Type as="h2" className="text-lg font-semibold mb-4">
-          MCP Server
-        </Type>
-        <div className="text-center py-8 text-muted-foreground">
-          <Server className="h-12 w-12 mx-auto mb-3 opacity-50 animate-pulse" />
-          <Type>Loading MCP server information...</Type>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="rounded-lg border bg-card p-6">
@@ -64,6 +47,20 @@ export function ExternalMCPServerCard({
           </div>
         </div>
       </routes.mcp.details.Link>
+    </div>
+  );
+}
+
+export function ExternalMCPServerCardLoading() {
+  return (
+    <div className="rounded-lg border bg-card p-6">
+      <Type as="h2" className="text-lg font-semibold mb-4">
+        MCP Server
+      </Type>
+      <div className="text-center py-8 text-muted-foreground">
+        <Server className="h-12 w-12 mx-auto mb-3 opacity-50 animate-pulse" />
+        <Type>Loading MCP server information...</Type>
+      </div>
     </div>
   );
 }
