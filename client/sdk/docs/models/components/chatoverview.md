@@ -6,11 +6,11 @@
 import { ChatOverview } from "@gram/client/models/components";
 
 let value: ChatOverview = {
-  createdAt: new Date("2024-05-18T14:46:31.663Z"),
+  createdAt: new Date("2025-05-18T14:46:31.663Z"),
   id: "<id>",
   numMessages: 349178,
   title: "<value>",
-  updatedAt: new Date("2023-01-03T09:29:42.548Z"),
+  updatedAt: new Date("2024-01-03T09:29:42.548Z"),
   userId: "<id>",
 };
 ```

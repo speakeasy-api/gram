@@ -56,3 +56,23 @@ func RemoveOAuthServerToolsetsPath() string {
 func AddOAuthProxyServerToolsetsPath() string {
 	return "/rpc/toolsets.addOAuthProxyServer"
 }
+
+// SetIterationModeToolsetsPath returns the URL path to the toolsets service setIterationMode HTTP endpoint.
+func SetIterationModeToolsetsPath() string {
+	return "/rpc/toolsets.setIterationMode"
+}
+
+// PromoteDraftToolsetsPath returns the URL path to the toolsets service promoteDraft HTTP endpoint.
+func PromoteDraftToolsetsPath() string {
+	return "/rpc/toolsets.promoteDraft"
+}
+
+// DiscardDraftToolsetsPath returns the URL path to the toolsets service discardDraft HTTP endpoint.
+func DiscardDraftToolsetsPath() string {
+	return "/rpc/toolsets.discardDraft"
+}
+
+// GetDraftToolsetToolsetsPath returns the URL path to the toolsets service getDraftToolset HTTP endpoint.
+func GetDraftToolsetToolsetsPath() string {
+	return "/rpc/toolsets.getDraft"
+}

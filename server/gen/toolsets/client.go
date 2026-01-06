@@ -26,10 +26,14 @@ type Client struct {
 	AddExternalOAuthServerEndpoint   goa.Endpoint
 	RemoveOAuthServerEndpoint        goa.Endpoint
 	AddOAuthProxyServerEndpoint      goa.Endpoint
+	SetIterationModeEndpoint         goa.Endpoint
+	PromoteDraftEndpoint             goa.Endpoint
+	DiscardDraftEndpoint             goa.Endpoint
+	GetDraftToolsetEndpoint          goa.Endpoint
 }
 
 // NewClient initializes a "toolsets" service client given the endpoints.
-func NewClient(createToolset, listToolsets, updateToolset, deleteToolset, getToolset, checkMCPSlugAvailability, cloneToolset, addExternalOAuthServer, removeOAuthServer, addOAuthProxyServer goa.Endpoint) *Client {
+func NewClient(createToolset, listToolsets, updateToolset, deleteToolset, getToolset, checkMCPSlugAvailability, cloneToolset, addExternalOAuthServer, removeOAuthServer, addOAuthProxyServer, setIterationMode, promoteDraft, discardDraft, getDraftToolset goa.Endpoint) *Client {
 	return &Client{
 		CreateToolsetEndpoint:            createToolset,
 		ListToolsetsEndpoint:             listToolsets,
@@ -41,6 +45,10 @@ func NewClient(createToolset, listToolsets, updateToolset, deleteToolset, getToo
 		AddExternalOAuthServerEndpoint:   addExternalOAuthServer,
 		RemoveOAuthServerEndpoint:        removeOAuthServer,
 		AddOAuthProxyServerEndpoint:      addOAuthProxyServer,
+		SetIterationModeEndpoint:         setIterationMode,
+		PromoteDraftEndpoint:             promoteDraft,
+		DiscardDraftEndpoint:             discardDraft,
+		GetDraftToolsetEndpoint:          getDraftToolset,
 	}
 }
 
@@ -258,6 +266,96 @@ func (c *Client) RemoveOAuthServer(ctx context.Context, p *RemoveOAuthServerPayl
 func (c *Client) AddOAuthProxyServer(ctx context.Context, p *AddOAuthProxyServerPayload) (res *types.Toolset, err error) {
 	var ires any
 	ires, err = c.AddOAuthProxyServerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.Toolset), nil
+}
+
+// SetIterationMode calls the "setIterationMode" endpoint of the "toolsets"
+// service.
+// SetIterationMode may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetIterationMode(ctx context.Context, p *SetIterationModePayload) (res *types.Toolset, err error) {
+	var ires any
+	ires, err = c.SetIterationModeEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.Toolset), nil
+}
+
+// PromoteDraft calls the "promoteDraft" endpoint of the "toolsets" service.
+// PromoteDraft may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) PromoteDraft(ctx context.Context, p *PromoteDraftPayload) (res *types.Toolset, err error) {
+	var ires any
+	ires, err = c.PromoteDraftEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.Toolset), nil
+}
+
+// DiscardDraft calls the "discardDraft" endpoint of the "toolsets" service.
+// DiscardDraft may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DiscardDraft(ctx context.Context, p *DiscardDraftPayload) (res *types.Toolset, err error) {
+	var ires any
+	ires, err = c.DiscardDraftEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.Toolset), nil
+}
+
+// GetDraftToolset calls the "getDraftToolset" endpoint of the "toolsets"
+// service.
+// GetDraftToolset may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetDraftToolset(ctx context.Context, p *GetDraftToolsetPayload) (res *types.Toolset, err error) {
+	var ires any
+	ires, err = c.GetDraftToolsetEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

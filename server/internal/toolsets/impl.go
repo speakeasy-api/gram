@@ -331,9 +331,28 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		updateParams.ToolSelectionMode = *payload.ToolSelectionMode
 	}
 
-	err = s.createToolsetVersion(ctx, payload.ToolUrns, payload.ResourceUrns, existingToolset.ID, tr)
-	if err != nil {
-		return nil, err
+	// Check if we should write to draft or production
+	if existingToolset.IterationMode && (payload.ToolUrns != nil || payload.ResourceUrns != nil) {
+		// Write to draft version instead of production
+		err = s.createOrUpdateDraftToolsetVersion(ctx, payload.ToolUrns, payload.ResourceUrns, existingToolset.ID, tr)
+		if err != nil {
+			return nil, err
+		}
+
+		// Mark that we have draft changes
+		_, err = tr.UpdateToolsetDraftState(ctx, repo.UpdateToolsetDraftStateParams{
+			ID:              existingToolset.ID,
+			HasDraftChanges: true,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to update draft state").Log(ctx, logger)
+		}
+	} else {
+		// Normal flow: write directly to production toolset version
+		err = s.createToolsetVersion(ctx, payload.ToolUrns, payload.ResourceUrns, existingToolset.ID, tr)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	updatedToolset, err := tr.UpdateToolset(ctx, updateParams)
@@ -892,6 +911,104 @@ func (s *Service) createToolsetVersion(ctx context.Context, toolUrnStrings []str
 	return nil
 }
 
+// createOrUpdateDraftToolsetVersion creates or updates a draft version for a toolset in iteration mode.
+// This is similar to createToolsetVersion but writes to draft_toolset_versions instead.
+// Draft tables store URNs as []string directly (not []urn.Tool).
+func (s *Service) createOrUpdateDraftToolsetVersion(ctx context.Context, toolUrnStrings []string, resourceUrnStrings []string, toolsetID uuid.UUID, tr *repo.Queries) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetID(toolsetID.String()))
+
+	// Only create a draft if URNs are provided
+	if toolUrnStrings == nil && resourceUrnStrings == nil {
+		return nil
+	}
+
+	// Validate and collect tool URNs (store as strings for draft tables)
+	var allToolUrns []string
+	for _, urnStr := range toolUrnStrings {
+		var toolUrn urn.Tool
+		if err := toolUrn.UnmarshalText([]byte(urnStr)); err != nil {
+			logger.WarnContext(ctx, "invalid tool URN", attr.SlogError(err), attr.SlogToolURN(urnStr))
+			continue
+		}
+		allToolUrns = append(allToolUrns, urnStr)
+	}
+
+	// Validate and collect resource URNs (store as strings for draft tables)
+	allResourceUrns := []string{}
+	for _, urnStr := range resourceUrnStrings {
+		var resourceUrn urn.Resource
+		if err := resourceUrn.UnmarshalText([]byte(urnStr)); err != nil {
+			logger.WarnContext(ctx, "invalid resource URN", attr.SlogError(err), attr.SlogResourceURN(urnStr))
+			continue
+		}
+		allResourceUrns = append(allResourceUrns, urnStr)
+	}
+
+	// If tool URNs not provided, keep the existing ones from draft (if exists) or production
+	if toolUrnStrings == nil {
+		draftVersion, err := tr.GetDraftToolsetVersion(ctx, toolsetID)
+		if err == nil {
+			allToolUrns = append(allToolUrns, draftVersion.ToolUrns...)
+		} else {
+			// Fall back to production version
+			latestVersion, err := tr.GetLatestToolsetVersion(ctx, toolsetID)
+			if err == nil {
+				for _, u := range latestVersion.ToolUrns {
+					allToolUrns = append(allToolUrns, u.String())
+				}
+			}
+		}
+	}
+
+	// If resource URNs not provided, keep the existing ones from draft (if exists) or production
+	if resourceUrnStrings == nil {
+		draftVersion, err := tr.GetDraftToolsetVersion(ctx, toolsetID)
+		if err == nil {
+			allResourceUrns = append(allResourceUrns, draftVersion.ResourceUrns...)
+		} else {
+			// Fall back to production version
+			latestVersion, err := tr.GetLatestToolsetVersion(ctx, toolsetID)
+			if err == nil {
+				for _, u := range latestVersion.ResourceUrns {
+					allResourceUrns = append(allResourceUrns, u.String())
+				}
+			}
+		}
+	}
+
+	// Check if draft already exists and update it, otherwise create new
+	_, err := tr.GetDraftToolsetVersion(ctx, toolsetID)
+	if err == nil {
+		// Update existing draft
+		_, err = tr.UpdateDraftToolsetVersion(ctx, repo.UpdateDraftToolsetVersionParams{
+			ToolsetID:    toolsetID,
+			ToolUrns:     allToolUrns,
+			ResourceUrns: allResourceUrns,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to update draft toolset version").Log(ctx, logger)
+		}
+		logger.InfoContext(ctx, "updated draft toolset version", attr.SlogToolsetID(toolsetID.String()))
+	} else {
+		// Create new draft
+		_, err = tr.CreateDraftToolsetVersion(ctx, repo.CreateDraftToolsetVersionParams{
+			ToolsetID:    toolsetID,
+			ToolUrns:     allToolUrns,
+			ResourceUrns: allResourceUrns,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to create draft toolset version").Log(ctx, logger)
+		}
+		logger.InfoContext(ctx, "created draft toolset version", attr.SlogToolsetID(toolsetID.String()))
+	}
+
+	return nil
+}
+
 // updatePromptTemplates updates the prompt templates for a toolset. NOTE: promptTemplates are NOT tools! These correspond to actual "prompts" in MCP
 func (s *Service) updatePromptTemplates(ctx context.Context, dbtx pgx.Tx, projectID uuid.UUID, toolsetID uuid.UUID, promptTemplateNames []string, logger *slog.Logger) error {
 	tr := repo.New(dbtx)
@@ -930,6 +1047,236 @@ func (s *Service) updatePromptTemplates(ctx context.Context, dbtx pgx.Tx, projec
 	}
 
 	return nil
+}
+
+// ============================================================================
+// Draft/Staging Workflow Methods
+// ============================================================================
+
+// SetIterationMode enables or disables iteration mode for a toolset.
+// When enabled, changes to tools are staged as drafts until explicitly promoted.
+func (s *Service) SetIterationMode(ctx context.Context, payload *gen.SetIterationModePayload) (*types.Toolset, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetSlug(string(payload.Slug)))
+
+	// Get the existing toolset
+	existingToolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
+		Slug:      conv.ToLower(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
+	}
+
+	// If disabling iteration mode, discard any pending draft
+	if !payload.IterationMode && existingToolset.HasDraftChanges {
+		err = s.repo.DeleteDraftToolsetVersion(ctx, existingToolset.ID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to discard draft").Log(ctx, logger)
+		}
+
+		// Clear the has_draft_changes flag
+		_, err = s.repo.UpdateToolsetDraftState(ctx, repo.UpdateToolsetDraftStateParams{
+			ID:              existingToolset.ID,
+			HasDraftChanges: false,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to update draft state").Log(ctx, logger)
+		}
+	}
+
+	// Update iteration mode
+	_, err = s.repo.UpdateToolsetIterationMode(ctx, repo.UpdateToolsetIterationModeParams{
+		ID:            existingToolset.ID,
+		IterationMode: payload.IterationMode,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update iteration mode").Log(ctx, logger)
+	}
+
+	return mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache)
+}
+
+// PromoteDraft promotes the draft toolset changes to production.
+// This copies draft tool URNs and variations to the live version.
+func (s *Service) PromoteDraft(ctx context.Context, payload *gen.PromoteDraftPayload) (*types.Toolset, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetSlug(string(payload.Slug)))
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	tr := s.repo.WithTx(dbtx)
+
+	// Get the existing toolset
+	existingToolset, err := tr.GetToolset(ctx, repo.GetToolsetParams{
+		Slug:      conv.ToLower(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
+	}
+
+	if !existingToolset.IterationMode {
+		return nil, oops.E(oops.CodeBadRequest, nil, "toolset is not in iteration mode").Log(ctx, logger)
+	}
+
+	if !existingToolset.HasDraftChanges {
+		return nil, oops.E(oops.CodeBadRequest, nil, "no draft changes to promote").Log(ctx, logger)
+	}
+
+	// Get the draft version
+	draftVersion, err := tr.GetDraftToolsetVersion(ctx, existingToolset.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "draft version not found").Log(ctx, logger)
+	}
+
+	// Convert draft URN strings to typed URNs for production table
+	toolUrns := make([]urn.Tool, 0, len(draftVersion.ToolUrns))
+	for _, urnStr := range draftVersion.ToolUrns {
+		var toolUrn urn.Tool
+		if err := toolUrn.UnmarshalText([]byte(urnStr)); err != nil {
+			logger.WarnContext(ctx, "invalid tool URN in draft", attr.SlogError(err), attr.SlogToolURN(urnStr))
+			continue
+		}
+		toolUrns = append(toolUrns, toolUrn)
+	}
+
+	resourceUrns := make([]urn.Resource, 0, len(draftVersion.ResourceUrns))
+	for _, urnStr := range draftVersion.ResourceUrns {
+		var resourceUrn urn.Resource
+		if err := resourceUrn.UnmarshalText([]byte(urnStr)); err != nil {
+			logger.WarnContext(ctx, "invalid resource URN in draft", attr.SlogError(err), attr.SlogResourceURN(urnStr))
+			continue
+		}
+		resourceUrns = append(resourceUrns, resourceUrn)
+	}
+
+	// Get the latest production version for predecessor reference
+	latestVersion, err := tr.GetLatestToolsetVersion(ctx, existingToolset.ID)
+	latestVersionNumber := int64(0)
+	var predecessorID uuid.NullUUID
+	if err == nil {
+		predecessorID = uuid.NullUUID{UUID: latestVersion.ID, Valid: true}
+		latestVersionNumber = latestVersion.Version
+	}
+
+	// Create a new production version from the draft
+	_, err = tr.CreateToolsetVersion(ctx, repo.CreateToolsetVersionParams{
+		ToolsetID:     existingToolset.ID,
+		Version:       latestVersionNumber + 1,
+		ToolUrns:      toolUrns,
+		ResourceUrns:  resourceUrns,
+		PredecessorID: predecessorID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create production version").Log(ctx, logger)
+	}
+
+	// TODO: Copy draft_tool_variations to tool_variations when we implement variation drafting
+
+	// Delete the draft version
+	err = tr.DeleteDraftToolsetVersion(ctx, existingToolset.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to delete draft version").Log(ctx, logger)
+	}
+
+	// Clear the has_draft_changes flag
+	_, err = tr.UpdateToolsetDraftState(ctx, repo.UpdateToolsetDraftStateParams{
+		ID:              existingToolset.ID,
+		HasDraftChanges: false,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update draft state").Log(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to commit transaction").Log(ctx, logger)
+	}
+
+	logger.InfoContext(ctx, "promoted draft to production", attr.SlogToolsetSlug(string(payload.Slug)))
+
+	return mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache)
+}
+
+// DiscardDraft discards any pending draft changes for a toolset.
+func (s *Service) DiscardDraft(ctx context.Context, payload *gen.DiscardDraftPayload) (*types.Toolset, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetSlug(string(payload.Slug)))
+
+	// Get the existing toolset
+	existingToolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
+		Slug:      conv.ToLower(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
+	}
+
+	if !existingToolset.HasDraftChanges {
+		// No draft to discard, just return the toolset
+		return mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache)
+	}
+
+	// Delete the draft version (this will cascade delete draft_tool_variations)
+	err = s.repo.DeleteDraftToolsetVersion(ctx, existingToolset.ID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to delete draft version").Log(ctx, logger)
+	}
+
+	// Clear the has_draft_changes flag
+	_, err = s.repo.UpdateToolsetDraftState(ctx, repo.UpdateToolsetDraftStateParams{
+		ID:              existingToolset.ID,
+		HasDraftChanges: false,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update draft state").Log(ctx, logger)
+	}
+
+	logger.InfoContext(ctx, "discarded draft changes", attr.SlogToolsetSlug(string(payload.Slug)))
+
+	return mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache)
+}
+
+// GetDraftToolset returns the draft version of a toolset for preview/staging.
+func (s *Service) GetDraftToolset(ctx context.Context, payload *gen.GetDraftToolsetPayload) (*types.Toolset, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetSlug(string(payload.Slug)))
+
+	// Get the existing toolset
+	existingToolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
+		Slug:      conv.ToLower(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
+	}
+
+	if !existingToolset.IterationMode {
+		return nil, oops.E(oops.CodeBadRequest, nil, "toolset is not in iteration mode").Log(ctx, logger)
+	}
+
+	// Use the draft-aware describe function
+	return mv.DescribeToolsetWithDraft(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache, true)
 }
 
 // InvalidateCacheByTool invalidates cache entries for all toolsets that contain the specified tool in their latest version

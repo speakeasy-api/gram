@@ -72,6 +72,13 @@ type AddOAuthProxyServerRequestBody struct {
 	OauthProxyServer *OAuthProxyServerFormRequestBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
 }
 
+// SetIterationModeRequestBody is the type of the "toolsets" service
+// "setIterationMode" endpoint HTTP request body.
+type SetIterationModeRequestBody struct {
+	// Whether to enable iteration mode
+	IterationMode *bool `form:"iteration_mode,omitempty" json:"iteration_mode,omitempty" xml:"iteration_mode,omitempty"`
+}
+
 // CreateToolsetResponseBody is the type of the "toolsets" service
 // "createToolset" endpoint HTTP response body.
 type CreateToolsetResponseBody struct {
@@ -126,6 +133,14 @@ type CreateToolsetResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// Whether iteration mode is enabled (staged changes)
+	IterationMode *bool `form:"iteration_mode,omitempty" json:"iteration_mode,omitempty" xml:"iteration_mode,omitempty"`
+	// Whether there are pending draft changes
+	HasDraftChanges *bool `form:"has_draft_changes,omitempty" json:"has_draft_changes,omitempty" xml:"has_draft_changes,omitempty"`
+	// Tool URNs in the draft (only populated when viewing draft)
+	DraftToolUrns []string `form:"draft_tool_urns,omitempty" json:"draft_tool_urns,omitempty" xml:"draft_tool_urns,omitempty"`
+	// Resource URNs in the draft (only populated when viewing draft)
+	DraftResourceUrns []string `form:"draft_resource_urns,omitempty" json:"draft_resource_urns,omitempty" xml:"draft_resource_urns,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -193,6 +208,14 @@ type UpdateToolsetResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// Whether iteration mode is enabled (staged changes)
+	IterationMode *bool `form:"iteration_mode,omitempty" json:"iteration_mode,omitempty" xml:"iteration_mode,omitempty"`
+	// Whether there are pending draft changes
+	HasDraftChanges *bool `form:"has_draft_changes,omitempty" json:"has_draft_changes,omitempty" xml:"has_draft_changes,omitempty"`
+	// Tool URNs in the draft (only populated when viewing draft)
+	DraftToolUrns []string `form:"draft_tool_urns,omitempty" json:"draft_tool_urns,omitempty" xml:"draft_tool_urns,omitempty"`
+	// Resource URNs in the draft (only populated when viewing draft)
+	DraftResourceUrns []string `form:"draft_resource_urns,omitempty" json:"draft_resource_urns,omitempty" xml:"draft_resource_urns,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -253,6 +276,14 @@ type GetToolsetResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// Whether iteration mode is enabled (staged changes)
+	IterationMode *bool `form:"iteration_mode,omitempty" json:"iteration_mode,omitempty" xml:"iteration_mode,omitempty"`
+	// Whether there are pending draft changes
+	HasDraftChanges *bool `form:"has_draft_changes,omitempty" json:"has_draft_changes,omitempty" xml:"has_draft_changes,omitempty"`
+	// Tool URNs in the draft (only populated when viewing draft)
+	DraftToolUrns []string `form:"draft_tool_urns,omitempty" json:"draft_tool_urns,omitempty" xml:"draft_tool_urns,omitempty"`
+	// Resource URNs in the draft (only populated when viewing draft)
+	DraftResourceUrns []string `form:"draft_resource_urns,omitempty" json:"draft_resource_urns,omitempty" xml:"draft_resource_urns,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -313,6 +344,14 @@ type CloneToolsetResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// Whether iteration mode is enabled (staged changes)
+	IterationMode *bool `form:"iteration_mode,omitempty" json:"iteration_mode,omitempty" xml:"iteration_mode,omitempty"`
+	// Whether there are pending draft changes
+	HasDraftChanges *bool `form:"has_draft_changes,omitempty" json:"has_draft_changes,omitempty" xml:"has_draft_changes,omitempty"`
+	// Tool URNs in the draft (only populated when viewing draft)
+	DraftToolUrns []string `form:"draft_tool_urns,omitempty" json:"draft_tool_urns,omitempty" xml:"draft_tool_urns,omitempty"`
+	// Resource URNs in the draft (only populated when viewing draft)
+	DraftResourceUrns []string `form:"draft_resource_urns,omitempty" json:"draft_resource_urns,omitempty" xml:"draft_resource_urns,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -373,6 +412,14 @@ type AddExternalOAuthServerResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// Whether iteration mode is enabled (staged changes)
+	IterationMode *bool `form:"iteration_mode,omitempty" json:"iteration_mode,omitempty" xml:"iteration_mode,omitempty"`
+	// Whether there are pending draft changes
+	HasDraftChanges *bool `form:"has_draft_changes,omitempty" json:"has_draft_changes,omitempty" xml:"has_draft_changes,omitempty"`
+	// Tool URNs in the draft (only populated when viewing draft)
+	DraftToolUrns []string `form:"draft_tool_urns,omitempty" json:"draft_tool_urns,omitempty" xml:"draft_tool_urns,omitempty"`
+	// Resource URNs in the draft (only populated when viewing draft)
+	DraftResourceUrns []string `form:"draft_resource_urns,omitempty" json:"draft_resource_urns,omitempty" xml:"draft_resource_urns,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -433,6 +480,14 @@ type RemoveOAuthServerResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// Whether iteration mode is enabled (staged changes)
+	IterationMode *bool `form:"iteration_mode,omitempty" json:"iteration_mode,omitempty" xml:"iteration_mode,omitempty"`
+	// Whether there are pending draft changes
+	HasDraftChanges *bool `form:"has_draft_changes,omitempty" json:"has_draft_changes,omitempty" xml:"has_draft_changes,omitempty"`
+	// Tool URNs in the draft (only populated when viewing draft)
+	DraftToolUrns []string `form:"draft_tool_urns,omitempty" json:"draft_tool_urns,omitempty" xml:"draft_tool_urns,omitempty"`
+	// Resource URNs in the draft (only populated when viewing draft)
+	DraftResourceUrns []string `form:"draft_resource_urns,omitempty" json:"draft_resource_urns,omitempty" xml:"draft_resource_urns,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -493,6 +548,286 @@ type AddOAuthProxyServerResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// Whether iteration mode is enabled (staged changes)
+	IterationMode *bool `form:"iteration_mode,omitempty" json:"iteration_mode,omitempty" xml:"iteration_mode,omitempty"`
+	// Whether there are pending draft changes
+	HasDraftChanges *bool `form:"has_draft_changes,omitempty" json:"has_draft_changes,omitempty" xml:"has_draft_changes,omitempty"`
+	// Tool URNs in the draft (only populated when viewing draft)
+	DraftToolUrns []string `form:"draft_tool_urns,omitempty" json:"draft_tool_urns,omitempty" xml:"draft_tool_urns,omitempty"`
+	// Resource URNs in the draft (only populated when viewing draft)
+	DraftResourceUrns []string `form:"draft_resource_urns,omitempty" json:"draft_resource_urns,omitempty" xml:"draft_resource_urns,omitempty"`
+	// When the toolset was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the toolset was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// SetIterationModeResponseBody is the type of the "toolsets" service
+// "setIterationMode" endpoint HTTP response body.
+type SetIterationModeResponseBody struct {
+	// The ID of the toolset
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this toolset belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The organization ID this toolset belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The account type of the organization
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// The name of the toolset
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Description of the toolset
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The metadata surrounding oauth enabled tools within this server
+	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata" json:"oauth_enablement_metadata" xml:"oauth_enablement_metadata"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// The tool URNs in this toolset
+	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
+	// The resources in this toolset
+	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
+	// The resource URNs in this toolset
+	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// The ID of the custom domain to use for the toolset
+	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// Whether iteration mode is enabled (staged changes)
+	IterationMode *bool `form:"iteration_mode,omitempty" json:"iteration_mode,omitempty" xml:"iteration_mode,omitempty"`
+	// Whether there are pending draft changes
+	HasDraftChanges *bool `form:"has_draft_changes,omitempty" json:"has_draft_changes,omitempty" xml:"has_draft_changes,omitempty"`
+	// Tool URNs in the draft (only populated when viewing draft)
+	DraftToolUrns []string `form:"draft_tool_urns,omitempty" json:"draft_tool_urns,omitempty" xml:"draft_tool_urns,omitempty"`
+	// Resource URNs in the draft (only populated when viewing draft)
+	DraftResourceUrns []string `form:"draft_resource_urns,omitempty" json:"draft_resource_urns,omitempty" xml:"draft_resource_urns,omitempty"`
+	// When the toolset was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the toolset was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// PromoteDraftResponseBody is the type of the "toolsets" service
+// "promoteDraft" endpoint HTTP response body.
+type PromoteDraftResponseBody struct {
+	// The ID of the toolset
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this toolset belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The organization ID this toolset belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The account type of the organization
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// The name of the toolset
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Description of the toolset
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The metadata surrounding oauth enabled tools within this server
+	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata" json:"oauth_enablement_metadata" xml:"oauth_enablement_metadata"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// The tool URNs in this toolset
+	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
+	// The resources in this toolset
+	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
+	// The resource URNs in this toolset
+	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// The ID of the custom domain to use for the toolset
+	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// Whether iteration mode is enabled (staged changes)
+	IterationMode *bool `form:"iteration_mode,omitempty" json:"iteration_mode,omitempty" xml:"iteration_mode,omitempty"`
+	// Whether there are pending draft changes
+	HasDraftChanges *bool `form:"has_draft_changes,omitempty" json:"has_draft_changes,omitempty" xml:"has_draft_changes,omitempty"`
+	// Tool URNs in the draft (only populated when viewing draft)
+	DraftToolUrns []string `form:"draft_tool_urns,omitempty" json:"draft_tool_urns,omitempty" xml:"draft_tool_urns,omitempty"`
+	// Resource URNs in the draft (only populated when viewing draft)
+	DraftResourceUrns []string `form:"draft_resource_urns,omitempty" json:"draft_resource_urns,omitempty" xml:"draft_resource_urns,omitempty"`
+	// When the toolset was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the toolset was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// DiscardDraftResponseBody is the type of the "toolsets" service
+// "discardDraft" endpoint HTTP response body.
+type DiscardDraftResponseBody struct {
+	// The ID of the toolset
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this toolset belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The organization ID this toolset belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The account type of the organization
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// The name of the toolset
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Description of the toolset
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The metadata surrounding oauth enabled tools within this server
+	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata" json:"oauth_enablement_metadata" xml:"oauth_enablement_metadata"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// The tool URNs in this toolset
+	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
+	// The resources in this toolset
+	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
+	// The resource URNs in this toolset
+	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// The ID of the custom domain to use for the toolset
+	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// Whether iteration mode is enabled (staged changes)
+	IterationMode *bool `form:"iteration_mode,omitempty" json:"iteration_mode,omitempty" xml:"iteration_mode,omitempty"`
+	// Whether there are pending draft changes
+	HasDraftChanges *bool `form:"has_draft_changes,omitempty" json:"has_draft_changes,omitempty" xml:"has_draft_changes,omitempty"`
+	// Tool URNs in the draft (only populated when viewing draft)
+	DraftToolUrns []string `form:"draft_tool_urns,omitempty" json:"draft_tool_urns,omitempty" xml:"draft_tool_urns,omitempty"`
+	// Resource URNs in the draft (only populated when viewing draft)
+	DraftResourceUrns []string `form:"draft_resource_urns,omitempty" json:"draft_resource_urns,omitempty" xml:"draft_resource_urns,omitempty"`
+	// When the toolset was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the toolset was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// GetDraftToolsetResponseBody is the type of the "toolsets" service
+// "getDraftToolset" endpoint HTTP response body.
+type GetDraftToolsetResponseBody struct {
+	// The ID of the toolset
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this toolset belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The organization ID this toolset belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The account type of the organization
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// The name of the toolset
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Description of the toolset
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The metadata surrounding oauth enabled tools within this server
+	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata" json:"oauth_enablement_metadata" xml:"oauth_enablement_metadata"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// The tool URNs in this toolset
+	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
+	// The resources in this toolset
+	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
+	// The resource URNs in this toolset
+	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// The ID of the custom domain to use for the toolset
+	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// Whether iteration mode is enabled (staged changes)
+	IterationMode *bool `form:"iteration_mode,omitempty" json:"iteration_mode,omitempty" xml:"iteration_mode,omitempty"`
+	// Whether there are pending draft changes
+	HasDraftChanges *bool `form:"has_draft_changes,omitempty" json:"has_draft_changes,omitempty" xml:"has_draft_changes,omitempty"`
+	// Tool URNs in the draft (only populated when viewing draft)
+	DraftToolUrns []string `form:"draft_tool_urns,omitempty" json:"draft_tool_urns,omitempty" xml:"draft_tool_urns,omitempty"`
+	// Resource URNs in the draft (only populated when viewing draft)
+	DraftResourceUrns []string `form:"draft_resource_urns,omitempty" json:"draft_resource_urns,omitempty" xml:"draft_resource_urns,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -2345,6 +2680,738 @@ type AddOAuthProxyServerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SetIterationModeUnauthorizedResponseBody is the type of the "toolsets"
+// service "setIterationMode" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetIterationModeUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetIterationModeForbiddenResponseBody is the type of the "toolsets" service
+// "setIterationMode" endpoint HTTP response body for the "forbidden" error.
+type SetIterationModeForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetIterationModeBadRequestResponseBody is the type of the "toolsets" service
+// "setIterationMode" endpoint HTTP response body for the "bad_request" error.
+type SetIterationModeBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetIterationModeNotFoundResponseBody is the type of the "toolsets" service
+// "setIterationMode" endpoint HTTP response body for the "not_found" error.
+type SetIterationModeNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetIterationModeConflictResponseBody is the type of the "toolsets" service
+// "setIterationMode" endpoint HTTP response body for the "conflict" error.
+type SetIterationModeConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetIterationModeUnsupportedMediaResponseBody is the type of the "toolsets"
+// service "setIterationMode" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SetIterationModeUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetIterationModeInvalidResponseBody is the type of the "toolsets" service
+// "setIterationMode" endpoint HTTP response body for the "invalid" error.
+type SetIterationModeInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetIterationModeInvariantViolationResponseBody is the type of the "toolsets"
+// service "setIterationMode" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SetIterationModeInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetIterationModeUnexpectedResponseBody is the type of the "toolsets" service
+// "setIterationMode" endpoint HTTP response body for the "unexpected" error.
+type SetIterationModeUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetIterationModeGatewayErrorResponseBody is the type of the "toolsets"
+// service "setIterationMode" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetIterationModeGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteDraftUnauthorizedResponseBody is the type of the "toolsets" service
+// "promoteDraft" endpoint HTTP response body for the "unauthorized" error.
+type PromoteDraftUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteDraftForbiddenResponseBody is the type of the "toolsets" service
+// "promoteDraft" endpoint HTTP response body for the "forbidden" error.
+type PromoteDraftForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteDraftBadRequestResponseBody is the type of the "toolsets" service
+// "promoteDraft" endpoint HTTP response body for the "bad_request" error.
+type PromoteDraftBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteDraftNotFoundResponseBody is the type of the "toolsets" service
+// "promoteDraft" endpoint HTTP response body for the "not_found" error.
+type PromoteDraftNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteDraftConflictResponseBody is the type of the "toolsets" service
+// "promoteDraft" endpoint HTTP response body for the "conflict" error.
+type PromoteDraftConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteDraftUnsupportedMediaResponseBody is the type of the "toolsets"
+// service "promoteDraft" endpoint HTTP response body for the
+// "unsupported_media" error.
+type PromoteDraftUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteDraftInvalidResponseBody is the type of the "toolsets" service
+// "promoteDraft" endpoint HTTP response body for the "invalid" error.
+type PromoteDraftInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteDraftInvariantViolationResponseBody is the type of the "toolsets"
+// service "promoteDraft" endpoint HTTP response body for the
+// "invariant_violation" error.
+type PromoteDraftInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteDraftUnexpectedResponseBody is the type of the "toolsets" service
+// "promoteDraft" endpoint HTTP response body for the "unexpected" error.
+type PromoteDraftUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteDraftGatewayErrorResponseBody is the type of the "toolsets" service
+// "promoteDraft" endpoint HTTP response body for the "gateway_error" error.
+type PromoteDraftGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardDraftUnauthorizedResponseBody is the type of the "toolsets" service
+// "discardDraft" endpoint HTTP response body for the "unauthorized" error.
+type DiscardDraftUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardDraftForbiddenResponseBody is the type of the "toolsets" service
+// "discardDraft" endpoint HTTP response body for the "forbidden" error.
+type DiscardDraftForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardDraftBadRequestResponseBody is the type of the "toolsets" service
+// "discardDraft" endpoint HTTP response body for the "bad_request" error.
+type DiscardDraftBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardDraftNotFoundResponseBody is the type of the "toolsets" service
+// "discardDraft" endpoint HTTP response body for the "not_found" error.
+type DiscardDraftNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardDraftConflictResponseBody is the type of the "toolsets" service
+// "discardDraft" endpoint HTTP response body for the "conflict" error.
+type DiscardDraftConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardDraftUnsupportedMediaResponseBody is the type of the "toolsets"
+// service "discardDraft" endpoint HTTP response body for the
+// "unsupported_media" error.
+type DiscardDraftUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardDraftInvalidResponseBody is the type of the "toolsets" service
+// "discardDraft" endpoint HTTP response body for the "invalid" error.
+type DiscardDraftInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardDraftInvariantViolationResponseBody is the type of the "toolsets"
+// service "discardDraft" endpoint HTTP response body for the
+// "invariant_violation" error.
+type DiscardDraftInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardDraftUnexpectedResponseBody is the type of the "toolsets" service
+// "discardDraft" endpoint HTTP response body for the "unexpected" error.
+type DiscardDraftUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscardDraftGatewayErrorResponseBody is the type of the "toolsets" service
+// "discardDraft" endpoint HTTP response body for the "gateway_error" error.
+type DiscardDraftGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDraftToolsetUnauthorizedResponseBody is the type of the "toolsets"
+// service "getDraftToolset" endpoint HTTP response body for the "unauthorized"
+// error.
+type GetDraftToolsetUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDraftToolsetForbiddenResponseBody is the type of the "toolsets" service
+// "getDraftToolset" endpoint HTTP response body for the "forbidden" error.
+type GetDraftToolsetForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDraftToolsetBadRequestResponseBody is the type of the "toolsets" service
+// "getDraftToolset" endpoint HTTP response body for the "bad_request" error.
+type GetDraftToolsetBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDraftToolsetNotFoundResponseBody is the type of the "toolsets" service
+// "getDraftToolset" endpoint HTTP response body for the "not_found" error.
+type GetDraftToolsetNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDraftToolsetConflictResponseBody is the type of the "toolsets" service
+// "getDraftToolset" endpoint HTTP response body for the "conflict" error.
+type GetDraftToolsetConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDraftToolsetUnsupportedMediaResponseBody is the type of the "toolsets"
+// service "getDraftToolset" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetDraftToolsetUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDraftToolsetInvalidResponseBody is the type of the "toolsets" service
+// "getDraftToolset" endpoint HTTP response body for the "invalid" error.
+type GetDraftToolsetInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDraftToolsetInvariantViolationResponseBody is the type of the "toolsets"
+// service "getDraftToolset" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetDraftToolsetInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDraftToolsetUnexpectedResponseBody is the type of the "toolsets" service
+// "getDraftToolset" endpoint HTTP response body for the "unexpected" error.
+type GetDraftToolsetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDraftToolsetGatewayErrorResponseBody is the type of the "toolsets"
+// service "getDraftToolset" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetDraftToolsetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SecurityVariableResponseBody is used to define fields on response body types.
 type SecurityVariableResponseBody struct {
 	// The type of security
@@ -2794,6 +3861,10 @@ type ToolsetEntryResponseBody struct {
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// Whether iteration mode is enabled (staged changes)
+	IterationMode *bool `form:"iteration_mode,omitempty" json:"iteration_mode,omitempty" xml:"iteration_mode,omitempty"`
+	// Whether there are pending draft changes
+	HasDraftChanges *bool `form:"has_draft_changes,omitempty" json:"has_draft_changes,omitempty" xml:"has_draft_changes,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -2879,6 +3950,8 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		IterationMode:     res.IterationMode,
+		HasDraftChanges:   res.HasDraftChanges,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -2980,6 +4053,18 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 	}
 	if res.OauthProxyServer != nil {
 		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	if res.DraftToolUrns != nil {
+		body.DraftToolUrns = make([]string, len(res.DraftToolUrns))
+		for i, val := range res.DraftToolUrns {
+			body.DraftToolUrns[i] = val
+		}
+	}
+	if res.DraftResourceUrns != nil {
+		body.DraftResourceUrns = make([]string, len(res.DraftResourceUrns))
+		for i, val := range res.DraftResourceUrns {
+			body.DraftResourceUrns[i] = val
+		}
 	}
 	return body
 }
@@ -3019,6 +4104,8 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		IterationMode:     res.IterationMode,
+		HasDraftChanges:   res.HasDraftChanges,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -3120,6 +4207,18 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 	}
 	if res.OauthProxyServer != nil {
 		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	if res.DraftToolUrns != nil {
+		body.DraftToolUrns = make([]string, len(res.DraftToolUrns))
+		for i, val := range res.DraftToolUrns {
+			body.DraftToolUrns[i] = val
+		}
+	}
+	if res.DraftResourceUrns != nil {
+		body.DraftResourceUrns = make([]string, len(res.DraftResourceUrns))
+		for i, val := range res.DraftResourceUrns {
+			body.DraftResourceUrns[i] = val
+		}
 	}
 	return body
 }
@@ -3140,6 +4239,8 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		IterationMode:     res.IterationMode,
+		HasDraftChanges:   res.HasDraftChanges,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -3241,6 +4342,18 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 	}
 	if res.OauthProxyServer != nil {
 		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	if res.DraftToolUrns != nil {
+		body.DraftToolUrns = make([]string, len(res.DraftToolUrns))
+		for i, val := range res.DraftToolUrns {
+			body.DraftToolUrns[i] = val
+		}
+	}
+	if res.DraftResourceUrns != nil {
+		body.DraftResourceUrns = make([]string, len(res.DraftResourceUrns))
+		for i, val := range res.DraftResourceUrns {
+			body.DraftResourceUrns[i] = val
+		}
 	}
 	return body
 }
@@ -3261,6 +4374,8 @@ func NewCloneToolsetResponseBody(res *types.Toolset) *CloneToolsetResponseBody {
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		IterationMode:     res.IterationMode,
+		HasDraftChanges:   res.HasDraftChanges,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -3362,6 +4477,18 @@ func NewCloneToolsetResponseBody(res *types.Toolset) *CloneToolsetResponseBody {
 	}
 	if res.OauthProxyServer != nil {
 		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	if res.DraftToolUrns != nil {
+		body.DraftToolUrns = make([]string, len(res.DraftToolUrns))
+		for i, val := range res.DraftToolUrns {
+			body.DraftToolUrns[i] = val
+		}
+	}
+	if res.DraftResourceUrns != nil {
+		body.DraftResourceUrns = make([]string, len(res.DraftResourceUrns))
+		for i, val := range res.DraftResourceUrns {
+			body.DraftResourceUrns[i] = val
+		}
 	}
 	return body
 }
@@ -3382,6 +4509,8 @@ func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuth
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		IterationMode:     res.IterationMode,
+		HasDraftChanges:   res.HasDraftChanges,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -3483,6 +4612,18 @@ func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuth
 	}
 	if res.OauthProxyServer != nil {
 		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	if res.DraftToolUrns != nil {
+		body.DraftToolUrns = make([]string, len(res.DraftToolUrns))
+		for i, val := range res.DraftToolUrns {
+			body.DraftToolUrns[i] = val
+		}
+	}
+	if res.DraftResourceUrns != nil {
+		body.DraftResourceUrns = make([]string, len(res.DraftResourceUrns))
+		for i, val := range res.DraftResourceUrns {
+			body.DraftResourceUrns[i] = val
+		}
 	}
 	return body
 }
@@ -3503,6 +4644,8 @@ func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResp
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		IterationMode:     res.IterationMode,
+		HasDraftChanges:   res.HasDraftChanges,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -3604,6 +4747,18 @@ func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResp
 	}
 	if res.OauthProxyServer != nil {
 		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	if res.DraftToolUrns != nil {
+		body.DraftToolUrns = make([]string, len(res.DraftToolUrns))
+		for i, val := range res.DraftToolUrns {
+			body.DraftToolUrns[i] = val
+		}
+	}
+	if res.DraftResourceUrns != nil {
+		body.DraftResourceUrns = make([]string, len(res.DraftResourceUrns))
+		for i, val := range res.DraftResourceUrns {
+			body.DraftResourceUrns[i] = val
+		}
 	}
 	return body
 }
@@ -3624,6 +4779,8 @@ func NewAddOAuthProxyServerResponseBody(res *types.Toolset) *AddOAuthProxyServer
 		McpEnabled:        res.McpEnabled,
 		ToolSelectionMode: res.ToolSelectionMode,
 		CustomDomainID:    res.CustomDomainID,
+		IterationMode:     res.IterationMode,
+		HasDraftChanges:   res.HasDraftChanges,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
 	}
@@ -3725,6 +4882,558 @@ func NewAddOAuthProxyServerResponseBody(res *types.Toolset) *AddOAuthProxyServer
 	}
 	if res.OauthProxyServer != nil {
 		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	if res.DraftToolUrns != nil {
+		body.DraftToolUrns = make([]string, len(res.DraftToolUrns))
+		for i, val := range res.DraftToolUrns {
+			body.DraftToolUrns[i] = val
+		}
+	}
+	if res.DraftResourceUrns != nil {
+		body.DraftResourceUrns = make([]string, len(res.DraftResourceUrns))
+		for i, val := range res.DraftResourceUrns {
+			body.DraftResourceUrns[i] = val
+		}
+	}
+	return body
+}
+
+// NewSetIterationModeResponseBody builds the HTTP response body from the
+// result of the "setIterationMode" endpoint of the "toolsets" service.
+func NewSetIterationModeResponseBody(res *types.Toolset) *SetIterationModeResponseBody {
+	body := &SetIterationModeResponseBody{
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		OrganizationID:    res.OrganizationID,
+		AccountType:       res.AccountType,
+		Name:              res.Name,
+		Slug:              string(res.Slug),
+		Description:       res.Description,
+		ToolsetVersion:    res.ToolsetVersion,
+		McpIsPublic:       res.McpIsPublic,
+		McpEnabled:        res.McpEnabled,
+		ToolSelectionMode: res.ToolSelectionMode,
+		CustomDomainID:    res.CustomDomainID,
+		IterationMode:     res.IterationMode,
+		HasDraftChanges:   res.HasDraftChanges,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
+	}
+	if res.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
+		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if res.McpSlug != nil {
+		mcpSlug := string(*res.McpSlug)
+		body.McpSlug = &mcpSlug
+	}
+	if res.SecurityVariables != nil {
+		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
+		for i, val := range res.SecurityVariables {
+			if val == nil {
+				body.SecurityVariables[i] = nil
+				continue
+			}
+			body.SecurityVariables[i] = marshalTypesSecurityVariableToSecurityVariableResponseBody(val)
+		}
+	}
+	if res.ServerVariables != nil {
+		body.ServerVariables = make([]*ServerVariableResponseBody, len(res.ServerVariables))
+		for i, val := range res.ServerVariables {
+			if val == nil {
+				body.ServerVariables[i] = nil
+				continue
+			}
+			body.ServerVariables[i] = marshalTypesServerVariableToServerVariableResponseBody(val)
+		}
+	}
+	if res.FunctionEnvironmentVariables != nil {
+		body.FunctionEnvironmentVariables = make([]*FunctionEnvironmentVariableResponseBody, len(res.FunctionEnvironmentVariables))
+		for i, val := range res.FunctionEnvironmentVariables {
+			if val == nil {
+				body.FunctionEnvironmentVariables[i] = nil
+				continue
+			}
+			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
+		}
+	}
+	if res.OauthEnablementMetadata != nil {
+		body.OauthEnablementMetadata = marshalTypesOAuthEnablementMetadataToOAuthEnablementMetadataResponseBody(res.OauthEnablementMetadata)
+	}
+	if res.Tools != nil {
+		body.Tools = make([]*ToolResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			if val == nil {
+				body.Tools[i] = nil
+				continue
+			}
+			body.Tools[i] = marshalTypesToolToToolResponseBody(val)
+		}
+	} else {
+		body.Tools = []*ToolResponseBody{}
+	}
+	if res.ToolUrns != nil {
+		body.ToolUrns = make([]string, len(res.ToolUrns))
+		for i, val := range res.ToolUrns {
+			body.ToolUrns[i] = val
+		}
+	} else {
+		body.ToolUrns = []string{}
+	}
+	if res.Resources != nil {
+		body.Resources = make([]*ResourceResponseBody, len(res.Resources))
+		for i, val := range res.Resources {
+			if val == nil {
+				body.Resources[i] = nil
+				continue
+			}
+			body.Resources[i] = marshalTypesResourceToResourceResponseBody(val)
+		}
+	} else {
+		body.Resources = []*ResourceResponseBody{}
+	}
+	if res.ResourceUrns != nil {
+		body.ResourceUrns = make([]string, len(res.ResourceUrns))
+		for i, val := range res.ResourceUrns {
+			body.ResourceUrns[i] = val
+		}
+	} else {
+		body.ResourceUrns = []string{}
+	}
+	if res.PromptTemplates != nil {
+		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
+		for i, val := range res.PromptTemplates {
+			if val == nil {
+				body.PromptTemplates[i] = nil
+				continue
+			}
+			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+		}
+	} else {
+		body.PromptTemplates = []*PromptTemplateResponseBody{}
+	}
+	if res.ExternalOauthServer != nil {
+		body.ExternalOauthServer = marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody(res.ExternalOauthServer)
+	}
+	if res.OauthProxyServer != nil {
+		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	if res.DraftToolUrns != nil {
+		body.DraftToolUrns = make([]string, len(res.DraftToolUrns))
+		for i, val := range res.DraftToolUrns {
+			body.DraftToolUrns[i] = val
+		}
+	}
+	if res.DraftResourceUrns != nil {
+		body.DraftResourceUrns = make([]string, len(res.DraftResourceUrns))
+		for i, val := range res.DraftResourceUrns {
+			body.DraftResourceUrns[i] = val
+		}
+	}
+	return body
+}
+
+// NewPromoteDraftResponseBody builds the HTTP response body from the result of
+// the "promoteDraft" endpoint of the "toolsets" service.
+func NewPromoteDraftResponseBody(res *types.Toolset) *PromoteDraftResponseBody {
+	body := &PromoteDraftResponseBody{
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		OrganizationID:    res.OrganizationID,
+		AccountType:       res.AccountType,
+		Name:              res.Name,
+		Slug:              string(res.Slug),
+		Description:       res.Description,
+		ToolsetVersion:    res.ToolsetVersion,
+		McpIsPublic:       res.McpIsPublic,
+		McpEnabled:        res.McpEnabled,
+		ToolSelectionMode: res.ToolSelectionMode,
+		CustomDomainID:    res.CustomDomainID,
+		IterationMode:     res.IterationMode,
+		HasDraftChanges:   res.HasDraftChanges,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
+	}
+	if res.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
+		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if res.McpSlug != nil {
+		mcpSlug := string(*res.McpSlug)
+		body.McpSlug = &mcpSlug
+	}
+	if res.SecurityVariables != nil {
+		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
+		for i, val := range res.SecurityVariables {
+			if val == nil {
+				body.SecurityVariables[i] = nil
+				continue
+			}
+			body.SecurityVariables[i] = marshalTypesSecurityVariableToSecurityVariableResponseBody(val)
+		}
+	}
+	if res.ServerVariables != nil {
+		body.ServerVariables = make([]*ServerVariableResponseBody, len(res.ServerVariables))
+		for i, val := range res.ServerVariables {
+			if val == nil {
+				body.ServerVariables[i] = nil
+				continue
+			}
+			body.ServerVariables[i] = marshalTypesServerVariableToServerVariableResponseBody(val)
+		}
+	}
+	if res.FunctionEnvironmentVariables != nil {
+		body.FunctionEnvironmentVariables = make([]*FunctionEnvironmentVariableResponseBody, len(res.FunctionEnvironmentVariables))
+		for i, val := range res.FunctionEnvironmentVariables {
+			if val == nil {
+				body.FunctionEnvironmentVariables[i] = nil
+				continue
+			}
+			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
+		}
+	}
+	if res.OauthEnablementMetadata != nil {
+		body.OauthEnablementMetadata = marshalTypesOAuthEnablementMetadataToOAuthEnablementMetadataResponseBody(res.OauthEnablementMetadata)
+	}
+	if res.Tools != nil {
+		body.Tools = make([]*ToolResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			if val == nil {
+				body.Tools[i] = nil
+				continue
+			}
+			body.Tools[i] = marshalTypesToolToToolResponseBody(val)
+		}
+	} else {
+		body.Tools = []*ToolResponseBody{}
+	}
+	if res.ToolUrns != nil {
+		body.ToolUrns = make([]string, len(res.ToolUrns))
+		for i, val := range res.ToolUrns {
+			body.ToolUrns[i] = val
+		}
+	} else {
+		body.ToolUrns = []string{}
+	}
+	if res.Resources != nil {
+		body.Resources = make([]*ResourceResponseBody, len(res.Resources))
+		for i, val := range res.Resources {
+			if val == nil {
+				body.Resources[i] = nil
+				continue
+			}
+			body.Resources[i] = marshalTypesResourceToResourceResponseBody(val)
+		}
+	} else {
+		body.Resources = []*ResourceResponseBody{}
+	}
+	if res.ResourceUrns != nil {
+		body.ResourceUrns = make([]string, len(res.ResourceUrns))
+		for i, val := range res.ResourceUrns {
+			body.ResourceUrns[i] = val
+		}
+	} else {
+		body.ResourceUrns = []string{}
+	}
+	if res.PromptTemplates != nil {
+		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
+		for i, val := range res.PromptTemplates {
+			if val == nil {
+				body.PromptTemplates[i] = nil
+				continue
+			}
+			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+		}
+	} else {
+		body.PromptTemplates = []*PromptTemplateResponseBody{}
+	}
+	if res.ExternalOauthServer != nil {
+		body.ExternalOauthServer = marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody(res.ExternalOauthServer)
+	}
+	if res.OauthProxyServer != nil {
+		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	if res.DraftToolUrns != nil {
+		body.DraftToolUrns = make([]string, len(res.DraftToolUrns))
+		for i, val := range res.DraftToolUrns {
+			body.DraftToolUrns[i] = val
+		}
+	}
+	if res.DraftResourceUrns != nil {
+		body.DraftResourceUrns = make([]string, len(res.DraftResourceUrns))
+		for i, val := range res.DraftResourceUrns {
+			body.DraftResourceUrns[i] = val
+		}
+	}
+	return body
+}
+
+// NewDiscardDraftResponseBody builds the HTTP response body from the result of
+// the "discardDraft" endpoint of the "toolsets" service.
+func NewDiscardDraftResponseBody(res *types.Toolset) *DiscardDraftResponseBody {
+	body := &DiscardDraftResponseBody{
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		OrganizationID:    res.OrganizationID,
+		AccountType:       res.AccountType,
+		Name:              res.Name,
+		Slug:              string(res.Slug),
+		Description:       res.Description,
+		ToolsetVersion:    res.ToolsetVersion,
+		McpIsPublic:       res.McpIsPublic,
+		McpEnabled:        res.McpEnabled,
+		ToolSelectionMode: res.ToolSelectionMode,
+		CustomDomainID:    res.CustomDomainID,
+		IterationMode:     res.IterationMode,
+		HasDraftChanges:   res.HasDraftChanges,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
+	}
+	if res.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
+		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if res.McpSlug != nil {
+		mcpSlug := string(*res.McpSlug)
+		body.McpSlug = &mcpSlug
+	}
+	if res.SecurityVariables != nil {
+		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
+		for i, val := range res.SecurityVariables {
+			if val == nil {
+				body.SecurityVariables[i] = nil
+				continue
+			}
+			body.SecurityVariables[i] = marshalTypesSecurityVariableToSecurityVariableResponseBody(val)
+		}
+	}
+	if res.ServerVariables != nil {
+		body.ServerVariables = make([]*ServerVariableResponseBody, len(res.ServerVariables))
+		for i, val := range res.ServerVariables {
+			if val == nil {
+				body.ServerVariables[i] = nil
+				continue
+			}
+			body.ServerVariables[i] = marshalTypesServerVariableToServerVariableResponseBody(val)
+		}
+	}
+	if res.FunctionEnvironmentVariables != nil {
+		body.FunctionEnvironmentVariables = make([]*FunctionEnvironmentVariableResponseBody, len(res.FunctionEnvironmentVariables))
+		for i, val := range res.FunctionEnvironmentVariables {
+			if val == nil {
+				body.FunctionEnvironmentVariables[i] = nil
+				continue
+			}
+			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
+		}
+	}
+	if res.OauthEnablementMetadata != nil {
+		body.OauthEnablementMetadata = marshalTypesOAuthEnablementMetadataToOAuthEnablementMetadataResponseBody(res.OauthEnablementMetadata)
+	}
+	if res.Tools != nil {
+		body.Tools = make([]*ToolResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			if val == nil {
+				body.Tools[i] = nil
+				continue
+			}
+			body.Tools[i] = marshalTypesToolToToolResponseBody(val)
+		}
+	} else {
+		body.Tools = []*ToolResponseBody{}
+	}
+	if res.ToolUrns != nil {
+		body.ToolUrns = make([]string, len(res.ToolUrns))
+		for i, val := range res.ToolUrns {
+			body.ToolUrns[i] = val
+		}
+	} else {
+		body.ToolUrns = []string{}
+	}
+	if res.Resources != nil {
+		body.Resources = make([]*ResourceResponseBody, len(res.Resources))
+		for i, val := range res.Resources {
+			if val == nil {
+				body.Resources[i] = nil
+				continue
+			}
+			body.Resources[i] = marshalTypesResourceToResourceResponseBody(val)
+		}
+	} else {
+		body.Resources = []*ResourceResponseBody{}
+	}
+	if res.ResourceUrns != nil {
+		body.ResourceUrns = make([]string, len(res.ResourceUrns))
+		for i, val := range res.ResourceUrns {
+			body.ResourceUrns[i] = val
+		}
+	} else {
+		body.ResourceUrns = []string{}
+	}
+	if res.PromptTemplates != nil {
+		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
+		for i, val := range res.PromptTemplates {
+			if val == nil {
+				body.PromptTemplates[i] = nil
+				continue
+			}
+			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+		}
+	} else {
+		body.PromptTemplates = []*PromptTemplateResponseBody{}
+	}
+	if res.ExternalOauthServer != nil {
+		body.ExternalOauthServer = marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody(res.ExternalOauthServer)
+	}
+	if res.OauthProxyServer != nil {
+		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	if res.DraftToolUrns != nil {
+		body.DraftToolUrns = make([]string, len(res.DraftToolUrns))
+		for i, val := range res.DraftToolUrns {
+			body.DraftToolUrns[i] = val
+		}
+	}
+	if res.DraftResourceUrns != nil {
+		body.DraftResourceUrns = make([]string, len(res.DraftResourceUrns))
+		for i, val := range res.DraftResourceUrns {
+			body.DraftResourceUrns[i] = val
+		}
+	}
+	return body
+}
+
+// NewGetDraftToolsetResponseBody builds the HTTP response body from the result
+// of the "getDraftToolset" endpoint of the "toolsets" service.
+func NewGetDraftToolsetResponseBody(res *types.Toolset) *GetDraftToolsetResponseBody {
+	body := &GetDraftToolsetResponseBody{
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		OrganizationID:    res.OrganizationID,
+		AccountType:       res.AccountType,
+		Name:              res.Name,
+		Slug:              string(res.Slug),
+		Description:       res.Description,
+		ToolsetVersion:    res.ToolsetVersion,
+		McpIsPublic:       res.McpIsPublic,
+		McpEnabled:        res.McpEnabled,
+		ToolSelectionMode: res.ToolSelectionMode,
+		CustomDomainID:    res.CustomDomainID,
+		IterationMode:     res.IterationMode,
+		HasDraftChanges:   res.HasDraftChanges,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
+	}
+	if res.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
+		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if res.McpSlug != nil {
+		mcpSlug := string(*res.McpSlug)
+		body.McpSlug = &mcpSlug
+	}
+	if res.SecurityVariables != nil {
+		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
+		for i, val := range res.SecurityVariables {
+			if val == nil {
+				body.SecurityVariables[i] = nil
+				continue
+			}
+			body.SecurityVariables[i] = marshalTypesSecurityVariableToSecurityVariableResponseBody(val)
+		}
+	}
+	if res.ServerVariables != nil {
+		body.ServerVariables = make([]*ServerVariableResponseBody, len(res.ServerVariables))
+		for i, val := range res.ServerVariables {
+			if val == nil {
+				body.ServerVariables[i] = nil
+				continue
+			}
+			body.ServerVariables[i] = marshalTypesServerVariableToServerVariableResponseBody(val)
+		}
+	}
+	if res.FunctionEnvironmentVariables != nil {
+		body.FunctionEnvironmentVariables = make([]*FunctionEnvironmentVariableResponseBody, len(res.FunctionEnvironmentVariables))
+		for i, val := range res.FunctionEnvironmentVariables {
+			if val == nil {
+				body.FunctionEnvironmentVariables[i] = nil
+				continue
+			}
+			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
+		}
+	}
+	if res.OauthEnablementMetadata != nil {
+		body.OauthEnablementMetadata = marshalTypesOAuthEnablementMetadataToOAuthEnablementMetadataResponseBody(res.OauthEnablementMetadata)
+	}
+	if res.Tools != nil {
+		body.Tools = make([]*ToolResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			if val == nil {
+				body.Tools[i] = nil
+				continue
+			}
+			body.Tools[i] = marshalTypesToolToToolResponseBody(val)
+		}
+	} else {
+		body.Tools = []*ToolResponseBody{}
+	}
+	if res.ToolUrns != nil {
+		body.ToolUrns = make([]string, len(res.ToolUrns))
+		for i, val := range res.ToolUrns {
+			body.ToolUrns[i] = val
+		}
+	} else {
+		body.ToolUrns = []string{}
+	}
+	if res.Resources != nil {
+		body.Resources = make([]*ResourceResponseBody, len(res.Resources))
+		for i, val := range res.Resources {
+			if val == nil {
+				body.Resources[i] = nil
+				continue
+			}
+			body.Resources[i] = marshalTypesResourceToResourceResponseBody(val)
+		}
+	} else {
+		body.Resources = []*ResourceResponseBody{}
+	}
+	if res.ResourceUrns != nil {
+		body.ResourceUrns = make([]string, len(res.ResourceUrns))
+		for i, val := range res.ResourceUrns {
+			body.ResourceUrns[i] = val
+		}
+	} else {
+		body.ResourceUrns = []string{}
+	}
+	if res.PromptTemplates != nil {
+		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
+		for i, val := range res.PromptTemplates {
+			if val == nil {
+				body.PromptTemplates[i] = nil
+				continue
+			}
+			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+		}
+	} else {
+		body.PromptTemplates = []*PromptTemplateResponseBody{}
+	}
+	if res.ExternalOauthServer != nil {
+		body.ExternalOauthServer = marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody(res.ExternalOauthServer)
+	}
+	if res.OauthProxyServer != nil {
+		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	if res.DraftToolUrns != nil {
+		body.DraftToolUrns = make([]string, len(res.DraftToolUrns))
+		for i, val := range res.DraftToolUrns {
+			body.DraftToolUrns[i] = val
+		}
+	}
+	if res.DraftResourceUrns != nil {
+		body.DraftResourceUrns = make([]string, len(res.DraftResourceUrns))
+		for i, val := range res.DraftResourceUrns {
+			body.DraftResourceUrns[i] = val
+		}
 	}
 	return body
 }
@@ -5164,6 +6873,569 @@ func NewAddOAuthProxyServerGatewayErrorResponseBody(res *goa.ServiceError) *AddO
 	return body
 }
 
+// NewSetIterationModeUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "setIterationMode" endpoint of the "toolsets" service.
+func NewSetIterationModeUnauthorizedResponseBody(res *goa.ServiceError) *SetIterationModeUnauthorizedResponseBody {
+	body := &SetIterationModeUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetIterationModeForbiddenResponseBody builds the HTTP response body from
+// the result of the "setIterationMode" endpoint of the "toolsets" service.
+func NewSetIterationModeForbiddenResponseBody(res *goa.ServiceError) *SetIterationModeForbiddenResponseBody {
+	body := &SetIterationModeForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetIterationModeBadRequestResponseBody builds the HTTP response body from
+// the result of the "setIterationMode" endpoint of the "toolsets" service.
+func NewSetIterationModeBadRequestResponseBody(res *goa.ServiceError) *SetIterationModeBadRequestResponseBody {
+	body := &SetIterationModeBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetIterationModeNotFoundResponseBody builds the HTTP response body from
+// the result of the "setIterationMode" endpoint of the "toolsets" service.
+func NewSetIterationModeNotFoundResponseBody(res *goa.ServiceError) *SetIterationModeNotFoundResponseBody {
+	body := &SetIterationModeNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetIterationModeConflictResponseBody builds the HTTP response body from
+// the result of the "setIterationMode" endpoint of the "toolsets" service.
+func NewSetIterationModeConflictResponseBody(res *goa.ServiceError) *SetIterationModeConflictResponseBody {
+	body := &SetIterationModeConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetIterationModeUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "setIterationMode" endpoint of the "toolsets"
+// service.
+func NewSetIterationModeUnsupportedMediaResponseBody(res *goa.ServiceError) *SetIterationModeUnsupportedMediaResponseBody {
+	body := &SetIterationModeUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetIterationModeInvalidResponseBody builds the HTTP response body from
+// the result of the "setIterationMode" endpoint of the "toolsets" service.
+func NewSetIterationModeInvalidResponseBody(res *goa.ServiceError) *SetIterationModeInvalidResponseBody {
+	body := &SetIterationModeInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetIterationModeInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "setIterationMode" endpoint of the "toolsets"
+// service.
+func NewSetIterationModeInvariantViolationResponseBody(res *goa.ServiceError) *SetIterationModeInvariantViolationResponseBody {
+	body := &SetIterationModeInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetIterationModeUnexpectedResponseBody builds the HTTP response body from
+// the result of the "setIterationMode" endpoint of the "toolsets" service.
+func NewSetIterationModeUnexpectedResponseBody(res *goa.ServiceError) *SetIterationModeUnexpectedResponseBody {
+	body := &SetIterationModeUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetIterationModeGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "setIterationMode" endpoint of the "toolsets" service.
+func NewSetIterationModeGatewayErrorResponseBody(res *goa.ServiceError) *SetIterationModeGatewayErrorResponseBody {
+	body := &SetIterationModeGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteDraftUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "promoteDraft" endpoint of the "toolsets" service.
+func NewPromoteDraftUnauthorizedResponseBody(res *goa.ServiceError) *PromoteDraftUnauthorizedResponseBody {
+	body := &PromoteDraftUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteDraftForbiddenResponseBody builds the HTTP response body from the
+// result of the "promoteDraft" endpoint of the "toolsets" service.
+func NewPromoteDraftForbiddenResponseBody(res *goa.ServiceError) *PromoteDraftForbiddenResponseBody {
+	body := &PromoteDraftForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteDraftBadRequestResponseBody builds the HTTP response body from the
+// result of the "promoteDraft" endpoint of the "toolsets" service.
+func NewPromoteDraftBadRequestResponseBody(res *goa.ServiceError) *PromoteDraftBadRequestResponseBody {
+	body := &PromoteDraftBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteDraftNotFoundResponseBody builds the HTTP response body from the
+// result of the "promoteDraft" endpoint of the "toolsets" service.
+func NewPromoteDraftNotFoundResponseBody(res *goa.ServiceError) *PromoteDraftNotFoundResponseBody {
+	body := &PromoteDraftNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteDraftConflictResponseBody builds the HTTP response body from the
+// result of the "promoteDraft" endpoint of the "toolsets" service.
+func NewPromoteDraftConflictResponseBody(res *goa.ServiceError) *PromoteDraftConflictResponseBody {
+	body := &PromoteDraftConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteDraftUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "promoteDraft" endpoint of the "toolsets" service.
+func NewPromoteDraftUnsupportedMediaResponseBody(res *goa.ServiceError) *PromoteDraftUnsupportedMediaResponseBody {
+	body := &PromoteDraftUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteDraftInvalidResponseBody builds the HTTP response body from the
+// result of the "promoteDraft" endpoint of the "toolsets" service.
+func NewPromoteDraftInvalidResponseBody(res *goa.ServiceError) *PromoteDraftInvalidResponseBody {
+	body := &PromoteDraftInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteDraftInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "promoteDraft" endpoint of the "toolsets" service.
+func NewPromoteDraftInvariantViolationResponseBody(res *goa.ServiceError) *PromoteDraftInvariantViolationResponseBody {
+	body := &PromoteDraftInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteDraftUnexpectedResponseBody builds the HTTP response body from the
+// result of the "promoteDraft" endpoint of the "toolsets" service.
+func NewPromoteDraftUnexpectedResponseBody(res *goa.ServiceError) *PromoteDraftUnexpectedResponseBody {
+	body := &PromoteDraftUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteDraftGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "promoteDraft" endpoint of the "toolsets" service.
+func NewPromoteDraftGatewayErrorResponseBody(res *goa.ServiceError) *PromoteDraftGatewayErrorResponseBody {
+	body := &PromoteDraftGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardDraftUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "discardDraft" endpoint of the "toolsets" service.
+func NewDiscardDraftUnauthorizedResponseBody(res *goa.ServiceError) *DiscardDraftUnauthorizedResponseBody {
+	body := &DiscardDraftUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardDraftForbiddenResponseBody builds the HTTP response body from the
+// result of the "discardDraft" endpoint of the "toolsets" service.
+func NewDiscardDraftForbiddenResponseBody(res *goa.ServiceError) *DiscardDraftForbiddenResponseBody {
+	body := &DiscardDraftForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardDraftBadRequestResponseBody builds the HTTP response body from the
+// result of the "discardDraft" endpoint of the "toolsets" service.
+func NewDiscardDraftBadRequestResponseBody(res *goa.ServiceError) *DiscardDraftBadRequestResponseBody {
+	body := &DiscardDraftBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardDraftNotFoundResponseBody builds the HTTP response body from the
+// result of the "discardDraft" endpoint of the "toolsets" service.
+func NewDiscardDraftNotFoundResponseBody(res *goa.ServiceError) *DiscardDraftNotFoundResponseBody {
+	body := &DiscardDraftNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardDraftConflictResponseBody builds the HTTP response body from the
+// result of the "discardDraft" endpoint of the "toolsets" service.
+func NewDiscardDraftConflictResponseBody(res *goa.ServiceError) *DiscardDraftConflictResponseBody {
+	body := &DiscardDraftConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardDraftUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "discardDraft" endpoint of the "toolsets" service.
+func NewDiscardDraftUnsupportedMediaResponseBody(res *goa.ServiceError) *DiscardDraftUnsupportedMediaResponseBody {
+	body := &DiscardDraftUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardDraftInvalidResponseBody builds the HTTP response body from the
+// result of the "discardDraft" endpoint of the "toolsets" service.
+func NewDiscardDraftInvalidResponseBody(res *goa.ServiceError) *DiscardDraftInvalidResponseBody {
+	body := &DiscardDraftInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardDraftInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "discardDraft" endpoint of the "toolsets" service.
+func NewDiscardDraftInvariantViolationResponseBody(res *goa.ServiceError) *DiscardDraftInvariantViolationResponseBody {
+	body := &DiscardDraftInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardDraftUnexpectedResponseBody builds the HTTP response body from the
+// result of the "discardDraft" endpoint of the "toolsets" service.
+func NewDiscardDraftUnexpectedResponseBody(res *goa.ServiceError) *DiscardDraftUnexpectedResponseBody {
+	body := &DiscardDraftUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscardDraftGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "discardDraft" endpoint of the "toolsets" service.
+func NewDiscardDraftGatewayErrorResponseBody(res *goa.ServiceError) *DiscardDraftGatewayErrorResponseBody {
+	body := &DiscardDraftGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDraftToolsetUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getDraftToolset" endpoint of the "toolsets" service.
+func NewGetDraftToolsetUnauthorizedResponseBody(res *goa.ServiceError) *GetDraftToolsetUnauthorizedResponseBody {
+	body := &GetDraftToolsetUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDraftToolsetForbiddenResponseBody builds the HTTP response body from
+// the result of the "getDraftToolset" endpoint of the "toolsets" service.
+func NewGetDraftToolsetForbiddenResponseBody(res *goa.ServiceError) *GetDraftToolsetForbiddenResponseBody {
+	body := &GetDraftToolsetForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDraftToolsetBadRequestResponseBody builds the HTTP response body from
+// the result of the "getDraftToolset" endpoint of the "toolsets" service.
+func NewGetDraftToolsetBadRequestResponseBody(res *goa.ServiceError) *GetDraftToolsetBadRequestResponseBody {
+	body := &GetDraftToolsetBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDraftToolsetNotFoundResponseBody builds the HTTP response body from
+// the result of the "getDraftToolset" endpoint of the "toolsets" service.
+func NewGetDraftToolsetNotFoundResponseBody(res *goa.ServiceError) *GetDraftToolsetNotFoundResponseBody {
+	body := &GetDraftToolsetNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDraftToolsetConflictResponseBody builds the HTTP response body from
+// the result of the "getDraftToolset" endpoint of the "toolsets" service.
+func NewGetDraftToolsetConflictResponseBody(res *goa.ServiceError) *GetDraftToolsetConflictResponseBody {
+	body := &GetDraftToolsetConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDraftToolsetUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getDraftToolset" endpoint of the "toolsets" service.
+func NewGetDraftToolsetUnsupportedMediaResponseBody(res *goa.ServiceError) *GetDraftToolsetUnsupportedMediaResponseBody {
+	body := &GetDraftToolsetUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDraftToolsetInvalidResponseBody builds the HTTP response body from the
+// result of the "getDraftToolset" endpoint of the "toolsets" service.
+func NewGetDraftToolsetInvalidResponseBody(res *goa.ServiceError) *GetDraftToolsetInvalidResponseBody {
+	body := &GetDraftToolsetInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDraftToolsetInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getDraftToolset" endpoint of the "toolsets"
+// service.
+func NewGetDraftToolsetInvariantViolationResponseBody(res *goa.ServiceError) *GetDraftToolsetInvariantViolationResponseBody {
+	body := &GetDraftToolsetInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDraftToolsetUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getDraftToolset" endpoint of the "toolsets" service.
+func NewGetDraftToolsetUnexpectedResponseBody(res *goa.ServiceError) *GetDraftToolsetUnexpectedResponseBody {
+	body := &GetDraftToolsetUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDraftToolsetGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getDraftToolset" endpoint of the "toolsets" service.
+func NewGetDraftToolsetGatewayErrorResponseBody(res *goa.ServiceError) *GetDraftToolsetGatewayErrorResponseBody {
+	body := &GetDraftToolsetGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateToolsetPayload builds a toolsets service createToolset endpoint
 // payload.
 func NewCreateToolsetPayload(body *CreateToolsetRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.CreateToolsetPayload {
@@ -5335,6 +7607,56 @@ func NewAddOAuthProxyServerPayload(body *AddOAuthProxyServerRequestBody, slug st
 	return v
 }
 
+// NewSetIterationModePayload builds a toolsets service setIterationMode
+// endpoint payload.
+func NewSetIterationModePayload(body *SetIterationModeRequestBody, slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.SetIterationModePayload {
+	v := &toolsets.SetIterationModePayload{
+		IterationMode: *body.IterationMode,
+	}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewPromoteDraftPayload builds a toolsets service promoteDraft endpoint
+// payload.
+func NewPromoteDraftPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.PromoteDraftPayload {
+	v := &toolsets.PromoteDraftPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewDiscardDraftPayload builds a toolsets service discardDraft endpoint
+// payload.
+func NewDiscardDraftPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.DiscardDraftPayload {
+	v := &toolsets.DiscardDraftPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetDraftToolsetPayload builds a toolsets service getDraftToolset endpoint
+// payload.
+func NewGetDraftToolsetPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.GetDraftToolsetPayload {
+	v := &toolsets.GetDraftToolsetPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // ValidateCreateToolsetRequestBody runs the validations defined on
 // CreateToolsetRequestBody
 func ValidateCreateToolsetRequestBody(body *CreateToolsetRequestBody) (err error) {
@@ -5398,6 +7720,15 @@ func ValidateAddOAuthProxyServerRequestBody(body *AddOAuthProxyServerRequestBody
 		if err2 := ValidateOAuthProxyServerFormRequestBody(body.OauthProxyServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	return
+}
+
+// ValidateSetIterationModeRequestBody runs the validations defined on
+// SetIterationModeRequestBody
+func ValidateSetIterationModeRequestBody(body *SetIterationModeRequestBody) (err error) {
+	if body.IterationMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("iteration_mode", "body"))
 	}
 	return
 }

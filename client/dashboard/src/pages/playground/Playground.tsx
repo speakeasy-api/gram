@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
 import {
   useRegisterEnvironmentTelemetry,
@@ -22,6 +23,7 @@ import { useRoutes } from "@/routes";
 import {
   queryKeyInstance,
   queryKeyListToolsets,
+  useDraftToolset,
   useInstance,
   useListChats,
   useListEnvironments,
@@ -272,6 +274,7 @@ export function ToolsetPanel({
     string | undefined
   >();
   const [editingTool, setEditingTool] = useState<Tool | null>(null);
+  const [useStagingTools, setUseStagingTools] = useState(false);
 
   const { data: toolsetsData } = useListToolsets();
   const { data: environmentsData } = useListEnvironments();
@@ -286,6 +289,21 @@ export function ToolsetPanel({
   const selectedEnvironment = configRef.current.environmentSlug;
 
   const toolset = toolsets?.find((toolset) => toolset.slug === selectedToolset);
+
+  // Fetch draft toolset when staging mode is enabled
+  // Note: draftToolset contains draft tool URNs that could be used to filter/show draft tools
+  // For MVP, this just prefetches the draft data - full tool list switching would require
+  // additional integration with the instance endpoint
+  const { data: _draftToolset } = useDraftToolset(
+    { slug: selectedToolset ?? "" },
+    undefined,
+    {
+      enabled: !!selectedToolset && useStagingTools && !!toolset?.iterationMode,
+    },
+  );
+
+  // Check if staging toggle should be shown
+  const showStagingToggle = toolset?.iterationMode && toolset?.hasDraftChanges;
 
   const environmentData = useEnvironment(selectedEnvironment ?? undefined);
 
@@ -495,6 +513,25 @@ export function ToolsetPanel({
               ))}
             </SelectContent>
           </Select>
+        }
+        stagingToggle={
+          showStagingToggle ? (
+            <div className="flex items-center justify-between py-2 px-1">
+              <div className="flex flex-col gap-0.5">
+                <Type variant="small" className="font-medium">
+                  Test Staging
+                </Type>
+                <Type variant="small" className="text-muted-foreground text-xs">
+                  Use draft tool configuration
+                </Type>
+              </div>
+              <Switch
+                checked={useStagingTools}
+                onCheckedChange={setUseStagingTools}
+                aria-label="Toggle staging tools"
+              />
+            </div>
+          ) : undefined
         }
         authSettings={
           toolset && environmentData ? (

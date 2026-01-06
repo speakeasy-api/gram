@@ -2424,6 +2424,974 @@ func DecodeAddOAuthProxyServerResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// BuildSetIterationModeRequest instantiates a HTTP request object with method
+// and path set to call the "toolsets" service "setIterationMode" endpoint
+func (c *Client) BuildSetIterationModeRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetIterationModeToolsetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "setIterationMode", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetIterationModeRequest returns an encoder for requests sent to the
+// toolsets setIterationMode server.
+func EncodeSetIterationModeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.SetIterationModePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "setIterationMode", "*toolsets.SetIterationModePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		req.URL.RawQuery = values.Encode()
+		body := NewSetIterationModeRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("toolsets", "setIterationMode", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetIterationModeResponse returns a decoder for responses returned by
+// the toolsets setIterationMode endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeSetIterationModeResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetIterationModeResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetIterationModeResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setIterationMode", err)
+			}
+			err = ValidateSetIterationModeResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setIterationMode", err)
+			}
+			res := NewSetIterationModeToolsetOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetIterationModeUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setIterationMode", err)
+			}
+			err = ValidateSetIterationModeUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setIterationMode", err)
+			}
+			return nil, NewSetIterationModeUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetIterationModeForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setIterationMode", err)
+			}
+			err = ValidateSetIterationModeForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setIterationMode", err)
+			}
+			return nil, NewSetIterationModeForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetIterationModeBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setIterationMode", err)
+			}
+			err = ValidateSetIterationModeBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setIterationMode", err)
+			}
+			return nil, NewSetIterationModeBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetIterationModeNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setIterationMode", err)
+			}
+			err = ValidateSetIterationModeNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setIterationMode", err)
+			}
+			return nil, NewSetIterationModeNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetIterationModeConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setIterationMode", err)
+			}
+			err = ValidateSetIterationModeConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setIterationMode", err)
+			}
+			return nil, NewSetIterationModeConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetIterationModeUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setIterationMode", err)
+			}
+			err = ValidateSetIterationModeUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setIterationMode", err)
+			}
+			return nil, NewSetIterationModeUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetIterationModeInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setIterationMode", err)
+			}
+			err = ValidateSetIterationModeInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setIterationMode", err)
+			}
+			return nil, NewSetIterationModeInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetIterationModeInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "setIterationMode", err)
+				}
+				err = ValidateSetIterationModeInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "setIterationMode", err)
+				}
+				return nil, NewSetIterationModeInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetIterationModeUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "setIterationMode", err)
+				}
+				err = ValidateSetIterationModeUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "setIterationMode", err)
+				}
+				return nil, NewSetIterationModeUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "setIterationMode", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetIterationModeGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setIterationMode", err)
+			}
+			err = ValidateSetIterationModeGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setIterationMode", err)
+			}
+			return nil, NewSetIterationModeGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "setIterationMode", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildPromoteDraftRequest instantiates a HTTP request object with method and
+// path set to call the "toolsets" service "promoteDraft" endpoint
+func (c *Client) BuildPromoteDraftRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: PromoteDraftToolsetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "promoteDraft", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodePromoteDraftRequest returns an encoder for requests sent to the
+// toolsets promoteDraft server.
+func EncodePromoteDraftRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.PromoteDraftPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "promoteDraft", "*toolsets.PromoteDraftPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodePromoteDraftResponse returns a decoder for responses returned by the
+// toolsets promoteDraft endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodePromoteDraftResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodePromoteDraftResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body PromoteDraftResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "promoteDraft", err)
+			}
+			err = ValidatePromoteDraftResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "promoteDraft", err)
+			}
+			res := NewPromoteDraftToolsetOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body PromoteDraftUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "promoteDraft", err)
+			}
+			err = ValidatePromoteDraftUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "promoteDraft", err)
+			}
+			return nil, NewPromoteDraftUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body PromoteDraftForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "promoteDraft", err)
+			}
+			err = ValidatePromoteDraftForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "promoteDraft", err)
+			}
+			return nil, NewPromoteDraftForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body PromoteDraftBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "promoteDraft", err)
+			}
+			err = ValidatePromoteDraftBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "promoteDraft", err)
+			}
+			return nil, NewPromoteDraftBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body PromoteDraftNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "promoteDraft", err)
+			}
+			err = ValidatePromoteDraftNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "promoteDraft", err)
+			}
+			return nil, NewPromoteDraftNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body PromoteDraftConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "promoteDraft", err)
+			}
+			err = ValidatePromoteDraftConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "promoteDraft", err)
+			}
+			return nil, NewPromoteDraftConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body PromoteDraftUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "promoteDraft", err)
+			}
+			err = ValidatePromoteDraftUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "promoteDraft", err)
+			}
+			return nil, NewPromoteDraftUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body PromoteDraftInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "promoteDraft", err)
+			}
+			err = ValidatePromoteDraftInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "promoteDraft", err)
+			}
+			return nil, NewPromoteDraftInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body PromoteDraftInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "promoteDraft", err)
+				}
+				err = ValidatePromoteDraftInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "promoteDraft", err)
+				}
+				return nil, NewPromoteDraftInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body PromoteDraftUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "promoteDraft", err)
+				}
+				err = ValidatePromoteDraftUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "promoteDraft", err)
+				}
+				return nil, NewPromoteDraftUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "promoteDraft", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body PromoteDraftGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "promoteDraft", err)
+			}
+			err = ValidatePromoteDraftGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "promoteDraft", err)
+			}
+			return nil, NewPromoteDraftGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "promoteDraft", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDiscardDraftRequest instantiates a HTTP request object with method and
+// path set to call the "toolsets" service "discardDraft" endpoint
+func (c *Client) BuildDiscardDraftRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DiscardDraftToolsetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "discardDraft", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDiscardDraftRequest returns an encoder for requests sent to the
+// toolsets discardDraft server.
+func EncodeDiscardDraftRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.DiscardDraftPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "discardDraft", "*toolsets.DiscardDraftPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDiscardDraftResponse returns a decoder for responses returned by the
+// toolsets discardDraft endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeDiscardDraftResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDiscardDraftResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body DiscardDraftResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "discardDraft", err)
+			}
+			err = ValidateDiscardDraftResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "discardDraft", err)
+			}
+			res := NewDiscardDraftToolsetOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DiscardDraftUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "discardDraft", err)
+			}
+			err = ValidateDiscardDraftUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "discardDraft", err)
+			}
+			return nil, NewDiscardDraftUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DiscardDraftForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "discardDraft", err)
+			}
+			err = ValidateDiscardDraftForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "discardDraft", err)
+			}
+			return nil, NewDiscardDraftForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DiscardDraftBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "discardDraft", err)
+			}
+			err = ValidateDiscardDraftBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "discardDraft", err)
+			}
+			return nil, NewDiscardDraftBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DiscardDraftNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "discardDraft", err)
+			}
+			err = ValidateDiscardDraftNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "discardDraft", err)
+			}
+			return nil, NewDiscardDraftNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DiscardDraftConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "discardDraft", err)
+			}
+			err = ValidateDiscardDraftConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "discardDraft", err)
+			}
+			return nil, NewDiscardDraftConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DiscardDraftUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "discardDraft", err)
+			}
+			err = ValidateDiscardDraftUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "discardDraft", err)
+			}
+			return nil, NewDiscardDraftUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DiscardDraftInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "discardDraft", err)
+			}
+			err = ValidateDiscardDraftInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "discardDraft", err)
+			}
+			return nil, NewDiscardDraftInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DiscardDraftInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "discardDraft", err)
+				}
+				err = ValidateDiscardDraftInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "discardDraft", err)
+				}
+				return nil, NewDiscardDraftInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DiscardDraftUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "discardDraft", err)
+				}
+				err = ValidateDiscardDraftUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "discardDraft", err)
+				}
+				return nil, NewDiscardDraftUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "discardDraft", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DiscardDraftGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "discardDraft", err)
+			}
+			err = ValidateDiscardDraftGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "discardDraft", err)
+			}
+			return nil, NewDiscardDraftGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "discardDraft", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetDraftToolsetRequest instantiates a HTTP request object with method
+// and path set to call the "toolsets" service "getDraftToolset" endpoint
+func (c *Client) BuildGetDraftToolsetRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetDraftToolsetToolsetsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "getDraftToolset", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetDraftToolsetRequest returns an encoder for requests sent to the
+// toolsets getDraftToolset server.
+func EncodeGetDraftToolsetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.GetDraftToolsetPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "getDraftToolset", "*toolsets.GetDraftToolsetPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetDraftToolsetResponse returns a decoder for responses returned by
+// the toolsets getDraftToolset endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetDraftToolsetResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetDraftToolsetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetDraftToolsetResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getDraftToolset", err)
+			}
+			err = ValidateGetDraftToolsetResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getDraftToolset", err)
+			}
+			res := NewGetDraftToolsetToolsetOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetDraftToolsetUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getDraftToolset", err)
+			}
+			err = ValidateGetDraftToolsetUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getDraftToolset", err)
+			}
+			return nil, NewGetDraftToolsetUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetDraftToolsetForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getDraftToolset", err)
+			}
+			err = ValidateGetDraftToolsetForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getDraftToolset", err)
+			}
+			return nil, NewGetDraftToolsetForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetDraftToolsetBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getDraftToolset", err)
+			}
+			err = ValidateGetDraftToolsetBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getDraftToolset", err)
+			}
+			return nil, NewGetDraftToolsetBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetDraftToolsetNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getDraftToolset", err)
+			}
+			err = ValidateGetDraftToolsetNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getDraftToolset", err)
+			}
+			return nil, NewGetDraftToolsetNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetDraftToolsetConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getDraftToolset", err)
+			}
+			err = ValidateGetDraftToolsetConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getDraftToolset", err)
+			}
+			return nil, NewGetDraftToolsetConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetDraftToolsetUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getDraftToolset", err)
+			}
+			err = ValidateGetDraftToolsetUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getDraftToolset", err)
+			}
+			return nil, NewGetDraftToolsetUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetDraftToolsetInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getDraftToolset", err)
+			}
+			err = ValidateGetDraftToolsetInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getDraftToolset", err)
+			}
+			return nil, NewGetDraftToolsetInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetDraftToolsetInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "getDraftToolset", err)
+				}
+				err = ValidateGetDraftToolsetInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "getDraftToolset", err)
+				}
+				return nil, NewGetDraftToolsetInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetDraftToolsetUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "getDraftToolset", err)
+				}
+				err = ValidateGetDraftToolsetUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "getDraftToolset", err)
+				}
+				return nil, NewGetDraftToolsetUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "getDraftToolset", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetDraftToolsetGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getDraftToolset", err)
+			}
+			err = ValidateGetDraftToolsetGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getDraftToolset", err)
+			}
+			return nil, NewGetDraftToolsetGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "getDraftToolset", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalSecurityVariableResponseBodyToTypesSecurityVariable builds a value
 // of type *types.SecurityVariable from a value of type
 // *SecurityVariableResponseBody.
@@ -2903,6 +3871,8 @@ func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryRespons
 		McpEnabled:        v.McpEnabled,
 		ToolSelectionMode: *v.ToolSelectionMode,
 		CustomDomainID:    v.CustomDomainID,
+		IterationMode:     v.IterationMode,
+		HasDraftChanges:   v.HasDraftChanges,
 		CreatedAt:         *v.CreatedAt,
 		UpdatedAt:         *v.UpdatedAt,
 	}

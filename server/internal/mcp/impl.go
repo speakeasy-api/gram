@@ -108,6 +108,7 @@ type mcpInputs struct {
 	authenticated    bool
 	sessionID        string
 	mode             ToolMode
+	useDraft         bool // When true, serves draft tools instead of production (staging endpoint)
 }
 
 func NewService(
@@ -180,6 +181,12 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	}).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{project}/{toolset}/{environment}", oops.ErrHandle(service.logger, service.ServeAuthenticated).ServeHTTP)
+
+	// Staging endpoint - serves draft tools instead of production
+	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/staging", oops.ErrHandle(service.logger, service.ServeStaging).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/staging", oops.ErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
+		return service.HandleGetServer(w, r, metadataService)
+	}).ServeHTTP)
 
 	// OAuth 2.1 Authorization Server Metadata
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-authorization-server/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata).ServeHTTP)
@@ -534,6 +541,222 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		oauthTokenInputs: tokenInputs,
 		sessionID:        sessionID,
 		mode:             resolveToolMode(r, *toolset),
+		useDraft:         false, // Production endpoint uses production tools
+	}
+
+	body, err := s.handleBatch(ctx, mcpInputs, batch)
+	switch {
+	case body == nil && err == nil:
+		return respondWithNoContent(true, w)
+	case err != nil:
+		return NewErrorFromCause(batch[0].ID, err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, writeErr := w.Write(body)
+	if writeErr != nil {
+		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body")
+	}
+
+	return nil
+}
+
+// ServeStaging handles MCP requests for the staging endpoint.
+// This is similar to ServePublic but serves draft tools instead of production tools.
+// Used to test toolset changes before promoting them to production.
+func (s *Service) ServeStaging(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	defer o11y.LogDefer(ctx, s.logger, func() error {
+		return r.Body.Close()
+	})
+
+	mcpSlug := chi.URLParam(r, "mcpSlug")
+	if mcpSlug == "" {
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided")
+	}
+
+	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
+	}
+
+	// Check if toolset has iteration mode enabled
+	if !toolset.IterationMode {
+		return oops.E(oops.CodeBadRequest, nil, "toolset is not in iteration mode - staging endpoint not available")
+	}
+
+	baseURL := s.serverURL.String()
+	if customDomainCtx != nil {
+		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
+	}
+
+	fullToolset, err := mv.DescribeToolsetWithDraft(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache, true)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to load draft toolset").Log(ctx, s.logger)
+	}
+	hasExternalMCPOAuth := externalmcp.ResolveOAuthConfig(fullToolset) != nil
+
+	token := r.Header.Get("Authorization")
+	token = strings.TrimPrefix(token, "Bearer ")
+	token = strings.TrimPrefix(token, "bearer ")
+	var tokenInputs []oauthTokenInputs
+
+	var oAuthProxyProvider *oauth_repo.OauthProxyProvider
+	if toolset.OauthProxyServerID.Valid {
+		providers, err := s.oauthRepo.ListOAuthProxyProvidersByServer(
+			ctx,
+			oauth_repo.ListOAuthProxyProvidersByServerParams{
+				OauthProxyServerID: toolset.OauthProxyServerID.UUID,
+				ProjectID:          toolset.ProjectID,
+			},
+		)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to load OAuth proxy providers").Log(ctx, s.logger)
+		}
+
+		if len(providers) == 0 {
+			return oops.E(oops.CodeUnexpected, nil, "no OAuth proxy providers found").Log(ctx, s.logger)
+		}
+
+		oAuthProxyProvider = &providers[0]
+	}
+
+	switch {
+	case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
+		// External OAuth server flow
+		if token == "" {
+			s.logger.WarnContext(ctx, "No authorization token provided")
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
+			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+		}
+
+		tokenInputs = append(tokenInputs, oauthTokenInputs{
+			securityKeys: []string{},
+			Token:        token,
+		})
+	case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
+		// Custom OAuth provider flow
+		validatedToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
+		if err != nil {
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
+			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
+		}
+		s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()))
+
+		for _, externalSecret := range validatedToken.ExternalSecrets {
+			tokenInputs = append(tokenInputs, oauthTokenInputs{
+				securityKeys: externalSecret.SecurityKeys,
+				Token:        externalSecret.Token,
+			})
+		}
+	case toolset.McpIsPublic && hasExternalMCPOAuth:
+		if token == "" {
+			w.Header().Set(
+				"WWW-Authenticate",
+				fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
+			)
+			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+		}
+		// Token provided - pass it through as OAuth token for external MCP
+		tokenInputs = append(tokenInputs, oauthTokenInputs{
+			securityKeys: []string{},
+			Token:        token,
+		})
+	case !toolset.McpIsPublic:
+		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
+
+		ctx, err = s.authenticateToken(ctx, token, toolset.ID, isOAuthCapable)
+		if err == nil {
+			break
+		}
+
+		if isOAuthCapable {
+			w.Header().Set(
+				"WWW-Authenticate",
+				fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
+			)
+		}
+
+		return oops.E(oops.CodeUnauthorized, nil, "expired or invalid access token")
+	default:
+		if token != "" {
+			ctx, err = s.authenticateToken(ctx, token, toolset.ID, false)
+			if err != nil {
+				return err
+			}
+
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			if !ok || authCtx == nil {
+				return oops.E(oops.CodeUnauthorized, nil, "no auth context found").Log(ctx, s.logger)
+			}
+		}
+	}
+
+	var selectedEnvironment string
+	var authenticated bool
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ActiveOrganizationID != "" {
+		projects, err := s.authRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return oops.E(oops.CodeForbidden, nil, "no projects found").Log(ctx, s.logger)
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "error checking project access").Log(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		}
+
+		projectInOrg := false
+		for _, project := range projects {
+			if project.ID == toolset.ProjectID {
+				projectInOrg = true
+				break
+			}
+		}
+
+		if !projectInOrg {
+			return oops.C(oops.CodeUnauthorized)
+		}
+
+		authenticated = true
+	}
+
+	if !toolset.McpIsPublic && !authenticated {
+		return oops.C(oops.CodeNotFound)
+	}
+
+	// IMPORTANT: We should not use gram environments if we are not in an authenticated context
+	if authenticated {
+		selectedEnvironment = conv.PtrValOr(conv.FromPGText[string](toolset.DefaultEnvironmentSlug), "")
+		if passedEnv := r.Header.Get("Gram-Environment"); passedEnv != "" {
+			selectedEnvironment = conv.ToSlug(passedEnv)
+		}
+	}
+
+	var batch batchedRawRequest
+	err = json.NewDecoder(r.Body).Decode(&batch)
+	switch {
+	case errors.Is(err, io.EOF):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").Log(ctx, s.logger)
+	}
+
+	if len(batch) == 0 {
+		return respondWithNoContent(true, w)
+	}
+
+	sessionID := parseMcpSessionID(r.Header)
+	w.Header().Set("Mcp-Session-Id", sessionID)
+
+	mcpInputs := &mcpInputs{
+		projectID:        toolset.ProjectID,
+		toolset:          toolset.Slug,
+		environment:      selectedEnvironment,
+		mcpEnvVariables:  parseMcpEnvVariables(r),
+		authenticated:    authenticated,
+		oauthTokenInputs: tokenInputs,
+		sessionID:        sessionID,
+		mode:             resolveToolMode(r, *toolset),
+		useDraft:         true, // Staging endpoint uses draft tools
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
@@ -661,6 +884,7 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		oauthTokenInputs: []oauthTokenInputs{},
 		sessionID:        sessionID,
 		mode:             resolveToolMode(r, toolset),
+		useDraft:         false, // Authenticated endpoint uses production tools
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)

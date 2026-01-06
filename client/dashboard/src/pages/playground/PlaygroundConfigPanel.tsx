@@ -60,6 +60,7 @@ interface ToolsetSectionProps {
   onMaxTokensChange?: (tokens: number) => void;
   toolsetSelector?: React.ReactNode;
   environmentSelector?: React.ReactNode;
+  stagingToggle?: React.ReactNode;
   authSettings?: React.ReactNode;
   toolsetInfo?: ToolsetInfo;
   onToolsetUpdate?: (updates: { name?: string; description?: string }) => void;
@@ -241,6 +242,7 @@ export function PlaygroundConfigPanel({
   onMaxTokensChange,
   toolsetSelector,
   environmentSelector,
+  stagingToggle,
   authSettings,
   toolsetInfo: _toolsetInfo,
   onToolsetUpdate: _onToolsetUpdate,
@@ -296,6 +298,13 @@ export function PlaygroundConfigPanel({
             Environment
           </Label>
           {environmentSelector}
+        </div>
+      )}
+
+      {/* Staging Toggle - shown when toolset has draft changes */}
+      {stagingToggle && (
+        <div className="px-4 py-2 border-b bg-yellow-50 dark:bg-yellow-950/20">
+          {stagingToggle}
         </div>
       )}
 

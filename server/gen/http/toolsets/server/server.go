@@ -30,6 +30,10 @@ type Server struct {
 	AddExternalOAuthServer   http.Handler
 	RemoveOAuthServer        http.Handler
 	AddOAuthProxyServer      http.Handler
+	SetIterationMode         http.Handler
+	PromoteDraft             http.Handler
+	DiscardDraft             http.Handler
+	GetDraftToolset          http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -69,6 +73,10 @@ func New(
 			{"AddExternalOAuthServer", "POST", "/rpc/toolsets.addExternalOAuthServer"},
 			{"RemoveOAuthServer", "POST", "/rpc/toolsets.removeOAuthServer"},
 			{"AddOAuthProxyServer", "POST", "/rpc/toolsets.addOAuthProxyServer"},
+			{"SetIterationMode", "POST", "/rpc/toolsets.setIterationMode"},
+			{"PromoteDraft", "POST", "/rpc/toolsets.promoteDraft"},
+			{"DiscardDraft", "POST", "/rpc/toolsets.discardDraft"},
+			{"GetDraftToolset", "GET", "/rpc/toolsets.getDraft"},
 		},
 		CreateToolset:            NewCreateToolsetHandler(e.CreateToolset, mux, decoder, encoder, errhandler, formatter),
 		ListToolsets:             NewListToolsetsHandler(e.ListToolsets, mux, decoder, encoder, errhandler, formatter),
@@ -80,6 +88,10 @@ func New(
 		AddExternalOAuthServer:   NewAddExternalOAuthServerHandler(e.AddExternalOAuthServer, mux, decoder, encoder, errhandler, formatter),
 		RemoveOAuthServer:        NewRemoveOAuthServerHandler(e.RemoveOAuthServer, mux, decoder, encoder, errhandler, formatter),
 		AddOAuthProxyServer:      NewAddOAuthProxyServerHandler(e.AddOAuthProxyServer, mux, decoder, encoder, errhandler, formatter),
+		SetIterationMode:         NewSetIterationModeHandler(e.SetIterationMode, mux, decoder, encoder, errhandler, formatter),
+		PromoteDraft:             NewPromoteDraftHandler(e.PromoteDraft, mux, decoder, encoder, errhandler, formatter),
+		DiscardDraft:             NewDiscardDraftHandler(e.DiscardDraft, mux, decoder, encoder, errhandler, formatter),
+		GetDraftToolset:          NewGetDraftToolsetHandler(e.GetDraftToolset, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -98,6 +110,10 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.AddExternalOAuthServer = m(s.AddExternalOAuthServer)
 	s.RemoveOAuthServer = m(s.RemoveOAuthServer)
 	s.AddOAuthProxyServer = m(s.AddOAuthProxyServer)
+	s.SetIterationMode = m(s.SetIterationMode)
+	s.PromoteDraft = m(s.PromoteDraft)
+	s.DiscardDraft = m(s.DiscardDraft)
+	s.GetDraftToolset = m(s.GetDraftToolset)
 }
 
 // MethodNames returns the methods served.
@@ -115,6 +131,10 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountAddExternalOAuthServerHandler(mux, h.AddExternalOAuthServer)
 	MountRemoveOAuthServerHandler(mux, h.RemoveOAuthServer)
 	MountAddOAuthProxyServerHandler(mux, h.AddOAuthProxyServer)
+	MountSetIterationModeHandler(mux, h.SetIterationMode)
+	MountPromoteDraftHandler(mux, h.PromoteDraft)
+	MountDiscardDraftHandler(mux, h.DiscardDraft)
+	MountGetDraftToolsetHandler(mux, h.GetDraftToolset)
 }
 
 // Mount configures the mux to serve the toolsets endpoints.
@@ -630,6 +650,218 @@ func NewAddOAuthProxyServerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "addOAuthProxyServer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetIterationModeHandler configures the mux to serve the "toolsets"
+// service "setIterationMode" endpoint.
+func MountSetIterationModeHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/toolsets.setIterationMode", otelhttp.WithRouteTag("/rpc/toolsets.setIterationMode", f).ServeHTTP)
+}
+
+// NewSetIterationModeHandler creates a HTTP handler which loads the HTTP
+// request and calls the "toolsets" service "setIterationMode" endpoint.
+func NewSetIterationModeHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetIterationModeRequest(mux, decoder)
+		encodeResponse = EncodeSetIterationModeResponse(encoder)
+		encodeError    = EncodeSetIterationModeError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setIterationMode")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountPromoteDraftHandler configures the mux to serve the "toolsets" service
+// "promoteDraft" endpoint.
+func MountPromoteDraftHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/toolsets.promoteDraft", otelhttp.WithRouteTag("/rpc/toolsets.promoteDraft", f).ServeHTTP)
+}
+
+// NewPromoteDraftHandler creates a HTTP handler which loads the HTTP request
+// and calls the "toolsets" service "promoteDraft" endpoint.
+func NewPromoteDraftHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodePromoteDraftRequest(mux, decoder)
+		encodeResponse = EncodePromoteDraftResponse(encoder)
+		encodeError    = EncodePromoteDraftError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "promoteDraft")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDiscardDraftHandler configures the mux to serve the "toolsets" service
+// "discardDraft" endpoint.
+func MountDiscardDraftHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/toolsets.discardDraft", otelhttp.WithRouteTag("/rpc/toolsets.discardDraft", f).ServeHTTP)
+}
+
+// NewDiscardDraftHandler creates a HTTP handler which loads the HTTP request
+// and calls the "toolsets" service "discardDraft" endpoint.
+func NewDiscardDraftHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDiscardDraftRequest(mux, decoder)
+		encodeResponse = EncodeDiscardDraftResponse(encoder)
+		encodeError    = EncodeDiscardDraftError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "discardDraft")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetDraftToolsetHandler configures the mux to serve the "toolsets"
+// service "getDraftToolset" endpoint.
+func MountGetDraftToolsetHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/toolsets.getDraft", otelhttp.WithRouteTag("/rpc/toolsets.getDraft", f).ServeHTTP)
+}
+
+// NewGetDraftToolsetHandler creates a HTTP handler which loads the HTTP
+// request and calls the "toolsets" service "getDraftToolset" endpoint.
+func NewGetDraftToolsetHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetDraftToolsetRequest(mux, decoder)
+		encodeResponse = EncodeGetDraftToolsetResponse(encoder)
+		encodeError    = EncodeGetDraftToolsetError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getDraftToolset")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
 		payload, err := decodeRequest(r)
 		if err != nil {

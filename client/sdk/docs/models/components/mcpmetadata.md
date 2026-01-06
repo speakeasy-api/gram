@@ -8,10 +8,10 @@ Metadata used to configure the MCP install page.
 import { McpMetadata } from "@gram/client/models/components";
 
 let value: McpMetadata = {
-  createdAt: new Date("2023-09-10T07:11:07.924Z"),
+  createdAt: new Date("2024-09-09T07:11:07.924Z"),
   id: "<id>",
   toolsetId: "d6857a14-9fe0-4abf-b801-5641a43197a3",
-  updatedAt: new Date("2024-07-05T03:59:55.214Z"),
+  updatedAt: new Date("2025-07-05T03:59:55.214Z"),
 };
 ```
 

@@ -60,6 +60,14 @@ type Toolset struct {
 	ExternalOauthServer *ExternalOAuthServer
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServer
+	// Whether iteration mode is enabled (staged changes)
+	IterationMode *bool
+	// Whether there are pending draft changes
+	HasDraftChanges *bool
+	// Tool URNs in the draft (only populated when viewing draft)
+	DraftToolUrns []string
+	// Resource URNs in the draft (only populated when viewing draft)
+	DraftResourceUrns []string
 	// When the toolset was created.
 	CreatedAt string
 	// When the toolset was last updated.

@@ -8,9 +8,9 @@ A single environment entry
 import { EnvironmentEntry } from "@gram/client/models/components";
 
 let value: EnvironmentEntry = {
-  createdAt: new Date("2023-11-27T13:52:01.538Z"),
+  createdAt: new Date("2024-11-26T13:52:01.538Z"),
   name: "<value>",
-  updatedAt: new Date("2024-01-09T00:28:30.950Z"),
+  updatedAt: new Date("2025-01-08T00:28:30.950Z"),
   value: "<value>",
 };
 ```

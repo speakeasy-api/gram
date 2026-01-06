@@ -270,6 +270,119 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "addOAuthProxyServer")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AddOAuthProxyServer"}`)
 	})
+
+	// ========================================================================
+	// Draft/Staging Workflow Methods
+	// ========================================================================
+
+	Method("setIterationMode", func() {
+		Description("Enable or disable iteration mode for a toolset. When enabled, changes to tools are staged as drafts until promoted.")
+
+		Payload(func() {
+			Required("slug", "iteration_mode")
+			Attribute("slug", shared.Slug, "The slug of the toolset")
+			Attribute("iteration_mode", Boolean, "Whether to enable iteration mode")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(shared.Toolset)
+
+		HTTP(func() {
+			Param("slug")
+			POST("/rpc/toolsets.setIterationMode")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setIterationMode")
+		Meta("openapi:extension:x-speakeasy-name-override", "setIterationMode")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetIterationMode"}`)
+	})
+
+	Method("promoteDraft", func() {
+		Description("Promote the draft toolset changes to production. This copies draft tool URNs and variations to the live version.")
+
+		Payload(func() {
+			Required("slug")
+			Attribute("slug", shared.Slug, "The slug of the toolset")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(shared.Toolset)
+
+		HTTP(func() {
+			Param("slug")
+			POST("/rpc/toolsets.promoteDraft")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "promoteDraft")
+		Meta("openapi:extension:x-speakeasy-name-override", "promoteDraft")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "PromoteDraft"}`)
+	})
+
+	Method("discardDraft", func() {
+		Description("Discard any pending draft changes for a toolset.")
+
+		Payload(func() {
+			Required("slug")
+			Attribute("slug", shared.Slug, "The slug of the toolset")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(shared.Toolset)
+
+		HTTP(func() {
+			Param("slug")
+			POST("/rpc/toolsets.discardDraft")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "discardDraft")
+		Meta("openapi:extension:x-speakeasy-name-override", "discardDraft")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DiscardDraft"}`)
+	})
+
+	Method("getDraftToolset", func() {
+		Description("Get the draft version of a toolset for preview/staging. Returns the toolset with draft tool URNs instead of production.")
+
+		Payload(func() {
+			Required("slug")
+			Attribute("slug", shared.Slug, "The slug of the toolset")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(shared.Toolset)
+
+		HTTP(func() {
+			GET("/rpc/toolsets.getDraft")
+			Param("slug")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getDraftToolset")
+		Meta("openapi:extension:x-speakeasy-name-override", "getDraft")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DraftToolset"}`)
+	})
 })
 
 var CreateToolsetForm = Type("CreateToolsetForm", func() {

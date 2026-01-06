@@ -6,11 +6,11 @@
 import { GetSlackConnectionResult } from "@gram/client/models/components";
 
 let value: GetSlackConnectionResult = {
-  createdAt: new Date("2023-12-05T11:14:15.948Z"),
+  createdAt: new Date("2024-12-04T11:14:15.948Z"),
   defaultToolsetSlug: "<value>",
   slackTeamId: "<id>",
   slackTeamName: "<value>",
-  updatedAt: new Date("2025-05-05T16:38:36.066Z"),
+  updatedAt: new Date("2026-05-05T16:38:36.066Z"),
 };
 ```
 

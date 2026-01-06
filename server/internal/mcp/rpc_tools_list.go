@@ -43,7 +43,14 @@ func handleToolsList(
 ) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
-	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache)
+	var toolset *types.Toolset
+	var err error
+	if payload.useDraft {
+		// Use draft tools for staging endpoint
+		toolset, err = mv.DescribeToolsetWithDraft(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache, true)
+	} else {
+		toolset, err = mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache)
+	}
 	if err != nil {
 		return nil, err
 	}

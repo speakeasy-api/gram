@@ -5,30 +5,28 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
+  QueryFunctionContext,
+  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramCore } from "../core.js";
+import { environmentsGetByToolset } from "../funcs/environmentsGetByToolset.js";
+import { combineSignals } from "../lib/primitives.js";
+import { RequestOptions } from "../lib/sdks.js";
+import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
+import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
-import {
-  buildGetToolsetEnvironmentQuery,
-  GetToolsetEnvironmentQueryData,
-  prefetchGetToolsetEnvironment,
-  queryKeyGetToolsetEnvironment,
-} from "./getToolsetEnvironment.core.js";
-export {
-  buildGetToolsetEnvironmentQuery,
-  type GetToolsetEnvironmentQueryData,
-  prefetchGetToolsetEnvironment,
-  queryKeyGetToolsetEnvironment,
-};
+
+export type GetToolsetEnvironmentQueryData = components.Environment;
 
 /**
  * getToolsetEnvironment environments
@@ -76,6 +74,21 @@ export function useGetToolsetEnvironmentSuspense(
   });
 }
 
+export function prefetchGetToolsetEnvironment(
+  queryClient: QueryClient,
+  client$: GramCore,
+  request: operations.GetToolsetEnvironmentRequest,
+  security?: operations.GetToolsetEnvironmentSecurity | undefined,
+): Promise<void> {
+  return queryClient.prefetchQuery({
+    ...buildGetToolsetEnvironmentQuery(
+      client$,
+      request,
+      security,
+    ),
+  });
+}
+
 export function setGetToolsetEnvironmentData(
   client: QueryClient,
   queryKeyBase: [
@@ -117,4 +130,50 @@ export function invalidateAllGetToolsetEnvironment(
     ...filters,
     queryKey: ["@gram/client", "environments", "getByToolset"],
   });
+}
+
+export function buildGetToolsetEnvironmentQuery(
+  client$: GramCore,
+  request: operations.GetToolsetEnvironmentRequest,
+  security?: operations.GetToolsetEnvironmentSecurity | undefined,
+  options?: RequestOptions,
+): {
+  queryKey: QueryKey;
+  queryFn: (
+    context: QueryFunctionContext,
+  ) => Promise<GetToolsetEnvironmentQueryData>;
+} {
+  return {
+    queryKey: queryKeyGetToolsetEnvironment({
+      toolsetId: request.toolsetId,
+      gramSession: request.gramSession,
+      gramProject: request.gramProject,
+    }),
+    queryFn: async function getToolsetEnvironmentQueryFn(
+      ctx,
+    ): Promise<GetToolsetEnvironmentQueryData> {
+      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
+      const mergedOptions = {
+        ...options,
+        fetchOptions: { ...options?.fetchOptions, signal: sig },
+      };
+
+      return unwrapAsync(environmentsGetByToolset(
+        client$,
+        request,
+        security,
+        mergedOptions,
+      ));
+    },
+  };
+}
+
+export function queryKeyGetToolsetEnvironment(
+  parameters: {
+    toolsetId: string;
+    gramSession?: string | undefined;
+    gramProject?: string | undefined;
+  },
+): QueryKey {
+  return ["@gram/client", "environments", "getByToolset", parameters];
 }

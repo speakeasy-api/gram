@@ -57,6 +57,22 @@ type Client struct {
 	// addOAuthProxyServer endpoint.
 	AddOAuthProxyServerDoer goahttp.Doer
 
+	// SetIterationMode Doer is the HTTP client used to make requests to the
+	// setIterationMode endpoint.
+	SetIterationModeDoer goahttp.Doer
+
+	// PromoteDraft Doer is the HTTP client used to make requests to the
+	// promoteDraft endpoint.
+	PromoteDraftDoer goahttp.Doer
+
+	// DiscardDraft Doer is the HTTP client used to make requests to the
+	// discardDraft endpoint.
+	DiscardDraftDoer goahttp.Doer
+
+	// GetDraftToolset Doer is the HTTP client used to make requests to the
+	// getDraftToolset endpoint.
+	GetDraftToolsetDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -87,6 +103,10 @@ func NewClient(
 		AddExternalOAuthServerDoer:   doer,
 		RemoveOAuthServerDoer:        doer,
 		AddOAuthProxyServerDoer:      doer,
+		SetIterationModeDoer:         doer,
+		PromoteDraftDoer:             doer,
+		DiscardDraftDoer:             doer,
+		GetDraftToolsetDoer:          doer,
 		RestoreResponseBody:          restoreBody,
 		scheme:                       scheme,
 		host:                         host,
@@ -330,6 +350,102 @@ func (c *Client) AddOAuthProxyServer() goa.Endpoint {
 		resp, err := c.AddOAuthProxyServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("toolsets", "addOAuthProxyServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetIterationMode returns an endpoint that makes HTTP requests to the
+// toolsets service setIterationMode server.
+func (c *Client) SetIterationMode() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetIterationModeRequest(c.encoder)
+		decodeResponse = DecodeSetIterationModeResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetIterationModeRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetIterationModeDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "setIterationMode", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// PromoteDraft returns an endpoint that makes HTTP requests to the toolsets
+// service promoteDraft server.
+func (c *Client) PromoteDraft() goa.Endpoint {
+	var (
+		encodeRequest  = EncodePromoteDraftRequest(c.encoder)
+		decodeResponse = DecodePromoteDraftResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildPromoteDraftRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.PromoteDraftDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "promoteDraft", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DiscardDraft returns an endpoint that makes HTTP requests to the toolsets
+// service discardDraft server.
+func (c *Client) DiscardDraft() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDiscardDraftRequest(c.encoder)
+		decodeResponse = DecodeDiscardDraftResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDiscardDraftRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DiscardDraftDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "discardDraft", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetDraftToolset returns an endpoint that makes HTTP requests to the toolsets
+// service getDraftToolset server.
+func (c *Client) GetDraftToolset() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetDraftToolsetRequest(c.encoder)
+		decodeResponse = DecodeGetDraftToolsetResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetDraftToolsetRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetDraftToolsetDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "getDraftToolset", err)
 		}
 		return decodeResponse(resp)
 	}

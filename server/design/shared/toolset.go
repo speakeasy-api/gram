@@ -71,6 +71,13 @@ var Toolset = Type("Toolset", func() {
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
 	Attribute("external_oauth_server", ExternalOAuthServer, "The external OAuth server details")
 	Attribute("oauth_proxy_server", OAuthProxyServer, "The OAuth proxy server details")
+
+	// Draft/staging workflow fields
+	Attribute("iteration_mode", Boolean, "Whether iteration mode is enabled (staged changes)")
+	Attribute("has_draft_changes", Boolean, "Whether there are pending draft changes")
+	Attribute("draft_tool_urns", ArrayOf(String), "Tool URNs in the draft (only populated when viewing draft)")
+	Attribute("draft_resource_urns", ArrayOf(String), "Resource URNs in the draft (only populated when viewing draft)")
+
 	Attribute("created_at", String, func() {
 		Description("When the toolset was created.")
 		Format(FormatDateTime)
@@ -106,6 +113,11 @@ var ToolsetEntry = Type("ToolsetEntry", func() {
 	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
 	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
+
+	// Draft/staging workflow fields
+	Attribute("iteration_mode", Boolean, "Whether iteration mode is enabled (staged changes)")
+	Attribute("has_draft_changes", Boolean, "Whether there are pending draft changes")
+
 	Attribute("created_at", String, func() {
 		Description("When the toolset was created.")
 		Format(FormatDateTime)

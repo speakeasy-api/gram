@@ -44,7 +44,7 @@ SET
   , oauth_proxy_server_id = NULL
   , updated_at = clock_timestamp()
 WHERE slug = $1 AND project_id = $2
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, iteration_mode, has_draft_changes, created_at, updated_at, deleted_at, deleted
 `
 
 type ClearToolsetOAuthServersParams struct {
@@ -70,6 +70,8 @@ func (q *Queries) ClearToolsetOAuthServers(ctx context.Context, arg ClearToolset
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
 		&i.OauthProxyServerID,
+		&i.IterationMode,
+		&i.HasDraftChanges,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -94,6 +96,41 @@ func (q *Queries) ClearToolsetPromptTemplates(ctx context.Context, arg ClearTool
 	return err
 }
 
+const createDraftToolsetVersion = `-- name: CreateDraftToolsetVersion :one
+INSERT INTO draft_toolset_versions (
+    toolset_id
+  , tool_urns
+  , resource_urns
+) VALUES (
+    $1
+  , $2
+  , $3
+)
+RETURNING id, toolset_id, tool_urns, resource_urns, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateDraftToolsetVersionParams struct {
+	ToolsetID    uuid.UUID
+	ToolUrns     []string
+	ResourceUrns []string
+}
+
+func (q *Queries) CreateDraftToolsetVersion(ctx context.Context, arg CreateDraftToolsetVersionParams) (DraftToolsetVersion, error) {
+	row := q.db.QueryRow(ctx, createDraftToolsetVersion, arg.ToolsetID, arg.ToolUrns, arg.ResourceUrns)
+	var i DraftToolsetVersion
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
+		&i.ToolUrns,
+		&i.ResourceUrns,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const createToolset = `-- name: CreateToolset :one
 INSERT INTO toolsets (
     organization_id
@@ -114,7 +151,7 @@ INSERT INTO toolsets (
   , $7
   , $8
 )
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, iteration_mode, has_draft_changes, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateToolsetParams struct {
@@ -155,6 +192,8 @@ func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (T
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
 		&i.OauthProxyServerID,
+		&i.IterationMode,
+		&i.HasDraftChanges,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -212,6 +251,46 @@ func (q *Queries) CreateToolsetVersion(ctx context.Context, arg CreateToolsetVer
 	return i, err
 }
 
+const deleteDraftToolVariation = `-- name: DeleteDraftToolVariation :exec
+UPDATE draft_tool_variations
+SET deleted_at = clock_timestamp()
+WHERE draft_version_id = $1
+  AND src_tool_urn = $2
+  AND deleted IS FALSE
+`
+
+type DeleteDraftToolVariationParams struct {
+	DraftVersionID uuid.UUID
+	SrcToolUrn     string
+}
+
+func (q *Queries) DeleteDraftToolVariation(ctx context.Context, arg DeleteDraftToolVariationParams) error {
+	_, err := q.db.Exec(ctx, deleteDraftToolVariation, arg.DraftVersionID, arg.SrcToolUrn)
+	return err
+}
+
+const deleteDraftToolVariations = `-- name: DeleteDraftToolVariations :exec
+UPDATE draft_tool_variations
+SET deleted_at = clock_timestamp()
+WHERE draft_version_id = $1 AND deleted IS FALSE
+`
+
+func (q *Queries) DeleteDraftToolVariations(ctx context.Context, draftVersionID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteDraftToolVariations, draftVersionID)
+	return err
+}
+
+const deleteDraftToolsetVersion = `-- name: DeleteDraftToolsetVersion :exec
+UPDATE draft_toolset_versions
+SET deleted_at = clock_timestamp()
+WHERE toolset_id = $1 AND deleted IS FALSE
+`
+
+func (q *Queries) DeleteDraftToolsetVersion(ctx context.Context, toolsetID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteDraftToolsetVersion, toolsetID)
+	return err
+}
+
 const deleteToolset = `-- name: DeleteToolset :exec
 UPDATE toolsets
 SET deleted_at = clock_timestamp()
@@ -227,6 +306,70 @@ type DeleteToolsetParams struct {
 func (q *Queries) DeleteToolset(ctx context.Context, arg DeleteToolsetParams) error {
 	_, err := q.db.Exec(ctx, deleteToolset, arg.Slug, arg.ProjectID)
 	return err
+}
+
+const getDraftToolVariations = `-- name: GetDraftToolVariations :many
+SELECT id, draft_version_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, created_at, updated_at, deleted_at, deleted
+FROM draft_tool_variations
+WHERE draft_version_id = $1 AND deleted IS FALSE
+`
+
+func (q *Queries) GetDraftToolVariations(ctx context.Context, draftVersionID uuid.UUID) ([]DraftToolVariation, error) {
+	rows, err := q.db.Query(ctx, getDraftToolVariations, draftVersionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DraftToolVariation
+	for rows.Next() {
+		var i DraftToolVariation
+		if err := rows.Scan(
+			&i.ID,
+			&i.DraftVersionID,
+			&i.SrcToolUrn,
+			&i.SrcToolName,
+			&i.Confirm,
+			&i.ConfirmPrompt,
+			&i.Name,
+			&i.Summary,
+			&i.Description,
+			&i.Tags,
+			&i.Summarizer,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getDraftToolsetVersion = `-- name: GetDraftToolsetVersion :one
+SELECT id, toolset_id, tool_urns, resource_urns, created_at, updated_at, deleted_at, deleted
+FROM draft_toolset_versions
+WHERE toolset_id = $1 AND deleted IS FALSE
+`
+
+func (q *Queries) GetDraftToolsetVersion(ctx context.Context, toolsetID uuid.UUID) (DraftToolsetVersion, error) {
+	row := q.db.QueryRow(ctx, getDraftToolsetVersion, toolsetID)
+	var i DraftToolsetVersion
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
+		&i.ToolUrns,
+		&i.ResourceUrns,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const getHTTPSecurityDefinitions = `-- name: GetHTTPSecurityDefinitions :many
@@ -429,7 +572,7 @@ func (q *Queries) GetPromptTemplatesForToolset(ctx context.Context, arg GetPromp
 }
 
 const getToolset = `-- name: GetToolset :one
-SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, iteration_mode, has_draft_changes, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -457,6 +600,8 @@ func (q *Queries) GetToolset(ctx context.Context, arg GetToolsetParams) (Toolset
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
 		&i.OauthProxyServerID,
+		&i.IterationMode,
+		&i.HasDraftChanges,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -466,7 +611,7 @@ func (q *Queries) GetToolset(ctx context.Context, arg GetToolsetParams) (Toolset
 }
 
 const getToolsetByMCPSlug = `-- name: GetToolsetByMCPSlug :one
-SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, iteration_mode, has_draft_changes, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE mcp_slug = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -495,6 +640,8 @@ func (q *Queries) GetToolsetByMCPSlug(ctx context.Context, arg GetToolsetByMCPSl
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
 		&i.OauthProxyServerID,
+		&i.IterationMode,
+		&i.HasDraftChanges,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -504,7 +651,7 @@ func (q *Queries) GetToolsetByMCPSlug(ctx context.Context, arg GetToolsetByMCPSl
 }
 
 const getToolsetByMcpSlug = `-- name: GetToolsetByMcpSlug :one
-SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, iteration_mode, has_draft_changes, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE mcp_slug = $1
   AND custom_domain_id IS NULL
@@ -529,6 +676,8 @@ func (q *Queries) GetToolsetByMcpSlug(ctx context.Context, mcpSlug pgtype.Text) 
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
 		&i.OauthProxyServerID,
+		&i.IterationMode,
+		&i.HasDraftChanges,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -538,7 +687,7 @@ func (q *Queries) GetToolsetByMcpSlug(ctx context.Context, mcpSlug pgtype.Text) 
 }
 
 const getToolsetByMcpSlugAndCustomDomain = `-- name: GetToolsetByMcpSlugAndCustomDomain :one
-SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, iteration_mode, has_draft_changes, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE mcp_slug = $1
   AND custom_domain_id = $2
@@ -568,6 +717,8 @@ func (q *Queries) GetToolsetByMcpSlugAndCustomDomain(ctx context.Context, arg Ge
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
 		&i.OauthProxyServerID,
+		&i.IterationMode,
+		&i.HasDraftChanges,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -611,7 +762,7 @@ func (q *Queries) GetToolsetPromptTemplateNames(ctx context.Context, arg GetTool
 
 const getToolsetsByToolURN = `-- name: GetToolsetsByToolURN :many
 SELECT
-    t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.created_at, t.updated_at, t.deleted_at, t.deleted,
+    t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.iteration_mode, t.has_draft_changes, t.created_at, t.updated_at, t.deleted_at, t.deleted,
     tv.version as latest_version
 FROM toolsets t
 JOIN toolset_versions tv ON t.id = tv.toolset_id
@@ -647,6 +798,8 @@ type GetToolsetsByToolURNRow struct {
 	CustomDomainID         uuid.NullUUID
 	ExternalOauthServerID  uuid.NullUUID
 	OauthProxyServerID     uuid.NullUUID
+	IterationMode          bool
+	HasDraftChanges        bool
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
@@ -678,6 +831,8 @@ func (q *Queries) GetToolsetsByToolURN(ctx context.Context, arg GetToolsetsByToo
 			&i.CustomDomainID,
 			&i.ExternalOauthServerID,
 			&i.OauthProxyServerID,
+			&i.IterationMode,
+			&i.HasDraftChanges,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -695,7 +850,7 @@ func (q *Queries) GetToolsetsByToolURN(ctx context.Context, arg GetToolsetsByToo
 }
 
 const listEnabledToolsetsByOrganization = `-- name: ListEnabledToolsetsByOrganization :many
-SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.created_at, t.updated_at, t.deleted_at, t.deleted
+SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.iteration_mode, t.has_draft_changes, t.created_at, t.updated_at, t.deleted_at, t.deleted
 FROM toolsets t
 JOIN projects p ON t.project_id = p.id
 WHERE p.organization_id = $1
@@ -729,6 +884,8 @@ func (q *Queries) ListEnabledToolsetsByOrganization(ctx context.Context, organiz
 			&i.CustomDomainID,
 			&i.ExternalOauthServerID,
 			&i.OauthProxyServerID,
+			&i.IterationMode,
+			&i.HasDraftChanges,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -745,7 +902,7 @@ func (q *Queries) ListEnabledToolsetsByOrganization(ctx context.Context, organiz
 }
 
 const listToolsetsByProject = `-- name: ListToolsetsByProject :many
-SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, iteration_mode, has_draft_changes, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -776,6 +933,8 @@ func (q *Queries) ListToolsetsByProject(ctx context.Context, projectID uuid.UUID
 			&i.CustomDomainID,
 			&i.ExternalOauthServerID,
 			&i.OauthProxyServerID,
+			&i.IterationMode,
+			&i.HasDraftChanges,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -791,6 +950,38 @@ func (q *Queries) ListToolsetsByProject(ctx context.Context, projectID uuid.UUID
 	return items, nil
 }
 
+const updateDraftToolsetVersion = `-- name: UpdateDraftToolsetVersion :one
+UPDATE draft_toolset_versions
+SET
+    tool_urns = $1
+  , resource_urns = $2
+  , updated_at = clock_timestamp()
+WHERE toolset_id = $3 AND deleted IS FALSE
+RETURNING id, toolset_id, tool_urns, resource_urns, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateDraftToolsetVersionParams struct {
+	ToolUrns     []string
+	ResourceUrns []string
+	ToolsetID    uuid.UUID
+}
+
+func (q *Queries) UpdateDraftToolsetVersion(ctx context.Context, arg UpdateDraftToolsetVersionParams) (DraftToolsetVersion, error) {
+	row := q.db.QueryRow(ctx, updateDraftToolsetVersion, arg.ToolUrns, arg.ResourceUrns, arg.ToolsetID)
+	var i DraftToolsetVersion
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
+		&i.ToolUrns,
+		&i.ResourceUrns,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const updateToolset = `-- name: UpdateToolset :one
 UPDATE toolsets
 SET
@@ -804,7 +995,7 @@ SET
   , tool_selection_mode = COALESCE($8, tool_selection_mode)
   , updated_at = clock_timestamp()
 WHERE slug = $9 AND project_id = $10
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, iteration_mode, has_draft_changes, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateToolsetParams struct {
@@ -849,6 +1040,50 @@ func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (T
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
 		&i.OauthProxyServerID,
+		&i.IterationMode,
+		&i.HasDraftChanges,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateToolsetDraftState = `-- name: UpdateToolsetDraftState :one
+UPDATE toolsets
+SET
+    has_draft_changes = $1
+  , updated_at = clock_timestamp()
+WHERE id = $2 AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, iteration_mode, has_draft_changes, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateToolsetDraftStateParams struct {
+	HasDraftChanges bool
+	ID              uuid.UUID
+}
+
+func (q *Queries) UpdateToolsetDraftState(ctx context.Context, arg UpdateToolsetDraftStateParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, updateToolsetDraftState, arg.HasDraftChanges, arg.ID)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.IterationMode,
+		&i.HasDraftChanges,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -863,7 +1098,7 @@ SET
     external_oauth_server_id = $1
   , updated_at = clock_timestamp()
 WHERE slug = $2 AND project_id = $3
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, iteration_mode, has_draft_changes, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateToolsetExternalOAuthServerParams struct {
@@ -890,6 +1125,54 @@ func (q *Queries) UpdateToolsetExternalOAuthServer(ctx context.Context, arg Upda
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
 		&i.OauthProxyServerID,
+		&i.IterationMode,
+		&i.HasDraftChanges,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateToolsetIterationMode = `-- name: UpdateToolsetIterationMode :one
+
+UPDATE toolsets
+SET
+    iteration_mode = $1
+  , updated_at = clock_timestamp()
+WHERE id = $2 AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, iteration_mode, has_draft_changes, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateToolsetIterationModeParams struct {
+	IterationMode bool
+	ID            uuid.UUID
+}
+
+// ============================================================================
+// Draft/Staging Workflow Queries
+// ============================================================================
+func (q *Queries) UpdateToolsetIterationMode(ctx context.Context, arg UpdateToolsetIterationModeParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, updateToolsetIterationMode, arg.IterationMode, arg.ID)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.IterationMode,
+		&i.HasDraftChanges,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -904,7 +1187,7 @@ SET
     oauth_proxy_server_id = $1
   , updated_at = clock_timestamp()
 WHERE slug = $2 AND project_id = $3
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, iteration_mode, has_draft_changes, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateToolsetOAuthProxyServerParams struct {
@@ -931,6 +1214,93 @@ func (q *Queries) UpdateToolsetOAuthProxyServer(ctx context.Context, arg UpdateT
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
 		&i.OauthProxyServerID,
+		&i.IterationMode,
+		&i.HasDraftChanges,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertDraftToolVariation = `-- name: UpsertDraftToolVariation :one
+INSERT INTO draft_tool_variations (
+    draft_version_id
+  , src_tool_urn
+  , src_tool_name
+  , confirm
+  , confirm_prompt
+  , name
+  , summary
+  , description
+  , tags
+  , summarizer
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+)
+ON CONFLICT (draft_version_id, src_tool_urn) WHERE deleted IS FALSE
+DO UPDATE SET
+    src_tool_name = EXCLUDED.src_tool_name
+  , confirm = EXCLUDED.confirm
+  , confirm_prompt = EXCLUDED.confirm_prompt
+  , name = EXCLUDED.name
+  , summary = EXCLUDED.summary
+  , description = EXCLUDED.description
+  , tags = EXCLUDED.tags
+  , summarizer = EXCLUDED.summarizer
+  , updated_at = clock_timestamp()
+RETURNING id, draft_version_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertDraftToolVariationParams struct {
+	DraftVersionID uuid.UUID
+	SrcToolUrn     string
+	SrcToolName    string
+	Confirm        pgtype.Text
+	ConfirmPrompt  pgtype.Text
+	Name           pgtype.Text
+	Summary        pgtype.Text
+	Description    pgtype.Text
+	Tags           []string
+	Summarizer     pgtype.Text
+}
+
+func (q *Queries) UpsertDraftToolVariation(ctx context.Context, arg UpsertDraftToolVariationParams) (DraftToolVariation, error) {
+	row := q.db.QueryRow(ctx, upsertDraftToolVariation,
+		arg.DraftVersionID,
+		arg.SrcToolUrn,
+		arg.SrcToolName,
+		arg.Confirm,
+		arg.ConfirmPrompt,
+		arg.Name,
+		arg.Summary,
+		arg.Description,
+		arg.Tags,
+		arg.Summarizer,
+	)
+	var i DraftToolVariation
+	err := row.Scan(
+		&i.ID,
+		&i.DraftVersionID,
+		&i.SrcToolUrn,
+		&i.SrcToolName,
+		&i.Confirm,
+		&i.ConfirmPrompt,
+		&i.Name,
+		&i.Summary,
+		&i.Description,
+		&i.Tags,
+		&i.Summarizer,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

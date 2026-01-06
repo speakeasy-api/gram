@@ -212,3 +212,108 @@ WHERE t.project_id = @project_id
     WHERE tv2.toolset_id = t.id
       AND tv2.deleted IS FALSE
   );
+
+-- ============================================================================
+-- Draft/Staging Workflow Queries
+-- ============================================================================
+
+-- name: UpdateToolsetIterationMode :one
+UPDATE toolsets
+SET
+    iteration_mode = @iteration_mode
+  , updated_at = clock_timestamp()
+WHERE id = @id AND deleted IS FALSE
+RETURNING *;
+
+-- name: UpdateToolsetDraftState :one
+UPDATE toolsets
+SET
+    has_draft_changes = @has_draft_changes
+  , updated_at = clock_timestamp()
+WHERE id = @id AND deleted IS FALSE
+RETURNING *;
+
+-- name: GetDraftToolsetVersion :one
+SELECT *
+FROM draft_toolset_versions
+WHERE toolset_id = @toolset_id AND deleted IS FALSE;
+
+-- name: CreateDraftToolsetVersion :one
+INSERT INTO draft_toolset_versions (
+    toolset_id
+  , tool_urns
+  , resource_urns
+) VALUES (
+    @toolset_id
+  , @tool_urns
+  , @resource_urns
+)
+RETURNING *;
+
+-- name: UpdateDraftToolsetVersion :one
+UPDATE draft_toolset_versions
+SET
+    tool_urns = @tool_urns
+  , resource_urns = @resource_urns
+  , updated_at = clock_timestamp()
+WHERE toolset_id = @toolset_id AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeleteDraftToolsetVersion :exec
+UPDATE draft_toolset_versions
+SET deleted_at = clock_timestamp()
+WHERE toolset_id = @toolset_id AND deleted IS FALSE;
+
+-- name: GetDraftToolVariations :many
+SELECT *
+FROM draft_tool_variations
+WHERE draft_version_id = @draft_version_id AND deleted IS FALSE;
+
+-- name: UpsertDraftToolVariation :one
+INSERT INTO draft_tool_variations (
+    draft_version_id
+  , src_tool_urn
+  , src_tool_name
+  , confirm
+  , confirm_prompt
+  , name
+  , summary
+  , description
+  , tags
+  , summarizer
+) VALUES (
+    @draft_version_id
+  , @src_tool_urn
+  , @src_tool_name
+  , @confirm
+  , @confirm_prompt
+  , @name
+  , @summary
+  , @description
+  , @tags
+  , @summarizer
+)
+ON CONFLICT (draft_version_id, src_tool_urn) WHERE deleted IS FALSE
+DO UPDATE SET
+    src_tool_name = EXCLUDED.src_tool_name
+  , confirm = EXCLUDED.confirm
+  , confirm_prompt = EXCLUDED.confirm_prompt
+  , name = EXCLUDED.name
+  , summary = EXCLUDED.summary
+  , description = EXCLUDED.description
+  , tags = EXCLUDED.tags
+  , summarizer = EXCLUDED.summarizer
+  , updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: DeleteDraftToolVariations :exec
+UPDATE draft_tool_variations
+SET deleted_at = clock_timestamp()
+WHERE draft_version_id = @draft_version_id AND deleted IS FALSE;
+
+-- name: DeleteDraftToolVariation :exec
+UPDATE draft_tool_variations
+SET deleted_at = clock_timestamp()
+WHERE draft_version_id = @draft_version_id
+  AND src_tool_urn = @src_tool_urn
+  AND deleted IS FALSE;

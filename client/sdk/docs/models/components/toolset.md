@@ -7,7 +7,7 @@ import { Toolset } from "@gram/client/models/components";
 
 let value: Toolset = {
   accountType: "<value>",
-  createdAt: new Date("2025-09-03T11:41:50.334Z"),
+  createdAt: new Date("2026-09-03T11:41:50.334Z"),
   id: "<id>",
   name: "<value>",
   oauthEnablementMetadata: {
@@ -27,7 +27,7 @@ let value: Toolset = {
     {},
   ],
   toolsetVersion: 606302,
-  updatedAt: new Date("2024-09-30T12:50:02.116Z"),
+  updatedAt: new Date("2025-09-30T12:50:02.116Z"),
 };
 ```
 
@@ -40,9 +40,13 @@ let value: Toolset = {
 | `customDomainId`                                                                                   | *string*                                                                                           | :heavy_minus_sign:                                                                                 | The ID of the custom domain to use for the toolset                                                 |
 | `defaultEnvironmentSlug`                                                                           | *string*                                                                                           | :heavy_minus_sign:                                                                                 | A short url-friendly label that uniquely identifies a resource.                                    |
 | `description`                                                                                      | *string*                                                                                           | :heavy_minus_sign:                                                                                 | Description of the toolset                                                                         |
+| `draftResourceUrns`                                                                                | *string*[]                                                                                         | :heavy_minus_sign:                                                                                 | Resource URNs in the draft (only populated when viewing draft)                                     |
+| `draftToolUrns`                                                                                    | *string*[]                                                                                         | :heavy_minus_sign:                                                                                 | Tool URNs in the draft (only populated when viewing draft)                                         |
 | `externalOauthServer`                                                                              | [components.ExternalOAuthServer](../../models/components/externaloauthserver.md)                   | :heavy_minus_sign:                                                                                 | N/A                                                                                                |
 | `functionEnvironmentVariables`                                                                     | [components.FunctionEnvironmentVariable](../../models/components/functionenvironmentvariable.md)[] | :heavy_minus_sign:                                                                                 | The function environment variables that are relevant to the toolset                                |
+| `hasDraftChanges`                                                                                  | *boolean*                                                                                          | :heavy_minus_sign:                                                                                 | Whether there are pending draft changes                                                            |
 | `id`                                                                                               | *string*                                                                                           | :heavy_check_mark:                                                                                 | The ID of the toolset                                                                              |
+| `iterationMode`                                                                                    | *boolean*                                                                                          | :heavy_minus_sign:                                                                                 | Whether iteration mode is enabled (staged changes)                                                 |
 | `mcpEnabled`                                                                                       | *boolean*                                                                                          | :heavy_minus_sign:                                                                                 | Whether the toolset is enabled for MCP                                                             |
 | `mcpIsPublic`                                                                                      | *boolean*                                                                                          | :heavy_minus_sign:                                                                                 | Whether the toolset is public in MCP                                                               |
 | `mcpSlug`                                                                                          | *string*                                                                                           | :heavy_minus_sign:                                                                                 | A short url-friendly label that uniquely identifies a resource.                                    |

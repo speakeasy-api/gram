@@ -37,6 +37,17 @@ type Service interface {
 	RemoveOAuthServer(context.Context, *RemoveOAuthServerPayload) (res *types.Toolset, err error)
 	// Associate an OAuth proxy server with a toolset (admin only)
 	AddOAuthProxyServer(context.Context, *AddOAuthProxyServerPayload) (res *types.Toolset, err error)
+	// Enable or disable iteration mode for a toolset. When enabled, changes to
+	// tools are staged as drafts until promoted.
+	SetIterationMode(context.Context, *SetIterationModePayload) (res *types.Toolset, err error)
+	// Promote the draft toolset changes to production. This copies draft tool URNs
+	// and variations to the live version.
+	PromoteDraft(context.Context, *PromoteDraftPayload) (res *types.Toolset, err error)
+	// Discard any pending draft changes for a toolset.
+	DiscardDraft(context.Context, *DiscardDraftPayload) (res *types.Toolset, err error)
+	// Get the draft version of a toolset for preview/staging. Returns the toolset
+	// with draft tool URNs instead of production.
+	GetDraftToolset(context.Context, *GetDraftToolsetPayload) (res *types.Toolset, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -59,7 +70,7 @@ const ServiceName = "toolsets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"createToolset", "listToolsets", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "addOAuthProxyServer"}
+var MethodNames = [14]string{"createToolset", "listToolsets", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "addOAuthProxyServer", "setIterationMode", "promoteDraft", "discardDraft", "getDraftToolset"}
 
 // AddExternalOAuthServerPayload is the payload type of the toolsets service
 // addExternalOAuthServer method.
@@ -133,6 +144,26 @@ type DeleteToolsetPayload struct {
 	ProjectSlugInput *string
 }
 
+// DiscardDraftPayload is the payload type of the toolsets service discardDraft
+// method.
+type DiscardDraftPayload struct {
+	// The slug of the toolset
+	Slug             types.Slug
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// GetDraftToolsetPayload is the payload type of the toolsets service
+// getDraftToolset method.
+type GetDraftToolsetPayload struct {
+	// The slug of the toolset
+	Slug             types.Slug
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // GetToolsetPayload is the payload type of the toolsets service getToolset
 // method.
 type GetToolsetPayload struct {
@@ -158,11 +189,33 @@ type ListToolsetsResult struct {
 	Toolsets []*types.ToolsetEntry
 }
 
+// PromoteDraftPayload is the payload type of the toolsets service promoteDraft
+// method.
+type PromoteDraftPayload struct {
+	// The slug of the toolset
+	Slug             types.Slug
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // RemoveOAuthServerPayload is the payload type of the toolsets service
 // removeOAuthServer method.
 type RemoveOAuthServerPayload struct {
 	// The slug of the toolset
 	Slug             types.Slug
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// SetIterationModePayload is the payload type of the toolsets service
+// setIterationMode method.
+type SetIterationModePayload struct {
+	// The slug of the toolset
+	Slug types.Slug
+	// Whether to enable iteration mode
+	IterationMode    bool
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
