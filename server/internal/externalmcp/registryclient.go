@@ -169,12 +169,20 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 	return servers, nil
 }
 
+type TransportType string
+
+const (
+	TransportTypeStreamableHTTP TransportType = "streamable-http"
+	TransportTypeSSE            TransportType = "sse"
+)
+
 // ServerDetails contains detailed information about an MCP server including connection info.
 type ServerDetails struct {
 	Name        string
 	Description string
 	Version     string
 	RemoteURL   string
+	TransportType
 }
 
 // getServerResponse wraps a single server from the registry.
@@ -225,13 +233,16 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 
 	// Find the remote URL, preferring streamable-http over sse
 	var remoteURL string
+	var transportType TransportType
 	for _, remote := range serverResp.Server.Remotes {
 		if remote.Type == "streamable-http" {
 			remoteURL = remote.URL
+			transportType = TransportTypeStreamableHTTP
 			break
 		}
 		if remote.Type == "sse" && remoteURL == "" {
 			remoteURL = remote.URL
+			transportType = TransportTypeSSE
 		}
 	}
 
@@ -240,9 +251,10 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 	}
 
 	return &ServerDetails{
-		Name:        serverResp.Server.Name,
-		Description: serverResp.Server.Description,
-		Version:     serverResp.Server.Version,
-		RemoteURL:   remoteURL,
+		Name:          serverResp.Server.Name,
+		Description:   serverResp.Server.Description,
+		Version:       serverResp.Server.Version,
+		RemoteURL:     remoteURL,
+		TransportType: transportType,
 	}, nil
 }

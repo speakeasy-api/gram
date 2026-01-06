@@ -49,7 +49,7 @@ type Client struct {
 
 // NewClient creates a new client connection to an external MCP server.
 // This performs the MCP protocol initialization internally.
-func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, opts *ClientOptions) (*Client, error) {
+func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, transportType TransportType, opts *ClientOptions) (*Client, error) {
 	if opts == nil {
 		opts = &ClientOptions{
 			Authorization: "",
@@ -76,10 +76,19 @@ func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, opts 
 		Title:   "",
 	}, nil)
 
-	transport := &mcp.StreamableClientTransport{
-		Endpoint:   remoteURL,
-		HTTPClient: httpClient,
-		MaxRetries: 3,
+	var transport mcp.Transport
+	switch transportType {
+	case TransportTypeStreamableHTTP:
+		transport = &mcp.StreamableClientTransport{
+			Endpoint:   remoteURL,
+			HTTPClient: httpClient,
+			MaxRetries: 3,
+		}
+	case TransportTypeSSE:
+		transport = &mcp.SSEClientTransport{
+			Endpoint:   remoteURL,
+			HTTPClient: httpClient,
+		}
 	}
 
 	session, err := client.Connect(ctx, transport, nil)
