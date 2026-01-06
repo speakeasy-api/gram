@@ -911,9 +911,6 @@ func (s *Service) createToolsetVersion(ctx context.Context, toolUrnStrings []str
 	return nil
 }
 
-// createOrUpdateDraftToolsetVersion creates or updates a draft version for a toolset in iteration mode.
-// This is similar to createToolsetVersion but writes to draft_toolset_versions instead.
-// Draft tables store URNs as []string directly (not []urn.Tool).
 func (s *Service) createOrUpdateDraftToolsetVersion(ctx context.Context, toolUrnStrings []string, resourceUrnStrings []string, toolsetID uuid.UUID, tr *repo.Queries) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -1049,12 +1046,7 @@ func (s *Service) updatePromptTemplates(ctx context.Context, dbtx pgx.Tx, projec
 	return nil
 }
 
-// ============================================================================
-// Draft/Staging Workflow Methods
-// ============================================================================
-
 // SetIterationMode enables or disables iteration mode for a toolset.
-// When enabled, changes to tools are staged as drafts until explicitly promoted.
 func (s *Service) SetIterationMode(ctx context.Context, payload *gen.SetIterationModePayload) (*types.Toolset, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -1102,7 +1094,6 @@ func (s *Service) SetIterationMode(ctx context.Context, payload *gen.SetIteratio
 }
 
 // PromoteDraft promotes the draft toolset changes to production.
-// This copies draft tool URNs and variations to the live version.
 func (s *Service) PromoteDraft(ctx context.Context, payload *gen.PromoteDraftPayload) (*types.Toolset, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

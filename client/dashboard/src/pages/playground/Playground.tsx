@@ -23,7 +23,6 @@ import { useRoutes } from "@/routes";
 import {
   queryKeyInstance,
   queryKeyListToolsets,
-  useDraftToolset,
   useInstance,
   useListChats,
   useListEnvironments,
@@ -290,19 +289,6 @@ export function ToolsetPanel({
 
   const toolset = toolsets?.find((toolset) => toolset.slug === selectedToolset);
 
-  // Fetch draft toolset when staging mode is enabled
-  // Note: draftToolset contains draft tool URNs that could be used to filter/show draft tools
-  // For MVP, this just prefetches the draft data - full tool list switching would require
-  // additional integration with the instance endpoint
-  const { data: _draftToolset } = useDraftToolset(
-    { slug: selectedToolset ?? "" },
-    undefined,
-    {
-      enabled: !!selectedToolset && useStagingTools && !!toolset?.iterationMode,
-    },
-  );
-
-  // Check if staging toggle should be shown
   const showStagingToggle = toolset?.iterationMode && toolset?.hasDraftChanges;
 
   const environmentData = useEnvironment(selectedEnvironment ?? undefined);

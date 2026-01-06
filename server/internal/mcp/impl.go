@@ -541,7 +541,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		oauthTokenInputs: tokenInputs,
 		sessionID:        sessionID,
 		mode:             resolveToolMode(r, *toolset),
-		useDraft:         false, // Production endpoint uses production tools
+		useDraft:         false,
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
@@ -562,9 +562,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// ServeStaging handles MCP requests for the staging endpoint.
-// This is similar to ServePublic but serves draft tools instead of production tools.
-// Used to test toolset changes before promoting them to production.
+// ServeStaging handles MCP requests for the staging endpoint, serving draft tools.
 func (s *Service) ServeStaging(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	defer o11y.LogDefer(ctx, s.logger, func() error {
@@ -756,7 +754,7 @@ func (s *Service) ServeStaging(w http.ResponseWriter, r *http.Request) error {
 		oauthTokenInputs: tokenInputs,
 		sessionID:        sessionID,
 		mode:             resolveToolMode(r, *toolset),
-		useDraft:         true, // Staging endpoint uses draft tools
+		useDraft:         true,
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
@@ -884,7 +882,7 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		oauthTokenInputs: []oauthTokenInputs{},
 		sessionID:        sessionID,
 		mode:             resolveToolMode(r, toolset),
-		useDraft:         false, // Authenticated endpoint uses production tools
+		useDraft:         false,
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
