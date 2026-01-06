@@ -112,28 +112,6 @@ const config: ElementsConfig = {
 
 ***
 
-### chatEndpoint?
-
-> `optional` **chatEndpoint**: `string`
-
-The path of your backend's chat endpoint.
-
-#### Default
-
-```ts
-'/chat/completions'
-```
-
-#### Example
-
-```ts
-const config: ElementsConfig = {
-  chatEndpoint: '/my-custom-chat-endpoint',
-}
-```
-
-***
-
 ### environment?
 
 > `optional` **environment**: `Record`\<`string`, `unknown`\>

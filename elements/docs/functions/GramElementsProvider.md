@@ -6,11 +6,11 @@
 
 # Function: GramElementsProvider()
 
-> **GramElementsProvider**(`__namedParameters`): `Element`
+> **GramElementsProvider**(`props`): `Element`
 
 ## Parameters
 
-### \_\_namedParameters
+### props
 
 [`ElementsProviderProps`](../interfaces/ElementsProviderProps.md)
 
