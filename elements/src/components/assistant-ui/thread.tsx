@@ -57,6 +57,7 @@ export const Thread: FC = () => {
   const d = useDensity()
   const { config } = useElements()
   const components = config.components ?? {}
+
   return (
     <LazyMotion features={domAnimation}>
       <MotionConfig reducedMotion="user">
@@ -176,7 +177,7 @@ const ThreadWelcome: FC = () => {
 }
 
 const ThreadSuggestions: FC = () => {
-  const { config } = useElements()
+  const { config, isLoadingMCPTools } = useElements()
   const r = useRadius()
   const d = useDensity()
   const suggestions = config.welcome?.suggestions ?? []
@@ -213,7 +214,12 @@ const ThreadSuggestions: FC = () => {
             !isStandalone && 'nth-[n+3]:hidden @md:nth-[n+3]:block'
           )}
         >
-          <ThreadPrimitive.Suggestion prompt={suggestion.action} send asChild>
+          <ThreadPrimitive.Suggestion
+            disabled={isLoadingMCPTools}
+            prompt={suggestion.action}
+            send
+            asChild
+          >
             <Button
               variant="ghost"
               className={cn(
@@ -248,6 +254,7 @@ const Composer: FC = () => {
     attachments: true,
   }
   const components = config.components ?? {}
+  const { isLoadingMCPTools } = useElements()
 
   if (components.Composer) {
     return <components.Composer />
@@ -280,6 +287,7 @@ const Composer: FC = () => {
           )}
           rows={1}
           autoFocus
+          disabled={isLoadingMCPTools}
           aria-label="Message input"
         />
         <ComposerAction />

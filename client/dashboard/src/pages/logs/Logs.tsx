@@ -1,13 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { SearchBar } from "@/components/ui/search-bar";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   ToolCallSummary,
   TelemetryLogRecord,
   FeatureName,
@@ -25,16 +18,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { TraceRow } from "./TraceRow";
 import { LogDetailSheet } from "./LogDetailSheet";
 
-interface Filters {
-  searchQuery: string | null;
-  statusFilter: string | null;
-}
-
 export default function LogsPage() {
-  const [filters, setFilters] = useState<Filters>({
-    searchQuery: null,
-    statusFilter: null,
-  });
+  const [searchQuery, setSearchQuery] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [expandedTraceId, setExpandedTraceId] = useState<string | null>(null);
   const [selectedLog, setSelectedLog] = useState<TelemetryLogRecord | null>(
@@ -103,31 +88,33 @@ export default function LogsPage() {
   // Debounce search input
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      setFilters((prev) => ({
-        ...prev,
-        searchQuery: searchInput || null,
-      }));
+      setSearchQuery(searchInput || null);
     }, 500);
     return () => clearTimeout(timeoutId);
   }, [searchInput]);
 
-  // Fetch traces when filters or cursor change
+  // Reset pagination when search query changes
+  useEffect(() => {
+    setCurrentCursor(undefined);
+    lastProcessedCursorRef.current = undefined;
+    setAllTraces([]);
+  }, [searchQuery]);
+
+  // Fetch traces with server-side gramUrn filter
   const fetchTraces = useCallback(() => {
     mutate({
       request: {
         searchToolCallsPayload: {
-          filter: filters.searchQuery
-            ? { gramUrn: filters.searchQuery }
-            : undefined,
+          filter: searchQuery ? { gramUrn: searchQuery } : undefined,
           cursor: currentCursor,
           limit: perPage,
           sort: "desc",
         },
       },
     });
-  }, [mutate, filters.searchQuery, currentCursor]);
+  }, [mutate, searchQuery, currentCursor]);
 
-  // Initial fetch and filter changes
+  // Fetch when query or cursor changes
   useEffect(() => {
     fetchTraces();
   }, [fetchTraces]);
@@ -142,32 +129,12 @@ export default function LogsPage() {
         return;
       }
 
-      let filteredTraces = data.toolCalls;
-
-      // Client-side status filter
-      if (filters.statusFilter) {
-        filteredTraces = filteredTraces.filter((trace) => {
-          const status = trace.httpStatusCode;
-          if (!status) return filters.statusFilter === "success";
-          switch (filters.statusFilter) {
-            case "success":
-              return status >= 200 && status < 400;
-            case "4xx":
-              return status >= 400 && status < 500;
-            case "5xx":
-              return status >= 500;
-            default:
-              return true;
-          }
-        });
-      }
-
       if (currentCursor === undefined) {
-        setAllTraces(filteredTraces);
+        setAllTraces(data.toolCalls);
       } else {
         setAllTraces((prev) => {
           const existingIds = new Set(prev.map((t) => t.traceId));
-          const newTraces = filteredTraces.filter(
+          const newTraces = data.toolCalls.filter(
             (t) => !existingIds.has(t.traceId),
           );
           return [...prev, ...newTraces];
@@ -177,18 +144,10 @@ export default function LogsPage() {
       lastProcessedCursorRef.current = currentCursor;
       setIsFetchingMore(false);
     }
-  }, [data, isPending, currentCursor, filters.statusFilter]);
+  }, [data, isPending, currentCursor]);
 
   const nextCursor = data?.nextCursor;
   const hasNextPage = !!nextCursor;
-
-  // Reset cursor when filters change
-  useEffect(() => {
-    setCurrentCursor(undefined);
-    lastProcessedCursorRef.current = undefined;
-    setIsFetchingMore(false);
-    setAllTraces([]);
-  }, [filters.searchQuery, filters.statusFilter]);
 
   // Handle scroll for infinite loading
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -225,36 +184,14 @@ export default function LogsPage() {
           {null}
           <Page.Section.Body>
             <div className="flex flex-col gap-4">
-              {/* Search and Filters Row */}
-              <div className="flex items-center justify-between gap-4">
+              {/* Search Row */}
+              <div className="flex items-center gap-4">
                 <SearchBar
                   value={searchInput}
                   onChange={setSearchInput}
                   placeholder="Search by tool URN"
                   className="w-1/3"
                 />
-
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={filters.statusFilter ?? "all"}
-                    onValueChange={(value) =>
-                      setFilters((prev) => ({
-                        ...prev,
-                        statusFilter: value === "all" ? null : value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      <SelectItem value="success">Success (2xx/3xx)</SelectItem>
-                      <SelectItem value="4xx">Client Error (4xx)</SelectItem>
-                      <SelectItem value="5xx">Server Error (5xx)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
 
               {/* Trace list container */}
@@ -304,7 +241,11 @@ export default function LogsPage() {
                   ) : allTraces.length === 0 ? (
                     <div className="py-12 text-center text-muted-foreground">
                       {logsEnabled ? (
-                        "No traces found"
+                        searchQuery ? (
+                          "No traces match your search"
+                        ) : (
+                          "No traces found"
+                        )
                       ) : (
                         <div className="flex flex-col items-center gap-3">
                           <span>Logs are disabled for your organization.</span>

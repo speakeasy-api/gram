@@ -1,5 +1,12 @@
 # @gram-ai/elements
 
+## 1.16.5
+
+### Patch Changes
+
+- 3d48d55: The chat handler has been removed as the chat request now happens client side. A new session handler has been added to the server package, which should be implemented by consumers in their backends.
+- d19cb20: Fixes syncronization issue with chart plugin JSON parsing whilst streaming
+
 ## 1.16.4
 
 ### Patch Changes

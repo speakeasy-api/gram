@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.16.4**](../README.md)
+[**@gram-ai/elements v1.16.5**](../README.md)
 
 ***
 
@@ -107,28 +107,6 @@ Note: This config option will likely change in the future
 ```ts
 const config: ElementsConfig = {
   mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
-}
-```
-
-***
-
-### chatEndpoint?
-
-> `optional` **chatEndpoint**: `string`
-
-The path of your backend's chat endpoint.
-
-#### Default
-
-```ts
-'/chat/completions'
-```
-
-#### Example
-
-```ts
-const config: ElementsConfig = {
-  chatEndpoint: '/my-custom-chat-endpoint',
 }
 ```
 

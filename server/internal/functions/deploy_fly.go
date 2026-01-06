@@ -457,9 +457,7 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 	}
 
 	flapsc, err := flaps.NewWithOptions(ctx, flaps.NewClientOpts{
-		AppName:   appName,
 		UserAgent: f.ua,
-		OrgSlug:   orgSlug,
 		Tokens:    f.tokens,
 		Logger: &flyLogger{
 			logger: logger.With(attr.SlogComponent("flyio-flaps")),
@@ -477,7 +475,7 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to set function runner secrets").Log(ctx, logger)
 	}
 
-	ms, err := f.launchN(ctx, flapsc, region, machineConfig, minSecretVersion, 2)
+	ms, err := f.launchN(ctx, appName, flapsc, region, machineConfig, minSecretVersion, 2)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to spin up function runner machines").Log(ctx, logger)
 	}
@@ -678,11 +676,11 @@ func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, file
 	}
 }
 
-func (f *FlyRunner) launchN(ctx context.Context, flapsc *flaps.Client, region string, config *fly.MachineConfig, minSecretVersion *uint64, n uint8) ([]*fly.Machine, error) {
+func (f *FlyRunner) launchN(ctx context.Context, appName string, flapsc *flaps.Client, region string, config *fly.MachineConfig, minSecretVersion *uint64, n uint8) ([]*fly.Machine, error) {
 	ms := make([]*fly.Machine, 0, n)
 
 	for i := range n {
-		m, err := flapsc.Launch(ctx, fly.LaunchMachineInput{
+		m, err := flapsc.Launch(ctx, appName, fly.LaunchMachineInput{
 			Region:                  region,
 			Timeout:                 0,
 			RequiresReplacement:     true,
@@ -698,7 +696,7 @@ func (f *FlyRunner) launchN(ctx context.Context, flapsc *flaps.Client, region st
 		}
 		ms = append(ms, m)
 
-		if err := flapsc.Wait(ctx, m, "started", 30*time.Second); err != nil {
+		if err := flapsc.Wait(ctx, appName, m, "started", 30*time.Second); err != nil {
 			return nil, fmt.Errorf("waiting for machine %s to start: %w", m.ID, err)
 		}
 	}

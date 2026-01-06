@@ -16,6 +16,12 @@ import {
 } from 'react'
 import type { Plugin } from './plugins'
 
+/**
+ * Function to retrieve the session token from the backend endpoint.
+ * Override this if you have mounted your session endpoint at a different path.
+ */
+export type GetSessionFn = () => Promise<string>
+
 export interface ElementsProviderProps {
   /**
    * The children to render.
@@ -26,6 +32,20 @@ export interface ElementsProviderProps {
    * Configuration object for the Elements library.
    */
   config: ElementsConfig
+
+  /**
+   * Function to retrieve the session token from the backend endpoint.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   getSession: async () => {
+   *     return fetch('/chat/session').then(res => res.json()).then(data => data.client_token)
+   *   },
+   * }
+   *
+   * @default Use this default if you are using the Elements server handlers, and have mounted the session handler at /chat/session.
+   */
+  getSession?: GetSessionFn
 }
 
 type ServerUrl = string
@@ -107,18 +127,6 @@ export interface ElementsConfig {
    * }
    */
   mcp: ServerUrl
-
-  /**
-   * The path of your backend's chat endpoint.
-   *
-   * @default '/chat/completions'
-   *
-   * @example
-   * const config: ElementsConfig = {
-   *   chatEndpoint: '/my-custom-chat-endpoint',
-   * }
-   */
-  chatEndpoint?: string
 
   /**
    * Custom environment variable overrides for the Elements library.
@@ -645,4 +653,10 @@ export type ElementsContextType = {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
   plugins: Plugin[]
+
+  /**
+   * Indicates if the process of discovering MCP tools is still ongoing.
+   * TODO: failure state
+   */
+  isLoadingMCPTools: boolean
 }
