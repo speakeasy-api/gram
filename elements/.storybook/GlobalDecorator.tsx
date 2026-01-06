@@ -1,5 +1,5 @@
 import merge from 'lodash.merge'
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo } from 'react'
 import { ElementsProvider } from '../src/contexts/ElementsProvider'
 import { recommended } from '../src/plugins'
 import { ElementsConfig } from '../src/types'
@@ -11,7 +11,6 @@ interface ElementsDecoratorProps {
 }
 
 const DEFAULT_ELEMENTS_CONFIG: ElementsConfig = {
-  clientToken: null,
   projectSlug: 'adamtest',
   mcp: 'https://chat.speakeasy.com/mcp/speakeasy-team-my_api',
   variant: 'widget',
@@ -42,24 +41,6 @@ const DEFAULT_ELEMENTS_CONFIG: ElementsConfig = {
   plugins: recommended,
 }
 
-const useSession = () => {
-  const [session, setSession] = useState<string | null>(null)
-  useEffect(() => {
-    fetch(`/session`, {
-      method: 'POST',
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        setSession(data.client_token)
-      })
-      .catch((error) => {
-        console.error('Error creating session:', error)
-      })
-  }, [])
-
-  return session
-}
-
 /**
  * Global decorator that wraps all stories in the AssistantRuntimeProvider,
  * which provides the chat runtime to the story.
@@ -72,14 +53,10 @@ export const ElementsDecorator: React.FC<ElementsDecoratorProps> = ({
   children,
   config,
 }) => {
-  const session = useSession()
-
   const finalConfig = useMemo(
     () => merge({}, DEFAULT_ELEMENTS_CONFIG, config ?? {}),
     [config]
   )
-
-  finalConfig.clientToken = session
 
   return (
     <ElementsProvider config={finalConfig}>

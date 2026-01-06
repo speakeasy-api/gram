@@ -7,6 +7,9 @@ import {
 import z from 'zod'
 import { FC } from 'react'
 
+/**
+ * Converts from assistant-ui tool format to the AI SDK tool shape
+ */
 export const toAISDKTools = (tools: Record<string, Tool>) => {
   return Object.fromEntries(
     Object.entries(tools).map(([name, tool]) => [
@@ -21,6 +24,9 @@ export const toAISDKTools = (tools: Record<string, Tool>) => {
   )
 }
 
+/**
+ * Returns only frontend tools that are enabled
+ */
 export const getEnabledTools = (tools: Record<string, Tool>) => {
   return Object.fromEntries(
     Object.entries(tools).filter(

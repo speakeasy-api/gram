@@ -3,23 +3,29 @@ import { MODELS } from '@/lib/models'
 import { recommended } from '@/plugins'
 import { ElementsProviderProps, Model } from '@/types'
 import { Plugin } from '@/types/plugins'
-import { experimental_createMCPClient as createMCPClient } from '@ai-sdk/mcp'
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
-import { useChatRuntime } from '@assistant-ui/react-ai-sdk'
+import {
+  frontendTools as convertFrontendToolsToAISDKTools,
+  useChatRuntime,
+} from '@assistant-ui/react-ai-sdk'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import {
   convertToModelMessages,
   smoothStream,
   stepCountIs,
   streamText,
+  ToolSet,
   type ChatTransport,
   type UIMessage,
 } from 'ai'
 import { useMemo, useState } from 'react'
 import { ElementsContext } from './elementsContextType'
+import { getEnabledTools, toAISDKTools } from '@/lib/tools'
+import { useSession } from '@/hooks/useSession'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useMCPTools } from '@/hooks/useMCPTools'
 
 const GRAM_API_URL = 'https://app.getgram.ai'
-const HEADER_PREFIX = 'MCP-'
 
 const BASE_SYSTEM_PROMPT = `You are a helpful assistant that can answer questions and help with tasks.`
 
@@ -37,33 +43,9 @@ function mergeInternalSystemPromptWith(
   ${plugins.map((plugin) => `- ${plugin.language}: ${plugin.prompt}`).join('\n')}`
 }
 
-function transformEnvironmentToHeaders(environment: Record<string, unknown>) {
-  if (typeof environment !== 'object' || environment === null) {
-    return {}
-  }
-  return Object.entries(environment).reduce(
-    (acc, [key, value]) => {
-      // Normalize key: replace underscores with dashes
-      const normalizedKey = key.replace(/_/g, '-')
+const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
+  const session = useSession(config)
 
-      // Add MCP- prefix if it doesn't already have it
-      const headerKey = normalizedKey.startsWith(HEADER_PREFIX)
-        ? normalizedKey
-        : `${HEADER_PREFIX}${normalizedKey}`
-
-      acc[headerKey] = value as string
-      return acc
-    },
-    {} as Record<string, string>
-  )
-}
-
-export const ElementsProvider = ({
-  children,
-  config,
-}: ElementsProviderProps) => {
-  const session = config.clientToken
-  
   const [model, setModel] = useState<Model>(
     config.model?.defaultModel ?? MODELS[0]
   )
@@ -80,33 +62,27 @@ export const ElementsProvider = ({
     plugins
   )
 
+  const { data: mcpTools, isLoading: mcpToolsLoading } = useMCPTools(config)
+
+  // Show loading if we don't have tools yet or they're actively loading
+  const isLoadingMCPTools = !mcpTools || mcpToolsLoading
+
   // Create custom transport
-  const transport = useMemo<ChatTransport<UIMessage>>(
+  const transport = useMemo<ChatTransport<UIMessage> | undefined>(
     () => ({
       sendMessages: async ({ messages, abortSignal }) => {
         if (!session) {
           throw new Error('No session found')
         }
 
-        // TODO: FIX ME
-        // const clientTools = getEnabledTools(
-        //   frontendTools(config.tools?.frontendTools ?? {})
-        // ) as any
+        if (mcpToolsLoading || !mcpTools) {
+          throw new Error('MCP tools are still being discovered')
+        }
 
-        // Create MCP client
-        // TODO: Don't do this every time we send a message
-        const mcpClient = await createMCPClient({
-          transport: {
-            type: 'http',
-            url: config.mcp,
-            headers: {
-              ...transformEnvironmentToHeaders(config.environment ?? {}),
-              'Gram-Chat-Session': session,
-            },
-          },
-        })
-
-        const mcpTools = await mcpClient.tools()
+        const context = runtime.thread.getModelContext()
+        const frontendTools = toAISDKTools(
+          getEnabledTools(context?.tools ?? {})
+        )
 
         // Create OpenRouter model
         const openRouterModel = createOpenRouter({
@@ -123,11 +99,10 @@ export const ElementsProvider = ({
           system: systemPrompt,
           model: openRouterModel.chat(model),
           messages: convertToModelMessages(messages),
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           tools: {
             ...mcpTools,
-            // ...frontendTools(clientTools),
-          } as any,
+            ...convertFrontendToolsToAISDKTools(frontendTools),
+          } as ToolSet,
           stopWhen: stepCountIs(10),
           experimental_transform: smoothStream({ delayInMs: 15 }),
           abortSignal,
@@ -140,7 +115,7 @@ export const ElementsProvider = ({
         throw new Error('Stream reconnection not supported')
       },
     }),
-    [config, model, systemPrompt, session]
+    [config, model, systemPrompt, session, mcpTools, mcpToolsLoading]
   )
 
   const runtime = useChatRuntime({
@@ -159,6 +134,7 @@ export const ElementsProvider = ({
           isOpen: isOpen ?? false,
           setIsOpen,
           plugins,
+          isLoadingMCPTools,
         }}
       >
         {children}
@@ -167,5 +143,14 @@ export const ElementsProvider = ({
         <FrontendTools tools={config.tools?.frontendTools ?? {}} />
       </ElementsContext.Provider>
     </AssistantRuntimeProvider>
+  )
+}
+
+export const ElementsProvider = (props: ElementsProviderProps) => {
+  const queryClient = new QueryClient()
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ElementsProviderInner {...props} />
+    </QueryClientProvider>
   )
 }

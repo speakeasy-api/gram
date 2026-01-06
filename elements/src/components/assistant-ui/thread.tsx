@@ -5,6 +5,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CopyIcon,
+  Loader,
   PencilIcon,
   RefreshCwIcon,
   Settings2,
@@ -57,6 +58,8 @@ export const Thread: FC = () => {
   const d = useDensity()
   const { config } = useElements()
   const components = config.components ?? {}
+  const { isLoadingMCPTools } = useElements()
+
   return (
     <LazyMotion features={domAnimation}>
       <MotionConfig reducedMotion="user">
@@ -72,28 +75,43 @@ export const Thread: FC = () => {
               d('p-lg')
             )}
           >
-            <ThreadPrimitive.If empty>
-              {components.ThreadWelcome ? (
-                <components.ThreadWelcome />
-              ) : (
-                <ThreadWelcome />
-              )}
-            </ThreadPrimitive.If>
+            {isLoadingMCPTools ? (
+              <div className="flex h-full flex-col items-center justify-center gap-2">
+                <Loader
+                  className="text-muted-foreground size-8 animate-spin"
+                  strokeWidth={1.5}
+                />
 
-            <ThreadPrimitive.Messages
-              components={{
-                UserMessage: components.UserMessage ?? UserMessage,
-                EditComposer: components.EditComposer ?? EditComposer,
-                AssistantMessage:
-                  components.AssistantMessage ?? AssistantMessage,
-              }}
-            />
+                <p className="shimmer text-muted-foreground text-base">
+                  Loading...
+                </p>
+              </div>
+            ) : (
+              <>
+                <ThreadPrimitive.If empty>
+                  {components.ThreadWelcome ? (
+                    <components.ThreadWelcome />
+                  ) : (
+                    <ThreadWelcome />
+                  )}
+                </ThreadPrimitive.If>
 
-            <ThreadPrimitive.If empty={false}>
-              <div className="aui-thread-viewport-spacer min-h-8 grow" />
-            </ThreadPrimitive.If>
+                <ThreadPrimitive.Messages
+                  components={{
+                    UserMessage: components.UserMessage ?? UserMessage,
+                    EditComposer: components.EditComposer ?? EditComposer,
+                    AssistantMessage:
+                      components.AssistantMessage ?? AssistantMessage,
+                  }}
+                />
 
-            <Composer />
+                <ThreadPrimitive.If empty={false}>
+                  <div className="aui-thread-viewport-spacer min-h-8 grow" />
+                </ThreadPrimitive.If>
+
+                <Composer />
+              </>
+            )}
           </ThreadPrimitive.Viewport>
         </ThreadPrimitive.Root>
       </MotionConfig>

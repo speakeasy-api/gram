@@ -11,7 +11,13 @@ const apiMiddlewarePlugin = () => ({
   name: 'chat-api-middleware',
   configureServer(server: ViteDevServer) {
     const handlers = createElementsServerHandlers()
-    server.middlewares.use('/session', handlers.session)
+    server.middlewares.use('/chat/session', (req, res) =>
+      handlers.session(req, res, {
+        embedOrigin: 'http://localhost:6006',
+        userIdentifier: 'test',
+        expiresAfter: 3600,
+      })
+    )
   },
 })
 

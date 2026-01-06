@@ -45,11 +45,6 @@ export type Variant = (typeof VARIANTS)[number]
  */
 export interface ElementsConfig {
   /**
-   * The client token to use for the Elements library. Retrieved from app.getgram.ai/rpc/chatSessions.create
-   */
-  clientToken: string | null
-
-  /**
    * The system prompt to use for the Elements library.
    */
   systemPrompt?: string
@@ -114,16 +109,16 @@ export interface ElementsConfig {
   mcp: ServerUrl
 
   /**
-   * The path of your backend's chat endpoint.
+   * The path of your backend's session endpoint.
    *
-   * @default '/chat/completions'
+   * @default '/chat/session'
    *
    * @example
    * const config: ElementsConfig = {
-   *   chatEndpoint: '/my-custom-chat-endpoint',
+   *   sessionEndpoint: '/my-custom-session-endpoint',
    * }
    */
-  chatEndpoint?: string
+  sessionEndpoint?: string
 
   /**
    * Custom environment variable overrides for the Elements library.
@@ -650,4 +645,6 @@ export type ElementsContextType = {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
   plugins: Plugin[]
+
+  isLoadingMCPTools: boolean
 }
