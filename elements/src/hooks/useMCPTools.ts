@@ -1,4 +1,4 @@
-import { ElementsConfig } from '@/types'
+import { GetSessionFn } from '@/types'
 import { experimental_createMCPClient as createMCPClient } from '@ai-sdk/mcp'
 import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { useSession } from './useSession'
@@ -8,22 +8,33 @@ type MCPToolsResult = Awaited<
   ReturnType<Awaited<ReturnType<typeof createMCPClient>>['tools']>
 >
 
-export function useMCPTools(
-  config: ElementsConfig
-): UseQueryResult<MCPToolsResult, Error> {
-  const session = useSession(config)
+export function useMCPTools({
+  getSession,
+  projectSlug,
+  mcp,
+  environment,
+}: {
+  getSession: GetSessionFn
+  projectSlug: string
+  mcp: string
+  environment: Record<string, unknown>
+}): UseQueryResult<MCPToolsResult, Error> {
+  const session = useSession({
+    getSession,
+    projectSlug,
+  })
 
   const queryResult = useQuery({
-    queryKey: ['mcpTools', config.projectSlug, config.mcp, session],
+    queryKey: ['mcpTools', projectSlug, mcp, session],
     queryFn: async () => {
       assert(session, 'No session found')
       const mcpClient = await createMCPClient({
         name: 'gram-elements-mcp-client',
         transport: {
           type: 'http',
-          url: config.mcp,
+          url: mcp,
           headers: {
-            ...transformEnvironmentToHeaders(config.environment ?? {}),
+            ...transformEnvironmentToHeaders(environment ?? {}),
             'Gram-Chat-Session': session,
           },
         },

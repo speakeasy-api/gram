@@ -43,8 +43,18 @@ function mergeInternalSystemPromptWith(
   ${plugins.map((plugin) => `- ${plugin.language}: ${plugin.prompt}`).join('\n')}`
 }
 
-const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
-  const session = useSession(config)
+async function defaultGetSession(): Promise<string> {
+  const response = await fetch('/chat/session', { method: 'POST' })
+  const data = await response.json()
+  return data.client_token
+}
+
+const ElementsProviderInner = ({
+  children,
+  config,
+  getSession = defaultGetSession,
+}: ElementsProviderProps) => {
+  const session = useSession({ getSession, projectSlug: config.projectSlug })
 
   const [model, setModel] = useState<Model>(
     config.model?.defaultModel ?? MODELS[0]
@@ -62,7 +72,12 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     plugins
   )
 
-  const { data: mcpTools, isLoading: mcpToolsLoading } = useMCPTools(config)
+  const { data: mcpTools, isLoading: mcpToolsLoading } = useMCPTools({
+    getSession,
+    projectSlug: config.projectSlug,
+    mcp: config.mcp,
+    environment: config.environment ?? {},
+  })
 
   // Show loading if we don't have tools yet or they're actively loading
   const isLoadingMCPTools = !mcpTools || mcpToolsLoading

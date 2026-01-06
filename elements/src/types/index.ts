@@ -16,6 +16,8 @@ import {
 } from 'react'
 import type { Plugin } from './plugins'
 
+export type GetSessionFn = () => Promise<string>
+
 export interface ElementsProviderProps {
   /**
    * The children to render.
@@ -26,6 +28,18 @@ export interface ElementsProviderProps {
    * Configuration object for the Elements library.
    */
   config: ElementsConfig
+
+  /**
+   * Function to retrieve the session token from the backend endpoint.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   getSession: async () => {
+   *     return fetch('/chat/session').then(res => res.json()).then(data => data.client_token)
+   *   },
+   * }
+   */
+  getSession?: GetSessionFn
 }
 
 type ServerUrl = string
@@ -107,18 +121,6 @@ export interface ElementsConfig {
    * }
    */
   mcp: ServerUrl
-
-  /**
-   * The path of your backend's session endpoint.
-   *
-   * @default '/chat/session'
-   *
-   * @example
-   * const config: ElementsConfig = {
-   *   sessionEndpoint: '/my-custom-session-endpoint',
-   * }
-   */
-  sessionEndpoint?: string
 
   /**
    * Custom environment variable overrides for the Elements library.
