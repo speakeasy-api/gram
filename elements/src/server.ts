@@ -22,7 +22,7 @@ interface SessionHandlerOptions {
   embedOrigin: string
 
   /**
-   * Optional free-form user identifier
+   * Free-form user identifier
    */
   userIdentifier: string
 
