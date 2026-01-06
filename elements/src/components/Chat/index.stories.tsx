@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Chat } from '.'
 import { ElementsProvider } from '../../contexts/ElementsProvider'
 import type { Meta, StoryFn } from '@storybook/react-vite'
-import { HomeIcon, ZapIcon } from 'lucide-react'
+import { ZapIcon } from 'lucide-react'
 import {
   ToolCallMessagePartProps,
   useAssistantState,
