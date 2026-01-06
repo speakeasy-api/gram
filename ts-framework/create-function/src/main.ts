@@ -233,8 +233,8 @@ async function init(argv: string[]): Promise<void> {
   const contributingPath = join(dir, "CONTRIBUTING.md");
   if (existsSync(contributingPath)) {
     tlog.message("Creating symlinks for CONTRIBUTING.md");
-    await fs.symlink("CONTRIBUTING.md", join(dir, "AGENTS.md"));
-    await fs.symlink("CONTRIBUTING.md", join(dir, "CLAUDE.md"));
+    await symlinkOrCopy("CONTRIBUTING.md", join(dir, "AGENTS.md"), dir);
+    await symlinkOrCopy("CONTRIBUTING.md", join(dir, "CLAUDE.md"), dir);
   }
 
   if (initGit) {
@@ -274,4 +274,23 @@ try {
 } catch (err) {
   log.error(`Unexpected error: ${err}`);
   process.exit(1);
+}
+
+/**
+ * Creates a symlink with fallback to copy for environments that don't support
+ * symlinks (Windows without Developer Mode, FAT32/exFAT filesystems, network
+ * shares, etc.)
+ */
+async function symlinkOrCopy(
+  target: string,
+  path: string,
+  dir: string,
+): Promise<void> {
+  try {
+    await fs.symlink(target, path);
+  } catch {
+    // Symlinks may fail on Windows without Developer Mode, or on filesystems
+    // that don't support them (FAT32, exFAT, network shares). Fall back to copy.
+    await fs.copyFile(join(dir, target), path).catch(() => {});
+  }
 }
