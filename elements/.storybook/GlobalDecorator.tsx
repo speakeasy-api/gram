@@ -1,8 +1,8 @@
+import merge from 'lodash.merge'
 import React, { useMemo } from 'react'
 import { ElementsProvider } from '../src/contexts/ElementsProvider'
-import { ElementsConfig } from '../src/types'
-import merge from 'lodash.merge'
 import { recommended } from '../src/plugins'
+import { ElementsConfig } from '../src/types'
 
 interface ElementsDecoratorProps {
   children: React.ReactNode
@@ -57,6 +57,7 @@ export const ElementsDecorator: React.FC<ElementsDecoratorProps> = ({
     () => merge({}, DEFAULT_ELEMENTS_CONFIG, config ?? {}),
     [config]
   )
+
   return (
     <ElementsProvider config={finalConfig}>
       <div className="h-screen bg-zinc-50">{children}</div>
