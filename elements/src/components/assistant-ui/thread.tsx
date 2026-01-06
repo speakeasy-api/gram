@@ -310,13 +310,20 @@ const ComposerModelPicker: FC = () => {
     previousOpenRef.current = popoverOpen
   }, [popoverOpen])
 
+  // Close tooltip when popover opens
+  useEffect(() => {
+    if (popoverOpen) {
+      setTooltipOpen(false)
+    }
+  }, [popoverOpen])
+
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     savedScrollPosition.current = e.currentTarget.scrollTop
   }
 
   return (
     <TooltipProvider>
-      <Tooltip open={tooltipOpen} onOpenChange={setTooltipOpen}>
+      <Tooltip open={tooltipOpen && !popoverOpen} onOpenChange={setTooltipOpen}>
         <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
           <TooltipTrigger asChild>
             <PopoverTrigger asChild>
@@ -326,7 +333,6 @@ const ComposerModelPicker: FC = () => {
                 data-state={popoverOpen ? 'open' : 'closed'}
                 className="aui-composer-model-picker data-[state=open]:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30 flex w-fit items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold"
                 aria-label="Model Settings"
-                onPointerUp={(e) => e.stopPropagation()}
               >
                 <Settings2 className="aui-attachment-add-icon size-5 stroke-[1.5px]" />
               </Button>
