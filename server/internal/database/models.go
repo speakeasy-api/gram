@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	pgvector_go "github.com/pgvector/pgvector-go"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -201,6 +202,7 @@ type ExternalMcpToolDefinition struct {
 	ExternalMcpAttachmentID    uuid.UUID
 	ToolUrn                    string
 	RemoteUrl                  string
+	TransportType              externalmcp.TransportType
 	RequiresOauth              bool
 	OauthVersion               string
 	OauthAuthorizationEndpoint pgtype.Text
