@@ -5,7 +5,6 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CopyIcon,
-  Loader,
   PencilIcon,
   RefreshCwIcon,
   Settings2,
@@ -58,7 +57,6 @@ export const Thread: FC = () => {
   const d = useDensity()
   const { config } = useElements()
   const components = config.components ?? {}
-  const { isLoadingMCPTools } = useElements()
 
   return (
     <LazyMotion features={domAnimation}>
@@ -75,43 +73,28 @@ export const Thread: FC = () => {
               d('p-lg')
             )}
           >
-            {isLoadingMCPTools ? (
-              <div className="flex h-full flex-col items-center justify-center gap-2">
-                <Loader
-                  className="text-muted-foreground size-8 animate-spin"
-                  strokeWidth={1.5}
-                />
+            <ThreadPrimitive.If empty>
+              {components.ThreadWelcome ? (
+                <components.ThreadWelcome />
+              ) : (
+                <ThreadWelcome />
+              )}
+            </ThreadPrimitive.If>
 
-                <p className="shimmer text-muted-foreground text-base">
-                  Loading...
-                </p>
-              </div>
-            ) : (
-              <>
-                <ThreadPrimitive.If empty>
-                  {components.ThreadWelcome ? (
-                    <components.ThreadWelcome />
-                  ) : (
-                    <ThreadWelcome />
-                  )}
-                </ThreadPrimitive.If>
+            <ThreadPrimitive.Messages
+              components={{
+                UserMessage: components.UserMessage ?? UserMessage,
+                EditComposer: components.EditComposer ?? EditComposer,
+                AssistantMessage:
+                  components.AssistantMessage ?? AssistantMessage,
+              }}
+            />
 
-                <ThreadPrimitive.Messages
-                  components={{
-                    UserMessage: components.UserMessage ?? UserMessage,
-                    EditComposer: components.EditComposer ?? EditComposer,
-                    AssistantMessage:
-                      components.AssistantMessage ?? AssistantMessage,
-                  }}
-                />
+            <ThreadPrimitive.If empty={false}>
+              <div className="aui-thread-viewport-spacer min-h-8 grow" />
+            </ThreadPrimitive.If>
 
-                <ThreadPrimitive.If empty={false}>
-                  <div className="aui-thread-viewport-spacer min-h-8 grow" />
-                </ThreadPrimitive.If>
-
-                <Composer />
-              </>
-            )}
+            <Composer />
           </ThreadPrimitive.Viewport>
         </ThreadPrimitive.Root>
       </MotionConfig>
@@ -194,7 +177,7 @@ const ThreadWelcome: FC = () => {
 }
 
 const ThreadSuggestions: FC = () => {
-  const { config } = useElements()
+  const { config, isLoadingMCPTools } = useElements()
   const r = useRadius()
   const d = useDensity()
   const suggestions = config.welcome?.suggestions ?? []
@@ -231,7 +214,12 @@ const ThreadSuggestions: FC = () => {
             !isStandalone && 'nth-[n+3]:hidden @md:nth-[n+3]:block'
           )}
         >
-          <ThreadPrimitive.Suggestion prompt={suggestion.action} send asChild>
+          <ThreadPrimitive.Suggestion
+            disabled={isLoadingMCPTools}
+            prompt={suggestion.action}
+            send
+            asChild
+          >
             <Button
               variant="ghost"
               className={cn(
@@ -266,6 +254,7 @@ const Composer: FC = () => {
     attachments: true,
   }
   const components = config.components ?? {}
+  const { isLoadingMCPTools } = useElements()
 
   if (components.Composer) {
     return <components.Composer />
@@ -298,6 +287,7 @@ const Composer: FC = () => {
           )}
           rows={1}
           autoFocus
+          disabled={isLoadingMCPTools}
           aria-label="Message input"
         />
         <ComposerAction />
