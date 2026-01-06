@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.16.4
+
+### Patch Changes
+
+- b44d018: Fix small display issues with modal variant
+
 ## 1.16.3
 
 ### Patch Changes
