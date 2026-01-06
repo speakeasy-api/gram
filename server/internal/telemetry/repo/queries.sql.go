@@ -600,6 +600,7 @@ WHERE gram_project_id = ?
     AND trace_id != ''
     AND (? = '' OR gram_deployment_id = toUUIDOrNull(?))
     AND (? = '' OR gram_function_id = toUUIDOrNull(?))
+    AND if(? = '', true, position(telemetry_logs.gram_urn, ?) > 0)
 GROUP BY trace_id
 HAVING if(
         ? = '',
@@ -622,6 +623,7 @@ type ListTracesParams struct {
 	TimeEnd          int64
 	GramDeploymentID string
 	GramFunctionID   string
+	GramURN          string
 	SortOrder        string
 	Cursor           string // trace_id to paginate from
 	Limit            int
@@ -635,13 +637,14 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 		arg.TimeEnd,                                // 3: time_unix_nano <=
 		arg.GramDeploymentID, arg.GramDeploymentID, // 4,5: deployment_id filter
 		arg.GramFunctionID, arg.GramFunctionID, // 6,7: function_id filter
-		arg.Cursor,    // 8: cursor empty string check
-		arg.SortOrder, // 9: ASC or DESC for comparison
-		arg.Cursor,    // 10: ASC cursor subquery
-		arg.Cursor,    // 11: DESC cursor subquery
-		arg.SortOrder, // 12: ORDER BY start_time ASC
-		arg.SortOrder, // 13: ORDER BY start_time DESC
-		arg.Limit,     // 14: LIMIT
+		arg.GramURN, arg.GramURN, // 8,9: gram_urn filter (position-based substring search) 
+		arg.Cursor,    // 10: cursor empty string check
+		arg.SortOrder, // 11: ASC or DESC for comparison
+		arg.Cursor,    // 12: ASC cursor subquery
+		arg.Cursor,    // 13: DESC cursor subquery
+		arg.SortOrder, // 14: ORDER BY start_time ASC
+		arg.SortOrder, // 15: ORDER BY start_time DESC
+		arg.Limit,     // 16: LIMIT
 	)
 	if err != nil {
 		return nil, err

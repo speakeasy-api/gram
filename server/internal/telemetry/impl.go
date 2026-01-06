@@ -443,7 +443,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	to := time.Now().UnixNano()
 
 	// Extract filter values
-	var deploymentID, functionID string
+	var deploymentID, functionID, gramURN string
 	if payload.Filter != nil {
 		from, to, err = parseTimeRange(payload.Filter.From, payload.Filter.To)
 		if err != nil {
@@ -451,7 +451,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 		}
 		deploymentID = conv.PtrValOr(payload.Filter.DeploymentID, "")
 		functionID = conv.PtrValOr(payload.Filter.FunctionID, "")
-		// TODO: gram_urn filtering not yet supported for tool calls aggregation
+		gramURN = conv.PtrValOr(payload.Filter.GramUrn, "")
 	}
 
 	// Query with limit+1 to detect if there are more results
@@ -461,6 +461,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 		TimeEnd:          to,
 		GramDeploymentID: deploymentID,
 		GramFunctionID:   functionID,
+		GramURN:          gramURN,
 		SortOrder:        sortOrder,
 		Cursor:           cursor,
 		Limit:            limit + 1, // +1 for overflow detection
