@@ -603,6 +603,94 @@ func TestSearchToolCalls_AggregatesByTraceID(t *testing.T) {
 	require.Equal(t, "urn:gram:test2", toolCall2.GramUrn)
 }
 
+func TestSearchToolCalls_FilterByGramURN(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	traceID1 := "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+	traceID2 := "ffffffffffffffffffffffffffffffff"
+	traceID3 := "11111111111111111111111111111111"
+
+	// Insert logs with different gram URNs
+	insertTelemetryLog(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), &traceID1, "tools:http:petstore:listPets", "INFO")
+	insertTelemetryLog(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), &traceID2, "tools:http:petstore:getPet", "INFO")
+	insertTelemetryLog(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), &traceID3, "tools:http:weather:getForecast", "INFO")
+
+	// Wait for ClickHouse eventual consistency
+	time.Sleep(100 * time.Millisecond)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	tests := []struct {
+		name          string
+		gramUrn       string
+		expectedCount int
+		expectedURNs  []string
+	}{
+		{
+			name:          "exact match returns single result",
+			gramUrn:       "tools:http:petstore:listPets",
+			expectedCount: 1,
+			expectedURNs:  []string{"tools:http:petstore:listPets"},
+		},
+		{
+			name:          "partial match on source returns multiple results",
+			gramUrn:       "petstore",
+			expectedCount: 2,
+			expectedURNs:  []string{"tools:http:petstore:listPets", "tools:http:petstore:getPet"},
+		},
+		{
+			name:          "partial match on tool name",
+			gramUrn:       "getPet",
+			expectedCount: 1,
+			expectedURNs:  []string{"tools:http:petstore:getPet"},
+		},
+		{
+			name:          "no match returns empty",
+			gramUrn:       "nonexistent",
+			expectedCount: 0,
+			expectedURNs:  []string{},
+		},
+		{
+			name:          "partial match on type",
+			gramUrn:       "http",
+			expectedCount: 3,
+			expectedURNs:  []string{"tools:http:petstore:listPets", "tools:http:petstore:getPet", "tools:http:weather:getForecast"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := ti.service.SearchToolCalls(ctx, &gen.SearchToolCallsPayload{
+				Filter: &gen.SearchToolCallsFilter{
+					From:    &from,
+					To:      &to,
+					GramUrn: &tt.gramUrn,
+				},
+				Limit: 100,
+				Sort:  "desc",
+			})
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Len(t, result.ToolCalls, tt.expectedCount, "expected %d tool calls but got %d", tt.expectedCount, len(result.ToolCalls))
+
+			// Verify all returned URNs are in the expected list
+			for _, toolCall := range result.ToolCalls {
+				require.Contains(t, tt.expectedURNs, toolCall.GramUrn, "unexpected gram_urn: %s", toolCall.GramUrn)
+			}
+		})
+	}
+}
+
 func insertTestTelemetryLogs(t *testing.T, ctx context.Context, projectID, deploymentID string, count int) {
 	t.Helper()
 
