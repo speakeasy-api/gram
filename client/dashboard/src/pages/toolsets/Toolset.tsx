@@ -25,6 +25,8 @@ import {
   useCloneToolsetMutation,
   useCreateToolsetMutation,
   useDeleteToolsetMutation,
+  useDiscardDraftMutation,
+  usePromoteDraftMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
@@ -533,10 +535,85 @@ export function ToolsetView({
     },
   });
 
+  const promoteDraftMutation = usePromoteDraftMutation({
+    onSuccess: () => {
+      telemetry.capture("toolset_event", { action: "draft_promoted" });
+      toast.success("Draft changes promoted to production");
+      onUpdate();
+    },
+    onError: (error) => {
+      handleAPIError(error, "Failed to promote draft changes");
+    },
+  });
+
+  const discardDraftMutation = useDiscardDraftMutation({
+    onSuccess: () => {
+      telemetry.capture("toolset_event", { action: "draft_discarded" });
+      toast.success("Draft changes discarded");
+      onUpdate();
+    },
+    onError: (error) => {
+      handleAPIError(error, "Failed to discard draft changes");
+    },
+  });
+
+  const handlePromoteDraft = () => {
+    if (
+      confirm(
+        "Are you sure you want to promote draft changes to production? This will make your changes live.",
+      )
+    ) {
+      promoteDraftMutation.mutate({
+        request: {
+          slug: toolsetSlug,
+        },
+      });
+    }
+  };
+
+  const handleDiscardDraft = () => {
+    if (
+      confirm(
+        "Are you sure you want to discard all draft changes? This action cannot be undone.",
+      )
+    ) {
+      discardDraftMutation.mutate({
+        request: {
+          slug: toolsetSlug,
+        },
+      });
+    }
+  };
+
+  const isIterationMode = toolset?.iterationMode ?? false;
+  const hasDraftChanges = toolset?.hasDraftChanges ?? false;
+
   const actions = (
     <Stack direction="horizontal" gap={2} align="center">
+      {isIterationMode && hasDraftChanges && (
+        <>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleDiscardDraft}
+            disabled={discardDraftMutation.isPending}
+          >
+            <Button.Text>Discard</Button.Text>
+          </Button>
+          <Button
+            size="sm"
+            onClick={handlePromoteDraft}
+            disabled={promoteDraftMutation.isPending}
+          >
+            <Button.LeftIcon>
+              <Icon name="rocket" className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Release Changes</Button.Text>
+          </Button>
+        </>
+      )}
       {!isExternalMcp && (
-        <Button onClick={gotoAddTools} size="sm">
+        <Button onClick={gotoAddTools} size="sm" variant={isIterationMode && hasDraftChanges ? "secondary" : "primary"}>
           <Button.LeftIcon>
             <Icon name="plus" className="h-4 w-4" />
           </Button.LeftIcon>

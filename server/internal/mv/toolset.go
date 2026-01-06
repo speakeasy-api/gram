@@ -280,6 +280,8 @@ func DescribeToolsetEntry(
 		ToolSelectionMode:            toolset.ToolSelectionMode,
 		CustomDomainID:               conv.FromNullableUUID(toolset.CustomDomainID),
 		McpIsPublic:                  &toolset.McpIsPublic,
+		IterationMode:                &toolset.IterationMode,
+		HasDraftChanges:              &toolset.HasDraftChanges,
 		CreatedAt:                    toolset.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                    toolset.UpdatedAt.Time.Format(time.RFC3339),
 		Tools:                        tools,
@@ -530,9 +532,277 @@ func DescribeToolset(
 		OauthEnablementMetadata: &types.OAuthEnablementMetadata{
 			Oauth2SecurityCount: oauth2AuthCodeSecurityCount,
 		},
+		// Draft/staging workflow fields
+		IterationMode:     &toolset.IterationMode,
+		HasDraftChanges:   &toolset.HasDraftChanges,
+		DraftToolUrns:     nil, // Not populated for non-draft view
+		DraftResourceUrns: nil, // Not populated for non-draft view
 	}
 
 	return result, nil
+}
+
+// DescribeToolsetWithDraft returns a toolset with draft tool URNs if useDraft is true.
+// When useDraft is true, it reads from draft_toolset_versions instead of toolset_versions.
+func DescribeToolsetWithDraft(
+	ctx context.Context,
+	logger *slog.Logger,
+	tx DBTX,
+	projectID ProjectID,
+	toolsetSlug ToolsetSlug,
+	toolsetCache *cache.TypedCacheObject[ToolsetBaseContents],
+	useDraft bool,
+) (*types.Toolset, error) {
+	if !useDraft {
+		return DescribeToolset(ctx, logger, tx, projectID, toolsetSlug, toolsetCache)
+	}
+
+	toolsetRepo := tsr.New(tx)
+	orgRepo := org.New(tx)
+	pid := uuid.UUID(projectID)
+	oauthRepo := oauth.New(tx)
+	deploymentRepo := deploymentR.New(tx)
+
+	if err := inv.Check(
+		"describe toolset inputs",
+		"project id is set", pid != uuid.Nil,
+		"toolset slug is set", toolsetSlug != "",
+	); err != nil {
+		return nil, oops.E(oops.CodeInvariantViolation, err, "not enough information to describe toolset").Log(ctx, logger)
+	}
+
+	toolset, err := toolsetRepo.GetToolset(ctx, tsr.GetToolsetParams{
+		Slug:      conv.ToLower(toolsetSlug),
+		ProjectID: pid,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset").Log(ctx, logger)
+	}
+
+	activeDeploymentID, err := deploymentRepo.GetActiveDeploymentID(ctx, pid)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to get active deployment id", attr.SlogError(err))
+	}
+
+	// Get tool URNs from draft version if it exists, otherwise fall back to production
+	var toolUrns []string
+	var resourceUrns []string
+	var toolsetVersion int64
+	var draftToolUrns []string
+	var draftResourceUrns []string
+
+	// Try to get draft version first
+	draftVersion, draftErr := toolsetRepo.GetDraftToolsetVersion(ctx, toolset.ID)
+	if draftErr == nil {
+		// Use draft URNs (already []string from database)
+		draftToolUrns = draftVersion.ToolUrns
+		draftResourceUrns = draftVersion.ResourceUrns
+		toolUrns = draftToolUrns
+		resourceUrns = draftResourceUrns
+	} else {
+		// Fall back to production version
+		latestVersion, err := toolsetRepo.GetLatestToolsetVersion(ctx, toolset.ID)
+		if err == nil {
+			toolUrns = make([]string, len(latestVersion.ToolUrns))
+			for i, u := range latestVersion.ToolUrns {
+				toolUrns[i] = u.String()
+			}
+			resourceUrns = make([]string, len(latestVersion.ResourceUrns))
+			for i, u := range latestVersion.ResourceUrns {
+				resourceUrns[i] = u.String()
+			}
+			toolsetVersion = latestVersion.Version
+		}
+	}
+
+	// Don't use cache for draft queries - drafts change frequently
+	toolsetTools, err := readToolsetTools(ctx, logger, tx, pid, activeDeploymentID, toolset.ID, toolsetVersion, toolUrns, resourceUrns, nil)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset tools").Log(ctx, logger)
+	}
+
+	err = ApplyVariations(ctx, logger, tx, pid, toolsetTools.Tools)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to toolset").Log(ctx, logger)
+	}
+
+	ptrows, err := toolsetRepo.GetPromptTemplatesForToolset(ctx, tsr.GetPromptTemplatesForToolsetParams{
+		ProjectID: pid,
+		ToolsetID: toolset.ID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates for toolset").Log(ctx, logger)
+	}
+
+	promptTemplates := make([]*types.PromptTemplate, 0, len(ptrows))
+	for _, pt := range ptrows {
+		promptTemplates = append(promptTemplates, &types.PromptTemplate{
+			ID:            pt.ID.String(),
+			ToolUrn:       pt.ToolUrn,
+			HistoryID:     pt.HistoryID.String(),
+			PredecessorID: conv.FromNullableUUID(pt.PredecessorID),
+			Name:          pt.Name,
+			Prompt:        pt.Prompt,
+			Description:   conv.PtrValOrEmpty(conv.FromPGText[string](pt.Description), ""),
+			Schema:        string(pt.Arguments),
+			SchemaVersion: nil,
+			Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](pt.Engine), "none"),
+			Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](pt.Kind), "prompt"),
+			ToolsHint:     pt.ToolsHint,
+			ToolUrnsHint:  pt.ToolUrnsHint,
+			CreatedAt:     pt.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:     pt.UpdatedAt.Time.Format(time.RFC3339),
+			ProjectID:     pt.ProjectID.String(),
+			CanonicalName: pt.Name,
+			Confirm:       nil,
+			ConfirmPrompt: nil,
+			Summarizer:    nil,
+			Canonical:     nil,
+			Variation:     nil,
+		})
+	}
+
+	var externalOAuthServer *types.ExternalOAuthServer
+	var oauthProxyServer *types.OAuthProxyServer
+
+	if toolset.ExternalOauthServerID.Valid {
+		externalOauthMetadata, err := oauthRepo.GetExternalOAuthServerMetadata(ctx, oauth.GetExternalOAuthServerMetadataParams{
+			ProjectID: pid,
+			ID:        toolset.ExternalOauthServerID.UUID,
+		})
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get external oauth server metadata").Log(ctx, logger)
+		}
+		if len(externalOauthMetadata.Metadata) > 0 {
+			var metadata interface{}
+			if err := json.Unmarshal(externalOauthMetadata.Metadata, &metadata); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal external oauth metadata").Log(ctx, logger)
+			}
+			externalOAuthServer = &types.ExternalOAuthServer{
+				ID:        externalOauthMetadata.ID.String(),
+				ProjectID: externalOauthMetadata.ProjectID.String(),
+				Slug:      types.Slug(externalOauthMetadata.Slug),
+				Metadata:  metadata,
+				CreatedAt: externalOauthMetadata.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt: externalOauthMetadata.UpdatedAt.Time.Format(time.RFC3339),
+			}
+		}
+	}
+
+	if toolset.OauthProxyServerID.Valid {
+		oauthProxyServerData, err := oauthRepo.GetOAuthProxyServer(ctx, oauth.GetOAuthProxyServerParams{
+			ProjectID: pid,
+			ID:        toolset.OauthProxyServerID.UUID,
+		})
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get oauth proxy server").Log(ctx, logger)
+		}
+		if err == nil {
+			oauthProxyProviders, err := oauthRepo.ListOAuthProxyProvidersByServer(ctx, oauth.ListOAuthProxyProvidersByServerParams{
+				ProjectID:          pid,
+				OauthProxyServerID: oauthProxyServerData.ID,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to get oauth proxy providers").Log(ctx, logger)
+			}
+
+			providers := make([]*types.OAuthProxyProvider, 0, len(oauthProxyProviders))
+			for _, provider := range oauthProxyProviders {
+				var environmentSlug *types.Slug
+				if provider.Secrets != nil {
+					var secrets map[string]string
+					if err := json.Unmarshal(provider.Secrets, &secrets); err == nil {
+						if envSlug, ok := secrets["environment_slug"]; ok && envSlug != "" {
+							slug := types.Slug(envSlug)
+							environmentSlug = &slug
+						}
+					}
+				}
+				providers = append(providers, &types.OAuthProxyProvider{
+					ID:                                provider.ID.String(),
+					Slug:                              types.Slug(provider.Slug),
+					ProviderType:                      provider.ProviderType,
+					AuthorizationEndpoint:             provider.AuthorizationEndpoint.String,
+					TokenEndpoint:                     provider.TokenEndpoint.String,
+					ScopesSupported:                   provider.ScopesSupported,
+					GrantTypesSupported:               provider.GrantTypesSupported,
+					TokenEndpointAuthMethodsSupported: provider.TokenEndpointAuthMethodsSupported,
+					EnvironmentSlug:                   environmentSlug,
+					CreatedAt:                         provider.CreatedAt.Time.Format(time.RFC3339),
+					UpdatedAt:                         provider.UpdatedAt.Time.Format(time.RFC3339),
+				})
+			}
+			oauthProxyServer = &types.OAuthProxyServer{
+				ID:                  oauthProxyServerData.ID.String(),
+				ProjectID:           oauthProxyServerData.ProjectID.String(),
+				Slug:                types.Slug(oauthProxyServerData.Slug),
+				OauthProxyProviders: providers,
+				CreatedAt:           oauthProxyServerData.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:           oauthProxyServerData.UpdatedAt.Time.Format(time.RFC3339),
+			}
+		}
+	}
+
+	orgMetadata, err := orgRepo.GetOrganizationMetadata(ctx, toolset.OrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").Log(ctx, logger)
+	}
+
+	oauth2AuthCodeSecurityCount := 0
+	for _, securityVariable := range toolsetTools.SecurityVars {
+		isAuthorizationCode := securityVariable.Type != nil && *securityVariable.Type == "oauth2" && securityVariable.OauthTypes != nil && slices.Contains(securityVariable.OauthTypes, "authorization_code")
+		isOpenIdConnect := securityVariable.Type != nil && *securityVariable.Type == "openIdConnect"
+		if isAuthorizationCode || isOpenIdConnect {
+			oauth2AuthCodeSecurityCount++
+		}
+	}
+
+	functionEnvVars := dedupeFunctionEnvVars(toolsetTools.FunctionEnvVars)
+	for _, functionEnvironmentVariable := range functionEnvVars {
+		if functionEnvironmentVariable != nil && functionEnvironmentVariable.AuthInputType != nil && *functionEnvironmentVariable.AuthInputType == "oauth2" {
+			oauth2AuthCodeSecurityCount++
+		}
+	}
+
+	return &types.Toolset{
+		ID:                           toolset.ID.String(),
+		OrganizationID:               toolset.OrganizationID,
+		AccountType:                  orgMetadata.GramAccountType,
+		ProjectID:                    toolset.ProjectID.String(),
+		Name:                         toolset.Name,
+		Slug:                         types.Slug(toolset.Slug),
+		DefaultEnvironmentSlug:       conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
+		SecurityVariables:            toolsetTools.SecurityVars,
+		ServerVariables:              toolsetTools.ServerVars,
+		FunctionEnvironmentVariables: functionEnvVars,
+		Description:                  conv.FromPGText[string](toolset.Description),
+		Tools:                        toolsetTools.Tools,
+		ToolsetVersion:               toolsetVersion,
+		Resources:                    toolsetTools.Resources,
+		PromptTemplates:              promptTemplates,
+		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
+		McpEnabled:                   &toolset.McpEnabled,
+		ToolSelectionMode:            toolset.ToolSelectionMode,
+		CustomDomainID:               conv.FromNullableUUID(toolset.CustomDomainID),
+		McpIsPublic:                  &toolset.McpIsPublic,
+		CreatedAt:                    toolset.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                    toolset.UpdatedAt.Time.Format(time.RFC3339),
+		ToolUrns:                     toolUrns,
+		ResourceUrns:                 resourceUrns,
+		ExternalOauthServer:          externalOAuthServer,
+		OauthProxyServer:             oauthProxyServer,
+		OauthEnablementMetadata: &types.OAuthEnablementMetadata{
+			Oauth2SecurityCount: oauth2AuthCodeSecurityCount,
+		},
+		// Draft/staging workflow fields
+		IterationMode:     &toolset.IterationMode,
+		HasDraftChanges:   &toolset.HasDraftChanges,
+		DraftToolUrns:     draftToolUrns,
+		DraftResourceUrns: draftResourceUrns,
+	}, nil
 }
 
 func readToolsetTools(

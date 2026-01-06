@@ -6,11 +6,11 @@
 import { AllowedOrigin } from "@gram/client/models/components";
 
 let value: AllowedOrigin = {
-  createdAt: new Date("2024-05-20T07:37:19.273Z"),
+  createdAt: new Date("2025-05-20T07:37:19.273Z"),
   id: "<id>",
   origin: "<value>",
   projectId: "<id>",
-  updatedAt: new Date("2025-11-13T23:13:20.459Z"),
+  updatedAt: new Date("2026-11-13T23:13:20.459Z"),
 };
 ```
 

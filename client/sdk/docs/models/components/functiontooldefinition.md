@@ -10,7 +10,7 @@ import { FunctionToolDefinition } from "@gram/client/models/components";
 let value: FunctionToolDefinition = {
   assetId: "<id>",
   canonicalName: "<value>",
-  createdAt: new Date("2023-08-28T10:42:53.622Z"),
+  createdAt: new Date("2024-08-27T10:42:53.622Z"),
   deploymentId: "<id>",
   description: "scruple whether yahoo",
   functionId: "<id>",
@@ -20,7 +20,7 @@ let value: FunctionToolDefinition = {
   runtime: "<value>",
   schema: "<value>",
   toolUrn: "<value>",
-  updatedAt: new Date("2024-04-07T23:29:23.396Z"),
+  updatedAt: new Date("2025-04-07T23:29:23.396Z"),
 };
 ```
 

@@ -8,11 +8,11 @@ import { Asset } from "@gram/client/models/components";
 let value: Asset = {
   contentLength: 95314,
   contentType: "<value>",
-  createdAt: new Date("2025-11-12T07:39:23.206Z"),
+  createdAt: new Date("2026-11-12T07:39:23.206Z"),
   id: "<id>",
   kind: "image",
   sha256: "<value>",
-  updatedAt: new Date("2023-04-08T11:11:06.209Z"),
+  updatedAt: new Date("2024-04-07T11:11:06.209Z"),
 };
 ```
 

@@ -8,7 +8,7 @@ import { GetPromptTemplateResult } from "@gram/client/models/components";
 let value: GetPromptTemplateResult = {
   template: {
     canonicalName: "<value>",
-    createdAt: new Date("2025-02-04T03:43:35.518Z"),
+    createdAt: new Date("2026-02-04T03:43:35.518Z"),
     description: "ha swathe dental an evil",
     engine: "mustache",
     historyId: "<id>",
@@ -24,7 +24,7 @@ let value: GetPromptTemplateResult = {
       "<value 2>",
       "<value 3>",
     ],
-    updatedAt: new Date("2025-12-12T05:35:57.442Z"),
+    updatedAt: new Date("2026-12-12T05:35:57.442Z"),
   },
 };
 ```

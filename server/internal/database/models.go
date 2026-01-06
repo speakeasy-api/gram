@@ -162,6 +162,35 @@ type DeploymentsPackage struct {
 	VersionID    uuid.UUID
 }
 
+type DraftToolVariation struct {
+	ID             uuid.UUID
+	DraftVersionID uuid.UUID
+	SrcToolUrn     string
+	SrcToolName    string
+	Confirm        pgtype.Text
+	ConfirmPrompt  pgtype.Text
+	Name           pgtype.Text
+	Summary        pgtype.Text
+	Description    pgtype.Text
+	Tags           []string
+	Summarizer     pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+type DraftToolsetVersion struct {
+	ID           uuid.UUID
+	ToolsetID    uuid.UUID
+	ToolUrns     []string
+	ResourceUrns []string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
+}
+
 type Environment struct {
 	ID             uuid.UUID
 	OrganizationID string
@@ -615,6 +644,8 @@ type Toolset struct {
 	CustomDomainID         uuid.NullUUID
 	ExternalOauthServerID  uuid.NullUUID
 	OauthProxyServerID     uuid.NullUUID
+	IterationMode          bool
+	HasDraftChanges        bool
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz

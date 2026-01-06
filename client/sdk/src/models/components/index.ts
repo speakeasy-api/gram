@@ -129,6 +129,7 @@ export * from "./searchtoolcallsresult.js";
 export * from "./securityvariable.js";
 export * from "./servervariable.js";
 export * from "./serviceinfo.js";
+export * from "./setiterationmoderequestbody.js";
 export * from "./setmcpmetadatarequestbody.js";
 export * from "./setproductfeaturerequestbody.js";
 export * from "./setprojectlogoresult.js";

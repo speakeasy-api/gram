@@ -5,30 +5,28 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
+  QueryFunctionContext,
+  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramCore } from "../core.js";
+import { projectsListAllowedOrigins } from "../funcs/projectsListAllowedOrigins.js";
+import { combineSignals } from "../lib/primitives.js";
+import { RequestOptions } from "../lib/sdks.js";
+import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
+import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
-import {
-  buildListAllowedOriginsQuery,
-  ListAllowedOriginsQueryData,
-  prefetchListAllowedOrigins,
-  queryKeyListAllowedOrigins,
-} from "./listAllowedOrigins.core.js";
-export {
-  buildListAllowedOriginsQuery,
-  type ListAllowedOriginsQueryData,
-  prefetchListAllowedOrigins,
-  queryKeyListAllowedOrigins,
-};
+
+export type ListAllowedOriginsQueryData = components.ListAllowedOriginsResult;
 
 /**
  * listAllowedOrigins projects
@@ -73,6 +71,21 @@ export function useListAllowedOriginsSuspense(
       options,
     ),
     ...options,
+  });
+}
+
+export function prefetchListAllowedOrigins(
+  queryClient: QueryClient,
+  client$: GramCore,
+  request?: operations.ListAllowedOriginsRequest | undefined,
+  security?: operations.ListAllowedOriginsSecurity | undefined,
+): Promise<void> {
+  return queryClient.prefetchQuery({
+    ...buildListAllowedOriginsQuery(
+      client$,
+      request,
+      security,
+    ),
   });
 }
 
@@ -122,4 +135,50 @@ export function invalidateAllListAllowedOrigins(
     ...filters,
     queryKey: ["@gram/client", "projects", "listAllowedOrigins"],
   });
+}
+
+export function buildListAllowedOriginsQuery(
+  client$: GramCore,
+  request?: operations.ListAllowedOriginsRequest | undefined,
+  security?: operations.ListAllowedOriginsSecurity | undefined,
+  options?: RequestOptions,
+): {
+  queryKey: QueryKey;
+  queryFn: (
+    context: QueryFunctionContext,
+  ) => Promise<ListAllowedOriginsQueryData>;
+} {
+  return {
+    queryKey: queryKeyListAllowedOrigins({
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function listAllowedOriginsQueryFn(
+      ctx,
+    ): Promise<ListAllowedOriginsQueryData> {
+      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
+      const mergedOptions = {
+        ...options,
+        fetchOptions: { ...options?.fetchOptions, signal: sig },
+      };
+
+      return unwrapAsync(projectsListAllowedOrigins(
+        client$,
+        request,
+        security,
+        mergedOptions,
+      ));
+    },
+  };
+}
+
+export function queryKeyListAllowedOrigins(
+  parameters: {
+    gramKey?: string | undefined;
+    gramSession?: string | undefined;
+    gramProject?: string | undefined;
+  },
+): QueryKey {
+  return ["@gram/client", "projects", "listAllowedOrigins", parameters];
 }

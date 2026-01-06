@@ -8,9 +8,13 @@ import { toolsetsCheckMCPSlugAvailability } from "../funcs/toolsetsCheckMCPSlugA
 import { toolsetsCloneBySlug } from "../funcs/toolsetsCloneBySlug.js";
 import { toolsetsCreate } from "../funcs/toolsetsCreate.js";
 import { toolsetsDeleteBySlug } from "../funcs/toolsetsDeleteBySlug.js";
+import { toolsetsDiscardDraft } from "../funcs/toolsetsDiscardDraft.js";
 import { toolsetsGetBySlug } from "../funcs/toolsetsGetBySlug.js";
+import { toolsetsGetDraft } from "../funcs/toolsetsGetDraft.js";
 import { toolsetsList } from "../funcs/toolsetsList.js";
+import { toolsetsPromoteDraft } from "../funcs/toolsetsPromoteDraft.js";
 import { toolsetsRemoveOAuthServer } from "../funcs/toolsetsRemoveOAuthServer.js";
+import { toolsetsSetIterationMode } from "../funcs/toolsetsSetIterationMode.js";
 import { toolsetsUpdateBySlug } from "../funcs/toolsetsUpdateBySlug.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -133,6 +137,25 @@ export class Toolsets extends ClientSDK {
   }
 
   /**
+   * discardDraft toolsets
+   *
+   * @remarks
+   * Discard any pending draft changes for a toolset.
+   */
+  async discardDraft(
+    request: operations.DiscardDraftRequest,
+    security?: operations.DiscardDraftSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Toolset> {
+    return unwrapAsync(toolsetsDiscardDraft(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getToolset toolsets
    *
    * @remarks
@@ -144,6 +167,25 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Toolset> {
     return unwrapAsync(toolsetsGetBySlug(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getDraftToolset toolsets
+   *
+   * @remarks
+   * Get the draft version of a toolset for preview/staging. Returns the toolset with draft tool URNs instead of production.
+   */
+  async getDraft(
+    request: operations.GetDraftToolsetRequest,
+    security?: operations.GetDraftToolsetSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Toolset> {
+    return unwrapAsync(toolsetsGetDraft(
       this,
       request,
       security,
@@ -171,6 +213,25 @@ export class Toolsets extends ClientSDK {
   }
 
   /**
+   * promoteDraft toolsets
+   *
+   * @remarks
+   * Promote the draft toolset changes to production. This copies draft tool URNs and variations to the live version.
+   */
+  async promoteDraft(
+    request: operations.PromoteDraftRequest,
+    security?: operations.PromoteDraftSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Toolset> {
+    return unwrapAsync(toolsetsPromoteDraft(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * removeOAuthServer toolsets
    *
    * @remarks
@@ -182,6 +243,25 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Toolset> {
     return unwrapAsync(toolsetsRemoveOAuthServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setIterationMode toolsets
+   *
+   * @remarks
+   * Enable or disable iteration mode for a toolset. When enabled, changes to tools are staged as drafts until promoted.
+   */
+  async setIterationMode(
+    request: operations.SetIterationModeRequest,
+    security?: operations.SetIterationModeSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Toolset> {
+    return unwrapAsync(toolsetsSetIterationMode(
       this,
       request,
       security,

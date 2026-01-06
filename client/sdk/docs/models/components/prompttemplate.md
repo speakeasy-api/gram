@@ -9,7 +9,7 @@ import { PromptTemplate } from "@gram/client/models/components";
 
 let value: PromptTemplate = {
   canonicalName: "<value>",
-  createdAt: new Date("2024-03-05T06:53:41.866Z"),
+  createdAt: new Date("2025-03-05T06:53:41.866Z"),
   description: "as impartial into even lavish",
   engine: "mustache",
   historyId: "<id>",
@@ -21,7 +21,7 @@ let value: PromptTemplate = {
   schema: "<value>",
   toolUrn: "<value>",
   toolsHint: [],
-  updatedAt: new Date("2025-12-07T09:02:53.100Z"),
+  updatedAt: new Date("2026-12-07T09:02:53.100Z"),
 };
 ```
 

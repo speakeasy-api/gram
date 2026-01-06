@@ -6,12 +6,12 @@
 import { ExternalOAuthServer } from "@gram/client/models/components";
 
 let value: ExternalOAuthServer = {
-  createdAt: new Date("2024-03-01T16:09:27.293Z"),
+  createdAt: new Date("2025-03-01T16:09:27.293Z"),
   id: "<id>",
   metadata: "<value>",
   projectId: "<id>",
   slug: "<value>",
-  updatedAt: new Date("2023-02-12T23:43:49.362Z"),
+  updatedAt: new Date("2024-02-12T23:43:49.362Z"),
 };
 ```
 

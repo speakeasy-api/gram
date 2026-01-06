@@ -8,7 +8,7 @@ A function resource
 import { FunctionResourceDefinition } from "@gram/client/models/components";
 
 let value: FunctionResourceDefinition = {
-  createdAt: new Date("2024-05-21T09:10:14.826Z"),
+  createdAt: new Date("2025-05-21T09:10:14.826Z"),
   deploymentId: "<id>",
   description: "backbone wherever emphasize or gee rejigger amid valiantly",
   functionId: "<id>",
@@ -17,7 +17,7 @@ let value: FunctionResourceDefinition = {
   projectId: "<id>",
   resourceUrn: "<value>",
   runtime: "<value>",
-  updatedAt: new Date("2024-10-02T17:48:33.775Z"),
+  updatedAt: new Date("2025-10-02T17:48:33.775Z"),
   uri: "https://sleepy-slipper.net",
 };
 ```

@@ -624,6 +624,10 @@ CREATE TABLE IF NOT EXISTS toolsets (
   external_oauth_server_id uuid,
   oauth_proxy_server_id uuid,
 
+  -- Draft/staging workflow
+  iteration_mode BOOLEAN NOT NULL DEFAULT FALSE,
+  has_draft_changes BOOLEAN NOT NULL DEFAULT FALSE,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -669,6 +673,27 @@ CREATE TABLE IF NOT EXISTS toolset_versions (
 );
 
 CREATE INDEX IF NOT EXISTS toolset_versions_toolset_id_version_idx ON toolset_versions (toolset_id, version DESC);
+
+-- Draft toolset versions for iteration mode (staging workflow)
+-- Only one active draft per toolset; stores tool/resource URNs pending promotion
+CREATE TABLE IF NOT EXISTS draft_toolset_versions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  toolset_id uuid NOT NULL,
+  tool_urns TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  resource_urns TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT draft_toolset_versions_pkey PRIMARY KEY (id),
+  CONSTRAINT draft_toolset_versions_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS draft_toolset_versions_toolset_id_key
+ON draft_toolset_versions (toolset_id)
+WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS toolset_environments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -854,6 +879,36 @@ CREATE TABLE IF NOT EXISTS tool_variations (
 
 CREATE UNIQUE INDEX IF NOT EXISTS tool_variations_scoped_src_tool_urn_key
 ON tool_variations (group_id, src_tool_urn)
+WHERE deleted IS FALSE;
+
+-- Draft tool variations for iteration mode (staging workflow)
+-- Stores tool customizations pending promotion, linked to draft_toolset_versions
+CREATE TABLE IF NOT EXISTS draft_tool_variations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  draft_version_id uuid NOT NULL,
+
+  src_tool_urn TEXT NOT NULL,
+  src_tool_name TEXT NOT NULL,
+
+  confirm TEXT,
+  confirm_prompt TEXT,
+  name TEXT,
+  summary TEXT,
+  description TEXT,
+  tags TEXT[],
+  summarizer TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT draft_tool_variations_pkey PRIMARY KEY (id),
+  CONSTRAINT draft_tool_variations_draft_version_id_fkey FOREIGN KEY (draft_version_id) REFERENCES draft_toolset_versions (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS draft_tool_variations_version_urn_key
+ON draft_tool_variations (draft_version_id, src_tool_urn)
 WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS prompt_templates (

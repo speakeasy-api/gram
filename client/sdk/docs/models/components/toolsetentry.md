@@ -6,7 +6,7 @@
 import { ToolsetEntry } from "@gram/client/models/components";
 
 let value: ToolsetEntry = {
-  createdAt: new Date("2024-06-19T11:54:18.705Z"),
+  createdAt: new Date("2025-06-19T11:54:18.705Z"),
   id: "<id>",
   name: "<value>",
   organizationId: "<id>",
@@ -25,7 +25,7 @@ let value: ToolsetEntry = {
       type: "http",
     },
   ],
-  updatedAt: new Date("2025-10-29T00:12:43.112Z"),
+  updatedAt: new Date("2026-10-29T00:12:43.112Z"),
 };
 ```
 
@@ -38,7 +38,9 @@ let value: ToolsetEntry = {
 | `defaultEnvironmentSlug`                                                                           | *string*                                                                                           | :heavy_minus_sign:                                                                                 | A short url-friendly label that uniquely identifies a resource.                                    |
 | `description`                                                                                      | *string*                                                                                           | :heavy_minus_sign:                                                                                 | Description of the toolset                                                                         |
 | `functionEnvironmentVariables`                                                                     | [components.FunctionEnvironmentVariable](../../models/components/functionenvironmentvariable.md)[] | :heavy_minus_sign:                                                                                 | The function environment variables that are relevant to the toolset                                |
+| `hasDraftChanges`                                                                                  | *boolean*                                                                                          | :heavy_minus_sign:                                                                                 | Whether there are pending draft changes                                                            |
 | `id`                                                                                               | *string*                                                                                           | :heavy_check_mark:                                                                                 | The ID of the toolset                                                                              |
+| `iterationMode`                                                                                    | *boolean*                                                                                          | :heavy_minus_sign:                                                                                 | Whether iteration mode is enabled (staged changes)                                                 |
 | `mcpEnabled`                                                                                       | *boolean*                                                                                          | :heavy_minus_sign:                                                                                 | Whether the toolset is enabled for MCP                                                             |
 | `mcpIsPublic`                                                                                      | *boolean*                                                                                          | :heavy_minus_sign:                                                                                 | Whether the toolset is public in MCP                                                               |
 | `mcpSlug`                                                                                          | *string*                                                                                           | :heavy_minus_sign:                                                                                 | A short url-friendly label that uniquely identifies a resource.                                    |

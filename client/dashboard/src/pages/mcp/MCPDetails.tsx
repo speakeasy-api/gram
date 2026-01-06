@@ -476,6 +476,19 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         description="The URL you or your users will use to access this MCP server."
       >
         <CodeBlock className="mb-2">{mcpUrl ?? ""}</CodeBlock>
+        {toolset.iterationMode && (
+          <Block label="Staging URL" className="p-0 mt-4">
+            <BlockInner>
+              <Stack gap={2}>
+                <Type muted small>
+                  Test draft changes before promoting to production. This URL
+                  serves your staged tool configuration.
+                </Type>
+                <CodeBlock>{mcpUrl ? `${mcpUrl}/staging` : ""}</CodeBlock>
+              </Stack>
+            </BlockInner>
+          </Block>
+        )}
         <Block label="Custom Slug" error={mcpSlugError} className="p-0">
           <BlockInner>
             <Stack direction="horizontal" align="center">

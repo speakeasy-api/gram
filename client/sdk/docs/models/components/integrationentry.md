@@ -10,7 +10,7 @@ let value: IntegrationEntry = {
   packageName: "<value>",
   toolNames: [],
   version: "<value>",
-  versionCreatedAt: new Date("2025-11-21T22:12:24.981Z"),
+  versionCreatedAt: new Date("2026-11-21T22:12:24.981Z"),
 };
 ```
 

@@ -21,7 +21,7 @@ let value: ListToolLogResponse = {
       toolType: "http",
       toolUrn: "<value>",
       traceId: "<id>",
-      ts: new Date("2023-09-26T02:29:26.013Z"),
+      ts: new Date("2024-09-25T02:29:26.013Z"),
       userAgent: "<value>",
     },
   ],

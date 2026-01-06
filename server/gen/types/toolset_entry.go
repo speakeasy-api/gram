@@ -49,6 +49,10 @@ type ToolsetEntry struct {
 	ToolSelectionMode string
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string
+	// Whether iteration mode is enabled (staged changes)
+	IterationMode *bool
+	// Whether there are pending draft changes
+	HasDraftChanges *bool
 	// When the toolset was created.
 	CreatedAt string
 	// When the toolset was last updated.

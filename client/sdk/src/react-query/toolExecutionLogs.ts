@@ -5,30 +5,28 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
+  QueryFunctionContext,
+  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramCore } from "../core.js";
+import { logsListToolExecutionLogs } from "../funcs/logsListToolExecutionLogs.js";
+import { combineSignals } from "../lib/primitives.js";
+import { RequestOptions } from "../lib/sdks.js";
+import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
+import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
-import {
-  buildToolExecutionLogsQuery,
-  prefetchToolExecutionLogs,
-  queryKeyToolExecutionLogs,
-  ToolExecutionLogsQueryData,
-} from "./toolExecutionLogs.core.js";
-export {
-  buildToolExecutionLogsQuery,
-  prefetchToolExecutionLogs,
-  queryKeyToolExecutionLogs,
-  type ToolExecutionLogsQueryData,
-};
+
+export type ToolExecutionLogsQueryData = components.ListToolExecutionLogsResult;
 
 /**
  * listToolExecutionLogs logs
@@ -73,6 +71,21 @@ export function useToolExecutionLogsSuspense(
       options,
     ),
     ...options,
+  });
+}
+
+export function prefetchToolExecutionLogs(
+  queryClient: QueryClient,
+  client$: GramCore,
+  request?: operations.ListToolExecutionLogsRequest | undefined,
+  security?: operations.ListToolExecutionLogsSecurity | undefined,
+): Promise<void> {
+  return queryClient.prefetchQuery({
+    ...buildToolExecutionLogsQuery(
+      client$,
+      request,
+      security,
+    ),
   });
 }
 
@@ -144,4 +157,72 @@ export function invalidateAllToolExecutionLogs(
     ...filters,
     queryKey: ["@gram/client", "logs", "listToolExecutionLogs"],
   });
+}
+
+export function buildToolExecutionLogsQuery(
+  client$: GramCore,
+  request?: operations.ListToolExecutionLogsRequest | undefined,
+  security?: operations.ListToolExecutionLogsSecurity | undefined,
+  options?: RequestOptions,
+): {
+  queryKey: QueryKey;
+  queryFn: (
+    context: QueryFunctionContext,
+  ) => Promise<ToolExecutionLogsQueryData>;
+} {
+  return {
+    queryKey: queryKeyToolExecutionLogs({
+      tsStart: request?.tsStart,
+      tsEnd: request?.tsEnd,
+      deploymentId: request?.deploymentId,
+      functionId: request?.functionId,
+      instance: request?.instance,
+      level: request?.level,
+      source: request?.source,
+      cursor: request?.cursor,
+      perPage: request?.perPage,
+      direction: request?.direction,
+      sort: request?.sort,
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function toolExecutionLogsQueryFn(
+      ctx,
+    ): Promise<ToolExecutionLogsQueryData> {
+      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
+      const mergedOptions = {
+        ...options,
+        fetchOptions: { ...options?.fetchOptions, signal: sig },
+      };
+
+      return unwrapAsync(logsListToolExecutionLogs(
+        client$,
+        request,
+        security,
+        mergedOptions,
+      ));
+    },
+  };
+}
+
+export function queryKeyToolExecutionLogs(
+  parameters: {
+    tsStart?: Date | undefined;
+    tsEnd?: Date | undefined;
+    deploymentId?: string | undefined;
+    functionId?: string | undefined;
+    instance?: string | undefined;
+    level?: operations.Level | undefined;
+    source?: operations.Source | undefined;
+    cursor?: string | undefined;
+    perPage?: number | undefined;
+    direction?: operations.QueryParamDirection | undefined;
+    sort?: operations.QueryParamSort | undefined;
+    gramKey?: string | undefined;
+    gramSession?: string | undefined;
+    gramProject?: string | undefined;
+  },
+): QueryKey {
+  return ["@gram/client", "logs", "listToolExecutionLogs", parameters];
 }

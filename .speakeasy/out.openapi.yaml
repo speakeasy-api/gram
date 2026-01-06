@@ -9206,6 +9206,115 @@ paths:
       x-speakeasy-name-override: deleteBySlug
       x-speakeasy-react-hook:
         name: DeleteToolset
+  /rpc/toolsets.discardDraft:
+    post:
+      description: Discard any pending draft changes for a toolset.
+      operationId: discardDraft
+      parameters:
+        - allowEmptyValue: true
+          description: The slug of the toolset
+          in: query
+          name: slug
+          required: true
+          schema:
+            description: A short url-friendly label that uniquely identifies a resource.
+            maxLength: 40
+            pattern: ^[a-z0-9_-]{1,128}$
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Toolset'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: discardDraft toolsets
+      tags:
+        - toolsets
+      x-speakeasy-name-override: discardDraft
+      x-speakeasy-react-hook:
+        name: DiscardDraft
   /rpc/toolsets.get:
     get:
       description: Get detailed information about a toolset including full HTTP tool definitions
@@ -9315,6 +9424,115 @@ paths:
       x-speakeasy-name-override: getBySlug
       x-speakeasy-react-hook:
         name: Toolset
+  /rpc/toolsets.getDraft:
+    get:
+      description: Get the draft version of a toolset for preview/staging. Returns the toolset with draft tool URNs instead of production.
+      operationId: getDraftToolset
+      parameters:
+        - allowEmptyValue: true
+          description: The slug of the toolset
+          in: query
+          name: slug
+          required: true
+          schema:
+            description: A short url-friendly label that uniquely identifies a resource.
+            maxLength: 40
+            pattern: ^[a-z0-9_-]{1,128}$
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Toolset'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getDraftToolset toolsets
+      tags:
+        - toolsets
+      x-speakeasy-name-override: getDraft
+      x-speakeasy-react-hook:
+        name: DraftToolset
   /rpc/toolsets.list:
     get:
       description: List all toolsets for a project
@@ -9414,6 +9632,115 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: ListToolsets
+  /rpc/toolsets.promoteDraft:
+    post:
+      description: Promote the draft toolset changes to production. This copies draft tool URNs and variations to the live version.
+      operationId: promoteDraft
+      parameters:
+        - allowEmptyValue: true
+          description: The slug of the toolset
+          in: query
+          name: slug
+          required: true
+          schema:
+            description: A short url-friendly label that uniquely identifies a resource.
+            maxLength: 40
+            pattern: ^[a-z0-9_-]{1,128}$
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Toolset'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: promoteDraft toolsets
+      tags:
+        - toolsets
+      x-speakeasy-name-override: promoteDraft
+      x-speakeasy-react-hook:
+        name: PromoteDraft
   /rpc/toolsets.removeOAuthServer:
     post:
       description: Remove OAuth server association from a toolset
@@ -9523,6 +9850,121 @@ paths:
       x-speakeasy-name-override: removeOAuthServer
       x-speakeasy-react-hook:
         name: RemoveOAuthServer
+  /rpc/toolsets.setIterationMode:
+    post:
+      description: Enable or disable iteration mode for a toolset. When enabled, changes to tools are staged as drafts until promoted.
+      operationId: setIterationMode
+      parameters:
+        - allowEmptyValue: true
+          description: The slug of the toolset
+          in: query
+          name: slug
+          required: true
+          schema:
+            description: A short url-friendly label that uniquely identifies a resource.
+            maxLength: 40
+            pattern: ^[a-z0-9_-]{1,128}$
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetIterationModeRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Toolset'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: setIterationMode toolsets
+      tags:
+        - toolsets
+      x-speakeasy-name-override: setIterationMode
+      x-speakeasy-react-hook:
+        name: SetIterationMode
   /rpc/toolsets.update:
     post:
       description: Update a toolset's properties including name, description, and HTTP tools
@@ -14044,6 +14486,14 @@ components:
       description: Service information
       required:
         - name
+    SetIterationModeRequestBody:
+      type: object
+      properties:
+        iteration_mode:
+          type: boolean
+          description: Whether to enable iteration mode
+      required:
+        - iteration_mode
     SetMcpMetadataRequestBody:
       type: object
       properties:
@@ -14451,6 +14901,16 @@ components:
         description:
           type: string
           description: Description of the toolset
+        draft_resource_urns:
+          type: array
+          items:
+            type: string
+          description: Resource URNs in the draft (only populated when viewing draft)
+        draft_tool_urns:
+          type: array
+          items:
+            type: string
+          description: Tool URNs in the draft (only populated when viewing draft)
         external_oauth_server:
           $ref: '#/components/schemas/ExternalOAuthServer'
         function_environment_variables:
@@ -14458,9 +14918,15 @@ components:
           items:
             $ref: '#/components/schemas/FunctionEnvironmentVariable'
           description: The function environment variables that are relevant to the toolset
+        has_draft_changes:
+          type: boolean
+          description: Whether there are pending draft changes
         id:
           type: string
           description: The ID of the toolset
+        iteration_mode:
+          type: boolean
+          description: Whether iteration mode is enabled (staged changes)
         mcp_enabled:
           type: boolean
           description: Whether the toolset is enabled for MCP
@@ -14576,9 +15042,15 @@ components:
           items:
             $ref: '#/components/schemas/FunctionEnvironmentVariable'
           description: The function environment variables that are relevant to the toolset
+        has_draft_changes:
+          type: boolean
+          description: Whether there are pending draft changes
         id:
           type: string
           description: The ID of the toolset
+        iteration_mode:
+          type: boolean
+          description: Whether iteration mode is enabled (staged changes)
         mcp_enabled:
           type: boolean
           description: Whether the toolset is enabled for MCP

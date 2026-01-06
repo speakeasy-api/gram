@@ -15,7 +15,7 @@ let value: Integration = {
     "<value 2>",
   ],
   version: "<value>",
-  versionCreatedAt: new Date("2025-10-27T14:06:45.597Z"),
+  versionCreatedAt: new Date("2026-10-27T14:06:45.597Z"),
 };
 ```
 

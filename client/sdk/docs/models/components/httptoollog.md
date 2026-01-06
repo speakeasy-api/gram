@@ -20,7 +20,7 @@ let value: HTTPToolLog = {
   toolType: "http",
   toolUrn: "<value>",
   traceId: "<id>",
-  ts: new Date("2023-08-13T03:36:10.953Z"),
+  ts: new Date("2024-08-12T03:36:10.953Z"),
   userAgent: "<value>",
 };
 ```

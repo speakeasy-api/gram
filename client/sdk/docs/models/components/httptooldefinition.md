@@ -10,7 +10,7 @@ import { HTTPToolDefinition } from "@gram/client/models/components";
 let value: HTTPToolDefinition = {
   assetId: "<id>",
   canonicalName: "<value>",
-  createdAt: new Date("2025-03-04T09:26:20.697Z"),
+  createdAt: new Date("2026-03-04T09:26:20.697Z"),
   deploymentId: "<id>",
   description:
     "winding oh burly lest notwithstanding viciously curiously swathe a atop",
@@ -23,7 +23,7 @@ let value: HTTPToolDefinition = {
   summary: "<value>",
   tags: [],
   toolUrn: "<value>",
-  updatedAt: new Date("2025-05-22T21:11:55.475Z"),
+  updatedAt: new Date("2026-05-22T21:11:55.475Z"),
 };
 ```
 

@@ -8,14 +8,14 @@ Model representing an environment
 import { Environment } from "@gram/client/models/components";
 
 let value: Environment = {
-  createdAt: new Date("2024-12-03T14:12:16.809Z"),
+  createdAt: new Date("2025-12-03T14:12:16.809Z"),
   entries: [],
   id: "<id>",
   name: "<value>",
   organizationId: "<id>",
   projectId: "<id>",
   slug: "<value>",
-  updatedAt: new Date("2023-09-16T02:48:31.195Z"),
+  updatedAt: new Date("2024-09-15T02:48:31.195Z"),
 };
 ```
 
