@@ -646,5 +646,9 @@ export type ElementsContextType = {
   setIsOpen: (isOpen: boolean) => void
   plugins: Plugin[]
 
+  /**
+   * Indicates if the process of discovering MCP tools is still ongoing.
+   * TODO: failure state
+   */
   isLoadingMCPTools: boolean
 }
