@@ -8,8 +8,24 @@ type ServerHandler<T> = (
   options?: T
 ) => Promise<void>
 
-// expose a set of http handlers that is agnostic of the underlying node.js framework
-export const createElementsServerHandlers = () => {
+interface ServerHandlers {
+  /**
+   * Handler to create a new chat session token.
+   *
+   * @example
+   * ```typescript
+   * import { createElementsServerHandlers } from '@gram-ai/elements/server'
+   * import express from 'express'
+   * const app = express()
+   * const handlers = createElementsServerHandlers()
+   * app.post('/chat/session', handlers.session)
+   * app.listen(3000)
+   * ```
+   */
+  session: ServerHandler<SessionHandlerOptions>
+}
+
+export const createElementsServerHandlers = (): ServerHandlers => {
   return {
     session: sessionHandler,
   }

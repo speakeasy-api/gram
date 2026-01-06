@@ -16,6 +16,10 @@ import {
 } from 'react'
 import type { Plugin } from './plugins'
 
+/**
+ * Function to retrieve the session token from the backend endpoint.
+ * Override this if you have mounted your session endpoint at a different path.
+ */
 export type GetSessionFn = () => Promise<string>
 
 export interface ElementsProviderProps {
@@ -38,6 +42,8 @@ export interface ElementsProviderProps {
    *     return fetch('/chat/session').then(res => res.json()).then(data => data.client_token)
    *   },
    * }
+   *
+   * @default Use this default if you are using the Elements server handlers, and have mounted the session handler at /chat/session.
    */
   getSession?: GetSessionFn
 }
