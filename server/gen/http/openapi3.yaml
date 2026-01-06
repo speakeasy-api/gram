@@ -11728,6 +11728,9 @@ components:
                 tool_urn:
                     type: string
                     description: The URN of this tool (tools:externalmcp:<slug>:proxy)
+                transport_type:
+                    type: string
+                    description: The transport type used to connect to the MCP server ('streamable-http' or 'sse')
                 updated_at:
                     type: string
                     description: When the tool definition was last updated.
@@ -11742,6 +11745,7 @@ components:
                 - name
                 - slug
                 - remote_url
+                - transport_type
                 - requires_oauth
                 - oauth_version
                 - created_at

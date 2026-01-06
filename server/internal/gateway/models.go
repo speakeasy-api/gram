@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -138,6 +139,8 @@ type ExternalMCPToolCallPlan struct {
 	Slug string `json:"slug" yaml:"slug"`
 	// RequiresOAuth indicates if the external MCP requires OAuth authentication.
 	RequiresOAuth bool `json:"requires_oauth" yaml:"requires_oauth"`
+	// TransportType is the transport type to use when communicating with the external MCP.
+	TransportType externalmcp.TransportType `json:"transport_type" yaml:"transport_type"`
 }
 
 type ResourceFunctionCallPlan struct {

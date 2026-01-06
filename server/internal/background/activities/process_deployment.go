@@ -440,7 +440,7 @@ func (p *ProcessDeployment) doExternalMCPs(
 			// Attempt to connect to detect OAuth requirements
 			var requiresOAuth bool
 			var oauthDiscovery *externalmcp.OAuthDiscoveryResult
-			mcpClient, err := externalmcp.NewClient(ctx, logger, serverDetails.RemoteURL, nil)
+			mcpClient, err := externalmcp.NewClient(ctx, logger, serverDetails.RemoteURL, serverDetails.TransportType, nil)
 			if authErr, ok := externalmcp.IsAuthRequiredError(err); ok {
 				requiresOAuth = true
 				logger.InfoContext(ctx, "external MCP server requires OAuth",

@@ -457,6 +457,9 @@ type ExternalMCPToolDefinitionResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The URL to connect to the MCP server
 	RemoteURL *string `form:"remote_url,omitempty" json:"remote_url,omitempty" xml:"remote_url,omitempty"`
+	// The transport type used to connect to the MCP server ('streamable-http' or
+	// 'sse')
+	TransportType *string `form:"transport_type,omitempty" json:"transport_type,omitempty" xml:"transport_type,omitempty"`
 	// Whether the external MCP server requires OAuth authentication
 	RequiresOauth *bool `form:"requires_oauth,omitempty" json:"requires_oauth,omitempty" xml:"requires_oauth,omitempty"`
 	// OAuth version: '2.1' (MCP OAuth), '2.0' (legacy), or 'none'
@@ -1353,6 +1356,9 @@ func ValidateExternalMCPToolDefinitionResponseBody(body *ExternalMCPToolDefiniti
 	}
 	if body.RemoteURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remote_url", "body"))
+	}
+	if body.TransportType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("transport_type", "body"))
 	}
 	if body.RequiresOauth == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("requires_oauth", "body"))

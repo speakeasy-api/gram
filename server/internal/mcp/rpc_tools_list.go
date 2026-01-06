@@ -138,7 +138,7 @@ func unfoldExternalMCPTools(ctx context.Context, logger *slog.Logger, tools []*t
 			}
 		}
 
-		mcpClient, err := externalmcp.NewClient(ctx, logger, proxy.RemoteURL, opts)
+		mcpClient, err := externalmcp.NewClient(ctx, logger, proxy.RemoteURL, externalmcp.TransportType(proxy.TransportType), opts)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP").Log(ctx, logger)
 		}

@@ -37,6 +37,7 @@ type ClientOptions struct {
 	// Authorization is the value for the Authorization header (e.g., "Bearer token").
 	// If empty, no Authorization header is sent.
 	Authorization string
+	TransportType
 }
 
 // Client represents an active connection to an external MCP server.

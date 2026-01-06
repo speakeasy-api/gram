@@ -571,11 +571,12 @@ func handleExternalMCPToolCall(
 	if proxy.RequiresOauth && oauthToken != "" {
 		opts = &externalmcp.ClientOptions{
 			Authorization: "Bearer " + oauthToken,
+			TransportType: externalmcp.TransportType(proxy.TransportType),
 		}
 	}
 
 	// Create client and call tool
-	client, err := externalmcp.NewClient(ctx, logger, proxy.RemoteURL, opts)
+	client, err := externalmcp.NewClient(ctx, logger, proxy.RemoteURL, externalmcp.TransportType(proxy.TransportType), opts)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").Log(ctx, logger)
 	}
