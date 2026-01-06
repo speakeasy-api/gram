@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Chat } from '.'
 import { ElementsProvider } from '../../contexts/ElementsProvider'
 import type { Meta, StoryFn } from '@storybook/react-vite'
-import { HomeIcon } from 'lucide-react'
+import { ZapIcon } from 'lucide-react'
 import {
   ToolCallMessagePartProps,
   useAssistantState,
@@ -335,10 +335,11 @@ WithCustomModalIcon.parameters = {
   elements: {
     config: {
       modal: {
+        defaultOpen: false,
         icon: (state: 'open' | 'closed' | undefined) => (
-          <HomeIcon
+          <ZapIcon
             data-state={state}
-            className="aui-modal-button-closed-icon absolute size-5 transition-all data-[state=closed]:scale-100 data-[state=closed]:rotate-0 data-[state=open]:scale-0 data-[state=open]:rotate-90"
+            className="aui-modal-button-closed-icon absolute transition-all data-[state=closed]:scale-100 data-[state=closed]:rotate-0 data-[state=open]:scale-0 data-[state=open]:rotate-90"
           />
         ),
       },

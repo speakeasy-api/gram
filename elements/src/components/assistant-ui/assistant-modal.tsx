@@ -84,7 +84,7 @@ export const AssistantModal: FC = () => {
       <MotionConfig reducedMotion="user" transition={LAYOUT_TRANSITION}>
         <div
           className={cn(
-            'aui-root aui-modal-anchor fixed z-[9999]',
+            'aui-root aui-modal-anchor fixed z-10',
             anchorPositionClass,
             themeProps.className,
             r('lg'),
@@ -111,6 +111,7 @@ export const AssistantModal: FC = () => {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.8 }}
                   transition={{ duration: 0.2, ease: EASE_OUT_QUINT }}
+                  className="flex size-full items-center justify-center"
                 >
                   {customIcon ? (
                     customIcon('closed')

@@ -219,7 +219,7 @@ export const ComposerAddAttachment: FC = () => {
     <ComposerPrimitive.AddAttachment asChild>
       <TooltipIconButton
         tooltip="Add Attachment"
-        side="bottom"
+        side="top"
         variant="ghost"
         size="icon"
         align="start"
