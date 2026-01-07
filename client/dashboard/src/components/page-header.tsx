@@ -78,14 +78,19 @@ function PageHeaderBreadcrumbs({
   };
 
   // Build breadcrumb elements from URL segments
-  const visibleElements = location.pathname
+  const allSegments = location.pathname
     .split("/")
-    .filter(Boolean) // Remove empty strings
-    .slice(2) // Remove the two leading elements (org slug and project slug)
-    .filter((segment) => !skipSegments.includes(segment)) // Skip specified segments
-    .map((segment, index, segments) => {
-      const url = "/" + segments.slice(0, index + 1).join("/");
-      const isCurrentPage = location.pathname.endsWith(url);
+    .filter(Boolean)
+    .slice(2);
+
+  const visibleElements = allSegments
+    .map((segment, index) => {
+      const url = "/" + allSegments.slice(0, index + 1).join("/");
+      const isCurrentPage = index === allSegments.length - 1;
+
+      if (skipSegments.includes(segment)) {
+        return null;
+      }
 
       let display = segment;
       if (allSubstitutions[segment]) {
@@ -99,7 +104,8 @@ function PageHeaderBreadcrumbs({
         display,
         isCurrentPage,
       };
-    });
+    })
+    .filter((elem): elem is NonNullable<typeof elem> => elem !== null);
 
   visibleElements.unshift({
     url: "/",
