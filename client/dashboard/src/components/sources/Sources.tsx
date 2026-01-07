@@ -262,10 +262,8 @@ export default function Sources() {
               {dialogState.type === "remove-source" && (
                 <RemoveSourceDialogContent
                   asset={dialogState.asset}
-                  onConfirmRemoval={async (...args) => {
-                    await removeSource(...args);
-                    closeDialog();
-                  }}
+                  onConfirmRemoval={removeSource}
+                  onClose={closeDialog}
                 />
               )}
               {dialogState.type === "upload-openapi" && (
