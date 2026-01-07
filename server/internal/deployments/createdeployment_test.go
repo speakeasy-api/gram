@@ -6,6 +6,7 @@ import (
 	"io"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/samber/lo"
@@ -113,7 +114,6 @@ func TestDeploymentsService_CreateDeployment_NonBlocking(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
-
 	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -145,11 +145,31 @@ func TestDeploymentsService_CreateDeployment_NonBlocking(t *testing.T) {
 		ExternalURL:      nil,
 	})
 	require.NoError(t, err, "create deployment in non-blocking mode")
-
 	require.NotEqual(t, uuid.Nil.String(), dep.Deployment.ID, "deployment ID is nil")
-	require.Equal(t, "created", dep.Deployment.Status, "deployment status should be 'created' when non_blocking is true")
+	// Non-blocking returns immediately but the workflow runs concurrently, so
+	// the status may be "created", "pending", or "completed" depending on timing.
+	require.Contains(t, []string{"created", "pending", "completed"}, dep.Deployment.Status,
+		"deployment status should be a valid early state")
 	require.Len(t, dep.Deployment.Openapiv3Assets, 1, "expected 1 openapi asset")
 	require.Equal(t, "test-doc", dep.Deployment.Openapiv3Assets[0].Name, "unexpected asset name")
+
+	// Poll until the non-blocking deployment completes
+	var finalStatus string
+	require.Eventually(t, func() bool {
+		result, err := ti.service.GetDeployment(ctx, &gen.GetDeploymentPayload{
+			ID:               dep.Deployment.ID,
+			ApikeyToken:      nil,
+			SessionToken:     nil,
+			ProjectSlugInput: nil,
+		})
+		if err != nil {
+			return false
+		}
+		finalStatus = result.Status
+		return finalStatus == "completed" || finalStatus == "failed"
+	}, 10*time.Second, 100*time.Millisecond, "non-blocking deployment should eventually complete")
+
+	require.Equal(t, "completed", finalStatus, "non-blocking deployment should complete successfully")
 }
 
 func TestDeploymentsService_CreateDeployment_Idempotency(t *testing.T) {

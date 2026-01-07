@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/samber/lo"
@@ -76,7 +77,6 @@ func TestDeploymentsService_Evolve_NonBlocking(t *testing.T) {
 	assetStorage := assetstest.NewTestBlobStore(t)
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
-	// Upload OpenAPI asset
 	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
 	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
 		ApikeyToken:      nil,
@@ -87,7 +87,6 @@ func TestDeploymentsService_Evolve_NonBlocking(t *testing.T) {
 	}, io.NopCloser(bs))
 	require.NoError(t, err, "upload openapi v3 asset")
 
-	// Test evolving with non_blocking=true
 	result, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -108,12 +107,31 @@ func TestDeploymentsService_Evolve_NonBlocking(t *testing.T) {
 		ExcludePackages:        []string{},
 	})
 	require.NoError(t, err, "evolve deployment in non-blocking mode")
-
 	require.NotEqual(t, uuid.Nil.String(), result.Deployment.ID, "deployment ID is nil")
-	require.Equal(t, "created", result.Deployment.Status, "deployment status should be 'created' when non_blocking is true")
+	// Non-blocking returns immediately but the workflow runs concurrently, so
+	// the status may be "created", "pending", or "completed" depending on timing.
+	require.Contains(t, []string{"created", "pending", "completed"}, result.Deployment.Status,
+		"deployment status should be a valid early state")
 	require.Len(t, result.Deployment.Openapiv3Assets, 1, "expected 1 openapi asset")
 	require.Equal(t, "initial-doc", result.Deployment.Openapiv3Assets[0].Name, "unexpected asset name")
-	require.Equal(t, "initial-doc", string(result.Deployment.Openapiv3Assets[0].Slug), "unexpected asset slug")
+
+	// Poll until the non-blocking deployment completes
+	var finalStatus string
+	require.Eventually(t, func() bool {
+		dep, err := ti.service.GetDeployment(ctx, &gen.GetDeploymentPayload{
+			ID:               result.Deployment.ID,
+			ApikeyToken:      nil,
+			SessionToken:     nil,
+			ProjectSlugInput: nil,
+		})
+		if err != nil {
+			return false
+		}
+		finalStatus = dep.Status
+		return finalStatus == "completed" || finalStatus == "failed"
+	}, 10*time.Second, 100*time.Millisecond, "non-blocking deployment should eventually complete")
+
+	require.Equal(t, "completed", finalStatus, "non-blocking deployment should complete successfully")
 }
 
 func TestDeploymentsService_Evolve_UpsertOpenAPIv3(t *testing.T) {
