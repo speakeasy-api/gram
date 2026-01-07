@@ -2,6 +2,7 @@ import { Expandable } from "@/components/expandable";
 import { GramLogo } from "@/components/gram-logo";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
+import { OpenApiSourceInput } from "@/components/OpenApiSourceInput";
 import { ProjectSelector } from "@/components/project-menu";
 import { ToolBadge } from "@/components/tool-badge";
 import { ErrorAlert } from "@/components/ui/alert";
@@ -10,7 +11,6 @@ import { Input } from "@/components/ui/input";
 import { SkeletonParagraph } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
-import { OpenApiSourceInput } from "@/components/OpenApiSourceInput";
 import { AsciiVideo, useWebGLStore } from "@/components/webgl";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -29,15 +29,21 @@ import {
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { CodeBlock } from "@/components/code";
+import { FeatureRequestModal } from "@/components/FeatureRequestModal";
+import { handleAPIError } from "@/lib/errors";
 import {
   Check,
   ChevronRight,
   CircleCheckIcon,
+  Database,
   FileCode,
   FileJson2,
+  MessageSquare,
   RefreshCcw,
   ServerCog,
   SquareFunction,
+  Store,
   Upload,
   Wrench,
   X,
@@ -48,11 +54,15 @@ import { Link, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
 import { DeploymentLogs, useUploadOpenAPISteps } from "./UploadOpenAPI";
-import { CodeBlock } from "@/components/code";
-import { handleAPIError } from "@/lib/errors";
 
 type OnboardingPath = "openapi" | "cli";
-type OnboardingStep = "choice" | "upload" | "cli-setup" | "toolset" | "mcp";
+type OnboardingStep =
+  | "initial-choice"
+  | "first-party-choice"
+  | "upload"
+  | "cli-setup"
+  | "toolset"
+  | "mcp";
 
 export const START_PATH_PARAM = "start-path";
 export const START_STEP_PARAM = "start-step";
@@ -60,6 +70,7 @@ export const START_STEP_PARAM = "start-step";
 export function OnboardingWizard() {
   const { orgSlug } = useParams();
   const telemetry = useTelemetry();
+  const routes = useRoutes();
   const [searchParams] = useSearchParams();
 
   // Feature flag for Gram functions flow
@@ -67,11 +78,11 @@ export function OnboardingWizard() {
     telemetry.isFeatureEnabled("gram-functions") ?? false;
 
   const [selectedPath, setSelectedPath] = useState<OnboardingPath>();
-  const [currentStep, setCurrentStep] = useState<OnboardingStep>(
-    isFunctionsEnabled ? "choice" : "upload",
-  );
+  const [currentStep, setCurrentStep] =
+    useState<OnboardingStep>("initial-choice");
   const [toolsetName, setToolsetName] = useState<string>();
   const [mcpSlug, setMcpSlug] = useState<string>();
+  const [deployChatModalOpen, setDeployChatModalOpen] = useState(false);
 
   const startStep = searchParams.get(START_STEP_PARAM);
   const startPath = searchParams.get(START_PATH_PARAM);
@@ -83,13 +94,6 @@ export function OnboardingWizard() {
       setCurrentStep(startStep as OnboardingStep);
     }
   }, [startPath, startStep]);
-
-  // Auto-select OpenAPI path if functions are disabled
-  useEffect(() => {
-    if (!isFunctionsEnabled && !selectedPath) {
-      setSelectedPath("openapi");
-    }
-  }, [isFunctionsEnabled, selectedPath]);
 
   // Initialize mcpSlug when toolsetName changes
   useEffect(() => {
@@ -111,6 +115,8 @@ export function OnboardingWizard() {
           mcpSlug={mcpSlug}
           setMcpSlug={setMcpSlug}
           isFunctionsEnabled={isFunctionsEnabled}
+          onDeployChatClick={() => setDeployChatModalOpen(true)}
+          routes={routes}
         />
       </div>
       <div className="w-1/2 h-full bg-background overflow-hidden">
@@ -120,6 +126,14 @@ export function OnboardingWizard() {
           mcpSlug={mcpSlug}
         />
       </div>
+      <FeatureRequestModal
+        isOpen={deployChatModalOpen}
+        onClose={() => setDeployChatModalOpen(false)}
+        title="Deploy Chat Connected To Your Data"
+        description="Build embeddable chat experiences using Gram Elements. Click here to get on the early access list."
+        actionType="deploy_chat"
+        icon={MessageSquare}
+      />
     </Stack>
   );
 }
@@ -154,6 +168,35 @@ const Step = ({
   );
 };
 
+const ChoiceCard = ({
+  onClick,
+  icon: Icon,
+  title,
+  description,
+}: {
+  onClick: () => void;
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  title: string;
+  description: string;
+}) => {
+  return (
+    <button
+      onClick={onClick}
+      className="p-8 bg-secondary rounded-lg hover:bg-accent transition-colors text-left group flex flex-col items-start relative shadow-[inset_0px_1px_1px_0px_rgba(255,255,255,0.24),inset_0px_-1px_1px_0px_rgba(0,0,0,0.08)]"
+    >
+      <Icon className="w-8 h-8 text-primary mb-3 shrink-0" strokeWidth={1.5} />
+      <div className="flex flex-col gap-1">
+        <Type className="text-heading-sm">{title}</Type>
+        <Type small className="text-muted">
+          {description}
+        </Type>
+      </div>
+    </button>
+  );
+};
+
+type RoutesWithGoTo = ReturnType<typeof useRoutes>;
+
 const LHS = ({
   currentStep,
   setCurrentStep,
@@ -164,6 +207,8 @@ const LHS = ({
   mcpSlug,
   setMcpSlug,
   isFunctionsEnabled,
+  onDeployChatClick,
+  routes,
 }: {
   currentStep: OnboardingStep;
   setCurrentStep: (step: OnboardingStep) => void;
@@ -174,12 +219,15 @@ const LHS = ({
   mcpSlug: string | undefined;
   setMcpSlug: (slug: string) => void;
   isFunctionsEnabled: boolean;
+  onDeployChatClick: () => void;
+  routes: RoutesWithGoTo;
 }) => {
   const [createdToolset, setCreatedToolset] = useState<Toolset>();
   const { organization } = useSession();
   const [showTopBlur, setShowTopBlur] = useState(false);
   const [showBottomBlur, setShowBottomBlur] = useState(false);
   const contentScrollRef = useRef<HTMLDivElement>(null);
+  const telemetry = useTelemetry();
 
   // Check scroll position to show/hide blur gradients
   const handleScroll = () => {
@@ -199,6 +247,9 @@ const LHS = ({
   useEffect(() => {
     handleScroll();
   }, [currentStep]);
+
+  const isNotChoiceStep =
+    currentStep !== "first-party-choice" && currentStep !== "initial-choice";
 
   const lowerLeft =
     organization?.projects.length > 1 ? (
@@ -230,7 +281,7 @@ const LHS = ({
             </Type>
           </a>
         </Stack>
-        {currentStep !== "choice" && (
+        {isNotChoiceStep && (
           <Stack direction={"horizontal"} gap={6} align={"center"}>
             <Step
               text={selectedPath === "cli" ? "Setup CLI" : "Upload OpenAPI"}
@@ -258,11 +309,13 @@ const LHS = ({
       {/* Content - absolutely positioned within left container */}
       <div
         className="absolute inset-x-0 bottom-16 pointer-events-none"
-        style={{ top: currentStep !== "choice" ? "160px" : "64px" }}
+        style={{
+          top: isNotChoiceStep ? "160px" : "64px",
+        }}
       >
         {/* Blur gradient at top (when scrolled) */}
         {showTopBlur && (
-          <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-card to-transparent pointer-events-none z-20" />
+          <div className="absolute inset-x-0 top-0 h-16 bg-linear-to-b from-card to-transparent pointer-events-none z-20" />
         )}
 
         {/* Scrollable content */}
@@ -272,7 +325,19 @@ const LHS = ({
           className="h-full overflow-y-auto px-16 flex items-center justify-center"
         >
           <Stack className="w-full max-w-3xl gap-8 pointer-events-auto z-10 my-auto">
-            {currentStep === "choice" && (
+            {currentStep === "initial-choice" && (
+              <InitialChoiceStep
+                setCurrentStep={setCurrentStep}
+                setSelectedPath={setSelectedPath}
+                onDeployChatClick={onDeployChatClick}
+                routes={routes}
+                isFunctionsEnabled={isFunctionsEnabled}
+                onChoiceSelected={(choice) => {
+                  telemetry.capture("onboarding_choice_selected", { choice });
+                }}
+              />
+            )}
+            {currentStep === "first-party-choice" && (
               <ChoiceStep
                 setCurrentStep={setCurrentStep}
                 setSelectedPath={setSelectedPath}
@@ -308,7 +373,7 @@ const LHS = ({
 
         {/* Blur gradient at bottom (when not at bottom) */}
         {showBottomBlur && (
-          <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-card to-transparent pointer-events-none z-20" />
+          <div className="absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-card to-transparent pointer-events-none z-20" />
         )}
       </div>
 
@@ -325,6 +390,69 @@ const LHS = ({
         </a>
       </Stack>
     </div>
+  );
+};
+
+const InitialChoiceStep = ({
+  setCurrentStep,
+  setSelectedPath,
+  onDeployChatClick,
+  routes,
+  isFunctionsEnabled,
+  onChoiceSelected,
+}: {
+  setCurrentStep: (step: OnboardingStep) => void;
+  setSelectedPath: (path: OnboardingPath) => void;
+  onDeployChatClick: () => void;
+  routes: RoutesWithGoTo;
+  isFunctionsEnabled: boolean;
+  onChoiceSelected: (choice: string) => void;
+}) => {
+  const handleConnectToData = () => {
+    onChoiceSelected("connect_to_data");
+    // Go to the secondary choice step (openapi vs cli) if functions enabled,
+    // otherwise skip directly to upload
+    if (isFunctionsEnabled) {
+      setCurrentStep("first-party-choice");
+    } else {
+      setSelectedPath("openapi");
+      setCurrentStep("upload");
+    }
+  };
+
+  return (
+    <>
+      <Stack gap={1}>
+        <span className="text-heading-md">Get Started with Gram</span>
+        <span className="text-body-sm">What would you like to do?</span>
+      </Stack>
+      <div className="grid grid-cols-1 gap-4">
+        <ChoiceCard
+          onClick={() => {
+            onChoiceSelected("connect_to_popular_mcps");
+            routes.catalog.goTo();
+          }}
+          icon={Store}
+          title="Connect to Popular MCPs"
+          description="Browse and connect to official and community-maintained MCP servers"
+        />
+        <ChoiceCard
+          onClick={handleConnectToData}
+          icon={Database}
+          title="Connect to Your Data"
+          description="Create tools and MCPs from your own APIs or deploy custom code"
+        />
+        <ChoiceCard
+          onClick={() => {
+            onChoiceSelected("deploy_data_integrated_chat");
+            onDeployChatClick();
+          }}
+          icon={MessageSquare}
+          title="Deploy Chat Connected To Your Data"
+          description="Build embeddable chat experiences powered by your data"
+        />
+      </div>
+    </>
   );
 };
 
@@ -345,43 +473,25 @@ const ChoiceStep = ({
   return (
     <>
       <Stack gap={1}>
-        <span className="text-heading-md">Get Started with Gram</span>
+        <span className="text-heading-md">Connect to Your Data</span>
         <span className="text-body-sm">
           Choose how you want to create your tools
         </span>
       </Stack>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <button
+        <ChoiceCard
           onClick={() => handleChoice("openapi")}
-          className="p-8 bg-secondary rounded-lg hover:bg-accent transition-colors text-left group flex flex-col items-start relative shadow-[inset_0px_1px_1px_0px_rgba(255,255,255,0.24),inset_0px_-1px_1px_0px_rgba(0,0,0,0.08)]"
-        >
-          <FileCode
-            className="w-8 h-8 text-primary mb-3 shrink-0"
-            strokeWidth={1.5}
-          />
-          <div className="flex flex-col gap-1">
-            <Type className="text-heading-sm">Start from API</Type>
-            <Type small className="text-muted">
-              Generate tools from your OpenAPI specification
-            </Type>
-          </div>
-        </button>
+          icon={FileCode}
+          title="Start from API"
+          description="Generate tools from your OpenAPI specification"
+        />
         {isFunctionsEnabled && (
-          <button
+          <ChoiceCard
             onClick={() => handleChoice("cli")}
-            className="p-8 bg-secondary rounded-lg hover:bg-accent transition-colors text-left group flex flex-col items-start relative shadow-[inset_0px_1px_1px_0px_rgba(255,255,255,0.24),inset_0px_-1px_1px_0px_rgba(0,0,0,0.08)]"
-          >
-            <SquareFunction
-              className="w-8 h-8 text-primary mb-3 shrink-0"
-              strokeWidth={1.5}
-            />
-            <div className="flex flex-col gap-1">
-              <Type className="text-heading-sm">Start from Code</Type>
-              <Type small className="text-muted">
-                Deploy custom functions using the Gram CLI
-              </Type>
-            </div>
-          </button>
+            icon={SquareFunction}
+            title="Start from Code"
+            description="Deploy custom functions using the Gram CLI"
+          />
         )}
       </div>
     </>
