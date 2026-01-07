@@ -44,7 +44,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const topNavGroups = {
     create: [routes.toolsets, routes.customTools, routes.prompts] as AppRoute[],
-    connect: [routes.playground, routes.chatElements, routes.mcp, routes.environments],
+    connect: [
+      routes.playground,
+      routes.chatElements,
+      routes.mcp,
+      routes.environments,
+    ],
   };
 
   if (isCatalogEnabled) {

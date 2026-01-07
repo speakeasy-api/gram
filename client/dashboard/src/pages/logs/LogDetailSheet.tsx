@@ -239,15 +239,17 @@ function flattenObject(
 
     if (value === null || value === undefined) {
       result.push([fullKey, "—"]);
-      continue
+      continue;
     }
-    
+
     switch (typeof value) {
       case "object":
         if (Array.isArray(value)) {
           result.push([fullKey, JSON.stringify(value)]);
         } else if (Object.keys(value).length > 0) {
-          result.push(...flattenObject(value as Record<string, unknown>, fullKey));
+          result.push(
+            ...flattenObject(value as Record<string, unknown>, fullKey),
+          );
         }
         break;
       case "string":
