@@ -50,7 +50,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion, useMotionValue } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
 import { DeploymentLogs, useUploadOpenAPISteps } from "./UploadOpenAPI";
@@ -92,6 +92,8 @@ export function OnboardingWizard() {
     if (startPath && startStep) {
       setSelectedPath(startPath as OnboardingPath);
       setCurrentStep(startStep as OnboardingStep);
+    } else if (startStep === "first-party-choice") {
+      setCurrentStep("first-party-choice");
     }
   }, [startPath, startStep]);
 
@@ -168,7 +170,7 @@ const Step = ({
   );
 };
 
-const ChoiceCard = ({
+export const ChoiceCard = ({
   onClick,
   icon: Icon,
   title,
@@ -393,7 +395,7 @@ const LHS = ({
   );
 };
 
-const InitialChoiceStep = ({
+export const InitialChoiceStep = ({
   setCurrentStep,
   setSelectedPath,
   onDeployChatClick,
@@ -401,22 +403,31 @@ const InitialChoiceStep = ({
   isFunctionsEnabled,
   onChoiceSelected,
 }: {
-  setCurrentStep: (step: OnboardingStep) => void;
-  setSelectedPath: (path: OnboardingPath) => void;
+  setCurrentStep?: (step: OnboardingStep) => void;
+  setSelectedPath?: (path: OnboardingPath) => void;
   onDeployChatClick: () => void;
   routes: RoutesWithGoTo;
   isFunctionsEnabled: boolean;
   onChoiceSelected: (choice: string) => void;
 }) => {
+  const navigate = useNavigate();
+
   const handleConnectToData = () => {
     onChoiceSelected("connect_to_data");
-    // Go to the secondary choice step (openapi vs cli) if functions enabled,
-    // otherwise skip directly to upload
-    if (isFunctionsEnabled) {
-      setCurrentStep("first-party-choice");
+    // If we have step setters (wizard context), update wizard state
+    // Otherwise navigate directly to onboarding page with params
+    if (setCurrentStep && setSelectedPath) {
+      if (isFunctionsEnabled) {
+        setCurrentStep("first-party-choice");
+      } else {
+        setSelectedPath("openapi");
+        setCurrentStep("upload");
+      }
     } else {
-      setSelectedPath("openapi");
-      setCurrentStep("upload");
+      // Navigate to onboarding with appropriate start params
+      navigate(
+        routes.onboarding.href() + `?${START_STEP_PARAM}=first-party-choice`,
+      );
     }
   };
 
