@@ -130,7 +130,7 @@ export function OnboardingWizard() {
         isOpen={deployChatModalOpen}
         onClose={() => setDeployChatModalOpen(false)}
         title="Deploy Chat Connected To Your Data"
-        description="Embeddable chat experiences powered by your data are coming soon! We'll let you know when this feature is available."
+        description="Build embeddable chat experiences using Gram Elements. Click here to get on the early access list."
         actionType="deploy_chat"
         icon={MessageSquare}
       />
