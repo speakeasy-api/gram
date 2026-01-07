@@ -1,11 +1,14 @@
+import { useTelemetry } from "@/contexts/Telemetry.tsx";
 import { cn } from "@/lib/utils.ts";
 import { useIsProjectEmpty } from "@/pages/onboarding/UploadOpenAPI.tsx";
+import { InitialChoiceStep } from "@/pages/onboarding/Wizard.tsx";
 import { useRoutes } from "@/routes.tsx";
-import { Stack } from "@speakeasy-api/moonshine";
-import React, { ReactElement } from "react"; // Added missing import for React
+import { Button, Stack } from "@speakeasy-api/moonshine";
+import { MessageSquare } from "lucide-react";
+import React, { ReactElement, useState } from "react";
 import { ContentErrorBoundary } from "./content-error-boundary.tsx";
+import { FeatureRequestModal } from "./FeatureRequestModal.tsx";
 import { PageHeader } from "./page-header.tsx";
-import { Button } from "@speakeasy-api/moonshine";
 import { Heading } from "./ui/heading.tsx";
 import { MoreActions } from "./ui/more-actions.tsx";
 import { Type } from "./ui/type.tsx";
@@ -173,8 +176,40 @@ export function EmptyState({
   graphicClassName?: string;
 }) {
   const routes = useRoutes();
+  const telemetry = useTelemetry();
   const { isEmpty, isLoading } = useIsProjectEmpty();
+  const [deployChatModalOpen, setDeployChatModalOpen] = useState(false);
 
+  const isFunctionsEnabled =
+    telemetry.isFeatureEnabled("gram-functions") ?? false;
+
+  // For empty projects, show the onboarding choice cards
+  if (isEmpty && !isLoading) {
+    return (
+      <>
+        <Stack gap={8} className="w-full max-w-xl m-8">
+          <InitialChoiceStep
+            onDeployChatClick={() => setDeployChatModalOpen(true)}
+            routes={routes}
+            isFunctionsEnabled={isFunctionsEnabled}
+            onChoiceSelected={(choice) => {
+              telemetry.capture("onboarding_choice_selected", { choice });
+            }}
+          />
+        </Stack>
+        <FeatureRequestModal
+          isOpen={deployChatModalOpen}
+          onClose={() => setDeployChatModalOpen(false)}
+          title="Deploy Chat Connected To Your Data"
+          description="Build embeddable chat experiences using Gram Elements. Click here to get on the early access list."
+          actionType="deploy_chat"
+          icon={MessageSquare}
+        />
+      </>
+    );
+  }
+
+  // For non-empty projects or loading state, show the standard empty state
   let CTA: React.ReactNode = (
     <routes.onboarding.Link>
       <Button size="sm">Get Started</Button>
@@ -192,7 +227,7 @@ export function EmptyState({
   }
 
   return (
-    <div className="w-full h-[600px] flex items-center justify-center bg-background rounded-xl border-1">
+    <div className="w-full h-[600px] flex items-center justify-center bg-background rounded-xl border">
       <Stack
         gap={1}
         className="w-full max-w-sm m-8"
