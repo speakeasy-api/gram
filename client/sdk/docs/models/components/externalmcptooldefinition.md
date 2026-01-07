@@ -8,7 +8,7 @@ A proxy tool that references an external MCP server
 import { ExternalMCPToolDefinition } from "@gram/client/models/components";
 
 let value: ExternalMCPToolDefinition = {
-  createdAt: new Date("2025-07-07T10:46:48.668Z"),
+  createdAt: new Date("2026-07-07T10:46:48.668Z"),
   deploymentExternalMcpId: "<id>",
   deploymentId: "<id>",
   id: "<id>",
@@ -19,7 +19,7 @@ let value: ExternalMCPToolDefinition = {
   requiresOauth: false,
   slug: "<value>",
   toolUrn: "<value>",
-  updatedAt: new Date("2025-03-24T08:29:23.674Z"),
+  updatedAt: new Date("2026-03-24T08:29:23.674Z"),
 };
 ```
 

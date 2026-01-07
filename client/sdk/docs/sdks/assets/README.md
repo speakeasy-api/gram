@@ -516,12 +516,14 @@ Upload functions to Gram.
 <!-- UsageSnippet language="typescript" operationID="uploadFunctions" method="post" path="/rpc/assets.uploadFunctions" -->
 ```typescript
 import { Gram } from "@gram/client";
+import { openAsBlob } from "node:fs";
 
 const gram = new Gram();
 
 async function run() {
   const result = await gram.assets.uploadFunctions({
     contentLength: 858625,
+    requestBody: await openAsBlob("example.file"),
   });
 
   console.log(result);
@@ -537,6 +539,7 @@ The standalone function version of this method:
 ```typescript
 import { GramCore } from "@gram/client/core.js";
 import { assetsUploadFunctions } from "@gram/client/funcs/assetsUploadFunctions.js";
+import { openAsBlob } from "node:fs";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -545,6 +548,7 @@ const gram = new GramCore();
 async function run() {
   const res = await assetsUploadFunctions(gram, {
     contentLength: 858625,
+    requestBody: await openAsBlob("example.file"),
   });
   if (res.ok) {
     const { value: result } = res;
@@ -605,12 +609,14 @@ Upload an image to Gram.
 <!-- UsageSnippet language="typescript" operationID="uploadImage" method="post" path="/rpc/assets.uploadImage" -->
 ```typescript
 import { Gram } from "@gram/client";
+import { openAsBlob } from "node:fs";
 
 const gram = new Gram();
 
 async function run() {
   const result = await gram.assets.uploadImage({
     contentLength: 768839,
+    requestBody: await openAsBlob("example.file"),
   });
 
   console.log(result);
@@ -626,6 +632,7 @@ The standalone function version of this method:
 ```typescript
 import { GramCore } from "@gram/client/core.js";
 import { assetsUploadImage } from "@gram/client/funcs/assetsUploadImage.js";
+import { openAsBlob } from "node:fs";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -634,6 +641,7 @@ const gram = new GramCore();
 async function run() {
   const res = await assetsUploadImage(gram, {
     contentLength: 768839,
+    requestBody: await openAsBlob("example.file"),
   });
   if (res.ok) {
     const { value: result } = res;
@@ -694,12 +702,14 @@ Upload an OpenAPI v3 document to Gram.
 <!-- UsageSnippet language="typescript" operationID="uploadOpenAPIv3Asset" method="post" path="/rpc/assets.uploadOpenAPIv3" -->
 ```typescript
 import { Gram } from "@gram/client";
+import { openAsBlob } from "node:fs";
 
 const gram = new Gram();
 
 async function run() {
   const result = await gram.assets.uploadOpenAPIv3({
     contentLength: 513080,
+    requestBody: await openAsBlob("example.file"),
   });
 
   console.log(result);
@@ -715,6 +725,7 @@ The standalone function version of this method:
 ```typescript
 import { GramCore } from "@gram/client/core.js";
 import { assetsUploadOpenAPIv3 } from "@gram/client/funcs/assetsUploadOpenAPIv3.js";
+import { openAsBlob } from "node:fs";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -723,6 +734,7 @@ const gram = new GramCore();
 async function run() {
   const res = await assetsUploadOpenAPIv3(gram, {
     contentLength: 513080,
+    requestBody: await openAsBlob("example.file"),
   });
   if (res.ok) {
     const { value: result } = res;

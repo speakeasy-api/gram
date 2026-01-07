@@ -34,6 +34,7 @@ export type UploadOpenAPIv3AssetRequest = {
    * Session header
    */
   gramSession?: string | undefined;
+  requestBody: ReadableStream<Uint8Array> | Blob | ArrayBuffer | Uint8Array;
 };
 
 /** @internal */
@@ -137,6 +138,7 @@ export type UploadOpenAPIv3AssetRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Session"?: string | undefined;
+  RequestBody: ReadableStream<Uint8Array> | Blob | ArrayBuffer | Uint8Array;
 };
 
 /** @internal */
@@ -149,12 +151,19 @@ export const UploadOpenAPIv3AssetRequest$outboundSchema: z.ZodType<
   gramKey: z.string().optional(),
   gramProject: z.string().optional(),
   gramSession: z.string().optional(),
+  requestBody: z.union([
+    z.instanceof(ReadableStream<Uint8Array>),
+    z.instanceof(Blob),
+    z.instanceof(ArrayBuffer),
+    z.instanceof(Uint8Array),
+  ]),
 }).transform((v) => {
   return remap$(v, {
     contentLength: "Content-Length",
     gramKey: "Gram-Key",
     gramProject: "Gram-Project",
     gramSession: "Gram-Session",
+    requestBody: "RequestBody",
   });
 });
 
