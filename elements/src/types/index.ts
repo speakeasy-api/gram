@@ -205,9 +205,12 @@ export interface ElementsConfig {
   composer?: ComposerConfig
 
   /**
-   * Optional property to override the LLM provider.
-   * NOTE: if you override the model, then logs & usage metrics will not be tracked
-   * directly via Gram.
+   * Optional property to override the LLM provider. If you override the model,
+   * then logs & usage metrics will not be tracked directly via Gram.
+   *
+   * Please ensure that you are using an AI SDK v2 compatible model (e.g a
+   * Vercel AI sdk provider in the v2 semver range), as this is the only variant
+   * compatible with AI SDK V5
    *
    * Example with Google Gemini:
    * ```ts
