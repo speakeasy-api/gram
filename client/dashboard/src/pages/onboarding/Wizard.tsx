@@ -90,6 +90,8 @@ export function OnboardingWizard() {
     if (startPath && startStep) {
       setSelectedPath(startPath as OnboardingPath);
       setCurrentStep(startStep as OnboardingStep);
+    } else if (startStep === "first-party-choice") {
+      setCurrentStep(startStep as OnboardingStep);
     }
   }, [startPath, startStep]);
 

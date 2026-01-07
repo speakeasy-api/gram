@@ -1,87 +1,30 @@
 import { CodeBlock } from "@/components/code";
 import { GramLogo } from "@/components/gram-logo";
-import { InputField } from "@/components/moon/input-field";
 import { ProjectSelector } from "@/components/project-menu";
 import { Type } from "@/components/ui/type";
 import { useSession } from "@/contexts/Auth";
+import { useSlugs } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
+import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { Button, Stack } from "@speakeasy-api/moonshine";
-import {
-  Check,
-  ChevronRight,
-  Code,
-  MessageSquare,
-  Rocket,
-  Settings,
-} from "lucide-react";
+import { Loader2, MessageSquare } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
-import { cn } from "@/lib/utils";
-
-type DeployChatStep = "setup" | "configure" | "deploy";
 
 export function DeployChatWizard() {
-  const [currentStep, setCurrentStep] = useState<DeployChatStep>("setup");
-  const [projectName, setProjectName] = useState<string>("");
-
   return (
     <Stack direction={"horizontal"} className="h-[100vh] w-full">
       <div className="w-1/2 h-full border-r-1">
-        <DeployChatLHS
-          currentStep={currentStep}
-          setCurrentStep={setCurrentStep}
-          projectName={projectName}
-          setProjectName={setProjectName}
-        />
+        <DeployChatLHS />
       </div>
       <div className="w-1/2 h-full bg-background overflow-hidden flex items-center justify-center">
-        <DeployChatRHS currentStep={currentStep} projectName={projectName} />
+        <DeployChatRHS />
       </div>
     </Stack>
   );
 }
 
-const Step = ({
-  text,
-  icon,
-  active,
-  completed,
-}: {
-  text: string;
-  icon: React.ReactNode;
-  active?: boolean;
-  completed?: boolean;
-}) => {
-  return (
-    <Stack direction={"horizontal"} gap={2} align={"center"}>
-      <span
-        className={cn(
-          "rounded-lg bg-muted h-8 w-8 flex items-center justify-center border border-border",
-          completed &&
-            "bg-success text-success-foreground border-success-softest",
-          !active && !completed && "border-neutral-softest",
-        )}
-      >
-        {completed ? <Check className="w-4 h-4" /> : icon}
-      </span>
-      <span className={cn(!active && "text-muted-foreground", "text-body-sm")}>
-        {text}
-      </span>
-    </Stack>
-  );
-};
-
-const DeployChatLHS = ({
-  currentStep,
-  setCurrentStep,
-  projectName,
-  setProjectName,
-}: {
-  currentStep: DeployChatStep;
-  setCurrentStep: (step: DeployChatStep) => void;
-  projectName: string;
-  setProjectName: (name: string) => void;
-}) => {
+const DeployChatLHS = () => {
   const { organization } = useSession();
 
   const lowerLeft =
@@ -114,27 +57,6 @@ const DeployChatLHS = ({
             </Type>
           </a>
         </Stack>
-        <Stack direction={"horizontal"} gap={6} align={"center"}>
-          <Step
-            text="Setup Project"
-            icon={<Code className="w-4 h-4" />}
-            active={currentStep === "setup"}
-            completed={currentStep === "configure" || currentStep === "deploy"}
-          />
-          <ChevronRight className="w-4 h-4 text-muted-foreground" />
-          <Step
-            text="Configure Chat"
-            icon={<Settings className="w-4 h-4" />}
-            active={currentStep === "configure"}
-            completed={currentStep === "deploy"}
-          />
-          <ChevronRight className="w-4 h-4 text-muted-foreground" />
-          <Step
-            text="Deploy"
-            icon={<Rocket className="w-4 h-4" />}
-            active={currentStep === "deploy"}
-          />
-        </Stack>
       </Stack>
 
       {/* Content */}
@@ -144,17 +66,7 @@ const DeployChatLHS = ({
       >
         <div className="h-full overflow-y-auto px-16 flex items-center justify-center">
           <Stack className="w-full max-w-3xl gap-8 pointer-events-auto z-10 my-auto">
-            {currentStep === "setup" && (
-              <SetupStep
-                setCurrentStep={setCurrentStep}
-                projectName={projectName}
-                setProjectName={setProjectName}
-              />
-            )}
-            {currentStep === "configure" && (
-              <ConfigureStep setCurrentStep={setCurrentStep} />
-            )}
-            {currentStep === "deploy" && <DeployStep />}
+            <SetupStep />
           </Stack>
         </div>
       </div>
@@ -175,32 +87,54 @@ const DeployChatLHS = ({
   );
 };
 
-const SetupStep = ({
-  setCurrentStep,
-  projectName,
-  setProjectName,
-}: {
-  setCurrentStep: (step: DeployChatStep) => void;
-  projectName: string;
-  setProjectName: (name: string) => void;
-}) => {
-  const [installMethod, setInstallMethod] = useState<"npm" | "pnpm">("npm");
+const SetupStep = () => {
+  const routes = useRoutes();
+  const { projectSlug } = useSlugs();
+  const [apiKey, setApiKey] = useState<string | null>(null);
 
-  const commands = [
-    {
-      label: "Create a new Gram Chat project",
-      command: `${installMethod} create @gram-ai/chat@latest`,
-      showToggle: true,
+  const createKeyMutation = useCreateAPIKeyMutation({
+    onSuccess: (data) => {
+      if (data.key) {
+        setApiKey(data.key);
+      }
     },
-    {
-      label: "Install dependencies",
-      command: `cd my-chat-app && ${installMethod} install`,
-    },
-    {
-      label: "Start the development server",
-      command: `${installMethod === "npm" ? "npm run" : "pnpm"} dev`,
-    },
-  ];
+  });
+
+  const handleCreateApiKey = () => {
+    createKeyMutation.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: {
+        createKeyForm: {
+          // Add this random suffix or else a second key creation will cause a conflict and fail
+          name: `Elements Chat - ${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+          scopes: ["chat"],
+        },
+      },
+    });
+  };
+
+  const installCommand = `pnpm add @gram-ai/elements`;
+
+  const appCode = `import {
+  GramElementsProvider,
+  Chat,
+  type ElementsConfig
+} from '@gram-ai/elements'
+import '@gram-ai/elements/elements.css'
+
+const config: ElementsConfig = {
+  projectSlug: '${projectSlug}',
+  // TODO: Replace with Chat Sessions (see Gram docs) before shipping to production
+  unsafeApiKey: '${apiKey ?? "YOUR_API_KEY"}',
+}
+
+export const App = () => {
+  return (
+    <GramElementsProvider config={config}>
+      <Chat />
+    </GramElementsProvider>
+  )
+}`;
 
   return (
     <>
@@ -211,200 +145,58 @@ const SetupStep = ({
         </span>
       </Stack>
 
-      <InputField
-        label="Project Name"
-        placeholder="my-chat-app"
-        value={projectName}
-        onChange={(e) => setProjectName(e.target.value)}
-        hint="Give your chat project a name"
-      />
-
       <Stack gap={4}>
-        {commands.map((item, index) => (
-          <Stack key={index} gap={2}>
-            <Stack
-              direction="horizontal"
-              justify="space-between"
-              align="center"
+        <Stack gap={2}>
+          <Type small className="font-medium">
+            1. Create an API key if you don't have one yet
+          </Type>
+          {apiKey ? (
+            <CodeBlock language="bash">{apiKey}</CodeBlock>
+          ) : (
+            <Button
+              variant="secondary"
+              onClick={handleCreateApiKey}
+              disabled={createKeyMutation.isPending}
             >
-              <Type small className="font-medium">
-                {index + 1}. {item.label}
-              </Type>
-              {item.showToggle && (
-                <Stack direction="horizontal" gap={1}>
-                  <Button
-                    variant={installMethod === "npm" ? "primary" : "tertiary"}
-                    size="sm"
-                    onClick={() => setInstallMethod("npm")}
-                  >
-                    npm
-                  </Button>
-                  <Button
-                    variant={installMethod === "pnpm" ? "primary" : "tertiary"}
-                    size="sm"
-                    onClick={() => setInstallMethod("pnpm")}
-                  >
-                    pnpm
-                  </Button>
-                </Stack>
+              {createKeyMutation.isPending && (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               )}
-            </Stack>
-            <CodeBlock language="bash">{item.command}</CodeBlock>
-          </Stack>
-        ))}
+              Create API key
+            </Button>
+          )}
+        </Stack>
+
+        <Stack gap={2}>
+          <Type small className="font-medium">
+            2. Install the @gram-ai/elements package
+          </Type>
+          <CodeBlock language="bash">{installCommand}</CodeBlock>
+        </Stack>
+
+        <Stack gap={2}>
+          <Type small className="font-medium">
+            3. Add the provider and chat component to your app
+          </Type>
+          <CodeBlock language="tsx">{appCode}</CodeBlock>
+        </Stack>
       </Stack>
 
-      <Button
-        variant="brand"
-        className="w-full"
-        onClick={() => setCurrentStep("configure")}
-        disabled={!projectName}
-      >
-        Continue
-      </Button>
+      <routes.chatElements.Link>
+        <Button
+          variant="brand"
+          className="w-full"
+          onClick={() => {
+            localStorage.setItem("elements-onboarding-completed", "true");
+          }}
+        >
+          Continue
+        </Button>
+      </routes.chatElements.Link>
     </>
   );
 };
 
-const ConfigureStep = ({
-  setCurrentStep,
-}: {
-  setCurrentStep: (step: DeployChatStep) => void;
-}) => {
-  const configCode = `// gram.config.ts
-import { defineConfig } from "@gram-ai/chat";
-
-export default defineConfig({
-  // Connect to your MCP server
-  mcpServer: "https://mcp.getgram.ai/your-org/your-server",
-
-  // Customize the chat experience
-  theme: {
-    primaryColor: "#6366f1",
-    borderRadius: "lg",
-  },
-
-  // Configure available tools
-  tools: {
-    // Tools are automatically loaded from your MCP server
-    enabled: true,
-  },
-
-  // Optional: Add authentication
-  auth: {
-    required: false,
-  },
-});`;
-
-  return (
-    <>
-      <Stack gap={1}>
-        <span className="text-heading-md">Configure Your Chat</span>
-        <span className="text-body-sm">
-          Customize the chat experience and connect to your MCP server
-        </span>
-      </Stack>
-
-      <Stack gap={2}>
-        <Type small className="font-medium">
-          Edit your configuration file:
-        </Type>
-        <CodeBlock language="typescript">{configCode}</CodeBlock>
-      </Stack>
-
-      <Stack gap={2}>
-        <Type small className="font-medium">
-          Key configuration options:
-        </Type>
-        <ul className="list-disc list-inside text-body-sm text-muted-foreground space-y-1">
-          <li>
-            <strong>mcpServer</strong> - Your Gram MCP server URL
-          </li>
-          <li>
-            <strong>theme</strong> - Customize colors, fonts, and styling
-          </li>
-          <li>
-            <strong>tools</strong> - Configure which tools are available
-          </li>
-          <li>
-            <strong>auth</strong> - Add authentication requirements
-          </li>
-        </ul>
-      </Stack>
-
-      <Button
-        variant="brand"
-        className="w-full"
-        onClick={() => setCurrentStep("deploy")}
-      >
-        Continue
-      </Button>
-    </>
-  );
-};
-
-const DeployStep = () => {
-  const routes = useRoutes();
-
-  const deployCommands = [
-    {
-      label: "Build for production",
-      command: "npm run build",
-    },
-    {
-      label: "Deploy to Vercel (or your preferred platform)",
-      command: "vercel deploy",
-    },
-  ];
-
-  const embedCode = `<!-- Add to your website -->
-<script src="https://chat.getgram.ai/embed.js"></script>
-<gram-chat
-  server="your-server-slug"
-  theme="light"
-/>`;
-
-  return (
-    <>
-      <Stack gap={1}>
-        <span className="text-heading-md">Deploy Your Chat</span>
-        <span className="text-body-sm">
-          Build and deploy your chat experience
-        </span>
-      </Stack>
-
-      <Stack gap={4}>
-        {deployCommands.map((item, index) => (
-          <Stack key={index} gap={2}>
-            <Type small className="font-medium">
-              {index + 1}. {item.label}
-            </Type>
-            <CodeBlock language="bash">{item.command}</CodeBlock>
-          </Stack>
-        ))}
-      </Stack>
-
-      <Stack gap={2}>
-        <Type small className="font-medium">
-          Or embed directly in your website:
-        </Type>
-        <CodeBlock language="html">{embedCode}</CodeBlock>
-      </Stack>
-
-      <Button variant="brand" className="w-full" onClick={() => routes.home.goTo()}>
-        Go to Dashboard
-      </Button>
-    </>
-  );
-};
-
-const DeployChatRHS = ({
-  currentStep,
-  projectName,
-}: {
-  currentStep: DeployChatStep;
-  projectName: string;
-}) => {
+const DeployChatRHS = () => {
   return (
     <div className="flex flex-col items-center gap-4">
       {/* Chat preview mockup */}
@@ -412,9 +204,7 @@ const DeployChatRHS = ({
         {/* Chat header */}
         <div className="bg-muted border-b px-4 py-3 flex items-center gap-2">
           <MessageSquare className="w-5 h-5 text-primary" />
-          <span className="font-medium text-sm">
-            {projectName || "My Chat App"}
-          </span>
+          <span className="font-medium text-sm">My Chat App</span>
         </div>
 
         {/* Chat messages */}
@@ -430,23 +220,6 @@ const DeployChatRHS = ({
               to your tools and can perform actions on your behalf.
             </div>
           </div>
-          {currentStep !== "setup" && (
-            <div className="flex justify-end">
-              <div className="bg-primary text-primary-foreground rounded-lg px-3 py-2 max-w-[80%] text-sm">
-                Show me recent activity
-              </div>
-            </div>
-          )}
-          {currentStep === "deploy" && (
-            <div className="flex justify-start">
-              <div className="bg-muted rounded-lg px-3 py-2 max-w-[80%] text-sm">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-                  Fetching data...
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Chat input */}
@@ -459,9 +232,7 @@ const DeployChatRHS = ({
 
       {/* Step indicator */}
       <Type small className="text-muted-foreground">
-        {currentStep === "setup" && "Preview of your chat widget"}
-        {currentStep === "configure" && "Customizing your chat experience"}
-        {currentStep === "deploy" && "Ready to deploy!"}
+        Preview of your chat widget
       </Type>
     </div>
   );
