@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -184,10 +185,11 @@ func hackilyEnrichWithLogos(servers []*types.ExternalMCPServer) {
 
 // ServerDetails contains detailed information about an MCP server including connection info.
 type ServerDetails struct {
-	Name        string
-	Description string
-	Version     string
-	RemoteURL   string
+	Name          string
+	Description   string
+	Version       string
+	RemoteURL     string
+	TransportType externalmcptypes.TransportType
 }
 
 // getServerResponse wraps a single server from the registry.
@@ -238,13 +240,15 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 
 	// Find the remote URL, preferring streamable-http over sse
 	var remoteURL string
+	var transportType externalmcptypes.TransportType
 	for _, remote := range serverResp.Server.Remotes {
 		if remote.Type == "streamable-http" {
 			remoteURL = remote.URL
+			transportType = externalmcptypes.TransportTypeStreamableHTTP
 			break
-		}
-		if remote.Type == "sse" && remoteURL == "" {
+		} else if remote.Type == "sse" {
 			remoteURL = remote.URL
+			transportType = externalmcptypes.TransportTypeSSE
 		}
 	}
 
@@ -253,9 +257,10 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 	}
 
 	return &ServerDetails{
-		Name:        serverResp.Server.Name,
-		Description: serverResp.Server.Description,
-		Version:     serverResp.Server.Version,
-		RemoteURL:   remoteURL,
+		Name:          serverResp.Server.Name,
+		Description:   serverResp.Server.Description,
+		Version:       serverResp.Server.Version,
+		RemoteURL:     remoteURL,
+		TransportType: transportType,
 	}, nil
 }

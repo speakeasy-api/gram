@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 )
 
 // AuthRequiredError is returned when an external MCP server requires authentication.
@@ -37,6 +38,7 @@ type ClientOptions struct {
 	// Authorization is the value for the Authorization header (e.g., "Bearer token").
 	// If empty, no Authorization header is sent.
 	Authorization string
+	TransportType types.TransportType
 }
 
 // Client represents an active connection to an external MCP server.
@@ -49,10 +51,11 @@ type Client struct {
 
 // NewClient creates a new client connection to an external MCP server.
 // This performs the MCP protocol initialization internally.
-func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, opts *ClientOptions) (*Client, error) {
+func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, transportType types.TransportType, opts *ClientOptions) (*Client, error) {
 	if opts == nil {
 		opts = &ClientOptions{
 			Authorization: "",
+			TransportType: "",
 		}
 	}
 
@@ -76,10 +79,21 @@ func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, opts 
 		Title:   "",
 	}, nil)
 
-	transport := &mcp.StreamableClientTransport{
-		Endpoint:   remoteURL,
-		HTTPClient: httpClient,
-		MaxRetries: 3,
+	var transport mcp.Transport
+	switch transportType {
+	case types.TransportTypeStreamableHTTP:
+		transport = &mcp.StreamableClientTransport{
+			Endpoint:   remoteURL,
+			HTTPClient: httpClient,
+			MaxRetries: 3,
+		}
+	case types.TransportTypeSSE:
+		transport = &mcp.SSEClientTransport{
+			Endpoint:   remoteURL,
+			HTTPClient: httpClient,
+		}
+	default:
+		return nil, fmt.Errorf("unsupported transport type: %s", transportType)
 	}
 
 	session, err := client.Connect(ctx, transport, nil)

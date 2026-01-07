@@ -29294,30 +29294,30 @@ definitions:
             oauth_authorization_endpoint:
                 type: string
                 description: The OAuth authorization endpoint URL
-                example: Facilis voluptas nisi enim perspiciatis sed quasi.
+                example: Voluptas nisi enim.
             oauth_registration_endpoint:
                 type: string
                 description: The OAuth dynamic client registration endpoint URL
-                example: Est magnam dolorum quam eos.
+                example: Et eaque rerum nihil est.
             oauth_scopes_supported:
                 type: array
                 items:
                     type: string
-                    example: Provident laboriosam rerum architecto.
+                    example: Dolorum quam eos aut provident laboriosam rerum.
                 description: The OAuth scopes supported by the server
                 example:
-                    - Eaque omnis.
-                    - Voluptas possimus modi consequatur minus harum.
+                    - Veritatis eaque.
+                    - Eos voluptas possimus modi consequatur minus harum.
                     - Esse doloremque accusamus.
                     - Vel explicabo pariatur unde.
             oauth_token_endpoint:
                 type: string
                 description: The OAuth token endpoint URL
-                example: Dolores reiciendis velit et eaque rerum.
+                example: Sed quasi natus dolores reiciendis.
             oauth_version:
                 type: string
                 description: 'OAuth version: ''2.1'' (MCP OAuth), ''2.0'' (legacy), or ''none'''
-                example: Omnis fuga occaecati error minima rem.
+                example: Fuga occaecati error minima rem officia.
             registry_id:
                 type: string
                 description: The ID of the MCP registry
@@ -29329,7 +29329,7 @@ definitions:
             requires_oauth:
                 type: boolean
                 description: Whether the external MCP server requires OAuth authentication
-                example: true
+                example: false
             slug:
                 type: string
                 description: The slug used for tool prefixing (e.g., github)
@@ -29338,6 +29338,13 @@ definitions:
                 type: string
                 description: The URN of this tool (tools:externalmcp:<slug>:proxy)
                 example: Sint possimus voluptatibus.
+            transport_type:
+                type: string
+                description: The transport type used to connect to the MCP server
+                example: streamable-http
+                enum:
+                    - streamable-http
+                    - sse
             updated_at:
                 type: string
                 description: When the tool definition was last updated.
@@ -29350,19 +29357,20 @@ definitions:
             deployment_id: Deserunt voluptate omnis reprehenderit totam.
             id: Consequuntur dolorum assumenda minus.
             name: Recusandae sit ratione qui harum in eligendi.
-            oauth_authorization_endpoint: In amet alias dolor.
+            oauth_authorization_endpoint: Cum dolorum sint in amet alias dolor.
             oauth_registration_endpoint: In amet provident voluptatum placeat aut.
             oauth_scopes_supported:
                 - Non voluptatum et.
                 - In cum fugit ad quisquam a aut.
                 - Fugiat voluptate quasi.
             oauth_token_endpoint: Repellat quia molestias temporibus tempore.
-            oauth_version: Commodi fugit magni quam cum dolorum.
+            oauth_version: Fugit magni.
             registry_id: Dolor harum itaque non cumque.
             remote_url: Ut cumque esse reprehenderit sunt.
-            requires_oauth: false
+            requires_oauth: true
             slug: Odit qui dicta ea rem magni sunt.
             tool_urn: Laborum dignissimos necessitatibus recusandae.
+            transport_type: sse
             updated_at: "1992-12-16T23:20:52Z"
         required:
             - id
@@ -29373,6 +29381,7 @@ definitions:
             - name
             - slug
             - remote_url
+            - transport_type
             - requires_oauth
             - oauth_version
             - created_at
@@ -30685,19 +30694,21 @@ definitions:
                         deployment_id: Eveniet est.
                         id: Ut similique nostrum suscipit dolor excepturi rerum.
                         name: Consectetur similique ut exercitationem repudiandae sed corrupti.
-                        oauth_authorization_endpoint: Sunt est eius similique doloribus ea.
-                        oauth_registration_endpoint: Ut in et in in ut ratione.
+                        oauth_authorization_endpoint: Libero sunt.
+                        oauth_registration_endpoint: Soluta et nemo quis earum facere quia.
                         oauth_scopes_supported:
+                            - In et in in ut ratione est.
                             - Animi praesentium fugiat.
                             - Soluta quaerat doloribus dicta voluptatem ut.
                             - Dicta ullam architecto.
-                        oauth_token_endpoint: Et nemo quis earum facere quia.
-                        oauth_version: Sint quo quae quia.
+                        oauth_token_endpoint: Eius similique doloribus.
+                        oauth_version: Quo quae.
                         registry_id: Qui saepe.
                         remote_url: Odit velit voluptas iste.
-                        requires_oauth: true
+                        requires_oauth: false
                         slug: Nulla ea at velit sint eveniet at.
                         tool_urn: Omnis id quas quas aperiam recusandae voluptatem.
+                        transport_type: streamable-http
                         updated_at: "2000-06-14T22:54:55Z"
                       function_tool_definition:
                         asset_id: Officiis quisquam aliquam tempora deleniti.
@@ -30848,19 +30859,21 @@ definitions:
                         deployment_id: Eveniet est.
                         id: Ut similique nostrum suscipit dolor excepturi rerum.
                         name: Consectetur similique ut exercitationem repudiandae sed corrupti.
-                        oauth_authorization_endpoint: Sunt est eius similique doloribus ea.
-                        oauth_registration_endpoint: Ut in et in in ut ratione.
+                        oauth_authorization_endpoint: Libero sunt.
+                        oauth_registration_endpoint: Soluta et nemo quis earum facere quia.
                         oauth_scopes_supported:
+                            - In et in in ut ratione est.
                             - Animi praesentium fugiat.
                             - Soluta quaerat doloribus dicta voluptatem ut.
                             - Dicta ullam architecto.
-                        oauth_token_endpoint: Et nemo quis earum facere quia.
-                        oauth_version: Sint quo quae quia.
+                        oauth_token_endpoint: Eius similique doloribus.
+                        oauth_version: Quo quae.
                         registry_id: Qui saepe.
                         remote_url: Odit velit voluptas iste.
-                        requires_oauth: true
+                        requires_oauth: false
                         slug: Nulla ea at velit sint eveniet at.
                         tool_urn: Omnis id quas quas aperiam recusandae voluptatem.
+                        transport_type: streamable-http
                         updated_at: "2000-06-14T22:54:55Z"
                       function_tool_definition:
                         asset_id: Officiis quisquam aliquam tempora deleniti.
@@ -31217,19 +31230,21 @@ definitions:
                     deployment_id: Eveniet est.
                     id: Ut similique nostrum suscipit dolor excepturi rerum.
                     name: Consectetur similique ut exercitationem repudiandae sed corrupti.
-                    oauth_authorization_endpoint: Sunt est eius similique doloribus ea.
-                    oauth_registration_endpoint: Ut in et in in ut ratione.
+                    oauth_authorization_endpoint: Libero sunt.
+                    oauth_registration_endpoint: Soluta et nemo quis earum facere quia.
                     oauth_scopes_supported:
+                        - In et in in ut ratione est.
                         - Animi praesentium fugiat.
                         - Soluta quaerat doloribus dicta voluptatem ut.
                         - Dicta ullam architecto.
-                    oauth_token_endpoint: Et nemo quis earum facere quia.
-                    oauth_version: Sint quo quae quia.
+                    oauth_token_endpoint: Eius similique doloribus.
+                    oauth_version: Quo quae.
                     registry_id: Qui saepe.
                     remote_url: Odit velit voluptas iste.
-                    requires_oauth: true
+                    requires_oauth: false
                     slug: Nulla ea at velit sint eveniet at.
                     tool_urn: Omnis id quas quas aperiam recusandae voluptatem.
+                    transport_type: streamable-http
                     updated_at: "2000-06-14T22:54:55Z"
                   function_tool_definition:
                     asset_id: Officiis quisquam aliquam tempora deleniti.
@@ -31380,19 +31395,21 @@ definitions:
                     deployment_id: Eveniet est.
                     id: Ut similique nostrum suscipit dolor excepturi rerum.
                     name: Consectetur similique ut exercitationem repudiandae sed corrupti.
-                    oauth_authorization_endpoint: Sunt est eius similique doloribus ea.
-                    oauth_registration_endpoint: Ut in et in in ut ratione.
+                    oauth_authorization_endpoint: Libero sunt.
+                    oauth_registration_endpoint: Soluta et nemo quis earum facere quia.
                     oauth_scopes_supported:
+                        - In et in in ut ratione est.
                         - Animi praesentium fugiat.
                         - Soluta quaerat doloribus dicta voluptatem ut.
                         - Dicta ullam architecto.
-                    oauth_token_endpoint: Et nemo quis earum facere quia.
-                    oauth_version: Sint quo quae quia.
+                    oauth_token_endpoint: Eius similique doloribus.
+                    oauth_version: Quo quae.
                     registry_id: Qui saepe.
                     remote_url: Odit velit voluptas iste.
-                    requires_oauth: true
+                    requires_oauth: false
                     slug: Nulla ea at velit sint eveniet at.
                     tool_urn: Omnis id quas quas aperiam recusandae voluptatem.
+                    transport_type: streamable-http
                     updated_at: "2000-06-14T22:54:55Z"
                   function_tool_definition:
                     asset_id: Officiis quisquam aliquam tempora deleniti.
@@ -36669,19 +36686,21 @@ definitions:
                         deployment_id: Eveniet est.
                         id: Ut similique nostrum suscipit dolor excepturi rerum.
                         name: Consectetur similique ut exercitationem repudiandae sed corrupti.
-                        oauth_authorization_endpoint: Sunt est eius similique doloribus ea.
-                        oauth_registration_endpoint: Ut in et in in ut ratione.
+                        oauth_authorization_endpoint: Libero sunt.
+                        oauth_registration_endpoint: Soluta et nemo quis earum facere quia.
                         oauth_scopes_supported:
+                            - In et in in ut ratione est.
                             - Animi praesentium fugiat.
                             - Soluta quaerat doloribus dicta voluptatem ut.
                             - Dicta ullam architecto.
-                        oauth_token_endpoint: Et nemo quis earum facere quia.
-                        oauth_version: Sint quo quae quia.
+                        oauth_token_endpoint: Eius similique doloribus.
+                        oauth_version: Quo quae.
                         registry_id: Qui saepe.
                         remote_url: Odit velit voluptas iste.
-                        requires_oauth: true
+                        requires_oauth: false
                         slug: Nulla ea at velit sint eveniet at.
                         tool_urn: Omnis id quas quas aperiam recusandae voluptatem.
+                        transport_type: streamable-http
                         updated_at: "2000-06-14T22:54:55Z"
                       function_tool_definition:
                         asset_id: Officiis quisquam aliquam tempora deleniti.
@@ -36832,19 +36851,21 @@ definitions:
                         deployment_id: Eveniet est.
                         id: Ut similique nostrum suscipit dolor excepturi rerum.
                         name: Consectetur similique ut exercitationem repudiandae sed corrupti.
-                        oauth_authorization_endpoint: Sunt est eius similique doloribus ea.
-                        oauth_registration_endpoint: Ut in et in in ut ratione.
+                        oauth_authorization_endpoint: Libero sunt.
+                        oauth_registration_endpoint: Soluta et nemo quis earum facere quia.
                         oauth_scopes_supported:
+                            - In et in in ut ratione est.
                             - Animi praesentium fugiat.
                             - Soluta quaerat doloribus dicta voluptatem ut.
                             - Dicta ullam architecto.
-                        oauth_token_endpoint: Et nemo quis earum facere quia.
-                        oauth_version: Sint quo quae quia.
+                        oauth_token_endpoint: Eius similique doloribus.
+                        oauth_version: Quo quae.
                         registry_id: Qui saepe.
                         remote_url: Odit velit voluptas iste.
-                        requires_oauth: true
+                        requires_oauth: false
                         slug: Nulla ea at velit sint eveniet at.
                         tool_urn: Omnis id quas quas aperiam recusandae voluptatem.
+                        transport_type: streamable-http
                         updated_at: "2000-06-14T22:54:55Z"
                       function_tool_definition:
                         asset_id: Officiis quisquam aliquam tempora deleniti.
@@ -36998,19 +37019,21 @@ definitions:
                     deployment_id: Eveniet est.
                     id: Ut similique nostrum suscipit dolor excepturi rerum.
                     name: Consectetur similique ut exercitationem repudiandae sed corrupti.
-                    oauth_authorization_endpoint: Sunt est eius similique doloribus ea.
-                    oauth_registration_endpoint: Ut in et in in ut ratione.
+                    oauth_authorization_endpoint: Libero sunt.
+                    oauth_registration_endpoint: Soluta et nemo quis earum facere quia.
                     oauth_scopes_supported:
+                        - In et in in ut ratione est.
                         - Animi praesentium fugiat.
                         - Soluta quaerat doloribus dicta voluptatem ut.
                         - Dicta ullam architecto.
-                    oauth_token_endpoint: Et nemo quis earum facere quia.
-                    oauth_version: Sint quo quae quia.
+                    oauth_token_endpoint: Eius similique doloribus.
+                    oauth_version: Quo quae.
                     registry_id: Qui saepe.
                     remote_url: Odit velit voluptas iste.
-                    requires_oauth: true
+                    requires_oauth: false
                     slug: Nulla ea at velit sint eveniet at.
                     tool_urn: Omnis id quas quas aperiam recusandae voluptatem.
+                    transport_type: streamable-http
                     updated_at: "2000-06-14T22:54:55Z"
                   function_tool_definition:
                     asset_id: Officiis quisquam aliquam tempora deleniti.
@@ -37161,19 +37184,21 @@ definitions:
                     deployment_id: Eveniet est.
                     id: Ut similique nostrum suscipit dolor excepturi rerum.
                     name: Consectetur similique ut exercitationem repudiandae sed corrupti.
-                    oauth_authorization_endpoint: Sunt est eius similique doloribus ea.
-                    oauth_registration_endpoint: Ut in et in in ut ratione.
+                    oauth_authorization_endpoint: Libero sunt.
+                    oauth_registration_endpoint: Soluta et nemo quis earum facere quia.
                     oauth_scopes_supported:
+                        - In et in in ut ratione est.
                         - Animi praesentium fugiat.
                         - Soluta quaerat doloribus dicta voluptatem ut.
                         - Dicta ullam architecto.
-                    oauth_token_endpoint: Et nemo quis earum facere quia.
-                    oauth_version: Sint quo quae quia.
+                    oauth_token_endpoint: Eius similique doloribus.
+                    oauth_version: Quo quae.
                     registry_id: Qui saepe.
                     remote_url: Odit velit voluptas iste.
-                    requires_oauth: true
+                    requires_oauth: false
                     slug: Nulla ea at velit sint eveniet at.
                     tool_urn: Omnis id quas quas aperiam recusandae voluptatem.
+                    transport_type: streamable-http
                     updated_at: "2000-06-14T22:54:55Z"
                   function_tool_definition:
                     asset_id: Officiis quisquam aliquam tempora deleniti.
@@ -37324,19 +37349,21 @@ definitions:
                     deployment_id: Eveniet est.
                     id: Ut similique nostrum suscipit dolor excepturi rerum.
                     name: Consectetur similique ut exercitationem repudiandae sed corrupti.
-                    oauth_authorization_endpoint: Sunt est eius similique doloribus ea.
-                    oauth_registration_endpoint: Ut in et in in ut ratione.
+                    oauth_authorization_endpoint: Libero sunt.
+                    oauth_registration_endpoint: Soluta et nemo quis earum facere quia.
                     oauth_scopes_supported:
+                        - In et in in ut ratione est.
                         - Animi praesentium fugiat.
                         - Soluta quaerat doloribus dicta voluptatem ut.
                         - Dicta ullam architecto.
-                    oauth_token_endpoint: Et nemo quis earum facere quia.
-                    oauth_version: Sint quo quae quia.
+                    oauth_token_endpoint: Eius similique doloribus.
+                    oauth_version: Quo quae.
                     registry_id: Qui saepe.
                     remote_url: Odit velit voluptas iste.
-                    requires_oauth: true
+                    requires_oauth: false
                     slug: Nulla ea at velit sint eveniet at.
                     tool_urn: Omnis id quas quas aperiam recusandae voluptatem.
+                    transport_type: streamable-http
                     updated_at: "2000-06-14T22:54:55Z"
                   function_tool_definition:
                     asset_id: Officiis quisquam aliquam tempora deleniti.
@@ -54357,19 +54384,21 @@ definitions:
                 deployment_id: Eveniet est.
                 id: Ut similique nostrum suscipit dolor excepturi rerum.
                 name: Consectetur similique ut exercitationem repudiandae sed corrupti.
-                oauth_authorization_endpoint: Sunt est eius similique doloribus ea.
-                oauth_registration_endpoint: Ut in et in in ut ratione.
+                oauth_authorization_endpoint: Libero sunt.
+                oauth_registration_endpoint: Soluta et nemo quis earum facere quia.
                 oauth_scopes_supported:
+                    - In et in in ut ratione est.
                     - Animi praesentium fugiat.
                     - Soluta quaerat doloribus dicta voluptatem ut.
                     - Dicta ullam architecto.
-                oauth_token_endpoint: Et nemo quis earum facere quia.
-                oauth_version: Sint quo quae quia.
+                oauth_token_endpoint: Eius similique doloribus.
+                oauth_version: Quo quae.
                 registry_id: Qui saepe.
                 remote_url: Odit velit voluptas iste.
-                requires_oauth: true
+                requires_oauth: false
                 slug: Nulla ea at velit sint eveniet at.
                 tool_urn: Omnis id quas quas aperiam recusandae voluptatem.
+                transport_type: streamable-http
                 updated_at: "2000-06-14T22:54:55Z"
             function_tool_definition:
                 asset_id: Officiis quisquam aliquam tempora deleniti.
@@ -55576,19 +55605,21 @@ definitions:
                         deployment_id: Eveniet est.
                         id: Ut similique nostrum suscipit dolor excepturi rerum.
                         name: Consectetur similique ut exercitationem repudiandae sed corrupti.
-                        oauth_authorization_endpoint: Sunt est eius similique doloribus ea.
-                        oauth_registration_endpoint: Ut in et in in ut ratione.
+                        oauth_authorization_endpoint: Libero sunt.
+                        oauth_registration_endpoint: Soluta et nemo quis earum facere quia.
                         oauth_scopes_supported:
+                            - In et in in ut ratione est.
                             - Animi praesentium fugiat.
                             - Soluta quaerat doloribus dicta voluptatem ut.
                             - Dicta ullam architecto.
-                        oauth_token_endpoint: Et nemo quis earum facere quia.
-                        oauth_version: Sint quo quae quia.
+                        oauth_token_endpoint: Eius similique doloribus.
+                        oauth_version: Quo quae.
                         registry_id: Qui saepe.
                         remote_url: Odit velit voluptas iste.
-                        requires_oauth: true
+                        requires_oauth: false
                         slug: Nulla ea at velit sint eveniet at.
                         tool_urn: Omnis id quas quas aperiam recusandae voluptatem.
+                        transport_type: streamable-http
                         updated_at: "2000-06-14T22:54:55Z"
                       function_tool_definition:
                         asset_id: Officiis quisquam aliquam tempora deleniti.
@@ -55739,19 +55770,21 @@ definitions:
                         deployment_id: Eveniet est.
                         id: Ut similique nostrum suscipit dolor excepturi rerum.
                         name: Consectetur similique ut exercitationem repudiandae sed corrupti.
-                        oauth_authorization_endpoint: Sunt est eius similique doloribus ea.
-                        oauth_registration_endpoint: Ut in et in in ut ratione.
+                        oauth_authorization_endpoint: Libero sunt.
+                        oauth_registration_endpoint: Soluta et nemo quis earum facere quia.
                         oauth_scopes_supported:
+                            - In et in in ut ratione est.
                             - Animi praesentium fugiat.
                             - Soluta quaerat doloribus dicta voluptatem ut.
                             - Dicta ullam architecto.
-                        oauth_token_endpoint: Et nemo quis earum facere quia.
-                        oauth_version: Sint quo quae quia.
+                        oauth_token_endpoint: Eius similique doloribus.
+                        oauth_version: Quo quae.
                         registry_id: Qui saepe.
                         remote_url: Odit velit voluptas iste.
-                        requires_oauth: true
+                        requires_oauth: false
                         slug: Nulla ea at velit sint eveniet at.
                         tool_urn: Omnis id quas quas aperiam recusandae voluptatem.
+                        transport_type: streamable-http
                         updated_at: "2000-06-14T22:54:55Z"
                       function_tool_definition:
                         asset_id: Officiis quisquam aliquam tempora deleniti.
@@ -55902,19 +55935,21 @@ definitions:
                         deployment_id: Eveniet est.
                         id: Ut similique nostrum suscipit dolor excepturi rerum.
                         name: Consectetur similique ut exercitationem repudiandae sed corrupti.
-                        oauth_authorization_endpoint: Sunt est eius similique doloribus ea.
-                        oauth_registration_endpoint: Ut in et in in ut ratione.
+                        oauth_authorization_endpoint: Libero sunt.
+                        oauth_registration_endpoint: Soluta et nemo quis earum facere quia.
                         oauth_scopes_supported:
+                            - In et in in ut ratione est.
                             - Animi praesentium fugiat.
                             - Soluta quaerat doloribus dicta voluptatem ut.
                             - Dicta ullam architecto.
-                        oauth_token_endpoint: Et nemo quis earum facere quia.
-                        oauth_version: Sint quo quae quia.
+                        oauth_token_endpoint: Eius similique doloribus.
+                        oauth_version: Quo quae.
                         registry_id: Qui saepe.
                         remote_url: Odit velit voluptas iste.
-                        requires_oauth: true
+                        requires_oauth: false
                         slug: Nulla ea at velit sint eveniet at.
                         tool_urn: Omnis id quas quas aperiam recusandae voluptatem.
+                        transport_type: streamable-http
                         updated_at: "2000-06-14T22:54:55Z"
                       function_tool_definition:
                         asset_id: Officiis quisquam aliquam tempora deleniti.
@@ -56517,19 +56552,21 @@ definitions:
                     deployment_id: Eveniet est.
                     id: Ut similique nostrum suscipit dolor excepturi rerum.
                     name: Consectetur similique ut exercitationem repudiandae sed corrupti.
-                    oauth_authorization_endpoint: Sunt est eius similique doloribus ea.
-                    oauth_registration_endpoint: Ut in et in in ut ratione.
+                    oauth_authorization_endpoint: Libero sunt.
+                    oauth_registration_endpoint: Soluta et nemo quis earum facere quia.
                     oauth_scopes_supported:
+                        - In et in in ut ratione est.
                         - Animi praesentium fugiat.
                         - Soluta quaerat doloribus dicta voluptatem ut.
                         - Dicta ullam architecto.
-                    oauth_token_endpoint: Et nemo quis earum facere quia.
-                    oauth_version: Sint quo quae quia.
+                    oauth_token_endpoint: Eius similique doloribus.
+                    oauth_version: Quo quae.
                     registry_id: Qui saepe.
                     remote_url: Odit velit voluptas iste.
-                    requires_oauth: true
+                    requires_oauth: false
                     slug: Nulla ea at velit sint eveniet at.
                     tool_urn: Omnis id quas quas aperiam recusandae voluptatem.
+                    transport_type: streamable-http
                     updated_at: "2000-06-14T22:54:55Z"
                   function_tool_definition:
                     asset_id: Officiis quisquam aliquam tempora deleniti.
@@ -56680,19 +56717,21 @@ definitions:
                     deployment_id: Eveniet est.
                     id: Ut similique nostrum suscipit dolor excepturi rerum.
                     name: Consectetur similique ut exercitationem repudiandae sed corrupti.
-                    oauth_authorization_endpoint: Sunt est eius similique doloribus ea.
-                    oauth_registration_endpoint: Ut in et in in ut ratione.
+                    oauth_authorization_endpoint: Libero sunt.
+                    oauth_registration_endpoint: Soluta et nemo quis earum facere quia.
                     oauth_scopes_supported:
+                        - In et in in ut ratione est.
                         - Animi praesentium fugiat.
                         - Soluta quaerat doloribus dicta voluptatem ut.
                         - Dicta ullam architecto.
-                    oauth_token_endpoint: Et nemo quis earum facere quia.
-                    oauth_version: Sint quo quae quia.
+                    oauth_token_endpoint: Eius similique doloribus.
+                    oauth_version: Quo quae.
                     registry_id: Qui saepe.
                     remote_url: Odit velit voluptas iste.
-                    requires_oauth: true
+                    requires_oauth: false
                     slug: Nulla ea at velit sint eveniet at.
                     tool_urn: Omnis id quas quas aperiam recusandae voluptatem.
+                    transport_type: streamable-http
                     updated_at: "2000-06-14T22:54:55Z"
                   function_tool_definition:
                     asset_id: Officiis quisquam aliquam tempora deleniti.
@@ -56843,19 +56882,21 @@ definitions:
                     deployment_id: Eveniet est.
                     id: Ut similique nostrum suscipit dolor excepturi rerum.
                     name: Consectetur similique ut exercitationem repudiandae sed corrupti.
-                    oauth_authorization_endpoint: Sunt est eius similique doloribus ea.
-                    oauth_registration_endpoint: Ut in et in in ut ratione.
+                    oauth_authorization_endpoint: Libero sunt.
+                    oauth_registration_endpoint: Soluta et nemo quis earum facere quia.
                     oauth_scopes_supported:
+                        - In et in in ut ratione est.
                         - Animi praesentium fugiat.
                         - Soluta quaerat doloribus dicta voluptatem ut.
                         - Dicta ullam architecto.
-                    oauth_token_endpoint: Et nemo quis earum facere quia.
-                    oauth_version: Sint quo quae quia.
+                    oauth_token_endpoint: Eius similique doloribus.
+                    oauth_version: Quo quae.
                     registry_id: Qui saepe.
                     remote_url: Odit velit voluptas iste.
-                    requires_oauth: true
+                    requires_oauth: false
                     slug: Nulla ea at velit sint eveniet at.
                     tool_urn: Omnis id quas quas aperiam recusandae voluptatem.
+                    transport_type: streamable-http
                     updated_at: "2000-06-14T22:54:55Z"
                   function_tool_definition:
                     asset_id: Officiis quisquam aliquam tempora deleniti.

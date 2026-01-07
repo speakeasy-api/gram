@@ -19,7 +19,8 @@ let value: ExternalMCPToolDefinition = {
   requiresOauth: false,
   slug: "<value>",
   toolUrn: "<value>",
-  updatedAt: new Date("2026-03-24T08:29:23.674Z"),
+  transportType: "sse",
+  updatedAt: new Date("2026-12-23T11:31:25.886Z"),
 };
 ```
 
@@ -42,4 +43,5 @@ let value: ExternalMCPToolDefinition = {
 | `requiresOauth`                                                                               | *boolean*                                                                                     | :heavy_check_mark:                                                                            | Whether the external MCP server requires OAuth authentication                                 |
 | `slug`                                                                                        | *string*                                                                                      | :heavy_check_mark:                                                                            | The slug used for tool prefixing (e.g., github)                                               |
 | `toolUrn`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | The URN of this tool (tools:externalmcp:<slug>:proxy)                                         |
+| `transportType`                                                                               | [components.TransportType](../../models/components/transporttype.md)                          | :heavy_check_mark:                                                                            | The transport type used to connect to the MCP server                                          |
 | `updatedAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | When the tool definition was last updated.                                                    |
