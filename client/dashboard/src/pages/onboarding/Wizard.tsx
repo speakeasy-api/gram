@@ -129,7 +129,7 @@ export function OnboardingWizard() {
       <FeatureRequestModal
         isOpen={deployChatModalOpen}
         onClose={() => setDeployChatModalOpen(false)}
-        title="Deploy Data-Integrated Chat"
+        title="Deploy Chat Connected To Your Data"
         description="Embeddable chat experiences powered by your data are coming soon! We'll let you know when this feature is available."
         actionType="deploy_chat"
         icon={MessageSquare}
