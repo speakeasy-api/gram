@@ -168,6 +168,33 @@ const Step = ({
   );
 };
 
+const ChoiceCard = ({
+  onClick,
+  icon: Icon,
+  title,
+  description,
+}: {
+  onClick: () => void;
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  title: string;
+  description: string;
+}) => {
+  return (
+    <button
+      onClick={onClick}
+      className="p-8 bg-secondary rounded-lg hover:bg-accent transition-colors text-left group flex flex-col items-start relative shadow-[inset_0px_1px_1px_0px_rgba(255,255,255,0.24),inset_0px_-1px_1px_0px_rgba(0,0,0,0.08)]"
+    >
+      <Icon className="w-8 h-8 text-primary mb-3 shrink-0" strokeWidth={1.5} />
+      <div className="flex flex-col gap-1">
+        <Type className="text-heading-sm">{title}</Type>
+        <Type small className="text-muted">
+          {description}
+        </Type>
+      </div>
+    </button>
+  );
+};
+
 type RoutesWithGoTo = ReturnType<typeof useRoutes>;
 
 const LHS = ({
@@ -393,52 +420,24 @@ const InitialChoiceStep = ({
         <span className="text-body-sm">What would you like to do?</span>
       </Stack>
       <div className="grid grid-cols-1 gap-4">
-        <button
+        <ChoiceCard
           onClick={() => routes.catalog.goTo()}
-          className="p-8 bg-secondary rounded-lg hover:bg-accent transition-colors text-left group flex flex-col items-start relative shadow-[inset_0px_1px_1px_0px_rgba(255,255,255,0.24),inset_0px_-1px_1px_0px_rgba(0,0,0,0.08)]"
-        >
-          <Store
-            className="w-8 h-8 text-primary mb-3 shrink-0"
-            strokeWidth={1.5}
-          />
-          <div className="flex flex-col gap-1">
-            <Type className="text-heading-sm">Connect to Popular MCPs</Type>
-            <Type small className="text-muted">
-              Browse and connect to official and community-maintained MCP
-              servers
-            </Type>
-          </div>
-        </button>
-        <button
+          icon={Store}
+          title="Connect to Popular MCPs"
+          description="Browse and connect to official and community-maintained MCP servers"
+        />
+        <ChoiceCard
           onClick={handleConnectToData}
-          className="p-8 bg-secondary rounded-lg hover:bg-accent transition-colors text-left group flex flex-col items-start relative shadow-[inset_0px_1px_1px_0px_rgba(255,255,255,0.24),inset_0px_-1px_1px_0px_rgba(0,0,0,0.08)]"
-        >
-          <Database
-            className="w-8 h-8 text-primary mb-3 shrink-0"
-            strokeWidth={1.5}
-          />
-          <div className="flex flex-col gap-1">
-            <Type className="text-heading-sm">Connect to Your Data</Type>
-            <Type small className="text-muted">
-              Create tools and MCPs from your own APIs or deploy custom code
-            </Type>
-          </div>
-        </button>
-        <button
+          icon={Database}
+          title="Connect to Your Data"
+          description="Create tools and MCPs from your own APIs or deploy custom code"
+        />
+        <ChoiceCard
           onClick={onDeployChatClick}
-          className="p-8 bg-secondary rounded-lg hover:bg-accent transition-colors text-left group flex flex-col items-start relative shadow-[inset_0px_1px_1px_0px_rgba(255,255,255,0.24),inset_0px_-1px_1px_0px_rgba(0,0,0,0.08)]"
-        >
-          <MessageSquare
-            className="w-8 h-8 text-primary mb-3 shrink-0"
-            strokeWidth={1.5}
-          />
-          <div className="flex flex-col gap-1">
-            <Type className="text-heading-sm">Deploy Data-Integrated Chat</Type>
-            <Type small className="text-muted">
-              Build embeddable chat experiences powered by your data
-            </Type>
-          </div>
-        </button>
+          icon={MessageSquare}
+          title="Deploy Data-Integrated Chat"
+          description="Build embeddable chat experiences powered by your data"
+        />
       </div>
     </>
   );
@@ -467,37 +466,19 @@ const ChoiceStep = ({
         </span>
       </Stack>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <button
+        <ChoiceCard
           onClick={() => handleChoice("openapi")}
-          className="p-8 bg-secondary rounded-lg hover:bg-accent transition-colors text-left group flex flex-col items-start relative shadow-[inset_0px_1px_1px_0px_rgba(255,255,255,0.24),inset_0px_-1px_1px_0px_rgba(0,0,0,0.08)]"
-        >
-          <FileCode
-            className="w-8 h-8 text-primary mb-3 shrink-0"
-            strokeWidth={1.5}
-          />
-          <div className="flex flex-col gap-1">
-            <Type className="text-heading-sm">Start from API</Type>
-            <Type small className="text-muted">
-              Generate tools from your OpenAPI specification
-            </Type>
-          </div>
-        </button>
+          icon={FileCode}
+          title="Start from API"
+          description="Generate tools from your OpenAPI specification"
+        />
         {isFunctionsEnabled && (
-          <button
+          <ChoiceCard
             onClick={() => handleChoice("cli")}
-            className="p-8 bg-secondary rounded-lg hover:bg-accent transition-colors text-left group flex flex-col items-start relative shadow-[inset_0px_1px_1px_0px_rgba(255,255,255,0.24),inset_0px_-1px_1px_0px_rgba(0,0,0,0.08)]"
-          >
-            <SquareFunction
-              className="w-8 h-8 text-primary mb-3 shrink-0"
-              strokeWidth={1.5}
-            />
-            <div className="flex flex-col gap-1">
-              <Type className="text-heading-sm">Start from Code</Type>
-              <Type small className="text-muted">
-                Deploy custom functions using the Gram CLI
-              </Type>
-            </div>
-          </button>
+            icon={SquareFunction}
+            title="Start from Code"
+            description="Deploy custom functions using the Gram CLI"
+          />
         )}
       </div>
     </>
