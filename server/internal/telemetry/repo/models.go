@@ -100,24 +100,6 @@ type ToolLog struct {
 	FunctionID   string `ch:"function_id"`   // UUID
 }
 
-// HTTPRequestListResult contains the result of an HTTP request list operation.
-type HTTPRequestListResult struct {
-	Logs       []ToolHTTPRequest  `json:"logs"`
-	Pagination PaginationMetadata `json:"pagination"`
-}
-
-// ToolLogsListResult contains the result of a tool logs list operation.
-type ToolLogsListResult struct {
-	Logs       []ToolLog          `json:"logs"`
-	Pagination PaginationMetadata `json:"pagination"`
-}
-
-// ListResult contains the result of a list operation.
-type ListResult struct {
-	Logs       []ToolHTTPRequest  `json:"logs"`
-	Pagination PaginationMetadata `json:"pagination"`
-}
-
 // TelemetryLog represents a unified telemetry log entry (HTTP requests, function logs, etc.).
 type TelemetryLog struct {
 	// OTel Log Record Identity
