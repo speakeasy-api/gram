@@ -624,8 +624,8 @@ CREATE TABLE IF NOT EXISTS toolsets (
   external_oauth_server_id uuid,
   oauth_proxy_server_id uuid,
 
-  -- Draft/staging workflow
-  iteration_mode BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Draft/staging workflow (staging is default, iteration_mode=false bypasses staging)
+  iteration_mode BOOLEAN NOT NULL DEFAULT TRUE,
   has_draft_changes BOOLEAN NOT NULL DEFAULT FALSE,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),

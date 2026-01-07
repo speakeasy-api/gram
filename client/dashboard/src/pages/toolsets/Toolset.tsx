@@ -15,25 +15,29 @@ import {
 } from "@/contexts/Telemetry";
 import { useToolset } from "@/hooks/toolTypes";
 import { handleAPIError } from "@/lib/errors";
-import { Tool, useGroupedTools } from "@/lib/toolTypes";
+import { asTools, Tool, useGroupedTools } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Confirm } from "@gram/client/models/components";
 import { invalidateTemplate } from "@gram/client/react-query";
 import {
+  invalidateAllDraftToolset,
   queryKeyInstance,
   useCloneToolsetMutation,
   useCreateToolsetMutation,
   useDeleteToolsetMutation,
   useDiscardDraftMutation,
+  useDraftToolset,
   usePromoteDraftMutation,
+  useSetIterationModeMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
+import { ReleaseChangesPopover } from "@/components/release-changes-popover";
 import { MCPDetails, MCPEnableButton } from "../mcp/MCPDetails";
 import { AddToolsDialog } from "./AddToolsDialog";
 import { PromptsTabContent } from "./PromptsTab";
@@ -258,11 +262,33 @@ export function ToolsetView({
   const telemetry = useTelemetry();
   const client = useSdkClient();
   const { data: toolset, refetch } = useToolset(toolsetSlug);
+
+  // Fetch draft toolset when in iteration mode - needed for correct tool merging
+  const { data: draftToolset } = useDraftToolset(
+    { slug: toolsetSlug },
+    undefined,
+    { enabled: toolset?.iterationMode && toolset?.hasDraftChanges },
+  );
+
   const { addActions, removeActions } = useCommandPalette();
   const location = useLocation();
   const navigate = useNavigate();
 
-  const tools = toolset?.tools ?? [];
+  // draftToolset.tools is raw SDK type, need to transform via asTools()
+  const tools =
+    toolset?.iterationMode && toolset?.hasDraftChanges && draftToolset?.tools
+      ? asTools(draftToolset.tools)
+      : toolset?.tools ?? [];
+
+  const stagedToolUrns = useMemo(() => {
+    if (!toolset?.iterationMode || !toolset?.hasDraftChanges || !draftToolset?.draftToolUrns) {
+      return new Set<string>();
+    }
+    const productionUrns = new Set(toolset.toolUrns || []);
+    return new Set(
+      draftToolset.draftToolUrns.filter((urn) => !productionUrns.has(urn))
+    );
+  }, [toolset?.iterationMode, toolset?.hasDraftChanges, toolset?.toolUrns, draftToolset?.draftToolUrns]);
 
   const isExternalMcp = toolset?.kind === "external-mcp";
 
@@ -384,6 +410,9 @@ export function ToolsetView({
   const onUpdate = () => {
     refetch?.();
     refetchInstance();
+    if (toolset?.iterationMode) {
+      invalidateAllDraftToolset(queryClient);
+    }
   };
 
   const updateToolsetMutation = useUpdateToolsetMutation({
@@ -435,7 +464,10 @@ export function ToolsetView({
 
   const handleToolsRemove = useCallback(
     (removedUrns: string[]) => {
-      const currentUrns = toolset?.toolUrns || [];
+      const currentUrns =
+        toolset?.iterationMode && draftToolset?.draftToolUrns
+          ? draftToolset.draftToolUrns
+          : toolset?.toolUrns || [];
       const updatedUrns = currentUrns.filter(
         (urn) => !removedUrns.includes(urn),
       );
@@ -469,7 +501,7 @@ export function ToolsetView({
         },
       );
     },
-    [toolset?.toolUrns, toolsetSlug],
+    [toolset?.toolUrns, toolset?.iterationMode, draftToolset?.draftToolUrns, toolsetSlug],
   );
 
   const handleTestInPlayground = useCallback(() => {
@@ -557,6 +589,34 @@ export function ToolsetView({
     },
   });
 
+  const setIterationModeMutation = useSetIterationModeMutation({
+    onSuccess: () => {
+      telemetry.capture("toolset_event", { action: "staging_disabled" });
+      toast.success("Staging disabled - changes will now apply directly to production");
+      onUpdate();
+    },
+    onError: (error) => {
+      handleAPIError(error, "Failed to disable staging");
+    },
+  });
+
+  const handleDisableStaging = () => {
+    if (
+      confirm(
+        "⚠️ DANGER: This will disable staging mode.\n\nAll future changes will apply DIRECTLY to your live MCP server without review.\n\nAre you absolutely sure?",
+      )
+    ) {
+      setIterationModeMutation.mutate({
+        request: {
+          slug: toolsetSlug,
+          setIterationModeRequestBody: {
+            iterationMode: false,
+          },
+        },
+      });
+    }
+  };
+
   const handlePromoteDraft = () => {
     if (
       confirm(
@@ -585,12 +645,12 @@ export function ToolsetView({
     }
   };
 
-  const isIterationMode = toolset?.iterationMode ?? false;
   const hasDraftChanges = toolset?.hasDraftChanges ?? false;
+  const isStaging = toolset?.iterationMode ?? true;
 
   const actions = (
     <Stack direction="horizontal" gap={2} align="center">
-      {isIterationMode && hasDraftChanges && (
+      {hasDraftChanges && (
         <>
           <Button
             variant="secondary"
@@ -600,20 +660,15 @@ export function ToolsetView({
           >
             <Button.Text>Discard</Button.Text>
           </Button>
-          <Button
-            size="sm"
-            onClick={handlePromoteDraft}
-            disabled={promoteDraftMutation.isPending}
-          >
-            <Button.LeftIcon>
-              <Icon name="rocket" className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>Release Changes</Button.Text>
-          </Button>
+          <ReleaseChangesPopover
+            toolset={toolset}
+            onRelease={handlePromoteDraft}
+            isPending={promoteDraftMutation.isPending}
+          />
         </>
       )}
       {!isExternalMcp && (
-        <Button onClick={gotoAddTools} size="sm" variant={isIterationMode && hasDraftChanges ? "secondary" : "primary"}>
+        <Button onClick={gotoAddTools} size="sm" variant={hasDraftChanges ? "secondary" : "primary"}>
           <Button.LeftIcon>
             <Icon name="plus" className="h-4 w-4" />
           </Button.LeftIcon>
@@ -629,6 +684,16 @@ export function ToolsetView({
             },
             icon: "message-circle",
           },
+          ...(isStaging && !hasDraftChanges
+            ? [
+                {
+                  label: "Disable Staging",
+                  onClick: handleDisableStaging,
+                  icon: "alert-triangle" as const,
+                  destructive: true,
+                },
+              ]
+            : []),
           {
             label: "Delete Toolset",
             onClick: () => {
@@ -713,6 +778,7 @@ export function ToolsetView({
             <ToolList
               tools={toolsToDisplay}
               toolset={toolset}
+              stagedToolUrns={stagedToolUrns}
               onToolUpdate={handleToolUpdate}
               onToolsRemove={handleToolsRemove}
               onCreateToolset={handleCreateToolset}
@@ -768,7 +834,10 @@ export function ToolsetView({
           onOpenChange={setAddToolsDialogOpen}
           toolset={toolset}
           onAddTools={async (toolUrns) => {
-            const currentUrns = toolset.toolUrns || [];
+            const currentUrns =
+              toolset.iterationMode && draftToolset?.draftToolUrns
+                ? draftToolset.draftToolUrns
+                : toolset.toolUrns || [];
             const newUrns = [...new Set([...currentUrns, ...toolUrns])];
 
             await client.toolsets.updateBySlug({

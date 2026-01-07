@@ -1,4 +1,4 @@
-h1:Inv7N1ORP6oq86IQeYrg5AVj2Gz4YES//AaWt9BEU2M=
+h1:uAgrKpuXzs7IM+IGxQ+uxlxGaeJBpwEUDBiNY9BdwHQ=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -84,3 +84,5 @@ h1:Inv7N1ORP6oq86IQeYrg5AVj2Gz4YES//AaWt9BEU2M=
 20251215231431_project_allowed_origins.sql h1:c9Zv3T1UvQaaP/JfIV3tUnqJ+KyqiBhu8Xu7KxSSkZE=
 20251219193631_add-registry-server-specifier-and-oauth-metadata.sql h1:220kr/4FJV8sfU5guCPeGWz0yXCq+ZajqSvO9x7PsGA=
 20260105143828_toolsets-add-draft-support.sql h1:l7fZLlpCPWaCzkNjoSDzMYTDln7LvDhsxThUgWOyhzM=
+20260106230331_toolsets-add-published-version.sql h1:wh0dOVG5n51k/TUTKrCDm7HoYMStECMVwQu4lcmHV+8=
+20260107175125_toolsets-default-staging-mode.sql h1:d0/lHl4lUClt6nNR7jwZ6eT/5FAc4g/SIzqn/0XNYRM=

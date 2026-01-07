@@ -8,7 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
 import {
   useRegisterEnvironmentTelemetry,
@@ -273,7 +272,7 @@ export function ToolsetPanel({
     string | undefined
   >();
   const [editingTool, setEditingTool] = useState<Tool | null>(null);
-  const [useStagingTools, setUseStagingTools] = useState(false);
+  const [selectedVersion, setSelectedVersion] = useState<"staged" | "production">("production");
 
   const { data: toolsetsData } = useListToolsets();
   const { data: environmentsData } = useListEnvironments();
@@ -288,8 +287,16 @@ export function ToolsetPanel({
   const selectedEnvironment = configRef.current.environmentSlug;
 
   const toolset = toolsets?.find((toolset) => toolset.slug === selectedToolset);
+  const hasDraftChanges = toolset?.hasDraftChanges ?? false;
 
-  const showStagingToggle = toolset?.iterationMode && toolset?.hasDraftChanges;
+  // Default to staged when draft changes exist
+  useEffect(() => {
+    if (hasDraftChanges) {
+      setSelectedVersion("staged");
+    } else {
+      setSelectedVersion("production");
+    }
+  }, [hasDraftChanges, selectedToolset]);
 
   const environmentData = useEnvironment(selectedEnvironment ?? undefined);
 
@@ -500,23 +507,20 @@ export function ToolsetPanel({
             </SelectContent>
           </Select>
         }
-        stagingToggle={
-          showStagingToggle ? (
-            <div className="flex items-center justify-between py-2 px-1">
-              <div className="flex flex-col gap-0.5">
-                <Type variant="small" className="font-medium">
-                  Test Staging
-                </Type>
-                <Type variant="small" className="text-muted-foreground text-xs">
-                  Use draft tool configuration
-                </Type>
-              </div>
-              <Switch
-                checked={useStagingTools}
-                onCheckedChange={setUseStagingTools}
-                aria-label="Toggle staging tools"
-              />
-            </div>
+        versionSelector={
+          hasDraftChanges ? (
+            <Select
+              value={selectedVersion}
+              onValueChange={(v) => setSelectedVersion(v as "staged" | "production")}
+            >
+              <SelectTrigger size="sm" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="staged">Staged (Draft)</SelectItem>
+                <SelectItem value="production">Production (Live)</SelectItem>
+              </SelectContent>
+            </Select>
           ) : undefined
         }
         authSettings={

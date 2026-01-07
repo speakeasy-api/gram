@@ -27,6 +27,7 @@ import { SubtoolsBadge } from "./SubtoolsBadge";
 interface ToolListProps {
   tools: Tool[]; // Accepts all tool types, filters to Tool internally
   toolset?: Toolset; // Optionally specificy the toolset to provide rows with additional context
+  stagedToolUrns?: Set<string>; // Tool URNs that are staged (in draft but not production)
   onToolUpdate?: (
     tool: Tool,
     updates: { name?: string; description?: string },
@@ -229,6 +230,7 @@ function ToolRow({
   onUpdate,
   isSelected,
   isFocused,
+  isStaged,
   onCheckboxChange,
   onTestInPlayground,
   onRemove,
@@ -240,6 +242,7 @@ function ToolRow({
   onUpdate?: (updates: { name?: string; description?: string }) => void;
   isSelected: boolean;
   isFocused: boolean;
+  isStaged?: boolean;
   onCheckboxChange: (checked: boolean) => void;
   onTestInPlayground?: () => void;
   onRemove?: () => void;
@@ -310,10 +313,11 @@ function ToolRow({
       : []),
   ];
 
-  const toolPrefix = tool.name.startsWith(groupName + "_")
+  const toolName = tool.name ?? "";
+  const toolPrefix = toolName.startsWith(groupName + "_")
     ? groupName + "_"
     : "";
-  const toolNameNoPrefix = tool.name.replace(toolPrefix, "");
+  const toolNameNoPrefix = toolName.replace(toolPrefix, "");
 
   return (
     <>
@@ -346,6 +350,11 @@ function ToolRow({
                 {toolNameNoPrefix}
               </p>
               <ToolVariationBadge tool={tool} />
+              {isStaged && (
+                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+                  Staged
+                </span>
+              )}
             </Stack>
             <p className="text-sm leading-6 text-muted-foreground truncate">
               {tool.description || "No description"}
@@ -522,6 +531,7 @@ function ToolGroupHeader({
 export function ToolList({
   tools,
   toolset,
+  stagedToolUrns,
   onToolUpdate,
   onToolsRemove,
   onAddToToolset,
@@ -869,6 +879,7 @@ export function ToolList({
                             : selectedForRemoval.has(toolId)
                         }
                         isFocused={toolIndex === focusedToolIndex}
+                        isStaged={stagedToolUrns?.has(toolId)}
                         onCheckboxChange={(checked) =>
                           handleCheckboxChange(toolId, checked)
                         }
