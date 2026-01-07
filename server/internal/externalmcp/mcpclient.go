@@ -92,6 +92,8 @@ func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, trans
 			Endpoint:   remoteURL,
 			HTTPClient: httpClient,
 		}
+	default:
+		return nil, fmt.Errorf("unsupported transport type: %s", transportType)
 	}
 
 	session, err := client.Connect(ctx, transport, nil)
