@@ -1031,6 +1031,13 @@ paths:
       x-speakeasy-name-override: uploadFunctions
       x-speakeasy-react-hook:
         name: UploadFunctions
+      requestBody:
+        required: true
+        content:
+          "*/*":
+            schema:
+              type: string
+              format: binary
   /rpc/assets.uploadImage:
     post:
       description: Upload an image to Gram.
@@ -1143,6 +1150,13 @@ paths:
       x-speakeasy-name-override: uploadImage
       x-speakeasy-react-hook:
         name: UploadImage
+      requestBody:
+        required: true
+        content:
+          "*/*":
+            schema:
+              type: string
+              format: binary
   /rpc/assets.uploadOpenAPIv3:
     post:
       description: Upload an OpenAPI v3 document to Gram.
@@ -1255,6 +1269,13 @@ paths:
       x-speakeasy-name-override: uploadOpenAPIv3
       x-speakeasy-react-hook:
         name: UploadOpenAPIv3
+      requestBody:
+        required: true
+        content:
+          "*/*":
+            schema:
+              type: string
+              format: binary
   /rpc/auth.callback:
     get:
       description: Handles the authentication callback.
