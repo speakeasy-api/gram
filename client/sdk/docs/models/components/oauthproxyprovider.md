@@ -7,12 +7,12 @@ import { OAuthProxyProvider } from "@gram/client/models/components";
 
 let value: OAuthProxyProvider = {
   authorizationEndpoint: "<value>",
-  createdAt: new Date("2023-11-23T21:56:04.000Z"),
+  createdAt: new Date("2024-11-22T21:56:04.000Z"),
   id: "<id>",
   providerType: "custom",
   slug: "<value>",
   tokenEndpoint: "<value>",
-  updatedAt: new Date("2023-11-28T19:56:33.661Z"),
+  updatedAt: new Date("2024-11-27T19:56:33.661Z"),
 };
 ```
 

@@ -6,12 +6,12 @@
 import { Package } from "@gram/client/models/components";
 
 let value: Package = {
-  createdAt: new Date("2024-02-10T19:08:11.368Z"),
+  createdAt: new Date("2025-02-09T19:08:11.368Z"),
   id: "<id>",
   name: "<value>",
   organizationId: "<id>",
   projectId: "<id>",
-  updatedAt: new Date("2024-01-09T01:15:25.788Z"),
+  updatedAt: new Date("2025-01-08T01:15:25.788Z"),
 };
 ```
 

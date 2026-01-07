@@ -776,3 +776,31 @@ func stringPtr(s string) *string {
 func int32Ptr(i int32) *int32 {
 	return &i
 }
+
+// fromTimeV7 creates a UUIDv7 with the timestamp portion set from the provided time.
+func fromTimeV7(t time.Time) (uuid.UUID, error) {
+	var u uuid.UUID
+
+	// 1) Encode unix milliseconds into first 48 bits
+	ms := t.UnixMilli()
+	u[0] = byte(ms >> 40)
+	u[1] = byte(ms >> 32)
+	u[2] = byte(ms >> 24)
+	u[3] = byte(ms >> 16)
+	u[4] = byte(ms >> 8)
+	u[5] = byte(ms)
+
+	// 2) 12-bit random field (or sub-millisecond precision)
+	u[6] = 0
+	u[7] = 0
+
+	// 3) Set version (v7)
+	u[6] = (u[6] & 0x0F) | 0x70
+
+	// 4) Set variant (RFC 4122)
+	u[8] = (u[8] & 0x3F) | 0x80
+
+	// 5) Fill remaining with random bits (bytes 9..15)
+	// For deterministic testing, we leave them as zero
+	return u, nil
+}

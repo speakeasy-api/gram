@@ -9,12 +9,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/google/uuid"
-
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -88,14 +85,3 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
-func setProjectID(t *testing.T, ctx context.Context, projectID string) context.Context {
-	t.Helper()
-
-	authContext, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	id := uuid.MustParse(projectID)
-	authContext.ProjectID = &id
-
-	return contextvalues.SetAuthContext(ctx, authContext)
-}
