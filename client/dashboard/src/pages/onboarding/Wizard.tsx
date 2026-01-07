@@ -217,6 +217,7 @@ const LHS = ({
   const [showTopBlur, setShowTopBlur] = useState(false);
   const [showBottomBlur, setShowBottomBlur] = useState(false);
   const contentScrollRef = useRef<HTMLDivElement>(null);
+  const telemetry = useTelemetry();
 
   // Check scroll position to show/hide blur gradients
   const handleScroll = () => {
@@ -321,6 +322,9 @@ const LHS = ({
                 onDeployChatClick={onDeployChatClick}
                 routes={routes}
                 isFunctionsEnabled={isFunctionsEnabled}
+                onChoiceSelected={(choice) => {
+                  telemetry.capture("onboarding_choice_selected", { choice });
+                }}
               />
             )}
             {currentStep === "first-party-choice" && (
@@ -385,14 +389,17 @@ const InitialChoiceStep = ({
   onDeployChatClick,
   routes,
   isFunctionsEnabled,
+  onChoiceSelected,
 }: {
   setCurrentStep: (step: OnboardingStep) => void;
   setSelectedPath: (path: OnboardingPath) => void;
   onDeployChatClick: () => void;
   routes: RoutesWithGoTo;
   isFunctionsEnabled: boolean;
+  onChoiceSelected: (choice: string) => void;
 }) => {
   const handleConnectToData = () => {
+    onChoiceSelected("connect_to_data");
     // Go to the secondary choice step (openapi vs cli) if functions enabled,
     // otherwise skip directly to upload
     if (isFunctionsEnabled) {
@@ -411,7 +418,10 @@ const InitialChoiceStep = ({
       </Stack>
       <div className="grid grid-cols-1 gap-4">
         <ChoiceCard
-          onClick={() => routes.catalog.goTo()}
+          onClick={() => {
+            onChoiceSelected("connect_to_popular_mcps");
+            routes.catalog.goTo();
+          }}
           icon={Store}
           title="Connect to Popular MCPs"
           description="Browse and connect to official and community-maintained MCP servers"
@@ -423,7 +433,10 @@ const InitialChoiceStep = ({
           description="Create tools and MCPs from your own APIs or deploy custom code"
         />
         <ChoiceCard
-          onClick={onDeployChatClick}
+          onClick={() => {
+            onChoiceSelected("deploy_data_integrated_chat");
+            onDeployChatClick();
+          }}
           icon={MessageSquare}
           title="Deploy Data-Integrated Chat"
           description="Build embeddable chat experiences powered by your data"
