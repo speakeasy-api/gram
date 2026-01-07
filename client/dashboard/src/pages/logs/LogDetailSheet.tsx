@@ -17,7 +17,10 @@ export function LogDetailSheet({
 }: LogDetailSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="!w-[33vw] !min-w-[400px] !max-w-none sm:!max-w-none h-full max-h-screen overflow-y-auto">
+      <SheetContent
+        className="h-full max-h-screen overflow-y-auto"
+        style={{ width: "33vw", minWidth: 500, maxWidth: "none" }}
+      >
         {log && <LogDetailContent log={log} />}
       </SheetContent>
     </Sheet>
@@ -26,6 +29,10 @@ export function LogDetailSheet({
 
 function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
   const severityClass = getSeverityColorClass(log.severityText);
+  const resourceAttrs = log.resourceAttributes as
+    | { gram?: { urn?: string } }
+    | undefined;
+  const gramUrn = resourceAttrs?.gram?.urn;
 
   return (
     <div className="flex flex-col gap-6 pt-6 px-5 pb-6">
@@ -48,6 +55,14 @@ function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
             label="Service"
             value={log.service?.name || "Unknown"}
           />
+          {gramUrn && (
+            <MetadataBadge
+              label="Gram URN"
+              value={gramUrn}
+              mono
+              copyValue={gramUrn}
+            />
+          )}
           {log.traceId && (
             <MetadataBadge
               label="Trace ID"
@@ -98,55 +113,19 @@ function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
           {/* Attributes */}
           {log.attributes &&
             Object.keys(log.attributes as object).length > 0 && (
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-medium uppercase text-muted-foreground tracking-wide">
-                    Attributes
-                  </div>
-                  <button
-                    className="p-1.5 rounded hover:bg-surface-secondary-default"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(
-                        JSON.stringify(log.attributes, null, 2),
-                      );
-                    }}
-                  >
-                    <Copy className="size-4" />
-                  </button>
-                </div>
-                <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4 max-h-[300px] overflow-y-auto">
-                  <pre className="font-mono text-sm whitespace-pre-wrap break-all">
-                    {JSON.stringify(log.attributes, null, 2)}
-                  </pre>
-                </div>
-              </div>
+              <AttributesSection
+                title="Attributes"
+                data={log.attributes as Record<string, unknown>}
+              />
             )}
 
           {/* Resource */}
           {log.resourceAttributes &&
             Object.keys(log.resourceAttributes as object).length > 0 && (
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-medium uppercase text-muted-foreground tracking-wide">
-                    Resource
-                  </div>
-                  <button
-                    className="p-1.5 rounded hover:bg-surface-secondary-default"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(
-                        JSON.stringify(log.resourceAttributes, null, 2),
-                      );
-                    }}
-                  >
-                    <Copy className="size-4" />
-                  </button>
-                </div>
-                <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4 max-h-[250px] overflow-y-auto">
-                  <pre className="font-mono text-sm whitespace-pre-wrap break-all">
-                    {JSON.stringify(log.resourceAttributes, null, 2)}
-                  </pre>
-                </div>
-              </div>
+              <AttributesSection
+                title="Resource"
+                data={log.resourceAttributes as Record<string, unknown>}
+              />
             )}
         </TabsContent>
 
@@ -190,7 +169,7 @@ function MetadataBadge({
 }) {
   return (
     <button
-      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-tertiary-default hover:bg-surface-secondary-default transition-colors text-sm"
+      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-tertiary hover:bg-surface-secondary-default transition-colors text-sm"
       onClick={() => {
         if (copyValue) {
           void navigator.clipboard.writeText(copyValue);
@@ -204,4 +183,84 @@ function MetadataBadge({
       </span>
     </button>
   );
+}
+
+function AttributesSection({
+  title,
+  data,
+}: {
+  title: string;
+  data: Record<string, unknown>;
+}) {
+  const flatEntries = flattenObject(data);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-medium uppercase text-muted-foreground tracking-wide">
+          {title}
+        </div>
+        <button
+          className="p-1.5 rounded hover:bg-surface-secondary-default"
+          onClick={() => {
+            void navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+          }}
+        >
+          <Copy className="size-4" />
+        </button>
+      </div>
+      <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg divide-y divide-neutral-softest">
+        {flatEntries.map(([key, value]) => (
+          <div
+            key={key}
+            className="flex flex-col gap-1 px-4 py-2.5 hover:bg-surface-tertiary transition-colors"
+          >
+            <span className="text-xs text-muted-foreground">{key}</span>
+            <span className="text-sm font-mono break-all">{value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Flatten a nested object into dot-notation keys
+ * e.g. { http: { request: { method: "POST" } } } => [["http.request.method", "POST"]]
+ */
+function flattenObject(
+  obj: Record<string, unknown>,
+  prefix = "",
+): [string, string][] {
+  const result: [string, string][] = [];
+
+  for (const [key, value] of Object.entries(obj)) {
+    const fullKey = prefix ? `${prefix}.${key}` : key;
+
+    if (value === null || value === undefined) {
+      result.push([fullKey, "—"]);
+      continue
+    }
+    
+    switch (typeof value) {
+      case "object":
+        if (Array.isArray(value)) {
+          result.push([fullKey, JSON.stringify(value)]);
+        } else if (Object.keys(value).length > 0) {
+          result.push(...flattenObject(value as Record<string, unknown>, fullKey));
+        }
+        break;
+      case "string":
+        result.push([fullKey, value || "—"]);
+        break;
+      case "number":
+      case "boolean":
+        result.push([fullKey, String(value)]);
+        break;
+      default:
+        result.push([fullKey, JSON.stringify(value)]);
+    }
+  }
+
+  return result;
 }
