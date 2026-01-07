@@ -64,8 +64,8 @@ type serverJSON struct {
 	Version     string  `json:"version"`
 	Title       *string `json:"title"`
 	WebsiteURL  *string `json:"websiteUrl"`
-	Icons       []struct {
-		URL string `json:"url"`
+	Icons []struct {
+		Src string `json:"src"`
 	} `json:"icons"`
 	Remotes []serverRemote `json:"remotes"`
 }
@@ -150,7 +150,7 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 	for _, s := range listResp.Servers {
 		var iconURL *string
 		if len(s.Server.Icons) > 0 {
-			iconURL = &s.Server.Icons[0].URL
+			iconURL = &s.Server.Icons[0].Src
 		}
 
 		server := &types.ExternalMCPServer{
@@ -166,7 +166,20 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 		servers = append(servers, server)
 	}
 
+	hackilyEnrichWithLogos(servers)
 	return servers, nil
+}
+
+// hackilyEnrichWithLogos patches servers with hardcoded logo URLs for servers
+// that don't have icons from the registry.
+func hackilyEnrichWithLogos(servers []*types.ExternalMCPServer) {
+	for _, s := range servers {
+		if s.IconURL == nil {
+			if logo, ok := HardcodedLogos[s.RegistrySpecifier]; ok {
+				s.IconURL = &logo
+			}
+		}
+	}
 }
 
 // ServerDetails contains detailed information about an MCP server including connection info.
