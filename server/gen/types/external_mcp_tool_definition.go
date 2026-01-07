@@ -25,8 +25,7 @@ type ExternalMCPToolDefinition struct {
 	Slug string
 	// The URL to connect to the MCP server
 	RemoteURL string
-	// The transport type used to connect to the MCP server ('streamable-http' or
-	// 'sse')
+	// The transport type used to connect to the MCP server
 	TransportType string
 	// Whether the external MCP server requires OAuth authentication
 	RequiresOauth bool

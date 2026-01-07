@@ -3075,7 +3075,7 @@ func integrationsGetUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "integrations get --id \"Aperiam saepe quo excepturi quibusdam soluta provident.\" --name \"Quae et dolores quas sunt iusto.\" --session-token \"Enim id libero vero repudiandae omnis.\" --project-slug-input \"Ea esse voluptatem.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "integrations get --id \"Ut ut aut veniam dolores quis aperiam.\" --name \"Quo excepturi.\" --session-token \"Soluta provident.\" --project-slug-input \"Quae et dolores quas sunt iusto.\"")
 }
 
 func integrationsListUsage() {
