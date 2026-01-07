@@ -91,11 +91,12 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = payload.RequestBody;
 
   const path = pathToFunc("/rpc/assets.uploadOpenAPIv3")();
 
   const headers = new Headers(compactMap({
+    "Content-Type": body instanceof Blob && body.type ? body.type : undefined,
     Accept: "application/json",
     "Content-Length": encodeSimple(
       "Content-Length",

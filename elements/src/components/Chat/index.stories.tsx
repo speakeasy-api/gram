@@ -3,6 +3,7 @@ import { Chat } from '.'
 import { ElementsProvider } from '../../contexts/ElementsProvider'
 import type { Meta, StoryFn } from '@storybook/react-vite'
 import { ZapIcon } from 'lucide-react'
+import { google } from '@ai-sdk/google'
 import {
   ToolCallMessagePartProps,
   useAssistantState,
@@ -766,6 +767,32 @@ WithFrontendTools.parameters = {
           fetchUrl: FetchToolComponent,
         },
       },
+    },
+  },
+}
+
+// NOTE: add Gemini API key to .env.local with the key VITE_GOOGLE_GENERATIVE_AI_API_KEY
+export const WithCustomLanguageModel: Story = () => <Chat />
+WithCustomLanguageModel.parameters = {
+  elements: {
+    config: {
+      welcome: {
+        title: 'Using Google Gemini',
+        subtitle: 'Using Google Gemini 3 Flash Preview',
+        suggestions: [
+          {
+            title: 'Generate a chart',
+            label: 'Generate a chart',
+            action: 'Generate a chart of these values: 1, 2, 3, 4, 5',
+          },
+          {
+            title: 'Call all tools',
+            label: 'Call all tools',
+            action: 'Call all tools',
+          },
+        ],
+      },
+      languageModel: google('gemini-3-flash-preview'),
     },
   },
 }

@@ -6,11 +6,11 @@
 import { Chat } from "@gram/client/models/components";
 
 let value: Chat = {
-  createdAt: new Date("2023-08-22T03:55:40.546Z"),
+  createdAt: new Date("2024-08-21T03:55:40.546Z"),
   id: "<id>",
   messages: [
     {
-      createdAt: new Date("2024-01-23T04:53:42.435Z"),
+      createdAt: new Date("2025-01-22T04:53:42.435Z"),
       id: "<id>",
       model: "Durango",
       role: "<value>",
@@ -18,7 +18,7 @@ let value: Chat = {
   ],
   numMessages: 338963,
   title: "<value>",
-  updatedAt: new Date("2024-06-25T13:21:36.855Z"),
+  updatedAt: new Date("2025-06-25T13:21:36.855Z"),
   userId: "<id>",
 };
 ```

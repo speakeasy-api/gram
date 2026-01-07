@@ -11,7 +11,7 @@ actions:
   - target: $.components.schemas.Error
     update:
       x-speakeasy-name-override: ServiceError
-  - target: $.paths.*[?@.operationId=='assets#uploadOpenAPIv3']
+  - target: $.paths.*[?(@.operationId=='uploadOpenAPIv3Asset' || @.operationId=='uploadFunctions' || @.operationId=='uploadImage')]
     update:
       requestBody:
         required: true

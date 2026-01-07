@@ -3,4 +3,4 @@
 
 set -e
 
-exec pnpm dev
+exec pnpm --filter ./client/dashboard dev

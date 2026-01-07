@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.16.5**](../README.md)
+[**@gram-ai/elements v1.17.0**](../README.md)
 
 ***
 
@@ -216,6 +216,31 @@ const config: ElementsConfig = {
   composer: {
     placeholder: 'Enter your message...',
   },
+}
+```
+
+***
+
+### languageModel?
+
+> `optional` **languageModel**: `LanguageModel`
+
+Optional property to override the LLM provider. If you override the model,
+then logs & usage metrics will not be tracked directly via Gram.
+
+Please ensure that you are using an AI SDK v2 compatible model (e.g a
+Vercel AI sdk provider in the v2 semver range), as this is the only variant
+compatible with AI SDK V5
+
+Example with Google Gemini:
+```ts
+import { google } from '@ai-sdk/google';
+
+const googleGemini = google('gemini-3-pro-preview');
+
+const config: ElementsConfig = {
+  {other options}
+  languageModel: googleGemini,
 }
 ```
 
