@@ -86,6 +86,8 @@ const ElementsProviderInner = ({
   const transport = useMemo<ChatTransport<UIMessage> | undefined>(
     () => ({
       sendMessages: async ({ messages, abortSignal }) => {
+        const usingCustomModel = !!config.languageModel
+
         if (!session) {
           throw new Error('No session found')
         }
@@ -99,38 +101,67 @@ const ElementsProviderInner = ({
           getEnabledTools(context?.tools ?? {})
         )
 
-        // Create OpenRouter model
-        const openRouterModel = createOpenRouter({
-          baseURL: GRAM_API_URL,
-          apiKey: 'unused, but must be set',
-          headers: {
-            'Gram-Project': config.projectSlug,
-            'Gram-Chat-Session': session,
-          },
-        })
+        // Create OpenRouter model (only needed when not using custom model)
+        const openRouterModel = usingCustomModel
+          ? null
+          : createOpenRouter({
+              baseURL: GRAM_API_URL,
+              apiKey: 'unused, but must be set',
+              headers: {
+                'Gram-Project': config.projectSlug,
+                'Gram-Chat-Session': session!,
+              },
+            })
+
+        if (config.languageModel) {
+          console.log('Using custom language model', config.languageModel)
+        }
+
+        // Combine tools - MCP tools only available when not using custom model
+        const tools: ToolSet = {
+          ...mcpTools,
+          ...convertFrontendToolsToAISDKTools(frontendTools),
+        } as ToolSet
 
         // Stream the response
-        const result = streamText({
-          system: systemPrompt,
-          model: openRouterModel.chat(model),
-          messages: convertToModelMessages(messages),
-          tools: {
-            ...mcpTools,
-            ...convertFrontendToolsToAISDKTools(frontendTools),
-          } as ToolSet,
-          stopWhen: stepCountIs(10),
-          experimental_transform: smoothStream({ delayInMs: 15 }),
-          abortSignal,
-        })
+        const modelToUse = config.languageModel
+          ? config.languageModel
+          : openRouterModel!.chat(model)
 
-        return result.toUIMessageStream()
+        try {
+          const result = streamText({
+            system: systemPrompt,
+            model: modelToUse,
+            messages: convertToModelMessages(messages),
+            tools,
+            stopWhen: stepCountIs(10),
+            experimental_transform: smoothStream({ delayInMs: 15 }),
+            abortSignal,
+            onError: ({ error }) => {
+              console.error('Stream error in onError callback:', error)
+            },
+          })
+
+          return result.toUIMessageStream()
+        } catch (error) {
+          console.error('Error creating stream:', error)
+          throw error
+        }
       },
       reconnectToStream: async () => {
         // Not implemented for client-side streaming
         throw new Error('Stream reconnection not supported')
       },
     }),
-    [config, model, systemPrompt, session, mcpTools, mcpToolsLoading]
+    [
+      config,
+      config.languageModel,
+      model,
+      systemPrompt,
+      session,
+      mcpTools,
+      mcpToolsLoading,
+    ]
   )
 
   const runtime = useChatRuntime({

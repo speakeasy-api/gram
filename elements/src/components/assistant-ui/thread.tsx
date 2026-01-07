@@ -195,7 +195,7 @@ const ThreadSuggestions: FC = () => {
           ? 'flex flex-wrap items-center justify-center'
           : suggestions.length === 1
             ? 'flex'
-            : 'grid @md:grid-cols-2'
+            : 'grid max-w-fit @md:grid-cols-2'
       )}
     >
       {suggestions.map((suggestion, index) => (
@@ -399,7 +399,9 @@ const ComposerAction: FC = () => {
           <div className="aui-composer-add-attachment-placeholder" />
         )}
 
-        {config.model?.showModelPicker && <ComposerModelPicker />}
+        {config.model?.showModelPicker && !config.languageModel && (
+          <ComposerModelPicker />
+        )}
       </div>
 
       <ThreadPrimitive.If running={false}>

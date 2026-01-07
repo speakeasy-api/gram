@@ -6,7 +6,7 @@ import { ChartRenderer } from './component'
  */
 export const chart: Plugin = {
   language: 'vega',
-  prompt: `When a user requests a chart or visualization, respond with a valid Vega specification (https://vega.github.io/vega/) in a code block with language 'vega'.
+  prompt: `When a user requests a chart or visualization, respond with a valid Vega specification (https://vega.github.io/vega/) in a code block annotated with the language identifier 'vega'.
 
 CRITICAL JSON REQUIREMENTS:
 - The code block MUST contain ONLY valid, parseable JSON
