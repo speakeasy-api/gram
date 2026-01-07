@@ -11,11 +11,13 @@ interface RemoveSourceDialogContentProps {
     assetIdOrSlug: string,
     type: "openapi" | "function" | "externalmcp",
   ) => Promise<void>;
+  onClose: () => void;
 }
 
 export function RemoveSourceDialogContent({
   asset,
   onConfirmRemoval,
+  onClose,
 }: RemoveSourceDialogContentProps) {
   const [pending, setPending] = useState(false);
   const [inputMatches, setInputMatches] = useState(false);
@@ -32,9 +34,11 @@ export function RemoveSourceDialogContent({
     setPending(true);
     // For external MCPs, pass the slug; for others, pass the asset ID
     const identifier = asset.type === "externalmcp" ? asset.slug : asset.id;
-    await onConfirmRemoval(identifier, asset.type);
-    setPending(false);
-    setInputMatches(false);
+    try {
+      await onConfirmRemoval(identifier, asset.type);
+    } finally {
+      onClose();
+    }
   };
 
   const DeleteButton = () => {
