@@ -30,7 +30,6 @@ import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { CodeBlock } from "@/components/code";
-import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { handleAPIError } from "@/lib/errors";
 import {
   Check,
@@ -82,7 +81,6 @@ export function OnboardingWizard() {
     useState<OnboardingStep>("initial-choice");
   const [toolsetName, setToolsetName] = useState<string>();
   const [mcpSlug, setMcpSlug] = useState<string>();
-  const [deployChatModalOpen, setDeployChatModalOpen] = useState(false);
 
   const startStep = searchParams.get(START_STEP_PARAM);
   const startPath = searchParams.get(START_PATH_PARAM);
@@ -115,7 +113,7 @@ export function OnboardingWizard() {
           mcpSlug={mcpSlug}
           setMcpSlug={setMcpSlug}
           isFunctionsEnabled={isFunctionsEnabled}
-          onDeployChatClick={() => setDeployChatModalOpen(true)}
+          onDeployChatClick={() => routes.deployChat.goTo()}
           routes={routes}
         />
       </div>
@@ -126,14 +124,6 @@ export function OnboardingWizard() {
           mcpSlug={mcpSlug}
         />
       </div>
-      <FeatureRequestModal
-        isOpen={deployChatModalOpen}
-        onClose={() => setDeployChatModalOpen(false)}
-        title="Deploy Data-Integrated Chat"
-        description="Embeddable chat experiences powered by your data are coming soon! We'll let you know when this feature is available."
-        actionType="deploy_chat"
-        icon={MessageSquare}
-      />
     </Stack>
   );
 }

@@ -19,6 +19,7 @@ import Logs from "./pages/logs/Logs";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPHostedPage } from "./pages/mcp/MCPHostedPage";
 import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
+import { DeployChatWizard } from "./pages/onboarding/DeployChatWizard";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
 import Playground from "./pages/playground/Playground";
@@ -112,6 +113,12 @@ const ROUTE_STRUCTURE = {
     url: "onboarding",
     component: OnboardingWizard,
     outsideMainLayout: true, // Break out of normal page structure
+  },
+  deployChat: {
+    title: "Deploy Chat",
+    url: "deploy-chat",
+    component: DeployChatWizard,
+    outsideMainLayout: true,
   },
   home: {
     title: "Home",
