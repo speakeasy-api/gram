@@ -152,28 +152,6 @@ export default function Sources() {
     return [...openApiSources, ...functionSources, ...externalMcpSources];
   }, [deployment, assets]);
 
-  if (!isLoading && deploymentIsEmpty) {
-    return (
-      <>
-        <SourcesEmptyState onNewUpload={openAddSource} />
-        <Dialog
-          open={dialogState.type === "add-source"}
-          onOpenChange={(open) => !open && closeDialog()}
-        >
-          <Dialog.Content className="max-w-2xl!">
-            <AddSourceDialogContent onCompletion={closeDialog} />
-          </Dialog.Content>
-        </Dialog>
-      </>
-    );
-  }
-
-  const handleDialogSuccess = () => {
-    closeDialog();
-    refetch();
-    refetchAssets();
-  };
-
   const removeSource = async (
     assetId: string,
     type: "openapi" | "function" | "externalmcp",
@@ -209,6 +187,43 @@ export default function Sources() {
             : "external MCP";
       toast.error(`Failed to delete ${typeLabel} source. Please try again.`);
     }
+  };
+
+  if (!isLoading && deploymentIsEmpty) {
+    return (
+      <>
+        <SourcesEmptyState onNewUpload={openAddSource} />
+        <Dialog
+          open={dialogState.type === "add-source"}
+          onOpenChange={(open) => !open && closeDialog()}
+        >
+          <Dialog.Content className="max-w-2xl!">
+            <AddSourceDialogContent onCompletion={closeDialog} />
+          </Dialog.Content>
+        </Dialog>
+        {/* Render remove dialog in empty state to allow graceful close animation when deleting last source */}
+        <Dialog
+          open={dialogState.type === "remove-source"}
+          onOpenChange={(open) => !open && closeDialog()}
+        >
+          <Dialog.Content className="max-w-2xl!">
+            {dialogState.type === "remove-source" && (
+              <RemoveSourceDialogContent
+                asset={dialogState.asset}
+                onConfirmRemoval={removeSource}
+                onClose={closeDialog}
+              />
+            )}
+          </Dialog.Content>
+        </Dialog>
+      </>
+    );
+  }
+
+  const handleDialogSuccess = () => {
+    closeDialog();
+    refetch();
+    refetchAssets();
   };
 
   return (
