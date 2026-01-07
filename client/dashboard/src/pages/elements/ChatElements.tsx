@@ -49,8 +49,8 @@ export default function ChatElements() {
                 icon={Rocket}
                 title="Productionize your chat"
                 description="Set up Chat Sessions for secure production deployments and customize your chat experience"
-                // TODO: Update these docs to actually talk about chat sessions
-                linkTo="https://www.getgram.ai/docs/gram-elements/quickstart#step-2-setup-your-backend"
+                // TODO: Update this to point to the docsite once it is updated
+                linkTo="https://github.com/speakeasy-api/gram/tree/main/elements#setting-up-your-backend"
                 linkText="View docs"
                 external
               />
