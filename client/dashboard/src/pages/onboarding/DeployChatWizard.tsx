@@ -139,7 +139,9 @@ export const App = () => {
   return (
     <>
       <Stack gap={1}>
-        <span className="text-heading-md">Deploy Data-Integrated Chat</span>
+        <span className="text-heading-md">
+          Deploy Chat Connected To Your Data
+        </span>
         <span className="text-body-sm">
           Create an embeddable chat experience powered by your data
         </span>
