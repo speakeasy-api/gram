@@ -15,6 +15,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { Plugin } from './plugins'
+import { LanguageModel } from 'ai'
 
 /**
  * Function to retrieve the session token from the backend endpoint.
@@ -202,6 +203,25 @@ export interface ElementsConfig {
    * }
    */
   composer?: ComposerConfig
+
+  /**
+   * Optional property to override the LLM provider.
+   * NOTE: if you override the model, then logs & usage metrics will not be tracked
+   * directly via Gram.
+   *
+   * Example with Google Gemini:
+   * ```ts
+   * import { google } from '@ai-sdk/google';
+   *
+   * const googleGemini = google('gemini-3-pro-preview');
+   *
+   * const config: ElementsConfig = {
+   *   {other options}
+   *   languageModel: googleGemini,
+   * }
+   * ```
+   */
+  languageModel?: LanguageModel
 
   /**
    * The configuration for the modal window.

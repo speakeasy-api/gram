@@ -1,4 +1,4 @@
-import { defineConfig, ViteDevServer } from 'vite'
+import { defineConfig, loadEnv, ViteDevServer } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { dirname, resolve } from 'node:path'
@@ -21,11 +21,25 @@ const apiMiddlewarePlugin = () => ({
   },
 })
 
-export default defineConfig({
-  plugins: [react(), tailwindcss(), apiMiddlewarePlugin()],
-  resolve: {
-    alias: {
-      '@': resolve(__dirname, '../src'),
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+
+  return {
+    plugins: [react(), tailwindcss(), apiMiddlewarePlugin()],
+    resolve: {
+      alias: {
+        '@': resolve(__dirname, '../src'),
+      },
     },
-  },
+    // define the process.env variable for the browser env and attach the .env values (used for storybook stories that rely on external provider keys, namely google)
+    define: {
+      'process.env': JSON.stringify(
+        Object.fromEntries(
+          Object.entries(env)
+            .filter(([key]) => key.startsWith('VITE_'))
+            .map(([key, value]) => [key.replace('VITE_', ''), value])
+        )
+      ),
+    },
+  }
 })

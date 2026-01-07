@@ -3,10 +3,6 @@ import { GetSessionFn } from '@/types'
 
 /**
  * Hook to fetch or retrieve the session token for the chat.
- * If clientToken is provided in config, it will be used directly.
- * Otherwise, if apiKey is provided, it will fetch a new session token.
- *
- * @param config - The ElementsConfig containing clientToken, apiKey, and projectSlug
  * @returns The session token string or null
  */
 export const useSession = ({
