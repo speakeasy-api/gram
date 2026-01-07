@@ -2,7 +2,6 @@ package externalmcp
 
 import (
 	"context"
-	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -170,47 +170,13 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 	return servers, nil
 }
 
-type TransportType string
-
-const (
-	TransportTypeStreamableHTTP TransportType = "streamable-http"
-	TransportTypeSSE            TransportType = "sse"
-)
-
-func (t TransportType) Value() (driver.Value, error) {
-	return string(t), nil
-}
-
-func (t *TransportType) Scan(value interface{}) error {
-	if value == nil {
-		*t = ""
-		return nil
-	}
-
-	str, ok := value.(string)
-	if !ok {
-		return fmt.Errorf("failed to scan TransportType: %v", value)
-	}
-
-	*t = TransportType(str)
-	return nil
-}
-
-func (t TransportType) Valid() bool {
-	return t == TransportTypeStreamableHTTP || t == TransportTypeSSE
-}
-
-func (t TransportType) String() string {
-	return string(t)
-}
-
 // ServerDetails contains detailed information about an MCP server including connection info.
 type ServerDetails struct {
-	Name        string
-	Description string
-	Version     string
-	RemoteURL   string
-	TransportType
+	Name          string
+	Description   string
+	Version       string
+	RemoteURL     string
+	TransportType externalmcptypes.TransportType
 }
 
 // getServerResponse wraps a single server from the registry.
@@ -261,16 +227,15 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 
 	// Find the remote URL, preferring streamable-http over sse
 	var remoteURL string
-	var transportType TransportType
+	var transportType externalmcptypes.TransportType
 	for _, remote := range serverResp.Server.Remotes {
 		if remote.Type == "streamable-http" {
 			remoteURL = remote.URL
-			transportType = TransportTypeStreamableHTTP
+			transportType = externalmcptypes.TransportTypeStreamableHTTP
 			break
-		}
-		if remote.Type == "sse" && remoteURL == "" {
+		} else if remote.Type == "sse" {
 			remoteURL = remote.URL
-			transportType = TransportTypeSSE
+			transportType = externalmcptypes.TransportTypeSSE
 		}
 	}
 

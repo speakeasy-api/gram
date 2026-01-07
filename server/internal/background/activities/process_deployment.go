@@ -503,6 +503,7 @@ func (p *ProcessDeployment) doExternalMCPs(
 				ExternalMcpAttachmentID:    mcp.ID,
 				ToolUrn:                    toolURN.String(),
 				RemoteUrl:                  serverDetails.RemoteURL,
+				TransportType:              serverDetails.TransportType,
 				RequiresOauth:              requiresOAuth,
 				OauthVersion:               oauthVersion,
 				OauthAuthorizationEndpoint: oauthAuthEndpoint,

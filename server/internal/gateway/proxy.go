@@ -605,6 +605,7 @@ func (tp *ToolProxy) doExternalMCP(
 		if token := env.UserConfig.Get(ExternalMCPOAuthTokenKey); token != "" {
 			opts = &externalmcp.ClientOptions{
 				Authorization: "Bearer " + token,
+				TransportType: plan.TransportType,
 			}
 		}
 	}

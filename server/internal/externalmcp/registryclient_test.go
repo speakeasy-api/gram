@@ -3,23 +3,25 @@ package externalmcp
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodGet, r.Method)
-		require.Contains(t, r.URL.Path, "/v0.1/servers/test-server/versions/latest")
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Contains(t, r.URL.Path, "/v0.1/servers/test-server/versions/latest")
 
 		response := getServerResponse{
 			Server: serverJSON{
@@ -35,7 +37,7 @@ func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		err := json.NewEncoder(w).Encode(response)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -54,16 +56,17 @@ func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 	require.Equal(t, "Test server description", details.Description)
 	require.Equal(t, "1.0.0", details.Version)
 	require.Equal(t, "https://example.com/streamable", details.RemoteURL)
-	require.Equal(t, TransportTypeStreamableHTTP, details.TransportType)
+	require.Equal(t, types.TransportTypeStreamableHTTP, details.TransportType)
 }
 
 func TestGetServerDetails_OnlySSE(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodGet, r.Method)
-		require.Contains(t, r.URL.Path, "/v0.1/servers/test-server/versions/latest")
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Contains(t, r.URL.Path, "/v0.1/servers/test-server/versions/latest")
 
 		response := getServerResponse{
 			Server: serverJSON{
@@ -79,7 +82,7 @@ func TestGetServerDetails_OnlySSE(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		err := json.NewEncoder(w).Encode(response)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -98,16 +101,17 @@ func TestGetServerDetails_OnlySSE(t *testing.T) {
 	require.Equal(t, "Test server description", details.Description)
 	require.Equal(t, "1.0.0", details.Version)
 	require.Equal(t, "https://example.com/sse", details.RemoteURL)
-	require.Equal(t, TransportTypeSSE, details.TransportType)
+	require.Equal(t, types.TransportTypeSSE, details.TransportType)
 }
 
 func TestGetServerDetails_PrefersStreamableHTTPOverSSE(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodGet, r.Method)
-		require.Contains(t, r.URL.Path, "/v0.1/servers/test-server/versions/latest")
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Contains(t, r.URL.Path, "/v0.1/servers/test-server/versions/latest")
 
 		response := getServerResponse{
 			Server: serverJSON{
@@ -124,7 +128,7 @@ func TestGetServerDetails_PrefersStreamableHTTPOverSSE(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		err := json.NewEncoder(w).Encode(response)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -143,5 +147,5 @@ func TestGetServerDetails_PrefersStreamableHTTPOverSSE(t *testing.T) {
 	require.Equal(t, "Test server description", details.Description)
 	require.Equal(t, "1.0.0", details.Version)
 	require.Equal(t, "https://example.com/streamable", details.RemoteURL)
-	require.Equal(t, TransportTypeStreamableHTTP, details.TransportType)
+	require.Equal(t, types.TransportTypeStreamableHTTP, details.TransportType)
 }

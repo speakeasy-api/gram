@@ -60,7 +60,7 @@ overrides:
           type: Vector
       - column: external_mcp_tool_definitions.transport_type
         go_type:
-          import: github.com/speakeasy-api/gram/server/internal/externalmcp
+          import: github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types
           type: TransportType
 
 sql:
