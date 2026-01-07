@@ -7,12 +7,12 @@ import { CustomDomain } from "@gram/client/models/components";
 
 let value: CustomDomain = {
   activated: false,
-  createdAt: new Date("2025-10-29T10:18:42.496Z"),
+  createdAt: new Date("2026-10-29T10:18:42.496Z"),
   domain: "glass-giggle.name",
   id: "<id>",
   isUpdating: false,
   organizationId: "<id>",
-  updatedAt: new Date("2023-06-22T11:19:48.376Z"),
+  updatedAt: new Date("2024-06-21T11:19:48.376Z"),
   verified: false,
 };
 ```
