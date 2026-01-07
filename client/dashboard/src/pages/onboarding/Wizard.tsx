@@ -448,7 +448,7 @@ const InitialChoiceStep = ({
             onDeployChatClick();
           }}
           icon={MessageSquare}
-          title="Deploy Data-Integrated Chat"
+          title="Deploy Chat Connected To Your Data"
           description="Build embeddable chat experiences powered by your data"
         />
       </div>
