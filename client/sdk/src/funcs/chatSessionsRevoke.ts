@@ -109,19 +109,35 @@ async function $do(
       explode: false,
       charEncoding: "none",
     }),
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+      explode: false,
+      charEncoding: "none",
+    }),
   }));
 
   const requestSecurity = resolveSecurity(
     [
       {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.option1?.projectSlugHeaderGramProject,
+      },
+      {
+        fieldName: "Gram-Session",
+        type: "apiKey:header",
+        value: security?.option1?.sessionHeaderGramSession,
+      },
+    ],
+    [
+      {
         fieldName: "Gram-Key",
         type: "apiKey:header",
-        value: security?.apikeyHeaderGramKey,
+        value: security?.option2?.apikeyHeaderGramKey,
       },
       {
         fieldName: "Gram-Project",
         type: "apiKey:header",
-        value: security?.projectSlugHeaderGramProject,
+        value: security?.option2?.projectSlugHeaderGramProject,
       },
     ],
   );

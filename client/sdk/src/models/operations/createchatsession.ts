@@ -7,12 +7,26 @@ import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
+export type CreateChatSessionSecurityOption1 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
+export type CreateChatSessionSecurityOption2 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
 export type CreateChatSessionSecurity = {
-  apikeyHeaderGramKey?: string | undefined;
-  projectSlugHeaderGramProject?: string | undefined;
+  option1?: CreateChatSessionSecurityOption1 | undefined;
+  option2?: CreateChatSessionSecurityOption2 | undefined;
 };
 
 export type CreateChatSessionRequest = {
+  /**
+   * Session header
+   */
+  gramSession?: string | undefined;
   /**
    * API Key header
    */
@@ -25,9 +39,71 @@ export type CreateChatSessionRequest = {
 };
 
 /** @internal */
+export type CreateChatSessionSecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const CreateChatSessionSecurityOption1$outboundSchema: z.ZodType<
+  CreateChatSessionSecurityOption1$Outbound,
+  z.ZodTypeDef,
+  CreateChatSessionSecurityOption1
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+export function createChatSessionSecurityOption1ToJSON(
+  createChatSessionSecurityOption1: CreateChatSessionSecurityOption1,
+): string {
+  return JSON.stringify(
+    CreateChatSessionSecurityOption1$outboundSchema.parse(
+      createChatSessionSecurityOption1,
+    ),
+  );
+}
+
+/** @internal */
+export type CreateChatSessionSecurityOption2$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const CreateChatSessionSecurityOption2$outboundSchema: z.ZodType<
+  CreateChatSessionSecurityOption2$Outbound,
+  z.ZodTypeDef,
+  CreateChatSessionSecurityOption2
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+export function createChatSessionSecurityOption2ToJSON(
+  createChatSessionSecurityOption2: CreateChatSessionSecurityOption2,
+): string {
+  return JSON.stringify(
+    CreateChatSessionSecurityOption2$outboundSchema.parse(
+      createChatSessionSecurityOption2,
+    ),
+  );
+}
+
+/** @internal */
 export type CreateChatSessionSecurity$Outbound = {
-  "apikey_header_Gram-Key"?: string | undefined;
-  "project_slug_header_Gram-Project"?: string | undefined;
+  Option1?: CreateChatSessionSecurityOption1$Outbound | undefined;
+  Option2?: CreateChatSessionSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -36,12 +112,14 @@ export const CreateChatSessionSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   CreateChatSessionSecurity
 > = z.object({
-  apikeyHeaderGramKey: z.string().optional(),
-  projectSlugHeaderGramProject: z.string().optional(),
+  option1: z.lazy(() => CreateChatSessionSecurityOption1$outboundSchema)
+    .optional(),
+  option2: z.lazy(() => CreateChatSessionSecurityOption2$outboundSchema)
+    .optional(),
 }).transform((v) => {
   return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    option1: "Option1",
+    option2: "Option2",
   });
 });
 
@@ -55,6 +133,7 @@ export function createChatSessionSecurityToJSON(
 
 /** @internal */
 export type CreateChatSessionRequest$Outbound = {
+  "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
   CreateRequestBody: components.CreateRequestBody$Outbound;
@@ -66,11 +145,13 @@ export const CreateChatSessionRequest$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   CreateChatSessionRequest
 > = z.object({
+  gramSession: z.string().optional(),
   gramKey: z.string().optional(),
   gramProject: z.string().optional(),
   createRequestBody: components.CreateRequestBody$outboundSchema,
 }).transform((v) => {
   return remap$(v, {
+    gramSession: "Gram-Session",
     gramKey: "Gram-Key",
     gramProject: "Gram-Project",
     createRequestBody: "CreateRequestBody",

@@ -41,10 +41,10 @@ import { ChatProvider, useChatContext } from "./ChatContext";
 import { ChatConfig } from "./ChatWindow";
 import { EditToolDialog } from "./EditToolDialog";
 import { ManageToolsDialog } from "./ManageToolsDialog";
-import { getAuthStatus, PlaygroundAuth } from "./PlaygroundAuth";
+import { PlaygroundAuth } from "./PlaygroundAuth";
 import { PlaygroundConfigPanel } from "./PlaygroundConfigPanel";
+import { PlaygroundElements } from "./PlaygroundElements";
 import { PlaygroundLogsPanel } from "./PlaygroundLogsPanel";
-import { PlaygroundRHS } from "./PlaygroundRHS";
 
 export default function Playground() {
   return (
@@ -71,9 +71,6 @@ function PlaygroundInner() {
   const [model, setModel] = useState("anthropic/claude-sonnet-4.5");
   const [maxTokens, setMaxTokens] = useState(4096);
 
-  // Get prompt from URL params if available
-  const initialPrompt = searchParams.get("prompt");
-
   // We use a ref so that we can hot-swap the toolset and environment without causing a re-render
   const chatConfigRef = useRef({
     toolsetSlug: selectedToolset,
@@ -86,27 +83,6 @@ function PlaygroundInner() {
     environmentSlug: selectedEnvironment,
     isOnboarding: false,
   };
-
-  // Fetch toolsets and instance data
-  const { data: toolsetsData } = useListToolsets();
-  const toolsets = toolsetsData?.toolsets;
-  const toolset = toolsets?.find((ts) => ts.slug === selectedToolset);
-
-  const environmentData = useEnvironment(selectedEnvironment ?? undefined);
-
-  // Check auth status
-  const authStatus = useMemo(() => {
-    if (!toolset || !environmentData) {
-      return null;
-    }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return getAuthStatus(toolset as any, {
-      entries: environmentData.entries?.map((e) => ({
-        name: e.name,
-        value: e.value,
-      })),
-    });
-  }, [toolset, environmentData]);
 
   useRegisterToolsetTelemetry({
     toolsetSlug: selectedToolset ?? "",
@@ -213,20 +189,10 @@ function PlaygroundInner() {
                 </div>
               </div>
               <div className="flex-1 overflow-hidden">
-                <PlaygroundRHS
-                  configRef={chatConfigRef}
-                  initialPrompt={initialPrompt}
-                  temperature={temperature}
+                <PlaygroundElements
+                  toolsetSlug={selectedToolset}
+                  environmentSlug={selectedEnvironment}
                   model={model}
-                  maxTokens={maxTokens}
-                  authWarning={
-                    authStatus?.hasMissingAuth && toolset
-                      ? {
-                          missingCount: authStatus.missingCount,
-                          toolsetSlug: toolset.slug,
-                        }
-                      : null
-                  }
                 />
               </div>
             </div>
