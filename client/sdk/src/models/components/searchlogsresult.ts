@@ -18,6 +18,10 @@ import {
  */
 export type SearchLogsResult = {
   /**
+   * Whether tool metrics are enabled for the organization
+   */
+  enabled: boolean;
+  /**
    * List of telemetry log records
    */
   logs: Array<TelemetryLogRecord>;
@@ -33,6 +37,7 @@ export const SearchLogsResult$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  enabled: z.boolean(),
   logs: z.array(TelemetryLogRecord$inboundSchema),
   next_cursor: z.string().optional(),
 }).transform((v) => {
