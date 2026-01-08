@@ -251,7 +251,7 @@ const config: ElementsConfig = {
 > `optional` **modal**: [`ModalConfig`](ModalConfig.md)
 
 The configuration for the modal window.
-Does not apply if variant is 'standalone'.
+Only applicable if variant is 'widget'.
 
 #### Example
 
