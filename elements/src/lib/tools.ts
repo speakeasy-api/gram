@@ -6,7 +6,6 @@ import {
 } from '@assistant-ui/react'
 import z from 'zod'
 import { FC } from 'react'
-import { ApprovalType } from '@/types'
 
 /**
  * Converts from assistant-ui tool format to the AI SDK tool shape
@@ -78,18 +77,18 @@ export interface ApprovalHelpers {
  */
 export function wrapToolsWithApproval(
   tools: ToolSet,
-  approvalConfig: Record<string, ApprovalType> | undefined,
+  toolsRequiringApproval: string[] | undefined,
   approvalHelpers: ApprovalHelpers
 ): ToolSet {
-  if (!approvalConfig) {
+  if (!toolsRequiringApproval || toolsRequiringApproval.length === 0) {
     return tools
   }
 
+  const approvalSet = new Set(toolsRequiringApproval)
+
   return Object.fromEntries(
     Object.entries(tools).map(([name, tool]) => {
-      const approvalType = approvalConfig[name]
-
-      if (!approvalType || approvalType === 'never') {
+      if (!approvalSet.has(name)) {
         return [name, tool]
       }
 
@@ -111,11 +110,8 @@ export function wrapToolsWithApproval(
             const toolCallId =
               (opts as { toolCallId?: string }).toolCallId ?? ''
 
-            // Check if already approved (for "once" type)
-            if (
-              approvalType === 'once' &&
-              approvalHelpers.isToolApproved(name)
-            ) {
+            // Check if already approved (user chose "Approve always" previously)
+            if (approvalHelpers.isToolApproved(name)) {
               return originalExecute(
                 args,
                 opts as Parameters<typeof originalExecute>[1]
@@ -141,7 +137,7 @@ export function wrapToolsWithApproval(
               }
             }
 
-            // Note: Tool is marked as approved via the UI when user clicks "Approve once"
+            // Note: Tool is marked as approved via the UI when user clicks "Approve always"
             // (handled in tool-fallback.tsx via markToolApproved)
 
             return originalExecute(

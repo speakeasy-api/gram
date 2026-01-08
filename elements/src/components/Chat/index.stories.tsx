@@ -811,9 +811,32 @@ WithToolsRequiringApproval.parameters = {
         ],
       },
       tools: {
-        toolsRequiringApproval: {
-          my_api_get_salutation: 'once',
-        },
+        toolsRequiringApproval: ['my_api_get_salutation'],
+      },
+    },
+  },
+}
+
+// This story demonstrates the tool approval UI when multiple tools are grouped together.
+export const WithMultipleGroupedToolsRequiringApproval: Story = () => <Chat />
+WithMultipleGroupedToolsRequiringApproval.parameters = {
+  elements: {
+    config: {
+      welcome: {
+        suggestions: [
+          {
+            title: 'Call both tools requiring approval',
+            label: 'Call both tools requiring approval',
+            action:
+              'Call both my_api_get_salutation and my_api_get_get_card_details',
+          },
+        ],
+      },
+      tools: {
+        toolsRequiringApproval: [
+          'my_api_get_salutation',
+          'my_api_get_get_card_details',
+        ],
       },
     },
   },

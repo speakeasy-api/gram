@@ -432,14 +432,6 @@ export interface ComponentOverrides {
  * }
  */
 
-/**
- * The approval type for a tool.
- * - `once`: The tool requires approval once.
- * - `always`: The tool requires approval always.
- * - `never`: The tool does not require approval.
- */
-export type ApprovalType = 'once' | 'always' | 'never'
-
 export interface ToolsConfig {
   /**
    * Whether individual tool calls within a group should be expanded by default.
@@ -518,16 +510,18 @@ export interface ToolsConfig {
   frontendTools?: Record<string, AssistantTool>
 
   /**
-   * Register any tools that require confirmation from the end user before
-   * being executed.
+   * List of tool names that require confirmation from the end user before
+   * being executed. The user can choose to approve once or approve for the
+   * entire session via the UI.
    *
-   * Values:
-   *
-   * - `once`: The tool requires approval once. Subsequent calls to the tool will not require approval.
-   * - `always`: The tool requires approval always. Subsequent calls to the tool will require approval.
-   * - `never`: The tool does not require approval (same as not providing a value).
+   * @example
+   * ```ts
+   * tools: {
+   *   toolsRequiringApproval: ['delete_file', 'send_email'],
+   * }
+   * ```
    */
-  toolsRequiringApproval?: Record<string, ApprovalType>
+  toolsRequiringApproval?: string[]
 }
 
 export interface WelcomeConfig {

@@ -372,9 +372,7 @@ function ToolUI({
   const isApprovalPending =
     status === 'approval' && onApprove !== undefined && onDeny !== undefined
   // Auto-expand when approval is pending, collapse when approved
-  const [isExpanded, setIsExpanded] = useState(
-    defaultExpanded || isApprovalPending
-  )
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const hasContent = request !== undefined || result !== undefined
 
   // Track approval mode: 'once' or 'always' (default to 'always' for safety)
@@ -457,33 +455,8 @@ function ToolUI({
       {/* Expandable content */}
       {isExpanded && hasContent && (
         <div data-slot="tool-ui-content">
-          {/* When approval pending, show args directly (always visible) */}
-          {request !== undefined && isApprovalPending && (
-            <div className="border-border border-t">
-              <div className="text-muted-foreground flex items-center justify-between px-4 py-2.5 text-sm">
-                <span>Arguments</span>
-                <CopyButton
-                  content={
-                    typeof request === 'string'
-                      ? request
-                      : JSON.stringify(request, null, 2)
-                  }
-                />
-              </div>
-              <div className="border-border border-t">
-                <SyntaxHighlightedCode
-                  text={
-                    typeof request === 'string'
-                      ? request
-                      : JSON.stringify(request, null, 2)
-                  }
-                  language="json"
-                />
-              </div>
-            </div>
-          )}
           {/* When not approval pending, use collapsible section */}
-          {request !== undefined && !isApprovalPending && (
+          {request !== undefined && (
             <ToolUISection
               title="Arguments"
               content={request}
@@ -492,7 +465,7 @@ function ToolUI({
             />
           )}
           {/* Hide output when approval is pending */}
-          {result !== undefined && !isApprovalPending && (
+          {result !== undefined && (
             <ToolUISection
               title="Output"
               content={result}
