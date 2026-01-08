@@ -6,4 +6,4 @@
 
 # Type Alias: Variant
 
-> **Variant** = *typeof* `VARIANTS`\[`number`\]
+> **Variant** = *typeof* [`VARIANTS`](VARIANTS.md)\[`number`\]

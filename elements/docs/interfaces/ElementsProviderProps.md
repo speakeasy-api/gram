@@ -26,7 +26,7 @@ Configuration object for the Elements library.
 
 ### getSession?
 
-> `optional` **getSession**: `GetSessionFn`
+> `optional` **getSession**: [`GetSessionFn`](../type-aliases/GetSessionFn.md)
 
 Function to retrieve the session token from the backend endpoint.
 
