@@ -112,21 +112,3 @@ const config: ElementsConfig = {
   },
 }
 ```
-
-***
-
-### toolsRequiringApproval?
-
-> `optional` **toolsRequiringApproval**: `string`[]
-
-List of tool names that require confirmation from the end user before
-being executed. The user can choose to approve once or approve for the
-entire session via the UI.
-
-#### Example
-
-```ts
-tools: {
-  toolsRequiringApproval: ['delete_file', 'send_email'],
-}
-```

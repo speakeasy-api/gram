@@ -6,4 +6,4 @@
 
 # Type Alias: Radius
 
-> **Radius** = *typeof* [`RADII`](RADII.md)\[`number`\]
+> **Radius** = *typeof* `RADII`\[`number`\]

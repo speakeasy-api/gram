@@ -6,4 +6,4 @@
 
 # Type Alias: Density
 
-> **Density** = *typeof* [`DENSITIES`](DENSITIES.md)\[`number`\]
+> **Density** = *typeof* `DENSITIES`\[`number`\]

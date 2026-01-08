@@ -6,4 +6,4 @@
 
 # Type Alias: ColorScheme
 
-> **ColorScheme** = *typeof* [`COLOR_SCHEMES`](COLOR_SCHEMES.md)\[`number`\]
+> **ColorScheme** = *typeof* `COLOR_SCHEMES`\[`number`\]
