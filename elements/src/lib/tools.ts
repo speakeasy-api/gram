@@ -141,10 +141,8 @@ export function wrapToolsWithApproval(
               }
             }
 
-            // Mark as approved for "once" type
-            if (approvalType === 'once') {
-              approvalHelpers.markToolApproved(name)
-            }
+            // Note: Tool is marked as approved via the UI when user clicks "Approve once"
+            // (handled in tool-fallback.tsx via markToolApproved)
 
             return originalExecute(
               args,

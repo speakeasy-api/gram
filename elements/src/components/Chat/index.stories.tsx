@@ -804,7 +804,7 @@ WithToolsRequiringApproval.parameters = {
       welcome: {
         suggestions: [
           {
-            title: 'Get a salutation',
+            title: 'Call a tool requiring approval',
             label: 'Get a salutation',
             action: 'Get a salutation',
           },

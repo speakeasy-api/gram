@@ -523,8 +523,8 @@ export interface ToolsConfig {
    *
    * Values:
    *
-   * - `once`: The tool requires approval once.
-   * - `always`: The tool requires approval always.
+   * - `once`: The tool requires approval once. Subsequent calls to the tool will not require approval.
+   * - `always`: The tool requires approval always. Subsequent calls to the tool will require approval.
    * - `never`: The tool does not require approval (same as not providing a value).
    */
   toolsRequiringApproval?: Record<string, ApprovalType>
