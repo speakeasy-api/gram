@@ -69,7 +69,7 @@ export interface ApprovalHelpers {
     args: unknown
   ) => Promise<boolean>
   isToolApproved: (toolName: string) => boolean
-  markToolApproved: (toolName: string) => void
+  whitelistTool: (toolName: string) => void
 }
 
 /**

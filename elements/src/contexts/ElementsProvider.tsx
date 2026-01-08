@@ -94,25 +94,23 @@ const ElementsProviderWithApproval = ({
   const approvalHelpersRef = useRef<ApprovalHelpers>({
     requestApproval: toolApproval.requestApproval,
     isToolApproved: toolApproval.isToolApproved,
-    markToolApproved: toolApproval.markToolApproved,
+    whitelistTool: toolApproval.whitelistTool,
   })
 
-  // Keep ref updated
   approvalHelpersRef.current = {
     requestApproval: toolApproval.requestApproval,
     isToolApproved: toolApproval.isToolApproved,
-    markToolApproved: toolApproval.markToolApproved,
+    whitelistTool: toolApproval.whitelistTool,
   }
 
-  // Stable wrapper function that uses the ref
   const getApprovalHelpers = useCallback((): ApprovalHelpers => {
     return {
       requestApproval: (...args) =>
         approvalHelpersRef.current.requestApproval(...args),
       isToolApproved: (...args) =>
         approvalHelpersRef.current.isToolApproved(...args),
-      markToolApproved: (...args) =>
-        approvalHelpersRef.current.markToolApproved(...args),
+      whitelistTool: (...args) =>
+        approvalHelpersRef.current.whitelistTool(...args),
     }
   }, [])
 
