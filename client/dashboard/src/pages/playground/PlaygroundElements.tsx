@@ -1,5 +1,6 @@
 import { GramElementsProvider, Chat, type Model } from "@gram-ai/elements";
-import "@gram-ai/elements/elements.css";
+// Note: Not importing Elements CSS as it conflicts with dashboard's Tailwind styles
+// The dashboard's Tailwind should provide necessary utility classes
 import { useCallback, useMemo } from "react";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useMcpUrl } from "../mcp/MCPDetails";
