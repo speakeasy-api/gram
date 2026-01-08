@@ -115,4 +115,4 @@ export function ToolApprovalProvider({ children }: { children: ReactNode }) {
   )
 }
 
-export type { ToolApprovalContextType, PendingApproval }
+export type { ToolApprovalContextType,  }

@@ -561,8 +561,6 @@ export interface Dimension {
   maxHeight?: number | string
 }
 
-export type ExpandedDimension = Omit<Dimension, 'maxHeight'>
-
 interface ExpandableConfig {
   /**
    * Whether the modal or sidecar can be expanded
