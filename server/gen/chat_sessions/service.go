@@ -52,6 +52,7 @@ type CreatePayload struct {
 	EmbedOrigin string
 	// Token expiration in seconds (max / default 3600)
 	ExpiresAfter     int
+	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
 }
@@ -74,6 +75,7 @@ type CreateResult struct {
 type RevokePayload struct {
 	// The chat session token to revoke
 	Token            string
+	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
 }

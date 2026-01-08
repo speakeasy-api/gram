@@ -2089,6 +2089,13 @@ paths:
             operationId: createChatSession
             parameters:
                 - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
                   description: API Key header
                   in: header
                   name: Gram-Key
@@ -2170,6 +2177,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
             summary: create chatSessions
@@ -2188,6 +2197,13 @@ paths:
                   required: true
                   schema:
                     description: The chat session token to revoke
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -2261,6 +2277,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
             summary: revoke chatSessions
