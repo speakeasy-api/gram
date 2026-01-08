@@ -228,7 +228,7 @@ export interface ElementsConfig {
 
   /**
    * The configuration for the modal window.
-   * Does not apply if variant is 'standalone'.
+   * Only applicable if variant is 'widget'.
    *
    * @example
    * const config: ElementsConfig = {
@@ -431,6 +431,7 @@ export interface ComponentOverrides {
  *   },
  * }
  */
+
 export interface ToolsConfig {
   /**
    * Whether individual tool calls within a group should be expanded by default.
@@ -507,6 +508,20 @@ export interface ToolsConfig {
    * ```
    */
   frontendTools?: Record<string, AssistantTool>
+
+  /**
+   * List of tool names that require confirmation from the end user before
+   * being executed. The user can choose to approve once or approve for the
+   * entire session via the UI.
+   *
+   * @example
+   * ```ts
+   * tools: {
+   *   toolsRequiringApproval: ['delete_file', 'send_email'],
+   * }
+   * ```
+   */
+  toolsRequiringApproval?: string[]
 }
 
 export interface WelcomeConfig {
@@ -545,8 +560,6 @@ export interface Dimension {
   height: number | string
   maxHeight?: number | string
 }
-
-export type ExpandedDimension = Omit<Dimension, 'maxHeight'>
 
 interface ExpandableConfig {
   /**

@@ -18,12 +18,19 @@ import {
   type ChatTransport,
   type UIMessage,
 } from 'ai'
-import { useMemo, useState } from 'react'
-import { ElementsContext } from './elementsContextType'
-import { getEnabledTools, toAISDKTools } from '@/lib/tools'
+import { useMemo, useState, useRef, useCallback } from 'react'
+import { ElementsContext } from './contexts'
+import {
+  getEnabledTools,
+  toAISDKTools,
+  wrapToolsWithApproval,
+  type ApprovalHelpers,
+} from '@/lib/tools'
 import { useSession } from '@/hooks/useSession'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useMCPTools } from '@/hooks/useMCPTools'
+import { ToolApprovalProvider } from './ToolApprovalContext'
+import { useToolApproval } from '@/hooks/useToolApproval'
 
 const GRAM_API_URL = 'https://app.getgram.ai'
 
@@ -49,12 +56,13 @@ async function defaultGetSession(): Promise<string> {
   return data.client_token
 }
 
-const ElementsProviderInner = ({
+const ElementsProviderWithApproval = ({
   children,
   config,
   getSession = defaultGetSession,
 }: ElementsProviderProps) => {
   const session = useSession({ getSession, projectSlug: config.projectSlug })
+  const toolApproval = useToolApproval()
 
   const [model, setModel] = useState<Model>(
     config.model?.defaultModel ?? MODELS[0]
@@ -81,6 +89,30 @@ const ElementsProviderInner = ({
 
   // Show loading if we don't have tools yet or they're actively loading
   const isLoadingMCPTools = !mcpTools || mcpToolsLoading
+
+  // Store approval helpers in ref so they can be used in async contexts
+  const approvalHelpersRef = useRef<ApprovalHelpers>({
+    requestApproval: toolApproval.requestApproval,
+    isToolApproved: toolApproval.isToolApproved,
+    whitelistTool: toolApproval.whitelistTool,
+  })
+
+  approvalHelpersRef.current = {
+    requestApproval: toolApproval.requestApproval,
+    isToolApproved: toolApproval.isToolApproved,
+    whitelistTool: toolApproval.whitelistTool,
+  }
+
+  const getApprovalHelpers = useCallback((): ApprovalHelpers => {
+    return {
+      requestApproval: (...args) =>
+        approvalHelpersRef.current.requestApproval(...args),
+      isToolApproved: (...args) =>
+        approvalHelpersRef.current.isToolApproved(...args),
+      whitelistTool: (...args) =>
+        approvalHelpersRef.current.whitelistTool(...args),
+    }
+  }, [])
 
   // Create custom transport
   const transport = useMemo<ChatTransport<UIMessage> | undefined>(
@@ -118,10 +150,17 @@ const ElementsProviderInner = ({
         }
 
         // Combine tools - MCP tools only available when not using custom model
-        const tools: ToolSet = {
+        const combinedTools: ToolSet = {
           ...mcpTools,
           ...convertFrontendToolsToAISDKTools(frontendTools),
         } as ToolSet
+
+        // Wrap tools that require approval
+        const tools = wrapToolsWithApproval(
+          combinedTools,
+          config.tools?.toolsRequiringApproval,
+          getApprovalHelpers()
+        )
 
         // Stream the response
         const modelToUse = config.languageModel
@@ -161,6 +200,7 @@ const ElementsProviderInner = ({
       session,
       mcpTools,
       mcpToolsLoading,
+      getApprovalHelpers,
     ]
   )
 
@@ -196,7 +236,9 @@ export const ElementsProvider = (props: ElementsProviderProps) => {
   const queryClient = new QueryClient()
   return (
     <QueryClientProvider client={queryClient}>
-      <ElementsProviderInner {...props} />
+      <ToolApprovalProvider>
+        <ElementsProviderWithApproval {...props} />
+      </ToolApprovalProvider>
     </QueryClientProvider>
   )
 }

@@ -1,4 +1,4 @@
-import { JSONSchema7 } from 'ai'
+import { JSONSchema7, ToolSet, type ToolCallOptions } from 'ai'
 import {
   AssistantToolProps,
   Tool,
@@ -57,4 +57,96 @@ export const defineFrontendTool = <
     ...tool,
     toolName: name,
   })
+}
+
+/**
+ * Helpers for requesting and tracking tool approval state.
+ */
+export interface ApprovalHelpers {
+  requestApproval: (
+    toolName: string,
+    toolCallId: string,
+    args: unknown
+  ) => Promise<boolean>
+  isToolApproved: (toolName: string) => boolean
+  whitelistTool: (toolName: string) => void
+}
+
+/**
+ * Wraps tools with approval logic based on the approval config.
+ */
+export function wrapToolsWithApproval(
+  tools: ToolSet,
+  toolsRequiringApproval: string[] | undefined,
+  approvalHelpers: ApprovalHelpers
+): ToolSet {
+  if (!toolsRequiringApproval || toolsRequiringApproval.length === 0) {
+    return tools
+  }
+
+  const approvalSet = new Set(toolsRequiringApproval)
+
+  return Object.fromEntries(
+    Object.entries(tools).map(([name, tool]) => {
+      if (!approvalSet.has(name)) {
+        return [name, tool]
+      }
+
+      const originalExecute = tool.execute
+      if (!originalExecute) {
+        return [name, tool]
+      }
+
+      return [
+        name,
+        {
+          ...tool,
+          execute: async (args: unknown, options?: ToolCallOptions) => {
+            // Use type assertion similar to useExecuteToolWithApproval
+            const opts = (options ?? {}) as Parameters<
+              typeof originalExecute
+            >[1]
+            // Extract toolCallId from options
+            const toolCallId =
+              (opts as { toolCallId?: string }).toolCallId ?? ''
+
+            // Check if already approved (user chose "Approve always" previously)
+            if (approvalHelpers.isToolApproved(name)) {
+              return originalExecute(
+                args,
+                opts as Parameters<typeof originalExecute>[1]
+              )
+            }
+
+            // Request approval using the actual toolCallId from the stream
+            const approved = await approvalHelpers.requestApproval(
+              name,
+              toolCallId,
+              args
+            )
+
+            if (!approved) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Tool "${name}" execution was denied by the user. Please acknowledge this and continue without using this tool's result.`,
+                  },
+                ],
+                isError: true,
+              }
+            }
+
+            // Note: Tool is marked as approved via the UI when user clicks "Approve always"
+            // (handled in tool-fallback.tsx via markToolApproved)
+
+            return originalExecute(
+              args,
+              opts as Parameters<typeof originalExecute>[1]
+            )
+          },
+        },
+      ]
+    })
+  ) as ToolSet
 }
