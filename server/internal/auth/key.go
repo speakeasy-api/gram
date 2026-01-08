@@ -91,10 +91,13 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		return ctx, oops.E(oops.CodeUnexpected, err, "error loading api key details")
 	}
 
-	// a bit of a hack right now, the product intends to allow producer keys to act as a superset of consumer keys
+	// a bit of a hack right now, the product intends to allow producer keys to act as a superset of consumer and chat keys
 	scopes := slices.Clone(apiKey.Scopes)
 	if slices.Contains(scopes, APIKeyScopeProducer.String()) && !slices.Contains(scopes, APIKeyScopeConsumer.String()) {
 		scopes = append(scopes, APIKeyScopeConsumer.String())
+	}
+	if slices.Contains(scopes, APIKeyScopeProducer.String()) && !slices.Contains(scopes, APIKeyScopeChat.String()) {
+		scopes = append(scopes, APIKeyScopeChat.String())
 	}
 
 	for _, scope := range requiredScopes {
