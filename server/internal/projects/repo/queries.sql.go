@@ -86,6 +86,37 @@ func (q *Queries) GetProjectByID(ctx context.Context, id uuid.UUID) (Project, er
 	return i, err
 }
 
+const getProjectBySlug = `-- name: GetProjectBySlug :one
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+FROM projects
+WHERE slug = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+`
+
+type GetProjectBySlugParams struct {
+	Slug           string
+	OrganizationID string
+}
+
+func (q *Queries) GetProjectBySlug(ctx context.Context, arg GetProjectBySlugParams) (Project, error) {
+	row := q.db.QueryRow(ctx, getProjectBySlug, arg.Slug, arg.OrganizationID)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.OrganizationID,
+		&i.LogoAssetID,
+		&i.FunctionsRunnerVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getProjectWithOrganizationMetadata = `-- name: GetProjectWithOrganizationMetadata :one
 SELECT 
     -- Project fields

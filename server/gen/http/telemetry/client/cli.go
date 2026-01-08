@@ -78,7 +78,7 @@ func BuildSearchToolCallsPayload(telemetrySearchToolCallsBody string, telemetryS
 	{
 		err = json.Unmarshal([]byte(telemetrySearchToolCallsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Alias cumque omnis.\",\n      \"filter\": {\n         \"deployment_id\": \"62b6f132-da2c-4407-a47a-181b88a56ef1\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"9b9d3d43-c8d4-4038-93bc-2569bb1c924c\",\n         \"gram_urn\": \"Dolor repudiandae possimus.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 243,\n      \"sort\": \"desc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Placeat voluptatum consequatur aliquid debitis voluptatem.\",\n      \"filter\": {\n         \"deployment_id\": \"62b6f132-da2c-47a4-a29f-bfb9279d4bc6\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"84a698f1-59ba-4e93-ace7-b25f7902704b\",\n         \"gram_urn\": \"Expedita alias cumque omnis fugiat recusandae beatae.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 909,\n      \"sort\": \"desc\"\n   }'")
 		}
 	}
 	var apikeyToken *string

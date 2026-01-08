@@ -22,7 +22,7 @@ func TestListToolLogs(t *testing.T) {
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	queries := repo.New(logger, tracerProvider, conn, nil)
+	queries := repo.New(logger, tracerProvider, conn)
 
 	projectID := uuid.New().String()
 	deploymentID := uuid.New().String()

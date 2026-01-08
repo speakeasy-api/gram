@@ -6,7 +6,7 @@
 
 # Type Alias: Model
 
-> **Model** = *typeof* `MODELS`\[`number`\]
+> **Model** = *typeof* [`MODELS`](../variables/MODELS.md)\[`number`\]
 
 The LLM model to use for the Elements library.
 

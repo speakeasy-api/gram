@@ -4,11 +4,14 @@ import { useRoutes } from "@/routes";
 import { Stack } from "@speakeasy-api/moonshine";
 import { ArrowRight, Check, Code, Database, Rocket } from "lucide-react";
 import { Link } from "react-router";
+import { useIsProjectEmpty } from "../onboarding/UploadOpenAPI";
 
 const ELEMENTS_ONBOARDING_KEY = "elements-onboarding-completed";
 
 export default function ChatElements() {
   const routes = useRoutes();
+  const { isEmpty: isProjectEmpty } = useIsProjectEmpty();
+
   const isStep1Completed =
     localStorage.getItem(ELEMENTS_ONBOARDING_KEY) === "true";
 
@@ -43,6 +46,7 @@ export default function ChatElements() {
                   routes.onboarding.href() + "?start-step=first-party-choice"
                 }
                 linkText="Connect data"
+                completed={!isProjectEmpty}
               />
               <StepCard
                 step={3}

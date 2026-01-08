@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-export type TooltipIconButtonProps = ComponentPropsWithRef<typeof Button> & {
+type TooltipIconButtonProps = ComponentPropsWithRef<typeof Button> & {
   tooltip: string
   side?: 'top' | 'bottom' | 'left' | 'right'
   align?: 'start' | 'center' | 'end'

@@ -8,7 +8,7 @@ A proxy tool that references an external MCP server
 import { ExternalMCPToolDefinition } from "@gram/client/models/components";
 
 let value: ExternalMCPToolDefinition = {
-  createdAt: new Date("2025-07-07T10:46:48.668Z"),
+  createdAt: new Date("2026-07-07T10:46:48.668Z"),
   deploymentExternalMcpId: "<id>",
   deploymentId: "<id>",
   id: "<id>",
@@ -19,7 +19,8 @@ let value: ExternalMCPToolDefinition = {
   requiresOauth: false,
   slug: "<value>",
   toolUrn: "<value>",
-  updatedAt: new Date("2025-03-24T08:29:23.674Z"),
+  transportType: "sse",
+  updatedAt: new Date("2026-12-23T11:31:25.886Z"),
 };
 ```
 
@@ -42,4 +43,5 @@ let value: ExternalMCPToolDefinition = {
 | `requiresOauth`                                                                               | *boolean*                                                                                     | :heavy_check_mark:                                                                            | Whether the external MCP server requires OAuth authentication                                 |
 | `slug`                                                                                        | *string*                                                                                      | :heavy_check_mark:                                                                            | The slug used for tool prefixing (e.g., github)                                               |
 | `toolUrn`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | The URN of this tool (tools:externalmcp:<slug>:proxy)                                         |
+| `transportType`                                                                               | [components.TransportType](../../models/components/transporttype.md)                          | :heavy_check_mark:                                                                            | The transport type used to connect to the MCP server                                          |
 | `updatedAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | When the tool definition was last updated.                                                    |

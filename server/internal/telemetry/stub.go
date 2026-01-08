@@ -35,7 +35,3 @@ func (n *StubToolMetricsClient) LogHTTPRequest(_ context.Context, _ repo.ToolHTT
 func (n *StubToolMetricsClient) InsertTelemetryLog(_ context.Context, _ repo.InsertTelemetryLogParams) error {
 	return nil
 }
-
-func (n *StubToolMetricsClient) ShouldLog(_ context.Context, _ string) (bool, error) {
-	return true, nil
-}

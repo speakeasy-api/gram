@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/button'
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 
+// NOTE: These components are currently not used but they will be
+// when we add support for thread / chat history
 export const ThreadList: FC = () => {
   return (
     <ThreadListPrimitive.Root className="aui-root aui-thread-list-root flex flex-col items-stretch gap-1.5">

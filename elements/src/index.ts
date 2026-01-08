@@ -28,12 +28,19 @@ export type {
   Model,
   ModalTriggerPosition,
   ColorScheme,
+  COLOR_SCHEMES,
+  GetSessionFn,
   Radius,
+  RADII,
   Density,
+  DENSITIES,
+  VARIANTS,
   Variant,
   Dimensions,
   Dimension,
   ComponentOverrides,
 } from './types'
+
+export { MODELS } from './lib/models'
 
 export type { Plugin } from './types/plugins'

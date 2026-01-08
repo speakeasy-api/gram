@@ -1,5 +1,5 @@
 import { useContext } from 'react'
-import { ElementsContext } from '@/contexts/elementsContextType'
+import { ElementsContext } from '@/contexts/contexts'
 
 /**
  * @private Internal hook to access the ElementsContext

@@ -6,11 +6,11 @@
 import { OAuthProxyServer } from "@gram/client/models/components";
 
 let value: OAuthProxyServer = {
-  createdAt: new Date("2024-01-26T13:27:19.398Z"),
+  createdAt: new Date("2025-01-25T13:27:19.398Z"),
   id: "<id>",
   projectId: "<id>",
   slug: "<value>",
-  updatedAt: new Date("2024-03-18T13:32:08.277Z"),
+  updatedAt: new Date("2025-03-18T13:32:08.277Z"),
 };
 ```
 

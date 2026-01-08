@@ -8,11 +8,11 @@ import { ListAllowedOriginsResult } from "@gram/client/models/components";
 let value: ListAllowedOriginsResult = {
   allowedOrigins: [
     {
-      createdAt: new Date("2024-06-06T17:00:10.839Z"),
+      createdAt: new Date("2025-06-06T17:00:10.839Z"),
       id: "<id>",
       origin: "<value>",
       projectId: "<id>",
-      updatedAt: new Date("2025-11-03T17:27:17.996Z"),
+      updatedAt: new Date("2026-11-03T17:27:17.996Z"),
     },
   ],
 };
