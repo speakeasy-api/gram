@@ -144,19 +144,7 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 		return nil, nilFunc, fmt.Errorf("failed to ping clickhouse after %d attempts: %w", maxRetries+1, pingErr)
 	}
 
-	cc := tm_repo.New(logger, tracerProvider, conn, func(ctx context.Context, orgId string) (bool, error) {
-		isEnabled, err := featureClient.IsFeatureEnabled(ctx, orgId, productfeatures.FeatureLogs)
-		if err != nil {
-			logger.ErrorContext(
-				ctx, "error checking if logs are enabled",
-				attr.SlogError(err),
-				attr.SlogOrganizationSlug(orgId),
-			)
-			return false, fmt.Errorf("error checking if logs are enabled: %w", err)
-		}
-
-		return isEnabled, nil
-	})
+	cc := tm_repo.New(logger, tracerProvider, conn)
 
 	shutdown := func(ctx context.Context) error {
 		if err := conn.Close(); err != nil {

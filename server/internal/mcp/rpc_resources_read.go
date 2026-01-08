@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -47,7 +48,18 @@ type resourceContent struct {
 	Blob     string  `json:"blob,omitempty"`
 }
 
-func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, toolProxy *gateway.ToolProxy, env gateway.EnvironmentLoader, billingTracker billing.Tracker, billingRepository billing.Repository, tcm tm.ToolMetricsProvider) (json.RawMessage, error) {
+func handleResourcesRead(
+	ctx context.Context,
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	payload *mcpInputs,
+	req *rawRequest,
+	toolProxy *gateway.ToolProxy,
+	env gateway.EnvironmentLoader,
+	billingTracker billing.Tracker,
+	billingRepository billing.Repository,
+	tcm tm.ToolMetricsProvider,
+	featuresClient *productfeatures.Client) (json.RawMessage, error) {
 	var params resourceReadParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse get resource request").Log(ctx, logger)
@@ -87,7 +99,7 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	}
 
 	descriptor := plan.Descriptor
-	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, tcm, descriptor.OrganizationID, tm.ToolInfo{
+	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, tcm, featuresClient, descriptor.OrganizationID, tm.ToolInfo{
 		ID:             descriptor.ID,
 		Urn:            descriptor.URN.String(),
 		Name:           descriptor.Name,

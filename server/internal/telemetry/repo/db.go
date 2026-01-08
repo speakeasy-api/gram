@@ -20,7 +20,6 @@ type Queries struct {
 	conn       CHTX
 	logger     *slog.Logger
 	tracer     trace.Tracer
-	ShouldFlag func(ctx context.Context, orgId string) (bool, error)
 }
 
 // WithConn returns a new Queries instance using the provided connection.
@@ -29,24 +28,16 @@ func (q *Queries) WithConn(conn CHTX) *Queries {
 		conn:       conn,
 		logger:     q.logger,
 		tracer:     q.tracer,
-		ShouldFlag: q.ShouldFlag,
 	}
 }
 
 // New creates a new Queries instance with logger and tracer.
-func New(logger *slog.Logger, traceProvider trace.TracerProvider, conn CHTX, shouldFlag func(ctx context.Context, orgId string) (bool, error)) *Queries {
-	if shouldFlag == nil {
-		shouldFlag = func(ctx context.Context, orgId string) (bool, error) {
-			return true, nil
-		}
-	}
-
+func New(logger *slog.Logger, traceProvider trace.TracerProvider, conn CHTX) *Queries {
 	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry/repo")
 
 	return &Queries{
 		conn:       conn,
 		logger:     logger,
 		tracer:     tracer,
-		ShouldFlag: shouldFlag,
 	}
 }

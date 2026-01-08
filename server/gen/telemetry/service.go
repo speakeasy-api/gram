@@ -93,6 +93,8 @@ type SearchLogsResult struct {
 	Logs []*TelemetryLogRecord
 	// Cursor for next page
 	NextCursor *string
+	// Whether tool metrics are enabled for the organization
+	Enabled bool
 }
 
 // Filter criteria for searching tool calls
@@ -132,6 +134,8 @@ type SearchToolCallsResult struct {
 	ToolCalls []*ToolCallSummary
 	// Cursor for next page
 	NextCursor *string
+	// Whether tool metrics are enabled for the organization
+	Enabled bool
 }
 
 // Service information
