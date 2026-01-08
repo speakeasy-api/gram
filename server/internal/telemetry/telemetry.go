@@ -56,10 +56,6 @@ type ToolCallLogger interface {
 	RecordResponseBodyBytes(bytes int64)
 }
 
-type FeaturesProvider interface {
-	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
-}
-
 type toolCallLogger struct {
 	entry    *repo.ToolHTTPRequest
 	provider ToolMetricsProvider
