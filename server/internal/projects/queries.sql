@@ -17,6 +17,13 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 ORDER BY id ASC;
 
+-- name: GetProjectBySlug :one
+SELECT *
+FROM projects
+WHERE slug = @slug
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;
+
 -- name: GetProjectByID :one
 SELECT *
 FROM projects

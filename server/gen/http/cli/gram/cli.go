@@ -66,7 +66,7 @@ func UsageCommands() []string {
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"features set-product-feature",
-		"projects (create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project)",
+		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project)",
 		"resources list-resources",
 		"slack (callback|login|get-slack-connection|update-slack-connection|delete-slack-connection)",
 		"telemetry (search-logs|search-tool-calls)",
@@ -451,6 +451,11 @@ func ParseEndpoint(
 
 		projectsFlags = flag.NewFlagSet("projects", flag.ContinueOnError)
 
+		projectsGetProjectFlags            = flag.NewFlagSet("get-project", flag.ExitOnError)
+		projectsGetProjectSlugFlag         = projectsGetProjectFlags.String("slug", "REQUIRED", "")
+		projectsGetProjectApikeyTokenFlag  = projectsGetProjectFlags.String("apikey-token", "", "")
+		projectsGetProjectSessionTokenFlag = projectsGetProjectFlags.String("session-token", "", "")
+
 		projectsCreateProjectFlags            = flag.NewFlagSet("create-project", flag.ExitOnError)
 		projectsCreateProjectBodyFlag         = projectsCreateProjectFlags.String("body", "REQUIRED", "")
 		projectsCreateProjectApikeyTokenFlag  = projectsCreateProjectFlags.String("apikey-token", "", "")
@@ -815,6 +820,7 @@ func ParseEndpoint(
 	featuresSetProductFeatureFlags.Usage = featuresSetProductFeatureUsage
 
 	projectsFlags.Usage = projectsUsage
+	projectsGetProjectFlags.Usage = projectsGetProjectUsage
 	projectsCreateProjectFlags.Usage = projectsCreateProjectUsage
 	projectsListProjectsFlags.Usage = projectsListProjectsUsage
 	projectsSetLogoFlags.Usage = projectsSetLogoUsage
@@ -1212,6 +1218,9 @@ func ParseEndpoint(
 
 		case "projects":
 			switch epn {
+			case "get-project":
+				epf = projectsGetProjectFlags
+
 			case "create-project":
 				epf = projectsCreateProjectFlags
 
@@ -1655,6 +1664,9 @@ func ParseEndpoint(
 		case "projects":
 			c := projectsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "get-project":
+				endpoint = c.GetProject()
+				data, err = projectsc.BuildGetProjectPayload(*projectsGetProjectSlugFlag, *projectsGetProjectApikeyTokenFlag, *projectsGetProjectSessionTokenFlag)
 			case "create-project":
 				endpoint = c.CreateProject()
 				data, err = projectsc.BuildCreateProjectPayload(*projectsCreateProjectBodyFlag, *projectsCreateProjectApikeyTokenFlag, *projectsCreateProjectSessionTokenFlag)
@@ -3414,6 +3426,7 @@ func projectsUsage() {
 	fmt.Fprintln(os.Stderr, `Manages projects in Gram.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] projects COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-project: Get project details by slug.`)
 	fmt.Fprintln(os.Stderr, `    create-project: Create a new project.`)
 	fmt.Fprintln(os.Stderr, `    list-projects: List all projects for an organization.`)
 	fmt.Fprintln(os.Stderr, `    set-logo: Uploads a logo for a project.`)
@@ -3424,6 +3437,28 @@ func projectsUsage() {
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s projects COMMAND --help\n", os.Args[0])
 }
+func projectsGetProjectUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] projects get-project", os.Args[0])
+	fmt.Fprint(os.Stderr, " -slug STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get project details by slug.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects get-project --slug \"u4u\" --apikey-token \"Tempora in quisquam dolores est.\" --session-token \"Odit dolor.\"")
+}
+
 func projectsCreateProjectUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] projects create-project", os.Args[0])
@@ -3443,7 +3478,7 @@ func projectsCreateProjectUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects create-project --body '{\n      \"name\": \"zzd\",\n      \"organization_id\": \"Et aut dolores iure.\"\n   }' --apikey-token \"Dolores odit.\" --session-token \"Corrupti rerum ipsa laboriosam placeat illo adipisci.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects create-project --body '{\n      \"name\": \"4ib\",\n      \"organization_id\": \"Dolor est asperiores iste cum ducimus itaque.\"\n   }' --apikey-token \"Quam esse rerum.\" --session-token \"Ipsum quidem.\"")
 }
 
 func projectsListProjectsUsage() {
@@ -3465,7 +3500,7 @@ func projectsListProjectsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects list-projects --organization-id \"Ut dolor est asperiores iste cum.\" --apikey-token \"Itaque ut voluptas non vel.\" --session-token \"Quam esse rerum.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects list-projects --organization-id \"Voluptatem harum.\" --apikey-token \"Deleniti voluptate saepe et est incidunt aliquid.\" --session-token \"Non vel minus.\"")
 }
 
 func projectsSetLogoUsage() {
@@ -3489,7 +3524,7 @@ func projectsSetLogoUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects set-logo --body '{\n      \"asset_id\": \"Veniam ducimus voluptatem harum vitae deleniti.\"\n   }' --apikey-token \"Saepe et est incidunt.\" --session-token \"Dolorum non.\" --project-slug-input \"Minus eius recusandae.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects set-logo --body '{\n      \"asset_id\": \"Iure cupiditate cumque debitis.\"\n   }' --apikey-token \"Et quo autem nam odit explicabo.\" --session-token \"In voluptas maxime in porro doloribus.\" --project-slug-input \"Est est voluptatem.\"")
 }
 
 func projectsListAllowedOriginsUsage() {
@@ -3511,7 +3546,7 @@ func projectsListAllowedOriginsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects list-allowed-origins --apikey-token \"Cupiditate cumque debitis asperiores et.\" --session-token \"Autem nam.\" --project-slug-input \"Explicabo vel in voluptas.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects list-allowed-origins --apikey-token \"Tempora earum hic distinctio reprehenderit.\" --session-token \"Rem ab error in pariatur.\" --project-slug-input \"Nam quia quibusdam aut maiores velit.\"")
 }
 
 func projectsUpsertAllowedOriginUsage() {
@@ -3535,7 +3570,7 @@ func projectsUpsertAllowedOriginUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects upsert-allowed-origin --body '{\n      \"origin\": \"8sj\",\n      \"status\": \"approved\"\n   }' --apikey-token \"Ullam voluptates vitae incidunt.\" --session-token \"Accusamus et ratione quos nam qui reiciendis.\" --project-slug-input \"Numquam iste ad commodi.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects upsert-allowed-origin --body '{\n      \"origin\": \"61\",\n      \"status\": \"rejected\"\n   }' --apikey-token \"Sed ullam ut.\" --session-token \"Quae placeat.\" --project-slug-input \"Aut qui.\"")
 }
 
 func projectsDeleteProjectUsage() {
@@ -3557,7 +3592,7 @@ func projectsDeleteProjectUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects delete-project --id \"7c540177-f6a3-4dad-9579-7396addb1359\" --apikey-token \"Voluptatum et ut est.\" --session-token \"Repudiandae exercitationem sapiente molestias.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects delete-project --id \"53fd66c9-aebd-4747-8cc6-5fb15637611c\" --apikey-token \"Recusandae soluta facere.\" --session-token \"Soluta saepe labore magnam nisi magni.\"")
 }
 
 // resourcesUsage displays the usage of the resources command and its
@@ -3594,7 +3629,7 @@ func resourcesListResourcesUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "resources list-resources --cursor \"Eos veniam nesciunt maxime et corrupti.\" --limit 1365772453 --deployment-id \"Facere pariatur soluta.\" --session-token \"Labore magnam nisi magni minus.\" --project-slug-input \"Nesciunt nam rerum quis natus.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "resources list-resources --cursor \"Omnis cumque quia.\" --limit 1568842783 --deployment-id \"Exercitationem deleniti aliquid.\" --session-token \"Labore necessitatibus libero incidunt est.\" --project-slug-input \"Illo quidem.\"")
 }
 
 // slackUsage displays the usage of the slack command and its subcommands.
@@ -3628,7 +3663,7 @@ func slackCallbackUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack callback --state \"Impedit magnam laboriosam esse eum et.\" --code \"Necessitatibus ut.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack callback --state \"Provident necessitatibus ut est magni.\" --code \"Quia mollitia incidunt.\"")
 }
 
 func slackLoginUsage() {
@@ -3650,7 +3685,7 @@ func slackLoginUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack login --project-slug \"Aperiam nostrum libero at fugiat debitis.\" --return-url \"Quae qui dolorum.\" --session-token \"Veniam numquam cupiditate odit est praesentium incidunt.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack login --project-slug \"Debitis pariatur quae qui dolorum.\" --return-url \"Veniam numquam cupiditate odit est praesentium incidunt.\" --session-token \"Sunt vero magnam voluptas velit.\"")
 }
 
 func slackGetSlackConnectionUsage() {
@@ -3670,7 +3705,7 @@ func slackGetSlackConnectionUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack get-slack-connection --session-token \"Officiis sapiente quod et enim accusantium qui.\" --project-slug-input \"Beatae sed porro eius est.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack get-slack-connection --session-token \"Enim accusantium qui veritatis beatae.\" --project-slug-input \"Porro eius est ea.\"")
 }
 
 func slackUpdateSlackConnectionUsage() {

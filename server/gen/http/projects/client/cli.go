@@ -13,8 +13,44 @@ import (
 	"unicode/utf8"
 
 	projects "github.com/speakeasy-api/gram/server/gen/projects"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// BuildGetProjectPayload builds the payload for the projects getProject
+// endpoint from CLI flags.
+func BuildGetProjectPayload(projectsGetProjectSlug string, projectsGetProjectApikeyToken string, projectsGetProjectSessionToken string) (*projects.GetProjectPayload, error) {
+	var err error
+	var slug string
+	{
+		slug = projectsGetProjectSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if projectsGetProjectApikeyToken != "" {
+			apikeyToken = &projectsGetProjectApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if projectsGetProjectSessionToken != "" {
+			sessionToken = &projectsGetProjectSessionToken
+		}
+	}
+	v := &projects.GetProjectPayload{}
+	v.Slug = types.Slug(slug)
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
 
 // BuildCreateProjectPayload builds the payload for the projects createProject
 // endpoint from CLI flags.
@@ -24,7 +60,7 @@ func BuildCreateProjectPayload(projectsCreateProjectBody string, projectsCreateP
 	{
 		err = json.Unmarshal([]byte(projectsCreateProjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"zzd\",\n      \"organization_id\": \"Et aut dolores iure.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"4ib\",\n      \"organization_id\": \"Dolor est asperiores iste cum ducimus itaque.\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 40, false))
@@ -90,7 +126,7 @@ func BuildSetLogoPayload(projectsSetLogoBody string, projectsSetLogoApikeyToken 
 	{
 		err = json.Unmarshal([]byte(projectsSetLogoBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"Veniam ducimus voluptatem harum vitae deleniti.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"Iure cupiditate cumque debitis.\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -158,7 +194,7 @@ func BuildUpsertAllowedOriginPayload(projectsUpsertAllowedOriginBody string, pro
 	{
 		err = json.Unmarshal([]byte(projectsUpsertAllowedOriginBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"origin\": \"8sj\",\n      \"status\": \"approved\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"origin\": \"61\",\n      \"status\": \"rejected\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Origin) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.origin", body.Origin, utf8.RuneCountInString(body.Origin), 1, true))
