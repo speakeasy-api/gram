@@ -64,8 +64,8 @@ interface ToolUIProps {
   /** Additional class names */
   className?: string
   /** Approval callbacks */
-  onApprove?: () => void
-  onApproveAlways?: () => void
+  onApproveOnce?: () => void
+  onApproveForSession?: () => void
   onDeny?: () => void
 }
 
@@ -352,6 +352,8 @@ function ToolUISection({
   )
 }
 
+type ApprovalMode = 'one-time' | 'for-session'
+
 /* -----------------------------------------------------------------------------
  * ToolUI - Main component
  * -------------------------------------------------------------------------- */
@@ -365,18 +367,18 @@ function ToolUI({
   result,
   defaultExpanded = false,
   className,
-  onApprove,
-  onApproveAlways,
+  onApproveOnce,
+  onApproveForSession,
   onDeny,
 }: ToolUIProps) {
   const isApprovalPending =
-    status === 'approval' && onApprove !== undefined && onDeny !== undefined
+    status === 'approval' && onApproveOnce !== undefined && onDeny !== undefined
   // Auto-expand when approval is pending, collapse when approved
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const hasContent = request !== undefined || result !== undefined
 
-  // Track approval mode: 'once' or 'always' (default to 'always' for safety)
-  const [approvalMode, setApprovalMode] = useState<'once' | 'always'>('always')
+  // Track approval mode: 'one-time' or 'for-session'
+  const [approvalMode, setApprovalMode] = useState<ApprovalMode>('one-time')
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
 
   // Collapse when transitioning from approval to non-approval (i.e., when approved/denied)
@@ -388,10 +390,10 @@ function ToolUI({
 
   // Handle approve based on selected mode
   const handleApprove = () => {
-    if (approvalMode === 'always' && onApproveAlways) {
-      onApproveAlways()
-    } else if (onApprove) {
-      onApprove()
+    if (approvalMode === 'for-session' && onApproveForSession) {
+      onApproveForSession()
+    } else if (onApproveOnce) {
+      onApproveOnce()
     }
   }
 
@@ -503,10 +505,16 @@ function ToolUI({
                 variant="default"
                 size="sm"
                 onClick={handleApprove}
-                className="flex cursor-pointer justify-between gap-0 rounded-r-none bg-emerald-600 hover:bg-emerald-700"
+                className="flex cursor-pointer justify-between gap-1 rounded-r-none bg-emerald-600 hover:bg-emerald-700"
               >
                 <CheckIcon className="mr-1 size-3" />
-                {approvalMode === 'once' ? 'Approve always' : 'Approve once'}
+
+                {/* The min-width is needed to prevent the button from shifting when the text changes */}
+                <span className="min-w-[110px]">
+                  {approvalMode === 'one-time'
+                    ? 'Approve this time'
+                    : 'Approve always'}
+                </span>
               </Button>
               <Popover open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
                 <PopoverTrigger asChild>
@@ -521,36 +529,36 @@ function ToolUI({
                 <PopoverContent align="end" className="w-64 p-1" sideOffset={4}>
                   <button
                     onClick={() => {
-                      setApprovalMode('always')
+                      setApprovalMode('one-time')
                       setIsDropdownOpen(false)
                     }}
-                    className="hover:bg-accent flex w-full items-start gap-2 rounded-sm px-2 py-2 text-left"
+                    className="hover:bg-accent relative flex w-full items-start gap-2 rounded-sm px-2 py-2 text-left"
                   >
                     <CheckIcon
                       className={cn(
-                        'mt-0.5 size-3 shrink-0',
-                        approvalMode !== 'always' && 'invisible'
+                        'relative top-1 mt-0.5 size-3 shrink-0',
+                        approvalMode !== 'one-time' && 'invisible'
                       )}
                     />
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-sm">Approve once</span>
+                      <span className="text-sm">Approve only once</span>
                       <span className="text-muted-foreground text-xs">
                         You'll be asked again next time
                       </span>
                     </div>
                   </button>
-                  {onApproveAlways && (
+                  {onApproveForSession && (
                     <button
                       onClick={() => {
-                        setApprovalMode('once')
+                        setApprovalMode('for-session')
                         setIsDropdownOpen(false)
                       }}
-                      className="hover:bg-accent flex w-full items-start gap-2 rounded-sm px-2 py-2 text-left"
+                      className="hover:bg-accent relative flex w-full items-start gap-2 rounded-sm px-2 py-2 text-left"
                     >
                       <CheckIcon
                         className={cn(
-                          'mt-0.5 size-3 shrink-0',
-                          approvalMode !== 'once' && 'invisible'
+                          'relative top-1 mt-0.5 size-3 shrink-0',
+                          approvalMode !== 'for-session' && 'invisible'
                         )}
                       />
                       <div className="flex flex-col gap-0.5">

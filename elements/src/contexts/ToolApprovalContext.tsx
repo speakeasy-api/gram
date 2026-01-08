@@ -16,10 +16,13 @@ interface ToolApprovalContextType {
     toolCallId: string,
     args: unknown
   ) => Promise<boolean>
-  approveToolCall: (toolCallId: string) => void
-  denyToolCall: (toolCallId: string) => void
+  /** Whitelist a tool name so all future calls are auto-approved */
+  whitelistTool: (toolName: string) => void
+  /** Confirm a specific pending tool call approval */
+  confirmPendingApproval: (toolCallId: string) => void
+  /** Reject a specific pending tool call approval */
+  rejectPendingApproval: (toolCallId: string) => void
   isToolApproved: (toolName: string) => boolean
-  markToolApproved: (toolName: string) => void
   getPendingApproval: (toolCallId: string) => PendingApproval | undefined
 }
 
@@ -48,8 +51,15 @@ export function ToolApprovalProvider({ children }: { children: ReactNode }) {
     },
     []
   )
+  const whitelistTool = useCallback((toolName: string) => {
+    setApprovedTools((prev) => {
+      const next = new Set(prev)
+      next.add(toolName)
+      return next
+    })
+  }, [])
 
-  const approveToolCall = useCallback((toolCallId: string) => {
+  const confirmPendingApproval = useCallback((toolCallId: string) => {
     setPendingApprovals((prev) => {
       const pending = prev.get(toolCallId)
       if (pending) {
@@ -62,7 +72,7 @@ export function ToolApprovalProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const denyToolCall = useCallback((toolCallId: string) => {
+  const rejectPendingApproval = useCallback((toolCallId: string) => {
     setPendingApprovals((prev) => {
       const pending = prev.get(toolCallId)
       if (pending) {
@@ -82,14 +92,6 @@ export function ToolApprovalProvider({ children }: { children: ReactNode }) {
     [approvedTools]
   )
 
-  const markToolApproved = useCallback((toolName: string) => {
-    setApprovedTools((prev) => {
-      const next = new Set(prev)
-      next.add(toolName)
-      return next
-    })
-  }, [])
-
   const getPendingApproval = useCallback(
     (toolCallId: string) => {
       return pendingApprovals.get(toolCallId)
@@ -103,10 +105,10 @@ export function ToolApprovalProvider({ children }: { children: ReactNode }) {
         pendingApprovals,
         approvedTools,
         requestApproval,
-        approveToolCall,
-        denyToolCall,
+        whitelistTool,
+        confirmPendingApproval,
+        rejectPendingApproval,
         isToolApproved,
-        markToolApproved,
         getPendingApproval,
       }}
     >
@@ -115,4 +117,4 @@ export function ToolApprovalProvider({ children }: { children: ReactNode }) {
   )
 }
 
-export type { ToolApprovalContextType,  }
+export type { ToolApprovalContextType }

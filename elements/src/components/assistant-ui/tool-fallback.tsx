@@ -17,8 +17,12 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
   result,
   args,
 }) => {
-  const { pendingApprovals, approveToolCall, denyToolCall, markToolApproved } =
-    useToolApproval()
+  const {
+    pendingApprovals,
+    whitelistTool,
+    confirmPendingApproval,
+    rejectPendingApproval,
+  } = useToolApproval()
 
   // Check if this specific tool call has a pending approval
   const pendingApproval = pendingApprovals.get(toolCallId)
@@ -28,19 +32,17 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
     (part) => part.toolName === toolName
   )
 
-  // "Approve once" = trust this tool, auto-approve future calls
   const handleApproveOnce = () => {
-    markToolApproved(toolName)
-    approveToolCall(toolCallId)
+    confirmPendingApproval(toolCallId)
   }
 
-  // "Always approve" = just approve this call, still prompt for future calls
-  const handleApproveAlways = () => {
-    approveToolCall(toolCallId)
+  const handleApproveForSession = () => {
+    whitelistTool(toolName)
+    confirmPendingApproval(toolCallId)
   }
 
   const handleDeny = () => {
-    denyToolCall(toolCallId)
+    rejectPendingApproval(toolCallId)
   }
 
   // Map assistant-ui status to ToolUI status
@@ -97,8 +99,10 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
         status={getToolStatus()}
         request={args as Record<string, unknown>}
         result={getResult()}
-        onApprove={pendingApproval ? handleApproveOnce : undefined}
-        onApproveAlways={pendingApproval ? handleApproveAlways : undefined}
+        onApproveOnce={pendingApproval ? handleApproveOnce : undefined}
+        onApproveForSession={
+          pendingApproval ? handleApproveForSession : undefined
+        }
         onDeny={pendingApproval ? handleDeny : undefined}
         className="rounded-none border-0"
       />
