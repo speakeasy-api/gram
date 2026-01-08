@@ -392,9 +392,6 @@ importers:
       '@ai-sdk/mcp':
         specifier: ^0.0.11
         version: 0.0.11(zod@4.2.1)
-      '@ai-sdk/react':
-        specifier: 'catalog:'
-        version: 2.0.118(react@19.2.0)(zod@4.2.1)
       '@openrouter/ai-sdk-provider':
         specifier: ^1.4.1
         version: 1.5.4(ai@5.0.90(zod@4.2.1))(zod@4.2.1)
@@ -501,9 +498,6 @@ importers:
       eslint-config-prettier:
         specifier: ^10.1.8
         version: 10.1.8(eslint@9.39.1(jiti@2.6.1))
-      eslint-js:
-        specifier: github:eslint/js
-        version: https://codeload.github.com/eslint/js/tar.gz/d6e3d7c660677307e6d87830768b333427bc6eac
       eslint-plugin-prettier:
         specifier: ^5.5.4
         version: 5.5.4(eslint-config-prettier@10.1.8(eslint@9.39.1(jiti@2.6.1)))(eslint@9.39.1(jiti@2.6.1))(prettier@3.7.4)
@@ -4285,10 +4279,6 @@ packages:
     hasBin: true
     peerDependencies:
       eslint: '>=7.0.0'
-
-  eslint-js@https://codeload.github.com/eslint/js/tar.gz/d6e3d7c660677307e6d87830768b333427bc6eac:
-    resolution: {tarball: https://codeload.github.com/eslint/js/tar.gz/d6e3d7c660677307e6d87830768b333427bc6eac}
-    version: 0.0.0
 
   eslint-plugin-prettier@5.5.4:
     resolution: {integrity: sha512-swNtI95SToIz05YINMA6Ox5R057IMAmWZ26GqPxusAp1TZzj+IdY9tXNWWD3vkF/wEqydCONcwjTFpxybBqZsg==}
@@ -11644,8 +11634,6 @@ snapshots:
   eslint-config-prettier@10.1.8(eslint@9.39.1(jiti@2.6.1)):
     dependencies:
       eslint: 9.39.1(jiti@2.6.1)
-
-  eslint-js@https://codeload.github.com/eslint/js/tar.gz/d6e3d7c660677307e6d87830768b333427bc6eac: {}
 
   eslint-plugin-prettier@5.5.4(eslint-config-prettier@10.1.8(eslint@9.39.1(jiti@2.6.1)))(eslint@9.39.1(jiti@2.6.1))(prettier@3.7.4):
     dependencies:
