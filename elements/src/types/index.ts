@@ -228,7 +228,7 @@ export interface ElementsConfig {
 
   /**
    * The configuration for the modal window.
-   * Does not apply if variant is 'standalone'.
+   * Only applicable if variant is 'widget'.
    *
    * @example
    * const config: ElementsConfig = {
