@@ -65,6 +65,7 @@ export * from "./getinstanceresult.js";
 export * from "./getintegrationresult.js";
 export * from "./getlatestdeploymentresult.js";
 export * from "./getmcpmetadataresponsebody.js";
+export * from "./getprojectresult.js";
 export * from "./getprompttemplateresult.js";
 export * from "./getsignedasseturlform.js";
 export * from "./getslackconnectionresult.js";
