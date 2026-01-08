@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * getProject projects
  *
  * @remarks
- * Create a new project.
+ * Get project details by slug.
  */
 export function projectsRead(
   client: GramCore,

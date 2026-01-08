@@ -200,7 +200,7 @@ import {
 
 ## read
 
-Create a new project.
+Get project details by slug.
 
 ### Example Usage
 

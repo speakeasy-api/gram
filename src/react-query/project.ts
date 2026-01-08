@@ -35,7 +35,7 @@ export {
  * getProject projects
  *
  * @remarks
- * Create a new project.
+ * Get project details by slug.
  */
 export function useProject(
   request: operations.GetProjectRequest,
@@ -58,7 +58,7 @@ export function useProject(
  * getProject projects
  *
  * @remarks
- * Create a new project.
+ * Get project details by slug.
  */
 export function useProjectSuspense(
   request: operations.GetProjectRequest,

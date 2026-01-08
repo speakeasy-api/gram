@@ -58,7 +58,7 @@ export class Projects extends ClientSDK {
    * getProject projects
    *
    * @remarks
-   * Create a new project.
+   * Get project details by slug.
    */
   async read(
     request: operations.GetProjectRequest,
