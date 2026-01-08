@@ -325,7 +325,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 	}
 
 	if !params.enabled {
-		return &telem_gen.SearchLogsResult{Logs: []*telem_gen.TelemetryLogRecord{}, Enabled: false}, nil
+		return &telem_gen.SearchLogsResult{Logs: []*telem_gen.TelemetryLogRecord{}, Enabled: false, NextCursor: nil}, nil
 	}
 
 	// Extract SearchLogs-specific filter fields
@@ -402,7 +402,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	}
 
 	if !params.enabled {
-		return &telem_gen.SearchToolCallsResult{ToolCalls: []*telem_gen.ToolCallSummary{}, Enabled: false}, nil
+		return &telem_gen.SearchToolCallsResult{ToolCalls: []*telem_gen.ToolCallSummary{}, Enabled: false, NextCursor: nil}, nil
 	}
 
 	// Extract SearchToolCalls-specific filter fields
@@ -514,12 +514,8 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort st
 func (s *Service) isLogsEnabled(ctx context.Context, orgID string) (bool, error) {
 	logsEnabled, err := s.featureClient.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureLogs)
 	if err != nil {
-		s.logger.ErrorContext(
-			ctx, "error checking if logs are enabled",
-			attr.SlogError(err),
-			attr.SlogOrganizationSlug(orgID),
-		)
-		return false, err
+		return false, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled").
+			Log(ctx, s.logger, attr.SlogError(err), attr.SlogOrganizationID(orgID))
 	}
 
 	return logsEnabled, nil
