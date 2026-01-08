@@ -69,6 +69,7 @@ export * from "./listVersions.js";
 export * from "./loadChat.js";
 export * from "./logout.js";
 export * from "./mcpMetadataSet.js";
+export * from "./project.js";
 export * from "./publishPackage.js";
 export * from "./redeployDeployment.js";
 export * from "./register.js";

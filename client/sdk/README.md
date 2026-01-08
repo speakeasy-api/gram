@@ -236,6 +236,7 @@ run();
 
 * [create](docs/sdks/projects/README.md#create) - createProject projects
 * [deleteById](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
+* [read](docs/sdks/projects/README.md#read) - getProject projects
 * [list](docs/sdks/projects/README.md#list) - listProjects projects
 * [listAllowedOrigins](docs/sdks/projects/README.md#listallowedorigins) - listAllowedOrigins projects
 * [setLogo](docs/sdks/projects/README.md#setlogo) - setLogo projects
@@ -381,6 +382,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`projectsDeleteById`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
 - [`projectsList`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`projectsListAllowedOrigins`](docs/sdks/projects/README.md#listallowedorigins) - listAllowedOrigins projects
+- [`projectsRead`](docs/sdks/projects/README.md#read) - getProject projects
 - [`projectsSetLogo`](docs/sdks/projects/README.md#setlogo) - setLogo projects
 - [`projectsUpsertAllowedOrigin`](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
@@ -505,6 +507,7 @@ To learn about this feature and how to get started, check
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
 - [`useMcpMetadataSetMutation`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
+- [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
