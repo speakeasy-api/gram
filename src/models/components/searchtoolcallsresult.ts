@@ -18,6 +18,10 @@ import {
  */
 export type SearchToolCallsResult = {
   /**
+   * Whether tool metrics are enabled for the organization
+   */
+  enabled: boolean;
+  /**
    * Cursor for next page
    */
   nextCursor?: string | undefined;
@@ -33,6 +37,7 @@ export const SearchToolCallsResult$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  enabled: z.boolean(),
   next_cursor: z.string().optional(),
   tool_calls: z.array(ToolCallSummary$inboundSchema),
 }).transform((v) => {
