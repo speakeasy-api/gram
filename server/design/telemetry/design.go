@@ -143,8 +143,9 @@ var SearchLogsResult = Type("SearchLogsResult", func() {
 
 	Attribute("logs", ArrayOf(TelemetryLogRecord), "List of telemetry log records")
 	Attribute("next_cursor", String, "Cursor for next page")
+	Attribute("enabled", Boolean, "Whether tool metrics are enabled for the organization")
 
-	Required("logs")
+	Required("logs", "enabled")
 })
 
 var TelemetryLogRecord = Type("TelemetryLogRecord", func() {
@@ -211,8 +212,9 @@ var SearchToolCallsResult = Type("SearchToolCallsResult", func() {
 
 	Attribute("tool_calls", ArrayOf(ToolCallSummary), "List of tool call summaries")
 	Attribute("next_cursor", String, "Cursor for next page")
+	Attribute("enabled", Boolean, "Whether tool metrics are enabled for the organization")
 
-	Required("tool_calls")
+	Required("tool_calls", "enabled")
 })
 
 var ToolCallSummary = Type("ToolCallSummary", func() {

@@ -45,6 +45,8 @@ type SearchLogsResponseBody struct {
 	Logs []*TelemetryLogRecordResponseBody `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+	// Whether tool metrics are enabled for the organization
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
 // SearchToolCallsResponseBody is the type of the "telemetry" service
@@ -54,6 +56,8 @@ type SearchToolCallsResponseBody struct {
 	ToolCalls []*ToolCallSummaryResponseBody `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+	// Whether tool metrics are enabled for the organization
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
 // SearchLogsUnauthorizedResponseBody is the type of the "telemetry" service
@@ -567,6 +571,7 @@ func NewSearchToolCallsRequestBody(p *telemetry.SearchToolCallsPayload) *SearchT
 func NewSearchLogsResultOK(body *SearchLogsResponseBody) *telemetry.SearchLogsResult {
 	v := &telemetry.SearchLogsResult{
 		NextCursor: body.NextCursor,
+		Enabled:    *body.Enabled,
 	}
 	v.Logs = make([]*telemetry.TelemetryLogRecord, len(body.Logs))
 	for i, val := range body.Logs {
@@ -735,6 +740,7 @@ func NewSearchLogsGatewayError(body *SearchLogsGatewayErrorResponseBody) *goa.Se
 func NewSearchToolCallsResultOK(body *SearchToolCallsResponseBody) *telemetry.SearchToolCallsResult {
 	v := &telemetry.SearchToolCallsResult{
 		NextCursor: body.NextCursor,
+		Enabled:    *body.Enabled,
 	}
 	v.ToolCalls = make([]*telemetry.ToolCallSummary, len(body.ToolCalls))
 	for i, val := range body.ToolCalls {
@@ -904,6 +910,9 @@ func ValidateSearchLogsResponseBody(body *SearchLogsResponseBody) (err error) {
 	if body.Logs == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("logs", "body"))
 	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
 	for _, e := range body.Logs {
 		if e != nil {
 			if err2 := ValidateTelemetryLogRecordResponseBody(e); err2 != nil {
@@ -919,6 +928,9 @@ func ValidateSearchLogsResponseBody(body *SearchLogsResponseBody) (err error) {
 func ValidateSearchToolCallsResponseBody(body *SearchToolCallsResponseBody) (err error) {
 	if body.ToolCalls == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	for _, e := range body.ToolCalls {
 		if e != nil {

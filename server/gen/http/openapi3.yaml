@@ -13735,6 +13735,9 @@ components:
         SearchLogsResult:
             type: object
             properties:
+                enabled:
+                    type: boolean
+                    description: Whether tool metrics are enabled for the organization
                 logs:
                     type: array
                     items:
@@ -13746,6 +13749,7 @@ components:
             description: Result of searching telemetry logs
             required:
                 - logs
+                - enabled
         SearchToolCallsFilter:
             type: object
             properties:
@@ -13797,6 +13801,9 @@ components:
         SearchToolCallsResult:
             type: object
             properties:
+                enabled:
+                    type: boolean
+                    description: Whether tool metrics are enabled for the organization
                 next_cursor:
                     type: string
                     description: Cursor for next page
@@ -13808,6 +13815,7 @@ components:
             description: Result of searching tool call summaries
             required:
                 - tool_calls
+                - enabled
         SecurityVariable:
             type: object
             properties:

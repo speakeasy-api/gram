@@ -45,6 +45,8 @@ type SearchLogsResponseBody struct {
 	Logs []*TelemetryLogRecordResponseBody `form:"logs" json:"logs" xml:"logs"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+	// Whether tool metrics are enabled for the organization
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // SearchToolCallsResponseBody is the type of the "telemetry" service
@@ -54,6 +56,8 @@ type SearchToolCallsResponseBody struct {
 	ToolCalls []*ToolCallSummaryResponseBody `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+	// Whether tool metrics are enabled for the organization
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // SearchLogsUnauthorizedResponseBody is the type of the "telemetry" service
@@ -515,6 +519,7 @@ type SearchToolCallsFilterRequestBody struct {
 func NewSearchLogsResponseBody(res *telemetry.SearchLogsResult) *SearchLogsResponseBody {
 	body := &SearchLogsResponseBody{
 		NextCursor: res.NextCursor,
+		Enabled:    res.Enabled,
 	}
 	if res.Logs != nil {
 		body.Logs = make([]*TelemetryLogRecordResponseBody, len(res.Logs))
@@ -536,6 +541,7 @@ func NewSearchLogsResponseBody(res *telemetry.SearchLogsResult) *SearchLogsRespo
 func NewSearchToolCallsResponseBody(res *telemetry.SearchToolCallsResult) *SearchToolCallsResponseBody {
 	body := &SearchToolCallsResponseBody{
 		NextCursor: res.NextCursor,
+		Enabled:    res.Enabled,
 	}
 	if res.ToolCalls != nil {
 		body.ToolCalls = make([]*ToolCallSummaryResponseBody, len(res.ToolCalls))
