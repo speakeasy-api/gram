@@ -1,7 +1,7 @@
 import { FrontendTools } from '@/components/FrontendTools'
 import { MODELS } from '@/lib/models'
 import { recommended } from '@/plugins'
-import { ElementsProviderProps, Model } from '@/types'
+import { ApprovalType, ElementsProviderProps, Model } from '@/types'
 import { Plugin } from '@/types/plugins'
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import {
@@ -18,12 +18,14 @@ import {
   type ChatTransport,
   type UIMessage,
 } from 'ai'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef, useCallback } from 'react'
 import { ElementsContext } from './elementsContextType'
 import { getEnabledTools, toAISDKTools } from '@/lib/tools'
 import { useSession } from '@/hooks/useSession'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useMCPTools } from '@/hooks/useMCPTools'
+import { ToolApprovalProvider } from './ToolApprovalContext'
+import { useToolApproval } from '@/hooks/useToolApproval'
 
 const GRAM_API_URL = 'https://app.getgram.ai'
 
@@ -49,12 +51,95 @@ async function defaultGetSession(): Promise<string> {
   return data.client_token
 }
 
-const ElementsProviderInner = ({
+interface ApprovalHelpers {
+  requestApproval: (
+    toolName: string,
+    toolCallId: string,
+    args: unknown
+  ) => Promise<boolean>
+  isToolApproved: (toolName: string) => boolean
+  markToolApproved: (toolName: string) => void
+}
+
+interface ToolExecuteContext {
+  toolCallId: string
+  abortSignal?: AbortSignal
+}
+
+function wrapToolsWithApproval(
+  tools: ToolSet,
+  approvalConfig: Record<string, ApprovalType> | undefined,
+  approvalHelpers: ApprovalHelpers
+): ToolSet {
+  if (!approvalConfig) {
+    return tools
+  }
+
+  return Object.fromEntries(
+    Object.entries(tools).map(([name, tool]) => {
+      const approvalType = approvalConfig[name]
+
+      if (!approvalType || approvalType === 'never') {
+        return [name, tool]
+      }
+
+      const originalExecute = tool.execute
+      if (!originalExecute) {
+        return [name, tool]
+      }
+
+      return [
+        name,
+        {
+          ...tool,
+          execute: async (args: unknown, context: ToolExecuteContext) => {
+            // Check if already approved (for "once" type)
+            if (
+              approvalType === 'once' &&
+              approvalHelpers.isToolApproved(name)
+            ) {
+              return originalExecute(args, context)
+            }
+
+            // Request approval using the actual toolCallId from the stream
+            const approved = await approvalHelpers.requestApproval(
+              name,
+              context.toolCallId,
+              args
+            )
+
+            if (!approved) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Tool "${name}" execution was denied by the user. Please acknowledge this and continue without using this tool's result.`,
+                  },
+                ],
+                isError: true,
+              }
+            }
+
+            // Mark as approved for "once" type
+            if (approvalType === 'once') {
+              approvalHelpers.markToolApproved(name)
+            }
+
+            return originalExecute(args, context)
+          },
+        },
+      ]
+    })
+  ) as ToolSet
+}
+
+const ElementsProviderWithApproval = ({
   children,
   config,
   getSession = defaultGetSession,
 }: ElementsProviderProps) => {
   const session = useSession({ getSession, projectSlug: config.projectSlug })
+  const toolApproval = useToolApproval()
 
   const [model, setModel] = useState<Model>(
     config.model?.defaultModel ?? MODELS[0]
@@ -81,6 +166,32 @@ const ElementsProviderInner = ({
 
   // Show loading if we don't have tools yet or they're actively loading
   const isLoadingMCPTools = !mcpTools || mcpToolsLoading
+
+  // Store approval helpers in ref so they can be used in async contexts
+  const approvalHelpersRef = useRef<ApprovalHelpers>({
+    requestApproval: toolApproval.requestApproval,
+    isToolApproved: toolApproval.isToolApproved,
+    markToolApproved: toolApproval.markToolApproved,
+  })
+
+  // Keep ref updated
+  approvalHelpersRef.current = {
+    requestApproval: toolApproval.requestApproval,
+    isToolApproved: toolApproval.isToolApproved,
+    markToolApproved: toolApproval.markToolApproved,
+  }
+
+  // Stable wrapper function that uses the ref
+  const getApprovalHelpers = useCallback((): ApprovalHelpers => {
+    return {
+      requestApproval: (...args) =>
+        approvalHelpersRef.current.requestApproval(...args),
+      isToolApproved: (...args) =>
+        approvalHelpersRef.current.isToolApproved(...args),
+      markToolApproved: (...args) =>
+        approvalHelpersRef.current.markToolApproved(...args),
+    }
+  }, [])
 
   // Create custom transport
   const transport = useMemo<ChatTransport<UIMessage> | undefined>(
@@ -118,10 +229,17 @@ const ElementsProviderInner = ({
         }
 
         // Combine tools - MCP tools only available when not using custom model
-        const tools: ToolSet = {
+        const combinedTools: ToolSet = {
           ...mcpTools,
           ...convertFrontendToolsToAISDKTools(frontendTools),
         } as ToolSet
+
+        // Wrap tools that require approval
+        const tools = wrapToolsWithApproval(
+          combinedTools,
+          config.tools?.toolsRequiringApproval,
+          getApprovalHelpers()
+        )
 
         // Stream the response
         const modelToUse = config.languageModel
@@ -161,6 +279,7 @@ const ElementsProviderInner = ({
       session,
       mcpTools,
       mcpToolsLoading,
+      getApprovalHelpers,
     ]
   )
 
@@ -196,7 +315,9 @@ export const ElementsProvider = (props: ElementsProviderProps) => {
   const queryClient = new QueryClient()
   return (
     <QueryClientProvider client={queryClient}>
-      <ElementsProviderInner {...props} />
+      <ToolApprovalProvider>
+        <ElementsProviderWithApproval {...props} />
+      </ToolApprovalProvider>
     </QueryClientProvider>
   )
 }

@@ -796,3 +796,25 @@ WithCustomLanguageModel.parameters = {
     },
   },
 }
+
+export const WithToolsRequiringApproval: Story = () => <Chat />
+WithToolsRequiringApproval.parameters = {
+  elements: {
+    config: {
+      welcome: {
+        suggestions: [
+          {
+            title: 'Get a salutation',
+            label: 'Get a salutation',
+            action: 'Get a salutation',
+          },
+        ],
+      },
+      tools: {
+        toolsRequiringApproval: {
+          my_api_get_salutation: 'once',
+        },
+      },
+    },
+  },
+}

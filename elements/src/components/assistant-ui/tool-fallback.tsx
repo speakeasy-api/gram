@@ -16,13 +16,20 @@ import { ToolCallResultContent, ToolCallResultSchema } from '@/types/schemas'
 import { humanizeToolName } from '@/lib/humanize'
 import { useDensity } from '@/hooks/useDensity'
 import { BundledLanguage, codeToHtml } from 'shiki'
+import { useToolApproval } from '@/hooks/useToolApproval'
+import { ToolApproval } from './tool-approval'
 
 export const ToolFallback: ToolCallMessagePartComponent = ({
   toolName,
+  toolCallId,
   status,
   result,
   args,
 }) => {
+  const { pendingApprovals, approveToolCall, denyToolCall } = useToolApproval()
+
+  // Check if this specific tool call has a pending approval
+  const pendingApproval = pendingApprovals.get(toolCallId)
   const message = useAssistantState(({ message }) => message)
   const toolParts = message.parts.filter((part) => part.type === 'tool-call')
   const matchingMessagePartIndex = toolParts.findIndex(
@@ -33,8 +40,12 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
       return <CheckIcon className="size-4 text-emerald-500" />
     if (status.type === 'incomplete')
       return <AlertCircleIcon className="size-4 text-rose-500" />
+    // Show different indicator when waiting for approval
+    if (pendingApproval) {
+      return <AlertCircleIcon className="size-4 text-amber-500" />
+    }
     return <Loader className="text-muted-foreground size-4 animate-spin" />
-  }, [status])
+  }, [status, pendingApproval])
   const d = useDensity()
   const [isOpen, setIsOpen] = useState(false)
 
@@ -42,6 +53,35 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
     e.stopPropagation()
     setIsOpen(!isOpen)
   }
+
+  const handleApprove = () => {
+    approveToolCall(toolCallId)
+  }
+
+  const handleDeny = () => {
+    denyToolCall(toolCallId)
+  }
+
+  // Show approval UI if this tool call is pending approval
+  if (pendingApproval) {
+    return (
+      <div
+        className={cn(
+          'aui-tool-fallback-root flex w-full flex-col',
+          matchingMessagePartIndex !== -1 && 'border-b',
+          matchingMessagePartIndex === toolParts.length - 1 && 'border-b-0'
+        )}
+      >
+        <ToolApproval
+          toolName={toolName}
+          args={args}
+          onApprove={handleApprove}
+          onDeny={handleDeny}
+        />
+      </div>
+    )
+  }
+
   return (
     <div
       className={cn(
