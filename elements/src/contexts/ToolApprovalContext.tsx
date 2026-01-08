@@ -1,5 +1,5 @@
-import { createContext, useState, useCallback, type ReactNode } from 'react'
-import type { ApprovalType } from '@/types'
+import { useState, useCallback, type ReactNode } from 'react'
+import { ToolApprovalContext } from './contexts'
 
 interface PendingApproval {
   toolCallId: string
@@ -22,9 +22,6 @@ interface ToolApprovalContextType {
   markToolApproved: (toolName: string) => void
   getPendingApproval: (toolCallId: string) => PendingApproval | undefined
 }
-
-export const ToolApprovalContext =
-  createContext<ToolApprovalContextType | null>(null)
 
 export function ToolApprovalProvider({ children }: { children: ReactNode }) {
   const [pendingApprovals, setPendingApprovals] = useState<

@@ -1,5 +1,5 @@
 import { useContext } from 'react'
-import { ToolApprovalContext } from '@/contexts/ToolApprovalContext'
+import { ToolApprovalContext } from '@/contexts/contexts'
 
 /**
  * Hook to access the tool approval context for managing human-in-the-loop

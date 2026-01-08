@@ -1,7 +1,7 @@
 import { FrontendTools } from '@/components/FrontendTools'
 import { MODELS } from '@/lib/models'
 import { recommended } from '@/plugins'
-import { ApprovalType, ElementsProviderProps, Model } from '@/types'
+import { ElementsProviderProps, Model } from '@/types'
 import { Plugin } from '@/types/plugins'
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import {
@@ -19,8 +19,13 @@ import {
   type UIMessage,
 } from 'ai'
 import { useMemo, useState, useRef, useCallback } from 'react'
-import { ElementsContext } from './elementsContextType'
-import { getEnabledTools, toAISDKTools } from '@/lib/tools'
+import { ElementsContext } from './contexts'
+import {
+  getEnabledTools,
+  toAISDKTools,
+  wrapToolsWithApproval,
+  type ApprovalHelpers,
+} from '@/lib/tools'
 import { useSession } from '@/hooks/useSession'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useMCPTools } from '@/hooks/useMCPTools'
@@ -49,88 +54,6 @@ async function defaultGetSession(): Promise<string> {
   const response = await fetch('/chat/session', { method: 'POST' })
   const data = await response.json()
   return data.client_token
-}
-
-interface ApprovalHelpers {
-  requestApproval: (
-    toolName: string,
-    toolCallId: string,
-    args: unknown
-  ) => Promise<boolean>
-  isToolApproved: (toolName: string) => boolean
-  markToolApproved: (toolName: string) => void
-}
-
-interface ToolExecuteContext {
-  toolCallId: string
-  abortSignal?: AbortSignal
-}
-
-function wrapToolsWithApproval(
-  tools: ToolSet,
-  approvalConfig: Record<string, ApprovalType> | undefined,
-  approvalHelpers: ApprovalHelpers
-): ToolSet {
-  if (!approvalConfig) {
-    return tools
-  }
-
-  return Object.fromEntries(
-    Object.entries(tools).map(([name, tool]) => {
-      const approvalType = approvalConfig[name]
-
-      if (!approvalType || approvalType === 'never') {
-        return [name, tool]
-      }
-
-      const originalExecute = tool.execute
-      if (!originalExecute) {
-        return [name, tool]
-      }
-
-      return [
-        name,
-        {
-          ...tool,
-          execute: async (args: unknown, context: ToolExecuteContext) => {
-            // Check if already approved (for "once" type)
-            if (
-              approvalType === 'once' &&
-              approvalHelpers.isToolApproved(name)
-            ) {
-              return originalExecute(args, context)
-            }
-
-            // Request approval using the actual toolCallId from the stream
-            const approved = await approvalHelpers.requestApproval(
-              name,
-              context.toolCallId,
-              args
-            )
-
-            if (!approved) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Tool "${name}" execution was denied by the user. Please acknowledge this and continue without using this tool's result.`,
-                  },
-                ],
-                isError: true,
-              }
-            }
-
-            // Mark as approved for "once" type
-            if (approvalType === 'once') {
-              approvalHelpers.markToolApproved(name)
-            }
-
-            return originalExecute(args, context)
-          },
-        },
-      ]
-    })
-  ) as ToolSet
 }
 
 const ElementsProviderWithApproval = ({
