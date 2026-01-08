@@ -4,524 +4,459 @@
 
 import path from "node:path";
 import fs from "node:fs/promises";
+import assert from "node:assert";
 
-const PROJECTS: {
+import { $ } from "zx";
+import { GramCore } from "@gram/client/core.js";
+import { authInfo } from "@gram/client/funcs/authInfo.js";
+import { projectsCreate } from "@gram/client/funcs/projectsCreate.js";
+import { assetsUploadOpenAPIv3 } from "@gram/client/funcs/assetsUploadOpenAPIv3.js";
+import { deploymentsEvolveDeployment } from "@gram/client/funcs/deploymentsEvolveDeployment.js";
+import { toolsList } from "@gram/client/funcs/toolsList.js";
+import { toolsetsCreate } from "@gram/client/funcs/toolsetsCreate.js";
+import { ServiceError } from "@gram/client/models/errors";
+import { toolsetsUpdateBySlug } from "@gram/client/funcs/toolsetsUpdateBySlug.js";
+import { projectsRead } from "@gram/client/funcs/projectsRead.js";
+import { keysCreate } from "@gram/client/funcs/keysCreate.js";
+import { keysList } from "@gram/client/funcs/keysList.js";
+import { intro, log, outro } from "@clack/prompts";
+import { keysValidate } from "@gram/client/funcs/keysValidate.js";
+
+type Asset = { type: "openapi"; slug: string; filename: string };
+
+const SEED_PROJECTS: {
   name: string;
   slug: string;
   summary: string;
-  openapi: string;
-  url: string;
-  image: string;
+  mcpPublic: boolean;
+  assets: Asset[];
 }[] = [
   {
-    name: "Dub",
-    slug: "dub",
-    summary: "The modern link management platform for teams",
-    openapi: path.join("local", "openapi", "dub.json"),
-    url: "https://dub.co",
-    image: path.join("local", "openapi", "dub.png"),
-  },
-  {
-    name: "HubSpot",
-    slug: "hubspot",
-    summary:
-      "AI-powered CRM for inbound marketing, sales, and customer service",
-    openapi: path.join("local", "openapi", "hubspot.json"),
-    url: "https://hubspot.com",
-    image: path.join("local", "openapi", "hubspot.png"),
-  },
-  {
-    name: "Polar",
-    slug: "polar",
-    summary: "Payment infrastructure for the 21st century",
-    openapi: path.join("local", "openapi", "polar.json"),
-    url: "https://polar.sh",
-    image: path.join("local", "openapi", "polar.png"),
-  },
-  {
-    name: "Speakeasy",
-    slug: "speakeasy",
-    summary: "Generate SDKs, docs, and agent tools using your API",
-    openapi: path.join("local", "openapi", "speakeasy.yaml"),
-    url: "https://speakeasy.com",
-    image: path.join("local", "openapi", "speakeasy.png"),
+    name: "Kitchen Sink",
+    slug: "kitchen-sink",
+    summary: "An toy API to allow working with Gram Elements",
+    mcpPublic: true,
+    assets: [
+      {
+        type: "openapi",
+        slug: "kitchen-sink",
+        filename: path.join("local", "openapi", "kitchen-sink.json"),
+      },
+    ],
   },
 ];
 
-async function run() {
-  const [chost, cport] = process.env["GRAM_CONTROL_ADDRESS"]?.split(":") ?? [];
-  if (!cport) {
-    throw new Error("GRAM_CONTROL_ADDRESS is not set");
+async function seed() {
+  let success = false;
+  intro("Seeding local development environment...");
+  using _ = {
+    [Symbol.dispose]() {
+      outro(success ? "Seeding complete!" : "Seeding failed.");
+    },
+  };
+  const serverURL = process.env["GRAM_SERVER_URL"];
+  if (!serverURL) {
+    throw new Error("GRAM_SERVER_URL is not set");
   }
 
-  const [host, port] = process.env["GRAM_SERVER_ADDRESS"]?.split(":") ?? [];
-  if (!cport) {
-    throw new Error("GRAM_SERVER_ADDRESS is not set");
+  const gram = new GramCore({ serverURL });
+
+  const res = await authInfo(gram);
+  if (!res.ok) {
+    abort("Failed to query session info", res.error);
   }
-
-  const liveRes = await fetch(
-    `http://${chost || "localhost"}:${cport}/healthz`
-  );
-  if (!liveRes.ok) {
-    await logBadResponse(liveRes);
-    process.exit(1);
-  }
-
-  const base = `http://${host || "localhost"}:${port}`;
-
-  const sessionRes = await fetch(`${base}/rpc/auth.info`);
-  if (!sessionRes.ok) {
-    await logBadResponse(sessionRes);
-    process.exit(1);
-  }
-
-  const sessionInfo = await sessionRes.json();
+  const sessionInfo = res.value;
   const sessionJSON = JSON.stringify(sessionInfo, null, 2);
-  const sessionId = sessionRes.headers.get("gram-session");
+  const sessionHeaders = new Headers(
+    Object.entries(sessionInfo.headers).map(([k, vs]): [string, string] => [
+      k,
+      vs.join(","),
+    ]),
+  );
+  const sessionId = sessionHeaders.get("gram-session");
   if (!sessionId) {
-    console.error("Session ID not found");
-    console.error(sessionJSON);
-    process.exit(1);
+    abort("Session ID not found in session headers", sessionInfo);
   }
 
-  const activeOrgID = sessionInfo?.active_organization_id;
-  if (typeof activeOrgID !== "string" || !activeOrgID) {
-    console.error("Active organization not found");
-    console.error(sessionJSON);
-    process.exit(1);
+  const activeOrgID = sessionInfo.result.activeOrganizationId;
+  if (!activeOrgID) {
+    abort("Active organization ID not found", sessionJSON);
   }
 
-  const orgs = sessionInfo?.organizations;
-  if (!Array.isArray(orgs)) {
-    console.error("Organizations list not found");
-    console.error(sessionJSON);
-    process.exit(1);
-  }
-
+  const orgs = sessionInfo.result.organizations;
   const org = orgs.find(
     (o: unknown) =>
-      typeof o === "object" && o != null && "id" in o && o?.id === activeOrgID
+      typeof o === "object" && o != null && "id" in o && o?.id === activeOrgID,
   );
   if (!org) {
-    console.error("Active organization details not found");
-    console.error(sessionJSON);
-    process.exit(1);
-  }
-
-  const rawProjects = org.projects;
-  if (!Array.isArray(rawProjects)) {
-    console.error("Projects list not found");
-    console.error(sessionJSON);
-    process.exit(1);
+    abort("Active organization not found", sessionJSON);
   }
 
   const projects: Record<string, { slug: string; id: string }> = {};
-  for (const p of rawProjects) {
-    if (typeof p !== "object" || p == null) {
-      console.error("Project details not found");
-      console.error(sessionJSON);
-      process.exit(1);
-    }
-
+  for (const p of org.projects) {
     const id = p.id;
     const slug = p.slug;
-
-    if (typeof id !== "string" || typeof slug !== "string") {
-      console.error("Project details are missing slug and id fields");
-      console.error(sessionJSON);
-      process.exit(1);
-    }
-
     projects[slug] = { id, slug };
   }
 
-  console.group("Current projects:");
-  for (const [slug, { id }] of Object.entries(projects)) {
-    console.log(`- ${slug} (${id})`);
-  }
-  if (Object.keys(projects).length === 0) {
-    console.log("<EMPTY>");
-  }
-  console.groupEnd();
-  console.log("---\n");
+  const key = await initAPIKey({
+    gram,
+    sessionId,
+  });
 
-  for (const { name, slug, openapi, image, summary, url } of PROJECTS) {
-    if (slug in projects) {
-      continue;
-    }
-
-    const { id, slug: newSlug } = await createProject({
-      base,
+  for (const { name, slug, assets, mcpPublic } of SEED_PROJECTS) {
+    const {
+      created,
+      id,
+      slug: projectSlug,
+    } = await getOrCreateProject({
+      gram,
       sessionId,
       activeOrgID,
-      name,
       slug,
     });
-    projects[newSlug] = { id, slug: newSlug };
-    console.log(`Created project ${name} \`${slug}\` (${id})`);
+    projects[projectSlug] = { id, slug: projectSlug };
+    let verb = created ? "Created" : "Found existing";
+    log.info(`${verb} project '${projectSlug}' (project_id = ${id})`);
 
-    const deploymentId = await deployOpenAPIv3({
-      base,
+    const deploymentId = await deployAssets({
+      gram,
       sessionId,
-      projectSlug: slug,
+      projectSlug,
       projectName: name,
-      filename: openapi,
+      assets,
     });
-    console.log(`Deployed ${openapi} into \`${name}\` (${deploymentId})`);
-
-    const { id: pkgId, name: pkgName } = await createPackage({
-      base,
-      sessionId,
-      projectSlug: slug,
-      name: slug,
-      title: name,
-      summary: summary,
-      url: url,
-      image: image,
-    });
-    projects[newSlug] = { id, slug: newSlug };
-    console.log(`Created package \`${pkgName}\` (${pkgId})`);
-
-    const { id: pkgVersionId, semver } = await publishPackage({
-      base,
-      sessionId,
-      projectSlug: slug,
-      packageName: pkgName,
-      deploymentId,
-      version: "1.0.0",
-      visibility: "public",
-    });
-    console.log(
-      `Published package version \`${pkgName}@${semver}\` (${pkgVersionId})`
+    log.info(
+      `Deployed assets into '${projectSlug}' (deployment_id = ${deploymentId})`,
     );
-    console.log("---");
+
+    const toolset = await upsertToolset({
+      gram,
+      serverURL,
+      sessionId,
+      projectSlug,
+      mcpPublic,
+    });
+    verb = toolset.created ? "Created" : "Updated";
+    log.info(
+      `${verb} toolset '${toolset.slug}' for project '${projectSlug}' (mcp_url = ${toolset.mcpURL})`,
+    );
+
+    await $`mise set --file mise.local.toml \
+        VITE_GRAM_ELEMENTS_STORYBOOK_PROJECT_SLUG=${projectSlug} \
+        VITE_GRAM_ELEMENTS_STORYBOOK_MCP_URL=${toolset.mcpURL}`;
   }
+
+  success = true;
 }
 
-async function createProject(init: {
-  base: string;
+async function initAPIKey(init: {
+  gram: GramCore;
+  sessionId: string;
+}): Promise<void> {
+  const { gram, sessionId } = init;
+
+  const existing = process.env["GRAM_API_KEY"];
+  if (existing) {
+    const vres = await keysValidate(gram, undefined, {
+      apikeyHeaderGramKey: existing,
+    });
+    if (vres.ok) {
+      log.info(`Using existing GRAM_API_KEY environment variable.`);
+      return;
+    }
+    log.warn(`Existing GRAM_API_KEY is invalid. Creating a new API key...`);
+  }
+
+  const keyRes = await keysCreate(
+    gram,
+    {
+      createKeyForm: { name: "seed-key", scopes: ["producer"] },
+    },
+    {
+      sessionHeaderGramSession: sessionId,
+    },
+  );
+  if (!keyRes.ok) {
+    const listRes = await keysList(gram, undefined, {
+      sessionHeaderGramSession: sessionId,
+    });
+    if (!listRes.ok) {
+      abort("Failed to create or list API keys", keyRes.error, listRes.error);
+    }
+    const existingKey = listRes.value.keys.find((k) => k.name === "seed-key");
+    if (!existingKey) {
+      abort(`Failed to create API key 'seed-key'`, keyRes.error);
+    }
+
+    log.info(`Found existing API key. Continuing...`);
+    return;
+  }
+
+  const apiKey = keyRes.value.key;
+  assert(keyRes.value.key, "API key not found in /rpc/keys.create response");
+  await $`mise set --file mise.local.toml GRAM_API_KEY=${apiKey}`;
+  log.info(
+    `Created new API key and set GRAM_API_KEY environment variable in mise.local.toml.`,
+  );
+}
+
+async function getOrCreateProject(init: {
+  gram: GramCore;
   sessionId: string;
   activeOrgID: string;
-  name: string;
   slug: string;
-}): Promise<{ id: string; slug: string }> {
-  const { base: baseURL, sessionId, activeOrgID, name, slug } = init;
-  const res = await fetch(`${baseURL}/rpc/projects.create`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Gram-Session": sessionId ?? "",
+}): Promise<{ created: boolean; id: string; slug: string }> {
+  const { gram, sessionId, activeOrgID, slug } = init;
+  const res = await projectsCreate(
+    gram,
+    {
+      createProjectRequestBody: {
+        organizationId: activeOrgID,
+        name: slug,
+      },
     },
-    body: JSON.stringify({ name, slug, organization_id: activeOrgID }),
-  });
-  if (!res.ok) {
-    await logBadResponse(res);
-    process.exit(1);
+    {
+      sessionHeaderGramSession: sessionId,
+    },
+  );
+  switch (true) {
+    case !res.ok &&
+      res.error instanceof ServiceError &&
+      res.error.data$.name === "conflict":
+      const getRes = await projectsRead(
+        gram,
+        { slug },
+        { sessionHeaderGramSession: sessionId },
+      );
+      if (!getRes.ok) {
+        abort(`Failed to get existing project \`${slug}\``, getRes.error);
+      }
+      return {
+        created: false,
+        id: getRes.value.project.id,
+        slug: getRes.value.project.slug,
+      };
+    case !res.ok:
+      abort(`Failed to create project \`${slug}\``, res.error);
+    default:
+      return {
+        created: true,
+        id: res.value.project.id,
+        slug: res.value.project.slug,
+      };
   }
-
-  const body = await res.json();
-  const bodyJSON = JSON.stringify(body, null, 2);
-  if (
-    !("project" in body) ||
-    typeof body.project !== "object" ||
-    body.project == null
-  ) {
-    console.error(`Project details not found: ${name} (${slug})`);
-    console.error(bodyJSON);
-    process.exit(1);
-  }
-
-  const project = body.project;
-  const { id, slug: newSlug } = project;
-  if (typeof id !== "string" || typeof newSlug !== "string") {
-    console.error(
-      `Project details are missing slug and id fields: ${name} (${slug})`
-    );
-    console.error(bodyJSON);
-    process.exit(1);
-  }
-
-  return { id, slug: newSlug };
 }
 
-async function deployOpenAPIv3(init: {
-  base: string;
+async function deployAssets(init: {
+  gram: GramCore;
   sessionId: string;
   projectSlug: string;
   projectName: string;
-  filename: string;
+  assets: Asset[];
 }): Promise<string> {
-  const { base, sessionId, projectSlug, projectName, filename } = init;
+  const { sessionId, projectSlug, projectName, assets } = init;
 
-  const spec = await fs.readFile(filename, "utf-8");
-  let contentType = "application/json";
-  if (filename.endsWith(".yaml")) {
-    contentType = "application/x-yaml";
-  }
+  const oapi: Array<{ assetId: string; name: string; slug: string }> = [];
 
-  const assetRes = await fetch(`${base}/rpc/assets.uploadOpenAPIv3`, {
-    method: "POST",
-    headers: {
-      "Content-Type": contentType,
-      "Gram-Session": sessionId ?? "",
-      "Gram-Project": projectSlug,
-    },
-    body: spec,
-  });
-  if (!assetRes.ok) {
-    await logBadResponse(assetRes);
-    process.exit(1);
-  }
+  for (const asset of assets) {
+    const spec = await fs.readFile(asset.filename, "utf-8");
+    let contentType = "application/json";
+    if (asset.filename.endsWith(".yaml")) {
+      contentType = "application/x-yaml";
+    }
 
-  let body = await assetRes.json();
-  let bodyJSON = JSON.stringify(body, null, 2);
-  if (
-    !("asset" in body) ||
-    typeof body.asset !== "object" ||
-    body.asset == null
-  ) {
-    console.error("Asset details not found");
-    console.error(bodyJSON);
-    process.exit(1);
-  }
-
-  const assetId = body.asset.id;
-  if (typeof assetId !== "string" || !assetId) {
-    console.error("Asset ID not found");
-    console.error(bodyJSON);
-    process.exit(1);
-  }
-
-  const evolveRes = await fetch(`${base}/rpc/deployments.evolve`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Gram-Session": sessionId ?? "",
-      "Gram-Project": projectSlug,
-    },
-    body: JSON.stringify({
-      upsert_openapiv3_assets: [
-        {
-          asset_id: assetId,
-          name: projectName,
-          slug: projectSlug,
+    const res = await assetsUploadOpenAPIv3(
+      init.gram,
+      {
+        contentLength: spec.length,
+        requestBody: new Blob([spec], { type: contentType }),
+      },
+      {
+        option2: {
+          projectSlugHeaderGramProject: projectSlug,
+          sessionHeaderGramSession: sessionId,
         },
-      ],
-    }),
-  });
+      },
+    );
+
+    if (!res.ok) {
+      abort(`Failed to upload asset \`${asset.filename}\``, res.error);
+    }
+
+    const { id: assetId } = await res.value.asset;
+    oapi.push({ assetId, name: asset.slug, slug: asset.slug });
+  }
+
+  const evolveRes = await deploymentsEvolveDeployment(
+    init.gram,
+    {
+      evolveForm: {
+        upsertOpenapiv3Assets: oapi,
+      },
+    },
+    {
+      option2: {
+        projectSlugHeaderGramProject: projectSlug,
+        sessionHeaderGramSession: sessionId,
+      },
+    },
+  );
+
   if (!evolveRes.ok) {
-    await logBadResponse(evolveRes);
-    process.exit(1);
+    abort(`Failed to evolve project \`${projectName}\``, evolveRes.error);
   }
 
-  body = await evolveRes.json();
-  bodyJSON = JSON.stringify(body, null, 2);
-  if (
-    !("deployment" in body) ||
-    typeof body.deployment !== "object" ||
-    body.deployment == null
-  ) {
-    console.error("Deployment details not found");
-    console.error(bodyJSON);
-    process.exit(1);
-  }
-
-  const deploymentId = body.deployment.id;
+  const deploymentId = evolveRes.value.deployment?.id;
   if (typeof deploymentId !== "string" || !deploymentId) {
-    console.error("Deployment ID not found");
-    console.error(bodyJSON);
-    process.exit(1);
+    abort("Deployment ID not found", evolveRes.value);
   }
 
   return deploymentId;
 }
 
-async function createPackage(init: {
-  base: string;
+type Toolset = { created: boolean; slug: string; mcpURL: string };
+async function upsertToolset(init: {
+  gram: GramCore;
+  serverURL: string;
   sessionId: string;
   projectSlug: string;
-  title: string;
-  summary: string;
-  name: string;
-  url: string;
-  image: string;
-}): Promise<{ id: string; name: string; title: string }> {
-  const {
-    base: baseURL,
-    sessionId,
-    projectSlug,
-    name,
-    title,
-    summary,
-    image,
-    url,
-  } = init;
-
-  //eslint-disable-next-line @typescript-eslint/no-unsafe-assignment  
-  const imageRes = await fetch(`${baseURL}/rpc/assets.uploadImage`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "image/png",
-      "Gram-Session": sessionId ?? "",
-      "Gram-Project": projectSlug,
+  mcpPublic: boolean;
+}): Promise<Toolset> {
+  const { gram, serverURL, sessionId, projectSlug, mcpPublic } = init;
+  const toolRes = await toolsList(
+    gram,
+    {
+      limit: 100,
     },
-    body: await fs.readFile(image) as any, // This is causing a type error
-  });
-  if (!imageRes.ok) {
-    await logBadResponse(imageRes);
-    process.exit(1);
-  }
-
-  const imageBody = await imageRes.json();
-  const imageBodyJSON = JSON.stringify(imageBody, null, 2);
-  if (
-    !("asset" in imageBody) ||
-    typeof imageBody.asset !== "object" ||
-    imageBody.asset == null
-  ) {
-    console.error("Image asset details not found");
-    console.error(imageBodyJSON);
-    process.exit(1);
-  }
-
-  const assetId = imageBody.asset.id;
-  if (typeof assetId !== "string" || !assetId) {
-    console.error("Asset ID not found");
-    console.error(imageBodyJSON);
-    process.exit(1);
-  }
-
-  const res = await fetch(`${baseURL}/rpc/packages.create`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Gram-Session": sessionId ?? "",
-      "Gram-Project": projectSlug,
+    {
+      projectSlugHeaderGramProject: projectSlug,
+      sessionHeaderGramSession: sessionId,
     },
-    body: JSON.stringify({
-      name,
-      title,
-      summary,
-      url,
-      image_asset_id: assetId,
-    }),
+  );
+  if (!toolRes.ok) {
+    abort(`Failed to list tools for project \`${projectSlug}\``, toolRes.error);
+  }
+
+  const toolUrns = toolRes.value.tools.map((t) => {
+    switch (true) {
+      case !!t.httpToolDefinition:
+        return t.httpToolDefinition.toolUrn;
+      case !!t.functionToolDefinition:
+        return t.functionToolDefinition.toolUrn;
+      case !!t.externalMcpToolDefinition:
+        return t.externalMcpToolDefinition.toolUrn;
+      case !!t.promptTemplate:
+        return t.promptTemplate.toolUrn;
+      default:
+        assert(false, "Unknown tool type: " + JSON.stringify(t));
+    }
   });
-  if (!res.ok) {
-    await logBadResponse(res);
-    process.exit(1);
-  }
 
-  const body = await res.json();
-  const bodyJSON = JSON.stringify(body, null, 2);
-  if (
-    !("package" in body) ||
-    typeof body.package !== "object" ||
-    body.package == null
-  ) {
-    console.error(`Package details not found: ${name}`);
-    console.error(bodyJSON);
-    process.exit(1);
-  }
-
-  const pkg = body.package;
-  const { id, name: newName } = pkg;
-  if (typeof id !== "string" || typeof newName !== "string") {
-    console.error(`Project details are missing slug and id fields: ${name}`);
-    console.error(bodyJSON);
-    process.exit(1);
-  }
-
-  return { id, title, name: newName };
-}
-
-async function publishPackage(init: {
-  base: string;
-  sessionId: string;
-  projectSlug: string;
-  packageName: string;
-  deploymentId: string;
-  version: string;
-  visibility: "public" | "private";
-}): Promise<{
-  id: string;
-  name: string;
-  deploymentId: string;
-  semver: string;
-}> {
-  const {
-    base: baseURL,
-    sessionId,
-    projectSlug,
-    packageName,
-    deploymentId,
-    version,
-    visibility,
-  } = init;
-  const res = await fetch(`${baseURL}/rpc/packages.publish`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Gram-Session": sessionId ?? "",
-      "Gram-Project": projectSlug,
+  let toolset: Toolset;
+  let mcpURL = "";
+  const name = projectSlug + "-seed";
+  const createRes = await toolsetsCreate(
+    gram,
+    {
+      createToolsetRequestBody: {
+        name,
+        toolUrns,
+      },
     },
-    body: JSON.stringify({
-      name: packageName,
-      version,
-      deployment_id: deploymentId,
-      visibility,
-    }),
-  });
-  if (!res.ok) {
-    await logBadResponse(res);
-    process.exit(1);
+    {
+      option1: {
+        projectSlugHeaderGramProject: projectSlug,
+        sessionHeaderGramSession: sessionId,
+      },
+    },
+  );
+  switch (true) {
+    case !createRes.ok &&
+      createRes.error instanceof ServiceError &&
+      createRes.error.data$.name === "conflict":
+      const updateRes = await toolsetsUpdateBySlug(
+        gram,
+        {
+          slug: name,
+          updateToolsetRequestBody: {
+            toolUrns,
+          },
+        },
+        {
+          option1: {
+            projectSlugHeaderGramProject: projectSlug,
+            sessionHeaderGramSession: sessionId,
+          },
+        },
+      );
+      if (!updateRes.ok) {
+        abort(
+          `Failed to update toolset '${name}' for project '${projectSlug}'`,
+          updateRes.error,
+        );
+      }
+      toolset = {
+        created: false,
+        slug: updateRes.value.slug,
+        mcpURL: `${serverURL}/mcp/${updateRes.value.mcpSlug}`,
+      };
+      break;
+    case !createRes.ok:
+      abort(
+        `Failed to create toolset '${name}' for project '${projectSlug}'`,
+        createRes.error,
+      );
+    default:
+      toolset = {
+        created: true,
+        slug: createRes.value.slug,
+        mcpURL: `${serverURL}/mcp/${createRes.value.mcpSlug}`,
+      };
+      break;
   }
 
-  const body = await res.json();
-  const bodyJSON = JSON.stringify(body, null, 2);
-  if (
-    !("package" in body) ||
-    typeof body.package !== "object" ||
-    body.package == null
-  ) {
-    console.error(`Package details not found: ${name}`);
-    console.error(bodyJSON);
-    process.exit(1);
+  if (!mcpPublic) {
+    return toolset;
   }
 
-  if (
-    !("version" in body) ||
-    typeof body.version !== "object" ||
-    body.version == null
-  ) {
-    console.error(`Version details not found: ${name}`);
-    console.error(bodyJSON);
-    process.exit(1);
-  }
-
-  const pkg = body.package;
-  const { name: newName } = pkg;
-  const { id: newId, semver, deployment_id: newDeploymentId } = body.version;
-  if (
-    typeof newId !== "string" ||
-    typeof newName !== "string" ||
-    typeof semver !== "string" ||
-    typeof newDeploymentId !== "string"
-  ) {
-    console.error(
-      `Version details are missing id, name, semver, and/or deployment_id fields: ${packageName}`
+  const updateRes = await toolsetsUpdateBySlug(
+    gram,
+    {
+      slug: toolset.slug,
+      updateToolsetRequestBody: {
+        mcpIsPublic: true,
+      },
+    },
+    {
+      option1: {
+        sessionHeaderGramSession: sessionId,
+        projectSlugHeaderGramProject: projectSlug,
+      },
+    },
+  );
+  if (!updateRes.ok) {
+    abort(
+      `Failed to make toolset '${toolset.slug}' public for project '${projectSlug}'`,
+      updateRes.error,
     );
-    console.error(bodyJSON);
-    process.exit(1);
   }
 
-  return { id: newId, name: newName, deploymentId: newDeploymentId, semver };
+  log.info(`${toolset.mcpURL} visibility was changed to public`);
+
+  return toolset;
 }
 
-async function logBadResponse(res: Response) {
-  console.error(`Invalid response from ${res.url}`);
-  console.error(`${res.status} ${res.statusText}`);
-  console.error(await res.text());
+function abort(message: string, ...values: unknown[]): never {
+  log.error(message);
+  for (const value of values) {
+    if (typeof value !== "undefined") {
+      log.error(
+        value instanceof Error ? String(value) : JSON.stringify(value, null, 2),
+      );
+    }
+  }
   process.exit(1);
 }
 
-run();
+seed();
