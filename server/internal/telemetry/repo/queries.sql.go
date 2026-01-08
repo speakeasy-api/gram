@@ -192,10 +192,6 @@ func buildListHTTPRequestsQuery(opts ListToolLogsOptions) (string, []any) {
 	return query, args
 }
 
-func (q *Queries) ShouldLog(ctx context.Context, orgId string) (bool, error) {
-	return q.ShouldFlag(ctx, orgId)
-}
-
 const insertHttpRaw = `insert into http_requests_raw
 	(id, ts, organization_id, project_id, deployment_id, tool_id, tool_urn, tool_type, trace_id, span_id, http_method,
 	 http_server_url, http_route, status_code, duration_ms, user_agent, request_headers, request_body_bytes, response_headers, response_body_bytes)
@@ -203,16 +199,6 @@ const insertHttpRaw = `insert into http_requests_raw
 
 // Log inserts a tool HTTP request log entry.
 func (q *Queries) LogHTTPRequest(ctx context.Context, log ToolHTTPRequest) (err error) {
-	allow, err := q.ShouldFlag(ctx, log.OrganizationID)
-	if err != nil {
-		q.logger.ErrorContext(ctx, "failed to fetch feature flag", attr.SlogError(err))
-		return nil
-	}
-
-	if !allow {
-		return nil
-	}
-
 	ctx, span := q.tracer.Start(ctx, "clickhouse.log_http_request",
 		trace.WithAttributes(
 			attr.ToolID(log.ToolID),
