@@ -10,6 +10,7 @@ import (
 var _ = Service("chatSessions", func() {
 	Description("Manages chat session tokens for client-side authentication")
 
+	Security(security.Session, security.ProjectSlug)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("chat")
 	})
@@ -28,6 +29,7 @@ var _ = Service("chatSessions", func() {
 				Maximum(3600)
 				Default(3600)
 			})
+			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
 		})
@@ -43,6 +45,7 @@ var _ = Service("chatSessions", func() {
 
 		HTTP(func() {
 			POST("/rpc/chatSessions.create")
+			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
 
@@ -59,6 +62,7 @@ var _ = Service("chatSessions", func() {
 		Payload(func() {
 			Attribute("token", String, "The chat session token to revoke")
 			Required("token")
+			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
 		})
@@ -66,6 +70,7 @@ var _ = Service("chatSessions", func() {
 		HTTP(func() {
 			DELETE("/rpc/chatSessions.revoke")
 			Param("token")
+			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
 

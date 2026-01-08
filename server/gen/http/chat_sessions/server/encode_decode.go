@@ -56,9 +56,14 @@ func DecodeCreateRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		}
 
 		var (
+			sessionToken     *string
 			apikeyToken      *string
 			projectSlugInput *string
 		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -67,12 +72,12 @@ func DecodeCreateRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewCreatePayload(&body, apikeyToken, projectSlugInput)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
+		payload := NewCreatePayload(&body, sessionToken, apikeyToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
 			}
 		}
 		if payload.ProjectSlugInput != nil {
@@ -80,6 +85,13 @@ func DecodeCreateRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
 				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
 			}
 		}
 
@@ -258,6 +270,7 @@ func DecodeRevokeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 	return func(r *http.Request) (*chatsessions.RevokePayload, error) {
 		var (
 			token            string
+			sessionToken     *string
 			apikeyToken      *string
 			projectSlugInput *string
 			err              error
@@ -265,6 +278,10 @@ func DecodeRevokeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		token = r.URL.Query().Get("token")
 		if token == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("token", "query string"))
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -277,12 +294,12 @@ func DecodeRevokeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if err != nil {
 			return nil, err
 		}
-		payload := NewRevokePayload(token, apikeyToken, projectSlugInput)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
+		payload := NewRevokePayload(token, sessionToken, apikeyToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
 			}
 		}
 		if payload.ProjectSlugInput != nil {
@@ -290,6 +307,13 @@ func DecodeRevokeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
 				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
 			}
 		}
 

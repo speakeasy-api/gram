@@ -25,7 +25,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"o45\",\n      \"description\": \"Dicta dolor.\",\n      \"name\": \"Reprehenderit qui molestiae quos.\",\n      \"resource_urns\": [\n         \"Nihil voluptatem quibusdam et molestiae amet.\",\n         \"Facilis voluptatem quibusdam unde minus velit et.\"\n      ],\n      \"tool_urns\": [\n         \"Tenetur dicta eos.\",\n         \"Maiores rem ipsam voluptatibus expedita et similique.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"pck\",\n      \"description\": \"Hic natus voluptas veritatis et.\",\n      \"name\": \"Corrupti odio non.\",\n      \"resource_urns\": [\n         \"Debitis repellendus.\",\n         \"Sequi consequatur ipsa consectetur et.\",\n         \"Mollitia non.\"\n      ],\n      \"tool_urns\": [\n         \"Vel voluptates accusamus.\",\n         \"Non tempore consequatur voluptas quisquam commodi vel.\"\n      ]\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
@@ -121,7 +121,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"Nisi labore accusantium.\",\n      \"default_environment_slug\": \"bs0\",\n      \"description\": \"Enim molestias ut qui et.\",\n      \"mcp_enabled\": false,\n      \"mcp_is_public\": true,\n      \"mcp_slug\": \"8k9\",\n      \"name\": \"Non et.\",\n      \"prompt_template_names\": [\n         \"Laborum blanditiis.\",\n         \"Voluptatem magni neque nam odit.\",\n         \"Qui sint ut ducimus quo.\",\n         \"Quaerat quidem amet in est rerum.\"\n      ],\n      \"resource_urns\": [\n         \"Facere sint est ipsa deserunt.\",\n         \"Tenetur sed perspiciatis et eaque culpa numquam.\"\n      ],\n      \"tool_selection_mode\": \"Quisquam cupiditate rem nihil ex.\",\n      \"tool_urns\": [\n         \"Provident repudiandae eligendi ipsam nam eum qui.\",\n         \"Nihil sed velit nam molestiae ab facilis.\",\n         \"Cum molestiae.\",\n         \"Cupiditate tempora a aut quaerat ipsum non.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"Voluptatem provident ipsam.\",\n      \"default_environment_slug\": \"5pn\",\n      \"description\": \"Debitis qui.\",\n      \"mcp_enabled\": true,\n      \"mcp_is_public\": false,\n      \"mcp_slug\": \"41c\",\n      \"name\": \"Beatae officiis aut quia qui rerum.\",\n      \"prompt_template_names\": [\n         \"Fugit pariatur at dolor quia.\",\n         \"Sapiente modi.\",\n         \"Laudantium temporibus velit libero quibusdam illum eveniet.\"\n      ],\n      \"resource_urns\": [\n         \"Dicta et praesentium aspernatur sed itaque.\",\n         \"Similique officia.\",\n         \"Numquam rem sit reiciendis.\",\n         \"Saepe ipsum.\"\n      ],\n      \"tool_selection_mode\": \"Voluptas rem ut perspiciatis eum ratione minus.\",\n      \"tool_urns\": [\n         \"Consequuntur nobis dolorem expedita voluptas.\",\n         \"Neque quasi ut natus voluptatibus.\",\n         \"Alias voluptates consequatur voluptatem optio.\"\n      ]\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
@@ -390,7 +390,7 @@ func BuildAddExternalOAuthServerPayload(toolsetsAddExternalOAuthServerBody strin
 	{
 		err = json.Unmarshal([]byte(toolsetsAddExternalOAuthServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_oauth_server\": {\n         \"metadata\": \"Maiores neque ea blanditiis non quaerat.\",\n         \"slug\": \"164\"\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_oauth_server\": {\n         \"metadata\": \"Consectetur fuga aliquam voluptas excepturi voluptatem.\",\n         \"slug\": \"qw6\"\n      }\n   }'")
 		}
 		if body.ExternalOauthServer == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("external_oauth_server", "body"))
@@ -495,7 +495,7 @@ func BuildAddOAuthProxyServerPayload(toolsetsAddOAuthProxyServerBody string, too
 	{
 		err = json.Unmarshal([]byte(toolsetsAddOAuthProxyServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"oauth_proxy_server\": {\n         \"authorization_endpoint\": \"Voluptatem nemo autem.\",\n         \"environment_slug\": \"pzm\",\n         \"provider_type\": \"gram\",\n         \"scopes_supported\": [\n            \"Minus aut est quia rem enim aspernatur.\",\n            \"Eius fugit.\"\n         ],\n         \"slug\": \"zyq\",\n         \"token_endpoint\": \"Ex aliquam similique sapiente.\",\n         \"token_endpoint_auth_methods_supported\": [\n            \"Quaerat odit accusamus vel nulla.\",\n            \"At sint debitis.\",\n            \"Quia dolorem rem ut et.\"\n         ]\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"oauth_proxy_server\": {\n         \"authorization_endpoint\": \"Voluptatem similique quis.\",\n         \"environment_slug\": \"3mf\",\n         \"provider_type\": \"gram\",\n         \"scopes_supported\": [\n            \"Quod itaque ea.\",\n            \"Minima numquam.\"\n         ],\n         \"slug\": \"trf\",\n         \"token_endpoint\": \"Aut quidem placeat.\",\n         \"token_endpoint_auth_methods_supported\": [\n            \"Qui eius.\",\n            \"Temporibus iusto doloribus tempore repellendus nesciunt itaque.\",\n            \"Fugit saepe minus eos quis.\",\n            \"Dignissimos id eum nesciunt fuga.\"\n         ]\n      }\n   }'")
 		}
 		if body.OauthProxyServer == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("oauth_proxy_server", "body"))
