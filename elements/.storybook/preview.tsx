@@ -20,15 +20,16 @@ const preview: Preview = {
       const elementsConfig: Partial<ElementsConfig> =
         elementsParams.config ?? {}
 
-      const projectParam = elementsConfig.projectSlug
-      const mcpParam = elementsConfig.mcp
-      const projectArg = context.args.projectSlug
-      const mcpArg = context.args.mcpUrl
-      if (!projectParam && projectArg) {
-        elementsConfig.projectSlug = projectArg
+      const projectSlugParam = elementsConfig.projectSlug
+      const mcpUrlParam = elementsConfig.mcp
+      // Storbook users control these args using the controls panel
+      const projectSlugArg = context.args.projectSlug
+      const mcpUrlArg = context.args.mcpUrl
+      if (!projectSlugParam && projectSlugArg) {
+        elementsConfig.projectSlug = projectSlugArg
       }
-      if (!mcpParam && mcpArg) {
-        elementsConfig.mcp = mcpArg
+      if (!mcpUrlParam && mcpUrlArg) {
+        elementsConfig.mcp = mcpUrlArg
       }
 
       return (
