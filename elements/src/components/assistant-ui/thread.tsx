@@ -151,7 +151,7 @@ const ThreadWelcome: FC = () => {
             exit={{ opacity: 0, y: 10 }}
             transition={{ duration: 0.25, ease: EASE_OUT_QUINT }}
             className={cn(
-              'aui-thread-welcome-message-motion-1 font-semibold',
+              'aui-thread-welcome-message-motion-1 text-foreground font-semibold',
               d('text-title')
             )}
           >
@@ -226,7 +226,7 @@ const ThreadSuggestions: FC = () => {
               )}
               aria-label={suggestion.action}
             >
-              <span className="aui-thread-welcome-suggestion-text-1 text-sm font-medium">
+              <span className="aui-thread-welcome-suggestion-text-1 text-foreground text-sm font-medium">
                 {suggestion.title}
               </span>
               <span className="aui-thread-welcome-suggestion-text-2 text-muted-foreground text-sm">
