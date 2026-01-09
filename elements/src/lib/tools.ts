@@ -159,7 +159,6 @@ export function wrapToolsWithApproval(
         {
           ...tool,
           execute: async (args: unknown, options?: ToolCallOptions) => {
-            // Use type assertion similar to useExecuteToolWithApproval
             const opts = (options ?? {}) as Parameters<
               typeof originalExecute
             >[1]
