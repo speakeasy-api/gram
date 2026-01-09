@@ -98,6 +98,7 @@ const ElementsProviderWithApproval = ({
     auth,
     mcp: config.mcp,
     environment: config.environment ?? {},
+    envSlug: config.envSlug,
   })
 
   // Store approval helpers in ref so they can be used in async contexts
