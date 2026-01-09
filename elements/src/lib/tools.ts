@@ -6,6 +6,8 @@ import {
 } from '@assistant-ui/react'
 import z from 'zod'
 import { FC } from 'react'
+import {} from 'assistant-stream'
+import { ToolExecutionContext } from 'node_modules/assistant-stream/dist/core/tool/tool-types'
 
 /**
  * Converts from assistant-ui tool format to the AI SDK tool shape
@@ -43,6 +45,7 @@ export type FrontendTool<TArgs extends Record<string, unknown>, TResult> = FC<
 > & {
   unstable_tool: AssistantToolProps<TArgs, TResult>
 }
+
 /**
  * Make a frontend tool
  */
@@ -55,8 +58,59 @@ export const defineFrontendTool = <
 ): FrontendTool<TArgs, TResult> => {
   return makeAssistantTool({
     ...tool,
+    execute: (args: TArgs, context: ToolExecutionContext) => {
+      return tool.execute?.(args, context)
+    },
     toolName: name,
-  })
+  } as AssistantToolProps<TArgs, TResult>)
+}
+
+/**
+ * Wraps a frontend tool with approval logic (used internally by FrontendTools component)
+ */
+export const wrapFrontendToolWithApproval = <
+  TArgs extends Record<string, unknown>,
+  TResult,
+>(
+  tool: FrontendTool<TArgs, TResult>,
+  name: string,
+  approvalHelpers: ApprovalHelpers
+): FrontendTool<TArgs, TResult> => {
+  const originalExecute = tool.unstable_tool.execute
+
+  return makeAssistantTool({
+    ...tool.unstable_tool,
+    execute: async (args: TArgs, context: ToolExecutionContext) => {
+      const toolCallId = (context as { toolCallId?: string }).toolCallId ?? ''
+
+      // Check if already approved (user chose "Approve always" previously)
+      if (approvalHelpers.isToolApproved(name)) {
+        return originalExecute?.(args, context)
+      }
+
+      // Request approval
+      const approved = await approvalHelpers.requestApproval(
+        name,
+        toolCallId,
+        args
+      )
+
+      if (!approved) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Tool "${name}" execution was denied by the user. Please acknowledge this and continue without using this tool's result.`,
+            },
+          ],
+          isError: true,
+        } as TResult
+      }
+
+      return originalExecute?.(args, context)
+    },
+    toolName: name,
+  } as AssistantToolProps<TArgs, TResult>)
 }
 
 /**

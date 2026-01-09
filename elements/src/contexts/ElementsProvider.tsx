@@ -226,7 +226,11 @@ const ElementsProviderWithApproval = ({
         {children}
 
         {/* Doesn't render anything, but is used to register frontend tools */}
-        <FrontendTools tools={config.tools?.frontendTools ?? {}} />
+        <FrontendTools
+          tools={config.tools?.frontendTools ?? {}}
+          toolsRequiringApproval={config.tools?.toolsRequiringApproval}
+          approvalHelpers={getApprovalHelpers()}
+        />
       </ElementsContext.Provider>
     </AssistantRuntimeProvider>
   )

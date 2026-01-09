@@ -841,3 +841,39 @@ WithMultipleGroupedToolsRequiringApproval.parameters = {
     },
   },
 }
+const deleteFile = defineFrontendTool<{ fileId: string }, string>(
+  {
+    description: 'Delete a file',
+    parameters: z.object({
+      fileId: z.string().describe('The ID of the file to delete'),
+    }),
+    execute: async ({ fileId }) => {
+      alert(`File ${fileId} deleted`)
+      return `File ${fileId} deleted`
+    },
+  },
+  'deleteFile'
+)
+
+export const WithFrontendToolRequiringApproval: Story = () => <Chat />
+WithFrontendToolRequiringApproval.parameters = {
+  elements: {
+    config: {
+      welcome: {
+        suggestions: [
+          {
+            title: 'Delete a file',
+            label: 'Delete a file',
+            action: 'Delete file with ID 123',
+          },
+        ],
+      },
+      tools: {
+        frontendTools: {
+          deleteFile,
+        },
+        toolsRequiringApproval: ['deleteFile'],
+      },
+    },
+  },
+}
