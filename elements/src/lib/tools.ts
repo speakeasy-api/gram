@@ -6,7 +6,6 @@ import {
 } from '@assistant-ui/react'
 import z from 'zod'
 import { FC } from 'react'
-import {} from 'assistant-stream'
 import { ToolExecutionContext } from 'node_modules/assistant-stream/dist/core/tool/tool-types'
 
 /**
