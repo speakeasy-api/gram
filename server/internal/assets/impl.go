@@ -42,10 +42,11 @@ import (
 )
 
 const (
-	mib                  = 1024 * 1024
-	MaxFileSizeFunctions = 15 * mib
-	MaxFileSizeOpenAPI   = 10 * mib
-	MaxFileSizeImage     = 4 * mib
+	mib                       = 1024 * 1024
+	MaxFileSizeFunctions      = 15 * mib
+	MaxFileSizeOpenAPI        = 10 * mib
+	MaxFileSizeImage          = 4 * mib
+	MaxFileSizeChatAttachment = 10 * mib
 )
 
 type Service struct {
@@ -901,6 +902,203 @@ func (s *Service) ServeFunction(ctx context.Context, payload *gen.ServeFunctionF
 	}
 
 	return &gen.ServeFunctionResult{
+		ContentType:   row.ContentType,
+		ContentLength: row.ContentLength,
+		LastModified:  row.UpdatedAt.Time.Format(time.RFC1123),
+	}, body, nil
+}
+
+func validateChatAttachmentContentType(contentType string) (mimeType, ext string, err error) {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return "", "", oops.E(oops.CodeBadRequest, err, "invalid content type")
+	}
+
+	// Check wildcard categories
+	allowedPrefixes := []string{"audio/", "image/", "text/"}
+	for _, prefix := range allowedPrefixes {
+		if strings.HasPrefix(mediaType, prefix) {
+			exts, _ := mime.ExtensionsByType(mediaType)
+			if len(exts) > 0 {
+				return mediaType, exts[0], nil
+			}
+			return mediaType, "", nil
+		}
+	}
+
+	// Check explicit application types
+	explicitTypes := []string{
+		"application/json",
+		"application/yaml", "application/x-yaml",
+	}
+	if slices.Contains(explicitTypes, mediaType) {
+		switch mediaType {
+		case "application/json":
+			return mediaType, ".json", nil
+		case "application/yaml", "application/x-yaml":
+			return mediaType, ".yaml", nil
+		}
+	}
+
+	return "", "", oops.E(oops.CodeUnsupportedMedia, nil,
+		"unsupported content type: %s (allowed: audio/*, image/*, text/*, application/json, application/yaml)",
+		mediaType)
+}
+
+func (s *Service) UploadChatAttachment(ctx context.Context, payload *gen.UploadChatAttachmentForm, reader io.ReadCloser) (*gen.UploadChatAttachmentResult, error) {
+	defer o11y.LogDefer(ctx, s.logger, func() error {
+		return reader.Close()
+	})
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
+		maxLength:     MaxFileSizeChatAttachment,
+		contentLength: payload.ContentLength,
+		contentType:   payload.ContentType,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer o11y.LogDefer(ctx, s.logger, func() error {
+		return result.cleanup()
+	})
+
+	existing, err := s.findExistingAsset(ctx, &findAssetParams{
+		projectID: *authCtx.ProjectID,
+		hash:      result.hash,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		existingServeURL := url.URL{
+			Path: srv.ServeChatAttachmentAssetsPath(),
+			RawQuery: url.Values{
+				"project_id": {authCtx.ProjectID.String()},
+				"id":         {existing.ID},
+			}.Encode(),
+		}
+		return &gen.UploadChatAttachmentResult{Asset: existing, URL: existingServeURL.String()}, nil
+	}
+
+	mimeType, ext, err := validateChatAttachmentContentType(payload.ContentType)
+	if err != nil {
+		return nil, err
+	}
+
+	filename := fmt.Sprintf("attachment-%s%s", result.hash, ext)
+	uri, err := s.uploadAsset(ctx, &uploadAssetParams{
+		projectID:     *authCtx.ProjectID,
+		filename:      filename,
+		contentType:   mimeType,
+		contentLength: payload.ContentLength,
+		file:          result.file,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	asset, err := s.repo.CreateAsset(ctx, repo.CreateAssetParams{
+		Name:          filename,
+		Url:           uri.String(),
+		ProjectID:     *authCtx.ProjectID,
+		Sha256:        result.hash,
+		Kind:          "chat_attachment",
+		ContentType:   mimeType,
+		ContentLength: payload.ContentLength,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info")
+	}
+
+	serveURL := url.URL{
+		Path: srv.ServeChatAttachmentAssetsPath(),
+		RawQuery: url.Values{
+			"project_id": {authCtx.ProjectID.String()},
+			"id":         {asset.ID.String()},
+		}.Encode(),
+	}
+
+	return &gen.UploadChatAttachmentResult{
+		Asset: &gen.Asset{
+			ID:            asset.ID.String(),
+			Kind:          asset.Kind,
+			Sha256:        asset.Sha256,
+			ContentType:   asset.ContentType,
+			ContentLength: asset.ContentLength,
+			CreatedAt:     asset.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:     asset.UpdatedAt.Time.Format(time.RFC3339),
+		},
+		URL: serveURL.String(),
+	}, nil
+}
+
+func (s *Service) ServeChatAttachment(ctx context.Context, payload *gen.ServeChatAttachmentForm) (*gen.ServeChatAttachmentResult, io.ReadCloser, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	assetID, err := uuid.Parse(payload.ID)
+	switch {
+	case err != nil:
+		return nil, nil, oops.E(oops.CodeBadRequest, fmt.Errorf("parse asset id: %w", err), "invalid asset id")
+	case assetID == uuid.Nil:
+		return nil, nil, oops.E(oops.CodeBadRequest, nil, "asset id cannot be empty")
+	}
+
+	projectID, err := uuid.Parse(payload.ProjectID)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeBadRequest, err, "invalid project id").Log(ctx, s.logger)
+	}
+	if projectID == uuid.Nil {
+		return nil, nil, oops.E(oops.CodeBadRequest, nil, "project id cannot be empty")
+	}
+
+	if err := s.auth.CheckProjectAccess(ctx, s.logger, projectID); err != nil {
+		return nil, nil, err
+	}
+
+	logger := s.logger.With(
+		attr.SlogAssetID(assetID.String()),
+		attr.SlogProjectID(projectID.String()),
+	)
+
+	row, err := s.repo.GetChatAttachmentAssetURL(ctx, repo.GetChatAttachmentAssetURLParams{
+		ID:        assetID,
+		ProjectID: projectID,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get chat attachment asset url: %w", err), "error loading asset").Log(ctx, logger)
+	}
+
+	assetURL, err := url.Parse(row.Url)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse asset url: %w", err), "error loading asset").Log(ctx, logger)
+	}
+
+	exists, err := s.storage.Exists(ctx, assetURL)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("check if asset exists: %w", err), "error loading asset").Log(ctx, logger)
+	}
+
+	if !exists {
+		return nil, nil, oops.C(oops.CodeNotFound)
+	}
+
+	body, err := s.storage.Read(ctx, assetURL)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read asset: %w", err), "error fetching asset").Log(ctx, logger)
+	}
+
+	return &gen.ServeChatAttachmentResult{
 		ContentType:   row.ContentType,
 		ContentLength: row.ContentLength,
 		LastModified:  row.UpdatedAt.Time.Format(time.RFC1123),
