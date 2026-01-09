@@ -8,11 +8,8 @@ import {
 import {
   useSearchToolCallsMutation,
   useFeaturesSetMutation,
-  useListToolLogs,
-  invalidateAllListToolLogs,
 } from "@gram/client/react-query";
 import { Button, Icon } from "@speakeasy-api/moonshine";
-import { useQueryClient } from "@tanstack/react-query";
 import { XIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TraceRow } from "./TraceRow";
@@ -38,27 +35,19 @@ export default function LogsPage() {
 
   const { mutate, data, isPending, error } = useSearchToolCallsMutation();
 
-  // Check if logs are enabled using the logs list endpoint
-  const queryClient = useQueryClient();
-  const { data: logsData, refetch: refetchLogs } = useListToolLogs(
-    { perPage: 1 },
-    undefined,
-    { staleTime: 0, refetchOnWindowFocus: false },
-  );
-  const logsEnabled = logsData?.enabled ?? true;
+  // Get logsEnabled from the search result
+  const logsEnabled = data?.enabled ?? true;
 
   const [logsMutationError, setLogsMutationError] = useState<string | null>(
     null,
   );
   const { mutateAsync: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
-      onSuccess: async () => {
+      onSuccess: () => {
         setLogsMutationError(null);
-        await invalidateAllListToolLogs(queryClient);
         setCurrentCursor(undefined);
         lastProcessedCursorRef.current = undefined;
         setAllTraces([]);
-        await refetchLogs();
       },
       onError: (err) => {
         const message =
