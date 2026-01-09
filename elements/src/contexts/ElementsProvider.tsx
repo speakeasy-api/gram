@@ -1,7 +1,17 @@
 import { FrontendTools } from '@/components/FrontendTools'
+import { useMCPTools } from '@/hooks/useMCPTools'
+import { useToolApproval } from '@/hooks/useToolApproval'
 import { MODELS } from '@/lib/models'
+import {
+  clearFrontendToolApprovalConfig,
+  getEnabledTools,
+  setFrontendToolApprovalConfig,
+  toAISDKTools,
+  wrapToolsWithApproval,
+  type ApprovalHelpers,
+} from '@/lib/tools'
 import { recommended } from '@/plugins'
-import { ElementsProviderProps, Model } from '@/types'
+import { ElementsConfig, Model } from '@/types'
 import { Plugin } from '@/types/plugins'
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import {
@@ -9,6 +19,7 @@ import {
   useChatRuntime,
 } from '@assistant-ui/react-ai-sdk'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   convertToModelMessages,
   smoothStream,
@@ -18,21 +29,22 @@ import {
   type ChatTransport,
   type UIMessage,
 } from 'ai'
-import { useMemo, useState, useRef, useCallback, useEffect } from 'react'
-import { ElementsContext } from './contexts'
 import {
-  clearFrontendToolApprovalConfig,
-  getEnabledTools,
-  setFrontendToolApprovalConfig,
-  toAISDKTools,
-  wrapToolsWithApproval,
-  type ApprovalHelpers,
-} from '@/lib/tools'
-import { useSession } from '@/hooks/useSession'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useMCPTools } from '@/hooks/useMCPTools'
+  ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import { useAuth } from '../hooks/useAuth'
+import { ElementsContext } from './contexts'
 import { ToolApprovalProvider } from './ToolApprovalContext'
-import { useToolApproval } from '@/hooks/useToolApproval'
+
+export interface ElementsProviderProps {
+  children: ReactNode
+  config: ElementsConfig
+}
 
 const BASE_SYSTEM_PROMPT = `You are a helpful assistant that can answer questions and help with tasks.`
 
@@ -50,25 +62,20 @@ function mergeInternalSystemPromptWith(
   ${plugins.map((plugin) => `- ${plugin.language}: ${plugin.prompt}`).join('\n')}`
 }
 
-async function defaultGetSession(init: {
-  projectSlug: string
-}): Promise<string> {
-  const response = await fetch('/chat/session', {
-    method: 'POST',
-    headers: {
-      'Gram-Project': init.projectSlug,
-    },
-  })
-  const data = await response.json()
-  return data.client_token
+function getApiUrl(config: ElementsConfig): string {
+  const apiURL = __GRAM_API_URL__ || config.api?.url || 'https://app.getgram.ai'
+  return apiURL.replace(/\/+$/, '') // Remove trailing slashes
 }
 
 const ElementsProviderWithApproval = ({
   children,
   config,
-  getSession = defaultGetSession,
 }: ElementsProviderProps) => {
-  const session = useSession({ getSession, projectSlug: config.projectSlug })
+  const apiUrl = getApiUrl(config)
+  const auth = useAuth({
+    auth: config.api,
+    projectSlug: config.projectSlug,
+  })
   const toolApproval = useToolApproval()
 
   const [model, setModel] = useState<Model>(
@@ -88,8 +95,7 @@ const ElementsProviderWithApproval = ({
   )
 
   const { data: mcpTools, isLoading: mcpToolsLoading } = useMCPTools({
-    getSession,
-    projectSlug: config.projectSlug,
+    auth,
     mcp: config.mcp,
     environment: config.environment ?? {},
   })
@@ -131,20 +137,14 @@ const ElementsProviderWithApproval = ({
     }
   }, [config.tools?.toolsRequiringApproval, getApprovalHelpers])
 
-  let apiURL = __GRAM_API_URL__ || config.apiURL || 'https://app.getgram.ai'
-  apiURL = apiURL.replace(/\/+$/, '') // Remove trailing slashes
   // Create custom transport
   const transport = useMemo<ChatTransport<UIMessage> | undefined>(
     () => ({
       sendMessages: async ({ messages, abortSignal }) => {
         const usingCustomModel = !!config.languageModel
 
-        if (!session) {
-          throw new Error('No session found')
-        }
-
-        if (mcpToolsLoading || !mcpTools) {
-          throw new Error('MCP tools are still being discovered')
+        if (auth.isLoading) {
+          throw new Error('Session is laoding')
         }
 
         const context = runtime.thread.getModelContext()
@@ -156,12 +156,9 @@ const ElementsProviderWithApproval = ({
         const openRouterModel = usingCustomModel
           ? null
           : createOpenRouter({
-              baseURL: apiURL,
+              baseURL: apiUrl,
               apiKey: 'unused, but must be set',
-              headers: {
-                'Gram-Project': config.projectSlug,
-                'Gram-Chat-Session': session!,
-              },
+              headers: auth.headers,
             })
 
         if (config.languageModel) {
@@ -216,11 +213,11 @@ const ElementsProviderWithApproval = ({
       config.languageModel,
       model,
       systemPrompt,
-      session,
       mcpTools,
       mcpToolsLoading,
       getApprovalHelpers,
-      apiURL,
+      apiUrl,
+      auth.headers,
     ]
   )
 

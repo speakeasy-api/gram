@@ -23,32 +23,6 @@ import type { Plugin } from './plugins'
  */
 export type GetSessionFn = (init: { projectSlug: string }) => Promise<string>
 
-export interface ElementsProviderProps {
-  /**
-   * The children to render.
-   */
-  children: ReactNode
-
-  /**
-   * Configuration object for the Elements library.
-   */
-  config: ElementsConfig
-
-  /**
-   * Function to retrieve the session token from the backend endpoint.
-   *
-   * @example
-   * const config: ElementsConfig = {
-   *   getSession: async () => {
-   *     return fetch('/chat/session').then(res => res.json()).then(data => data.client_token)
-   *   },
-   * }
-   *
-   * @default Use this default if you are using the Elements server handlers, and have mounted the session handler at /chat/session.
-   */
-  getSession?: GetSessionFn
-}
-
 type ServerUrl = string
 
 export const VARIANTS = ['widget', 'sidecar', 'standalone'] as const
@@ -103,16 +77,6 @@ export interface ElementsConfig {
    * }
    */
   components?: ComponentOverrides
-
-  /**
-   * The Gram API URL to use for the Elements library.
-   *
-   * @example
-   * const config: ElementsConfig = {
-   *   apiURL: 'https://api.getgram.ai',
-   * }
-   */
-  apiURL?: string
 
   /**
    * The project slug to use for the Elements library.
@@ -296,7 +260,51 @@ export interface ElementsConfig {
    * }
    */
   tools?: ToolsConfig
+
+  api?: {
+    /**
+     * The Gram API URL to use for the Elements library.
+     *
+     * @example
+     * const config: ElementsConfig = {
+     *   apiURL: 'https://api.getgram.ai',
+     * }
+     */
+    url?: string
+  } & AuthConfig
 }
+
+export type AuthConfig =
+  | {
+      /**
+       * The function to use to retrieve the session token from the backend endpoint.
+       * By default, this will attempt to fetch the session token from `/chat/session`.
+       *
+       * @example
+       * const config: ElementsConfig = {
+       *   api: {
+       *     sessionFn: async () => {
+       *       return fetch('/chat/session').then(res => res.json()).then(data => data.client_token)
+       *     },
+       *   },
+       * }
+       */
+      sessionFn?: GetSessionFn
+    }
+  | {
+      /**
+       * The API key to use if you haven't yet configured a session endpoint.
+       * Do not use this in production.
+       *
+       * @example
+       * const config: ElementsConfig = {
+       *   api: {
+       *     UNSAFE_apiKey: 'your-api-key',
+       *   },
+       * }
+       */
+      UNSAFE_apiKey: string
+    }
 
 /**
  * The LLM model to use for the Elements library.

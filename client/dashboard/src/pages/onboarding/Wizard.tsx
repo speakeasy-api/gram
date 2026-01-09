@@ -114,7 +114,6 @@ export function OnboardingWizard() {
           mcpSlug={mcpSlug}
           setMcpSlug={setMcpSlug}
           isFunctionsEnabled={isFunctionsEnabled}
-          onDeployChatClick={() => routes.deployChat.goTo()}
           routes={routes}
         />
       </div>
@@ -198,7 +197,6 @@ const LHS = ({
   mcpSlug,
   setMcpSlug,
   isFunctionsEnabled,
-  onDeployChatClick,
   routes,
 }: {
   currentStep: OnboardingStep;
@@ -210,7 +208,6 @@ const LHS = ({
   mcpSlug: string | undefined;
   setMcpSlug: (slug: string) => void;
   isFunctionsEnabled: boolean;
-  onDeployChatClick: () => void;
   routes: RoutesWithGoTo;
 }) => {
   const [createdToolset, setCreatedToolset] = useState<Toolset>();
@@ -320,7 +317,6 @@ const LHS = ({
               <InitialChoiceStep
                 setCurrentStep={setCurrentStep}
                 setSelectedPath={setSelectedPath}
-                onDeployChatClick={onDeployChatClick}
                 routes={routes}
                 isFunctionsEnabled={isFunctionsEnabled}
                 onChoiceSelected={(choice) => {
@@ -387,14 +383,12 @@ const LHS = ({
 export const InitialChoiceStep = ({
   setCurrentStep,
   setSelectedPath,
-  onDeployChatClick,
   routes,
   isFunctionsEnabled,
   onChoiceSelected,
 }: {
   setCurrentStep?: (step: OnboardingStep) => void;
   setSelectedPath?: (path: OnboardingPath) => void;
-  onDeployChatClick: () => void;
   routes: RoutesWithGoTo;
   isFunctionsEnabled: boolean;
   onChoiceSelected: (choice: string) => void;
@@ -445,7 +439,7 @@ export const InitialChoiceStep = ({
         <ChoiceCard
           onClick={() => {
             onChoiceSelected("deploy_data_integrated_chat");
-            onDeployChatClick();
+            routes.deployChat.goTo();
           }}
           icon={MessageSquare}
           title="Deploy Chat Connected To Your Data"

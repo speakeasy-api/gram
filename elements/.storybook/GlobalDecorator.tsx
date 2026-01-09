@@ -14,7 +14,6 @@ interface ElementsDecoratorProps {
 declare const __GRAM_API_URL__: string | undefined
 
 const DEFAULT_ELEMENTS_CONFIG: ElementsConfig = {
-  apiURL: __GRAM_API_URL__ || 'https://api.getgram.ai',
   projectSlug: '',
   mcp: '',
   variant: 'widget',
@@ -43,6 +42,11 @@ const DEFAULT_ELEMENTS_CONFIG: ElementsConfig = {
     expandToolGroupsByDefault: true,
   },
   plugins: recommended,
+  api: {
+    url: __GRAM_API_URL__ || 'https://api.getgram.ai',
+    UNSAFE_apiKey:
+      'gram_local_dd029590d066949d2114fa0c92b947a126e8b6889113cf8f62ee3ddd42e8f5da', // TODO
+  },
 }
 
 /**

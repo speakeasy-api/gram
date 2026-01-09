@@ -1,5 +1,5 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { GetSessionFn } from '@/types'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 /**
  * Hook to fetch or retrieve the session token for the chat.
@@ -9,7 +9,7 @@ export const useSession = ({
   getSession,
   projectSlug,
 }: {
-  getSession: GetSessionFn
+  getSession: GetSessionFn | null
   projectSlug: string
 }): string | null => {
   const queryClient = useQueryClient()
@@ -26,8 +26,8 @@ export const useSession = ({
 
   const { data: fetchedSessionToken } = useQuery({
     queryKey,
-    queryFn: () => getSession({ projectSlug }),
-    enabled: shouldFetch,
+    queryFn: () => getSession!({ projectSlug }),
+    enabled: shouldFetch && getSession !== null,
     staleTime: Infinity, // Session tokens don't need to be refetched
     gcTime: Infinity, // Keep in cache indefinitely
   })
