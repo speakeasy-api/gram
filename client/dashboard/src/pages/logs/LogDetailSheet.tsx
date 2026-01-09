@@ -30,9 +30,9 @@ export function LogDetailSheet({
 function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
   const severityClass = getSeverityColorClass(log.severityText);
   const resourceAttrs = log.resourceAttributes as
-    | { gram?: { urn?: string } }
+    | { gram?: { tool?: { urn?: string } } }
     | undefined;
-  const gramUrn = resourceAttrs?.gram?.urn;
+  const gramUrn = resourceAttrs?.gram?.tool?.urn;
 
   return (
     <div className="flex flex-col gap-6 pt-6 px-5 pb-6">
