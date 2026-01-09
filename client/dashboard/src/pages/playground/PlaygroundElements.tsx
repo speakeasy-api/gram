@@ -8,6 +8,10 @@ import { useListToolsets } from "@gram/client/react-query/index.js";
 import { Type } from "@/components/ui/type";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { getServerURL } from "@/lib/utils";
+import {
+  GramThreadWelcome,
+  GramUserMessage,
+} from "./PlaygroundElementsOverrides";
 
 interface PlaygroundElementsProps {
   toolsetSlug: string | null;
@@ -81,10 +85,21 @@ export function PlaygroundElements({
         composer: {
           placeholder: "Send a message...",
         },
+        theme: {
+          colorScheme: "light",
+          density: "normal",
+          radius: "soft",
+        },
+        components: {
+          ThreadWelcome: GramThreadWelcome,
+          UserMessage: GramUserMessage,
+        },
       }}
       getSession={getSession}
     >
-      <Chat />
+      <div className="h-full bg-surface-primary [&_.aui-thread-root]:bg-transparent [&_.aui-composer-wrapper]:bg-transparent rounded-br-xl">
+        <Chat />
+      </div>
     </GramElementsProvider>
   );
 }
