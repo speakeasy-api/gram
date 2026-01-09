@@ -879,6 +879,8 @@ jobs:
   elements-build-lint:
     runs-on: ubicloud-standard-4
     needs: changes
+    env:
+      GRAM_GIT_SHA: "${{ github.sha }}"
     steps:
       - name: Skip if no elements changes exist
         if: ${{ needs.changes.outputs.elements != 'true' }}

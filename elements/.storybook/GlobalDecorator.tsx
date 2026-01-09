@@ -10,7 +10,11 @@ interface ElementsDecoratorProps {
   config?: Partial<ElementsConfig>
 }
 
+// Injected via Vite' `define` config
+declare const __GRAM_API_URL__: string | undefined
+
 const DEFAULT_ELEMENTS_CONFIG: ElementsConfig = {
+  apiURL: __GRAM_API_URL__ || 'https://api.getgram.ai',
   projectSlug: '',
   mcp: '',
   variant: 'widget',

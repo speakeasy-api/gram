@@ -41,6 +41,8 @@ export default defineConfig(({ mode }) => {
     },
     // define the process.env variable for the browser env and attach the .env values (used for storybook stories that rely on external provider keys, namely google)
     define: {
+      __GRAM_API_URL__: JSON.stringify(process.env['GRAM_API_URL'] || ''),
+      __GRAM_GIT_SHA__: JSON.stringify(process.env['GRAM_GIT_SHA'] || ''),
       'process.env': JSON.stringify(
         Object.fromEntries(
           Object.entries(env)

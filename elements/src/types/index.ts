@@ -105,6 +105,16 @@ export interface ElementsConfig {
   components?: ComponentOverrides
 
   /**
+   * The Gram API URL to use for the Elements library.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   apiURL: 'https://api.getgram.ai',
+   * }
+   */
+  apiURL?: string
+
+  /**
    * The project slug to use for the Elements library.
    *
    * Your project slug can be found within the Gram dashboard.
