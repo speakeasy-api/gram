@@ -44,6 +44,8 @@ const DEFAULT_ELEMENTS_CONFIG: ElementsConfig = {
   plugins: recommended,
   api: {
     url: __GRAM_API_URL__ || 'https://api.getgram.ai',
+    UNSAFE_apiKey:
+      'gram_local_dd029590d066949d2114fa0c92b947a126e8b6889113cf8f62ee3ddd42e8f5da', // TODO
   },
 }
 

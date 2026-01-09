@@ -9,7 +9,7 @@ export const useSession = ({
   getSession,
   projectSlug,
 }: {
-  getSession: GetSessionFn
+  getSession: GetSessionFn | null
   projectSlug: string
 }): string | null => {
   const queryClient = useQueryClient()
@@ -27,7 +27,7 @@ export const useSession = ({
   const { data: fetchedSessionToken } = useQuery({
     queryKey,
     queryFn: () => getSession!({ projectSlug }),
-    enabled: shouldFetch,
+    enabled: shouldFetch && getSession !== null,
     staleTime: Infinity, // Session tokens don't need to be refetched
     gcTime: Infinity, // Keep in cache indefinitely
   })

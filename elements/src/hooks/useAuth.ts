@@ -7,7 +7,7 @@ export type Auth =
       isLoading: false
     }
   | {
-      headers?: Record<string, string | null>
+      headers?: Record<string, string>
       isLoading: true
     }
 
@@ -35,6 +35,16 @@ export const useAuth = ({
   auth?: AuthConfig
   projectSlug: string
 }): Auth => {
+  let sessionFn = auth && 'sessionFn' in auth ? auth.sessionFn : null
+  if (sessionFn === undefined) {
+    sessionFn = defaultGetSession
+  }
+
+  const session = useSession({
+    getSession: sessionFn,
+    projectSlug,
+  })
+
   if (auth && 'UNSAFE_apiKey' in auth) {
     return {
       headers: {
@@ -44,16 +54,6 @@ export const useAuth = ({
       isLoading: false,
     }
   }
-
-  let sessionFn = auth && 'sessionFn' in auth ? auth.sessionFn : null
-  if (!sessionFn) {
-    sessionFn = defaultGetSession
-  }
-
-  const session = useSession({
-    getSession: sessionFn,
-    projectSlug,
-  })
 
   return !session
     ? {
