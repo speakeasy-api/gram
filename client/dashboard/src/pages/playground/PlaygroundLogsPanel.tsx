@@ -1,9 +1,8 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Type } from "@/components/ui/type";
-import { formatDuration } from "@/lib/dates";
-import { HTTPToolLog } from "@gram/client/models/components";
-import { useListToolLogs, useToolset } from "@gram/client/react-query";
+import { TelemetryLogRecord } from "@gram/client/models/components";
+import { useSearchLogsMutation, useToolset } from "@gram/client/react-query";
 import {
   CheckIcon,
   ChevronRightIcon,
@@ -11,7 +10,7 @@ import {
   XIcon,
   XCircleIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 function StatusIcon({ isSuccess }: { isSuccess: boolean }) {
   if (isSuccess) {
@@ -28,35 +27,29 @@ function StatusIcon({ isSuccess }: { isSuccess: boolean }) {
   );
 }
 
-function getToolNameFromUrn(urn: string): string {
-  const parts = urn.split(":");
-  return parts[parts.length - 1] || urn;
-}
-
-function isSuccessfulCall(log: HTTPToolLog): boolean {
-  return (
-    log.statusCode !== undefined &&
-    log.statusCode >= 200 &&
-    log.statusCode < 300
-  );
-}
-
-function getHttpMethodVariant(
-  method?: string,
+function getSeverityVariant(
+  severity?: string | null,
 ): "default" | "secondary" | "destructive" | "outline" {
-  switch (method?.toUpperCase()) {
-    case "GET":
+  switch (severity?.toUpperCase()) {
+    case "INFO":
       return "default";
-    case "POST":
-      return "secondary";
-    case "PUT":
-    case "PATCH":
+    case "WARN":
       return "outline";
-    case "DELETE":
+    case "ERROR":
+    case "FATAL":
       return "destructive";
     default:
       return "secondary";
   }
+}
+
+function formatTimestamp(timeUnixNano: number): string {
+  return new Date(timeUnixNano / 1_000_000).toLocaleTimeString();
+}
+
+function isSuccessLog(log: TelemetryLogRecord): boolean {
+  const severity = log.severityText?.toUpperCase();
+  return severity !== "ERROR" && severity !== "FATAL";
 }
 
 interface PlaygroundLogsPanelProps {
@@ -70,7 +63,9 @@ export function PlaygroundLogsPanel({
   toolsetSlug,
   onClose,
 }: PlaygroundLogsPanelProps) {
-  const [selectedLog, setSelectedLog] = useState<HTTPToolLog | null>(null);
+  const [selectedLog, setSelectedLog] = useState<TelemetryLogRecord | null>(
+    null,
+  );
 
   // Fetch toolset to get tool URNs for filtering
   const { data: toolsetData } = useToolset(
@@ -80,23 +75,32 @@ export function PlaygroundLogsPanel({
   );
 
   // Extract tool URNs from the toolset
-  const toolUrns = useMemo(() => {
+  const gramUrns = useMemo(() => {
     if (!toolsetData?.toolUrns || toolsetData.toolUrns.length === 0)
       return undefined;
     return toolsetData.toolUrns;
   }, [toolsetData]);
 
-  const { data, isLoading, refetch } = useListToolLogs(
-    {
-      perPage: 50,
-      toolUrns: toolUrns,
-    },
-    undefined,
-    {
-      refetchInterval: 5000, // Auto-refresh every 5 seconds
-      refetchOnWindowFocus: true,
-    },
-  );
+  const { mutate, data, isPending } = useSearchLogsMutation();
+
+  const fetchLogs = useCallback(() => {
+    mutate({
+      request: {
+        searchLogsPayload: {
+          filter: gramUrns ? { gramUrns } : undefined,
+          limit: 50,
+          sort: "desc",
+        },
+      },
+    });
+  }, [mutate, gramUrns]);
+
+  // Initial fetch and auto-refresh
+  useEffect(() => {
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 5000);
+    return () => clearInterval(interval);
+  }, [fetchLogs]);
 
   const logs = data?.logs || [];
   const logsEnabled = data?.enabled ?? true;
@@ -112,12 +116,12 @@ export function PlaygroundLogsPanel({
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => refetch()}
-            disabled={isLoading}
+            onClick={fetchLogs}
+            disabled={isPending}
             className="h-7 w-7 p-0"
           >
             <RefreshCwIcon
-              className={`size-3.5 ${isLoading ? "animate-spin" : ""}`}
+              className={`size-3.5 ${isPending ? "animate-spin" : ""}`}
             />
           </Button>
           <Button
@@ -136,7 +140,7 @@ export function PlaygroundLogsPanel({
         {logs.length === 0 ? (
           <div className="px-4 py-6 text-center">
             <Type variant="small" className="text-muted-foreground">
-              {isLoading
+              {isPending
                 ? "Loading logs..."
                 : !logsEnabled
                   ? "Logs are not enabled for this organization"
@@ -146,11 +150,8 @@ export function PlaygroundLogsPanel({
         ) : (
           <div>
             {logs.map((log) => {
-              const isSuccess = isSuccessfulCall(log);
-              const toolName = getToolNameFromUrn(log.toolUrn);
-              const timestamp = log.ts
-                ? new Date(log.ts).toLocaleTimeString()
-                : "";
+              const isSuccess = isSuccessLog(log);
+              const timestamp = formatTimestamp(log.timeUnixNano);
 
               return (
                 <button
@@ -162,43 +163,27 @@ export function PlaygroundLogsPanel({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <span className="font-medium text-xs truncate">
-                        {toolName}
+                        {log.service?.name || "Unknown Service"}
                       </span>
-                      {log.httpMethod && (
+                      {log.severityText && (
                         <Badge
-                          variant={getHttpMethodVariant(log.httpMethod)}
+                          variant={getSeverityVariant(log.severityText)}
                           className="text-[10px] px-1 py-0 h-4 font-semibold"
                         >
-                          {log.httpMethod}
+                          {log.severityText}
                         </Badge>
                       )}
                     </div>
-                    {log.httpRoute && (
-                      <div className="font-mono text-[10px] text-muted-foreground truncate mb-0.5">
-                        {log.httpRoute}
-                      </div>
-                    )}
+                    <div className="font-mono text-[10px] text-muted-foreground truncate mb-0.5">
+                      {log.body}
+                    </div>
                     <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                       <span className="font-mono">{timestamp}</span>
-                      {log.durationMs !== undefined && (
+                      {log.traceId && (
                         <>
                           <span>•</span>
-                          <span className="font-mono">
-                            {formatDuration(log.durationMs)}
-                          </span>
-                        </>
-                      )}
-                      {log.statusCode !== undefined && (
-                        <>
-                          <span>•</span>
-                          <span
-                            className={`font-mono font-semibold ${
-                              isSuccess
-                                ? "text-success-default"
-                                : "text-destructive-default"
-                            }`}
-                          >
-                            {log.statusCode}
+                          <span className="font-mono truncate max-w-[100px]">
+                            {log.traceId.slice(0, 8)}...
                           </span>
                         </>
                       )}
@@ -217,7 +202,7 @@ export function PlaygroundLogsPanel({
         <div className="border-t bg-muted/20">
           <div className="px-3 py-2.5 border-b flex items-center justify-between bg-inherit">
             <span className="text-xs font-semibold">
-              {getToolNameFromUrn(selectedLog.toolUrn)}
+              {selectedLog.service?.name || "Log Details"}
             </span>
             <Button
               size="sm"
@@ -238,95 +223,91 @@ export function PlaygroundLogsPanel({
                 <div className="bg-background/60 rounded border border-border/40 divide-y divide-border/40">
                   <div className="px-2.5 py-1.5 flex justify-between text-[11px]">
                     <span className="text-muted-foreground font-medium">
-                      Tool URN
+                      Service
                     </span>
                     <span className="font-mono text-right">
-                      {selectedLog.toolUrn}
+                      {selectedLog.service?.name}
+                      {selectedLog.service?.version &&
+                        ` (${selectedLog.service.version})`}
                     </span>
                   </div>
                   <div className="px-2.5 py-1.5 flex justify-between text-[11px]">
                     <span className="text-muted-foreground font-medium">
-                      Method
+                      Severity
                     </span>
                     <span className="font-mono font-semibold">
-                      {selectedLog.httpMethod}
+                      {selectedLog.severityText || "N/A"}
                     </span>
                   </div>
                   <div className="px-2.5 py-1.5 flex justify-between text-[11px]">
                     <span className="text-muted-foreground font-medium">
-                      Route
+                      Timestamp
                     </span>
-                    <span className="font-mono text-right truncate max-w-[200px]">
-                      {selectedLog.httpRoute}
-                    </span>
-                  </div>
-                  <div className="px-2.5 py-1.5 flex justify-between text-[11px]">
-                    <span className="text-muted-foreground font-medium">
-                      Status
-                    </span>
-                    <span
-                      className={`font-mono font-semibold ${
-                        isSuccessfulCall(selectedLog)
-                          ? "text-success-default"
-                          : "text-destructive-default"
-                      }`}
-                    >
-                      {selectedLog.statusCode}
+                    <span className="font-mono text-right">
+                      {new Date(
+                        selectedLog.timeUnixNano / 1_000_000,
+                      ).toISOString()}
                     </span>
                   </div>
-                  <div className="px-2.5 py-1.5 flex justify-between text-[11px]">
-                    <span className="text-muted-foreground font-medium">
-                      Duration
-                    </span>
-                    <span className="font-mono">
-                      {formatDuration(selectedLog.durationMs)}
-                    </span>
-                  </div>
-                  {selectedLog.requestBodyBytes !== undefined && (
+                  {selectedLog.traceId && (
                     <div className="px-2.5 py-1.5 flex justify-between text-[11px]">
                       <span className="text-muted-foreground font-medium">
-                        Request Size
+                        Trace ID
                       </span>
-                      <span className="font-mono">
-                        {selectedLog.requestBodyBytes} bytes
+                      <span className="font-mono text-right truncate max-w-[200px]">
+                        {selectedLog.traceId}
                       </span>
                     </div>
                   )}
-                  {selectedLog.responseBodyBytes !== undefined && (
+                  {selectedLog.spanId && (
                     <div className="px-2.5 py-1.5 flex justify-between text-[11px]">
                       <span className="text-muted-foreground font-medium">
-                        Response Size
+                        Span ID
                       </span>
-                      <span className="font-mono">
-                        {selectedLog.responseBodyBytes} bytes
+                      <span className="font-mono text-right">
+                        {selectedLog.spanId}
                       </span>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Request Headers */}
-              {selectedLog.requestHeaders &&
-                Object.keys(selectedLog.requestHeaders).length > 0 && (
+              {/* Body */}
+              {selectedLog.body && (
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Message
+                  </div>
+                  <pre className="bg-background/60 border border-border/40 p-2 rounded text-[10px] overflow-x-auto font-mono leading-relaxed whitespace-pre-wrap">
+                    {selectedLog.body}
+                  </pre>
+                </div>
+              )}
+
+              {/* Attributes */}
+              {selectedLog.attributes &&
+                typeof selectedLog.attributes === "object" &&
+                Object.keys(selectedLog.attributes).length > 0 && (
                   <div className="space-y-1.5">
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Request Headers
+                      Attributes
                     </div>
                     <pre className="bg-background/60 border border-border/40 p-2 rounded text-[10px] overflow-x-auto font-mono leading-relaxed">
-                      {JSON.stringify(selectedLog.requestHeaders, null, 2)}
+                      {JSON.stringify(selectedLog.attributes, null, 2)}
                     </pre>
                   </div>
                 )}
 
-              {/* Response Headers */}
-              {selectedLog.responseHeaders &&
-                Object.keys(selectedLog.responseHeaders).length > 0 && (
+              {/* Resource Attributes */}
+              {selectedLog.resourceAttributes &&
+                typeof selectedLog.resourceAttributes === "object" &&
+                Object.keys(selectedLog.resourceAttributes).length > 0 && (
                   <div className="space-y-1.5">
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Response Headers
+                      Resource Attributes
                     </div>
                     <pre className="bg-background/60 border border-border/40 p-2 rounded text-[10px] overflow-x-auto font-mono leading-relaxed">
-                      {JSON.stringify(selectedLog.responseHeaders, null, 2)}
+                      {JSON.stringify(selectedLog.resourceAttributes, null, 2)}
                     </pre>
                   </div>
                 )}
