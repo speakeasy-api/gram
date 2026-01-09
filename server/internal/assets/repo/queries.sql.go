@@ -122,6 +122,39 @@ func (q *Queries) GetAssetsByID(ctx context.Context, arg GetAssetsByIDParams) ([
 	return items, nil
 }
 
+const getChatAttachmentAssetURL = `-- name: GetChatAttachmentAssetURL :one
+SELECT url, content_type, content_length, updated_at
+FROM assets
+WHERE
+  id = $1 AND kind = 'chat_attachment'
+  AND project_id = $2
+  AND deleted = false
+`
+
+type GetChatAttachmentAssetURLParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetChatAttachmentAssetURLRow struct {
+	Url           string
+	ContentType   string
+	ContentLength int64
+	UpdatedAt     pgtype.Timestamptz
+}
+
+func (q *Queries) GetChatAttachmentAssetURL(ctx context.Context, arg GetChatAttachmentAssetURLParams) (GetChatAttachmentAssetURLRow, error) {
+	row := q.db.QueryRow(ctx, getChatAttachmentAssetURL, arg.ID, arg.ProjectID)
+	var i GetChatAttachmentAssetURLRow
+	err := row.Scan(
+		&i.Url,
+		&i.ContentType,
+		&i.ContentLength,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getFunctionAssetURL = `-- name: GetFunctionAssetURL :one
 SELECT url, content_type, content_length, updated_at
 FROM assets

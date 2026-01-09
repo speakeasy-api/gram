@@ -154,6 +154,7 @@ export * from "./updateprompttemplateform.js";
 export * from "./updateprompttemplateresult.js";
 export * from "./updateslackconnectionrequestbody.js";
 export * from "./updatetoolsetrequestbody.js";
+export * from "./uploadchatattachmentresult.js";
 export * from "./uploadfunctionsresult.js";
 export * from "./uploadimageresult.js";
 export * from "./uploadopenapiv3result.js";

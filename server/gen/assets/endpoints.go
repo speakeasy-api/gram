@@ -25,6 +25,8 @@ type Endpoints struct {
 	ServeOpenAPIv3        goa.Endpoint
 	ServeFunction         goa.Endpoint
 	ListAssets            goa.Endpoint
+	UploadChatAttachment  goa.Endpoint
+	ServeChatAttachment   goa.Endpoint
 }
 
 // ServeImageResponseData holds both the result and the HTTP response body
@@ -81,6 +83,24 @@ type ServeFunctionResponseData struct {
 	Body io.ReadCloser
 }
 
+// UploadChatAttachmentRequestData holds both the payload and the HTTP request
+// body reader of the "uploadChatAttachment" method.
+type UploadChatAttachmentRequestData struct {
+	// Payload is the method payload.
+	Payload *UploadChatAttachmentForm
+	// Body streams the HTTP request body.
+	Body io.ReadCloser
+}
+
+// ServeChatAttachmentResponseData holds both the result and the HTTP response
+// body reader of the "serveChatAttachment" method.
+type ServeChatAttachmentResponseData struct {
+	// Result is the method result.
+	Result *ServeChatAttachmentResult
+	// Body streams the HTTP response body.
+	Body io.ReadCloser
+}
+
 // NewEndpoints wraps the methods of the "assets" service with endpoints.
 func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
@@ -94,6 +114,8 @@ func NewEndpoints(s Service) *Endpoints {
 		ServeOpenAPIv3:        NewServeOpenAPIv3Endpoint(s, a.APIKeyAuth),
 		ServeFunction:         NewServeFunctionEndpoint(s, a.APIKeyAuth),
 		ListAssets:            NewListAssetsEndpoint(s, a.APIKeyAuth),
+		UploadChatAttachment:  NewUploadChatAttachmentEndpoint(s, a.APIKeyAuth),
+		ServeChatAttachment:   NewServeChatAttachmentEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -107,6 +129,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ServeOpenAPIv3 = m(e.ServeOpenAPIv3)
 	e.ServeFunction = m(e.ServeFunction)
 	e.ListAssets = m(e.ListAssets)
+	e.UploadChatAttachment = m(e.UploadChatAttachment)
+	e.ServeChatAttachment = m(e.ServeChatAttachment)
 }
 
 // NewServeImageEndpoint returns an endpoint function that calls the method
@@ -492,5 +516,103 @@ func NewListAssetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			return nil, err
 		}
 		return s.ListAssets(ctx, p)
+	}
+}
+
+// NewUploadChatAttachmentEndpoint returns an endpoint function that calls the
+// method "uploadChatAttachment" of service "assets".
+func NewUploadChatAttachmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		ep := req.(*UploadChatAttachmentRequestData)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if ep.Payload.ApikeyToken != nil {
+			key = *ep.Payload.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if ep.Payload.ProjectSlugInput != nil {
+				key = *ep.Payload.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if ep.Payload.SessionToken != nil {
+				key = *ep.Payload.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if ep.Payload.ProjectSlugInput != nil {
+					key = *ep.Payload.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UploadChatAttachment(ctx, ep.Payload, ep.Body)
+	}
+}
+
+// NewServeChatAttachmentEndpoint returns an endpoint function that calls the
+// method "serveChatAttachment" of service "assets".
+func NewServeChatAttachmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ServeChatAttachmentForm)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat"},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		res, body, err := s.ServeChatAttachment(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		return &ServeChatAttachmentResponseData{Result: res, Body: body}, nil
 	}
 }

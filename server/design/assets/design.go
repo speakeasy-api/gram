@@ -213,6 +213,58 @@ var _ = Service("assets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListAssets"}`)
 	})
 
+	Method("uploadChatAttachment", func() {
+		Description("Upload a chat attachment to Gram.")
+
+		Payload(UploadChatAttachmentForm)
+
+		Result(UploadChatAttachmentResult)
+
+		HTTP(func() {
+			POST("/rpc/assets.uploadChatAttachment")
+			Header("content_type:Content-Type")
+			Header("content_length:Content-Length")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			security.SessionHeader()
+			SkipRequestBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "uploadChatAttachment")
+		Meta("openapi:extension:x-speakeasy-name-override", "uploadChatAttachment")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UploadChatAttachment"}`)
+	})
+
+	Method("serveChatAttachment", func() {
+		Description("Serve a chat attachment from Gram.")
+
+		Payload(ServeChatAttachmentForm)
+		Result(ServeChatAttachmentResult)
+
+		Security(security.ByKey)
+		Security(security.Session)
+
+		HTTP(func() {
+			GET("/rpc/assets.serveChatAttachment")
+			Param("id")
+			Param("project_id")
+
+			Response(StatusOK, func() {
+				Header("content_type:Content-Type")
+				Header("content_length:Content-Length")
+				Header("last_modified:Last-Modified")
+			})
+
+			security.ByKeyHeader()
+			security.SessionHeader()
+			SkipResponseBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "serveChatAttachment")
+		Meta("openapi:extension:x-speakeasy-name-override", "serveChatAttachment")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "serveChatAttachment"}`)
+	})
+
 })
 
 var ListAssetsResult = Type("ListAssetsResult", func() {
@@ -333,7 +385,7 @@ var Asset = Type("Asset", func() {
 
 	Attribute("id", String, "The ID of the asset")
 	Attribute("kind", String, func() {
-		Enum("openapiv3", "image", "functions", "unknown")
+		Enum("openapiv3", "image", "functions", "chat_attachment", "unknown")
 	})
 	Attribute("sha256", String, "The SHA256 hash of the asset")
 	Attribute("content_type", String, "The content type of the asset")
@@ -346,4 +398,38 @@ var Asset = Type("Asset", func() {
 		Description("The last update date of the asset.")
 		Format(FormatDateTime)
 	})
+})
+
+var UploadChatAttachmentForm = Type("UploadChatAttachmentForm", func() {
+	Required("content_type", "content_length")
+	security.ByKeyPayload()
+	security.SessionPayload()
+	security.ProjectPayload()
+
+	Attribute("content_type", String)
+	Attribute("content_length", Int64)
+})
+
+var UploadChatAttachmentResult = Type("UploadChatAttachmentResult", func() {
+	Required("asset", "url")
+
+	Attribute("asset", Asset, "The asset entry that was created in Gram")
+	Attribute("url", String, "The URL to serve the chat attachment")
+})
+
+var ServeChatAttachmentForm = Type("ServeChatAttachmentForm", func() {
+	Required("id", "project_id")
+	security.ByKeyPayload()
+	security.SessionPayload()
+
+	Attribute("id", String, "The ID of the attachment to serve")
+	Attribute("project_id", String, "The project ID that the attachment belongs to")
+})
+
+var ServeChatAttachmentResult = Type("ServeChatAttachmentResult", func() {
+	Required("content_type", "content_length", "last_modified")
+
+	Attribute("content_type", String)
+	Attribute("content_length", Int64)
+	Attribute("last_modified", String)
 })
