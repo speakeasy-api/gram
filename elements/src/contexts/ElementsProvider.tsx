@@ -63,7 +63,7 @@ function mergeInternalSystemPromptWith(
 }
 
 function getApiUrl(config: ElementsConfig): string {
-  let apiURL = __GRAM_API_URL__ || config.api?.url || 'https://app.getgram.ai'
+  const apiURL = __GRAM_API_URL__ || config.api?.url || 'https://app.getgram.ai'
   return apiURL.replace(/\/+$/, '') // Remove trailing slashes
 }
 
