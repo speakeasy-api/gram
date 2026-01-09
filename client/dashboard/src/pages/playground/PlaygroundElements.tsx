@@ -35,6 +35,7 @@ export function PlaygroundElements({
 
   // Get environment entries for MCP headers
   const environmentData = useEnvironment(environmentSlug ?? undefined);
+  console.log("Env data", environmentData);
 
   // Build environment headers from environment entries
   const environment = useMemo(() => {
@@ -79,23 +80,14 @@ export function PlaygroundElements({
     );
   }
 
-  const languageModel = createOpenRouter({
-    baseURL: getServerURL(),
-    apiKey: "unused, but must be set",
-    headers: {
-      "Gram-Project": project.slug,
-      "Gram-Chat-Session": session.session,
-    },
-  }).chat(model);
-
   return (
     <GramElementsProvider
       config={{
         projectSlug: project.slug,
+        apiURL: getServerURL(),
         mcp: mcpUrl,
         environment,
         variant: "standalone",
-        // languageModel,
         model: {
           // defaultModel: model as Model,
           showModelPicker: false,
