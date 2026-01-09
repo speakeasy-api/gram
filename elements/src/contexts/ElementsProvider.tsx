@@ -96,9 +96,6 @@ const ElementsProviderWithApproval = ({
     environment: config.environment ?? {},
   })
 
-  // Show loading if we don't have tools yet or they're actively loading
-  const isLoadingMCPTools = !mcpTools || mcpToolsLoading
-
   // Store approval helpers in ref so they can be used in async contexts
   const approvalHelpersRef = useRef<ApprovalHelpers>({
     requestApproval: toolApproval.requestApproval,
@@ -242,7 +239,6 @@ const ElementsProviderWithApproval = ({
           isOpen: isOpen ?? false,
           setIsOpen,
           plugins,
-          isLoadingMCPTools,
         }}
       >
         {children}
