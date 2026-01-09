@@ -148,6 +148,16 @@ export interface ElementsConfig {
   environment?: Record<string, unknown>
 
   /**
+   * The environment slug for server-side environment variable resolution.
+   * When provided, the MCP server will resolve environment variables
+   * from the stored environment instead of using client-provided values.
+   *
+   * This is useful for authenticated contexts where you don't want to
+   * expose environment variable values to the client.
+   */
+  envSlug?: string
+
+  /**
    * The layout variant for the chat interface.
    *
    * - `widget`: A popup modal anchored to the bottom-right corner (default)

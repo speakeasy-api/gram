@@ -13,11 +13,13 @@ export function useMCPTools({
   projectSlug,
   mcp,
   environment,
+  envSlug,
 }: {
   getSession: GetSessionFn
   projectSlug: string
   mcp: string | undefined
   environment: Record<string, unknown>
+  envSlug?: string
 }): UseQueryResult<MCPToolsResult, Error> {
   const session = useSession({
     getSession,
@@ -25,7 +27,7 @@ export function useMCPTools({
   })
 
   const queryResult = useQuery({
-    queryKey: ['mcpTools', projectSlug, mcp, session],
+    queryKey: ['mcpTools', projectSlug, mcp, session, envSlug],
     queryFn: async () => {
       assert(session, 'No session found')
       assert(mcp, 'No MCP URL found')
@@ -38,6 +40,7 @@ export function useMCPTools({
           headers: {
             ...transformEnvironmentToHeaders(environment ?? {}),
             'Gram-Chat-Session': session,
+            ...(envSlug ? { 'Gram-Environment': envSlug } : {}),
           },
         },
       })

@@ -1,10 +1,9 @@
 import { GramElementsProvider, Chat, type Model } from "@gram-ai/elements";
 // Note: Not importing Elements CSS as it conflicts with dashboard's Tailwind styles
 // The dashboard's Tailwind should provide necessary utility classes
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useMcpUrl } from "../mcp/MCPDetails";
-import { useEnvironment } from "../environments/Environment";
 import { useListToolsets } from "@gram/client/react-query/index.js";
 import { Type } from "@/components/ui/type";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
@@ -31,24 +30,6 @@ export function PlaygroundElements({
 
   // Get MCP URL from toolset
   const { url: mcpUrl } = useMcpUrl(toolset);
-
-  // Get environment entries for MCP headers
-  const environmentData = useEnvironment(environmentSlug ?? undefined);
-
-  // Build environment headers from environment entries
-  const environment = useMemo(() => {
-    if (!environmentData?.entries) return {};
-
-    return environmentData.entries.reduce(
-      (acc, entry) => {
-        if (entry.value) {
-          acc[entry.name] = entry.value;
-        }
-        return acc;
-      },
-      {} as Record<string, string>,
-    );
-  }, [environmentData?.entries]);
 
   // Create getSession function using SDK mutation with session auth
   const getSession = useCallback(async () => {
@@ -84,7 +65,7 @@ export function PlaygroundElements({
         projectSlug: project.slug,
         apiURL: getServerURL(),
         mcp: mcpUrl,
-        environment,
+        envSlug: environmentSlug ?? undefined,
         variant: "standalone",
         model: {
           // defaultModel: model as Model,
