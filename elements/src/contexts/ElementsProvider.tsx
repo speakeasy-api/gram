@@ -18,10 +18,12 @@ import {
   type ChatTransport,
   type UIMessage,
 } from 'ai'
-import { useMemo, useState, useRef, useCallback } from 'react'
+import { useMemo, useState, useRef, useCallback, useEffect } from 'react'
 import { ElementsContext } from './contexts'
 import {
+  clearFrontendToolApprovalConfig,
   getEnabledTools,
+  setFrontendToolApprovalConfig,
   toAISDKTools,
   wrapToolsWithApproval,
   type ApprovalHelpers,
@@ -113,6 +115,19 @@ const ElementsProviderWithApproval = ({
         approvalHelpersRef.current.whitelistTool(...args),
     }
   }, [])
+
+  // Set up frontend tool approval config for runtime checking
+  useEffect(() => {
+    if (config.tools?.toolsRequiringApproval?.length) {
+      setFrontendToolApprovalConfig(
+        getApprovalHelpers(),
+        config.tools.toolsRequiringApproval
+      )
+    }
+    return () => {
+      clearFrontendToolApprovalConfig()
+    }
+  }, [config.tools?.toolsRequiringApproval, getApprovalHelpers])
 
   // Create custom transport
   const transport = useMemo<ChatTransport<UIMessage> | undefined>(
