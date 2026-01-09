@@ -28,7 +28,6 @@ func chatSessionsCORS(chatSessionsManager *chatsessions.Manager) func(next http.
 				if requestedHeaders := r.Header.Get("Access-Control-Request-Headers"); requestedHeaders != "" {
 					w.Header().Set("Access-Control-Allow-Headers", requestedHeaders)
 				}
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
