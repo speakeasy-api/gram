@@ -109,7 +109,7 @@ type SearchToolCallsFilter struct {
 	DeploymentID *string
 	// Function ID filter
 	FunctionID *string
-	// Gram URN filter
+	// Gram URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string
 }
 
