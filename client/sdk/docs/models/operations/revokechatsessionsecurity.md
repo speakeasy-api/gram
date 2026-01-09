@@ -10,7 +10,7 @@ let value: RevokeChatSessionSecurity = {};
 
 ## Fields
 
-| Field                          | Type                           | Required                       | Description                    |
-| ------------------------------ | ------------------------------ | ------------------------------ | ------------------------------ |
-| `apikeyHeaderGramKey`          | *string*                       | :heavy_minus_sign:             | N/A                            |
-| `projectSlugHeaderGramProject` | *string*                       | :heavy_minus_sign:             | N/A                            |
+| Field                                                                                                      | Type                                                                                                       | Required                                                                                                   | Description                                                                                                |
+| ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `option1`                                                                                                  | [operations.RevokeChatSessionSecurityOption1](../../models/operations/revokechatsessionsecurityoption1.md) | :heavy_minus_sign:                                                                                         | N/A                                                                                                        |
+| `option2`                                                                                                  | [operations.RevokeChatSessionSecurityOption2](../../models/operations/revokechatsessionsecurityoption2.md) | :heavy_minus_sign:                                                                                         | N/A                                                                                                        |

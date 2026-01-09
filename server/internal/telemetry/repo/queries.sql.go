@@ -479,7 +479,7 @@ FROM telemetry_logs
 WHERE gram_project_id = ?
     AND time_unix_nano >= ?
     AND time_unix_nano <= ?
-    AND (? = '' OR gram_urn = ?)
+    AND (length(?) = 0 OR has(?, gram_urn))
     AND (? = '' OR trace_id = ?)
     AND (? = '' OR gram_deployment_id = toUUIDOrNull(?))
     AND (? = '' OR gram_function_id = toUUIDOrNull(?))
@@ -510,7 +510,7 @@ type ListTelemetryLogsParams struct {
 	GramProjectID          string
 	TimeStart              int64
 	TimeEnd                int64
-	GramURN                string
+	GramURNs               []string // Supports multiple URNs
 	TraceID                string
 	GramDeploymentID       string
 	GramFunctionID         string
@@ -527,10 +527,10 @@ type ListTelemetryLogsParams struct {
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsParams) ([]TelemetryLog, error) {
 	rows, err := q.conn.Query(ctx, listTelemetryLogs,
-		arg.GramProjectID,        // 1: gram_project_id
-		arg.TimeStart,            // 2: time_unix_nano >=
-		arg.TimeEnd,              // 3: time_unix_nano <=
-		arg.GramURN, arg.GramURN, // 4,5: gram_urn filter
+		arg.GramProjectID,          // 1: gram_project_id
+		arg.TimeStart,              // 2: time_unix_nano >=
+		arg.TimeEnd,                // 3: time_unix_nano <=
+		arg.GramURNs, arg.GramURNs, // 4,5: gram_urns filter (array)
 		arg.TraceID, arg.TraceID, // 6,7: trace_id filter
 		arg.GramDeploymentID, arg.GramDeploymentID, // 8,9: gram_deployment_id filter
 		arg.GramFunctionID, arg.GramFunctionID, // 10,11: gram_function_id filter
@@ -609,7 +609,7 @@ type ListTracesParams struct {
 	TimeEnd          int64
 	GramDeploymentID string
 	GramFunctionID   string
-	GramURN          string
+	GramURN          string // Single URN filter (supports LIKE pattern matching)
 	SortOrder        string
 	Cursor           string // trace_id to paginate from
 	Limit            int
@@ -623,7 +623,7 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 		arg.TimeEnd,                                // 3: time_unix_nano <=
 		arg.GramDeploymentID, arg.GramDeploymentID, // 4,5: deployment_id filter
 		arg.GramFunctionID, arg.GramFunctionID, // 6,7: function_id filter
-		arg.GramURN, arg.GramURN, // 8,9: gram_urn filter (position-based substring search) 
+		arg.GramURN, arg.GramURN, // 8,9: gram_urn filter (position-based substring search)
 		arg.Cursor,    // 10: cursor empty string check
 		arg.SortOrder, // 11: ASC or DESC for comparison
 		arg.Cursor,    // 12: ASC cursor subquery
