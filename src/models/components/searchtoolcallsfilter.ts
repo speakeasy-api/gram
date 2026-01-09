@@ -23,9 +23,13 @@ export type SearchToolCallsFilter = {
    */
   functionId?: string | undefined;
   /**
-   * Gram URN filter
+   * Gram URN filter (single URN, use gram_urns for multiple)
    */
   gramUrn?: string | undefined;
+  /**
+   * Gram URN filter (one or more URNs)
+   */
+  gramUrns?: Array<string> | undefined;
   /**
    * End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
    */
@@ -38,6 +42,7 @@ export type SearchToolCallsFilter$Outbound = {
   from?: string | undefined;
   function_id?: string | undefined;
   gram_urn?: string | undefined;
+  gram_urns?: Array<string> | undefined;
   to?: string | undefined;
 };
 
@@ -51,12 +56,14 @@ export const SearchToolCallsFilter$outboundSchema: z.ZodType<
   from: z.date().transform(v => v.toISOString()).optional(),
   functionId: z.string().optional(),
   gramUrn: z.string().optional(),
+  gramUrns: z.array(z.string()).optional(),
   to: z.date().transform(v => v.toISOString()).optional(),
 }).transform((v) => {
   return remap$(v, {
     deploymentId: "deployment_id",
     functionId: "function_id",
     gramUrn: "gram_urn",
+    gramUrns: "gram_urns",
   });
 });
 
