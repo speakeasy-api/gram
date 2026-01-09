@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.25.2
+
+### Patch Changes
+
+- f0dad26: Adds support for UNSAFE_apiKey in Elements. This will be used during onboarding to allow users to quickly trial elements without needing to set up the sessions endpoint in their backend
+
 ## 0.25.1
 
 ### Patch Changes

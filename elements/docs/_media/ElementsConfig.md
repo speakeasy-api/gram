@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.18.0**](../README.md)
+[**@gram-ai/elements v1.18.2**](../README.md)
 
 ***
 
@@ -70,22 +70,6 @@ const config: ElementsConfig = {
   components: {
     Composer: CustomComposerComponent,
   },
-}
-```
-
-***
-
-### apiURL?
-
-> `optional` **apiURL**: `string`
-
-The Gram API URL to use for the Elements library.
-
-#### Example
-
-```ts
-const config: ElementsConfig = {
-  apiURL: 'https://api.getgram.ai',
 }
 ```
 
@@ -338,3 +322,9 @@ const config: ElementsConfig = {
   },
 }
 ```
+
+***
+
+### api?
+
+> `optional` **api**: \{ url?: string \| undefined; \} & AuthConfig

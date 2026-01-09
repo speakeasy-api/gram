@@ -1,35 +1,31 @@
 import { assert } from '@/lib/utils'
-import { GetSessionFn } from '@/types'
 import { experimental_createMCPClient as createMCPClient } from '@ai-sdk/mcp'
 import { useQuery, type UseQueryResult } from '@tanstack/react-query'
-import { useSession } from './useSession'
+import { Auth } from './useAuth'
 
 type MCPToolsResult = Awaited<
   ReturnType<Awaited<ReturnType<typeof createMCPClient>>['tools']>
 >
 
 export function useMCPTools({
-  getSession,
-  projectSlug,
+  auth,
   mcp,
   environment,
   envSlug,
 }: {
-  getSession: GetSessionFn
-  projectSlug: string
+  auth: Auth
   mcp: string | undefined
   environment: Record<string, unknown>
   envSlug?: string
 }): UseQueryResult<MCPToolsResult, Error> {
-  const session = useSession({
-    getSession,
-    projectSlug,
-  })
+  const authQueryKey = Object.entries(auth.headers ?? {}).map(
+    (k, v) => `${k}:${v}`
+  )
 
   const queryResult = useQuery({
-    queryKey: ['mcpTools', projectSlug, mcp, session, envSlug],
+    queryKey: ['mcpTools', mcp, ...authQueryKey],
     queryFn: async () => {
-      assert(session, 'No session found')
+      assert(!auth.isLoading, 'No auth found')
       assert(mcp, 'No MCP URL found')
 
       const mcpClient = await createMCPClient({
@@ -39,8 +35,7 @@ export function useMCPTools({
           url: mcp,
           headers: {
             ...transformEnvironmentToHeaders(environment ?? {}),
-            'Gram-Chat-Session': session,
-            ...(envSlug ? { 'Gram-Environment': envSlug } : {}),
+            ...auth.headers,
           },
         },
       })
@@ -48,13 +43,14 @@ export function useMCPTools({
       const mcpTools = await mcpClient.tools()
       return mcpTools
     },
-    enabled: !!session && !!mcp,
+    enabled: !auth.isLoading && !!mcp,
     staleTime: Infinity,
     gcTime: Infinity,
   })
 
   return queryResult
 }
+
 const HEADER_PREFIX = 'MCP-'
 
 function transformEnvironmentToHeaders(environment: Record<string, unknown>) {

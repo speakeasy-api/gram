@@ -21,42 +21,59 @@ import {
   ThreadPrimitive,
 } from '@assistant-ui/react'
 
-import { useState, useEffect, useRef, type FC } from 'react'
 import { LazyMotion, MotionConfig, domAnimation } from 'motion/react'
 import * as m from 'motion/react-m'
+import { useEffect, useRef, useState, type FC } from 'react'
 
-import { Button } from '@/components/ui/button'
-import { MarkdownText } from '@/components/assistant-ui/markdown-text'
-import { ToolFallback } from '@/components/assistant-ui/tool-fallback'
-import { Reasoning, ReasoningGroup } from '@/components/assistant-ui/reasoning'
-import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
 import {
   ComposerAddAttachment,
   ComposerAttachments,
   UserMessageAttachments,
 } from '@/components/assistant-ui/attachment'
+import { MarkdownText } from '@/components/assistant-ui/markdown-text'
+import { Reasoning, ReasoningGroup } from '@/components/assistant-ui/reasoning'
+import { ToolFallback } from '@/components/assistant-ui/tool-fallback'
+import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
+import { Button } from '@/components/ui/button'
 
-import { cn } from '@/lib/utils'
+import { useDensity } from '@/hooks/useDensity'
 import { useElements } from '@/hooks/useElements'
 import { useRadius } from '@/hooks/useRadius'
-import { useDensity } from '@/hooks/useDensity'
 import { useThemeProps } from '@/hooks/useThemeProps'
+import { EASE_OUT_QUINT } from '@/lib/easing'
+import { MODELS } from '@/lib/models'
+import { cn } from '@/lib/utils'
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '../ui/tooltip'
-import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
-import { MODELS } from '@/lib/models'
-import { EASE_OUT_QUINT } from '@/lib/easing'
 import { ToolGroup } from './tool-group'
+
+const ApiKeyWarning = () => (
+  <div className="m-2 rounded-md border border-amber-500 bg-amber-100 px-4 py-3 text-sm text-amber-800 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-200">
+    <strong>Warning:</strong> You are using an API key directly in the client.
+    Please{' '}
+    <a
+      href="https://github.com/speakeasy-api/gram/tree/main/elements#setting-up-your-backend"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-amber-700 underline hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200"
+    >
+      set up a session endpoint
+    </a>{' '}
+    before deploying to production.
+  </div>
+)
 
 export const Thread: FC = () => {
   const themeProps = useThemeProps()
   const d = useDensity()
   const { config } = useElements()
   const components = config.components ?? {}
+  const showApiKeyWarning = config.api && 'UNSAFE_apiKey' in config.api
 
   return (
     <LazyMotion features={domAnimation}>
@@ -80,6 +97,8 @@ export const Thread: FC = () => {
                 <ThreadWelcome />
               )}
             </ThreadPrimitive.If>
+
+            {showApiKeyWarning && <ApiKeyWarning />}
 
             <ThreadPrimitive.Messages
               components={{

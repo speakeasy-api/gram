@@ -106,7 +106,7 @@ const SetupStep = () => {
       request: {
         createKeyForm: {
           // Add this random suffix or else a second key creation will cause a conflict and fail
-          name: `Elements Chat - ${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+          name: `Chat Elements - ${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
           scopes: ["chat"],
         },
       },
@@ -115,17 +115,15 @@ const SetupStep = () => {
 
   const installCommand = `pnpm add @gram-ai/elements`;
 
-  const appCode = `import {
-  GramElementsProvider,
-  Chat,
-  type ElementsConfig
-} from '@gram-ai/elements'
+  const appCode = `import { GramElementsProvider, Chat, type ElementsConfig } from '@gram-ai/elements'
 import '@gram-ai/elements/elements.css'
 
 const config: ElementsConfig = {
   projectSlug: '${projectSlug}',
-  // TODO: Replace with Chat Sessions (see Gram docs) before shipping to production
-  unsafeApiKey: '${apiKey ?? "YOUR_API_KEY"}',
+  api: {
+    // TODO: Replace with Chat Sessions (see Gram docs) before shipping to production
+    UNSAFE_apiKey: '${apiKey ?? "YOUR_API_KEY"}',
+  }
 }
 
 export const App = () => {

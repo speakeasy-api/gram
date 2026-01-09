@@ -1,12 +1,11 @@
-[**@gram-ai/elements v1.18.0**](README.md)
+[**@gram-ai/elements v1.18.2**](README.md)
 
 ***
 
-# @gram-ai/elements v1.18.0
+# @gram-ai/elements v1.18.2
 
 ## Interfaces
 
-- [ElementsProviderProps](interfaces/ElementsProviderProps.md)
 - [ElementsConfig](interfaces/ElementsConfig.md)
 - [ModelConfig](interfaces/ModelConfig.md)
 - [ThemeConfig](interfaces/ThemeConfig.md)
