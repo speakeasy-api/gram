@@ -75,7 +75,6 @@ func DescribeToolsetEntry(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset").Log(ctx, logger)
 	}
 
-	// Get tool URNs and resource URNs from latest toolset version
 	var toolUrns []string
 	var resourceUrns []string
 	latestVersion, err := toolsetRepo.GetLatestToolsetVersion(ctx, toolset.ID)
@@ -187,9 +186,7 @@ func DescribeToolsetEntry(
 			})
 		}
 
-		// Fetch external MCP tool entries
 		externalmcpRepo := externalmcpR.New(tx)
-		// Filter toolUrns to find externalmcp URNs
 		externalMCPUrns := make([]string, 0)
 		for _, toolUrn := range toolUrns {
 			var parsedUrn urn.Tool
@@ -328,11 +325,9 @@ func DescribeToolset(
 	// TODO: It would be better if every query below accepted a deployment ID as a parameter to guarantee cache consistency.
 	activeDeploymentID, err := deploymentRepo.GetActiveDeploymentID(ctx, pid)
 	if err != nil {
-		// We only log this because we only need to know this for the cache
 		logger.ErrorContext(ctx, "failed to get active deployment id", attr.SlogError(err))
 	}
 
-	// Get tool URNs and resource URNs from latest toolset version
 	var toolUrns []string
 	var resourceUrns []string
 	var toolsetVersion int64
@@ -532,18 +527,15 @@ func DescribeToolset(
 		OauthEnablementMetadata: &types.OAuthEnablementMetadata{
 			Oauth2SecurityCount: oauth2AuthCodeSecurityCount,
 		},
-		// Draft/staging workflow fields
 		IterationMode:     &toolset.IterationMode,
 		HasDraftChanges:   &toolset.HasDraftChanges,
-		DraftToolUrns:     nil, // Not populated for non-draft view
-		DraftResourceUrns: nil, // Not populated for non-draft view
+		DraftToolUrns:     nil,
+		DraftResourceUrns: nil,
 	}
 
 	return result, nil
 }
 
-// DescribeToolsetWithDraft returns a toolset with draft tool URNs if useDraft is true.
-// When useDraft is true, it reads from draft_toolset_versions instead of toolset_versions.
 func DescribeToolsetWithDraft(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -587,23 +579,19 @@ func DescribeToolsetWithDraft(
 		logger.ErrorContext(ctx, "failed to get active deployment id", attr.SlogError(err))
 	}
 
-	// Get tool URNs from draft version if it exists, otherwise fall back to production
 	var toolUrns []string
 	var resourceUrns []string
 	var toolsetVersion int64
 	var draftToolUrns []string
 	var draftResourceUrns []string
 
-	// Try to get draft version first
 	draftVersion, draftErr := toolsetRepo.GetDraftToolsetVersion(ctx, toolset.ID)
 	if draftErr == nil {
-		// Use draft URNs (already []string from database)
 		draftToolUrns = draftVersion.ToolUrns
 		draftResourceUrns = draftVersion.ResourceUrns
 		toolUrns = draftToolUrns
 		resourceUrns = draftResourceUrns
 	} else {
-		// Fall back to production version
 		latestVersion, err := toolsetRepo.GetLatestToolsetVersion(ctx, toolset.ID)
 		if err == nil {
 			toolUrns = make([]string, len(latestVersion.ToolUrns))
@@ -797,7 +785,6 @@ func DescribeToolsetWithDraft(
 		OauthEnablementMetadata: &types.OAuthEnablementMetadata{
 			Oauth2SecurityCount: oauth2AuthCodeSecurityCount,
 		},
-		// Draft/staging workflow fields
 		IterationMode:     &toolset.IterationMode,
 		HasDraftChanges:   &toolset.HasDraftChanges,
 		DraftToolUrns:     draftToolUrns,
@@ -1007,7 +994,6 @@ func readToolsetTools(
 		}
 	}
 
-	// Fetch external MCP proxy tools
 	if activeDeploymentID != uuid.Nil {
 		externalmcpRepo := externalmcpR.New(tx)
 		externalMCPTools, err := externalmcpRepo.ListExternalMCPToolDefinitions(ctx, activeDeploymentID)
@@ -1016,7 +1002,6 @@ func readToolsetTools(
 		}
 
 		for _, def := range externalMCPTools {
-			// Only include if the tool URN is in the toolset's tool URNs
 			if !slices.Contains(toolUrns, def.ToolUrn) {
 				continue
 			}
@@ -1044,7 +1029,6 @@ func readToolsetTools(
 		}
 	}
 
-	// Fetch resources - for now we only have function resources
 	var resources []*types.Resource
 	if len(resourceUrns) > 0 {
 		resourcesRepo := resourcesR.New(tx)

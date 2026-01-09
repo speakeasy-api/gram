@@ -263,7 +263,6 @@ export function ToolsetView({
   const client = useSdkClient();
   const { data: toolset, refetch } = useToolset(toolsetSlug);
 
-  // Fetch draft toolset when in iteration mode - needed for correct tool merging
   const { data: draftToolset } = useDraftToolset(
     { slug: toolsetSlug },
     undefined,
@@ -274,27 +273,34 @@ export function ToolsetView({
   const location = useLocation();
   const navigate = useNavigate();
 
-  // draftToolset.tools is raw SDK type, need to transform via asTools()
   const tools =
     toolset?.iterationMode && toolset?.hasDraftChanges && draftToolset?.tools
       ? asTools(draftToolset.tools)
-      : toolset?.tools ?? [];
+      : (toolset?.tools ?? []);
 
   const stagedToolUrns = useMemo(() => {
-    if (!toolset?.iterationMode || !toolset?.hasDraftChanges || !draftToolset?.draftToolUrns) {
+    if (
+      !toolset?.iterationMode ||
+      !toolset?.hasDraftChanges ||
+      !draftToolset?.draftToolUrns
+    ) {
       return new Set<string>();
     }
     const productionUrns = new Set(toolset.toolUrns || []);
     return new Set(
-      draftToolset.draftToolUrns.filter((urn) => !productionUrns.has(urn))
+      draftToolset.draftToolUrns.filter((urn) => !productionUrns.has(urn)),
     );
-  }, [toolset?.iterationMode, toolset?.hasDraftChanges, toolset?.toolUrns, draftToolset?.draftToolUrns]);
+  }, [
+    toolset?.iterationMode,
+    toolset?.hasDraftChanges,
+    toolset?.toolUrns,
+    draftToolset?.draftToolUrns,
+  ]);
 
   const isExternalMcp = toolset?.kind === "external-mcp";
 
-  // Get initial tab from URL hash, default depends on toolset kind
   const getTabFromHash = (): ToolsetTabs => {
-    const hash = location.hash.slice(1); // Remove the # character
+    const hash = location.hash.slice(1);
     const validTabs: ToolsetTabs[] = [
       "tools",
       "prompts",
@@ -310,7 +316,6 @@ export function ToolsetView({
 
   const [activeTab, setActiveTab] = useState<ToolsetTabs>(getTabFromHash());
 
-  // Update tab when hash changes (e.g., browser back/forward)
   useEffect(() => {
     const newTab = getTabFromHash();
     if (newTab !== activeTab) {
@@ -318,7 +323,6 @@ export function ToolsetView({
     }
   }, [location.hash]);
 
-  // Redirect to appropriate default tab based on toolset kind
   useEffect(() => {
     if (!toolset) return;
 
@@ -328,17 +332,14 @@ export function ToolsetView({
         activeTab === "resources" ||
         activeTab === "prompts")
     ) {
-      // External MCP toolsets should show "server" tab instead of tools/resources/prompts
       setActiveTab("server");
       navigate("#server", { replace: true });
     } else if (!isExternalMcp && activeTab === "server") {
-      // Default toolsets shouldn't show "server" tab
       setActiveTab("tools");
       navigate("#tools", { replace: true });
     }
   }, [toolset?.kind]);
 
-  // Update URL hash when tab changes
   const handleTabChange = (tab: ToolsetTabs) => {
     setActiveTab(tab);
     navigate(`#${tab}`, { replace: true });
@@ -355,13 +356,10 @@ export function ToolsetView({
 
   const cloneToolset = useCloneToolset();
 
-  // Register page-specific command palette actions
-  // Note: routes changes on every render, so we exclude it from deps
   useEffect(() => {
     if (!toolset) return;
 
     const pageActions = [
-      // Only show "Add tools" for default toolsets
       ...(toolset.kind !== "external-mcp"
         ? [
             {
@@ -394,11 +392,8 @@ export function ToolsetView({
     return () => {
       removeActions(pageActions.map((a) => a.id));
     };
-    // addActions and removeActions are memoized in CommandPaletteContext with empty deps
-    // so they're stable and don't need to be in the dependency array
-  }, [toolsetSlug, toolset?.kind]); // Re-run when toolset slug or kind changes
+  }, [toolsetSlug, toolset?.kind]);
 
-  // Refetch any loaded instances of this toolset on update (primarily for the playground)
   const refetchInstance = () => {
     const queryKey = queryKeyInstance({
       toolsetSlug,
@@ -501,7 +496,12 @@ export function ToolsetView({
         },
       );
     },
-    [toolset?.toolUrns, toolset?.iterationMode, draftToolset?.draftToolUrns, toolsetSlug],
+    [
+      toolset?.toolUrns,
+      toolset?.iterationMode,
+      draftToolset?.draftToolUrns,
+      toolsetSlug,
+    ],
   );
 
   const handleTestInPlayground = useCallback(() => {
@@ -526,7 +526,6 @@ export function ToolsetView({
         tool_count: selectedToolUrns.length,
       });
 
-      // Add the selected tools to the new toolset
       await client.toolsets.updateBySlug({
         slug: data.slug,
         updateToolsetRequestBody: {
@@ -592,7 +591,9 @@ export function ToolsetView({
   const setIterationModeMutation = useSetIterationModeMutation({
     onSuccess: () => {
       telemetry.capture("toolset_event", { action: "staging_disabled" });
-      toast.success("Staging disabled - changes will now apply directly to production");
+      toast.success(
+        "Staging disabled - changes will now apply directly to production",
+      );
       onUpdate();
     },
     onError: (error) => {
@@ -668,7 +669,11 @@ export function ToolsetView({
         </>
       )}
       {!isExternalMcp && (
-        <Button onClick={gotoAddTools} size="sm" variant={hasDraftChanges ? "secondary" : "primary"}>
+        <Button
+          onClick={gotoAddTools}
+          size="sm"
+          variant={hasDraftChanges ? "secondary" : "primary"}
+        >
           <Button.LeftIcon>
             <Icon name="plus" className="h-4 w-4" />
           </Button.LeftIcon>
@@ -725,8 +730,6 @@ export function ToolsetView({
     />
   );
 
-  // Filter tools based on selected groups
-  // Map unified Tool[] from toolset to group keys, then filter tools
   const groupedToolNames = new Set(
     grouped
       .filter((group) => selectedGroups.includes(group.key))
@@ -734,9 +737,6 @@ export function ToolsetView({
   );
 
   let toolsToDisplay = tools.filter((tool) => groupedToolNames.has(tool.name));
-
-  // If no tools are selected, show all tools
-  // Mostly a failsafe for if the filtering doesn't work as expected
   if (toolsToDisplay.length === 0) {
     toolsToDisplay = tools;
   }

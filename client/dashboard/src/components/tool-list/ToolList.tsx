@@ -25,9 +25,9 @@ import { MethodBadge } from "./MethodBadge";
 import { SubtoolsBadge } from "./SubtoolsBadge";
 
 interface ToolListProps {
-  tools: Tool[]; // Accepts all tool types, filters to Tool internally
-  toolset?: Toolset; // Optionally specificy the toolset to provide rows with additional context
-  stagedToolUrns?: Set<string>; // Tool URNs that are staged (in draft but not production)
+  tools: Tool[];
+  toolset?: Toolset;
+  stagedToolUrns?: Set<string>;
   onToolUpdate?: (
     tool: Tool,
     updates: { name?: string; description?: string },

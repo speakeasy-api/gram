@@ -44,7 +44,7 @@ func (s *Auth) Authorize(ctx context.Context, key string, schema *security.APIKe
 	case constants.KeySecurityScheme:
 		return s.keys.KeyBasedAuth(ctx, key, schema.RequiredScopes)
 	case constants.SessionSecurityScheme:
-		return s.sessions.Authenticate(ctx, key, false)
+		return s.sessions.Authenticate(ctx, key, true)
 	case constants.ProjectSlugSecuritySchema:
 		return s.checkProjectAccess(ctx, s.logger, key)
 	default:
