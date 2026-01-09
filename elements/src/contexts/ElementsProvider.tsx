@@ -52,8 +52,15 @@ function mergeInternalSystemPromptWith(
   ${plugins.map((plugin) => `- ${plugin.language}: ${plugin.prompt}`).join('\n')}`
 }
 
-async function defaultGetSession(): Promise<string> {
-  const response = await fetch('/chat/session', { method: 'POST' })
+async function defaultGetSession(init: {
+  projectSlug: string
+}): Promise<string> {
+  const response = await fetch('/chat/session', {
+    method: 'POST',
+    headers: {
+      'Gram-Project': init.projectSlug,
+    },
+  })
   const data = await response.json()
   return data.client_token
 }

@@ -29,6 +29,19 @@ const meta: Meta<typeof Chat> = {
   parameters: {
     layout: 'fullscreen',
   },
+  args: {
+    projectSlug:
+      import.meta.env.VITE_GRAM_ELEMENTS_STORYBOOK_PROJECT_SLUG ?? '',
+    mcpUrl: import.meta.env.VITE_GRAM_ELEMENTS_STORYBOOK_MCP_URL ?? '',
+  },
+  argTypes: {
+    projectSlug: {
+      control: 'text',
+    },
+    mcpUrl: {
+      control: 'text',
+    },
+  },
 } satisfies Meta<typeof Chat>
 
 export default meta
@@ -45,8 +58,8 @@ export const Default: Story = () => (
 )
 
 const baseConfig: ElementsConfig = {
-  projectSlug: 'demo',
-  mcp: 'https://chat.speakeasy.com/mcp/speakeasy-team-my_api',
+  projectSlug: '', // will come from story controls
+  mcp: '', // will come from story controls
   welcome: {
     title: 'Hello!',
     subtitle: 'How can I help you today?',
@@ -275,9 +288,6 @@ export const VariantPlayground: Story = () => {
       config={{
         ...baseConfig,
         variant,
-        sidecar: {
-          expandedWidth: '600px',
-        },
       }}
     >
       <div className="min-h-screen">
