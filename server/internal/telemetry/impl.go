@@ -329,10 +329,12 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 	}
 
 	// Extract SearchLogs-specific filter fields
-	var gramURN, traceID, deploymentID, functionID, severityText, httpRoute, httpMethod, serviceName string
+	var traceID, deploymentID, functionID, severityText, httpRoute, httpMethod, serviceName string
 	var httpStatusCode int32
+	var gramURNs []string
 	if payload.Filter != nil {
-		gramURN = conv.PtrValOr(payload.Filter.GramUrn, "")
+		// Handle both gram_urn (single) and gram_urns (array) for backwards compatibility
+		gramURNs = resolveGramURNs(payload.Filter.GramUrn, payload.Filter.GramUrns)
 		traceID = conv.PtrValOr(payload.Filter.TraceID, "")
 		deploymentID = conv.PtrValOr(payload.Filter.DeploymentID, "")
 		functionID = conv.PtrValOr(payload.Filter.FunctionID, "")
@@ -348,7 +350,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		GramProjectID:          params.projectID,
 		TimeStart:              params.timeStart,
 		TimeEnd:                params.timeEnd,
-		GramURN:                gramURN,
+		GramURNs:               gramURNs,
 		TraceID:                traceID,
 		GramDeploymentID:       deploymentID,
 		GramFunctionID:         functionID,
@@ -545,6 +547,18 @@ func parseTimeRange(from, to *string) (timeStart, timeEnd int64, err error) {
 	}
 
 	return timeStart, timeEnd, nil
+}
+
+// resolveGramURNs handles backwards compatibility between gram_urn (single) and gram_urns (array).
+// If gram_urns is provided, it takes precedence; otherwise gram_urn is used as a single-element array.
+func resolveGramURNs(gramURN *string, gramURNs []string) []string {
+	if len(gramURNs) > 0 {
+		return gramURNs
+	}
+	if gramURN != nil && *gramURN != "" {
+		return []string{*gramURN}
+	}
+	return nil
 }
 
 // toTelemetryLogPayload converts a ClickHouse telemetry log record to the API response format.
