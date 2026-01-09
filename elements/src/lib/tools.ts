@@ -47,6 +47,35 @@ export type FrontendTool<TArgs extends Record<string, unknown>, TResult> = FC<
 }
 
 /**
+ * Module-level approval config that gets set by ElementsProvider at runtime.
+ * This allows defineFrontendTool to check approval status during execute.
+ */
+let approvalConfig: {
+  helpers: ApprovalHelpers
+  toolsRequiringApproval: Set<string>
+} | null = null
+
+/**
+ * Sets the approval configuration. Called by ElementsProvider.
+ */
+export function setFrontendToolApprovalConfig(
+  helpers: ApprovalHelpers,
+  toolsRequiringApproval: string[]
+): void {
+  approvalConfig = {
+    helpers,
+    toolsRequiringApproval: new Set(toolsRequiringApproval),
+  }
+}
+
+/**
+ * Clears the approval configuration. Called when ElementsProvider unmounts.
+ */
+export function clearFrontendToolApprovalConfig(): void {
+  approvalConfig = null
+}
+
+/**
  * Make a frontend tool
  */
 export const defineFrontendTool = <
@@ -58,56 +87,31 @@ export const defineFrontendTool = <
 ): FrontendTool<TArgs, TResult> => {
   return makeAssistantTool({
     ...tool,
-    execute: (args: TArgs, context: ToolExecutionContext) => {
-      return tool.execute?.(args, context)
-    },
-    toolName: name,
-  } as AssistantToolProps<TArgs, TResult>)
-}
-
-/**
- * Wraps a frontend tool with approval logic (used internally by FrontendTools component)
- */
-export const wrapFrontendToolWithApproval = <
-  TArgs extends Record<string, unknown>,
-  TResult,
->(
-  tool: FrontendTool<TArgs, TResult>,
-  name: string,
-  approvalHelpers: ApprovalHelpers
-): FrontendTool<TArgs, TResult> => {
-  const originalExecute = tool.unstable_tool.execute
-
-  return makeAssistantTool({
-    ...tool.unstable_tool,
     execute: async (args: TArgs, context: ToolExecutionContext) => {
-      const toolCallId = (context as { toolCallId?: string }).toolCallId ?? ''
+      // Check if this tool requires approval at runtime
+      if (approvalConfig?.toolsRequiringApproval.has(name)) {
+        const { helpers } = approvalConfig
+        const toolCallId = context.toolCallId ?? ''
 
-      // Check if already approved (user chose "Approve always" previously)
-      if (approvalHelpers.isToolApproved(name)) {
-        return originalExecute?.(args, context)
+        // Check if already approved (user chose "Approve always" previously)
+        if (!helpers.isToolApproved(name)) {
+          const approved = await helpers.requestApproval(name, toolCallId, args)
+
+          if (!approved) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Tool "${name}" execution was denied by the user. Please acknowledge this and continue without using this tool's result.`,
+                },
+              ],
+              isError: true,
+            } as TResult
+          }
+        }
       }
 
-      // Request approval
-      const approved = await approvalHelpers.requestApproval(
-        name,
-        toolCallId,
-        args
-      )
-
-      if (!approved) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Tool "${name}" execution was denied by the user. Please acknowledge this and continue without using this tool's result.`,
-            },
-          ],
-          isError: true,
-        } as TResult
-      }
-
-      return originalExecute?.(args, context)
+      return tool.execute?.(args, context)
     },
     toolName: name,
   } as AssistantToolProps<TArgs, TResult>)
