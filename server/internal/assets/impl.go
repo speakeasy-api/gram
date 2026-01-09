@@ -927,21 +927,19 @@ func validateChatAttachmentContentType(contentType string) (mimeType, ext string
 	}
 
 	// Check explicit application types
-	explicitTypes := []string{
-		"application/json",
-		"application/yaml", "application/x-yaml",
+	explicitTypeExtensions := map[string]string{
+		"application/pdf":    ".pdf",
+		"application/json":   ".json",
+		"application/yaml":   ".yaml",
+		"application/x-yaml": ".yaml",
 	}
-	if slices.Contains(explicitTypes, mediaType) {
-		switch mediaType {
-		case "application/json":
-			return mediaType, ".json", nil
-		case "application/yaml", "application/x-yaml":
-			return mediaType, ".yaml", nil
-		}
+	extension, ok := explicitTypeExtensions[mediaType]
+	if ok {
+		return mediaType, extension, nil
 	}
 
 	return "", "", oops.E(oops.CodeUnsupportedMedia, nil,
-		"unsupported content type: %s (allowed: audio/*, image/*, text/*, application/json, application/yaml)",
+		"unsupported content type: %s (allowed: audio/*, image/*, text/*, application/pdf, application/json, application/yaml)",
 		mediaType)
 }
 
