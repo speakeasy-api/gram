@@ -7,6 +7,7 @@ import Billing from "./pages/billing/Billing";
 import Catalog, { CatalogRoot } from "./pages/catalog/Catalog";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
+import ChatElements from "./pages/elements/ChatElements";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
   EnvironmentsRoot,
@@ -19,6 +20,7 @@ import Logs from "./pages/logs/Logs";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPHostedPage } from "./pages/mcp/MCPHostedPage";
 import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
+import { DeployChatWizard } from "./pages/onboarding/DeployChatWizard";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
 import Playground from "./pages/playground/Playground";
@@ -113,6 +115,12 @@ const ROUTE_STRUCTURE = {
     component: OnboardingWizard,
     outsideMainLayout: true, // Break out of normal page structure
   },
+  deployChat: {
+    title: "Deploy Chat",
+    url: "deploy-chat",
+    component: DeployChatWizard,
+    outsideMainLayout: true,
+  },
   home: {
     title: "Home",
     url: "",
@@ -124,6 +132,12 @@ const ROUTE_STRUCTURE = {
     url: "playground",
     icon: "message-circle",
     component: Playground,
+  },
+  chatElements: {
+    title: "Chat Elements",
+    url: "elements",
+    icon: "dock",
+    component: ChatElements,
   },
   integrations: {
     title: "Integrations",

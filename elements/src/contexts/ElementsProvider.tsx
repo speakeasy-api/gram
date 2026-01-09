@@ -18,10 +18,12 @@ import {
   type ChatTransport,
   type UIMessage,
 } from 'ai'
-import { useMemo, useState, useRef, useCallback } from 'react'
+import { useMemo, useState, useRef, useCallback, useEffect } from 'react'
 import { ElementsContext } from './contexts'
 import {
+  clearFrontendToolApprovalConfig,
   getEnabledTools,
+  setFrontendToolApprovalConfig,
   toAISDKTools,
   wrapToolsWithApproval,
   type ApprovalHelpers,
@@ -50,8 +52,15 @@ function mergeInternalSystemPromptWith(
   ${plugins.map((plugin) => `- ${plugin.language}: ${plugin.prompt}`).join('\n')}`
 }
 
-async function defaultGetSession(): Promise<string> {
-  const response = await fetch('/chat/session', { method: 'POST' })
+async function defaultGetSession(init: {
+  projectSlug: string
+}): Promise<string> {
+  const response = await fetch('/chat/session', {
+    method: 'POST',
+    headers: {
+      'Gram-Project': init.projectSlug,
+    },
+  })
   const data = await response.json()
   return data.client_token
 }
@@ -87,9 +96,6 @@ const ElementsProviderWithApproval = ({
     environment: config.environment ?? {},
   })
 
-  // Show loading if we don't have tools yet or they're actively loading
-  const isLoadingMCPTools = !mcpTools || mcpToolsLoading
-
   // Store approval helpers in ref so they can be used in async contexts
   const approvalHelpersRef = useRef<ApprovalHelpers>({
     requestApproval: toolApproval.requestApproval,
@@ -113,6 +119,19 @@ const ElementsProviderWithApproval = ({
         approvalHelpersRef.current.whitelistTool(...args),
     }
   }, [])
+
+  // Set up frontend tool approval config for runtime checking
+  useEffect(() => {
+    if (config.tools?.toolsRequiringApproval?.length) {
+      setFrontendToolApprovalConfig(
+        getApprovalHelpers(),
+        config.tools.toolsRequiringApproval
+      )
+    }
+    return () => {
+      clearFrontendToolApprovalConfig()
+    }
+  }, [config.tools?.toolsRequiringApproval, getApprovalHelpers])
 
   // Create custom transport
   const transport = useMemo<ChatTransport<UIMessage> | undefined>(
@@ -220,7 +239,6 @@ const ElementsProviderWithApproval = ({
           isOpen: isOpen ?? false,
           setIsOpen,
           plugins,
-          isLoadingMCPTools,
         }}
       >
         {children}

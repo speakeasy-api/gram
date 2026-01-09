@@ -7,6 +7,7 @@ import {
   TextMessagePartComponent,
   ToolCallMessagePartComponent,
 } from '@assistant-ui/react'
+import { LanguageModel } from 'ai'
 import {
   ComponentType,
   Dispatch,
@@ -15,13 +16,12 @@ import {
   type ReactNode,
 } from 'react'
 import type { Plugin } from './plugins'
-import { LanguageModel } from 'ai'
 
 /**
  * Function to retrieve the session token from the backend endpoint.
  * Override this if you have mounted your session endpoint at a different path.
  */
-export type GetSessionFn = () => Promise<string>
+export type GetSessionFn = (init: { projectSlug: string }) => Promise<string>
 
 export interface ElementsProviderProps {
   /**
@@ -127,7 +127,7 @@ export interface ElementsConfig {
    *   mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
    * }
    */
-  mcp: ServerUrl
+  mcp?: ServerUrl
 
   /**
    * Custom environment variable overrides for the Elements library.
@@ -689,10 +689,4 @@ export type ElementsContextType = {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
   plugins: Plugin[]
-
-  /**
-   * Indicates if the process of discovering MCP tools is still ongoing.
-   * TODO: failure state
-   */
-  isLoadingMCPTools: boolean
 }

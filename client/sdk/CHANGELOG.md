@@ -1,5 +1,12 @@
 # @gram/client
 
+## 0.25.8
+
+### Patch Changes
+
+- d972d1b: Adds ability to filter telemetry logs by multiple Gram URNs
+- 3a82c2e: Adds enabled field to telemetry API response indicating whether logging is enabled or not
+
 ## 0.24.2
 
 ### Patch Changes

@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.17.0**](../README.md)
+[**@gram-ai/elements v1.18.0**](../README.md)
 
 ***
 
@@ -93,9 +93,9 @@ const config: ElementsConfig = {
 
 ***
 
-### mcp
+### mcp?
 
-> **mcp**: `string`
+> `optional` **mcp**: `string`
 
 The Gram Server URL to use for the Elements library.
 Can be retrieved from https://app.getgram.ai/{team}/{project}/mcp/{mcp_slug}

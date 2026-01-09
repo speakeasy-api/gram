@@ -43,6 +43,36 @@ export type FrontendTool<TArgs extends Record<string, unknown>, TResult> = FC<
 > & {
   unstable_tool: AssistantToolProps<TArgs, TResult>
 }
+
+/**
+ * Module-level approval config that gets set by ElementsProvider at runtime.
+ * This allows defineFrontendTool to check approval status during execute.
+ */
+let approvalConfig: {
+  helpers: ApprovalHelpers
+  toolsRequiringApproval: Set<string>
+} | null = null
+
+/**
+ * Sets the approval configuration. Called by ElementsProvider.
+ */
+export function setFrontendToolApprovalConfig(
+  helpers: ApprovalHelpers,
+  toolsRequiringApproval: string[]
+): void {
+  approvalConfig = {
+    helpers,
+    toolsRequiringApproval: new Set(toolsRequiringApproval),
+  }
+}
+
+/**
+ * Clears the approval configuration. Called when ElementsProvider unmounts.
+ */
+export function clearFrontendToolApprovalConfig(): void {
+  approvalConfig = null
+}
+
 /**
  * Make a frontend tool
  */
@@ -53,10 +83,39 @@ export const defineFrontendTool = <
   tool: Tool,
   name: string
 ): FrontendTool<TArgs, TResult> => {
+  type ToolExecutionContext = Parameters<
+    NonNullable<Tool<Record<string, unknown>, void>['execute']>
+  >[1]
   return makeAssistantTool({
     ...tool,
+    execute: async (args: TArgs, context: ToolExecutionContext) => {
+      // Check if this tool requires approval at runtime
+      if (approvalConfig?.toolsRequiringApproval.has(name)) {
+        const { helpers } = approvalConfig
+        const toolCallId = context.toolCallId ?? ''
+
+        // Check if already approved (user chose "Approve always" previously)
+        if (!helpers.isToolApproved(name)) {
+          const approved = await helpers.requestApproval(name, toolCallId, args)
+
+          if (!approved) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Tool "${name}" execution was denied by the user. Please acknowledge this and continue without using this tool's result.`,
+                },
+              ],
+              isError: true,
+            } as TResult
+          }
+        }
+      }
+
+      return tool.execute?.(args, context)
+    },
     toolName: name,
-  })
+  } as AssistantToolProps<TArgs, TResult>)
 }
 
 /**
@@ -102,7 +161,6 @@ export function wrapToolsWithApproval(
         {
           ...tool,
           execute: async (args: unknown, options?: ToolCallOptions) => {
-            // Use type assertion similar to useExecuteToolWithApproval
             const opts = (options ?? {}) as Parameters<
               typeof originalExecute
             >[1]

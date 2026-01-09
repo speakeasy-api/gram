@@ -109,6 +109,9 @@ GRAM_ENABLE_OTEL_METRICS = 1
 GRAM_LOG_PRETTY = 1
 ## DO NOT SET THIS VARIABLE WHEN DEPLOYING TO PRODUCTION.
 GRAM_UNSAFE_LOCAL_ENV_PATH = "{{config_root}}/.local.env.json"
+## This config is used by the Elements SDK and CLI to point to the correct Gram
+## API server
+GRAM_API_URL = "{{env.GRAM_SERVER_URL}}"
 VITE_DEV_HOSTNAMES = "localhost,gram.local"
 TEMPORAL_WEB_PORT = "8233"
 ## The following variables configure the local opentelemetry stack powered by
@@ -152,3 +155,9 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 ## discoverable by the Gram application.
 LOCAL_MCP_REGISTRY_PORT = "9847"
 LOCAL_MCP_REGISTRY_URL = "http://localhost:{{env.LOCAL_MCP_REGISTRY_PORT}}"
+
+
+##############
+## Elements ##
+## Used for local development only
+VITE_GRAM_ELEMENTS_STORYBOOK_URL = "https://localhost:6006"

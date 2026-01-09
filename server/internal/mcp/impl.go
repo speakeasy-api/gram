@@ -382,6 +382,11 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	token := r.Header.Get("Authorization")
 	token = strings.TrimPrefix(token, "Bearer ")
 	token = strings.TrimPrefix(token, "bearer ")
+
+	// Also check for chat session token if no Authorization header
+	if token == "" {
+		token = r.Header.Get(constants.ChatSessionsTokenHeader)
+	}
 	var tokenInputs []oauthTokenInputs
 
 	var oAuthProxyProvider *oauth_repo.OauthProxyProvider

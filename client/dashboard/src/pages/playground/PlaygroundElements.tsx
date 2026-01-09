@@ -8,6 +8,8 @@ import { useEnvironment } from "../environments/Environment";
 import { useListToolsets } from "@gram/client/react-query/index.js";
 import { Type } from "@/components/ui/type";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { getServerURL } from "@/lib/utils";
 
 interface PlaygroundElementsProps {
   toolsetSlug: string | null;
@@ -77,6 +79,15 @@ export function PlaygroundElements({
     );
   }
 
+  const languageModel = createOpenRouter({
+    baseURL: getServerURL(),
+    apiKey: "unused, but must be set",
+    headers: {
+      "Gram-Project": project.slug,
+      "Gram-Chat-Session": session.session,
+    },
+  }).chat(model);
+
   return (
     <GramElementsProvider
       config={{
@@ -84,8 +95,9 @@ export function PlaygroundElements({
         mcp: mcpUrl,
         environment,
         variant: "standalone",
+        // languageModel,
         model: {
-          defaultModel: model as Model,
+          // defaultModel: model as Model,
           showModelPicker: false,
         },
         welcome: {

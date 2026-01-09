@@ -1,5 +1,15 @@
 # dashboard
 
+## 0.25.1
+
+### Patch Changes
+
+- 8ad0455: Ensure delete source dialog closes after completion
+- 0583dc0: Improves logs side panel to make it wider and more human-readable
+- Updated dependencies [d972d1b]
+- Updated dependencies [3a82c2e]
+  - @gram/client@0.25.8
+
 ## 0.25.0
 
 ### Minor Changes

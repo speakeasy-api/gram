@@ -1,5 +1,28 @@
 # server
 
+## 0.16.0
+
+### Minor Changes
+
+- 5bc733e: Added a new API endpoint `/rpc/projects.get` to Gram server that allows clients to retrieve project details given a project slug. The project must exist within the organization referenced by the provided `gram-session` cookie or `Gram-Key` header.
+
+### Patch Changes
+
+- 122209b: Updated auth logic allowing API keys that have producer scope to access chat session APIs. In other, producer scope becomes a superset of chat and consumer scopes.
+- 417c0c6: feat: Support external MCP servers that only have an SSE remote available.
+
+  Previously, Gram could only support external MCP servers that used the
+  Streamable HTTP transport. Now, servers that still use the deprecated SSE
+  type will be transparently adapted to Streamable HTTP. MCP clients will
+  still use Streamable HTTP to interact with the external MCP server via Gram:
+
+  ```
+  CLIENT <-(Streamable HTTP)-> GRAM <-(SSE)-> EXTERNAL MCP SERVER
+  ```
+
+- d972d1b: Adds ability to filter telemetry logs by multiple Gram URNs
+- 3a82c2e: Adds enabled field to telemetry API response indicating whether logging is enabled or not
+
 ## 0.15.1
 
 ### Patch Changes

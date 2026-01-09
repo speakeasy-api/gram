@@ -24,6 +24,9 @@ func chatSessionsCORS(chatSessionsManager *chatsessions.Manager) func(next http.
 			if r.Method == http.MethodOptions {
 				// Slightly non-ideal, but later in the file we validate the origin of the request against the audience claim
 				w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin")) // Allow the origin of the request for OPTIONS requests because we don't know what origins to allow until we get the token on the actual request
+				// Allow all headers for MCP routes since they use arbitrary MCP-* prefixed headers
+				// for environment variables, and these routes are already authenticated via chat session token
+				w.Header().Set("Access-Control-Allow-Headers", "*")
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}

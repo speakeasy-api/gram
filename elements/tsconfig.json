@@ -14,22 +14,11 @@
     "incremental": true,
     "tsBuildInfoFile": "./dist/.tsbuildinfo",
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
+      "@/*": ["./src/*"]
     },
     "baseUrl": ".",
-    "types": [
-      "vite/client",
-      "node"
-    ]
+    "types": ["node", "vite/client"]
   },
-  "include": [
-    "src",
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "src/**/*.stories.tsx"
-  ]
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
 }
