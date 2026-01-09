@@ -53,24 +53,14 @@ import {
 import { ToolGroup } from './tool-group'
 
 const ApiKeyWarning = () => (
-  <div
-    style={{
-      backgroundColor: '#fef3c7',
-      border: '1px solid #f59e0b',
-      borderRadius: '6px',
-      padding: '12px 16px',
-      margin: '8px',
-      fontSize: '14px',
-      color: '#92400e',
-    }}
-  >
+  <div className="m-2 rounded-md border border-amber-500 bg-amber-100 px-4 py-3 text-sm text-amber-800 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-200">
     <strong>Warning:</strong> You are using an API key directly in the client.
     Please{' '}
     <a
       href="https://github.com/speakeasy-api/gram/tree/main/elements#setting-up-your-backend"
       target="_blank"
       rel="noopener noreferrer"
-      style={{ color: '#b45309', textDecoration: 'underline' }}
+      className="text-amber-700 underline hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200"
     >
       set up a session endpoint
     </a>{' '}
