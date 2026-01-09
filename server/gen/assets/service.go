@@ -45,6 +45,14 @@ type Service interface {
 	ServeFunction(context.Context, *ServeFunctionForm) (res *ServeFunctionResult, body io.ReadCloser, err error)
 	// List all assets for a project.
 	ListAssets(context.Context, *ListAssetsPayload) (res *ListAssetsResult, err error)
+	// Upload a chat attachment to Gram.
+	UploadChatAttachment(context.Context, *UploadChatAttachmentForm, io.ReadCloser) (res *UploadChatAttachmentResult, err error)
+	// Serve a chat attachment from Gram.
+
+	// If body implements [io.WriterTo], that implementation will be used instead.
+	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
+	// implementations.
+	ServeChatAttachment(context.Context, *ServeChatAttachmentForm) (res *ServeChatAttachmentResult, body io.ReadCloser, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -67,7 +75,7 @@ const ServiceName = "assets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"serveImage", "uploadImage", "uploadFunctions", "uploadOpenAPIv3", "fetchOpenAPIv3FromURL", "serveOpenAPIv3", "serveFunction", "listAssets"}
+var MethodNames = [10]string{"serveImage", "uploadImage", "uploadFunctions", "uploadOpenAPIv3", "fetchOpenAPIv3FromURL", "serveOpenAPIv3", "serveFunction", "listAssets", "uploadChatAttachment", "serveChatAttachment"}
 
 type Asset struct {
 	// The ID of the asset
@@ -107,6 +115,25 @@ type ListAssetsPayload struct {
 type ListAssetsResult struct {
 	// The list of assets
 	Assets []*Asset
+}
+
+// ServeChatAttachmentForm is the payload type of the assets service
+// serveChatAttachment method.
+type ServeChatAttachmentForm struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// The ID of the attachment to serve
+	ID string
+	// The project ID that the attachment belongs to
+	ProjectID string
+}
+
+// ServeChatAttachmentResult is the result type of the assets service
+// serveChatAttachment method.
+type ServeChatAttachmentResult struct {
+	ContentType   string
+	ContentLength int64
+	LastModified  string
 }
 
 // ServeFunctionForm is the payload type of the assets service serveFunction
@@ -159,6 +186,25 @@ type ServeOpenAPIv3Result struct {
 	ContentType   string
 	ContentLength int64
 	LastModified  string
+}
+
+// UploadChatAttachmentForm is the payload type of the assets service
+// uploadChatAttachment method.
+type UploadChatAttachmentForm struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	ContentType      string
+	ContentLength    int64
+}
+
+// UploadChatAttachmentResult is the result type of the assets service
+// uploadChatAttachment method.
+type UploadChatAttachmentResult struct {
+	// The asset entry that was created in Gram
+	Asset *Asset
+	// The URL to serve the chat attachment
+	URL string
 }
 
 // UploadFunctionsForm is the payload type of the assets service

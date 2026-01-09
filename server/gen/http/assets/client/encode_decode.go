@@ -2067,6 +2067,531 @@ func DecodeListAssetsResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildUploadChatAttachmentRequest instantiates a HTTP request object with
+// method and path set to call the "assets" service "uploadChatAttachment"
+// endpoint
+func (c *Client) BuildUploadChatAttachmentRequest(ctx context.Context, v any) (*http.Request, error) {
+	var (
+		body io.Reader
+	)
+	rd, ok := v.(*assets.UploadChatAttachmentRequestData)
+	if !ok {
+		return nil, goahttp.ErrInvalidType("assets", "uploadChatAttachment", "assets.UploadChatAttachmentRequestData", v)
+	}
+	body = rd.Body
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UploadChatAttachmentAssetsPath()}
+	req, err := http.NewRequest("POST", u.String(), body)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("assets", "uploadChatAttachment", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUploadChatAttachmentRequest returns an encoder for requests sent to
+// the assets uploadChatAttachment server.
+func EncodeUploadChatAttachmentRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		data, ok := v.(*assets.UploadChatAttachmentRequestData)
+		if !ok {
+			return goahttp.ErrInvalidType("assets", "uploadChatAttachment", "*assets.UploadChatAttachmentRequestData", v)
+		}
+		p := data.Payload
+		{
+			head := p.ContentType
+			req.Header.Set("Content-Type", head)
+		}
+		{
+			head := p.ContentLength
+			headStr := strconv.FormatInt(head, 10)
+			req.Header.Set("Content-Length", headStr)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeUploadChatAttachmentResponse returns a decoder for responses returned
+// by the assets uploadChatAttachment endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeUploadChatAttachmentResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUploadChatAttachmentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UploadChatAttachmentResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadChatAttachment", err)
+			}
+			err = ValidateUploadChatAttachmentResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadChatAttachment", err)
+			}
+			res := NewUploadChatAttachmentResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UploadChatAttachmentUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadChatAttachment", err)
+			}
+			err = ValidateUploadChatAttachmentUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadChatAttachment", err)
+			}
+			return nil, NewUploadChatAttachmentUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UploadChatAttachmentForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadChatAttachment", err)
+			}
+			err = ValidateUploadChatAttachmentForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadChatAttachment", err)
+			}
+			return nil, NewUploadChatAttachmentForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UploadChatAttachmentBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadChatAttachment", err)
+			}
+			err = ValidateUploadChatAttachmentBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadChatAttachment", err)
+			}
+			return nil, NewUploadChatAttachmentBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UploadChatAttachmentNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadChatAttachment", err)
+			}
+			err = ValidateUploadChatAttachmentNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadChatAttachment", err)
+			}
+			return nil, NewUploadChatAttachmentNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UploadChatAttachmentConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadChatAttachment", err)
+			}
+			err = ValidateUploadChatAttachmentConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadChatAttachment", err)
+			}
+			return nil, NewUploadChatAttachmentConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UploadChatAttachmentUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadChatAttachment", err)
+			}
+			err = ValidateUploadChatAttachmentUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadChatAttachment", err)
+			}
+			return nil, NewUploadChatAttachmentUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UploadChatAttachmentInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadChatAttachment", err)
+			}
+			err = ValidateUploadChatAttachmentInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadChatAttachment", err)
+			}
+			return nil, NewUploadChatAttachmentInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UploadChatAttachmentInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "uploadChatAttachment", err)
+				}
+				err = ValidateUploadChatAttachmentInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "uploadChatAttachment", err)
+				}
+				return nil, NewUploadChatAttachmentInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UploadChatAttachmentUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "uploadChatAttachment", err)
+				}
+				err = ValidateUploadChatAttachmentUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "uploadChatAttachment", err)
+				}
+				return nil, NewUploadChatAttachmentUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "uploadChatAttachment", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UploadChatAttachmentGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadChatAttachment", err)
+			}
+			err = ValidateUploadChatAttachmentGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadChatAttachment", err)
+			}
+			return nil, NewUploadChatAttachmentGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("assets", "uploadChatAttachment", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// // BuildUploadChatAttachmentStreamPayload creates a streaming endpoint request
+// payload from the method payload and the path to the file to be streamed
+func BuildUploadChatAttachmentStreamPayload(payload any, fpath string) (*assets.UploadChatAttachmentRequestData, error) {
+	f, err := os.Open(fpath)
+	if err != nil {
+		return nil, err
+	}
+	return &assets.UploadChatAttachmentRequestData{
+		Payload: payload.(*assets.UploadChatAttachmentForm),
+		Body:    f,
+	}, nil
+}
+
+// BuildServeChatAttachmentRequest instantiates a HTTP request object with
+// method and path set to call the "assets" service "serveChatAttachment"
+// endpoint
+func (c *Client) BuildServeChatAttachmentRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ServeChatAttachmentAssetsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("assets", "serveChatAttachment", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeServeChatAttachmentRequest returns an encoder for requests sent to the
+// assets serveChatAttachment server.
+func EncodeServeChatAttachmentRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*assets.ServeChatAttachmentForm)
+		if !ok {
+			return goahttp.ErrInvalidType("assets", "serveChatAttachment", "*assets.ServeChatAttachmentForm", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		values.Add("project_id", p.ProjectID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeServeChatAttachmentResponse returns a decoder for responses returned
+// by the assets serveChatAttachment endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeServeChatAttachmentResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeServeChatAttachmentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				contentType   string
+				contentLength int64
+				lastModified  string
+				err           error
+			)
+			contentTypeRaw := resp.Header.Get("Content-Type")
+			if contentTypeRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("content_type", "header"))
+			}
+			contentType = contentTypeRaw
+			{
+				contentLengthRaw := resp.Header.Get("Content-Length")
+				if contentLengthRaw == "" {
+					return nil, goahttp.ErrValidationError("assets", "serveChatAttachment", goa.MissingFieldError("content_length", "header"))
+				}
+				v, err2 := strconv.ParseInt(contentLengthRaw, 10, 64)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("content_length", contentLengthRaw, "integer"))
+				}
+				contentLength = v
+			}
+			lastModifiedRaw := resp.Header.Get("Last-Modified")
+			if lastModifiedRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("last_modified", "header"))
+			}
+			lastModified = lastModifiedRaw
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveChatAttachment", err)
+			}
+			res := NewServeChatAttachmentResultOK(contentType, contentLength, lastModified)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ServeChatAttachmentUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveChatAttachment", err)
+			}
+			err = ValidateServeChatAttachmentUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveChatAttachment", err)
+			}
+			return nil, NewServeChatAttachmentUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ServeChatAttachmentForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveChatAttachment", err)
+			}
+			err = ValidateServeChatAttachmentForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveChatAttachment", err)
+			}
+			return nil, NewServeChatAttachmentForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ServeChatAttachmentBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveChatAttachment", err)
+			}
+			err = ValidateServeChatAttachmentBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveChatAttachment", err)
+			}
+			return nil, NewServeChatAttachmentBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ServeChatAttachmentNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveChatAttachment", err)
+			}
+			err = ValidateServeChatAttachmentNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveChatAttachment", err)
+			}
+			return nil, NewServeChatAttachmentNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ServeChatAttachmentConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveChatAttachment", err)
+			}
+			err = ValidateServeChatAttachmentConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveChatAttachment", err)
+			}
+			return nil, NewServeChatAttachmentConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ServeChatAttachmentUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveChatAttachment", err)
+			}
+			err = ValidateServeChatAttachmentUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveChatAttachment", err)
+			}
+			return nil, NewServeChatAttachmentUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ServeChatAttachmentInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveChatAttachment", err)
+			}
+			err = ValidateServeChatAttachmentInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveChatAttachment", err)
+			}
+			return nil, NewServeChatAttachmentInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ServeChatAttachmentInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "serveChatAttachment", err)
+				}
+				err = ValidateServeChatAttachmentInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "serveChatAttachment", err)
+				}
+				return nil, NewServeChatAttachmentInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ServeChatAttachmentUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "serveChatAttachment", err)
+				}
+				err = ValidateServeChatAttachmentUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "serveChatAttachment", err)
+				}
+				return nil, NewServeChatAttachmentUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "serveChatAttachment", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ServeChatAttachmentGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveChatAttachment", err)
+			}
+			err = ValidateServeChatAttachmentGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveChatAttachment", err)
+			}
+			return nil, NewServeChatAttachmentGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("assets", "serveChatAttachment", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAssetResponseBodyToAssetsAsset builds a value of type *assets.Asset
 // from a value of type *AssetResponseBody.
 func unmarshalAssetResponseBodyToAssetsAsset(v *AssetResponseBody) *assets.Asset {

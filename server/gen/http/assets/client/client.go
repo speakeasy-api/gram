@@ -50,6 +50,14 @@ type Client struct {
 	// endpoint.
 	ListAssetsDoer goahttp.Doer
 
+	// UploadChatAttachment Doer is the HTTP client used to make requests to the
+	// uploadChatAttachment endpoint.
+	UploadChatAttachmentDoer goahttp.Doer
+
+	// ServeChatAttachment Doer is the HTTP client used to make requests to the
+	// serveChatAttachment endpoint.
+	ServeChatAttachmentDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -78,6 +86,8 @@ func NewClient(
 		ServeOpenAPIv3Doer:        doer,
 		ServeFunctionDoer:         doer,
 		ListAssetsDoer:            doer,
+		UploadChatAttachmentDoer:  doer,
+		ServeChatAttachmentDoer:   doer,
 		RestoreResponseBody:       restoreBody,
 		scheme:                    scheme,
 		host:                      host,
@@ -290,5 +300,58 @@ func (c *Client) ListAssets() goa.Endpoint {
 			return nil, goahttp.ErrRequestError("assets", "listAssets", err)
 		}
 		return decodeResponse(resp)
+	}
+}
+
+// UploadChatAttachment returns an endpoint that makes HTTP requests to the
+// assets service uploadChatAttachment server.
+func (c *Client) UploadChatAttachment() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUploadChatAttachmentRequest(c.encoder)
+		decodeResponse = DecodeUploadChatAttachmentResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUploadChatAttachmentRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UploadChatAttachmentDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assets", "uploadChatAttachment", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ServeChatAttachment returns an endpoint that makes HTTP requests to the
+// assets service serveChatAttachment server.
+func (c *Client) ServeChatAttachment() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeServeChatAttachmentRequest(c.encoder)
+		decodeResponse = DecodeServeChatAttachmentResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildServeChatAttachmentRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ServeChatAttachmentDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assets", "serveChatAttachment", err)
+		}
+		res, err := decodeResponse(resp)
+		if err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+		return &assets.ServeChatAttachmentResponseData{Result: res.(*assets.ServeChatAttachmentResult), Body: resp.Body}, nil
 	}
 }

@@ -37,6 +37,8 @@ func NewAssetsClient(options *AssetsClientOptions) *AssetsClient {
 		h.ServeOpenAPIv3(),
 		h.ServeFunction(),
 		h.ListAssets(),
+		h.UploadChatAttachment(),
+		h.ServeChatAttachment(),
 	)
 
 	return &AssetsClient{client: client}

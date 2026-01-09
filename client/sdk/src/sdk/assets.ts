@@ -5,9 +5,11 @@
 
 import { assetsFetchOpenAPIv3FromURL } from "../funcs/assetsFetchOpenAPIv3FromURL.js";
 import { assetsListAssets } from "../funcs/assetsListAssets.js";
+import { assetsServeChatAttachment } from "../funcs/assetsServeChatAttachment.js";
 import { assetsServeFunction } from "../funcs/assetsServeFunction.js";
 import { assetsServeImage } from "../funcs/assetsServeImage.js";
 import { assetsServeOpenAPIv3 } from "../funcs/assetsServeOpenAPIv3.js";
+import { assetsUploadChatAttachment } from "../funcs/assetsUploadChatAttachment.js";
 import { assetsUploadFunctions } from "../funcs/assetsUploadFunctions.js";
 import { assetsUploadImage } from "../funcs/assetsUploadImage.js";
 import { assetsUploadOpenAPIv3 } from "../funcs/assetsUploadOpenAPIv3.js";
@@ -48,6 +50,25 @@ export class Assets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListAssetsResult> {
     return unwrapAsync(assetsListAssets(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * serveChatAttachment assets
+   *
+   * @remarks
+   * Serve a chat attachment from Gram.
+   */
+  async serveChatAttachment(
+    request: operations.ServeChatAttachmentRequest,
+    security?: operations.ServeChatAttachmentSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<operations.ServeChatAttachmentResponse> {
+    return unwrapAsync(assetsServeChatAttachment(
       this,
       request,
       security,
@@ -103,6 +124,25 @@ export class Assets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<operations.ServeOpenAPIv3Response> {
     return unwrapAsync(assetsServeOpenAPIv3(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * uploadChatAttachment assets
+   *
+   * @remarks
+   * Upload a chat attachment to Gram.
+   */
+  async uploadChatAttachment(
+    request: operations.UploadChatAttachmentRequest,
+    security?: operations.UploadChatAttachmentSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.UploadChatAttachmentResult> {
+    return unwrapAsync(assetsUploadChatAttachment(
       this,
       request,
       security,
