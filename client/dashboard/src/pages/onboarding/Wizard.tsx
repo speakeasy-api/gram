@@ -1,3 +1,4 @@
+import { CodeBlock } from "@/components/code";
 import { Expandable } from "@/components/expandable";
 import { GramLogo } from "@/components/gram-logo";
 import { AnyField } from "@/components/moon/any-field";
@@ -17,6 +18,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools } from "@/hooks/toolTypes";
 import { slugify } from "@/lib/constants";
+import { handleAPIError } from "@/lib/errors";
 import { filterHttpTools, useGroupedHttpTools } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -28,10 +30,6 @@ import {
 } from "@gram/client/react-query";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-
-import { CodeBlock } from "@/components/code";
-import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { handleAPIError } from "@/lib/errors";
 import {
   Check,
   ChevronRight,
@@ -82,7 +80,6 @@ export function OnboardingWizard() {
     useState<OnboardingStep>("initial-choice");
   const [toolsetName, setToolsetName] = useState<string>();
   const [mcpSlug, setMcpSlug] = useState<string>();
-  const [deployChatModalOpen, setDeployChatModalOpen] = useState(false);
 
   const startStep = searchParams.get(START_STEP_PARAM);
   const startPath = searchParams.get(START_PATH_PARAM);
@@ -117,7 +114,7 @@ export function OnboardingWizard() {
           mcpSlug={mcpSlug}
           setMcpSlug={setMcpSlug}
           isFunctionsEnabled={isFunctionsEnabled}
-          onDeployChatClick={() => setDeployChatModalOpen(true)}
+          onDeployChatClick={() => routes.deployChat.goTo()}
           routes={routes}
         />
       </div>
@@ -128,14 +125,6 @@ export function OnboardingWizard() {
           mcpSlug={mcpSlug}
         />
       </div>
-      <FeatureRequestModal
-        isOpen={deployChatModalOpen}
-        onClose={() => setDeployChatModalOpen(false)}
-        title="Deploy Chat Connected To Your Data"
-        description="Build embeddable chat experiences using Gram Elements. Click here to get on the early access list."
-        actionType="deploy_chat"
-        icon={MessageSquare}
-      />
     </Stack>
   );
 }

@@ -1,8 +1,8 @@
+import { assert } from '@/lib/utils'
 import { GetSessionFn } from '@/types'
 import { experimental_createMCPClient as createMCPClient } from '@ai-sdk/mcp'
 import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { useSession } from './useSession'
-import { assert } from '@/lib/utils'
 
 type MCPToolsResult = Awaited<
   ReturnType<Awaited<ReturnType<typeof createMCPClient>>['tools']>
@@ -16,7 +16,7 @@ export function useMCPTools({
 }: {
   getSession: GetSessionFn
   projectSlug: string
-  mcp: string
+  mcp: string | undefined
   environment: Record<string, unknown>
 }): UseQueryResult<MCPToolsResult, Error> {
   const session = useSession({
@@ -28,6 +28,8 @@ export function useMCPTools({
     queryKey: ['mcpTools', projectSlug, mcp, session],
     queryFn: async () => {
       assert(session, 'No session found')
+      assert(mcp, 'No MCP URL found')
+
       const mcpClient = await createMCPClient({
         name: 'gram-elements-mcp-client',
         transport: {
@@ -43,7 +45,7 @@ export function useMCPTools({
       const mcpTools = await mcpClient.tools()
       return mcpTools
     },
-    enabled: !!session,
+    enabled: !!session && !!mcp,
     staleTime: Infinity,
     gcTime: Infinity,
   })

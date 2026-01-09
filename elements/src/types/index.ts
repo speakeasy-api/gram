@@ -7,6 +7,7 @@ import {
   TextMessagePartComponent,
   ToolCallMessagePartComponent,
 } from '@assistant-ui/react'
+import { LanguageModel } from 'ai'
 import {
   ComponentType,
   Dispatch,
@@ -15,7 +16,6 @@ import {
   type ReactNode,
 } from 'react'
 import type { Plugin } from './plugins'
-import { LanguageModel } from 'ai'
 
 /**
  * Function to retrieve the session token from the backend endpoint.
@@ -127,7 +127,7 @@ export interface ElementsConfig {
    *   mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
    * }
    */
-  mcp: ServerUrl
+  mcp?: ServerUrl
 
   /**
    * Custom environment variable overrides for the Elements library.
