@@ -12,7 +12,7 @@
 
 ### props
 
-[`ElementsProviderProps`](../interfaces/ElementsProviderProps.md)
+`ElementsProviderProps`
 
 ## Returns
 

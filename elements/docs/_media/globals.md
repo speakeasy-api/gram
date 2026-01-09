@@ -6,7 +6,6 @@
 
 ## Interfaces
 
-- [ElementsProviderProps](interfaces/ElementsProviderProps.md)
 - [ElementsConfig](interfaces/ElementsConfig.md)
 - [ModelConfig](interfaces/ModelConfig.md)
 - [ThemeConfig](interfaces/ThemeConfig.md)

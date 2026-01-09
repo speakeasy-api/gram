@@ -75,22 +75,6 @@ const config: ElementsConfig = {
 
 ***
 
-### apiURL?
-
-> `optional` **apiURL**: `string`
-
-The Gram API URL to use for the Elements library.
-
-#### Example
-
-```ts
-const config: ElementsConfig = {
-  apiURL: 'https://api.getgram.ai',
-}
-```
-
-***
-
 ### projectSlug
 
 > **projectSlug**: `string`
@@ -338,3 +322,9 @@ const config: ElementsConfig = {
   },
 }
 ```
+
+***
+
+### api?
+
+> `optional` **api**: \{ url?: string \| undefined; \} & AuthConfig
