@@ -26,7 +26,7 @@ export const useSession = ({
 
   const { data: fetchedSessionToken } = useQuery({
     queryKey,
-    queryFn: getSession,
+    queryFn: () => getSession({ projectSlug }),
     enabled: shouldFetch,
     staleTime: Infinity, // Session tokens don't need to be refetched
     gcTime: Infinity, // Keep in cache indefinitely

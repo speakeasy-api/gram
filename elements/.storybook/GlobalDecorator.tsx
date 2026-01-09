@@ -11,8 +11,8 @@ interface ElementsDecoratorProps {
 }
 
 const DEFAULT_ELEMENTS_CONFIG: ElementsConfig = {
-  projectSlug: 'adamtest',
-  mcp: 'https://chat.speakeasy.com/mcp/speakeasy-team-my_api',
+  projectSlug: '',
+  mcp: '',
   variant: 'widget',
   welcome: {
     title: 'Hello there!',
@@ -57,6 +57,15 @@ export const ElementsDecorator: React.FC<ElementsDecoratorProps> = ({
     () => merge({}, DEFAULT_ELEMENTS_CONFIG, config ?? {}),
     [config]
   )
+
+  if (!finalConfig.projectSlug || !finalConfig.mcp) {
+    return (
+      <div className="bg-red-300 p-4 text-red-900">
+        Please provide both projectSlug and mcp in the controls panel to view
+        this story.
+      </div>
+    )
+  }
 
   return (
     <ElementsProvider config={finalConfig}>

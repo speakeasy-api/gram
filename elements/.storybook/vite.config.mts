@@ -1,4 +1,4 @@
-import { defineConfig, loadEnv, ViteDevServer } from 'vite'
+import { defineConfig, loadEnv, Plugin, ViteDevServer } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { dirname, resolve } from 'node:path'
@@ -7,13 +7,21 @@ import { createElementsServerHandlers } from '../src/server'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
-const apiMiddlewarePlugin = () => ({
+const apiMiddlewarePlugin = (): Plugin => ({
   name: 'chat-api-middleware',
   configureServer(server: ViteDevServer) {
+    const embedOrigin = process.env.VITE_GRAM_ELEMENTS_STORYBOOK_URL
+    if (!embedOrigin) {
+      this.error(
+        'VITE_GRAM_ELEMENTS_STORYBOOK_URL is not defined in the environment variables.'
+      )
+      return
+    }
+
     const handlers = createElementsServerHandlers()
     server.middlewares.use('/chat/session', (req, res) =>
       handlers.session(req, res, {
-        embedOrigin: 'http://localhost:6006',
+        embedOrigin,
         userIdentifier: 'test',
         expiresAfter: 3600,
       })

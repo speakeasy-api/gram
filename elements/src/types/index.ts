@@ -21,7 +21,7 @@ import type { Plugin } from './plugins'
  * Function to retrieve the session token from the backend endpoint.
  * Override this if you have mounted your session endpoint at a different path.
  */
-export type GetSessionFn = () => Promise<string>
+export type GetSessionFn = (init: { projectSlug: string }) => Promise<string>
 
 export interface ElementsProviderProps {
   /**

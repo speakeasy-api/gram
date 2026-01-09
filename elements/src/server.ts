@@ -1,7 +1,5 @@
 import { IncomingMessage, ServerResponse } from 'node:http'
 
-const GRAM_API_URL = 'https://app.getgram.ai'
-
 type ServerHandler<T> = (
   req: IncomingMessage,
   res: ServerResponse,
@@ -54,8 +52,13 @@ const sessionHandler: ServerHandler<SessionHandlerOptions> = async (
   res,
   options
 ) => {
+  const base = process.env.GRAM_API_URL ?? 'https://app.getgram.ai'
   if (req.method === 'POST') {
-    fetch(GRAM_API_URL + '/rpc/chatSessions.create', {
+    const projectSlug = Array.isArray(req.headers['gram-project'])
+      ? req.headers['gram-project'][0]
+      : req.headers['gram-project']
+
+    fetch(base + '/rpc/chatSessions.create', {
       method: 'POST',
       body: JSON.stringify({
         embed_origin: options?.embedOrigin,
@@ -64,7 +67,7 @@ const sessionHandler: ServerHandler<SessionHandlerOptions> = async (
       }),
       headers: {
         'Content-Type': 'application/json',
-        'Gram-Project': 'default',
+        'Gram-Project': typeof projectSlug === 'string' ? projectSlug : '',
         'Gram-Key': process.env.GRAM_API_KEY ?? '',
       },
     })
