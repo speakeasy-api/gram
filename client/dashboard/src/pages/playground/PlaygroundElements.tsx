@@ -67,12 +67,14 @@ export function PlaygroundElements({
     <GramElementsProvider
       config={{
         projectSlug: project.slug,
-        apiURL: getServerURL(),
+        api: {
+          url: getServerURL(),
+          sessionFn: getSession,
+        },
         mcp: mcpUrl,
         envSlug: environmentSlug ?? undefined,
         variant: "standalone",
         model: {
-          // defaultModel: model as Model,
           defaultModel: model as Model,
           showModelPicker: false,
         },
@@ -95,7 +97,6 @@ export function PlaygroundElements({
           UserMessage: GramUserMessage,
         },
       }}
-      getSession={getSession}
     >
       <div className="h-full bg-surface-primary [&_.aui-thread-root]:bg-transparent [&_.aui-composer-wrapper]:bg-transparent rounded-br-xl">
         <Chat />

@@ -23,7 +23,7 @@ export function useMCPTools({
   )
 
   const queryResult = useQuery({
-    queryKey: ['mcpTools', mcp, ...authQueryKey],
+    queryKey: ['mcpTools', mcp, envSlug, ...authQueryKey],
     queryFn: async () => {
       assert(!auth.isLoading, 'No auth found')
       assert(mcp, 'No MCP URL found')
@@ -36,6 +36,7 @@ export function useMCPTools({
           headers: {
             ...transformEnvironmentToHeaders(environment ?? {}),
             ...auth.headers,
+            ...(envSlug ? { 'Gram-Environment': envSlug } : {}),
           },
         },
       })
