@@ -1,26 +1,22 @@
 'use client'
 
 import { useElements } from '@/hooks/useElements'
-import { assertNever } from '@/lib/utils'
 import { AssistantModal } from '../assistant-ui/assistant-modal'
 import { AssistantSidecar } from '../assistant-ui/assistant-sidecar'
 import { Thread } from '../assistant-ui/thread'
+import { assertNever } from '@/lib/utils'
 
 export const Chat = () => {
   const { config } = useElements()
 
-  const renderChat = () => {
-    switch (config.variant) {
-      case 'standalone':
-        return <Thread />
-      case 'sidecar':
-        return <AssistantSidecar />
-      case 'widget':
-        return <AssistantModal />
-      default:
-        assertNever(config.variant)
-    }
+  switch (config.variant) {
+    case 'standalone':
+      return <Thread />
+    case 'sidecar':
+      return <AssistantSidecar />
+    case 'widget':
+      return <AssistantModal />
+    default:
+      assertNever(config.variant)
   }
-
-  return renderChat()
 }

@@ -147,11 +147,6 @@ const ElementsProviderWithApproval = ({
           throw new Error('Session is laoding')
         }
 
-        if (mcpToolsLoading || !mcpTools) {
-          // TODO
-          throw new Error('MCP tools are still being discovered')
-        }
-
         const context = runtime.thread.getModelContext()
         const frontendTools = toAISDKTools(
           getEnabledTools(context?.tools ?? {})
