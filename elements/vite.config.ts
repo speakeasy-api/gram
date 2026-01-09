@@ -51,4 +51,8 @@ export default defineConfig({
       '@': resolve(__dirname, 'src'),
     },
   },
+  define: {
+    __GRAM_API_URL__: JSON.stringify(process.env['GRAM_API_URL'] || ''),
+    __GRAM_GIT_SHA__: JSON.stringify(process.env['GRAM_GIT_SHA'] || ''),
+  },
 })

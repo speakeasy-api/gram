@@ -34,8 +34,6 @@ import { useMCPTools } from '@/hooks/useMCPTools'
 import { ToolApprovalProvider } from './ToolApprovalContext'
 import { useToolApproval } from '@/hooks/useToolApproval'
 
-const GRAM_API_URL = 'https://app.getgram.ai'
-
 const BASE_SYSTEM_PROMPT = `You are a helpful assistant that can answer questions and help with tasks.`
 
 function mergeInternalSystemPromptWith(
@@ -133,6 +131,8 @@ const ElementsProviderWithApproval = ({
     }
   }, [config.tools?.toolsRequiringApproval, getApprovalHelpers])
 
+  let apiURL = __GRAM_API_URL__ || config.apiURL || 'https://app.getgram.ai'
+  apiURL = apiURL.replace(/\/+$/, '') // Remove trailing slashes
   // Create custom transport
   const transport = useMemo<ChatTransport<UIMessage> | undefined>(
     () => ({
@@ -156,7 +156,7 @@ const ElementsProviderWithApproval = ({
         const openRouterModel = usingCustomModel
           ? null
           : createOpenRouter({
-              baseURL: GRAM_API_URL,
+              baseURL: apiURL,
               apiKey: 'unused, but must be set',
               headers: {
                 'Gram-Project': config.projectSlug,
@@ -220,6 +220,7 @@ const ElementsProviderWithApproval = ({
       mcpTools,
       mcpToolsLoading,
       getApprovalHelpers,
+      apiURL,
     ]
   )
 

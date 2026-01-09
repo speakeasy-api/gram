@@ -23,6 +23,8 @@ jobs:
     outputs:
       published: ${{ steps.changesets.outputs.published }}
       publishedPackages: ${{ steps.changesets.outputs.publishedPackages }}
+    env:
+      GRAM_GIT_SHA: "${{ github.sha }}"
     steps:
       - name: Checkout Repo
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
