@@ -14,6 +14,7 @@ export const Kind = {
   Openapiv3: "openapiv3",
   Image: "image",
   Functions: "functions",
+  ChatAttachment: "chat_attachment",
   Unknown: "unknown",
 } as const;
 export type Kind = ClosedEnum<typeof Kind>;

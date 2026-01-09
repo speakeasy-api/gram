@@ -133,9 +133,11 @@ run();
 
 * [fetchOpenAPIv3FromURL](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 * [listAssets](docs/sdks/assets/README.md#listassets) - listAssets assets
+* [serveChatAttachment](docs/sdks/assets/README.md#servechatattachment) - serveChatAttachment assets
 * [serveFunction](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 * [serveImage](docs/sdks/assets/README.md#serveimage) - serveImage assets
 * [serveOpenAPIv3](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
+* [uploadChatAttachment](docs/sdks/assets/README.md#uploadchatattachment) - uploadChatAttachment assets
 * [uploadFunctions](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 * [uploadImage](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 * [uploadOpenAPIv3](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
@@ -322,9 +324,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`agentsGet`](docs/sdks/agents/README.md#get) - getResponse agents
 - [`assetsFetchOpenAPIv3FromURL`](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 - [`assetsListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
+- [`assetsServeChatAttachment`](docs/sdks/assets/README.md#servechatattachment) - serveChatAttachment assets
 - [`assetsServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 - [`assetsServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`assetsServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
+- [`assetsUploadChatAttachment`](docs/sdks/assets/README.md#uploadchatattachment) - uploadChatAttachment assets
 - [`assetsUploadFunctions`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 - [`assetsUploadImage`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`assetsUploadOpenAPIv3`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
@@ -518,6 +522,7 @@ To learn about this feature and how to get started, check
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useSearchLogsMutation`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`useSearchToolCallsMutation`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
+- [`useServeChatAttachment`](docs/sdks/assets/README.md#servechatattachment) - serveChatAttachment assets
 - [`useServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
@@ -535,6 +540,7 @@ To learn about this feature and how to get started, check
 - [`useUpdateSlackConnectionMutation`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
+- [`useUploadChatAttachmentMutation`](docs/sdks/assets/README.md#uploadchatattachment) - uploadChatAttachment assets
 - [`useUploadFunctionsMutation`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 - [`useUploadImageMutation`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
