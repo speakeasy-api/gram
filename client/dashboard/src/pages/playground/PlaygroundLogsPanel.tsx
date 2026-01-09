@@ -52,6 +52,18 @@ function isSuccessLog(log: TelemetryLogRecord): boolean {
   return severity !== "ERROR" && severity !== "FATAL";
 }
 
+function getToolName(log: TelemetryLogRecord): string {
+  const resourceAttrs = log.resourceAttributes as
+    | { gram?: { tool?: { urn?: string } } }
+    | undefined;
+  const urn = resourceAttrs?.gram?.tool?.urn;
+
+  if (!urn) return "";
+
+  const parts = urn.split(":");
+  return parts[parts.length - 1] || urn;
+}
+
 interface PlaygroundLogsPanelProps {
   chatId?: string;
   toolsetSlug?: string;
@@ -152,6 +164,7 @@ export function PlaygroundLogsPanel({
             {logs.map((log) => {
               const isSuccess = isSuccessLog(log);
               const timestamp = formatTimestamp(log.timeUnixNano);
+              const toolName = getToolName(log);
 
               return (
                 <button
@@ -162,9 +175,11 @@ export function PlaygroundLogsPanel({
                   <StatusIcon isSuccess={isSuccess} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className="font-medium text-xs truncate">
-                        {log.service?.name || "Unknown Service"}
-                      </span>
+                      {toolName && (
+                        <span className="font-medium text-xs truncate">
+                          {toolName}
+                        </span>
+                      )}
                       {log.severityText && (
                         <Badge
                           variant={getSeverityVariant(log.severityText)}
@@ -202,7 +217,7 @@ export function PlaygroundLogsPanel({
         <div className="border-t bg-muted/20">
           <div className="px-3 py-2.5 border-b flex items-center justify-between bg-inherit">
             <span className="text-xs font-semibold">
-              {selectedLog.service?.name || "Log Details"}
+              {getToolName(selectedLog) || "Log Details"}
             </span>
             <Button
               size="sm"
