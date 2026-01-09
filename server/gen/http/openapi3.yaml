@@ -13802,7 +13802,12 @@ components:
                     format: uuid
                 gram_urn:
                     type: string
-                    description: Gram URN filter
+                    description: Gram URN filter (single URN, use gram_urns for multiple)
+                gram_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: Gram URN filter (one or more URNs)
                 http_method:
                     type: string
                     description: HTTP method filter
@@ -13902,7 +13907,7 @@ components:
                     format: uuid
                 gram_urn:
                     type: string
-                    description: Gram URN filter
+                    description: Gram URN filter (single URN, use gram_urns for multiple)
                 to:
                     type: string
                     description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
@@ -14224,7 +14229,7 @@ components:
                     format: uuid
                 gram_urn:
                     type: string
-                    description: Gram URN filter
+                    description: Gram URN filter (single URN, use gram_urns for multiple)
                 to:
                     type: string
                     description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')

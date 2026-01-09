@@ -56,9 +56,13 @@ export type SearchLogsFilter = {
    */
   functionId?: string | undefined;
   /**
-   * Gram URN filter
+   * Gram URN filter (single URN, use gram_urns for multiple)
    */
   gramUrn?: string | undefined;
+  /**
+   * Gram URN filter (one or more URNs)
+   */
+  gramUrns?: Array<string> | undefined;
   /**
    * HTTP method filter
    */
@@ -103,6 +107,7 @@ export type SearchLogsFilter$Outbound = {
   from?: string | undefined;
   function_id?: string | undefined;
   gram_urn?: string | undefined;
+  gram_urns?: Array<string> | undefined;
   http_method?: string | undefined;
   http_route?: string | undefined;
   http_status_code?: number | undefined;
@@ -122,6 +127,7 @@ export const SearchLogsFilter$outboundSchema: z.ZodType<
   from: z.date().transform(v => v.toISOString()).optional(),
   functionId: z.string().optional(),
   gramUrn: z.string().optional(),
+  gramUrns: z.array(z.string()).optional(),
   httpMethod: HttpMethod$outboundSchema.optional(),
   httpRoute: z.string().optional(),
   httpStatusCode: z.number().int().optional(),
@@ -134,6 +140,7 @@ export const SearchLogsFilter$outboundSchema: z.ZodType<
     deploymentId: "deployment_id",
     functionId: "function_id",
     gramUrn: "gram_urn",
+    gramUrns: "gram_urns",
     httpMethod: "http_method",
     httpRoute: "http_route",
     httpStatusCode: "http_status_code",

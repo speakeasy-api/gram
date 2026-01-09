@@ -516,6 +516,61 @@ func TestSearchLogs_Filters(t *testing.T) {
 			},
 			expectedCount: 3,
 		},
+		{
+			name: "filter by gram_urns with single URN returns matching logs",
+			filter: &gen.SearchLogsFilter{
+				From:     &from,
+				To:       &to,
+				GramUrns: []string{"urn:gram:http:api:get-users"},
+			},
+			expectedCount: 2,
+		},
+		{
+			name: "filter by gram_urns with multiple URNs returns all matching logs",
+			filter: &gen.SearchLogsFilter{
+				From:     &from,
+				To:       &to,
+				GramUrns: []string{"urn:gram:http:api:get-users", "urn:gram:http:api:create-order"},
+			},
+			expectedCount: 4,
+		},
+		{
+			name: "filter by gram_urns across different services",
+			filter: &gen.SearchLogsFilter{
+				From:     &from,
+				To:       &to,
+				GramUrns: []string{"urn:gram:http:api:get-users", "urn:gram:function:utils:hash-password"},
+			},
+			expectedCount: 4,
+		},
+		{
+			name: "filter by gram_urns with empty array returns all logs",
+			filter: &gen.SearchLogsFilter{
+				From:     &from,
+				To:       &to,
+				GramUrns: []string{},
+			},
+			expectedCount: 10,
+		},
+		{
+			name: "filter by gram_urns with non-matching URN returns empty",
+			filter: &gen.SearchLogsFilter{
+				From:     &from,
+				To:       &to,
+				GramUrns: []string{"urn:gram:nonexistent:tool"},
+			},
+			expectedCount: 0,
+		},
+		{
+			name: "gram_urns takes precedence over gram_urn when both provided",
+			filter: &gen.SearchLogsFilter{
+				From:     &from,
+				To:       &to,
+				GramUrn:  stringPtr("urn:gram:http:api:get-users"),
+				GramUrns: []string{"urn:gram:http:api:create-order"},
+			},
+			expectedCount: 2, // Only create-order logs, not get-users
+		},
 	}
 
 	for _, tt := range tests {
