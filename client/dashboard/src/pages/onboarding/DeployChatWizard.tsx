@@ -115,17 +115,15 @@ const SetupStep = () => {
 
   const installCommand = `pnpm add @gram-ai/elements`;
 
-  const appCode = `import {
-  GramElementsProvider,
-  Chat,
-  type ElementsConfig
-} from '@gram-ai/elements'
+  const appCode = `import { GramElementsProvider, Chat, type ElementsConfig } from '@gram-ai/elements'
 import '@gram-ai/elements/elements.css'
 
 const config: ElementsConfig = {
   projectSlug: '${projectSlug}',
-  // TODO: Replace with Chat Sessions (see Gram docs) before shipping to production
-  unsafeApiKey: '${apiKey ?? "YOUR_API_KEY"}',
+  api: {
+    // TODO: Replace with Chat Sessions (see Gram docs) before shipping to production
+    UNSAFE_apiKey: '${apiKey ?? "YOUR_API_KEY"}',
+  }
 }
 
 export const App = () => {

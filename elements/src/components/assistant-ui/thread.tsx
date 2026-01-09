@@ -67,7 +67,7 @@ const ApiKeyWarning = () => (
     <strong>Warning:</strong> You are using an API key directly in the client.
     Please{' '}
     <a
-      href="https://www.speakeasy.com/docs/gram/elements/authentication"
+      href="https://github.com/speakeasy-api/gram/tree/main/elements#setting-up-your-backend"
       target="_blank"
       rel="noopener noreferrer"
       style={{ color: '#b45309', textDecoration: 'underline' }}
