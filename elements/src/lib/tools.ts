@@ -6,7 +6,6 @@ import {
 } from '@assistant-ui/react'
 import z from 'zod'
 import { FC } from 'react'
-import { ToolExecutionContext } from 'node_modules/assistant-stream/dist/core/tool/tool-types'
 
 /**
  * Converts from assistant-ui tool format to the AI SDK tool shape
@@ -84,6 +83,9 @@ export const defineFrontendTool = <
   tool: Tool,
   name: string
 ): FrontendTool<TArgs, TResult> => {
+  type ToolExecutionContext = Parameters<
+    NonNullable<Tool<Record<string, unknown>, void>['execute']>
+  >[1]
   return makeAssistantTool({
     ...tool,
     execute: async (args: TArgs, context: ToolExecutionContext) => {
