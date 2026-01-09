@@ -6,10 +6,18 @@
 
 # Type Alias: GetSessionFn()
 
-> **GetSessionFn** = () => `Promise`\<`string`\>
+> **GetSessionFn** = (`init`) => `Promise`\<`string`\>
 
 Function to retrieve the session token from the backend endpoint.
 Override this if you have mounted your session endpoint at a different path.
+
+## Parameters
+
+### init
+
+#### projectSlug
+
+`string`
 
 ## Returns
 
