@@ -8,7 +8,6 @@ import { useEnvironment } from "../environments/Environment";
 import { useListToolsets } from "@gram/client/react-query/index.js";
 import { Type } from "@/components/ui/type";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { getServerURL } from "@/lib/utils";
 
 interface PlaygroundElementsProps {
@@ -35,7 +34,6 @@ export function PlaygroundElements({
 
   // Get environment entries for MCP headers
   const environmentData = useEnvironment(environmentSlug ?? undefined);
-  console.log("Env data", environmentData);
 
   // Build environment headers from environment entries
   const environment = useMemo(() => {
@@ -90,6 +88,7 @@ export function PlaygroundElements({
         variant: "standalone",
         model: {
           // defaultModel: model as Model,
+          defaultModel: model as Model,
           showModelPicker: false,
         },
         welcome: {
