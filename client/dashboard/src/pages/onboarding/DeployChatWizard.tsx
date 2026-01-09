@@ -106,7 +106,7 @@ const SetupStep = () => {
       request: {
         createKeyForm: {
           // Add this random suffix or else a second key creation will cause a conflict and fail
-          name: `Elements Chat - ${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+          name: `Chat Elements - ${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
           scopes: ["chat"],
         },
       },
