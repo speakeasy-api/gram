@@ -116,6 +116,13 @@ gen_keypair() {
   mkcert \
     -cert-file "$CERT_PATH" -key-file "$KEY_PATH" "$hostname"
 
+  root_ca="$(mkcert -CAROOT)/rootCA.pem"
+  if [ ! -f "$root_ca" ]; then
+    echo "WARN: root CA not found at $root_ca" >&2
+  else
+    mise set --file mise.local.toml NODE_EXTRA_CA_CERTS="$root_ca"
+  fi
+
   echo "  cert => $CERT_PATH"
   echo "  key  => $KEY_PATH"
 }
