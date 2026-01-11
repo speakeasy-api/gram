@@ -274,37 +274,53 @@ export interface ElementsConfig {
   } & AuthConfig
 }
 
-export type AuthConfig =
-  | {
-      /**
-       * The function to use to retrieve the session token from the backend endpoint.
-       * By default, this will attempt to fetch the session token from `/chat/session`.
-       *
-       * @example
-       * const config: ElementsConfig = {
-       *   api: {
-       *     sessionFn: async () => {
-       *       return fetch('/chat/session').then(res => res.json()).then(data => data.client_token)
-       *     },
-       *   },
-       * }
-       */
-      sessionFn?: GetSessionFn
-    }
-  | {
-      /**
-       * The API key to use if you haven't yet configured a session endpoint.
-       * Do not use this in production.
-       *
-       * @example
-       * const config: ElementsConfig = {
-       *   api: {
-       *     UNSAFE_apiKey: 'your-api-key',
-       *   },
-       * }
-       */
-      UNSAFE_apiKey: string
-    }
+export type SessionAuthConfig = {
+  /**
+   * The function to use to retrieve the session token from the backend endpoint.
+   * By default, this will attempt to fetch the session token from `/chat/session`.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   api: {
+   *     sessionFn: async () => {
+   *       return fetch('/chat/session').then(res => res.json()).then(data => data.client_token)
+   *     },
+   *   },
+   * }
+   */
+  sessionFn: GetSessionFn
+}
+
+/**
+ * The API key auth config is used to authenticate the Elements library using an API key only.
+ *
+ * NOTE: This is not recommended for production use, and a warning
+ * will be displayed in the chat interface if you use this config.
+ * Define a session endpoint instead to avoid this warning.
+ *
+ * @example
+ * const config: ElementsConfig = {
+ *   api: {
+ *     UNSAFE_apiKey: 'your-api-key',
+ *   },
+ * }
+ */
+export type ApiKeyAuthConfig = {
+  /**
+   * The API key to use if you haven't yet configured a session endpoint.
+   * Do not use this in production.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   api: {
+   *     UNSAFE_apiKey: 'your-api-key',
+   *   },
+   * }
+   */
+  UNSAFE_apiKey: string
+}
+
+export type AuthConfig = SessionAuthConfig | ApiKeyAuthConfig | undefined
 
 /**
  * The LLM model to use for the Elements library.

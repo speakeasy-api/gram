@@ -1,3 +1,4 @@
+import { isApiKeyAuth } from '@/lib/auth'
 import { AuthConfig } from '../types'
 import { useSession } from './useSession'
 
@@ -35,18 +36,18 @@ export const useAuth = ({
   auth?: AuthConfig
   projectSlug: string
 }): Auth => {
-  let sessionFn = auth && 'sessionFn' in auth ? auth.sessionFn : null
-  // If no session function is provided, use the default one
-  if (!sessionFn) {
-    sessionFn = defaultGetSession
-  }
-
+  // The session request is only neccessary if we are not using an API key auth
+  // configuration. If a custom session fetcher is provided, we use it,
+  // otherwise we fallback to the default session fetcher
   const session = useSession({
-    getSession: sessionFn,
+    enabled: !isApiKeyAuth(auth),
+    getSession: !isApiKeyAuth(auth)
+      ? (auth?.sessionFn ?? defaultGetSession)
+      : null,
     projectSlug,
   })
 
-  if (auth && 'UNSAFE_apiKey' in auth) {
+  if (isApiKeyAuth(auth)) {
     return {
       headers: {
         'Gram-Project': projectSlug,
