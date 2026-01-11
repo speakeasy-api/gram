@@ -63,7 +63,8 @@ function mergeInternalSystemPromptWith(
 }
 
 function getApiUrl(config: ElementsConfig): string {
-  const apiURL = __GRAM_API_URL__ || config.api?.url || 'https://app.getgram.ai'
+  // The api.url in the config should take precedence over the __GRAM_API_URL__ environment variable
+  const apiURL = config.api?.url ?? __GRAM_API_URL__ ?? 'https://app.getgram.ai'
   return apiURL.replace(/\/+$/, '') // Remove trailing slashes
 }
 
