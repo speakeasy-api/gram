@@ -36,7 +36,8 @@ export const useAuth = ({
   projectSlug: string
 }): Auth => {
   let sessionFn = auth && 'sessionFn' in auth ? auth.sessionFn : null
-  if (sessionFn === undefined) {
+  // If no session function is provided, use the default one
+  if (!sessionFn) {
     sessionFn = defaultGetSession
   }
 

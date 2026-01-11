@@ -1,3 +1,4 @@
+import './vite-env.d.ts'
 import type { Preview } from '@storybook/react-vite'
 import { ElementsDecorator } from './GlobalDecorator'
 import React from 'react'
@@ -12,6 +13,16 @@ const preview: Preview = {
         date: /Date$/i,
       },
     },
+  },
+  // Global args for all stories - used by the decorator to configure ElementsProvider
+  args: {
+    projectSlug:
+      import.meta.env.VITE_GRAM_ELEMENTS_STORYBOOK_PROJECT_SLUG ?? '',
+    mcpUrl: import.meta.env.VITE_GRAM_ELEMENTS_STORYBOOK_MCP_URL ?? '',
+  },
+  argTypes: {
+    projectSlug: { control: 'text' },
+    mcpUrl: { control: 'text' },
   },
   decorators: [
     (Story, context) => {

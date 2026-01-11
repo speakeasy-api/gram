@@ -8,11 +8,6 @@ const meta: Meta<typeof Chat> = {
   parameters: {
     layout: 'fullscreen',
   },
-  args: {
-    projectSlug:
-      import.meta.env.VITE_GRAM_ELEMENTS_STORYBOOK_PROJECT_SLUG ?? '',
-    mcpUrl: import.meta.env.VITE_GRAM_ELEMENTS_STORYBOOK_MCP_URL ?? '',
-  },
 } satisfies Meta<typeof Chat>
 
 export default meta
