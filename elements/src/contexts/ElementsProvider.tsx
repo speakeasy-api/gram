@@ -1,6 +1,7 @@
 import { FrontendTools } from '@/components/FrontendTools'
 import { useMCPTools } from '@/hooks/useMCPTools'
 import { useToolApproval } from '@/hooks/useToolApproval'
+import { getApiUrl } from '@/lib/api'
 import { MODELS } from '@/lib/models'
 import {
   clearFrontendToolApprovalConfig,
@@ -40,7 +41,6 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { ElementsContext } from './contexts'
 import { ToolApprovalProvider } from './ToolApprovalContext'
-import { getApiUrl } from '@/lib/api'
 
 export interface ElementsProviderProps {
   children: ReactNode
@@ -61,6 +61,34 @@ function mergeInternalSystemPromptWith(
 
   Utilities:
   ${plugins.map((plugin) => `- ${plugin.language}: ${plugin.prompt}`).join('\n')}`
+}
+
+/**
+ * Cleans messages before sending to the model to work around an AI SDK bug.
+ * Strips callProviderMetadata from all parts (AI SDK bug #9731)
+ */
+function cleanMessagesForModel(messages: UIMessage[]): UIMessage[] {
+  return messages.map((message) => {
+    // Type assertion to work with the parts property
+    const msg = message as any
+
+    const partsArray = msg.parts
+    if (!Array.isArray(partsArray)) {
+      return message
+    }
+
+    // Process each part: strip providerOptions/providerMetadata and filter reasoning
+    const cleanedParts = partsArray.map((part: any) => {
+      // Strip providerOptions and providerMetadata from all remaining parts
+      const { callProviderMetadata, ...cleanPart } = part
+      return cleanPart
+    })
+
+    return {
+      ...message,
+      parts: cleanedParts,
+    } as UIMessage
+  })
 }
 
 const ElementsProviderWithApproval = ({
@@ -180,10 +208,14 @@ const ElementsProviderWithApproval = ({
           : openRouterModel!.chat(model)
 
         try {
+          // This works around AI SDK bug where these fields cause validation failures
+          const cleanedMessages = cleanMessagesForModel(messages)
+          const modelMessages = convertToModelMessages(cleanedMessages)
+
           const result = streamText({
             system: systemPrompt,
             model: modelToUse,
-            messages: convertToModelMessages(messages),
+            messages: modelMessages,
             tools,
             stopWhen: stepCountIs(10),
             experimental_transform: smoothStream({ delayInMs: 15 }),
