@@ -37,7 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           src_path="elements/docs"
-          dest_path="marketing-repo/src/content/docs/elements"
+          dest_path="marketing-repo/src/content/docs/gram-elements"
           if [ -d "$src_path" ]; then
             mkdir -p "$dest_path"
             # Exclude the root docs index.mdx from being copied and protect any existing
@@ -50,10 +50,79 @@ jobs:
           else
             echo "Warning: $src_path does not exist; nothing to sync."
           fi
+      - name: Normalize filenames and add frontmatter
+        run: |
+          set -euo pipefail
+          content_dir="marketing-repo/src/content/docs/gram-elements"
+
+          # Process all .md files in subdirectories
+          find "$content_dir" -type f -name '*.md' | while read -r f; do
+            dir=$(dirname "$f")
+            filename=$(basename "$f" .md)
+            lowercase_filename=$(echo "$filename" | tr '[:upper:]' '[:lower:]')
+            lowercase_title="$lowercase_filename"
+
+            # Rename file to lowercase if needed
+            if [ "$filename" != "$lowercase_filename" ]; then
+              mv "$f" "$dir/$lowercase_filename.md"
+              f="$dir/$lowercase_filename.md"
+              echo "Renamed: $filename.md -> $lowercase_filename.md"
+            fi
+
+            # Add frontmatter with lowercase title if not already present
+            if ! head -1 "$f" | grep -q '^---$'; then
+              tmp=$(mktemp)
+              {
+                echo "---"
+                echo "title: $lowercase_title"
+                echo "---"
+                echo ""
+                cat "$f"
+              } > "$tmp"
+              mv "$tmp" "$f"
+              echo "Added frontmatter to: $f"
+            fi
+          done
+      - name: Generate index.md for each subdirectory
+        run: |
+          set -euo pipefail
+          content_dir="marketing-repo/src/content/docs/gram-elements"
+
+          # Define subdirectories and their display titles
+          declare -A titles=(
+            ["interfaces"]="Interfaces"
+            ["functions"]="Functions"
+            ["type-aliases"]="Type Aliases"
+            ["variables"]="Variables"
+          )
+
+          for dir in "${!titles[@]}"; do
+            dir_path="$content_dir/$dir"
+            if [ -d "$dir_path" ]; then
+              index_file="$dir_path/index.md"
+              title="${titles[$dir]}"
+
+              echo "---" > "$index_file"
+              echo "title: $title" >> "$index_file"
+              echo "---" >> "$index_file"
+              echo "" >> "$index_file"
+              echo "# $title" >> "$index_file"
+              echo "" >> "$index_file"
+
+              # List all .md files except index.md, sorted alphabetically
+              for f in $(find "$dir_path" -maxdepth 1 -name '*.md' ! -name 'index.md' -type f | sort); do
+                filename=$(basename "$f" .md)
+                # Filenames are already lowercase from previous step
+                echo "- [$filename](./$filename)" >> "$index_file"
+              done
+
+              echo "Generated $index_file"
+            fi
+          done
       - name: Transform internal links in synced content
         run: |
           set -euo pipefail
-          content_dir="marketing-repo/src/content/docs/elements"
+          content_dir="marketing-repo/src/content/docs/gram-elements"
           if [ -d "$content_dir" ]; then
             # Target common content file extensions
             mapfile -t files < <(find "$content_dir" -type f \( -name '*.md' -o -name '*.mdx' -o -name '*.markdown' \))
@@ -63,11 +132,11 @@ jobs:
                 if [[ "$f" == "$content_dir/index.mdx" ]]; then
                   continue
                 fi
-                # Prefix any root-relative internal links with /docs/elements/
+                # Prefix any root-relative internal links with /docs/gram-elements/
                 # Skips already-correct, assets, anchors, and URLs with a scheme (mailto:, https:, etc.)
                 perl -0777 -i -pe \
-                  's{(href=)(["\x27])/(?!docs/elements/|assets/|#|[a-z]+:)}{\1\2/docs/elements/}g;' \
-                  -e 's{(\]\()/(?!docs/elements/|assets/|#|[a-z]+:)}{\1/docs/elements/}g' \
+                  's{(href=)(["\x27])/(?!docs/gram-elements/|assets/|#|[a-z]+:)}{\1\2/docs/gram-elements/}g;' \
+                  -e 's{(\]\()/(?!docs/gram-elements/|assets/|#|[a-z]+:)}{\1/docs/gram-elements/}g' \
                   "$f"
               done
             fi
@@ -115,4 +184,5 @@ jobs:
             automation
             docs
             sync
+          draft: true # TODO: remove after testing
           signoff: false
