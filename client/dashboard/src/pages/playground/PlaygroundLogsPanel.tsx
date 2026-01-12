@@ -1,8 +1,11 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Type } from "@/components/ui/type";
+import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
 import { TelemetryLogRecord } from "@gram/client/models/components";
-import { useSearchLogsMutation, useToolset } from "@gram/client/react-query";
+import { useGramContext, useToolset } from "@gram/client/react-query";
+import { unwrapAsync } from "@gram/client/types/fp";
+import { useQuery } from "@tanstack/react-query";
 import {
   CheckIcon,
   ChevronRightIcon,
@@ -10,7 +13,7 @@ import {
   XIcon,
   XCircleIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 function StatusIcon({ isSuccess }: { isSuccess: boolean }) {
   if (isSuccess) {
@@ -93,26 +96,26 @@ export function PlaygroundLogsPanel({
     return toolsetData.toolUrns;
   }, [toolsetData]);
 
-  const { mutate, data, isPending } = useSearchLogsMutation();
+  const client = useGramContext();
 
-  const fetchLogs = useCallback(() => {
-    mutate({
-      request: {
-        searchLogsPayload: {
-          filter: gramUrns ? { gramUrns } : undefined,
-          limit: 50,
-          sort: "desc",
-        },
-      },
-    });
-  }, [mutate, gramUrns]);
-
-  // Initial fetch and auto-refresh
-  useEffect(() => {
-    fetchLogs();
-    const interval = setInterval(fetchLogs, 5000);
-    return () => clearInterval(interval);
-  }, [fetchLogs]);
+  const {
+    data,
+    isPending,
+    refetch: fetchLogs,
+  } = useQuery({
+    queryKey: ["playground-logs", gramUrns],
+    queryFn: () =>
+      unwrapAsync(
+        telemetrySearchLogs(client, {
+          searchLogsPayload: {
+            filter: gramUrns ? { gramUrns } : undefined,
+            limit: 50,
+            sort: "desc",
+          },
+        }),
+      ),
+    refetchInterval: 5000,
+  });
 
   const logs = data?.logs || [];
   const logsEnabled = data?.enabled ?? true;
@@ -128,7 +131,7 @@ export function PlaygroundLogsPanel({
           <Button
             size="sm"
             variant="ghost"
-            onClick={fetchLogs}
+            onClick={() => fetchLogs()}
             disabled={isPending}
             className="h-7 w-7 p-0"
           >

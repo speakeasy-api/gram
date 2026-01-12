@@ -1,7 +1,9 @@
+import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
 import { TelemetryLogRecord } from "@gram/client/models/components";
-import { useSearchLogsMutation } from "@gram/client/react-query";
+import { useGramContext } from "@gram/client/react-query";
+import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@speakeasy-api/moonshine";
-import { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { formatNanoTimestamp, formatLogBody } from "./utils";
 
 interface TraceLogsListProps {
@@ -17,12 +19,13 @@ export function TraceLogsList({
   isExpanded,
   onLogClick,
 }: TraceLogsListProps) {
-  const { mutate, data, isPending, error } = useSearchLogsMutation();
+  const client = useGramContext();
 
-  useEffect(() => {
-    if (isExpanded && !data && !isPending) {
-      mutate({
-        request: {
+  const { data, isPending, error } = useQuery({
+    queryKey: ["trace-logs", traceId],
+    queryFn: () =>
+      unwrapAsync(
+        telemetrySearchLogs(client, {
           searchLogsPayload: {
             filter: {
               traceId,
@@ -30,10 +33,10 @@ export function TraceLogsList({
             limit: 100,
             sort: "asc",
           },
-        },
-      });
-    }
-  }, [isExpanded, traceId, data, isPending, mutate]);
+        }),
+      ),
+    enabled: isExpanded,
+  });
 
   if (!isExpanded) {
     return null;
