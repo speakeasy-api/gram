@@ -216,6 +216,12 @@ var _ = Service("assets", func() {
 	Method("uploadChatAttachment", func() {
 		Description("Upload a chat attachment to Gram.")
 
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ChatSessionsToken, security.ProjectSlug)
+
 		Payload(UploadChatAttachmentForm)
 
 		Result(UploadChatAttachmentResult)
@@ -227,6 +233,7 @@ var _ = Service("assets", func() {
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			security.SessionHeader()
+			security.ChatSessionsTokenHeader()
 			SkipRequestBodyEncodeDecode()
 		})
 
@@ -243,6 +250,7 @@ var _ = Service("assets", func() {
 
 		Security(security.ByKey)
 		Security(security.Session)
+		Security(security.ChatSessionsToken)
 
 		HTTP(func() {
 			GET("/rpc/assets.serveChatAttachment")
@@ -257,6 +265,7 @@ var _ = Service("assets", func() {
 
 			security.ByKeyHeader()
 			security.SessionHeader()
+			security.ChatSessionsTokenHeader()
 			SkipResponseBodyEncodeDecode()
 		})
 
@@ -405,6 +414,7 @@ var UploadChatAttachmentForm = Type("UploadChatAttachmentForm", func() {
 	security.ByKeyPayload()
 	security.SessionPayload()
 	security.ProjectPayload()
+	security.ChatSessionsTokenPayload()
 
 	Attribute("content_type", String)
 	Attribute("content_length", Int64)
@@ -421,6 +431,7 @@ var ServeChatAttachmentForm = Type("ServeChatAttachmentForm", func() {
 	Required("id", "project_id")
 	security.ByKeyPayload()
 	security.SessionPayload()
+	security.ChatSessionsTokenPayload()
 
 	Attribute("id", String, "The ID of the attachment to serve")
 	Attribute("project_id", String, "The project ID that the attachment belongs to")

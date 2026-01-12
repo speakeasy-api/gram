@@ -16,6 +16,7 @@ import (
 
 	agen "github.com/speakeasy-api/gram/server/gen/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -86,6 +87,8 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "", billingClient)
 	require.NoError(t, err)
 
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	enc := testenv.NewEncryptionClient(t)
@@ -105,7 +108,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 
 	toolsSvc := tools.NewService(logger, conn, sessionManager)
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient)
-	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage)
+	assetsSvc := assets.NewService(logger, conn, sessionManager, chatSessionsManager, assetStorage)
 	packagesSvc := packages.NewService(logger, conn, sessionManager)
 	toolsetsSvc := toolsets.NewService(logger, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient))
 	templatesSvc := templates.NewService(logger, conn, sessionManager, toolsetsSvc)

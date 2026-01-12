@@ -569,7 +569,7 @@ func newStartCommand() *cli.Command {
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, db, sessionManager))
 			templates.Attach(mux, templates.NewService(logger, db, sessionManager, toolsetsSvc))
-			assets.Attach(mux, assets.NewService(logger, db, sessionManager, assetStorage))
+			assets.Attach(mux, assets.NewService(logger, db, sessionManager, chatSessionsManager, assetStorage))
 			deployments.Attach(mux, deployments.NewService(logger, tracerProvider, db, temporalClient, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient))
 			keys.Attach(mux, keys.NewService(logger, db, sessionManager, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, db, sessionManager, chatSessionsManager))

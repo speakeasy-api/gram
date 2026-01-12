@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -105,6 +106,8 @@ func newTestAgentsService(t *testing.T) (context.Context, *testInstance) {
 	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-test"), "", billingClient)
 	require.NoError(t, err)
 
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	// Create environment entries
@@ -131,7 +134,7 @@ func newTestAgentsService(t *testing.T) (context.Context, *testInstance) {
 	// Create supporting services
 	toolsetsSvc := toolsets.NewService(logger, conn, sessionManager, nil)
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthogClient, testenv.DefaultSiteURL(t), mcpRegistryClient)
-	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage)
+	assetsSvc := assets.NewService(logger, conn, sessionManager, chatSessionsManager, assetStorage)
 
 	return ctx, &testInstance{
 		agentsService:  agentsService,

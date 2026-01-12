@@ -617,6 +617,13 @@ paths:
                   schema:
                     description: Session header
                     type: string
+                - allowEmptyValue: true
+                  description: Chat Sessions token header
+                  in: header
+                  name: Gram-Chat-Session
+                  schema:
+                    description: Chat Sessions token header
+                    type: string
             responses:
                 "200":
                     content:
@@ -693,6 +700,7 @@ paths:
             security:
                 - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
+                - chat_sessions_token_header_Gram-Chat-Session: []
             summary: serveChatAttachment assets
             tags:
                 - assets
@@ -1067,6 +1075,13 @@ paths:
                   schema:
                     description: Session header
                     type: string
+                - allowEmptyValue: true
+                  description: Chat Sessions token header
+                  in: header
+                  name: Gram-Chat-Session
+                  schema:
+                    description: Chat Sessions token header
+                    type: string
             responses:
                 "200":
                     content:
@@ -1133,6 +1148,8 @@ paths:
                   project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
+                - chat_sessions_token_header_Gram-Chat-Session: []
+                  project_slug_header_Gram-Project: []
             summary: uploadChatAttachment assets
             tags:
                 - assets
@@ -14226,6 +14243,8 @@ components:
             properties:
                 apikey_token:
                     type: string
+                chat_sessions_token:
+                    type: string
                 id:
                     type: string
                     description: The ID of the attachment to serve
@@ -15254,6 +15273,8 @@ components:
             type: object
             properties:
                 apikey_token:
+                    type: string
+                chat_sessions_token:
                     type: string
                 content_length:
                     type: integer
