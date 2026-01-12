@@ -935,3 +935,51 @@ jobs:
       - name: Prune PNPM store
         if: ${{ needs.changes.outputs.elements == 'true' && success() }}
         run: pnpm store prune
+
+  elements-test:
+    runs-on: ubicloud-standard-4
+    needs: changes
+    steps:
+      - name: Skip if no elements changes exist
+        if: ${{ needs.changes.outputs.elements != 'true' }}
+        run: echo "No elements changes detected — skipping elements-test."
+
+      - name: Checkout
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+
+      - name: Setup Mise
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3.5.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: mise run github
+
+      - name: Cache PNPM
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+        with:
+          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_PNPM_KEY }}
+            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+          path: |
+            ${{ env.PNPM_STORE_PATH }}
+
+      - name: Install dependencies
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Test
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: pnpm test
+        working-directory: elements
+
+      - name: Prune PNPM store
+        if: ${{ needs.changes.outputs.elements == 'true' && success() }}
+        run: pnpm store prune
