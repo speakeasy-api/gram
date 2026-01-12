@@ -23,8 +23,15 @@ sync_docs() {
     rsync -a --delete \
       --exclude='.DS_Store' \
       --exclude='/index.mdx' \
+      --exclude='_media' \
       --filter='P /index.mdx' \
       "$src_path/" "$dest_path/"
+
+    # Rename README.md to quickstart.md
+    if [ -f "$dest_path/README.md" ]; then
+      mv "$dest_path/README.md" "$dest_path/quickstart.md"
+      echo "  Moved: README.md -> quickstart.md"
+    fi
   else
     echo "Warning: $src_path does not exist; nothing to sync."
     exit 1
@@ -38,6 +45,11 @@ normalize_files() {
     filename=$(basename "$f" .md)
     kebab_filename=$(to_kebab "$filename")
     title="$filename"
+
+    # Special case: quickstart.md gets "Quickstart" title
+    if [ "$filename" = "quickstart" ]; then
+      title="Quickstart"
+    fi
 
     # Rename file to kebab-case if needed
     if [ "$filename" != "$kebab_filename" ]; then
