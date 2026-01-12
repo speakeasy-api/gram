@@ -1,12 +1,22 @@
 import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+} from "@/components/ai-elements/prompt-input";
+import { Button } from "@/components/ui/button";
+import { Type } from "@/components/ui/type";
+import {
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  useAssistantApi,
+  useAssistantState,
 } from "@assistant-ui/react";
 import { useGramElements } from "@gram-ai/elements";
-import { Button } from "@/components/ui/button";
-import { Type } from "@/components/ui/type";
-import type { FC } from "react";
+import { type FC } from "react";
 
 /**
  * Custom ThreadWelcome component using Gram design system.
@@ -81,5 +91,36 @@ export const GramComposer: FC = () => {
         />
       </ComposerPrimitive.AttachmentDropzone>
     </ComposerPrimitive.Root>
+  );
+};
+
+export const Composer: FC = () => {
+  const threadState = useAssistantState((s) => s.thread);
+  const threadApi = useAssistantApi();
+
+  const handleSubmit = () => {
+    threadApi.composer().send();
+  };
+
+  const handleChange = (value: string) => {
+    threadApi.composer().setText(value);
+  };
+
+  return (
+    <PromptInput onSubmit={handleSubmit}>
+      <PromptInputBody>
+        <PromptInputTextarea
+          placeholder="Send a message..."
+          onChange={handleChange}
+        />
+      </PromptInputBody>
+      <PromptInputFooter className="bg-secondary border-t border-neutral-softest rounded-bl-lg rounded-br-lg">
+        <PromptInputTools>{/*{additionalActions}*/}</PromptInputTools>
+        <PromptInputSubmit
+          disabled={threadState.isLoading || threadState.isRunning}
+          // status={status}
+        />
+      </PromptInputFooter>
+    </PromptInput>
   );
 };

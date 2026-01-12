@@ -9,6 +9,7 @@ import { Type } from "@/components/ui/type";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { getServerURL } from "@/lib/utils";
 import {
+  Composer,
   GramThreadWelcome,
   GramUserMessage,
 } from "./PlaygroundElementsOverrides";
@@ -95,6 +96,7 @@ export function PlaygroundElements({
         components: {
           ThreadWelcome: GramThreadWelcome,
           UserMessage: GramUserMessage,
+          Composer: Composer,
         },
       }}
     >
