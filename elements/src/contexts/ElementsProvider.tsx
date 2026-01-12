@@ -69,11 +69,7 @@ function mergeInternalSystemPromptWith(
  */
 function cleanMessagesForModel(messages: UIMessage[]): UIMessage[] {
   return messages.map((message) => {
-    // Type assertion to work with the parts property
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const msg = message as any
-
-    const partsArray = msg.parts
+    const partsArray = message.parts
     if (!Array.isArray(partsArray)) {
       return message
     }
