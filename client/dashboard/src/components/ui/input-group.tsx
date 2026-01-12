@@ -149,7 +149,7 @@ function InputGroupInput({
 function InputGroupTextarea({
   className,
   ...props
-}: React.ComponentProps<"textarea">) {
+}: React.ComponentProps<typeof Textarea>) {
   return (
     <Textarea
       data-slot="input-group-control"
@@ -157,8 +157,7 @@ function InputGroupTextarea({
         "flex-1 resize-none rounded-none border-0 bg-transparent p-4 shadow-none focus-visible:ring-0 dark:bg-transparent",
         className,
       )}
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      {...(props as any)}
+      {...props}
     />
   );
 }
