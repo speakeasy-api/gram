@@ -27,6 +27,7 @@ sync_docs() {
       --exclude='README.md' \
       --filter='P /index.mdx' \
       --filter='P /plugins.mdx' \
+      --filter='P /introduction.mdx' \
       "$src_path/" "$dest_path/"
 
     # Use _media/README.md as quickstart.md
@@ -59,6 +60,12 @@ normalize_files() {
       f="$dir/$kebab_filename.md"
       echo "  Renamed: $filename.md -> $kebab_filename.md"
     fi
+
+    # Strip typedoc header lines (version link, separator, breadcrumb)
+    tmp=$(mktemp)
+    sed -E '/^\[\*\*@gram-ai\/elements/d; /^@gram-ai\/elements/d; /^\[@gram-ai\/elements\]/d; /^\*\*\*$/d' "$f" | \
+      sed '/./,$!d' > "$tmp"
+    mv "$tmp" "$f"
 
     # Add frontmatter if not already present
     if ! head -1 "$f" | grep -q '^---$'; then
