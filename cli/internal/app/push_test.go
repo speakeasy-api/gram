@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:paralleltest // Tests modify shared package-level variables (isTerminalFunc, openURLFunc)
 func TestOpenDeploymentURL(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -75,6 +76,8 @@ func TestOpenDeploymentURL(t *testing.T) {
 }
 
 func TestProcessingMessage(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		elapsed  time.Duration
@@ -109,6 +112,8 @@ func TestProcessingMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			result := processingMessage(tt.elapsed)
 			require.Equal(t, tt.expected, result)
 		})
