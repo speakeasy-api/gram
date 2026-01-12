@@ -17,6 +17,9 @@ import {
 } from "@assistant-ui/react";
 import { useGramElements } from "@gram-ai/elements";
 import { type FC } from "react";
+import { usePlaygroundAuthWarning } from "./PlaygroundElements";
+import { useRoutes } from "@/routes";
+import { AlertCircle } from "lucide-react";
 
 /**
  * Custom ThreadWelcome component using Gram design system.
@@ -97,6 +100,8 @@ export const GramComposer: FC = () => {
 export const Composer: FC = () => {
   const threadState = useAssistantState((s) => s.thread);
   const threadApi = useAssistantApi();
+  const authWarning = usePlaygroundAuthWarning();
+  const routes = useRoutes();
 
   const handleSubmit = () => {
     threadApi.composer().send();
@@ -107,20 +112,39 @@ export const Composer: FC = () => {
   };
 
   return (
-    <PromptInput onSubmit={handleSubmit}>
-      <PromptInputBody>
-        <PromptInputTextarea
-          placeholder="Send a message..."
-          onChange={handleChange}
-        />
-      </PromptInputBody>
-      <PromptInputFooter className="bg-secondary border-t border-neutral-softest rounded-bl-lg rounded-br-lg">
-        <PromptInputTools>{/*{additionalActions}*/}</PromptInputTools>
-        <PromptInputSubmit
-          disabled={threadState.isLoading || threadState.isRunning}
-          // status={status}
-        />
-      </PromptInputFooter>
-    </PromptInput>
+    <div className="flex flex-col gap-3">
+      {authWarning && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-warning/10 border border-warning/20 rounded-md text-sm text-warning-foreground">
+          <AlertCircle className="size-4 shrink-0" />
+          <span>
+            {authWarning.missingCount} authentication{" "}
+            {authWarning.missingCount === 1 ? "variable" : "variables"} not
+            configured.{" "}
+            <routes.toolsets.toolset.Link
+              params={[authWarning.toolsetSlug]}
+              hash="auth"
+              className="underline hover:text-foreground font-medium"
+            >
+              Configure now
+            </routes.toolsets.toolset.Link>
+          </span>
+        </div>
+      )}
+      <PromptInput onSubmit={handleSubmit}>
+        <PromptInputBody>
+          <PromptInputTextarea
+            placeholder="Send a message..."
+            onChange={handleChange}
+          />
+        </PromptInputBody>
+        <PromptInputFooter className="bg-secondary border-t border-neutral-softest rounded-bl-lg rounded-br-lg">
+          <PromptInputTools>{/*{additionalActions}*/}</PromptInputTools>
+          <PromptInputSubmit
+            disabled={threadState.isLoading || threadState.isRunning}
+            // status={status}
+          />
+        </PromptInputFooter>
+      </PromptInput>
+    </div>
   );
 };

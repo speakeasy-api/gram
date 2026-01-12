@@ -1,7 +1,7 @@
 import { GramElementsProvider, Chat, type Model } from "@gram-ai/elements";
 // Note: Not importing Elements CSS as it conflicts with dashboard's Tailwind styles
 // The dashboard's Tailwind should provide necessary utility classes
-import { useCallback } from "react";
+import { createContext, useCallback, useContext } from "react";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useMcpUrl } from "../mcp/MCPDetails";
 import { useListToolsets } from "@gram/client/react-query/index.js";
@@ -13,6 +13,15 @@ import {
   GramThreadWelcome,
   GramUserMessage,
 } from "./PlaygroundElementsOverrides";
+import { useEnvironment } from "../environments/Environment";
+import { getAuthStatus } from "./PlaygroundAuth";
+
+// Context for passing auth warning to the Composer component
+type AuthWarningValue = { missingCount: number; toolsetSlug: string } | null;
+export const PlaygroundAuthWarningContext =
+  createContext<AuthWarningValue>(null);
+export const usePlaygroundAuthWarning = () =>
+  useContext(PlaygroundAuthWarningContext);
 
 interface PlaygroundElementsProps {
   toolsetSlug: string | null;
@@ -35,6 +44,20 @@ export function PlaygroundElements({
 
   // Get MCP URL from toolset
   const { url: mcpUrl } = useMcpUrl(toolset);
+
+  // Get environment data for auth status check
+  const environmentData = useEnvironment(environmentSlug ?? undefined);
+
+  // Calculate auth status
+  const authStatus =
+    toolset && environmentData
+      ? getAuthStatus(toolset, {
+          entries: environmentData.entries?.map((e) => ({
+            name: e.name,
+            value: e.value,
+          })),
+        })
+      : null;
 
   // Create getSession function using SDK mutation with session auth
   const getSession = useCallback(async () => {
@@ -100,9 +123,17 @@ export function PlaygroundElements({
         },
       }}
     >
-      <div className="h-full bg-surface-primary [&_.aui-thread-root]:bg-transparent [&_.aui-composer-wrapper]:bg-transparent rounded-br-xl">
-        <Chat />
-      </div>
+      <PlaygroundAuthWarningContext.Provider
+        value={
+          authStatus?.hasMissingAuth && toolsetSlug
+            ? { missingCount: authStatus.missingCount, toolsetSlug }
+            : null
+        }
+      >
+        <div className="h-full bg-surface-primary [&_.aui-thread-root]:bg-transparent [&_.aui-composer-wrapper]:bg-transparent rounded-br-xl">
+          <Chat />
+        </div>
+      </PlaygroundAuthWarningContext.Provider>
     </GramElementsProvider>
   );
 }
