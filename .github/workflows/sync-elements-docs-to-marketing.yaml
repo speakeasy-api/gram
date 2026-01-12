@@ -1,0 +1,118 @@
+name: Sync Elements Docs → Marketing Site (PR)
+on:
+  push:
+    branches:
+      - main
+      - chai/automate-elements-docs-sync # TODO: remove after testing
+    paths:
+      - "elements/docs/**"
+  workflow_dispatch: # Manual trigger for testing
+permissions:
+  contents: read
+  pull-requests: write
+concurrency:
+  group: elements-to-marketing-pr-sync-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  MARKETING_REPO: speakeasy-api/marketing-site
+  BRANCH: main
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Gram repo (source)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Checkout Marketing repo (destination)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: ${{ env.MARKETING_REPO }}
+          ref: ${{ env.BRANCH }}
+          token: ${{ secrets.SERVICE_BOT_TOKEN }}
+          path: marketing-repo
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Sync docs content into Marketing working tree
+        run: |
+          set -euo pipefail
+          src_path="elements/docs"
+          dest_path="marketing-repo/src/content/docs/elements"
+          if [ -d "$src_path" ]; then
+            mkdir -p "$dest_path"
+            # Exclude the root docs index.mdx from being copied and protect any existing
+            # destination file from deletion/overwrites.
+            rsync -a --delete \
+              --exclude='.DS_Store' \
+              --exclude='/index.mdx' \
+              --filter='P /index.mdx' \
+              "$src_path/" "$dest_path/"
+          else
+            echo "Warning: $src_path does not exist; nothing to sync."
+          fi
+      - name: Transform internal links in synced content
+        run: |
+          set -euo pipefail
+          content_dir="marketing-repo/src/content/docs/elements"
+          if [ -d "$content_dir" ]; then
+            # Target common content file extensions
+            mapfile -t files < <(find "$content_dir" -type f \( -name '*.md' -o -name '*.mdx' -o -name '*.markdown' \))
+            if [ "${#files[@]}" -gt 0 ]; then
+              for f in "${files[@]}"; do
+                # Skip the root-level index.mdx (left unmanaged by sync step)
+                if [[ "$f" == "$content_dir/index.mdx" ]]; then
+                  continue
+                fi
+                # Prefix any root-relative internal links with /docs/elements/
+                # Skips already-correct, assets, anchors, and URLs with a scheme (mailto:, https:, etc.)
+                perl -0777 -i -pe \
+                  's{(href=)(["\x27])/(?!docs/elements/|assets/|#|[a-z]+:)}{\1\2/docs/elements/}g;' \
+                  -e 's{(\]\()/(?!docs/elements/|assets/|#|[a-z]+:)}{\1/docs/elements/}g' \
+                  "$f"
+              done
+            fi
+          else
+            echo "Warning: $content_dir does not exist; nothing to transform."
+          fi
+      - name: Build PR body with grouped changes
+        run: |
+          set -euo pipefail
+          cd marketing-repo
+          echo "### Sync from Elements" > ../PR_BODY.md
+          echo "" >> ../PR_BODY.md
+          echo "**Source commit:** \`${GITHUB_SHA}\`" >> ../PR_BODY.md
+          echo "" >> ../PR_BODY.md
+          echo "**Grouped file changes:**" >> ../PR_BODY.md
+          if git diff --name-status | grep -q .; then
+            git diff --name-status | awk '
+              {
+                split($2, parts, "/");
+                key = parts[1];
+                if (length(parts) >= 2) key = key "/" parts[2];
+                if (current != key) {
+                  if (current != "") print "" >> "../PR_BODY.md";
+                  print "#### `" key "/`" >> "../PR_BODY.md";
+                  current = key;
+                }
+                print $0 >> "../PR_BODY.md";
+              }
+            '
+          else
+            echo "_No file changes detected after sync._" >> ../PR_BODY.md
+          fi
+      - name: Create pull request in Marketing
+        uses: peter-evans/create-pull-request@98357b18bf14b5342f975ff684046ec3b2a07725  # v8.0.0
+        with:
+          token: ${{ secrets.SERVICE_BOT_TOKEN }}
+          path: marketing-repo
+          commit-message: "Sync marketing docs from Elements 🧩 (source ${{ github.sha }})"
+          branch: chore/elements-to-marketing-sync-${{ github.sha }}
+          title: "chore: sync docs from Elements"
+          body-path: PR_BODY.md
+          committer: "Beezy the bot <beezy-bot@users.noreply.github.com>"
+          author: "Beezy the bot <beezy-bot@users.noreply.github.com>"
+          labels: |
+            automation
+            docs
+            sync
+          signoff: false
