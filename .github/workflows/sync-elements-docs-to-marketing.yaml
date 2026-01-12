@@ -4,8 +4,8 @@ on:
     branches:
       - main
       - chai/automate-elements-docs-sync # TODO: remove after testing
-    paths:
-      - "elements/docs/**"
+    # paths:
+    #   - "elements/docs/**"
   workflow_dispatch: # Manual trigger for testing
 permissions:
   contents: read
