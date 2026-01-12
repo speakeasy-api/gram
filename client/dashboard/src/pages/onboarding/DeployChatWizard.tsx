@@ -181,7 +181,7 @@ export const App = () => {
         </Stack>
       </Stack>
 
-      <routes.chatElements.Link>
+      <routes.elements.Link>
         <Button
           variant="brand"
           className="w-full"
@@ -191,7 +191,7 @@ export const App = () => {
         >
           Continue
         </Button>
-      </routes.chatElements.Link>
+      </routes.elements.Link>
     </>
   );
 };

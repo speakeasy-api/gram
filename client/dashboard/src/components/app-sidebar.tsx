@@ -46,7 +46,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     create: [routes.toolsets, routes.customTools, routes.prompts] as AppRoute[],
     connect: [
       routes.playground,
-      routes.chatElements,
+      routes.elements,
       routes.mcp,
       routes.environments,
     ],

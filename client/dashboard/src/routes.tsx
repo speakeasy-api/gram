@@ -7,7 +7,7 @@ import Billing from "./pages/billing/Billing";
 import Catalog, { CatalogRoot } from "./pages/catalog/Catalog";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
-import ChatElements from "./pages/elements/ChatElements";
+import Elements from "./pages/elements/Elements";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
   EnvironmentsRoot,
@@ -133,11 +133,11 @@ const ROUTE_STRUCTURE = {
     icon: "message-circle",
     component: Playground,
   },
-  chatElements: {
-    title: "Chat Elements",
+  elements: {
+    title: "Elements",
     url: "elements",
     icon: "dock",
-    component: ChatElements,
+    component: Elements,
   },
   integrations: {
     title: "Integrations",

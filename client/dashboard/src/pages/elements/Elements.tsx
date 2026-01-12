@@ -1,0 +1,1280 @@
+import { Page } from "@/components/page-layout";
+import { useSlugs } from "@/contexts/Sdk";
+import { useProject, useSession } from "@/contexts/Auth";
+import { getServerURL } from "@/lib/utils";
+import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { TextArea } from "@/components/ui/textarea";
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  RefreshCw,
+  Search,
+} from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CodeBlock, CodeBlockCopyButton } from "@/components/ai-elements/code-block";
+
+type ColorScheme = "light" | "dark" | "system";
+type Density = "compact" | "normal" | "spacious";
+type Radius = "round" | "soft" | "sharp";
+type Variant = "widget" | "sidecar" | "standalone";
+type ModalPosition = "bottom-right" | "bottom-left" | "top-right" | "top-left";
+
+interface ElementsFormConfig {
+  // Connection
+  mcp: string;
+  // Theme
+  colorScheme: ColorScheme;
+  density: Density;
+  radius: Radius;
+  variant: Variant;
+  // Welcome
+  welcomeTitle: string;
+  welcomeSubtitle: string;
+  // Composer
+  composerPlaceholder: string;
+  // Model
+  showModelPicker: boolean;
+  // System Prompt
+  systemPrompt: string;
+  // Modal (widget variant)
+  modalTitle: string;
+  modalPosition: ModalPosition;
+  modalDefaultOpen: boolean;
+  // Tools
+  expandToolGroupsByDefault: boolean;
+}
+
+const defaultConfig: ElementsFormConfig = {
+  mcp: "https://chat.speakeasy.com/mcp/speakeasy-team-my_api",
+  colorScheme: "system",
+  density: "normal",
+  radius: "soft",
+  variant: "standalone",
+  welcomeTitle: "Welcome",
+  welcomeSubtitle: "How can I help you today?",
+  composerPlaceholder: "Send a message...",
+  showModelPicker: false,
+  systemPrompt: "",
+  modalTitle: "Chat",
+  modalPosition: "bottom-right",
+  modalDefaultOpen: false,
+  expandToolGroupsByDefault: false,
+};
+
+function ConfigSection({
+  title,
+  children,
+  defaultOpen = true,
+}: {
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <div>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center justify-between w-full group"
+      >
+        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+          {title}
+        </h3>
+        <motion.div
+          animate={{ rotate: isOpen ? 0 : -90 }}
+          transition={{ duration: 0.2, ease: "easeInOut" }}
+        >
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        </motion.div>
+      </button>
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="pt-3 space-y-4">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function ConfigField({
+  label,
+  description,
+  children,
+}: {
+  label: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-sm font-medium">{label}</Label>
+      {description && (
+        <p className="text-xs text-muted-foreground">{description}</p>
+      )}
+      {children}
+    </div>
+  );
+}
+
+function SwitchField({
+  label,
+  description,
+  checked,
+  onCheckedChange,
+}: {
+  label: string;
+  description?: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="space-y-0.5">
+        <Label className="text-sm font-medium">{label}</Label>
+        {description && (
+          <p className="text-xs text-muted-foreground">{description}</p>
+        )}
+      </div>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
+  );
+}
+
+export default function ChatElements() {
+  const { orgSlug, projectSlug } = useSlugs();
+  const session = useSession();
+  const project = useProject();
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [iframeReady, setIframeReady] = useState(false);
+  const [iframeKey, setIframeKey] = useState(0);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const sessionCreatedRef = useRef(false);
+  const [rightPanelTab, setRightPanelTab] = useState<"preview" | "install">(
+    "preview",
+  );
+
+  const [config, setConfig] = useState<ElementsFormConfig>(defaultConfig);
+
+  const updateConfig = <K extends keyof ElementsFormConfig>(
+    key: K,
+    value: ElementsFormConfig[K],
+  ) => {
+    setConfig((prev) => {
+      const newConfig = { ...prev, [key]: value };
+
+      // Auto-set modalDefaultOpen to true when switching to widget variant
+      if (key === "variant" && value === "widget") {
+        newConfig.modalDefaultOpen = true;
+      }
+
+      return newConfig;
+    });
+  };
+
+  const createSessionMutation = useChatSessionsCreateMutation();
+
+  // Listen for iframe ready signal
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type === "ELEMENTS_READY") {
+        setIframeReady(true);
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
+
+  // Create session ONCE when iframe is ready
+  useEffect(() => {
+    if (!iframeReady || sessionCreatedRef.current) return;
+    sessionCreatedRef.current = true;
+
+    const createSession = async () => {
+      try {
+        const result = await createSessionMutation.mutateAsync({
+          security: {
+            option1: {
+              projectSlugHeaderGramProject: project.slug,
+              sessionHeaderGramSession: session.session,
+            },
+          },
+          request: {
+            createRequestBody: {
+              embedOrigin: window.location.origin,
+            },
+          },
+        });
+        setSessionToken(result.clientToken);
+      } catch (error) {
+        console.error("Failed to create session:", error);
+      }
+    };
+
+    createSession();
+  }, [iframeReady, createSessionMutation, project.slug, session.session]);
+
+  // Build config object (memoized)
+  const elementsConfig = useMemo(
+    () => ({
+      mcp: config.mcp,
+      projectSlug: project.slug,
+      apiUrl: getServerURL(),
+      systemPrompt: config.systemPrompt || undefined,
+      variant: config.variant,
+      theme: {
+        colorScheme: config.colorScheme,
+        density: config.density,
+        radius: config.radius,
+      },
+      welcome: {
+        title: config.welcomeTitle,
+        subtitle: config.welcomeSubtitle,
+      },
+      composer: {
+        placeholder: config.composerPlaceholder,
+      },
+      model: {
+        showModelPicker: config.showModelPicker,
+      },
+      modal: {
+        title: config.modalTitle,
+        position: config.modalPosition,
+        defaultOpen: config.modalDefaultOpen,
+      },
+      tools: {
+        expandToolGroupsByDefault: config.expandToolGroupsByDefault,
+      },
+    }),
+    [config, project.slug],
+  );
+
+  // Send config to iframe whenever it changes (after session is ready)
+  useEffect(() => {
+    if (!iframeReady || !sessionToken || !iframeRef.current?.contentWindow)
+      return;
+
+    const iframe = iframeRef.current.contentWindow;
+    iframe.postMessage(
+      { type: "ELEMENTS_CONFIG", config: elementsConfig },
+      window.location.origin,
+    );
+  }, [iframeReady, sessionToken, elementsConfig]);
+
+  // Send session token to iframe when available
+  useEffect(() => {
+    if (!iframeReady || !sessionToken || !iframeRef.current?.contentWindow)
+      return;
+
+    const iframe = iframeRef.current.contentWindow;
+    iframe.postMessage(
+      { type: "ELEMENTS_SESSION", sessionToken },
+      window.location.origin,
+    );
+  }, [iframeReady, sessionToken]);
+
+  const refreshPreview = () => {
+    setIframeReady(false);
+    setSessionToken(null);
+    sessionCreatedRef.current = false;
+    setIframeKey((k) => k + 1);
+  };
+
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <Page.Section>
+          <Page.Section.Title className="lowercase">
+            @gram-ai/elements
+          </Page.Section.Title>
+          <Page.Section.Description>
+            Embeddable AI chat components for your applications
+          </Page.Section.Description>
+          <Page.Section.CTA>
+            <Tabs
+              value={rightPanelTab}
+              onValueChange={(v) => setRightPanelTab(v as "preview" | "install")}
+            >
+              <TabsList>
+                <TabsTrigger value="preview">Preview</TabsTrigger>
+                <TabsTrigger value="install">Installation</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </Page.Section.CTA>
+          <Page.Section.Body>
+            <div className="border rounded-lg p-6 bg-card">
+            {/* Preview Mode */}
+            <div
+              className={`${rightPanelTab === "preview" ? "block" : "hidden"}`}
+            >
+              <div className="flex gap-12 h-[calc(100vh-240px)] min-h-[500px]">
+                {/* Config Panel */}
+                <div className="w-1/3 h-full overflow-y-auto pr-4 space-y-6">
+                {/* Appearance */}
+                <ConfigSection title="Appearance">
+                  <ConfigField label="Variant" description="Layout style">
+                    <Select
+                      value={config.variant}
+                      onValueChange={(v) =>
+                        updateConfig("variant", v as Variant)
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="standalone">Standalone</SelectItem>
+                        <SelectItem value="widget">Widget</SelectItem>
+                        <SelectItem value="sidecar">Sidecar</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </ConfigField>
+
+                  <ConfigField label="Color Scheme">
+                    <Select
+                      value={config.colorScheme}
+                      onValueChange={(v) =>
+                        updateConfig("colorScheme", v as ColorScheme)
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="system">System</SelectItem>
+                        <SelectItem value="light">Light</SelectItem>
+                        <SelectItem value="dark">Dark</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </ConfigField>
+
+                  <ConfigField label="Density" description="Spacing density">
+                    <Select
+                      value={config.density}
+                      onValueChange={(v) =>
+                        updateConfig("density", v as Density)
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="compact">Compact</SelectItem>
+                        <SelectItem value="normal">Normal</SelectItem>
+                        <SelectItem value="spacious">Spacious</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </ConfigField>
+
+                  <ConfigField label="Border Radius">
+                    <Select
+                      value={config.radius}
+                      onValueChange={(v) => updateConfig("radius", v as Radius)}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="round">Round</SelectItem>
+                        <SelectItem value="soft">Soft</SelectItem>
+                        <SelectItem value="sharp">Sharp</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </ConfigField>
+                </ConfigSection>
+
+                {/* Welcome */}
+                <ConfigSection title="Welcome Screen" defaultOpen={false}>
+                  <ConfigField label="Title">
+                    <Input
+                      value={config.welcomeTitle}
+                      onChange={(value) => updateConfig("welcomeTitle", value)}
+                      placeholder="Welcome"
+                    />
+                  </ConfigField>
+                  <ConfigField label="Subtitle">
+                    <Input
+                      value={config.welcomeSubtitle}
+                      onChange={(value) =>
+                        updateConfig("welcomeSubtitle", value)
+                      }
+                      placeholder="How can I help you today?"
+                    />
+                  </ConfigField>
+                </ConfigSection>
+
+                {/* Composer */}
+                <ConfigSection title="Composer" defaultOpen={false}>
+                  <ConfigField label="Placeholder">
+                    <Input
+                      value={config.composerPlaceholder}
+                      onChange={(value) =>
+                        updateConfig("composerPlaceholder", value)
+                      }
+                      placeholder="Send a message..."
+                    />
+                  </ConfigField>
+                </ConfigSection>
+
+                {/* Model */}
+                <ConfigSection title="Model" defaultOpen={false}>
+                  <SwitchField
+                    label="Show Model Picker"
+                    description="Allow users to select different models"
+                    checked={config.showModelPicker}
+                    onCheckedChange={(checked) =>
+                      updateConfig("showModelPicker", checked)
+                    }
+                  />
+                </ConfigSection>
+
+                {/* System Prompt */}
+                <ConfigSection title="System Prompt" defaultOpen={false}>
+                  <ConfigField
+                    label="Instructions"
+                    description="Custom instructions for the AI assistant"
+                  >
+                    <TextArea
+                      value={config.systemPrompt}
+                      onChange={(value) => updateConfig("systemPrompt", value)}
+                      placeholder="You are a helpful assistant..."
+                      rows={4}
+                    />
+                  </ConfigField>
+                </ConfigSection>
+
+                {/* Modal Config (only for widget variant) */}
+                {config.variant === "widget" && (
+                  <ConfigSection title="Widget Modal" defaultOpen={false}>
+                    <ConfigField label="Modal Title">
+                      <Input
+                        value={config.modalTitle}
+                        onChange={(value) => updateConfig("modalTitle", value)}
+                        placeholder="Chat"
+                      />
+                    </ConfigField>
+                    <ConfigField label="Position">
+                      <Select
+                        value={config.modalPosition}
+                        onValueChange={(v) =>
+                          updateConfig("modalPosition", v as ModalPosition)
+                        }
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="bottom-right">
+                            Bottom Right
+                          </SelectItem>
+                          <SelectItem value="bottom-left">
+                            Bottom Left
+                          </SelectItem>
+                          <SelectItem value="top-right">Top Right</SelectItem>
+                          <SelectItem value="top-left">Top Left</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </ConfigField>
+                    <SwitchField
+                      label="Open by Default"
+                      checked={config.modalDefaultOpen}
+                      onCheckedChange={(checked) =>
+                        updateConfig("modalDefaultOpen", checked)
+                      }
+                    />
+                  </ConfigSection>
+                )}
+
+                {/* Tools */}
+                <ConfigSection title="Tools" defaultOpen={false}>
+                  <SwitchField
+                    label="Expand Tool Groups by Default"
+                    description="Show tool call details expanded"
+                    checked={config.expandToolGroupsByDefault}
+                    onCheckedChange={(checked) =>
+                      updateConfig("expandToolGroupsByDefault", checked)
+                    }
+                  />
+                </ConfigSection>
+
+                {/* Connection */}
+                <ConfigSection title="Connection" defaultOpen={false}>
+                  <ConfigField
+                    label="MCP Server URL"
+                    description="The URL of your MCP server"
+                  >
+                    <Input
+                      value={config.mcp}
+                      onChange={(value) => updateConfig("mcp", value)}
+                      placeholder="https://..."
+                    />
+                  </ConfigField>
+                </ConfigSection>
+              </div>
+
+                {/* Preview Panel */}
+                <div className="w-2/3 flex flex-col max-h-[700px]">
+                  <div className="flex items-center justify-end mb-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={refreshPreview}
+                      className="h-8 px-2"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-1" />
+                      Refresh
+                    </Button>
+                  </div>
+                  <div className="flex-1 rounded-lg border overflow-hidden bg-muted/30">
+                    <iframe
+                      key={iframeKey}
+                      ref={iframeRef}
+                      src="/embed.html"
+                      className="h-full w-full border-0"
+                      title="Gram Elements Chat"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Installation Mode */}
+            <div
+              className={`${rightPanelTab === "install" ? "block" : "hidden"}`}
+            >
+              <InstallationGuide
+                config={config}
+                projectSlug={projectSlug ?? "your-project"}
+              />
+            </div>
+            </div>
+          </Page.Section.Body>
+        </Page.Section>
+      </Page.Body>
+    </Page>
+  );
+}
+
+function InstallationGuide({
+  config,
+  projectSlug,
+}: {
+  config: ElementsFormConfig;
+  projectSlug: string;
+}) {
+  const [currentStep, setCurrentStep] = useState(1);
+  const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
+  const [selectedFramework, setSelectedFramework] = useState<
+    "nextjs" | "vite" | null
+  >(null);
+
+  const mcpUrl = config.mcp || `https://app.getgram.ai/mcp/${projectSlug}`;
+
+  const getPeerDeps = () => {
+    const pm = selectedFramework === "nextjs" ? "npm" : "pnpm";
+    return `${pm} add react react-dom @assistant-ui/react @assistant-ui/react-markdown motion remark-gfm zustand vega shiki`;
+  };
+
+  const getElementsInstall = () => {
+    const pm = selectedFramework === "nextjs" ? "npm" : "pnpm";
+    return `${pm} add @gram-ai/elements`;
+  };
+
+  const getEnvContent = () => {
+    return `GRAM_API_KEY=your_api_key_here
+EMBED_ORIGIN=http://localhost:3000`;
+  };
+
+  const getNextjsApiRoute = () => {
+    return `// pages/api/session.ts
+import type { NextApiRequest, NextApiResponse } from "next";
+import { createElementsServerHandlers } from "@gram-ai/elements/server";
+
+// Disable Next.js body parsing so the handler can read the raw stream.
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+const handlers = createElementsServerHandlers();
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  await handlers.session(req, res, {
+    userIdentifier: "user-123", // Replace with actual user ID
+    embedOrigin: process.env.EMBED_ORIGIN || "http://localhost:3000",
+  });
+}`;
+  };
+
+  const getViteApiRoute = () => {
+    return `// server.ts (Express)
+import express from "express";
+import { createElementsServerHandlers } from "@gram-ai/elements/server";
+
+const app = express();
+const handlers = createElementsServerHandlers();
+
+app.use(express.json());
+
+app.post("/chat/session", (req, res) =>
+  handlers.session(req, res, {
+    embedOrigin: "http://localhost:5173",
+    userIdentifier: "user-123", // Replace with actual user ID
+    expiresAfter: 3600,
+  })
+);
+
+app.listen(3001, () => {
+  console.log("Server running on http://localhost:3001");
+});`;
+  };
+
+  const getComponentCode = () => {
+    const isNextjs = selectedFramework === "nextjs";
+    const useClientDirective = isNextjs ? `"use client";\n\n` : "";
+    const sessionEndpoint = isNextjs ? "/api/session" : "http://localhost:3001/chat/session";
+
+    // Build config options
+    const configLines: string[] = [];
+    configLines.push(`  projectSlug: "${projectSlug}",`);
+    configLines.push(`  mcp: "${mcpUrl}",`);
+
+    if (config.variant !== "standalone") {
+      configLines.push(`  variant: "${config.variant}",`);
+    }
+
+    if (config.welcomeTitle || config.welcomeSubtitle) {
+      const welcomeParts: string[] = [];
+      if (config.welcomeTitle) welcomeParts.push(`    title: "${config.welcomeTitle}",`);
+      if (config.welcomeSubtitle) welcomeParts.push(`    subtitle: "${config.welcomeSubtitle}",`);
+      configLines.push(`  welcome: {\n${welcomeParts.join("\n")}\n  },`);
+    }
+
+    if (config.variant === "widget" && config.modalDefaultOpen) {
+      configLines.push(`  modal: {\n    defaultOpen: true,\n  },`);
+    }
+
+    // Add the api.sessionFn config
+    configLines.push(`  api: {\n    sessionFn: getSession,\n  },`);
+
+    return `${useClientDirective}import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
+import "@gram-ai/elements/elements.css";
+
+// Custom session function for non-standard session endpoint
+const getSession = async () => {
+  return fetch("${sessionEndpoint}", {
+    method: "POST",
+    headers: { "Gram-Project": "${projectSlug}" },
+  })
+    .then((res) => res.json())
+    .then((data) => data.client_token);
+};
+
+const config: ElementsConfig = {
+${configLines.join("\n")}
+};
+
+export default function GramChat() {
+  return (
+    <GramElementsProvider config={config}>
+      <Chat />
+    </GramElementsProvider>
+  );
+}`;
+  };
+
+  const products = [
+    {
+      id: "chat",
+      name: "AI Chat",
+      description: "Embed AI assistants",
+      preview: ChatPreview,
+      available: true,
+    },
+    {
+      id: "search",
+      name: "AI Search",
+      description: "Semantic search",
+      preview: SearchPreview,
+      available: false,
+    },
+    {
+      id: "notifications",
+      name: "Notifications",
+      description: "Notify your users",
+      preview: NotificationsPreview,
+      available: false,
+    },
+    {
+      id: "docs",
+      name: "Documentation",
+      description: "Auto-generated docs",
+      preview: DocsPreview,
+      available: false,
+    },
+  ];
+
+  const frameworks = [
+    {
+      id: "nextjs" as const,
+      name: "Next.js",
+      icon: NextJsIcon,
+    },
+    {
+      id: "vite" as const,
+      name: "React",
+      icon: ReactIcon,
+    },
+  ];
+
+  const handleProductSelect = (productId: string) => {
+    if (products.find((p) => p.id === productId)?.available) {
+      setSelectedProduct(productId);
+      setCurrentStep(2);
+    }
+  };
+
+  const handleFrameworkSelect = (frameworkId: "nextjs" | "vite") => {
+    setSelectedFramework(frameworkId);
+    setCurrentStep(3);
+  };
+
+  return (
+    <div className="relative pl-10">
+      {/* Vertical line */}
+      <div className="absolute left-[11px] top-6 bottom-0 w-px bg-border" />
+
+      {/* Step 1: What are you building? */}
+      <WizardStep
+        number={1}
+        title="What are you building?"
+        description="Choose from common AI experiences or go fully custom."
+        isActive={currentStep >= 1}
+        isCompleted={currentStep > 1}
+        completedSummary={
+          selectedProduct
+            ? products.find((p) => p.id === selectedProduct)?.name
+            : undefined
+        }
+      >
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+          {products.map((product) => (
+            <button
+              key={product.id}
+              onClick={() => handleProductSelect(product.id)}
+              disabled={!product.available}
+              className={`group relative flex flex-col rounded-lg border text-left transition-all overflow-hidden bg-background ${
+                selectedProduct === product.id && product.available
+                  ? "border-primary ring-2 ring-primary"
+                  : product.available
+                    ? "border-border hover:border-muted-foreground/50 hover:shadow-sm"
+                    : "border-border/50 cursor-not-allowed"
+              } ${!product.available ? "opacity-50" : ""}`}
+            >
+              {/* Preview area */}
+              <div
+                className={`h-36 w-full p-3 overflow-hidden transition-all duration-200 ${
+                  selectedProduct === product.id
+                    ? ""
+                    : "grayscale group-hover:grayscale-0"
+                }`}
+                style={{
+                  background:
+                    selectedProduct === product.id
+                      ? "linear-gradient(135deg, #89CFF0 0%, #5DADE2 25%, #3498DB 50%, #85C1E9 75%, #AED6F1 100%)"
+                      : "hsl(var(--muted) / 0.3)",
+                }}
+              >
+                <product.preview />
+              </div>
+              {/* Content */}
+              <div className="p-4 pt-3 border-t">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <span className="font-medium text-sm block">
+                      {product.name}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {product.description}
+                    </span>
+                  </div>
+                  {selectedProduct === product.id && product.available && (
+                    <Check className="h-5 w-5 text-primary shrink-0" />
+                  )}
+                </div>
+              </div>
+              {!product.available && (
+                <div className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-[1px]">
+                  <span className="text-[10px] font-semibold text-muted-foreground bg-muted px-2.5 py-1 rounded-full uppercase tracking-wide">
+                    Coming Soon
+                  </span>
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      </WizardStep>
+
+      {/* Step 2: Select your technology */}
+      <WizardStep
+        number={2}
+        title="Select your technology"
+        description="Choose one of the following step-by-step quickstart guides to help you get started."
+        isActive={currentStep >= 2}
+        isCompleted={currentStep > 2}
+        completedSummary={
+          selectedFramework
+            ? frameworks.find((f) => f.id === selectedFramework)?.name
+            : undefined
+        }
+      >
+        {currentStep >= 2 && (
+          <div className="flex gap-4 mt-6">
+            {frameworks.map((fw) => (
+              <button
+                key={fw.id}
+                onClick={() => handleFrameworkSelect(fw.id)}
+                className={`relative flex flex-col items-start p-4 rounded-lg border text-left transition-all min-w-[140px] ${
+                  selectedFramework === fw.id
+                    ? "border-primary ring-2 ring-primary bg-primary/5"
+                    : "border-border hover:border-muted-foreground/50"
+                }`}
+              >
+                <fw.icon className="h-6 w-6 mb-3" />
+                <span className="font-medium text-sm flex items-center gap-1.5">
+                  {fw.name}
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                </span>
+                <span className="text-[10px] font-semibold tracking-wide text-amber-700 dark:text-amber-400 uppercase mt-2">
+                  AI Chat
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </WizardStep>
+
+      {/* Step 3: Install & configure */}
+      <WizardStep
+        number={3}
+        title="Install & configure"
+        isActive={currentStep >= 3}
+        isCompleted={false}
+        isLast
+      >
+        {currentStep >= 3 && selectedFramework && (
+          <div className="mt-6 space-y-6">
+            {/* Step 3a: Install */}
+            <SetupStep
+              number="a"
+              title="Install packages"
+              description="Run these commands in your terminal"
+            >
+              <div className="space-y-2">
+                <CodeBlock code={getPeerDeps()} language="bash">
+                  <CodeBlockCopyButton />
+                </CodeBlock>
+                <CodeBlock code={getElementsInstall()} language="bash">
+                  <CodeBlockCopyButton />
+                </CodeBlock>
+              </div>
+            </SetupStep>
+
+            {/* Step 3b: Environment */}
+            <SetupStep
+              number="b"
+              title="Add environment variables"
+              description={
+                <>
+                  Add to{" "}
+                  <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                    .env.local
+                  </code>
+                </>
+              }
+            >
+              <CodeBlock code={getEnvContent()} language="bash">
+                <CodeBlockCopyButton />
+              </CodeBlock>
+            </SetupStep>
+
+            {/* Step 3c: API Route */}
+            <SetupStep
+              number="c"
+              title={
+                selectedFramework === "nextjs"
+                  ? "Create session API route"
+                  : "Create session endpoint"
+              }
+              description={
+                selectedFramework === "nextjs" ? (
+                  <>
+                    Create{" "}
+                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                      pages/api/session.ts
+                    </code>
+                  </>
+                ) : (
+                  <>
+                    Create{" "}
+                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                      server.ts
+                    </code>
+                  </>
+                )
+              }
+            >
+              <CodeBlock
+                code={
+                  selectedFramework === "nextjs"
+                    ? getNextjsApiRoute()
+                    : getViteApiRoute()
+                }
+                language="typescript"
+                className="max-h-[300px] overflow-y-auto"
+              >
+                <CodeBlockCopyButton />
+              </CodeBlock>
+            </SetupStep>
+
+            {/* Step 3d: Component */}
+            <SetupStep
+              number="d"
+              title="Add the chat component"
+              description={
+                selectedFramework === "nextjs" ? (
+                  <>
+                    Update{" "}
+                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                      app/page.tsx
+                    </code>
+                  </>
+                ) : (
+                  <>
+                    Update{" "}
+                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                      src/App.tsx
+                    </code>
+                  </>
+                )
+              }
+            >
+              <CodeBlock
+                code={getComponentCode()}
+                language="typescript"
+                className="max-h-[300px] overflow-y-auto"
+              >
+                <CodeBlockCopyButton />
+              </CodeBlock>
+            </SetupStep>
+
+            {/* Done */}
+            <div className="flex items-center gap-3 p-4 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900">
+              <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center shrink-0">
+                <Check className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                  You're all set!
+                </p>
+                <p className="text-sm text-green-700 dark:text-green-300">
+                  Run your app and the chat widget will appear.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </WizardStep>
+    </div>
+  );
+}
+
+function SetupStep({
+  number,
+  title,
+  description,
+  children,
+}: {
+  number: string;
+  title: string;
+  description: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex gap-4">
+      <div className="shrink-0 w-7 h-7 rounded-full bg-muted flex items-center justify-center">
+        <span className="text-xs font-semibold text-muted-foreground">
+          {number}
+        </span>
+      </div>
+      <div className="flex-1 min-w-0 space-y-3">
+        <div>
+          <h4 className="text-sm font-semibold">{title}</h4>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
+        <div>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function WizardStep({
+  number,
+  title,
+  description,
+  isActive,
+  isCompleted,
+  isLast,
+  completedSummary,
+  children,
+}: {
+  number: number;
+  title: string;
+  description?: string;
+  isActive: boolean;
+  isCompleted: boolean;
+  isLast?: boolean;
+  completedSummary?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div
+      className={`relative pb-10 ${isLast ? "pb-0" : ""} ${!isActive ? "opacity-40 pointer-events-none" : ""}`}
+    >
+      {/* Step indicator - positioned to the left of the content */}
+      <div
+        className={`absolute -left-10 top-0 w-6 h-6 rounded-full flex items-center justify-center bg-background border ${
+          isCompleted
+            ? "border-primary bg-primary text-primary-foreground"
+            : isActive
+              ? "border-muted-foreground"
+              : "border-border"
+        }`}
+      >
+        {isCompleted ? (
+          <Check className="h-3.5 w-3.5" />
+        ) : (
+          <span
+            className={`text-xs font-medium ${isActive ? "text-foreground" : "text-muted-foreground"}`}
+          >
+            {number}
+          </span>
+        )}
+      </div>
+
+      <div>
+        {isCompleted && completedSummary ? (
+          // Collapsed completed state
+          <div className="flex items-baseline gap-2">
+            <span className="font-semibold text-[15px] text-muted-foreground">
+              {title}
+            </span>
+            <span className="text-[15px] text-foreground">
+              {completedSummary}
+            </span>
+          </div>
+        ) : (
+          // Active/pending state
+          <>
+            <h3 className="font-semibold text-[15px] leading-6">{title}</h3>
+            {description && !isCompleted && (
+              <p className="text-sm text-muted-foreground mt-1">{description}</p>
+            )}
+            {children}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Product Preview Components
+function ChatPreview() {
+  return (
+    <div className="w-full h-full bg-white rounded-md border shadow-sm flex flex-col text-[10px]">
+      {/* Header */}
+      <div className="px-2 py-1.5 border-b flex items-center gap-1.5">
+        <div className="w-2 h-2 rounded-full bg-blue-500" />
+        <span className="font-medium text-[9px] text-slate-600">
+          AI Assistant
+        </span>
+      </div>
+      {/* Messages */}
+      <div className="flex-1 p-2 space-y-1.5 overflow-hidden">
+        <div className="flex gap-1.5">
+          <div className="w-4 h-4 rounded-full bg-linear-to-br from-blue-400 to-purple-500 shrink-0" />
+          <div className="bg-slate-100 rounded px-1.5 py-1 max-w-[80%]">
+            <div className="w-16 h-1.5 bg-slate-300 rounded" />
+          </div>
+        </div>
+        <div className="flex gap-1.5 justify-end">
+          <div className="bg-blue-500 rounded px-1.5 py-1 max-w-[80%]">
+            <div className="w-12 h-1.5 bg-blue-300 rounded" />
+          </div>
+        </div>
+        <div className="flex gap-1.5">
+          <div className="w-4 h-4 rounded-full bg-linear-to-br from-blue-400 to-purple-500 shrink-0" />
+          <div className="bg-slate-100 rounded px-1.5 py-1 max-w-[80%]">
+            <div className="w-20 h-1.5 bg-slate-300 rounded mb-1" />
+            <div className="w-14 h-1.5 bg-slate-300 rounded" />
+          </div>
+        </div>
+      </div>
+      {/* Input */}
+      <div className="px-2 py-1.5 border-t">
+        <div className="bg-slate-100 rounded-full px-2 py-1 flex items-center">
+          <div className="w-10 h-1.5 bg-slate-300 rounded" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SearchPreview() {
+  return (
+    <div className="w-full h-full bg-white rounded-md border shadow-sm flex flex-col text-[10px] p-2">
+      {/* Search bar */}
+      <div className="bg-slate-100 rounded-md px-2 py-1.5 flex items-center gap-1.5 mb-2">
+        <Search className="w-3 h-3 text-violet-500" />
+        <div className="w-16 h-1.5 bg-slate-300 rounded" />
+      </div>
+      {/* Results */}
+      <div className="space-y-1.5 flex-1">
+        <div className="bg-violet-50 rounded p-1.5 border-l-2 border-violet-400">
+          <div className="w-full h-1.5 bg-slate-400 rounded mb-1" />
+          <div className="w-3/4 h-1.5 bg-slate-300 rounded" />
+        </div>
+        <div className="bg-slate-50 rounded p-1.5">
+          <div className="w-full h-1.5 bg-slate-300 rounded mb-1" />
+          <div className="w-2/3 h-1.5 bg-slate-200 rounded" />
+        </div>
+        <div className="bg-slate-50 rounded p-1.5">
+          <div className="w-3/4 h-1.5 bg-slate-300 rounded mb-1" />
+          <div className="w-1/2 h-1.5 bg-slate-200 rounded" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NotificationsPreview() {
+  return (
+    <div className="w-full h-full bg-white rounded-md border shadow-sm flex flex-col text-[10px]">
+      {/* Header */}
+      <div className="px-2 py-1.5 border-b flex items-center justify-between">
+        <span className="font-medium text-[9px] text-slate-600">
+          Notifications
+        </span>
+        <div className="text-[8px] text-blue-500">Mark all as read</div>
+      </div>
+      {/* Notifications */}
+      <div className="flex-1 p-1.5 space-y-1">
+        <div className="flex gap-1.5 p-1 rounded bg-blue-50">
+          <div className="w-4 h-4 rounded-full bg-linear-to-br from-green-400 to-emerald-500 shrink-0" />
+          <div className="flex-1">
+            <div className="w-full h-1.5 bg-slate-400 rounded mb-1" />
+            <div className="w-2/3 h-1.5 bg-slate-300 rounded" />
+          </div>
+          <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+        </div>
+        <div className="flex gap-1.5 p-1 rounded">
+          <div className="w-4 h-4 rounded-full bg-linear-to-br from-orange-400 to-red-500 shrink-0" />
+          <div className="flex-1">
+            <div className="w-3/4 h-1.5 bg-slate-300 rounded mb-1" />
+            <div className="w-1/2 h-1.5 bg-slate-200 rounded" />
+          </div>
+        </div>
+        <div className="flex gap-1.5 p-1 rounded">
+          <div className="w-4 h-4 rounded-full bg-linear-to-br from-purple-400 to-pink-500 shrink-0" />
+          <div className="flex-1">
+            <div className="w-full h-1.5 bg-slate-300 rounded mb-1" />
+            <div className="w-3/4 h-1.5 bg-slate-200 rounded" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DocsPreview() {
+  return (
+    <div className="w-full h-full bg-white rounded-md border shadow-sm flex text-[10px]">
+      {/* Sidebar */}
+      <div className="w-1/3 border-r p-1.5 space-y-1 bg-slate-50">
+        <div className="w-full h-1.5 bg-blue-500 rounded" />
+        <div className="w-3/4 h-1.5 bg-blue-300 rounded ml-1.5" />
+        <div className="w-2/3 h-1.5 bg-slate-300 rounded ml-1.5" />
+        <div className="w-full h-1.5 bg-slate-400 rounded mt-2" />
+        <div className="w-3/4 h-1.5 bg-slate-300 rounded ml-1.5" />
+      </div>
+      {/* Content */}
+      <div className="flex-1 p-2 space-y-2">
+        <div className="w-1/2 h-2 bg-slate-700 rounded" />
+        <div className="space-y-1">
+          <div className="w-full h-1.5 bg-slate-300 rounded" />
+          <div className="w-full h-1.5 bg-slate-300 rounded" />
+          <div className="w-3/4 h-1.5 bg-slate-300 rounded" />
+        </div>
+        <div className="bg-slate-800 rounded p-1.5 mt-2">
+          <div className="w-full h-1.5 bg-emerald-400 rounded" />
+          <div className="w-2/3 h-1.5 bg-slate-500 rounded mt-1" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReactIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M14.23 12.004a2.236 2.236 0 0 1-2.235 2.236 2.236 2.236 0 0 1-2.236-2.236 2.236 2.236 0 0 1 2.235-2.236 2.236 2.236 0 0 1 2.236 2.236zm2.648-10.69c-1.346 0-3.107.96-4.888 2.622-1.78-1.653-3.542-2.602-4.887-2.602-.41 0-.783.093-1.106.278-1.375.793-1.683 3.264-.973 6.365C1.98 8.917 0 10.42 0 12.004c0 1.59 1.99 3.097 5.043 4.03-.704 3.113-.39 5.588.988 6.38.32.187.69.275 1.102.275 1.345 0 3.107-.96 4.888-2.624 1.78 1.654 3.542 2.603 4.887 2.603.41 0 .783-.09 1.106-.275 1.374-.792 1.683-3.263.973-6.365C22.02 15.096 24 13.59 24 12.004c0-1.59-1.99-3.097-5.043-4.032.704-3.11.39-5.587-.988-6.38-.318-.184-.688-.277-1.092-.278zm-.005 1.09v.006c.225 0 .406.044.558.127.666.382.955 1.835.73 3.704-.054.46-.142.945-.25 1.44-.96-.236-2.006-.417-3.107-.534-.66-.905-1.345-1.727-2.035-2.447 1.592-1.48 3.087-2.292 4.105-2.295zm-9.77.02c1.012 0 2.514.808 4.11 2.28-.686.72-1.37 1.537-2.02 2.442-1.107.117-2.154.298-3.113.538-.112-.49-.195-.964-.254-1.42-.23-1.868.054-3.32.714-3.707.19-.09.4-.127.563-.132zm4.882 3.05c.455.468.91.992 1.36 1.564-.44-.02-.89-.034-1.345-.034-.46 0-.915.01-1.36.034.44-.572.895-1.096 1.345-1.565zM12 8.1c.74 0 1.477.034 2.202.093.406.582.802 1.203 1.183 1.86.372.64.71 1.29 1.018 1.946-.308.655-.646 1.31-1.013 1.95-.38.66-.773 1.288-1.18 1.87-.728.063-1.466.098-2.21.098-.74 0-1.477-.035-2.202-.093-.406-.582-.802-1.204-1.183-1.86-.372-.64-.71-1.29-1.018-1.946.303-.657.646-1.313 1.013-1.954.38-.66.773-1.286 1.18-1.868.728-.064 1.466-.098 2.21-.098zm-3.635.254c-.24.377-.48.763-.704 1.16-.225.39-.435.782-.635 1.174-.265-.656-.49-1.31-.676-1.947.64-.15 1.315-.283 2.015-.386zm7.26 0c.695.103 1.365.23 2.006.387-.18.632-.405 1.282-.66 1.933-.2-.39-.41-.783-.64-1.174-.225-.392-.465-.774-.705-1.146zm3.063.675c.484.15.944.317 1.375.498 1.732.74 2.852 1.708 2.852 2.476-.005.768-1.125 1.74-2.857 2.475-.42.18-.88.342-1.355.493-.28-.958-.646-1.956-1.1-2.98.45-1.017.81-2.01 1.085-2.964zm-13.395.004c.278.96.645 1.957 1.1 2.98-.45 1.017-.812 2.01-1.086 2.964-.484-.15-.944-.318-1.37-.5-1.732-.737-2.852-1.706-2.852-2.474 0-.768 1.12-1.742 2.852-2.476.42-.18.88-.342 1.356-.494zm11.678 4.28c.265.657.49 1.312.676 1.948-.64.157-1.316.29-2.016.39.24-.375.48-.762.705-1.158.225-.39.435-.788.636-1.18zm-9.945.02c.2.392.41.783.64 1.175.23.39.465.772.705 1.143-.695-.102-1.365-.23-2.006-.386.18-.63.406-1.282.66-1.933zM17.92 16.32c.112.493.2.968.254 1.423.23 1.868-.054 3.32-.714 3.708-.147.09-.338.128-.563.128-1.012 0-2.514-.807-4.11-2.28.686-.72 1.37-1.536 2.02-2.44 1.107-.118 2.154-.3 3.113-.54zm-11.83.01c.96.234 2.006.415 3.107.532.66.905 1.345 1.727 2.035 2.446-1.595 1.483-3.092 2.295-4.11 2.295-.22-.005-.406-.05-.553-.132-.666-.38-.955-1.834-.73-3.703.054-.46.142-.944.25-1.438zm4.56.64c.44.02.89.034 1.345.034.46 0 .915-.01 1.36-.034-.44.572-.895 1.095-1.345 1.565-.455-.47-.91-.993-1.36-1.565z" />
+    </svg>
+  );
+}
+
+function NextJsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M11.572 0c-.176 0-.31.001-.358.007a19.76 19.76 0 0 1-.364.033C7.443.346 4.25 2.185 2.228 5.012a11.875 11.875 0 0 0-2.119 5.243c-.096.659-.108.854-.108 1.747s.012 1.089.108 1.748c.652 4.506 3.86 8.292 8.209 9.695.779.251 1.6.422 2.534.525.363.04 1.935.04 2.299 0 1.611-.178 2.977-.577 4.323-1.264.207-.106.247-.134.219-.158-.02-.013-.9-1.193-1.955-2.62l-1.919-2.592-2.404-3.558a338.739 338.739 0 0 0-2.422-3.556c-.009-.002-.018 1.579-.023 3.51-.007 3.38-.01 3.515-.052 3.595a.426.426 0 0 1-.206.214c-.075.037-.14.044-.495.044H7.81l-.108-.068a.438.438 0 0 1-.157-.171l-.05-.106.006-4.703.007-4.705.072-.092a.645.645 0 0 1 .174-.143c.096-.047.134-.051.54-.051.478 0 .558.018.682.154.035.038 1.337 1.999 2.895 4.361a10760.433 10760.433 0 0 0 4.735 7.17l1.9 2.879.096-.063a12.317 12.317 0 0 0 2.466-2.163 11.944 11.944 0 0 0 2.824-6.134c.096-.66.108-.854.108-1.748 0-.893-.012-1.088-.108-1.747-.652-4.506-3.859-8.292-8.208-9.695a12.597 12.597 0 0 0-2.499-.523A33.119 33.119 0 0 0 11.572 0zm4.069 7.217c.347 0 .408.005.486.047a.473.473 0 0 1 .237.277c.018.06.023 1.365.018 4.304l-.006 4.218-.744-1.14-.746-1.14v-3.066c0-1.982.01-3.097.023-3.15a.478.478 0 0 1 .233-.296c.096-.05.13-.054.5-.054z" />
+    </svg>
+  );
+}
+
+function ViteIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="m8.286 10.578.512-8.657a.306.306 0 0 1 .247-.282L17.377.006a.306.306 0 0 1 .353.385l-1.558 5.403a.306.306 0 0 0 .352.385l2.388-.46a.306.306 0 0 1 .332.438l-6.79 13.55-.123.19a.294.294 0 0 1-.252.14c-.177 0-.35-.152-.305-.369l1.095-5.301a.306.306 0 0 0-.388-.355l-1.433.435a.306.306 0 0 1-.389-.354l.69-3.375a.306.306 0 0 0-.37-.36l-2.32.536a.306.306 0 0 1-.374-.316zm14.976-7.926L17.284 3.74l-.544 1.887 2.077-.4a.8.8 0 0 1 .84.369.8.8 0 0 1 .034.783L12.9 19.93l-.013.025-.015.023-.122.19a.801.801 0 0 1-.672.37.826.826 0 0 1-.634-.302.8.8 0 0 1-.16-.67l1.029-4.981-1.12.34a.81.81 0 0 1-.86-.262.802.802 0 0 1-.165-.67l.63-3.08-2.027.468a.808.808 0 0 1-.768-.233.81.81 0 0 1-.217-.6l.389-6.57-7.44-1.33a.612.612 0 0 0-.64.906L11.58 23.691a.612.612 0 0 0 1.066-.004l11.26-20.135a.612.612 0 0 0-.644-.9z" />
+    </svg>
+  );
+}
