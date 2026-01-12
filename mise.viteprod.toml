@@ -2,8 +2,13 @@
 ## Gram dashboard with Vite for production.
 
 [env]
-## Both the Gram server and dashboard (client) are accesses on https://app.getgram.ai.
+## Both the Gram server and dashboard (client) are accessed on
+## https://app.getgram.ai.
 GRAM_SERVER_URL = false
+## GRAM_API_URL is used primarily during local development. That may change in
+## the future when we create separate builds per environment but until then we
+## should unset it so it is not baked into bundles built with vite.
+GRAM_API_URL = false
 ## Not needed for production builds, but can be useful for local development.
 GRAM_SSL_CERT_FILE = false
 GRAM_SSL_KEY_FILE = false

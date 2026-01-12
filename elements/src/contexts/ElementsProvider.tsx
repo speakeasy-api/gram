@@ -40,6 +40,7 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { ElementsContext } from './contexts'
 import { ToolApprovalProvider } from './ToolApprovalContext'
+import { getApiUrl } from '@/lib/api'
 
 export interface ElementsProviderProps {
   children: ReactNode
@@ -60,11 +61,6 @@ function mergeInternalSystemPromptWith(
 
   Utilities:
   ${plugins.map((plugin) => `- ${plugin.language}: ${plugin.prompt}`).join('\n')}`
-}
-
-function getApiUrl(config: ElementsConfig): string {
-  const apiURL = __GRAM_API_URL__ || config.api?.url || 'https://app.getgram.ai'
-  return apiURL.replace(/\/+$/, '') // Remove trailing slashes
 }
 
 const ElementsProviderWithApproval = ({
@@ -145,7 +141,7 @@ const ElementsProviderWithApproval = ({
         const usingCustomModel = !!config.languageModel
 
         if (auth.isLoading) {
-          throw new Error('Session is laoding')
+          throw new Error('Session is loading')
         }
 
         const context = runtime.thread.getModelContext()

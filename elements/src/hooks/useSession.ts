@@ -8,9 +8,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 export const useSession = ({
   getSession,
   projectSlug,
+  enabled,
 }: {
   getSession: GetSessionFn | null
   projectSlug: string
+  enabled: boolean
 }): string | null => {
   const queryClient = useQueryClient()
   const queryKey = ['chatSession', projectSlug]
@@ -27,7 +29,7 @@ export const useSession = ({
   const { data: fetchedSessionToken } = useQuery({
     queryKey,
     queryFn: () => getSession!({ projectSlug }),
-    enabled: shouldFetch && getSession !== null,
+    enabled: enabled && shouldFetch && getSession !== null,
     staleTime: Infinity, // Session tokens don't need to be refetched
     gcTime: Infinity, // Keep in cache indefinitely
   })

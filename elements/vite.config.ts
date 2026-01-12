@@ -10,6 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 export default defineConfig({
   plugins: [react(), dts(), tailwindcss()],
   build: {
+    sourcemap: true,
     minify: 'esbuild',
     lib: {
       entry: {
@@ -43,6 +44,7 @@ export default defineConfig({
           react: 'React',
           'react-dom': 'ReactDOM',
         },
+        sourcemapExcludeSources: true,
       },
     },
   },
