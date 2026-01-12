@@ -24,13 +24,14 @@ sync_docs() {
       --exclude='.DS_Store' \
       --exclude='/index.mdx' \
       --exclude='_media' \
+      --exclude='README.md' \
       --filter='P /index.mdx' \
       "$src_path/" "$dest_path/"
 
-    # Rename README.md to quickstart.md
-    if [ -f "$dest_path/README.md" ]; then
-      mv "$dest_path/README.md" "$dest_path/quickstart.md"
-      echo "  Moved: README.md -> quickstart.md"
+    # Use _media/README.md as quickstart.md
+    if [ -f "$src_path/_media/README.md" ]; then
+      cp "$src_path/_media/README.md" "$dest_path/quickstart.md"
+      echo "  Copied: _media/README.md -> quickstart.md"
     fi
   else
     echo "Warning: $src_path does not exist; nothing to sync."
@@ -133,17 +134,22 @@ transform_links() {
 
           my $prefix = "'"$docs_prefix"'";
 
-          s{\]\(([^)]+?)\.md\)}{
+          s{\]\(([^)#]+?)\.md(#[^)]+)?\)}{
             my $path = $1;
-            # Skip external URLs and anchors
-            if ($path =~ /^(https?:|mailto:|#)/) {
-              "](${path}.md)";
+            my $anchor = $2 // "";
+            # Skip external URLs
+            if ($path =~ /^(https?:|mailto:)/) {
+              "](${path}.md${anchor})";
             } else {
+              # Strip _media/ prefix since we exclude that folder
+              $path =~ s{^_media/}{};
+              # README.md -> quickstart (since we rename it)
+              $path =~ s{^README$}{quickstart}i;
               # Convert each path segment to kebab-case
               my @parts = split("/", $path);
               @parts = map { to_kebab($_) } @parts;
               my $new_path = join("/", @parts);
-              "](${prefix}/${new_path})";
+              "](${prefix}/${new_path}${anchor})";
             }
           }ge;
         ' "$f"
