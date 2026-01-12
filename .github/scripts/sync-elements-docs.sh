@@ -94,15 +94,19 @@ generate_indexes() {
 
       echo "---" > "$index_file"
       echo "title: $title" >> "$index_file"
+      echo "asIndexPage: true" >> "$index_file"
       echo "---" >> "$index_file"
-      echo "" >> "$index_file"
-      echo "# $title" >> "$index_file"
       echo "" >> "$index_file"
 
       # List all .md files except index.md, sorted alphabetically
       for f in $(find "$dir_path" -maxdepth 1 -name '*.md' ! -name 'index.md' -type f | sort); do
         filename=$(basename "$f" .md)
-        echo "- [$filename](./$filename)" >> "$index_file"
+        # Extract original title from frontmatter
+        file_title=$(sed -n 's/^title: //p' "$f" | head -1)
+        if [ -z "$file_title" ]; then
+          file_title="$filename"
+        fi
+        echo "- [$file_title](${docs_prefix}/${dir}/${filename})" >> "$index_file"
       done
 
       echo "  Generated: $index_file"
