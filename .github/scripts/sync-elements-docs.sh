@@ -142,12 +142,17 @@ transform_links() {
             if ($path =~ /^(https?:|mailto:)/) {
               "](${path}.md${anchor})";
             } else {
+              # Strip relative path prefixes
+              $path =~ s{^\./}{};
+              $path =~ s{^docs/}{};
               # Strip _media/ prefix since we exclude that folder
               $path =~ s{^_media/}{};
               # README.md -> quickstart (since we rename it)
               $path =~ s{^README$}{quickstart}i;
+              # src/plugins/README -> plugins (link to plugin guide)
+              $path =~ s{^src/plugins/README$}{plugins}i;
               # interfaces/Plugin -> plugins (link to plugin guide)
-              if ($path =~ m{^interfaces/Plugin$}i) {
+              if ($path =~ m{^interfaces/Plugin$}i || $path eq "plugins") {
                 "](${prefix}/plugins${anchor})";
               } else {
                 # Convert each path segment to kebab-case
