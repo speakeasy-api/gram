@@ -56,6 +56,12 @@ normalize_files() {
       title="Quickstart"
     fi
 
+    # Special case: globals.md is index for api-reference
+    is_index_page=""
+    if [ "$filename" = "globals" ]; then
+      is_index_page="true"
+    fi
+
     # Rename file to kebab-case if needed
     if [ "$filename" != "$kebab_filename" ]; then
       mv "$f" "$dir/$kebab_filename.md"
@@ -75,6 +81,9 @@ normalize_files() {
       {
         echo "---"
         echo "title: $title"
+        if [ -n "$is_index_page" ]; then
+          echo "asIndexPage: true"
+        fi
         echo "---"
         echo ""
         cat "$f"
