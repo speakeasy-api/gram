@@ -40,6 +40,7 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { ElementsContext } from './contexts'
 import { ToolApprovalProvider } from './ToolApprovalContext'
+import { getApiUrl } from '@/lib/api'
 
 export interface ElementsProviderProps {
   children: ReactNode
@@ -60,12 +61,6 @@ function mergeInternalSystemPromptWith(
 
   Utilities:
   ${plugins.map((plugin) => `- ${plugin.language}: ${plugin.prompt}`).join('\n')}`
-}
-
-function getApiUrl(config: ElementsConfig): string {
-  // The api.url in the config should take precedence over the __GRAM_API_URL__ environment variable
-  const apiURL = config.api?.url ?? __GRAM_API_URL__ ?? 'https://app.getgram.ai'
-  return apiURL.replace(/\/+$/, '') // Remove trailing slashes
 }
 
 const ElementsProviderWithApproval = ({

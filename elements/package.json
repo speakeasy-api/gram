@@ -34,6 +34,8 @@
   },
   "scripts": {
     "build": "vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "eslint src",
     "analyze": "pnpm dlx vite-bundle-visualizer",
     "storybook": "storybook dev -p 6006",
@@ -148,6 +150,7 @@
     "typescript-eslint": "^8.48.1",
     "vite": "^7.1.6",
     "vite-plugin-dts": "^4.5.4",
+    "vitest": "^4.0.13",
     "zustand": "^5.0.8"
   }
 }
