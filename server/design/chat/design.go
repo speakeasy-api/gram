@@ -65,6 +65,36 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "LoadChat"}`)
 	})
 
+	Method("renameChat", func() {
+		Description("Rename a chat")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			security.ChatSessionsTokenPayload()
+			Attribute("id", String, "The ID of the chat")
+			Attribute("title", String, "The new title for the chat")
+			Required("id", "title")
+		})
+
+		Result(func() {
+			Attribute("success", Boolean, "Whether the rename was successful")
+			Required("success")
+		})
+
+		HTTP(func() {
+			POST("/rpc/chat.rename")
+			security.SessionHeader()
+			security.ProjectHeader()
+			security.ChatSessionsTokenHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "renameChat")
+		Meta("openapi:extension:x-speakeasy-name-override", "rename")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RenameChat"}`)
+	})
+
 	Method("creditUsage", func() {
 		Description("Load a chat by its ID")
 

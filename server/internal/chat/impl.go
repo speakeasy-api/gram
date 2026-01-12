@@ -161,17 +161,27 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 
 func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) (*gen.ListChatsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil || authCtx.SessionID == nil {
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
+	// For chat session token auth (Elements), SessionID is nil but UserID is set from the JWT.
+	// These users are always treated as non-admin and can only see their own chats.
+	// For regular session auth, we check if the user is an admin.
+	isAdmin := false
+	if authCtx.SessionID != nil {
+		userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
+		}
+		isAdmin = userInfo.Admin
+	} else if authCtx.UserID == "" {
+		// No SessionID and no UserID means unauthorized
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	result := make([]*gen.ChatOverview, 0)
-	if userInfo.Admin {
+	if isAdmin {
 		chats, err := s.repo.ListChats(ctx, *authCtx.ProjectID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats").Log(ctx, s.logger)
@@ -190,7 +200,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	} else {
 		chats, err := s.repo.ListChatsForUser(ctx, repo.ListChatsForUserParams{
 			ProjectID: *authCtx.ProjectID,
-			UserID:    conv.ToPGText(authCtx.UserID), // TODO: make this work for external user ids (Elements)
+			UserID:    conv.ToPGText(authCtx.UserID),
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats").Log(ctx, s.logger)
@@ -264,6 +274,45 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		CreatedAt:   chat.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:   chat.UpdatedAt.Time.Format(time.RFC3339),
 		Messages:    resultMessages,
+	}, nil
+}
+
+func (s *Service) RenameChat(ctx context.Context, payload *gen.RenameChatPayload) (*gen.RenameChatResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	chatID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID")
+	}
+
+	// Verify the chat exists and belongs to this project
+	chat, err := s.repo.GetChat(ctx, chatID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get chat").Log(ctx, s.logger)
+	}
+
+	if chat.ProjectID != *authCtx.ProjectID {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Update the title
+	err = s.repo.UpdateChatTitle(ctx, repo.UpdateChatTitleParams{
+		ID:        chatID,
+		ProjectID: *authCtx.ProjectID,
+		Title:     conv.ToPGText(payload.Title),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update chat title").Log(ctx, s.logger)
+	}
+
+	return &gen.RenameChatResult{
+		Success: true,
 	}, nil
 }
 
@@ -463,12 +512,15 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 		return uuid.Nil, oops.E(oops.CodeInvalid, err, "invalid chat ID in header")
 	}
 
+	// Generate title from the first user message
+	title := generateChatTitle(request.Messages)
+
 	_, err = s.repo.UpsertChat(ctx, repo.UpsertChatParams{
 		ID:             chatID,
 		ProjectID:      projectID,
 		OrganizationID: orgID,
 		UserID:         conv.ToPGText(userID),
-		Title:          conv.ToPGText("New Chat"), // TODO title
+		Title:          conv.ToPGText(title),
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to create chat", attr.SlogError(err))
@@ -514,6 +566,31 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 	}
 
 	return chatID, nil
+}
+
+// generateChatTitle extracts a title from the first user message in a chat.
+// Returns "New Chat" if no suitable user message is found.
+func generateChatTitle(messages []openrouter.OpenAIChatMessage) string {
+	const maxTitleLength = 50
+
+	for _, msg := range messages {
+		if msg.Role == "user" && strings.TrimSpace(msg.Content) != "" {
+			title := strings.TrimSpace(msg.Content)
+			// Replace newlines with spaces
+			title = strings.ReplaceAll(title, "\n", " ")
+			// Collapse multiple spaces
+			for strings.Contains(title, "  ") {
+				title = strings.ReplaceAll(title, "  ", " ")
+			}
+			// Truncate if too long
+			if len(title) > maxTitleLength {
+				title = title[:maxTitleLength-3] + "..."
+			}
+			return title
+		}
+	}
+
+	return "New Chat"
 }
 
 // responseCaptor captures and logs response data

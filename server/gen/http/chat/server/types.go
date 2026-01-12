@@ -12,6 +12,15 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// RenameChatRequestBody is the type of the "chat" service "renameChat"
+// endpoint HTTP request body.
+type RenameChatRequestBody struct {
+	// The ID of the chat
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The new title for the chat
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+}
+
 // ListChatsResponseBody is the type of the "chat" service "listChats" endpoint
 // HTTP response body.
 type ListChatsResponseBody struct {
@@ -36,6 +45,13 @@ type LoadChatResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the chat was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// RenameChatResponseBody is the type of the "chat" service "renameChat"
+// endpoint HTTP response body.
+type RenameChatResponseBody struct {
+	// Whether the rename was successful
+	Success bool `form:"success" json:"success" xml:"success"`
 }
 
 // CreditUsageResponseBody is the type of the "chat" service "creditUsage"
@@ -407,6 +423,186 @@ type LoadChatGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RenameChatUnauthorizedResponseBody is the type of the "chat" service
+// "renameChat" endpoint HTTP response body for the "unauthorized" error.
+type RenameChatUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenameChatForbiddenResponseBody is the type of the "chat" service
+// "renameChat" endpoint HTTP response body for the "forbidden" error.
+type RenameChatForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenameChatBadRequestResponseBody is the type of the "chat" service
+// "renameChat" endpoint HTTP response body for the "bad_request" error.
+type RenameChatBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenameChatNotFoundResponseBody is the type of the "chat" service
+// "renameChat" endpoint HTTP response body for the "not_found" error.
+type RenameChatNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenameChatConflictResponseBody is the type of the "chat" service
+// "renameChat" endpoint HTTP response body for the "conflict" error.
+type RenameChatConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenameChatUnsupportedMediaResponseBody is the type of the "chat" service
+// "renameChat" endpoint HTTP response body for the "unsupported_media" error.
+type RenameChatUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenameChatInvalidResponseBody is the type of the "chat" service "renameChat"
+// endpoint HTTP response body for the "invalid" error.
+type RenameChatInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenameChatInvariantViolationResponseBody is the type of the "chat" service
+// "renameChat" endpoint HTTP response body for the "invariant_violation" error.
+type RenameChatInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenameChatUnexpectedResponseBody is the type of the "chat" service
+// "renameChat" endpoint HTTP response body for the "unexpected" error.
+type RenameChatUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenameChatGatewayErrorResponseBody is the type of the "chat" service
+// "renameChat" endpoint HTTP response body for the "gateway_error" error.
+type RenameChatGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // CreditUsageUnauthorizedResponseBody is the type of the "chat" service
 // "creditUsage" endpoint HTTP response body for the "unauthorized" error.
 type CreditUsageUnauthorizedResponseBody struct {
@@ -667,6 +863,15 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		}
 	} else {
 		body.Messages = []*ChatMessageResponseBody{}
+	}
+	return body
+}
+
+// NewRenameChatResponseBody builds the HTTP response body from the result of
+// the "renameChat" endpoint of the "chat" service.
+func NewRenameChatResponseBody(res *chat.RenameChatResult) *RenameChatResponseBody {
+	body := &RenameChatResponseBody{
+		Success: res.Success,
 	}
 	return body
 }
@@ -961,6 +1166,146 @@ func NewLoadChatGatewayErrorResponseBody(res *goa.ServiceError) *LoadChatGateway
 	return body
 }
 
+// NewRenameChatUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "renameChat" endpoint of the "chat" service.
+func NewRenameChatUnauthorizedResponseBody(res *goa.ServiceError) *RenameChatUnauthorizedResponseBody {
+	body := &RenameChatUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenameChatForbiddenResponseBody builds the HTTP response body from the
+// result of the "renameChat" endpoint of the "chat" service.
+func NewRenameChatForbiddenResponseBody(res *goa.ServiceError) *RenameChatForbiddenResponseBody {
+	body := &RenameChatForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenameChatBadRequestResponseBody builds the HTTP response body from the
+// result of the "renameChat" endpoint of the "chat" service.
+func NewRenameChatBadRequestResponseBody(res *goa.ServiceError) *RenameChatBadRequestResponseBody {
+	body := &RenameChatBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenameChatNotFoundResponseBody builds the HTTP response body from the
+// result of the "renameChat" endpoint of the "chat" service.
+func NewRenameChatNotFoundResponseBody(res *goa.ServiceError) *RenameChatNotFoundResponseBody {
+	body := &RenameChatNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenameChatConflictResponseBody builds the HTTP response body from the
+// result of the "renameChat" endpoint of the "chat" service.
+func NewRenameChatConflictResponseBody(res *goa.ServiceError) *RenameChatConflictResponseBody {
+	body := &RenameChatConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenameChatUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "renameChat" endpoint of the "chat" service.
+func NewRenameChatUnsupportedMediaResponseBody(res *goa.ServiceError) *RenameChatUnsupportedMediaResponseBody {
+	body := &RenameChatUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenameChatInvalidResponseBody builds the HTTP response body from the
+// result of the "renameChat" endpoint of the "chat" service.
+func NewRenameChatInvalidResponseBody(res *goa.ServiceError) *RenameChatInvalidResponseBody {
+	body := &RenameChatInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenameChatInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "renameChat" endpoint of the "chat" service.
+func NewRenameChatInvariantViolationResponseBody(res *goa.ServiceError) *RenameChatInvariantViolationResponseBody {
+	body := &RenameChatInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenameChatUnexpectedResponseBody builds the HTTP response body from the
+// result of the "renameChat" endpoint of the "chat" service.
+func NewRenameChatUnexpectedResponseBody(res *goa.ServiceError) *RenameChatUnexpectedResponseBody {
+	body := &RenameChatUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenameChatGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "renameChat" endpoint of the "chat" service.
+func NewRenameChatGatewayErrorResponseBody(res *goa.ServiceError) *RenameChatGatewayErrorResponseBody {
+	body := &RenameChatGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreditUsageUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "creditUsage" endpoint of the "chat" service.
 func NewCreditUsageUnauthorizedResponseBody(res *goa.ServiceError) *CreditUsageUnauthorizedResponseBody {
@@ -1122,6 +1467,19 @@ func NewLoadChatPayload(id string, sessionToken *string, projectSlugInput *strin
 	return v
 }
 
+// NewRenameChatPayload builds a chat service renameChat endpoint payload.
+func NewRenameChatPayload(body *RenameChatRequestBody, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.RenameChatPayload {
+	v := &chat.RenameChatPayload{
+		ID:    *body.ID,
+		Title: *body.Title,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v
+}
+
 // NewCreditUsagePayload builds a chat service creditUsage endpoint payload.
 func NewCreditUsagePayload(sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.CreditUsagePayload {
 	v := &chat.CreditUsagePayload{}
@@ -1130,4 +1488,16 @@ func NewCreditUsagePayload(sessionToken *string, projectSlugInput *string, chatS
 	v.ChatSessionsToken = chatSessionsToken
 
 	return v
+}
+
+// ValidateRenameChatRequestBody runs the validations defined on
+// RenameChatRequestBody
+func ValidateRenameChatRequestBody(body *RenameChatRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
+	return
 }

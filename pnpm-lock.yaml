@@ -10,7 +10,7 @@ catalogs:
       specifier: ^2.0.0
       version: 2.0.74
     '@ai-sdk/react':
-      specifier: ^2.0.118
+      specifier: 2.0.118
       version: 2.0.118
     '@ai-sdk/ui-utils':
       specifier: ^1.2.0
@@ -392,6 +392,9 @@ importers:
       '@ai-sdk/mcp':
         specifier: ^0.0.11
         version: 0.0.11(zod@4.2.1)
+      '@ai-sdk/react':
+        specifier: 'catalog:'
+        version: 2.0.118(react@19.2.0)(zod@4.2.1)
       '@openrouter/ai-sdk-provider':
         specifier: ^1.4.1
         version: 1.5.4(ai@5.0.90(zod@4.2.1))(zod@4.2.1)

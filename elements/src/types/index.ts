@@ -695,4 +695,27 @@ export type ElementsContextType = {
    * TODO: failure state
    */
   isLoadingMCPTools: boolean
+
+  /**
+   * The current chat ID used for persistence.
+   * Will be null until the first message is sent.
+   */
+  chatId: string | null
+
+  /**
+   * Starts a new chat by clearing the current chat ID and resetting the thread.
+   * The next message sent will generate a new chat ID.
+   */
+  startNewChat: () => void
+
+  /**
+   * Loads a chat by ID, fetching its messages and populating the thread.
+   * @param chatId The ID of the chat to load
+   */
+  loadChat: (chatId: string) => Promise<void>
+
+  /**
+   * Whether a chat is currently being loaded.
+   */
+  isLoadingChat: boolean
 }

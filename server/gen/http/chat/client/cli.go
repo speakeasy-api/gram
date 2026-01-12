@@ -8,6 +8,9 @@
 package client
 
 import (
+	"encoding/json"
+	"fmt"
+
 	chat "github.com/speakeasy-api/gram/server/gen/chat"
 )
 
@@ -67,6 +70,46 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatSessionToken string
 	}
 	v := &chat.LoadChatPayload{}
 	v.ID = id
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v, nil
+}
+
+// BuildRenameChatPayload builds the payload for the chat renameChat endpoint
+// from CLI flags.
+func BuildRenameChatPayload(chatRenameChatBody string, chatRenameChatSessionToken string, chatRenameChatProjectSlugInput string, chatRenameChatChatSessionsToken string) (*chat.RenameChatPayload, error) {
+	var err error
+	var body RenameChatRequestBody
+	{
+		err = json.Unmarshal([]byte(chatRenameChatBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"Iusto repellat.\",\n      \"title\": \"Nesciunt saepe enim rem saepe eos.\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if chatRenameChatSessionToken != "" {
+			sessionToken = &chatRenameChatSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatRenameChatProjectSlugInput != "" {
+			projectSlugInput = &chatRenameChatProjectSlugInput
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if chatRenameChatChatSessionsToken != "" {
+			chatSessionsToken = &chatRenameChatChatSessionsToken
+		}
+	}
+	v := &chat.RenameChatPayload{
+		ID:    body.ID,
+		Title: body.Title,
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

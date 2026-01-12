@@ -60,7 +60,7 @@ func BuildCreateProjectPayload(projectsCreateProjectBody string, projectsCreateP
 	{
 		err = json.Unmarshal([]byte(projectsCreateProjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"2i3\",\n      \"organization_id\": \"Quos ut sint explicabo ipsum deserunt.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"eid\",\n      \"organization_id\": \"Est dolorum accusamus totam et perferendis debitis.\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 40, false))
@@ -126,7 +126,7 @@ func BuildSetLogoPayload(projectsSetLogoBody string, projectsSetLogoApikeyToken 
 	{
 		err = json.Unmarshal([]byte(projectsSetLogoBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"Tempore non totam totam.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"Porro aut.\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -194,7 +194,7 @@ func BuildUpsertAllowedOriginPayload(projectsUpsertAllowedOriginBody string, pro
 	{
 		err = json.Unmarshal([]byte(projectsUpsertAllowedOriginBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"origin\": \"2qe\",\n      \"status\": \"rejected\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"origin\": \"h2\",\n      \"status\": \"pending\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Origin) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.origin", body.Origin, utf8.RuneCountInString(body.Origin), 1, true))

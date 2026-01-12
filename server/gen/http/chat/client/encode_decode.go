@@ -497,6 +497,248 @@ func DecodeLoadChatResponse(decoder func(*http.Response) goahttp.Decoder, restor
 	}
 }
 
+// BuildRenameChatRequest instantiates a HTTP request object with method and
+// path set to call the "chat" service "renameChat" endpoint
+func (c *Client) BuildRenameChatRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RenameChatChatPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("chat", "renameChat", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRenameChatRequest returns an encoder for requests sent to the chat
+// renameChat server.
+func EncodeRenameChatRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*chat.RenameChatPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("chat", "renameChat", "*chat.RenameChatPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		if p.ChatSessionsToken != nil {
+			head := *p.ChatSessionsToken
+			req.Header.Set("Gram-Chat-Session", head)
+		}
+		body := NewRenameChatRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("chat", "renameChat", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRenameChatResponse returns a decoder for responses returned by the
+// chat renameChat endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeRenameChatResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRenameChatResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RenameChatResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "renameChat", err)
+			}
+			err = ValidateRenameChatResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "renameChat", err)
+			}
+			res := NewRenameChatResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RenameChatUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "renameChat", err)
+			}
+			err = ValidateRenameChatUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "renameChat", err)
+			}
+			return nil, NewRenameChatUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RenameChatForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "renameChat", err)
+			}
+			err = ValidateRenameChatForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "renameChat", err)
+			}
+			return nil, NewRenameChatForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RenameChatBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "renameChat", err)
+			}
+			err = ValidateRenameChatBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "renameChat", err)
+			}
+			return nil, NewRenameChatBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RenameChatNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "renameChat", err)
+			}
+			err = ValidateRenameChatNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "renameChat", err)
+			}
+			return nil, NewRenameChatNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RenameChatConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "renameChat", err)
+			}
+			err = ValidateRenameChatConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "renameChat", err)
+			}
+			return nil, NewRenameChatConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RenameChatUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "renameChat", err)
+			}
+			err = ValidateRenameChatUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "renameChat", err)
+			}
+			return nil, NewRenameChatUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RenameChatInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "renameChat", err)
+			}
+			err = ValidateRenameChatInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "renameChat", err)
+			}
+			return nil, NewRenameChatInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RenameChatInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "renameChat", err)
+				}
+				err = ValidateRenameChatInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "renameChat", err)
+				}
+				return nil, NewRenameChatInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RenameChatUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "renameChat", err)
+				}
+				err = ValidateRenameChatUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "renameChat", err)
+				}
+				return nil, NewRenameChatUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("chat", "renameChat", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RenameChatGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "renameChat", err)
+			}
+			err = ValidateRenameChatGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "renameChat", err)
+			}
+			return nil, NewRenameChatGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("chat", "renameChat", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCreditUsageRequest instantiates a HTTP request object with method and
 // path set to call the "chat" service "creditUsage" endpoint
 func (c *Client) BuildCreditUsageRequest(ctx context.Context, v any) (*http.Request, error) {

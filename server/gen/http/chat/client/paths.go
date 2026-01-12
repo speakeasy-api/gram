@@ -17,6 +17,11 @@ func LoadChatChatPath() string {
 	return "/rpc/chat.load"
 }
 
+// RenameChatChatPath returns the URL path to the chat service renameChat HTTP endpoint.
+func RenameChatChatPath() string {
+	return "/rpc/chat.rename"
+}
+
 // CreditUsageChatPath returns the URL path to the chat service creditUsage HTTP endpoint.
 func CreditUsageChatPath() string {
 	return "/rpc/chat.creditUsage"

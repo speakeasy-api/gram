@@ -84,3 +84,8 @@ SELECT * FROM chat_messages WHERE chat_id = @chat_id AND (project_id IS NULL OR 
 
 -- name: CountChatMessages :one
 SELECT COUNT(*) FROM chat_messages WHERE chat_id = @chat_id;
+
+-- name: UpdateChatTitle :exec
+UPDATE chats
+SET title = @title, updated_at = NOW()
+WHERE id = @id AND project_id = @project_id;

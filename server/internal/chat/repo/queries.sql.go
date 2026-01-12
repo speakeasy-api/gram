@@ -240,6 +240,23 @@ func (q *Queries) ListChatsForUser(ctx context.Context, arg ListChatsForUserPara
 	return items, nil
 }
 
+const updateChatTitle = `-- name: UpdateChatTitle :exec
+UPDATE chats
+SET title = $1, updated_at = NOW()
+WHERE id = $2 AND project_id = $3
+`
+
+type UpdateChatTitleParams struct {
+	Title     pgtype.Text
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) UpdateChatTitle(ctx context.Context, arg UpdateChatTitleParams) error {
+	_, err := q.db.Exec(ctx, updateChatTitle, arg.Title, arg.ID, arg.ProjectID)
+	return err
+}
+
 const upsertChat = `-- name: UpsertChat :one
 INSERT INTO chats (
     id

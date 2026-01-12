@@ -2083,6 +2083,109 @@ paths:
             x-speakeasy-name-override: load
             x-speakeasy-react-hook:
                 name: LoadChat
+    /rpc/chat.rename:
+        post:
+            description: Rename a chat
+            operationId: renameChat
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+                - allowEmptyValue: true
+                  description: Chat Sessions token header
+                  in: header
+                  name: Gram-Chat-Session
+                  schema:
+                    description: Chat Sessions token header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RenameChatRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RenameChatResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - chat_sessions_token_header_Gram-Chat-Session: []
+            summary: renameChat chat
+            tags:
+                - chat
+            x-speakeasy-name-override: rename
+            x-speakeasy-react-hook:
+                name: RenameChat
     /rpc/chatSessions.create:
         post:
             description: Creates a new chat session token
@@ -13689,6 +13792,26 @@ components:
                     description: The name of the org to register
             required:
                 - org_name
+        RenameChatRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the chat
+                title:
+                    type: string
+                    description: The new title for the chat
+            required:
+                - id
+                - title
+        RenameChatResponseBody:
+            type: object
+            properties:
+                success:
+                    type: boolean
+                    description: Whether the rename was successful
+            required:
+                - success
         RenderTemplateByIDRequestBody:
             type: object
             properties:

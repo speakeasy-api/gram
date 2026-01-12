@@ -25,6 +25,10 @@ type Client struct {
 	// endpoint.
 	LoadChatDoer goahttp.Doer
 
+	// RenameChat Doer is the HTTP client used to make requests to the renameChat
+	// endpoint.
+	RenameChatDoer goahttp.Doer
+
 	// CreditUsage Doer is the HTTP client used to make requests to the creditUsage
 	// endpoint.
 	CreditUsageDoer goahttp.Doer
@@ -51,6 +55,7 @@ func NewClient(
 	return &Client{
 		ListChatsDoer:       doer,
 		LoadChatDoer:        doer,
+		RenameChatDoer:      doer,
 		CreditUsageDoer:     doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
@@ -103,6 +108,30 @@ func (c *Client) LoadChat() goa.Endpoint {
 		resp, err := c.LoadChatDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "loadChat", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RenameChat returns an endpoint that makes HTTP requests to the chat service
+// renameChat server.
+func (c *Client) RenameChat() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRenameChatRequest(c.encoder)
+		decodeResponse = DecodeRenameChatResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRenameChatRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RenameChatDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "renameChat", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -8,6 +8,7 @@ import {
   ToolCallMessagePartProps,
   useAssistantState,
 } from '@assistant-ui/react'
+import { ChatHistory } from '../assistant-ui/chat-history'
 import {
   COLOR_SCHEMES,
   ColorScheme,
@@ -884,6 +885,30 @@ WithFrontendToolRequiringApproval.parameters = {
         },
         toolsRequiringApproval: ['deleteFile'],
       },
+    },
+  },
+}
+
+export const WithChatHistory: Story = () => (
+  <div className="flex h-screen">
+    {/* Sidebar with chat history */}
+    <aside className="border-border bg-muted/30 w-64 border-r p-4">
+      <h2 className="text-foreground mb-4 text-lg font-semibold">
+        Chat History
+      </h2>
+      <ChatHistory />
+    </aside>
+    {/* Main chat area */}
+    <main className="flex-1">
+      <Chat />
+    </main>
+  </div>
+)
+WithChatHistory.parameters = {
+  layout: 'fullscreen',
+  elements: {
+    config: {
+      variant: 'standalone',
     },
   },
 }

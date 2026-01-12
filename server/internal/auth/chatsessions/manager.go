@@ -94,12 +94,18 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 	}
 
 	// Set auth context from JWT claims
+	// Use UserIdentifier from JWT as UserID for chat session auth
+	userID := ""
+	if claims.UserIdentifier != nil {
+		userID = *claims.UserIdentifier
+	}
+
 	authCtx := &contextvalues.AuthContext{
 		ActiveOrganizationID: claims.OrgID,
 		ProjectID:            &projectID,
 		OrganizationSlug:     claims.OrganizationSlug,
 		ProjectSlug:          &claims.ProjectSlug,
-		UserID:               "",
+		UserID:               userID,
 		Email:                nil,
 		AccountType:          "",
 		APIKeyScopes:         nil,

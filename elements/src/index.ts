@@ -7,6 +7,7 @@ export { useElements as useGramElements } from './hooks/useElements'
 
 // Core Components
 export { Chat } from '@/components/Chat'
+export { ChatHistory } from '@/components/assistant-ui/chat-history'
 
 // Frontend Tools
 export { defineFrontendTool } from './lib/tools'

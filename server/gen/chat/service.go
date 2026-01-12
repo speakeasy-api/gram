@@ -20,6 +20,8 @@ type Service interface {
 	ListChats(context.Context, *ListChatsPayload) (res *ListChatsResult, err error)
 	// Load a chat by its ID
 	LoadChat(context.Context, *LoadChatPayload) (res *Chat, err error)
+	// Rename a chat
+	RenameChat(context.Context, *RenameChatPayload) (res *RenameChatResult, err error)
 	// Load a chat by its ID
 	CreditUsage(context.Context, *CreditUsagePayload) (res *CreditUsageResult, err error)
 }
@@ -46,7 +48,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"listChats", "loadChat", "creditUsage"}
+var MethodNames = [4]string{"listChats", "loadChat", "renameChat", "creditUsage"}
 
 // Chat is the result type of the chat service loadChat method.
 type Chat struct {
@@ -138,6 +140,23 @@ type LoadChatPayload struct {
 	ChatSessionsToken *string
 	// The ID of the chat
 	ID string
+}
+
+// RenameChatPayload is the payload type of the chat service renameChat method.
+type RenameChatPayload struct {
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
+	// The ID of the chat
+	ID string
+	// The new title for the chat
+	Title string
+}
+
+// RenameChatResult is the result type of the chat service renameChat method.
+type RenameChatResult struct {
+	// Whether the rename was successful
+	Success bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

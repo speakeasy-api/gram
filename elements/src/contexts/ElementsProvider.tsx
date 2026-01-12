@@ -34,7 +34,7 @@ import { useMCPTools } from '@/hooks/useMCPTools'
 import { ToolApprovalProvider } from './ToolApprovalContext'
 import { useToolApproval } from '@/hooks/useToolApproval'
 
-const GRAM_API_URL = 'https://app.getgram.ai'
+const GRAM_API_URL = 'https://localhost:8080'
 
 const BASE_SYSTEM_PROMPT = `You are a helpful assistant that can answer questions and help with tasks.`
 
@@ -65,13 +65,50 @@ async function defaultGetSession(init: {
   return data.client_token
 }
 
-const ElementsProviderWithApproval = ({
+// Internal state for chat history management, shared via context
+interface ChatHistoryState {
+  chatId: string | null
+  setChatId: (id: string | null) => void
+  isLoadingChat: boolean
+  setIsLoadingChat: (loading: boolean) => void
+  initialMessages: UIMessage[]
+  setInitialMessages: (messages: UIMessage[]) => void
+  runtimeKey: number
+  setRuntimeKey: (updater: (k: number) => number) => void
+}
+
+// Props for the inner runtime component
+interface ChatRuntimeProviderProps {
+  children: React.ReactNode
+  config: ElementsProviderProps['config']
+  session: string | null
+  toolApproval: ReturnType<typeof useToolApproval>
+  chatHistoryState: ChatHistoryState
+  getSession: ElementsProviderProps['getSession']
+}
+
+// Inner component that creates the runtime - keyed to force re-creation
+const ChatRuntimeProvider = ({
   children,
   config,
+  session,
+  toolApproval,
+  chatHistoryState,
   getSession = defaultGetSession,
-}: ElementsProviderProps) => {
-  const session = useSession({ getSession, projectSlug: config.projectSlug })
-  const toolApproval = useToolApproval()
+}: ChatRuntimeProviderProps) => {
+  const {
+    chatId,
+    setChatId,
+    isLoadingChat,
+    setIsLoadingChat,
+    initialMessages,
+    setInitialMessages,
+    setRuntimeKey,
+  } = chatHistoryState
+
+  // Use ref to access current chatId in transport without re-creating it
+  const chatIdRef = useRef<string | null>(null)
+  chatIdRef.current = chatId
 
   const [model, setModel] = useState<Model>(
     config.model?.defaultModel ?? MODELS[0]
@@ -150,6 +187,13 @@ const ElementsProviderWithApproval = ({
           throw new Error('MCP tools are still being discovered')
         }
 
+        // Generate a chat ID if we don't have one yet (first message of a new conversation)
+        let currentChatId = chatIdRef.current
+        if (!currentChatId) {
+          currentChatId = crypto.randomUUID()
+          setChatId(currentChatId)
+        }
+
         const context = runtime.thread.getModelContext()
         const frontendTools = toAISDKTools(
           getEnabledTools(context?.tools ?? {})
@@ -164,6 +208,7 @@ const ElementsProviderWithApproval = ({
               headers: {
                 'Gram-Project': config.projectSlug,
                 'Gram-Chat-Session': session!,
+                'Gram-Chat-ID': currentChatId,
               },
             })
 
@@ -226,8 +271,90 @@ const ElementsProviderWithApproval = ({
     ]
   )
 
+  // Start a new chat by clearing the chat ID and resetting the thread
+  const startNewChat = useCallback(() => {
+    setChatId(null)
+    setInitialMessages([])
+    setRuntimeKey((k) => k + 1)
+  }, [setChatId, setInitialMessages, setRuntimeKey])
+
+  // Load a chat by ID, fetching its messages and populating the thread
+  const loadChat = useCallback(
+    async (chatIdToLoad: string) => {
+      if (!session) {
+        throw new Error('No session found')
+      }
+
+      setIsLoadingChat(true)
+      try {
+        const response = await fetch(
+          `${GRAM_API_URL}/rpc/chat.load?id=${encodeURIComponent(chatIdToLoad)}`,
+          {
+            headers: {
+              'Gram-Project': config.projectSlug,
+              'Gram-Chat-Session': session,
+            },
+          }
+        )
+
+        if (!response.ok) {
+          throw new Error(`Failed to load chat: ${response.statusText}`)
+        }
+
+        const chat = await response.json()
+
+        // Convert server messages to ThreadMessageLike format
+        // ThreadMessageLike requires: role, content, and optionally id, createdAt, status
+        // Note: Server uses snake_case (created_at), we need camelCase (createdAt)
+        const messages = (chat.messages ?? [])
+          .filter(
+            (msg: { role: string }) =>
+              msg.role === 'user' || msg.role === 'assistant'
+          )
+          .map(
+            (msg: {
+              id: string
+              role: 'user' | 'assistant'
+              content?: string
+              created_at: string
+            }) => ({
+              id: msg.id,
+              role: msg.role,
+              content: msg.content ?? '',
+              createdAt: msg.created_at ? new Date(msg.created_at) : undefined,
+              // Assistant messages need a status to indicate they're complete
+              status: msg.role === 'assistant' ? { type: 'complete' } : undefined,
+            })
+          )
+
+        console.log('Loaded chat with messages:', messages.length)
+
+        // Convert to UIMessage format for the runtime
+        type LoadedMessage = (typeof messages)[number]
+        const uiMessages: UIMessage[] = messages.map((msg: LoadedMessage) => ({
+          id: msg.id,
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+          createdAt: msg.createdAt ?? new Date(),
+          parts: [{ type: 'text' as const, text: msg.content }],
+        }))
+
+        // Set initial messages and increment key to force runtime re-creation
+        setInitialMessages(uiMessages)
+        setRuntimeKey((k) => k + 1)
+
+        // Set the chat ID so future messages are added to this chat
+        setChatId(chatIdToLoad)
+      } finally {
+        setIsLoadingChat(false)
+      }
+    },
+    [session, config.projectSlug, setChatId, setIsLoadingChat, setInitialMessages, setRuntimeKey]
+  )
+
   const runtime = useChatRuntime({
     transport,
+    messages: initialMessages.length > 0 ? initialMessages : undefined,
   })
 
   return (
@@ -243,6 +370,10 @@ const ElementsProviderWithApproval = ({
           setIsOpen,
           plugins,
           isLoadingMCPTools,
+          chatId,
+          startNewChat,
+          loadChat,
+          isLoadingChat,
         }}
       >
         {children}
@@ -251,6 +382,52 @@ const ElementsProviderWithApproval = ({
         <FrontendTools tools={config.tools?.frontendTools ?? {}} />
       </ElementsContext.Provider>
     </AssistantRuntimeProvider>
+  )
+}
+
+// Outer wrapper that manages chat history state and keys the inner component
+const ElementsProviderWithApproval = ({
+  children,
+  config,
+  getSession = defaultGetSession,
+}: ElementsProviderProps) => {
+  const session = useSession({ getSession, projectSlug: config.projectSlug })
+  const toolApproval = useToolApproval()
+
+  // Track the current chat ID for persistence
+  const [chatId, setChatId] = useState<string | null>(null)
+
+  // Track loading state for chat history
+  const [isLoadingChat, setIsLoadingChat] = useState(false)
+
+  // Initial messages for loading historical chats
+  const [initialMessages, setInitialMessages] = useState<UIMessage[]>([])
+
+  // Key to force runtime component re-creation when loading a different chat
+  const [runtimeKey, setRuntimeKey] = useState(0)
+
+  const chatHistoryState: ChatHistoryState = {
+    chatId,
+    setChatId,
+    isLoadingChat,
+    setIsLoadingChat,
+    initialMessages,
+    setInitialMessages,
+    runtimeKey,
+    setRuntimeKey,
+  }
+
+  return (
+    <ChatRuntimeProvider
+      key={runtimeKey}
+      config={config}
+      session={session}
+      toolApproval={toolApproval}
+      chatHistoryState={chatHistoryState}
+      getSession={getSession}
+    >
+      {children}
+    </ChatRuntimeProvider>
   )
 }
 
