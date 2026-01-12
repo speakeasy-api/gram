@@ -14,7 +14,7 @@ concurrency:
   group: elements-to-marketing-pr-sync-${{ github.ref }}
   cancel-in-progress: true
 env:
-  MARKETING_REPO: speakeasy-api/marketing-site
+  MARKETING_REPO: speakeasy-api/gram-marketing-site
   BRANCH: main
 jobs:
   sync:
