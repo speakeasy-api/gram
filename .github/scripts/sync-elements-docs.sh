@@ -56,13 +56,15 @@ normalize_files() {
       title="Quickstart"
     fi
 
-    # Special case: globals.md is index for api-reference
+    # Special case: globals.md becomes index.md for api-reference
     is_index_page=""
     if [ "$filename" = "globals" ]; then
       is_index_page="true"
+      kebab_filename="index"
+      title="API Reference"
     fi
 
-    # Rename file to kebab-case if needed
+    # Rename file to kebab-case (or index for globals)
     if [ "$filename" != "$kebab_filename" ]; then
       mv "$f" "$dir/$kebab_filename.md"
       f="$dir/$kebab_filename.md"
@@ -192,6 +194,8 @@ transform_links() {
                 "](${prefix}/plugins${anchor})";
               } elsif ($path eq "quickstart") {
                 "](${prefix}/quickstart${anchor})";
+              } elsif ($path eq "globals" || $path =~ m{^api-reference/globals$}i) {
+                "](${prefix}/api-reference${anchor})";
               } else {
                 # If path has no directory and we have a current dir, prepend it
                 if ($path !~ m{/} && $base_dir ne "") {
