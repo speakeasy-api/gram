@@ -41,6 +41,7 @@ import { useAuth } from '../hooks/useAuth'
 import { ElementsContext } from './contexts'
 import { ToolApprovalProvider } from './ToolApprovalContext'
 import { getApiUrl } from '@/lib/api'
+import { GramAttachmentAdapter } from '../adapters/GramAttachmentAdapter'
 
 export interface ElementsProviderProps {
   children: ReactNode
@@ -219,6 +220,9 @@ const ElementsProviderWithApproval = ({
 
   const runtime = useChatRuntime({
     transport,
+    adapters: {
+      attachments: new GramAttachmentAdapter(apiUrl, auth.headers),
+    },
   })
 
   return (
