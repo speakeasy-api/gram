@@ -26,6 +26,7 @@ sync_docs() {
       --exclude='_media' \
       --exclude='README.md' \
       --filter='P /index.mdx' \
+      --filter='P /plugins.mdx' \
       "$src_path/" "$dest_path/"
 
     # Use _media/README.md as quickstart.md
@@ -145,11 +146,16 @@ transform_links() {
               $path =~ s{^_media/}{};
               # README.md -> quickstart (since we rename it)
               $path =~ s{^README$}{quickstart}i;
-              # Convert each path segment to kebab-case
-              my @parts = split("/", $path);
-              @parts = map { to_kebab($_) } @parts;
-              my $new_path = join("/", @parts);
-              "](${prefix}/${new_path}${anchor})";
+              # interfaces/Plugin -> plugins (link to plugin guide)
+              if ($path =~ m{^interfaces/Plugin$}i) {
+                "](${prefix}/plugins${anchor})";
+              } else {
+                # Convert each path segment to kebab-case
+                my @parts = split("/", $path);
+                @parts = map { to_kebab($_) } @parts;
+                my $new_path = join("/", @parts);
+                "](${prefix}/${new_path}${anchor})";
+              }
             }
           }ge;
         ' "$f"
