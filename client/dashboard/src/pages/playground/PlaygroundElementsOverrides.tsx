@@ -4,12 +4,10 @@ import {
   PromptInputFooter,
   PromptInputSubmit,
   PromptInputTextarea,
-  PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
 import { Button } from "@/components/ui/button";
 import { Type } from "@/components/ui/type";
 import {
-  ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
   useAssistantApi,
@@ -75,30 +73,6 @@ export const GramUserMessage: FC = () => (
   </MessagePrimitive.Root>
 );
 
-/**
- * Custom Composer component using Gram design system.
- * Uses InputGroup for consistent form styling with the dashboard.
- */
-export const GramComposer: FC = () => {
-  const { config } = useGramElements();
-  const placeholder = config.composer?.placeholder ?? "Send a message...";
-
-  return (
-    <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
-      <ComposerPrimitive.AttachmentDropzone className="aui-composer-attachment-dropzone flex w-full flex-col rounded-2xl border border-input bg-background px-1 pt-2 outline-none transition-shadow has-[textarea:focus-visible]:border-ring has-[textarea:focus-visible]:ring-2 has-[textarea:focus-visible]:ring-ring/20 data-[dragging=true]:border-ring data-[dragging=true]:border-dashed data-[dragging=true]:bg-accent/50">
-        {/*<ComposerAttachments />*/}
-        <ComposerPrimitive.Input
-          placeholder={placeholder}
-          className="aui-composer-input mb-1 max-h-32 min-h-14 w-full resize-none bg-transparent px-4 pt-2 pb-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-0"
-          rows={1}
-          autoFocus
-          aria-label="Message input"
-        />
-      </ComposerPrimitive.AttachmentDropzone>
-    </ComposerPrimitive.Root>
-  );
-};
-
 export const Composer: FC = () => {
   const threadState = useAssistantState((s) => s.thread);
   const threadApi = useAssistantApi();
@@ -140,10 +114,8 @@ export const Composer: FC = () => {
           />
         </PromptInputBody>
         <PromptInputFooter className="bg-secondary border-t border-neutral-softest rounded-bl-lg rounded-br-lg">
-          <PromptInputTools>{/*{additionalActions}*/}</PromptInputTools>
           <PromptInputSubmit
             disabled={threadState.isLoading || threadState.isRunning}
-            // status={status}
           />
         </PromptInputFooter>
       </PromptInput>

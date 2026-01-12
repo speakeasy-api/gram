@@ -17,6 +17,8 @@ import { useEnvironment } from "../environments/Environment";
 import { getAuthStatus } from "./PlaygroundAuth";
 import { useChatContext } from "./ChatContext";
 import { useChatHistory } from "./ChatHistory";
+import { useTheme } from "next-themes";
+import { toast } from "sonner";
 
 // Context for passing auth warning to the Composer component
 type AuthWarningValue = { missingCount: number; toolsetSlug: string } | null;
@@ -43,6 +45,7 @@ export function PlaygroundElements({
   const project = useProject();
   const createSessionMutation = useChatSessionsCreateMutation();
   const chat = useChatContext();
+  const { resolvedTheme } = useTheme();
 
   // Load existing chat messages if chatId is from URL
   const { chatHistory, isLoading: isChatHistoryLoading } = useChatHistory(
@@ -73,21 +76,26 @@ export function PlaygroundElements({
 
   // Create getSession function using SDK mutation with session auth
   const getSession = useCallback(async () => {
-    const result = await createSessionMutation.mutateAsync({
-      request: {
-        createRequestBody: {
-          embedOrigin: window.location.origin,
-          expiresAfter: 3600,
+    try {
+      const result = await createSessionMutation.mutateAsync({
+        request: {
+          createRequestBody: {
+            embedOrigin: window.location.origin,
+            expiresAfter: 3600,
+          },
         },
-      },
-      security: {
-        option1: {
-          sessionHeaderGramSession: session.session,
-          projectSlugHeaderGramProject: project.slug,
+        security: {
+          option1: {
+            sessionHeaderGramSession: session.session,
+            projectSlugHeaderGramProject: project.slug,
+          },
         },
-      },
-    });
-    return result.clientToken;
+      });
+      return result.clientToken;
+    } catch (error) {
+      toast.error("Failed to create chat session. Please try again.");
+      throw error;
+    }
   }, [createSessionMutation, session.session, project.slug]);
 
   // Don't render until we have a valid MCP URL
@@ -136,7 +144,7 @@ export function PlaygroundElements({
           placeholder: "Send a message...",
         },
         theme: {
-          colorScheme: "light",
+          colorScheme: resolvedTheme === "dark" ? "dark" : "light",
           density: "normal",
           radius: "soft",
         },
