@@ -19,18 +19,20 @@ to_kebab() {
 sync_docs() {
   echo "==> Syncing docs from $src_path to $dest_path"
   if [ -d "$src_path" ]; then
-    mkdir -p "$dest_path"
+    mkdir -p "$dest_path/api-reference"
+    # Sync API docs to api-reference subfolder
     rsync -a --delete \
       --exclude='.DS_Store' \
       --exclude='/index.mdx' \
       --exclude='_media' \
       --exclude='README.md' \
       --filter='P /index.mdx' \
-      --filter='P /plugins.mdx' \
-      --filter='P /introduction.mdx' \
-      "$src_path/" "$dest_path/"
+      "$src_path/" "$dest_path/api-reference/"
 
-    # Use _media/README.md as quickstart.md
+    # Protect root-level files
+    touch "$dest_path/.keep" 2>/dev/null || true
+
+    # Use _media/README.md as quickstart.md at root level
     if [ -f "$src_path/_media/README.md" ]; then
       cp "$src_path/_media/README.md" "$dest_path/quickstart.md"
       echo "  Copied: _media/README.md -> quickstart.md"
@@ -86,6 +88,8 @@ normalize_files() {
 generate_indexes() {
   echo "==> Generating index.md for subdirectories"
 
+  api_ref_path="$dest_path/api-reference"
+
   declare -A titles=(
     ["interfaces"]="Interfaces"
     ["functions"]="Functions"
@@ -94,7 +98,7 @@ generate_indexes() {
   )
 
   for dir in "${!titles[@]}"; do
-    dir_path="$dest_path/$dir"
+    dir_path="$api_ref_path/$dir"
     if [ -d "$dir_path" ]; then
       index_file="$dir_path/index.md"
       title="${titles[$dir]}"
@@ -113,7 +117,7 @@ generate_indexes() {
         if [ -z "$file_title" ]; then
           file_title="$filename"
         fi
-        echo "- [$file_title](${docs_prefix}/${dir}/${filename})" >> "$index_file"
+        echo "- [$file_title](${docs_prefix}/api-reference/${dir}/${filename})" >> "$index_file"
       done
 
       echo "  Generated: $index_file"
@@ -133,6 +137,12 @@ transform_links() {
           continue
         fi
 
+        # Get relative directory of current file
+        rel_dir=$(dirname "${f#$dest_path/}")
+        if [ "$rel_dir" = "." ]; then
+          rel_dir=""
+        fi
+
         # Transform internal markdown links:
         # [Text](path/FileName.md) -> [Text](/docs/gram-elements/path/file-name)
         perl -i -pe '
@@ -145,6 +155,7 @@ transform_links() {
           }
 
           my $prefix = "'"$docs_prefix"'";
+          my $current_dir = "'"$rel_dir"'";
 
           s{\]\(([^)#]+?)\.md(#[^)]+)?\)}{
             my $path = $1;
@@ -153,6 +164,11 @@ transform_links() {
             if ($path =~ /^(https?:|mailto:)/) {
               "](${path}.md${anchor})";
             } else {
+              # Handle relative paths (../)
+              my $base_dir = $current_dir;
+              while ($path =~ s{^\.\./}{}) {
+                $base_dir =~ s{/?[^/]+$}{};
+              }
               # Strip relative path prefixes
               $path =~ s{^\./}{};
               $path =~ s{^docs/}{};
@@ -165,12 +181,20 @@ transform_links() {
               # interfaces/Plugin -> plugins (link to plugin guide)
               if ($path =~ m{^interfaces/Plugin$}i || $path eq "plugins") {
                 "](${prefix}/plugins${anchor})";
+              } elsif ($path eq "quickstart") {
+                "](${prefix}/quickstart${anchor})";
               } else {
+                # If path has no directory and we have a current dir, prepend it
+                if ($path !~ m{/} && $base_dir ne "") {
+                  $path = "$base_dir/$path";
+                }
+                # Strip api-reference/ if already present (for consistency)
+                $path =~ s{^api-reference/}{};
                 # Convert each path segment to kebab-case
                 my @parts = split("/", $path);
                 @parts = map { to_kebab($_) } @parts;
                 my $new_path = join("/", @parts);
-                "](${prefix}/${new_path}${anchor})";
+                "](${prefix}/api-reference/${new_path}${anchor})";
               }
             }
           }ge;
