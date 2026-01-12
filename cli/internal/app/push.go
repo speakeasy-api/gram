@@ -205,13 +205,19 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 	}
 }
 
+// isTerminalFunc and openURLFunc are package-level variables for testing.
+var (
+	isTerminalFunc = func() bool { return term.IsTerminal(int(os.Stdout.Fd())) }
+	openURLFunc    = mcp.OpenURL
+)
+
 // openDeploymentURL opens the deployment URL in the browser if running in a TTY.
 func openDeploymentURL(logger *slog.Logger, ctx context.Context, url string) {
-	if !term.IsTerminal(int(os.Stdout.Fd())) {
+	if !isTerminalFunc() {
 		return
 	}
 
-	if err := mcp.OpenURL(url); err != nil {
+	if err := openURLFunc(url); err != nil {
 		logger.DebugContext(ctx, "failed to open browser", slog.String("error", err.Error()))
 	}
 }
