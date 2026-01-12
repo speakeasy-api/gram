@@ -55,18 +55,25 @@ jobs:
           set -euo pipefail
           content_dir="marketing-repo/src/content/docs/gram-elements"
 
+          # Convert to kebab-case:
+          # - SCREAMING_SNAKE_CASE -> kebab-case (COLOR_SCHEMES -> color-schemes)
+          # - PascalCase/camelCase -> kebab-case (ModalTriggerPosition -> modal-trigger-position)
+          to_kebab() {
+            echo "$1" | sed -E 's/_/-/g; s/([a-z])([A-Z])/\1-\2/g; s/([A-Z]+)([A-Z][a-z])/\1-\2/g' | tr '[:upper:]' '[:lower:]'
+          }
+
           # Process all .md files in subdirectories
           find "$content_dir" -type f -name '*.md' | while read -r f; do
             dir=$(dirname "$f")
             filename=$(basename "$f" .md)
-            lowercase_filename=$(echo "$filename" | tr '[:upper:]' '[:lower:]')
-            lowercase_title="$lowercase_filename"
+            kebab_filename=$(to_kebab "$filename")
+            lowercase_title=$(echo "$filename" | tr '[:upper:]' '[:lower:]' | sed 's/_//g')
 
-            # Rename file to lowercase if needed
-            if [ "$filename" != "$lowercase_filename" ]; then
-              mv "$f" "$dir/$lowercase_filename.md"
-              f="$dir/$lowercase_filename.md"
-              echo "Renamed: $filename.md -> $lowercase_filename.md"
+            # Rename file to kebab-case if needed
+            if [ "$filename" != "$kebab_filename" ]; then
+              mv "$f" "$dir/$kebab_filename.md"
+              f="$dir/$kebab_filename.md"
+              echo "Renamed: $filename.md -> $kebab_filename.md"
             fi
 
             # Add frontmatter with lowercase title if not already present
