@@ -90,8 +90,7 @@ function cleanMessagesForModel(messages: UIMessage[]): UIMessage[] {
     return {
       ...message,
       parts: cleanedParts,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any as UIMessage
+    }
   })
 }
 
