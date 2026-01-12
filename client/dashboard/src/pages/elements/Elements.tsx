@@ -25,7 +25,10 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CodeBlock, CodeBlockCopyButton } from "@/components/ai-elements/code-block";
+import {
+  CodeBlock,
+  CodeBlockCopyButton,
+} from "@/components/ai-elements/code-block";
 
 type ColorScheme = "light" | "dark" | "system";
 type Density = "compact" | "normal" | "spacious";
@@ -320,7 +323,9 @@ export default function ChatElements() {
           <Page.Section.CTA>
             <Tabs
               value={rightPanelTab}
-              onValueChange={(v) => setRightPanelTab(v as "preview" | "install")}
+              onValueChange={(v) =>
+                setRightPanelTab(v as "preview" | "install")
+              }
             >
               <TabsList>
                 <TabsTrigger value="preview">Preview</TabsTrigger>
@@ -330,250 +335,265 @@ export default function ChatElements() {
           </Page.Section.CTA>
           <Page.Section.Body>
             <div className="border rounded-lg p-6 bg-card">
-            {/* Preview Mode */}
-            <div
-              className={`${rightPanelTab === "preview" ? "block" : "hidden"}`}
-            >
-              <div className="flex gap-12 h-[calc(100vh-240px)] min-h-[500px]">
-                {/* Config Panel */}
-                <div className="w-1/3 h-full overflow-y-auto pr-4 space-y-6">
-                {/* Appearance */}
-                <ConfigSection title="Appearance">
-                  <ConfigField label="Variant" description="Layout style">
-                    <Select
-                      value={config.variant}
-                      onValueChange={(v) =>
-                        updateConfig("variant", v as Variant)
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="standalone">Standalone</SelectItem>
-                        <SelectItem value="widget">Widget</SelectItem>
-                        <SelectItem value="sidecar">Sidecar</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </ConfigField>
+              {/* Preview Mode */}
+              <div
+                className={`${rightPanelTab === "preview" ? "block" : "hidden"}`}
+              >
+                <div className="flex gap-12 h-[calc(100vh-240px)] min-h-[500px]">
+                  {/* Config Panel */}
+                  <div className="w-1/3 h-full overflow-y-auto pr-4 space-y-6">
+                    {/* Appearance */}
+                    <ConfigSection title="Appearance">
+                      <ConfigField label="Variant" description="Layout style">
+                        <Select
+                          value={config.variant}
+                          onValueChange={(v) =>
+                            updateConfig("variant", v as Variant)
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="standalone">
+                              Standalone
+                            </SelectItem>
+                            <SelectItem value="widget">Widget</SelectItem>
+                            <SelectItem value="sidecar">Sidecar</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </ConfigField>
 
-                  <ConfigField label="Color Scheme">
-                    <Select
-                      value={config.colorScheme}
-                      onValueChange={(v) =>
-                        updateConfig("colorScheme", v as ColorScheme)
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="system">System</SelectItem>
-                        <SelectItem value="light">Light</SelectItem>
-                        <SelectItem value="dark">Dark</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </ConfigField>
+                      <ConfigField label="Color Scheme">
+                        <Select
+                          value={config.colorScheme}
+                          onValueChange={(v) =>
+                            updateConfig("colorScheme", v as ColorScheme)
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="system">System</SelectItem>
+                            <SelectItem value="light">Light</SelectItem>
+                            <SelectItem value="dark">Dark</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </ConfigField>
 
-                  <ConfigField label="Density" description="Spacing density">
-                    <Select
-                      value={config.density}
-                      onValueChange={(v) =>
-                        updateConfig("density", v as Density)
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="compact">Compact</SelectItem>
-                        <SelectItem value="normal">Normal</SelectItem>
-                        <SelectItem value="spacious">Spacious</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </ConfigField>
-
-                  <ConfigField label="Border Radius">
-                    <Select
-                      value={config.radius}
-                      onValueChange={(v) => updateConfig("radius", v as Radius)}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="round">Round</SelectItem>
-                        <SelectItem value="soft">Soft</SelectItem>
-                        <SelectItem value="sharp">Sharp</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </ConfigField>
-                </ConfigSection>
-
-                {/* Welcome */}
-                <ConfigSection title="Welcome Screen" defaultOpen={false}>
-                  <ConfigField label="Title">
-                    <Input
-                      value={config.welcomeTitle}
-                      onChange={(value) => updateConfig("welcomeTitle", value)}
-                      placeholder="Welcome"
-                    />
-                  </ConfigField>
-                  <ConfigField label="Subtitle">
-                    <Input
-                      value={config.welcomeSubtitle}
-                      onChange={(value) =>
-                        updateConfig("welcomeSubtitle", value)
-                      }
-                      placeholder="How can I help you today?"
-                    />
-                  </ConfigField>
-                </ConfigSection>
-
-                {/* Composer */}
-                <ConfigSection title="Composer" defaultOpen={false}>
-                  <ConfigField label="Placeholder">
-                    <Input
-                      value={config.composerPlaceholder}
-                      onChange={(value) =>
-                        updateConfig("composerPlaceholder", value)
-                      }
-                      placeholder="Send a message..."
-                    />
-                  </ConfigField>
-                </ConfigSection>
-
-                {/* Model */}
-                <ConfigSection title="Model" defaultOpen={false}>
-                  <SwitchField
-                    label="Show Model Picker"
-                    description="Allow users to select different models"
-                    checked={config.showModelPicker}
-                    onCheckedChange={(checked) =>
-                      updateConfig("showModelPicker", checked)
-                    }
-                  />
-                </ConfigSection>
-
-                {/* System Prompt */}
-                <ConfigSection title="System Prompt" defaultOpen={false}>
-                  <ConfigField
-                    label="Instructions"
-                    description="Custom instructions for the AI assistant"
-                  >
-                    <TextArea
-                      value={config.systemPrompt}
-                      onChange={(value) => updateConfig("systemPrompt", value)}
-                      placeholder="You are a helpful assistant..."
-                      rows={4}
-                    />
-                  </ConfigField>
-                </ConfigSection>
-
-                {/* Modal Config (only for widget variant) */}
-                {config.variant === "widget" && (
-                  <ConfigSection title="Widget Modal" defaultOpen={false}>
-                    <ConfigField label="Modal Title">
-                      <Input
-                        value={config.modalTitle}
-                        onChange={(value) => updateConfig("modalTitle", value)}
-                        placeholder="Chat"
-                      />
-                    </ConfigField>
-                    <ConfigField label="Position">
-                      <Select
-                        value={config.modalPosition}
-                        onValueChange={(v) =>
-                          updateConfig("modalPosition", v as ModalPosition)
-                        }
+                      <ConfigField
+                        label="Density"
+                        description="Spacing density"
                       >
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="bottom-right">
-                            Bottom Right
-                          </SelectItem>
-                          <SelectItem value="bottom-left">
-                            Bottom Left
-                          </SelectItem>
-                          <SelectItem value="top-right">Top Right</SelectItem>
-                          <SelectItem value="top-left">Top Left</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </ConfigField>
-                    <SwitchField
-                      label="Open by Default"
-                      checked={config.modalDefaultOpen}
-                      onCheckedChange={(checked) =>
-                        updateConfig("modalDefaultOpen", checked)
-                      }
-                    />
-                  </ConfigSection>
-                )}
+                        <Select
+                          value={config.density}
+                          onValueChange={(v) =>
+                            updateConfig("density", v as Density)
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="compact">Compact</SelectItem>
+                            <SelectItem value="normal">Normal</SelectItem>
+                            <SelectItem value="spacious">Spacious</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </ConfigField>
 
-                {/* Tools */}
-                <ConfigSection title="Tools" defaultOpen={false}>
-                  <SwitchField
-                    label="Expand Tool Groups by Default"
-                    description="Show tool call details expanded"
-                    checked={config.expandToolGroupsByDefault}
-                    onCheckedChange={(checked) =>
-                      updateConfig("expandToolGroupsByDefault", checked)
-                    }
-                  />
-                </ConfigSection>
+                      <ConfigField label="Border Radius">
+                        <Select
+                          value={config.radius}
+                          onValueChange={(v) =>
+                            updateConfig("radius", v as Radius)
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="round">Round</SelectItem>
+                            <SelectItem value="soft">Soft</SelectItem>
+                            <SelectItem value="sharp">Sharp</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </ConfigField>
+                    </ConfigSection>
 
-                {/* Connection */}
-                <ConfigSection title="Connection" defaultOpen={false}>
-                  <ConfigField
-                    label="MCP Server URL"
-                    description="The URL of your MCP server"
-                  >
-                    <Input
-                      value={config.mcp}
-                      onChange={(value) => updateConfig("mcp", value)}
-                      placeholder="https://..."
-                    />
-                  </ConfigField>
-                </ConfigSection>
-              </div>
+                    {/* Welcome */}
+                    <ConfigSection title="Welcome Screen" defaultOpen={false}>
+                      <ConfigField label="Title">
+                        <Input
+                          value={config.welcomeTitle}
+                          onChange={(value) =>
+                            updateConfig("welcomeTitle", value)
+                          }
+                          placeholder="Welcome"
+                        />
+                      </ConfigField>
+                      <ConfigField label="Subtitle">
+                        <Input
+                          value={config.welcomeSubtitle}
+                          onChange={(value) =>
+                            updateConfig("welcomeSubtitle", value)
+                          }
+                          placeholder="How can I help you today?"
+                        />
+                      </ConfigField>
+                    </ConfigSection>
 
-                {/* Preview Panel */}
-                <div className="w-2/3 flex flex-col max-h-[700px]">
-                  <div className="flex items-center justify-end mb-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={refreshPreview}
-                      className="h-8 px-2"
-                    >
-                      <RefreshCw className="h-4 w-4 mr-1" />
-                      Refresh
-                    </Button>
+                    {/* Composer */}
+                    <ConfigSection title="Composer" defaultOpen={false}>
+                      <ConfigField label="Placeholder">
+                        <Input
+                          value={config.composerPlaceholder}
+                          onChange={(value) =>
+                            updateConfig("composerPlaceholder", value)
+                          }
+                          placeholder="Send a message..."
+                        />
+                      </ConfigField>
+                    </ConfigSection>
+
+                    {/* Model */}
+                    <ConfigSection title="Model" defaultOpen={false}>
+                      <SwitchField
+                        label="Show Model Picker"
+                        description="Allow users to select different models"
+                        checked={config.showModelPicker}
+                        onCheckedChange={(checked) =>
+                          updateConfig("showModelPicker", checked)
+                        }
+                      />
+                    </ConfigSection>
+
+                    {/* System Prompt */}
+                    <ConfigSection title="System Prompt" defaultOpen={false}>
+                      <ConfigField
+                        label="Instructions"
+                        description="Custom instructions for the AI assistant"
+                      >
+                        <TextArea
+                          value={config.systemPrompt}
+                          onChange={(value) =>
+                            updateConfig("systemPrompt", value)
+                          }
+                          placeholder="You are a helpful assistant..."
+                          rows={4}
+                        />
+                      </ConfigField>
+                    </ConfigSection>
+
+                    {/* Modal Config (only for widget variant) */}
+                    {config.variant === "widget" && (
+                      <ConfigSection title="Widget Modal" defaultOpen={false}>
+                        <ConfigField label="Modal Title">
+                          <Input
+                            value={config.modalTitle}
+                            onChange={(value) =>
+                              updateConfig("modalTitle", value)
+                            }
+                            placeholder="Chat"
+                          />
+                        </ConfigField>
+                        <ConfigField label="Position">
+                          <Select
+                            value={config.modalPosition}
+                            onValueChange={(v) =>
+                              updateConfig("modalPosition", v as ModalPosition)
+                            }
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="bottom-right">
+                                Bottom Right
+                              </SelectItem>
+                              <SelectItem value="bottom-left">
+                                Bottom Left
+                              </SelectItem>
+                              <SelectItem value="top-right">
+                                Top Right
+                              </SelectItem>
+                              <SelectItem value="top-left">Top Left</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </ConfigField>
+                        <SwitchField
+                          label="Open by Default"
+                          checked={config.modalDefaultOpen}
+                          onCheckedChange={(checked) =>
+                            updateConfig("modalDefaultOpen", checked)
+                          }
+                        />
+                      </ConfigSection>
+                    )}
+
+                    {/* Tools */}
+                    <ConfigSection title="Tools" defaultOpen={false}>
+                      <SwitchField
+                        label="Expand Tool Groups by Default"
+                        description="Show tool call details expanded"
+                        checked={config.expandToolGroupsByDefault}
+                        onCheckedChange={(checked) =>
+                          updateConfig("expandToolGroupsByDefault", checked)
+                        }
+                      />
+                    </ConfigSection>
+
+                    {/* Connection */}
+                    <ConfigSection title="Connection" defaultOpen={false}>
+                      <ConfigField
+                        label="MCP Server URL"
+                        description="The URL of your MCP server"
+                      >
+                        <Input
+                          value={config.mcp}
+                          onChange={(value) => updateConfig("mcp", value)}
+                          placeholder="https://..."
+                        />
+                      </ConfigField>
+                    </ConfigSection>
                   </div>
-                  <div className="flex-1 rounded-lg border overflow-hidden bg-muted/30">
-                    <iframe
-                      key={iframeKey}
-                      ref={iframeRef}
-                      src="/embed.html"
-                      className="h-full w-full border-0"
-                      title="Gram Elements Chat"
-                    />
+
+                  {/* Preview Panel */}
+                  <div className="w-2/3 flex flex-col max-h-[700px]">
+                    <div className="flex items-center justify-end mb-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={refreshPreview}
+                        className="h-8 px-2"
+                      >
+                        <RefreshCw className="h-4 w-4 mr-1" />
+                        Refresh
+                      </Button>
+                    </div>
+                    <div className="flex-1 rounded-lg border overflow-hidden bg-muted/30">
+                      <iframe
+                        key={iframeKey}
+                        ref={iframeRef}
+                        src="/embed.html"
+                        className="h-full w-full border-0"
+                        title="Gram Elements Chat"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Installation Mode */}
-            <div
-              className={`${rightPanelTab === "install" ? "block" : "hidden"}`}
-            >
-              <InstallationGuide
-                config={config}
-                projectSlug={projectSlug ?? "your-project"}
-              />
-            </div>
+              {/* Installation Mode */}
+              <div
+                className={`${rightPanelTab === "install" ? "block" : "hidden"}`}
+              >
+                <InstallationGuide
+                  config={config}
+                  projectSlug={projectSlug ?? "your-project"}
+                />
+              </div>
             </div>
           </Page.Section.Body>
         </Page.Section>
@@ -663,7 +683,9 @@ app.listen(3001, () => {
   const getComponentCode = () => {
     const isNextjs = selectedFramework === "nextjs";
     const useClientDirective = isNextjs ? `"use client";\n\n` : "";
-    const sessionEndpoint = isNextjs ? "/api/session" : "http://localhost:3001/chat/session";
+    const sessionEndpoint = isNextjs
+      ? "/api/session"
+      : "http://localhost:3001/chat/session";
 
     // Build config options
     const configLines: string[] = [];
@@ -676,8 +698,10 @@ app.listen(3001, () => {
 
     if (config.welcomeTitle || config.welcomeSubtitle) {
       const welcomeParts: string[] = [];
-      if (config.welcomeTitle) welcomeParts.push(`    title: "${config.welcomeTitle}",`);
-      if (config.welcomeSubtitle) welcomeParts.push(`    subtitle: "${config.welcomeSubtitle}",`);
+      if (config.welcomeTitle)
+        welcomeParts.push(`    title: "${config.welcomeTitle}",`);
+      if (config.welcomeSubtitle)
+        welcomeParts.push(`    subtitle: "${config.welcomeSubtitle}",`);
       configLines.push(`  welcome: {\n${welcomeParts.join("\n")}\n  },`);
     }
 
@@ -1109,7 +1133,9 @@ function WizardStep({
           <>
             <h3 className="font-semibold text-[15px] leading-6">{title}</h3>
             {description && !isCompleted && (
-              <p className="text-sm text-muted-foreground mt-1">{description}</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {description}
+              </p>
             )}
             {children}
           </>
