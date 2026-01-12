@@ -70,6 +70,7 @@ function mergeInternalSystemPromptWith(
 function cleanMessagesForModel(messages: UIMessage[]): UIMessage[] {
   return messages.map((message) => {
     // Type assertion to work with the parts property
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const msg = message as any
 
     const partsArray = msg.parts
@@ -78,8 +79,10 @@ function cleanMessagesForModel(messages: UIMessage[]): UIMessage[] {
     }
 
     // Process each part: strip providerOptions/providerMetadata and filter reasoning
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cleanedParts = partsArray.map((part: any) => {
       // Strip providerOptions and providerMetadata from all remaining parts
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars, unused-imports/no-unused-vars
       const { callProviderMetadata, ...cleanPart } = part
       return cleanPart
     })
@@ -87,7 +90,8 @@ function cleanMessagesForModel(messages: UIMessage[]): UIMessage[] {
     return {
       ...message,
       parts: cleanedParts,
-    } as UIMessage
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any as UIMessage
   })
 }
 
