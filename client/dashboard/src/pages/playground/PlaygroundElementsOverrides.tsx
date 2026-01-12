@@ -20,6 +20,8 @@ import { type FC } from "react";
 import { usePlaygroundAuthWarning } from "./PlaygroundElements";
 import { useRoutes } from "@/routes";
 import { AlertCircle } from "lucide-react";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { toast } from "sonner";
 
 /**
  * Custom ThreadWelcome component using Gram design system.
@@ -146,5 +148,28 @@ export const Composer: FC = () => {
         </PromptInputFooter>
       </PromptInput>
     </div>
+  );
+};
+
+/**
+ * Share chat button that gets the chatId from Elements context.
+ */
+export const ShareChatButton: FC = () => {
+  const { chatId } = useGramElements();
+  const telemetry = useTelemetry();
+
+  const handleShare = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("chatId", chatId);
+
+    telemetry.capture("chat_event", { action: "chat_shared" });
+    navigator.clipboard.writeText(url.toString());
+    toast.success("Chat link copied to clipboard");
+  };
+
+  return (
+    <Button size="sm" variant="ghost" icon="link" onClick={handleShare}>
+      Share chat
+    </Button>
   );
 };

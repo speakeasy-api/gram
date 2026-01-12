@@ -32,9 +32,11 @@ async function defaultGetSession(init: {
 export const useAuth = ({
   projectSlug,
   auth,
+  chatId,
 }: {
   auth?: AuthConfig
   projectSlug: string
+  chatId?: string
 }): Auth => {
   // The session request is only neccessary if we are not using an API key auth
   // configuration. If a custom session fetcher is provided, we use it,
@@ -52,6 +54,7 @@ export const useAuth = ({
       headers: {
         'Gram-Project': projectSlug,
         'Gram-Key': auth.UNSAFE_apiKey,
+        ...(chatId && { 'Gram-Chat-ID': chatId }),
       },
       isLoading: false,
     }
@@ -65,6 +68,7 @@ export const useAuth = ({
         headers: {
           'Gram-Project': projectSlug,
           'Gram-Chat-Session': session,
+          ...(chatId && { 'Gram-Chat-ID': chatId }),
         },
         isLoading: false,
       }

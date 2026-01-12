@@ -7,7 +7,7 @@ import {
   TextMessagePartComponent,
   ToolCallMessagePartComponent,
 } from '@assistant-ui/react'
-import { LanguageModel } from 'ai'
+import { LanguageModel, UIMessage } from 'ai'
 import {
   ComponentType,
   Dispatch,
@@ -282,6 +282,18 @@ export interface ElementsConfig {
      */
     url?: string
   } & AuthConfig
+
+  /**
+   * The chat ID to use. If not provided, a new one will be generated.
+   * Pass this when loading a previously saved conversation.
+   */
+  chatId?: string
+
+  /**
+   * Initial messages to display in the chat.
+   * Used when loading a previously saved conversation.
+   */
+  initialMessages?: UIMessage[]
 }
 
 export type SessionAuthConfig = {
@@ -733,4 +745,5 @@ export type ElementsContextType = {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
   plugins: Plugin[]
+  chatId: string
 }

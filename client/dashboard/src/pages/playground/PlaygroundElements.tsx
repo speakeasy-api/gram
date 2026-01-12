@@ -15,6 +15,8 @@ import {
 } from "./PlaygroundElementsOverrides";
 import { useEnvironment } from "../environments/Environment";
 import { getAuthStatus } from "./PlaygroundAuth";
+import { useChatContext } from "./ChatContext";
+import { useChatHistory } from "./ChatHistory";
 
 // Context for passing auth warning to the Composer component
 type AuthWarningValue = { missingCount: number; toolsetSlug: string } | null;
@@ -27,16 +29,26 @@ interface PlaygroundElementsProps {
   toolsetSlug: string | null;
   environmentSlug: string | null;
   model: string;
+  /** Additional action buttons to render alongside the share button */
+  additionalActions?: React.ReactNode;
 }
 
 export function PlaygroundElements({
   toolsetSlug,
   environmentSlug,
   model,
+  additionalActions,
 }: PlaygroundElementsProps) {
   const session = useSession();
   const project = useProject();
   const createSessionMutation = useChatSessionsCreateMutation();
+  const chat = useChatContext();
+
+  // Load existing chat messages if chatId is from URL
+  const { chatHistory, isLoading: isChatHistoryLoading } = useChatHistory(
+    chat.id,
+  );
+  const hasExistingChat = chatHistory.length > 0;
 
   // Get toolset data to construct MCP URL
   const { data: toolsetsData } = useListToolsets();
@@ -87,6 +99,15 @@ export function PlaygroundElements({
     );
   }
 
+  // Don't render until chat history is loaded (to avoid showing empty then populated)
+  if (isChatHistoryLoading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Type muted>Loading...</Type>
+      </div>
+    );
+  }
+
   return (
     <GramElementsProvider
       config={{
@@ -98,6 +119,9 @@ export function PlaygroundElements({
         mcp: mcpUrl,
         envSlug: environmentSlug ?? undefined,
         variant: "standalone",
+        // Always pass chatId to ensure dashboard and Elements use the same ID
+        chatId: chat.id,
+        initialMessages: hasExistingChat ? chatHistory : undefined,
         model: {
           defaultModel: model as Model,
           showModelPicker: false,
@@ -130,6 +154,10 @@ export function PlaygroundElements({
             : null
         }
       >
+        {/* Action buttons rendered inside provider so ShareChatButton can access chatId */}
+        <div className="flex items-center justify-end gap-2 py-3">
+          {additionalActions}
+        </div>
         <div className="h-full bg-surface-primary [&_.aui-thread-root]:bg-transparent [&_.aui-composer-wrapper]:bg-transparent rounded-br-xl">
           <Chat />
         </div>

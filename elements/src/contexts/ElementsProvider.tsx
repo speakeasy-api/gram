@@ -37,6 +37,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { v7 as uuidv7 } from 'uuid'
 import { useAuth } from '../hooks/useAuth'
 import { ElementsContext } from './contexts'
 import { ToolApprovalProvider } from './ToolApprovalContext'
@@ -68,10 +69,18 @@ const ElementsProviderWithApproval = ({
   config,
 }: ElementsProviderProps) => {
   const apiUrl = getApiUrl(config)
+  const [chatId] = useState(() => config.chatId ?? uuidv7())
   const auth = useAuth({
     auth: config.api,
     projectSlug: config.projectSlug,
+    chatId,
   })
+
+  // Store auth in ref so transport always accesses current headers
+  // This ensures the Gram-Chat-ID header is included even if auth loads after transport creation
+  const authRef = useRef(auth)
+  authRef.current = auth
+
   const toolApproval = useToolApproval()
 
   const [model, setModel] = useState<Model>(
@@ -140,7 +149,9 @@ const ElementsProviderWithApproval = ({
       sendMessages: async ({ messages, abortSignal }) => {
         const usingCustomModel = !!config.languageModel
 
-        if (auth.isLoading) {
+        // Access auth via ref to ensure we always have current headers
+        const currentAuth = authRef.current
+        if (currentAuth.isLoading) {
           throw new Error('Session is loading')
         }
 
@@ -155,7 +166,7 @@ const ElementsProviderWithApproval = ({
           : createOpenRouter({
               baseURL: apiUrl,
               apiKey: 'unused, but must be set',
-              headers: auth.headers,
+              headers: currentAuth.headers,
             })
 
         if (config.languageModel) {
@@ -214,12 +225,13 @@ const ElementsProviderWithApproval = ({
       mcpToolsLoading,
       getApprovalHelpers,
       apiUrl,
-      auth.headers,
+      // Note: auth.headers accessed via authRef to ensure current value at send time
     ]
   )
 
   const runtime = useChatRuntime({
     transport,
+    messages: config.initialMessages,
   })
 
   return (
@@ -234,6 +246,7 @@ const ElementsProviderWithApproval = ({
           isOpen: isOpen ?? false,
           setIsOpen,
           plugins,
+          chatId,
         }}
       >
         {children}
