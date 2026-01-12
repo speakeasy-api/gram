@@ -17,7 +17,10 @@ const SECRET_FIELD_INDICATORS = ["SECRET", "KEY", "TOKEN", "PASSWORD"] as const;
 const PASSWORD_MASK = "••••••••";
 
 export function getAuthStatus(
-  toolset: Toolset,
+  toolset: Pick<
+    Toolset,
+    "securityVariables" | "serverVariables" | "functionEnvironmentVariables"
+  >,
   environment?: { entries?: Array<{ name: string; value: string }> },
 ): { hasMissingAuth: boolean; missingCount: number } {
   // In playground, always filter out server_url variables since they can't be configured here
