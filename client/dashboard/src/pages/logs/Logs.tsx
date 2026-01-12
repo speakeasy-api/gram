@@ -1,7 +1,10 @@
 import { Page } from "@/components/page-layout";
 import { SearchBar } from "@/components/ui/search-bar";
 import { telemetrySearchToolCalls } from "@gram/client/funcs/telemetrySearchToolCalls";
-import { TelemetryLogRecord, FeatureName } from "@gram/client/models/components";
+import {
+  TelemetryLogRecord,
+  FeatureName,
+} from "@gram/client/models/components";
 import {
   useGramContext,
   useFeaturesSetMutation,
