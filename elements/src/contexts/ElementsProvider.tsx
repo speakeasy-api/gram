@@ -140,7 +140,7 @@ const ElementsProviderWithApproval = ({
         const usingCustomModel = !!config.languageModel
 
         if (auth.isLoading) {
-          throw new Error('Session is laoding')
+          throw new Error('Session is loading')
         }
 
         const context = runtime.thread.getModelContext()
