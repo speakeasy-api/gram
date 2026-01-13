@@ -16,3 +16,6 @@ storybook-static
 
 # Ignore .DS_Store
 .DS_Store
+
+# Allow the bin directory
+!bin
