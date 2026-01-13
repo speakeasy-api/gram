@@ -261,17 +261,24 @@ export interface ElementsConfig {
    */
   tools?: ToolsConfig
 
-  api?: {
-    /**
-     * The Gram API URL to use for the Elements library.
-     *
-     * @example
-     * const config: ElementsConfig = {
-     *   apiURL: 'https://api.getgram.ai',
-     * }
-     */
-    url?: string
-  } & AuthConfig
+  api?: ApiConfig
+}
+
+/**
+ * Base API configuration with the server URL.
+ */
+export type BaseApiConfig = {
+  /**
+   * The Gram API URL to use for the Elements library.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   api: {
+   *     url: 'https://api.getgram.ai',
+   *   },
+   * }
+   */
+  url?: string
 }
 
 export type SessionAuthConfig = {
@@ -320,6 +327,15 @@ export type ApiKeyAuthConfig = {
   UNSAFE_apiKey: string
 }
 
+/**
+ * API configuration - can be just the URL, or URL with session auth, or URL with API key auth.
+ */
+export type ApiConfig =
+  | BaseApiConfig
+  | (BaseApiConfig & SessionAuthConfig)
+  | (BaseApiConfig & ApiKeyAuthConfig)
+
+/** @deprecated Use ApiConfig instead */
 export type AuthConfig = SessionAuthConfig | ApiKeyAuthConfig | undefined
 
 /**
