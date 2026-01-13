@@ -1,12 +1,10 @@
-import React from 'react'
 import { Chat } from '..'
 import type { Meta, StoryFn } from '@storybook/react-vite'
-import { useAssistantState } from '@assistant-ui/react'
 import { google } from '@ai-sdk/google'
-import { ComponentOverrides } from '../../../types'
+import { GetSessionFn } from '@/types'
 
 const meta: Meta<typeof Chat> = {
-  title: 'Chat/Customization',
+  title: 'Chat/Connection Configuration',
   component: Chat,
   parameters: {
     layout: 'fullscreen',
@@ -35,26 +33,47 @@ SystemPrompt.parameters = {
   },
 }
 
-const customComponents: ComponentOverrides = {
-  Text: () => {
-    const message = useAssistantState(({ message }) => message)
-    return (
-      <div className="text-red-500">
-        {message.parts
-          .map((part) => (part.type === 'text' ? part.text : ''))
-          .join('')}
-      </div>
-    )
+export const WithImplicitSessionAuth: Story = () => <Chat />
+WithImplicitSessionAuth.storyName = 'With Implicit Session Auth'
+WithImplicitSessionAuth.parameters = {
+  elements: {
+    config: {
+      // This story tests the case where no API config is provided, which should default to implicit session auth
+      api: undefined,
+    },
   },
 }
 
-export const ComponentOverridesStory: Story = () => <Chat />
-ComponentOverridesStory.storyName = 'Component Overrides'
-ComponentOverridesStory.parameters = {
+const sessionFn: GetSessionFn = async () => {
+  const response = await fetch('/chat/session', {
+    method: 'POST',
+    headers: {
+      'Gram-Project':
+        import.meta.env.VITE_GRAM_ELEMENTS_STORYBOOK_PROJECT_SLUG ?? '',
+    },
+  })
+  const data = await response.json()
+  return data.client_token
+}
+
+export const WithExplicitSessionAuth: Story = () => <Chat />
+WithExplicitSessionAuth.storyName = 'With Explicit Session Auth'
+WithExplicitSessionAuth.parameters = {
   elements: {
     config: {
-      variant: 'standalone',
-      components: customComponents,
+      api: { sessionFn },
+    },
+  },
+}
+
+// NOTE: api key auth is currently non functional due to concerns with security
+// Update this story when api key auth is secure
+export const WithExplicitAPIKeyAuth: Story = () => <Chat />
+WithExplicitAPIKeyAuth.storyName = 'With Explicit API Key Auth'
+WithExplicitAPIKeyAuth.parameters = {
+  elements: {
+    config: {
+      api: { UNSAFE_apiKey: 'test' },
     },
   },
 }
