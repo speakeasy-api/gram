@@ -22,16 +22,6 @@ export default meta
 
 type Story = StoryFn<typeof Chat>
 
-export const WithNoMCPServerConnected: Story = () => <Chat />
-WithNoMCPServerConnected.storyName = 'With No MCP Server Connected'
-WithNoMCPServerConnected.parameters = {
-  elements: {
-    config: {
-      mcp: undefined,
-    },
-  },
-}
-
 export const SystemPrompt: Story = () => <Chat />
 SystemPrompt.storyName = 'Custom System Prompt'
 SystemPrompt.parameters = {
