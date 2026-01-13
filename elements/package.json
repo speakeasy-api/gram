@@ -23,7 +23,7 @@
     "./elements.css": "./dist/elements.css"
   },
   "bin": {
-    "gram-elements": "./bin/cli.js"
+    "elements": "./bin/cli.js"
   },
   "files": [
     "dist",
