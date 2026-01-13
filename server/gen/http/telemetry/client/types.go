@@ -45,6 +45,8 @@ type SearchLogsResponseBody struct {
 	Logs []*TelemetryLogRecordResponseBody `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+	// Whether tool metrics are enabled for the organization
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
 // SearchToolCallsResponseBody is the type of the "telemetry" service
@@ -54,6 +56,8 @@ type SearchToolCallsResponseBody struct {
 	ToolCalls []*ToolCallSummaryResponseBody `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+	// Whether tool metrics are enabled for the organization
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
 // SearchLogsUnauthorizedResponseBody is the type of the "telemetry" service
@@ -436,6 +440,8 @@ type SearchLogsFilterRequestBody struct {
 	HTTPMethod *string `form:"http_method,omitempty" json:"http_method,omitempty" xml:"http_method,omitempty"`
 	// Service name filter
 	ServiceName *string `form:"service_name,omitempty" json:"service_name,omitempty" xml:"service_name,omitempty"`
+	// Gram URN filter (one or more URNs)
+	GramUrns []string `form:"gram_urns,omitempty" json:"gram_urns,omitempty" xml:"gram_urns,omitempty"`
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
@@ -444,7 +450,7 @@ type SearchLogsFilterRequestBody struct {
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 	// Function ID filter
 	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
-	// Gram URN filter
+	// Gram URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
 }
 
@@ -492,7 +498,7 @@ type SearchToolCallsFilterRequestBody struct {
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 	// Function ID filter
 	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
-	// Gram URN filter
+	// Gram URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
 }
 
@@ -567,6 +573,7 @@ func NewSearchToolCallsRequestBody(p *telemetry.SearchToolCallsPayload) *SearchT
 func NewSearchLogsResultOK(body *SearchLogsResponseBody) *telemetry.SearchLogsResult {
 	v := &telemetry.SearchLogsResult{
 		NextCursor: body.NextCursor,
+		Enabled:    *body.Enabled,
 	}
 	v.Logs = make([]*telemetry.TelemetryLogRecord, len(body.Logs))
 	for i, val := range body.Logs {
@@ -735,6 +742,7 @@ func NewSearchLogsGatewayError(body *SearchLogsGatewayErrorResponseBody) *goa.Se
 func NewSearchToolCallsResultOK(body *SearchToolCallsResponseBody) *telemetry.SearchToolCallsResult {
 	v := &telemetry.SearchToolCallsResult{
 		NextCursor: body.NextCursor,
+		Enabled:    *body.Enabled,
 	}
 	v.ToolCalls = make([]*telemetry.ToolCallSummary, len(body.ToolCalls))
 	for i, val := range body.ToolCalls {
@@ -904,6 +912,9 @@ func ValidateSearchLogsResponseBody(body *SearchLogsResponseBody) (err error) {
 	if body.Logs == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("logs", "body"))
 	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
 	for _, e := range body.Logs {
 		if e != nil {
 			if err2 := ValidateTelemetryLogRecordResponseBody(e); err2 != nil {
@@ -919,6 +930,9 @@ func ValidateSearchLogsResponseBody(body *SearchLogsResponseBody) (err error) {
 func ValidateSearchToolCallsResponseBody(body *SearchToolCallsResponseBody) (err error) {
 	if body.ToolCalls == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	for _, e := range body.ToolCalls {
 		if e != nil {

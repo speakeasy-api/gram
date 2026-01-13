@@ -45,6 +45,8 @@ type SearchLogsResponseBody struct {
 	Logs []*TelemetryLogRecordResponseBody `form:"logs" json:"logs" xml:"logs"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+	// Whether tool metrics are enabled for the organization
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // SearchToolCallsResponseBody is the type of the "telemetry" service
@@ -54,6 +56,8 @@ type SearchToolCallsResponseBody struct {
 	ToolCalls []*ToolCallSummaryResponseBody `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+	// Whether tool metrics are enabled for the organization
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // SearchLogsUnauthorizedResponseBody is the type of the "telemetry" service
@@ -483,6 +487,8 @@ type SearchLogsFilterRequestBody struct {
 	HTTPMethod *string `form:"http_method,omitempty" json:"http_method,omitempty" xml:"http_method,omitempty"`
 	// Service name filter
 	ServiceName *string `form:"service_name,omitempty" json:"service_name,omitempty" xml:"service_name,omitempty"`
+	// Gram URN filter (one or more URNs)
+	GramUrns []string `form:"gram_urns,omitempty" json:"gram_urns,omitempty" xml:"gram_urns,omitempty"`
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
@@ -491,7 +497,7 @@ type SearchLogsFilterRequestBody struct {
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 	// Function ID filter
 	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
-	// Gram URN filter
+	// Gram URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
 }
 
@@ -506,7 +512,7 @@ type SearchToolCallsFilterRequestBody struct {
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 	// Function ID filter
 	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
-	// Gram URN filter
+	// Gram URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
 }
 
@@ -515,6 +521,7 @@ type SearchToolCallsFilterRequestBody struct {
 func NewSearchLogsResponseBody(res *telemetry.SearchLogsResult) *SearchLogsResponseBody {
 	body := &SearchLogsResponseBody{
 		NextCursor: res.NextCursor,
+		Enabled:    res.Enabled,
 	}
 	if res.Logs != nil {
 		body.Logs = make([]*TelemetryLogRecordResponseBody, len(res.Logs))
@@ -536,6 +543,7 @@ func NewSearchLogsResponseBody(res *telemetry.SearchLogsResult) *SearchLogsRespo
 func NewSearchToolCallsResponseBody(res *telemetry.SearchToolCallsResult) *SearchToolCallsResponseBody {
 	body := &SearchToolCallsResponseBody{
 		NextCursor: res.NextCursor,
+		Enabled:    res.Enabled,
 	}
 	if res.ToolCalls != nil {
 		body.ToolCalls = make([]*ToolCallSummaryResponseBody, len(res.ToolCalls))

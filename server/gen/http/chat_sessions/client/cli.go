@@ -17,13 +17,13 @@ import (
 
 // BuildCreatePayload builds the payload for the chatSessions create endpoint
 // from CLI flags.
-func BuildCreatePayload(chatSessionsCreateBody string, chatSessionsCreateApikeyToken string, chatSessionsCreateProjectSlugInput string) (*chatsessions.CreatePayload, error) {
+func BuildCreatePayload(chatSessionsCreateBody string, chatSessionsCreateSessionToken string, chatSessionsCreateApikeyToken string, chatSessionsCreateProjectSlugInput string) (*chatsessions.CreatePayload, error) {
 	var err error
 	var body CreateRequestBody
 	{
 		err = json.Unmarshal([]byte(chatSessionsCreateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"embed_origin\": \"Quos quis velit quas sit qui sapiente.\",\n      \"expires_after\": 1873,\n      \"user_identifier\": \"Aperiam quo aspernatur laboriosam vero accusantium illum.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"embed_origin\": \"Vitae ex et quaerat ipsa debitis amet.\",\n      \"expires_after\": 2189,\n      \"user_identifier\": \"Suscipit voluptatem earum eligendi.\"\n   }'")
 		}
 		if body.ExpiresAfter < 1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expires_after", body.ExpiresAfter, 1, true))
@@ -33,6 +33,12 @@ func BuildCreatePayload(chatSessionsCreateBody string, chatSessionsCreateApikeyT
 		}
 		if err != nil {
 			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if chatSessionsCreateSessionToken != "" {
+			sessionToken = &chatSessionsCreateSessionToken
 		}
 	}
 	var apikeyToken *string
@@ -58,6 +64,7 @@ func BuildCreatePayload(chatSessionsCreateBody string, chatSessionsCreateApikeyT
 			v.ExpiresAfter = 3600
 		}
 	}
+	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -66,10 +73,16 @@ func BuildCreatePayload(chatSessionsCreateBody string, chatSessionsCreateApikeyT
 
 // BuildRevokePayload builds the payload for the chatSessions revoke endpoint
 // from CLI flags.
-func BuildRevokePayload(chatSessionsRevokeToken string, chatSessionsRevokeApikeyToken string, chatSessionsRevokeProjectSlugInput string) (*chatsessions.RevokePayload, error) {
+func BuildRevokePayload(chatSessionsRevokeToken string, chatSessionsRevokeSessionToken string, chatSessionsRevokeApikeyToken string, chatSessionsRevokeProjectSlugInput string) (*chatsessions.RevokePayload, error) {
 	var token string
 	{
 		token = chatSessionsRevokeToken
+	}
+	var sessionToken *string
+	{
+		if chatSessionsRevokeSessionToken != "" {
+			sessionToken = &chatSessionsRevokeSessionToken
+		}
 	}
 	var apikeyToken *string
 	{
@@ -85,6 +98,7 @@ func BuildRevokePayload(chatSessionsRevokeToken string, chatSessionsRevokeApikey
 	}
 	v := &chatsessions.RevokePayload{}
 	v.Token = token
+	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 

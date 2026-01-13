@@ -1,6 +1,7 @@
 package shared
 
 import (
+	extmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	. "goa.design/goa/v3/dsl"
 )
@@ -111,6 +112,10 @@ var ExternalMCPToolDefinition = Type("ExternalMCPToolDefinition", func() {
 	Attribute("name", String, "The reverse-DNS name of the external MCP server (e.g., ai.exa/exa)")
 	Attribute("slug", String, "The slug used for tool prefixing (e.g., github)")
 	Attribute("remote_url", String, "The URL to connect to the MCP server")
+	Attribute("transport_type", String, func() {
+		Description("The transport type used to connect to the MCP server")
+		Enum(string(extmcptypes.TransportTypeStreamableHTTP), string(extmcptypes.TransportTypeSSE))
+	})
 	Attribute("requires_oauth", Boolean, "Whether the external MCP server requires OAuth authentication")
 
 	// OAuth metadata
@@ -129,7 +134,7 @@ var ExternalMCPToolDefinition = Type("ExternalMCPToolDefinition", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "tool_urn", "deployment_external_mcp_id", "deployment_id", "registry_id", "name", "slug", "remote_url", "requires_oauth", "oauth_version", "created_at", "updated_at")
+	Required("id", "tool_urn", "deployment_external_mcp_id", "deployment_id", "registry_id", "name", "slug", "remote_url", "transport_type", "requires_oauth", "oauth_version", "created_at", "updated_at")
 })
 
 // Tool is a discriminated union of HTTP tools and prompt templates.

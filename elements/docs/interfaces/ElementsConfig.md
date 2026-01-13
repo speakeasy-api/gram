@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.16.3**](../README.md)
+[**@gram-ai/elements v1.19.0**](../README.md)
 
 ***
 
@@ -93,9 +93,9 @@ const config: ElementsConfig = {
 
 ***
 
-### mcp
+### mcp?
 
-> **mcp**: `string`
+> `optional` **mcp**: `string`
 
 The Gram Server URL to use for the Elements library.
 Can be retrieved from https://app.getgram.ai/{team}/{project}/mcp/{mcp_slug}
@@ -107,28 +107,6 @@ Note: This config option will likely change in the future
 ```ts
 const config: ElementsConfig = {
   mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
-}
-```
-
-***
-
-### chatEndpoint?
-
-> `optional` **chatEndpoint**: `string`
-
-The path of your backend's chat endpoint.
-
-#### Default
-
-```ts
-'/chat/completions'
-```
-
-#### Example
-
-```ts
-const config: ElementsConfig = {
-  chatEndpoint: '/my-custom-chat-endpoint',
 }
 ```
 
@@ -243,12 +221,37 @@ const config: ElementsConfig = {
 
 ***
 
+### languageModel?
+
+> `optional` **languageModel**: `LanguageModel`
+
+Optional property to override the LLM provider. If you override the model,
+then logs & usage metrics will not be tracked directly via Gram.
+
+Please ensure that you are using an AI SDK v2 compatible model (e.g a
+Vercel AI sdk provider in the v2 semver range), as this is the only variant
+compatible with AI SDK V5
+
+Example with Google Gemini:
+```ts
+import { google } from '@ai-sdk/google';
+
+const googleGemini = google('gemini-3-pro-preview');
+
+const config: ElementsConfig = {
+  {other options}
+  languageModel: googleGemini,
+}
+```
+
+***
+
 ### modal?
 
 > `optional` **modal**: [`ModalConfig`](ModalConfig.md)
 
 The configuration for the modal window.
-Does not apply if variant is 'standalone'.
+Only applicable if variant is 'widget'.
 
 #### Example
 
@@ -316,6 +319,26 @@ const config: ElementsConfig = {
     components: {
       fetchUrl: FetchToolComponent,
     },
+  },
+}
+```
+
+***
+
+### api?
+
+> `optional` **api**: `ApiConfig`
+
+The API configuration to use for the Elements library.
+
+Use this to override the default API URL, or add explicit auth configuration
+
+#### Example
+
+```ts
+const config: ElementsConfig = {
+  api: {
+    url: 'https://api.getgram.ai',
   },
 }
 ```

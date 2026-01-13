@@ -7,6 +7,7 @@ import {
   TextMessagePartComponent,
   ToolCallMessagePartComponent,
 } from '@assistant-ui/react'
+import { LanguageModel } from 'ai'
 import {
   ComponentType,
   Dispatch,
@@ -16,17 +17,11 @@ import {
 } from 'react'
 import type { Plugin } from './plugins'
 
-export interface ElementsProviderProps {
-  /**
-   * The children to render.
-   */
-  children: ReactNode
-
-  /**
-   * Configuration object for the Elements library.
-   */
-  config: ElementsConfig
-}
+/**
+ * Function to retrieve the session token from the backend endpoint.
+ * Override this if you have mounted your session endpoint at a different path.
+ */
+export type GetSessionFn = (init: { projectSlug: string }) => Promise<string>
 
 type ServerUrl = string
 
@@ -106,19 +101,7 @@ export interface ElementsConfig {
    *   mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
    * }
    */
-  mcp: ServerUrl
-
-  /**
-   * The path of your backend's chat endpoint.
-   *
-   * @default '/chat/completions'
-   *
-   * @example
-   * const config: ElementsConfig = {
-   *   chatEndpoint: '/my-custom-chat-endpoint',
-   * }
-   */
-  chatEndpoint?: string
+  mcp?: ServerUrl
 
   /**
    * Custom environment variable overrides for the Elements library.
@@ -196,8 +179,30 @@ export interface ElementsConfig {
   composer?: ComposerConfig
 
   /**
+   * Optional property to override the LLM provider. If you override the model,
+   * then logs & usage metrics will not be tracked directly via Gram.
+   *
+   * Please ensure that you are using an AI SDK v2 compatible model (e.g a
+   * Vercel AI sdk provider in the v2 semver range), as this is the only variant
+   * compatible with AI SDK V5
+   *
+   * Example with Google Gemini:
+   * ```ts
+   * import { google } from '@ai-sdk/google';
+   *
+   * const googleGemini = google('gemini-3-pro-preview');
+   *
+   * const config: ElementsConfig = {
+   *   {other options}
+   *   languageModel: googleGemini,
+   * }
+   * ```
+   */
+  languageModel?: LanguageModel
+
+  /**
    * The configuration for the modal window.
-   * Does not apply if variant is 'standalone'.
+   * Only applicable if variant is 'widget'.
    *
    * @example
    * const config: ElementsConfig = {
@@ -255,7 +260,92 @@ export interface ElementsConfig {
    * }
    */
   tools?: ToolsConfig
+
+  /**
+   * The API configuration to use for the Elements library.
+   *
+   * Use this to override the default API URL, or add explicit auth configuration
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   api: {
+   *     url: 'https://api.getgram.ai',
+   *   },
+   * }
+   */
+  api?: ApiConfig
 }
+
+/**
+ * Base API configuration with the server URL.
+ */
+export type BaseApiConfig = {
+  /**
+   * The Gram API URL to use for the Elements library.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   api: {
+   *     url: 'https://api.getgram.ai',
+   *   },
+   * }
+   */
+  url?: string
+}
+
+export type SessionAuthConfig = {
+  /**
+   * The function to use to retrieve the session token from the backend endpoint.
+   * By default, this will attempt to fetch the session token from `/chat/session`.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   api: {
+   *     sessionFn: async () => {
+   *       return fetch('/chat/session').then(res => res.json()).then(data => data.client_token)
+   *     },
+   *   },
+   * }
+   */
+  sessionFn: GetSessionFn
+}
+
+/**
+ * The API key auth config is used to authenticate the Elements library using an API key only.
+ *
+ * NOTE: This is not recommended for production use, and a warning
+ * will be displayed in the chat interface if you use this config.
+ * Define a session endpoint instead to avoid this warning.
+ *
+ * @example
+ * const config: ElementsConfig = {
+ *   api: {
+ *     UNSAFE_apiKey: 'your-api-key',
+ *   },
+ * }
+ */
+export type ApiKeyAuthConfig = {
+  /**
+   * The API key to use if you haven't yet configured a session endpoint.
+   * Do not use this in production.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   api: {
+   *     UNSAFE_apiKey: 'your-api-key',
+   *   },
+   * }
+   */
+  UNSAFE_apiKey: string
+}
+
+/**
+ * API configuration - can be just the URL, or URL with session auth, or URL with API key auth.
+ */
+export type ApiConfig =
+  | BaseApiConfig
+  | (BaseApiConfig & SessionAuthConfig)
+  | (BaseApiConfig & ApiKeyAuthConfig)
 
 /**
  * The LLM model to use for the Elements library.
@@ -400,6 +490,7 @@ export interface ComponentOverrides {
  *   },
  * }
  */
+
 export interface ToolsConfig {
   /**
    * Whether individual tool calls within a group should be expanded by default.
@@ -476,6 +567,20 @@ export interface ToolsConfig {
    * ```
    */
   frontendTools?: Record<string, AssistantTool>
+
+  /**
+   * List of tool names that require confirmation from the end user before
+   * being executed. The user can choose to approve once or approve for the
+   * entire session via the UI.
+   *
+   * @example
+   * ```ts
+   * tools: {
+   *   toolsRequiringApproval: ['delete_file', 'send_email'],
+   * }
+   * ```
+   */
+  toolsRequiringApproval?: string[]
 }
 
 export interface WelcomeConfig {
@@ -514,8 +619,6 @@ export interface Dimension {
   height: number | string
   maxHeight?: number | string
 }
-
-export type ExpandedDimension = Omit<Dimension, 'maxHeight'>
 
 interface ExpandableConfig {
   /**

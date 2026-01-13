@@ -772,7 +772,7 @@ jobs:
 
       - name: Set up Docker Buildx
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Extract Docker metadata
         if: ${{ needs.changes.outputs.functions == 'true' }}
@@ -879,6 +879,8 @@ jobs:
   elements-build-lint:
     runs-on: ubicloud-standard-4
     needs: changes
+    env:
+      GRAM_GIT_SHA: "${{ github.sha }}"
     steps:
       - name: Skip if no elements changes exist
         if: ${{ needs.changes.outputs.elements != 'true' }}
@@ -928,6 +930,54 @@ jobs:
       - name: Type check
         if: ${{ needs.changes.outputs.elements == 'true' }}
         run: pnpm type-check
+        working-directory: elements
+
+      - name: Prune PNPM store
+        if: ${{ needs.changes.outputs.elements == 'true' && success() }}
+        run: pnpm store prune
+
+  elements-test:
+    runs-on: ubicloud-standard-4
+    needs: changes
+    steps:
+      - name: Skip if no elements changes exist
+        if: ${{ needs.changes.outputs.elements != 'true' }}
+        run: echo "No elements changes detected — skipping elements-test."
+
+      - name: Checkout
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+
+      - name: Setup Mise
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3.5.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: mise run github
+
+      - name: Cache PNPM
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+        with:
+          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_PNPM_KEY }}
+            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+          path: |
+            ${{ env.PNPM_STORE_PATH }}
+
+      - name: Install dependencies
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Test
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: pnpm test
         working-directory: elements
 
       - name: Prune PNPM store

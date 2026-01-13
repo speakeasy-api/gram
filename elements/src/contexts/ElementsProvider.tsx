@@ -1,19 +1,51 @@
+import { FrontendTools } from '@/components/FrontendTools'
+import { useMCPTools } from '@/hooks/useMCPTools'
+import { useToolApproval } from '@/hooks/useToolApproval'
+import { getApiUrl } from '@/lib/api'
 import { MODELS } from '@/lib/models'
-import { ElementsProviderProps, Model } from '@/types'
+import {
+  clearFrontendToolApprovalConfig,
+  getEnabledTools,
+  setFrontendToolApprovalConfig,
+  toAISDKTools,
+  wrapToolsWithApproval,
+  type ApprovalHelpers,
+} from '@/lib/tools'
+import { recommended } from '@/plugins'
+import { ElementsConfig, Model } from '@/types'
+import { Plugin } from '@/types/plugins'
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import {
-  AssistantChatTransport,
+  frontendTools as convertFrontendToolsToAISDKTools,
   useChatRuntime,
 } from '@assistant-ui/react-ai-sdk'
-import { useState } from 'react'
-import { ElementsContext } from './elementsContextType'
-import { Plugin } from '@/types/plugins'
-import { recommended } from '@/plugins'
-import { getEnabledTools, toAISDKTools } from '@/lib/tools'
-import { FrontendTools } from '@/components/FrontendTools'
-import { lastAssistantMessageIsCompleteWithToolCalls } from 'ai'
+import { createOpenRouter } from '@openrouter/ai-sdk-provider'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import {
+  convertToModelMessages,
+  smoothStream,
+  stepCountIs,
+  streamText,
+  ToolSet,
+  type ChatTransport,
+  type UIMessage,
+} from 'ai'
+import {
+  ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import { useAuth } from '../hooks/useAuth'
+import { ElementsContext } from './contexts'
+import { ToolApprovalProvider } from './ToolApprovalContext'
 
-const DEFAULT_CHAT_ENDPOINT = '/chat/completions'
+export interface ElementsProviderProps {
+  children: ReactNode
+  config: ElementsConfig
+}
 
 const BASE_SYSTEM_PROMPT = `You are a helpful assistant that can answer questions and help with tasks.`
 
@@ -26,15 +58,49 @@ function mergeInternalSystemPromptWith(
 
   User-provided System Prompt:
   ${userSystemPrompt ?? 'None provided'}
-  
+
   Utilities:
   ${plugins.map((plugin) => `- ${plugin.language}: ${plugin.prompt}`).join('\n')}`
 }
 
-export const ElementsProvider = ({
+/**
+ * Cleans messages before sending to the model to work around an AI SDK bug.
+ * Strips callProviderMetadata from all parts (AI SDK bug #9731)
+ */
+function cleanMessagesForModel(messages: UIMessage[]): UIMessage[] {
+  return messages.map((message) => {
+    const partsArray = message.parts
+    if (!Array.isArray(partsArray)) {
+      return message
+    }
+
+    // Process each part: strip providerOptions/providerMetadata and filter reasoning
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cleanedParts = partsArray.map((part: any) => {
+      // Strip providerOptions and providerMetadata from all remaining parts
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars, unused-imports/no-unused-vars
+      const { callProviderMetadata, ...cleanPart } = part
+      return cleanPart
+    })
+
+    return {
+      ...message,
+      parts: cleanedParts,
+    }
+  })
+}
+
+const ElementsProviderWithApproval = ({
   children,
   config,
 }: ElementsProviderProps) => {
+  const apiUrl = getApiUrl(config)
+  const auth = useAuth({
+    auth: config.api,
+    projectSlug: config.projectSlug,
+  })
+  const toolApproval = useToolApproval()
+
   const [model, setModel] = useState<Model>(
     config.model?.defaultModel ?? MODELS[0]
   )
@@ -45,33 +111,145 @@ export const ElementsProvider = ({
 
   // If there are any user provided plugins, use them, otherwise use the recommended plugins
   const plugins = config.plugins ?? recommended
-  const runtime = useChatRuntime({
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
-    transport: new AssistantChatTransport({
-      api: config.chatEndpoint ?? DEFAULT_CHAT_ENDPOINT,
-      // Because we override prepareSendMessagesRequest, we need to manually
-      // pass the system prompt to the server (usually this would work with
-      // useAssistantInstructions but we need to pass custom config across which
-      // clobbers the super implementation of prepareSendMessagesRequest)
-      prepareSendMessagesRequest: ({ id, messages }) => {
+
+  const systemPrompt = mergeInternalSystemPromptWith(
+    config.systemPrompt,
+    plugins
+  )
+
+  const { data: mcpTools, isLoading: mcpToolsLoading } = useMCPTools({
+    auth,
+    mcp: config.mcp,
+    environment: config.environment ?? {},
+  })
+
+  // Store approval helpers in ref so they can be used in async contexts
+  const approvalHelpersRef = useRef<ApprovalHelpers>({
+    requestApproval: toolApproval.requestApproval,
+    isToolApproved: toolApproval.isToolApproved,
+    whitelistTool: toolApproval.whitelistTool,
+  })
+
+  approvalHelpersRef.current = {
+    requestApproval: toolApproval.requestApproval,
+    isToolApproved: toolApproval.isToolApproved,
+    whitelistTool: toolApproval.whitelistTool,
+  }
+
+  const getApprovalHelpers = useCallback((): ApprovalHelpers => {
+    return {
+      requestApproval: (...args) =>
+        approvalHelpersRef.current.requestApproval(...args),
+      isToolApproved: (...args) =>
+        approvalHelpersRef.current.isToolApproved(...args),
+      whitelistTool: (...args) =>
+        approvalHelpersRef.current.whitelistTool(...args),
+    }
+  }, [])
+
+  // Set up frontend tool approval config for runtime checking
+  useEffect(() => {
+    if (config.tools?.toolsRequiringApproval?.length) {
+      setFrontendToolApprovalConfig(
+        getApprovalHelpers(),
+        config.tools.toolsRequiringApproval
+      )
+    }
+    return () => {
+      clearFrontendToolApprovalConfig()
+    }
+  }, [config.tools?.toolsRequiringApproval, getApprovalHelpers])
+
+  // Create custom transport
+  const transport = useMemo<ChatTransport<UIMessage> | undefined>(
+    () => ({
+      sendMessages: async ({ messages, abortSignal }) => {
+        const usingCustomModel = !!config.languageModel
+
+        if (auth.isLoading) {
+          throw new Error('Session is loading')
+        }
+
         const context = runtime.thread.getModelContext()
-        const tools = toAISDKTools(getEnabledTools(context?.tools ?? {}))
-        return {
-          body: {
-            messages,
-            system: mergeInternalSystemPromptWith(config.systemPrompt, plugins),
-            id,
+        const frontendTools = toAISDKTools(
+          getEnabledTools(context?.tools ?? {})
+        )
+
+        // Create OpenRouter model (only needed when not using custom model)
+        const openRouterModel = usingCustomModel
+          ? null
+          : createOpenRouter({
+              baseURL: apiUrl,
+              apiKey: 'unused, but must be set',
+              headers: auth.headers,
+            })
+
+        if (config.languageModel) {
+          console.log('Using custom language model', config.languageModel)
+        }
+
+        // Combine tools - MCP tools only available when not using custom model
+        const combinedTools: ToolSet = {
+          ...mcpTools,
+          ...convertFrontendToolsToAISDKTools(frontendTools),
+        } as ToolSet
+
+        // Wrap tools that require approval
+        const tools = wrapToolsWithApproval(
+          combinedTools,
+          config.tools?.toolsRequiringApproval,
+          getApprovalHelpers()
+        )
+
+        // Stream the response
+        const modelToUse = config.languageModel
+          ? config.languageModel
+          : openRouterModel!.chat(model)
+
+        try {
+          // This works around AI SDK bug where these fields cause validation failures
+          const cleanedMessages = cleanMessagesForModel(messages)
+          const modelMessages = convertToModelMessages(cleanedMessages)
+
+          const result = streamText({
+            system: systemPrompt,
+            model: modelToUse,
+            messages: modelMessages,
             tools,
-            config: {
-              mcp: config.mcp,
-              environment: config.environment,
-              projectSlug: config.projectSlug,
-              model,
+            stopWhen: stepCountIs(10),
+            experimental_transform: smoothStream({ delayInMs: 15 }),
+            abortSignal,
+            onError: ({ error }) => {
+              console.error('Stream error in onError callback:', error)
             },
-          },
+          })
+
+          return result.toUIMessageStream()
+        } catch (error) {
+          console.error('Error creating stream:', error)
+          throw error
         }
       },
+      reconnectToStream: async () => {
+        // Not implemented for client-side streaming
+        throw new Error('Stream reconnection not supported')
+      },
     }),
+    [
+      config,
+      config.languageModel,
+      model,
+      systemPrompt,
+      mcpTools,
+      mcpToolsLoading,
+      getApprovalHelpers,
+      apiUrl,
+      auth.headers,
+    ]
+  )
+
+  const runtime = useChatRuntime({
+    transport,
   })
 
   return (
@@ -94,5 +272,16 @@ export const ElementsProvider = ({
         <FrontendTools tools={config.tools?.frontendTools ?? {}} />
       </ElementsContext.Provider>
     </AssistantRuntimeProvider>
+  )
+}
+
+export const ElementsProvider = (props: ElementsProviderProps) => {
+  const queryClient = new QueryClient()
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ToolApprovalProvider>
+        <ElementsProviderWithApproval {...props} />
+      </ToolApprovalProvider>
+    </QueryClientProvider>
   )
 }

@@ -12,9 +12,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-retryablehttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -25,10 +28,15 @@ type RegistryClient struct {
 }
 
 // NewRegistryClient creates a new registry client.
-func NewRegistryClient(logger *slog.Logger) *RegistryClient {
+func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider) *RegistryClient {
 	return &RegistryClient{
-		httpClient: retryablehttp.NewClient().StandardClient(),
-		logger:     logger,
+		httpClient: &http.Client{
+			Transport: otelhttp.NewTransport(
+				retryablehttp.NewClient().StandardClient().Transport,
+				otelhttp.WithTracerProvider(tracerProvider),
+			),
+		},
+		logger: logger,
 	}
 }
 
@@ -65,7 +73,7 @@ type serverJSON struct {
 	Title       *string `json:"title"`
 	WebsiteURL  *string `json:"websiteUrl"`
 	Icons       []struct {
-		URL string `json:"url"`
+		Src string `json:"src"`
 	} `json:"icons"`
 	Remotes []serverRemote `json:"remotes"`
 }
@@ -150,7 +158,7 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 	for _, s := range listResp.Servers {
 		var iconURL *string
 		if len(s.Server.Icons) > 0 {
-			iconURL = &s.Server.Icons[0].URL
+			iconURL = &s.Server.Icons[0].Src
 		}
 
 		server := &types.ExternalMCPServer{
@@ -166,15 +174,29 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 		servers = append(servers, server)
 	}
 
+	hackilyEnrichWithLogos(servers)
 	return servers, nil
+}
+
+// hackilyEnrichWithLogos patches servers with hardcoded logo URLs for servers
+// that don't have icons from the registry.
+func hackilyEnrichWithLogos(servers []*types.ExternalMCPServer) {
+	for _, s := range servers {
+		if s.IconURL == nil {
+			if logo, ok := HardcodedLogos[s.RegistrySpecifier]; ok {
+				s.IconURL = &logo
+			}
+		}
+	}
 }
 
 // ServerDetails contains detailed information about an MCP server including connection info.
 type ServerDetails struct {
-	Name        string
-	Description string
-	Version     string
-	RemoteURL   string
+	Name          string
+	Description   string
+	Version       string
+	RemoteURL     string
+	TransportType externalmcptypes.TransportType
 }
 
 // getServerResponse wraps a single server from the registry.
@@ -225,13 +247,15 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 
 	// Find the remote URL, preferring streamable-http over sse
 	var remoteURL string
+	var transportType externalmcptypes.TransportType
 	for _, remote := range serverResp.Server.Remotes {
 		if remote.Type == "streamable-http" {
 			remoteURL = remote.URL
+			transportType = externalmcptypes.TransportTypeStreamableHTTP
 			break
-		}
-		if remote.Type == "sse" && remoteURL == "" {
+		} else if remote.Type == "sse" {
 			remoteURL = remote.URL
+			transportType = externalmcptypes.TransportTypeSSE
 		}
 	}
 
@@ -240,9 +264,10 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 	}
 
 	return &ServerDetails{
-		Name:        serverResp.Server.Name,
-		Description: serverResp.Server.Description,
-		Version:     serverResp.Server.Version,
-		RemoteURL:   remoteURL,
+		Name:          serverResp.Server.Name,
+		Description:   serverResp.Server.Description,
+		Version:       serverResp.Server.Version,
+		RemoteURL:     remoteURL,
+		TransportType: transportType,
 	}, nil
 }

@@ -4,9 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"log/slog"
-	"os"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -54,6 +53,7 @@ type Service struct {
 	assetStorage   assets.BlobStore
 	temporal       client.Client
 	posthog        *posthog.Posthog
+	siteURL        *url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -66,6 +66,7 @@ func NewService(
 	sessions *sessions.Manager,
 	assetStorage assets.BlobStore,
 	posthog *posthog.Posthog,
+	siteURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("deployments"))
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/deployments")
@@ -76,13 +77,14 @@ func NewService(
 		db:             db,
 		repo:           repo.New(db),
 		externalmcp:    externalmcpRepo.New(db),
-		registryClient: externalmcp.NewRegistryClient(logger),
+		registryClient: externalmcp.NewRegistryClient(logger, tracerProvider),
 		auth:           auth.New(logger, db, sessions),
 		assets:         assetsRepo.New(db),
 		packages:       packagesRepo.New(db),
 		assetStorage:   assetStorage,
 		temporal:       temporal,
 		posthog:        posthog,
+		siteURL:        siteURL,
 	}
 }
 
@@ -977,7 +979,7 @@ func (s *Service) captureDeploymentProcessedEvent(
 		"functions_asset_count":           len(dep.FunctionsAssets),
 		"openapiv3_asset_count":           len(dep.Openapiv3Assets),
 		"first_deployment_with_functions": firstDeploymentWithFunctions,
-		"logs_url":                        fmt.Sprintf("%s/%s/%s/deployments/%s", os.Getenv("GRAM_SITE_URL"), organizationSlug, projectSlug, dep.ID),
+		"logs_url":                        s.siteURL.JoinPath(organizationSlug, projectSlug, "deployments", dep.ID).String(),
 	}
 
 	if previousDeployment != nil {

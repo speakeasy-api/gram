@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/speakeasy-api/gram/server/internal/templates"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/templates"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
@@ -536,6 +536,10 @@ func (tp *ToolProxy) doHTTP(
 
 	req.Header.Set("X-Gram-Proxy", "1")
 
+	if req.Header.Get("Accept") == "" {
+		req.Header.Set("Accept", "*/*")
+	}
+
 	return reverseProxyRequest(ctx, ReverseProxyOptions{
 		Logger:                    logger,
 		Tracer:                    tp.tracer,
@@ -605,12 +609,13 @@ func (tp *ToolProxy) doExternalMCP(
 		if token := env.UserConfig.Get(ExternalMCPOAuthTokenKey); token != "" {
 			opts = &externalmcp.ClientOptions{
 				Authorization: "Bearer " + token,
+				TransportType: plan.TransportType,
 			}
 		}
 	}
 
 	// Create client and call tool
-	client, err := externalmcp.NewClient(ctx, logger, plan.RemoteURL, opts)
+	client, err := externalmcp.NewClient(ctx, logger, plan.RemoteURL, plan.TransportType, opts)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").Log(ctx, logger)
 	}

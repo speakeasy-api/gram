@@ -694,7 +694,7 @@ func NewRevokeGatewayErrorResponseBody(res *goa.ServiceError) *RevokeGatewayErro
 }
 
 // NewCreatePayload builds a chatSessions service create endpoint payload.
-func NewCreatePayload(body *CreateRequestBody, apikeyToken *string, projectSlugInput *string) *chatsessions.CreatePayload {
+func NewCreatePayload(body *CreateRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *chatsessions.CreatePayload {
 	v := &chatsessions.CreatePayload{
 		UserIdentifier: body.UserIdentifier,
 		EmbedOrigin:    *body.EmbedOrigin,
@@ -705,6 +705,7 @@ func NewCreatePayload(body *CreateRequestBody, apikeyToken *string, projectSlugI
 	if body.ExpiresAfter == nil {
 		v.ExpiresAfter = 3600
 	}
+	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -712,9 +713,10 @@ func NewCreatePayload(body *CreateRequestBody, apikeyToken *string, projectSlugI
 }
 
 // NewRevokePayload builds a chatSessions service revoke endpoint payload.
-func NewRevokePayload(token string, apikeyToken *string, projectSlugInput *string) *chatsessions.RevokePayload {
+func NewRevokePayload(token string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *chatsessions.RevokePayload {
 	v := &chatsessions.RevokePayload{}
 	v.Token = token
+	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 

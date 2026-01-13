@@ -7,6 +7,11 @@
 
 package server
 
+// GetProjectProjectsPath returns the URL path to the projects service getProject HTTP endpoint.
+func GetProjectProjectsPath() string {
+	return "/rpc/projects.get"
+}
+
 // CreateProjectProjectsPath returns the URL path to the projects service createProject HTTP endpoint.
 func CreateProjectProjectsPath() string {
 	return "/rpc/projects.create"

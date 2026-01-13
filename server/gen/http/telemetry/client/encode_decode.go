@@ -522,6 +522,12 @@ func marshalTelemetrySearchLogsFilterToSearchLogsFilterRequestBody(v *telemetry.
 		FunctionID:     v.FunctionID,
 		GramUrn:        v.GramUrn,
 	}
+	if v.GramUrns != nil {
+		res.GramUrns = make([]string, len(v.GramUrns))
+		for i, val := range v.GramUrns {
+			res.GramUrns[i] = val
+		}
+	}
 
 	return res
 }
@@ -545,6 +551,12 @@ func marshalSearchLogsFilterRequestBodyToTelemetrySearchLogsFilter(v *SearchLogs
 		DeploymentID:   v.DeploymentID,
 		FunctionID:     v.FunctionID,
 		GramUrn:        v.GramUrn,
+	}
+	if v.GramUrns != nil {
+		res.GramUrns = make([]string, len(v.GramUrns))
+		for i, val := range v.GramUrns {
+			res.GramUrns[i] = val
+		}
 	}
 
 	return res

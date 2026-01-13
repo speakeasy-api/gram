@@ -79,7 +79,7 @@ func NewProcessDeployment(
 		projects:       projectsRepo.New(db),
 		billingRepo:    billingRepo,
 		externalmcp:    externalmcpRepo.New(db),
-		registryClient: externalmcp.NewRegistryClient(logger),
+		registryClient: externalmcp.NewRegistryClient(logger, tracerProvider),
 	}
 }
 
@@ -440,7 +440,7 @@ func (p *ProcessDeployment) doExternalMCPs(
 			// Attempt to connect to detect OAuth requirements
 			var requiresOAuth bool
 			var oauthDiscovery *externalmcp.OAuthDiscoveryResult
-			mcpClient, err := externalmcp.NewClient(ctx, logger, serverDetails.RemoteURL, nil)
+			mcpClient, err := externalmcp.NewClient(ctx, logger, serverDetails.RemoteURL, serverDetails.TransportType, nil)
 			if authErr, ok := externalmcp.IsAuthRequiredError(err); ok {
 				requiresOAuth = true
 				logger.InfoContext(ctx, "external MCP server requires OAuth",
@@ -503,6 +503,7 @@ func (p *ProcessDeployment) doExternalMCPs(
 				ExternalMcpAttachmentID:    mcp.ID,
 				ToolUrn:                    toolURN.String(),
 				RemoteUrl:                  serverDetails.RemoteURL,
+				TransportType:              serverDetails.TransportType,
 				RequiresOauth:              requiresOAuth,
 				OauthVersion:               oauthVersion,
 				OauthAuthorizationEndpoint: oauthAuthEndpoint,

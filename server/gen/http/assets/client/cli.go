@@ -165,7 +165,7 @@ func BuildFetchOpenAPIv3FromURLPayload(assetsFetchOpenAPIv3FromURLBody string, a
 	{
 		err = json.Unmarshal([]byte(assetsFetchOpenAPIv3FromURLBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"url\": \"Nostrum incidunt et inventore.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"url\": \"Officiis omnis fuga.\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -285,6 +285,81 @@ func BuildListAssetsPayload(assetsListAssetsSessionToken string, assetsListAsset
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildUploadChatAttachmentPayload builds the payload for the assets
+// uploadChatAttachment endpoint from CLI flags.
+func BuildUploadChatAttachmentPayload(assetsUploadChatAttachmentContentType string, assetsUploadChatAttachmentContentLength string, assetsUploadChatAttachmentApikeyToken string, assetsUploadChatAttachmentProjectSlugInput string, assetsUploadChatAttachmentSessionToken string) (*assets.UploadChatAttachmentForm, error) {
+	var err error
+	var contentType string
+	{
+		contentType = assetsUploadChatAttachmentContentType
+	}
+	var contentLength int64
+	{
+		contentLength, err = strconv.ParseInt(assetsUploadChatAttachmentContentLength, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value for contentLength, must be INT64")
+		}
+	}
+	var apikeyToken *string
+	{
+		if assetsUploadChatAttachmentApikeyToken != "" {
+			apikeyToken = &assetsUploadChatAttachmentApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assetsUploadChatAttachmentProjectSlugInput != "" {
+			projectSlugInput = &assetsUploadChatAttachmentProjectSlugInput
+		}
+	}
+	var sessionToken *string
+	{
+		if assetsUploadChatAttachmentSessionToken != "" {
+			sessionToken = &assetsUploadChatAttachmentSessionToken
+		}
+	}
+	v := &assets.UploadChatAttachmentForm{}
+	v.ContentType = contentType
+	v.ContentLength = contentLength
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildServeChatAttachmentPayload builds the payload for the assets
+// serveChatAttachment endpoint from CLI flags.
+func BuildServeChatAttachmentPayload(assetsServeChatAttachmentID string, assetsServeChatAttachmentProjectID string, assetsServeChatAttachmentApikeyToken string, assetsServeChatAttachmentSessionToken string) (*assets.ServeChatAttachmentForm, error) {
+	var id string
+	{
+		id = assetsServeChatAttachmentID
+	}
+	var projectID string
+	{
+		projectID = assetsServeChatAttachmentProjectID
+	}
+	var apikeyToken *string
+	{
+		if assetsServeChatAttachmentApikeyToken != "" {
+			apikeyToken = &assetsServeChatAttachmentApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if assetsServeChatAttachmentSessionToken != "" {
+			sessionToken = &assetsServeChatAttachmentSessionToken
+		}
+	}
+	v := &assets.ServeChatAttachmentForm{}
+	v.ID = id
+	v.ProjectID = projectID
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
 
 	return v, nil
 }

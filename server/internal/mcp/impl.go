@@ -20,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"go.opentelemetry.io/otel/metric"
@@ -78,6 +79,7 @@ type Service struct {
 	billingTracker      billing.Tracker
 	billingRepository   billing.Repository
 	toolsetCache        cache.TypedCacheObject[mv.ToolsetBaseContents]
+	features            *productfeatures.Client
 	tcm                 tm.ToolMetricsProvider
 	vectorToolStore     *rag.ToolsetVectorStore
 	temporal            temporal_client.Client
@@ -129,6 +131,7 @@ func NewService(
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
 	tcm tm.ToolMetricsProvider,
+	features *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporal temporal_client.Client,
 ) *Service {
@@ -167,6 +170,7 @@ func NewService(
 		billingRepository:   billingRepository,
 		toolsetCache:        cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		tcm:                 tcm,
+		features:            features,
 		vectorToolStore:     vectorToolStore,
 		temporal:            temporal,
 		sessions:            sessions,
@@ -209,7 +213,7 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 	body, err := json.Marshal(rpcError{
 		ID:      msgID{format: 0, String: "", Number: 0},
 		Code:    methodNotAllowed,
-		Message: methodNotAllowed.UserMessage(),
+		Message: "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication.",
 		Data:    nil,
 	})
 	if err != nil {
@@ -386,6 +390,10 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	token = strings.TrimPrefix(token, "Bearer ")
 	token = strings.TrimPrefix(token, "bearer ")
 	var tokenInputs []oauthTokenInputs
+
+	if token == "" {
+		token = r.Header.Get(constants.ChatSessionsTokenHeader)
+	}
 
 	var oAuthProxyProvider *oauth_repo.OauthProxyProvider
 	if toolset.OauthProxyServerID.Valid {
@@ -985,7 +993,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.tcm, s.vectorToolStore, s.temporal)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.tcm, s.features, s.vectorToolStore, s.temporal)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "prompts/get":
@@ -993,7 +1001,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "resources/list":
 		return handleResourcesList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "resources/read":
-		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.tcm)
+		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.tcm, s.features)
 	default:
 		return nil, &rpcError{
 			ID:      req.ID,

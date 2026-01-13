@@ -1,7 +1,7 @@
 {
   "name": "dashboard",
   "private": true,
-  "version": "0.25.0",
+  "version": "0.26.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -22,6 +22,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@gram/client": "workspace:*",
+    "@gram-ai/elements": "workspace:*",
     "@openrouter/ai-sdk-provider": "^1.2.0",
     "@polar-sh/checkout": "^0.1.14",
     "@radix-ui/react-accordion": "^1.2.12",

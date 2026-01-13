@@ -6,65 +6,73 @@ import { cn } from '@/lib/utils'
 import { useAssistantState } from '@assistant-ui/react'
 import { SyntaxHighlighterProps } from '@assistant-ui/react-markdown'
 import { AlertCircleIcon } from 'lucide-react'
-import { FC, useEffect, useRef, useState } from 'react'
+import { FC, useEffect, useMemo, useRef, useState } from 'react'
 import { parse, View, Warn } from 'vega'
 
 export const ChartRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
   const message = useAssistantState(({ message }) => message)
   const containerRef = useRef<HTMLDivElement>(null)
-  const [processingChart, setProcessingChart] = useState(true)
+  const viewRef = useRef<View | null>(null)
   const [error, setError] = useState<string | null>(null)
   const messageIsComplete = message.status?.type === 'complete'
   const r = useRadius()
   const d = useDensity()
 
-  useEffect(() => {
-    if (!messageIsComplete) {
-      return
+  // Parse and validate JSON in useMemo - only recomputes when code changes
+  const parsedSpec = useMemo(() => {
+    const trimmedCode = code.trim()
+    if (!trimmedCode) return null
+
+    try {
+      return JSON.parse(trimmedCode) as Record<string, unknown>
+    } catch {
+      return null
     }
-    if (!containerRef.current) {
+  }, [code])
+
+  // Only render when we have valid JSON AND message is complete
+  const shouldRender = messageIsComplete && parsedSpec !== null
+
+  useEffect(() => {
+    if (!containerRef.current || !shouldRender) {
       return
     }
 
-    let view: View | null = null
+    setError(null)
 
     const runChart = async () => {
       try {
-        let json
-        try {
-          json = JSON.parse(code)
-        } catch (parseErr) {
-          throw new Error(
-            `Invalid JSON syntax: ${parseErr instanceof Error ? parseErr.message : 'Unable to parse'}`
-          )
+        // Clean up any existing view
+        if (viewRef.current) {
+          viewRef.current.finalize()
+          viewRef.current = null
         }
-        const chart = parse(json)
-        view = new View(chart, {
+
+        const chart = parse(parsedSpec)
+        const view = new View(chart, {
           container: containerRef.current ?? undefined,
           renderer: 'svg',
           hover: true,
           logLevel: Warn,
         })
+        viewRef.current = view
 
         await view.runAsync()
-        setProcessingChart(false)
       } catch (err) {
         console.error('Failed to render chart:', err)
-        const errorMessage =
-          err instanceof Error ? err.message : 'Failed to render chart'
-        setError(errorMessage)
-        setProcessingChart(false)
+        setError(err instanceof Error ? err.message : 'Failed to render chart')
       }
     }
+
     runChart()
 
-    // Cleanup function to destroy the view when component unmounts or re-renders
     return () => {
-      if (view) {
-        view.finalize()
+      if (viewRef.current) {
+        viewRef.current.finalize()
+        viewRef.current = null
       }
     }
-  }, [messageIsComplete, code])
+  }, [shouldRender, parsedSpec])
 
   return (
     <div
@@ -75,7 +83,7 @@ export const ChartRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
         d('p-lg')
       )}
     >
-      {(processingChart || !messageIsComplete) && (
+      {!shouldRender && !error && (
         <div className="shimmer text-muted-foreground bg-background/80 absolute inset-0 z-10 flex items-center justify-center">
           Rendering chart...
         </div>
@@ -84,14 +92,11 @@ export const ChartRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
       {error && (
         <div className="bg-background absolute inset-0 z-10 flex items-center justify-center gap-2 text-rose-500">
           <AlertCircleIcon name="alert-circle" className="h-4 w-4" />
-          Error rendering chart
+          {error}
         </div>
       )}
 
-      <div
-        ref={containerRef}
-        className={processingChart ? 'hidden' : 'block'}
-      />
+      <div ref={containerRef} className={!shouldRender ? 'hidden' : 'block'} />
     </div>
   )
 }

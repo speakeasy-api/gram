@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.16.3**](../README.md)
+[**@gram-ai/elements v1.19.0**](../README.md)
 
 ***
 
@@ -6,4 +6,4 @@
 
 # Type Alias: Variant
 
-> **Variant** = *typeof* `VARIANTS`\[`number`\]
+> **Variant** = *typeof* [`VARIANTS`](VARIANTS.md)\[`number`\]

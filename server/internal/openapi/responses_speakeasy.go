@@ -77,7 +77,7 @@ type capturedResponseBodySpeakeasy struct {
 }
 
 func captureResponseBodySpeakeasy(ctx context.Context, logger *slog.Logger, doc *openapi.OpenAPI, schemaCache *concurrentSchemaCache, op *openapi.Operation) (*capturedResponseBodySpeakeasy, error) {
-	if op.Responses == nil || (op.Responses.Default == nil && op.Responses.Len() == 0) {
+	if op.Responses.Default == nil && op.Responses.Len() == 0 {
 		return nil, nil
 	}
 

@@ -298,6 +298,7 @@ func (t *Toolsets) extractExternalMCPToolCallPlan(ctx context.Context, tool exte
 	// are resolved at runtime when the tool is called (e.g., "notion:search" -> ToolName="search").
 	plan := &gateway.ExternalMCPToolCallPlan{
 		RemoteURL:     tool.RemoteUrl,
+		TransportType: tool.TransportType,
 		ToolName:      toolUrn.Name, // "proxy" for proxy tools, actual tool name for direct calls
 		Slug:          tool.Slug,
 		RequiresOAuth: tool.RequiresOauth,

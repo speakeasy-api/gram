@@ -11,16 +11,12 @@ packages:
   - evaluation
   - elements
 
-overrides:
-  # CVE-2025-64756 / GHSA-5j98-mcp5-4vw2
-  'glob@>=10.0 <10.5.0': '10.5.0'
-
 catalog:
   '@ai-sdk/openai': ^2.0.0
-  '@ai-sdk/react': ^2.0.0
+  '@ai-sdk/react': ^2.0.118
   '@ai-sdk/ui-utils': ^1.2.0
   '@modelcontextprotocol/sdk': ^1.20.1
-  '@tanstack/react-query': ^5.90.10
+  '@tanstack/react-query': 5.90.10
   '@types/react': ^19.2.7
   '@types/react-dom': ^19.2.3
   ai: 5.0.66
@@ -35,3 +31,6 @@ onlyBuiltDependencies:
   - bun
   - esbuild
   - sharp
+
+overrides:
+  glob@>=10.0 <10.5.0: 10.5.0

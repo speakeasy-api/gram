@@ -46,3 +46,13 @@ func ServeFunctionAssetsPath() string {
 func ListAssetsAssetsPath() string {
 	return "/rpc/assets.list"
 }
+
+// UploadChatAttachmentAssetsPath returns the URL path to the assets service uploadChatAttachment HTTP endpoint.
+func UploadChatAttachmentAssetsPath() string {
+	return "/rpc/assets.uploadChatAttachment"
+}
+
+// ServeChatAttachmentAssetsPath returns the URL path to the assets service serveChatAttachment HTTP endpoint.
+func ServeChatAttachmentAssetsPath() string {
+	return "/rpc/assets.serveChatAttachment"
+}

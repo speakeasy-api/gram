@@ -588,6 +588,124 @@ paths:
       x-speakeasy-name-override: listAssets
       x-speakeasy-react-hook:
         name: ListAssets
+  /rpc/assets.serveChatAttachment:
+    get:
+      description: Serve a chat attachment from Gram.
+      operationId: serveChatAttachment
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the attachment to serve
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the attachment to serve
+            type: string
+        - allowEmptyValue: true
+          description: The project ID that the attachment belongs to
+          in: query
+          name: project_id
+          required: true
+          schema:
+            description: The project ID that the attachment belongs to
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                format: binary
+                type: string
+          description: OK response.
+          headers:
+            Content-Length:
+              schema:
+                format: int64
+                type: integer
+            Content-Type:
+              schema:
+                type: string
+            Last-Modified:
+              schema:
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: serveChatAttachment assets
+      tags:
+        - assets
+      x-speakeasy-name-override: serveChatAttachment
+      x-speakeasy-react-hook:
+        name: serveChatAttachment
   /rpc/assets.serveFunction:
     get:
       description: Serve a Gram Functions asset from Gram.
@@ -919,6 +1037,118 @@ paths:
       x-speakeasy-name-override: serveOpenAPIv3
       x-speakeasy-react-hook:
         name: serveOpenAPIv3
+  /rpc/assets.uploadChatAttachment:
+    post:
+      description: Upload a chat attachment to Gram.
+      operationId: uploadChatAttachment
+      parameters:
+        - allowEmptyValue: true
+          in: header
+          name: Content-Type
+          required: true
+          schema:
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: Content-Length
+          required: true
+          schema:
+            format: int64
+            type: integer
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadChatAttachmentResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: uploadChatAttachment assets
+      tags:
+        - assets
+      x-speakeasy-name-override: uploadChatAttachment
+      x-speakeasy-react-hook:
+        name: UploadChatAttachment
   /rpc/assets.uploadFunctions:
     post:
       description: Upload functions to Gram.
@@ -1031,6 +1261,13 @@ paths:
       x-speakeasy-name-override: uploadFunctions
       x-speakeasy-react-hook:
         name: UploadFunctions
+      requestBody:
+        required: true
+        content:
+          "*/*":
+            schema:
+              type: string
+              format: binary
   /rpc/assets.uploadImage:
     post:
       description: Upload an image to Gram.
@@ -1143,6 +1380,13 @@ paths:
       x-speakeasy-name-override: uploadImage
       x-speakeasy-react-hook:
         name: UploadImage
+      requestBody:
+        required: true
+        content:
+          "*/*":
+            schema:
+              type: string
+              format: binary
   /rpc/assets.uploadOpenAPIv3:
     post:
       description: Upload an OpenAPI v3 document to Gram.
@@ -1255,6 +1499,13 @@ paths:
       x-speakeasy-name-override: uploadOpenAPIv3
       x-speakeasy-react-hook:
         name: UploadOpenAPIv3
+      requestBody:
+        required: true
+        content:
+          "*/*":
+            schema:
+              type: string
+              format: binary
   /rpc/auth.callback:
     get:
       description: Handles the authentication callback.
@@ -2107,6 +2358,13 @@ paths:
       operationId: createChatSession
       parameters:
         - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
           description: API Key header
           in: header
           name: Gram-Key
@@ -2188,6 +2446,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
@@ -2207,6 +2467,13 @@ paths:
           required: true
           schema:
             description: The chat session token to revoke
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -2280,6 +2547,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
@@ -6587,6 +6856,106 @@ paths:
       x-speakeasy-name-override: deleteById
       x-speakeasy-react-hook:
         name: DeleteProject
+  /rpc/projects.get:
+    get:
+      description: Get project details by slug.
+      operationId: getProject
+      parameters:
+        - allowEmptyValue: true
+          description: The slug of the project to get
+          in: query
+          name: slug
+          required: true
+          schema:
+            description: A short url-friendly label that uniquely identifies a resource.
+            maxLength: 40
+            pattern: ^[a-z0-9_-]{1,128}$
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetProjectResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: getProject projects
+      tags:
+        - projects
+      x-speakeasy-name-override: read
+      x-speakeasy-react-hook:
+        name: Project
   /rpc/projects.list:
     get:
       description: List all projects for an organization.
@@ -11098,6 +11467,7 @@ components:
             - openapiv3
             - image
             - functions
+            - chat_attachment
             - unknown
         sha256:
           type: string
@@ -12266,6 +12636,12 @@ components:
         tool_urn:
           type: string
           description: The URN of this tool (tools:externalmcp:<slug>:proxy)
+        transport_type:
+          type: string
+          description: The transport type used to connect to the MCP server
+          enum:
+            - streamable-http
+            - sse
         updated_at:
           type: string
           description: When the tool definition was last updated.
@@ -12280,6 +12656,7 @@ components:
         - name
         - slug
         - remote_url
+        - transport_type
         - requires_oauth
         - oauth_version
         - created_at
@@ -12724,6 +13101,23 @@ components:
       properties:
         metadata:
           $ref: '#/components/schemas/McpMetadata'
+    GetProjectForm:
+      type: object
+      properties:
+        slug:
+          type: string
+          description: A short url-friendly label that uniquely identifies a resource.
+          pattern: ^[a-z0-9_-]{1,128}$
+          maxLength: 40
+      required:
+        - slug
+    GetProjectResult:
+      type: object
+      properties:
+        project:
+          $ref: '#/components/schemas/Project'
+      required:
+        - project
     GetPromptTemplateResult:
       type: object
       properties:
@@ -14199,7 +14593,12 @@ components:
           format: uuid
         gram_urn:
           type: string
-          description: Gram URN filter
+          description: Gram URN filter (single URN, use gram_urns for multiple)
+        gram_urns:
+          type: array
+          items:
+            type: string
+          description: Gram URN filter (one or more URNs)
         http_method:
           type: string
           description: HTTP method filter
@@ -14266,6 +14665,9 @@ components:
     SearchLogsResult:
       type: object
       properties:
+        enabled:
+          type: boolean
+          description: Whether tool metrics are enabled for the organization
         logs:
           type: array
           items:
@@ -14277,6 +14679,7 @@ components:
       description: Result of searching telemetry logs
       required:
         - logs
+        - enabled
     SearchToolCallsFilter:
       type: object
       properties:
@@ -14295,7 +14698,7 @@ components:
           format: uuid
         gram_urn:
           type: string
-          description: Gram URN filter
+          description: Gram URN filter (single URN, use gram_urns for multiple)
         to:
           type: string
           description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
@@ -14328,6 +14731,9 @@ components:
     SearchToolCallsResult:
       type: object
       properties:
+        enabled:
+          type: boolean
+          description: Whether tool metrics are enabled for the organization
         next_cursor:
           type: string
           description: Cursor for next page
@@ -14339,6 +14745,7 @@ components:
       description: Result of searching tool call summaries
       required:
         - tool_calls
+        - enabled
     SecurityVariable:
       type: object
       properties:
@@ -14376,6 +14783,36 @@ components:
         - in_placement
         - scheme
         - env_variables
+    ServeChatAttachmentForm:
+      type: object
+      properties:
+        apikey_token:
+          type: string
+        id:
+          type: string
+          description: The ID of the attachment to serve
+        project_id:
+          type: string
+          description: The project ID that the attachment belongs to
+        session_token:
+          type: string
+      required:
+        - id
+        - project_id
+    ServeChatAttachmentResult:
+      type: object
+      properties:
+        content_length:
+          type: integer
+          format: int64
+        content_type:
+          type: string
+        last_modified:
+          type: string
+      required:
+        - content_type
+        - content_length
+        - last_modified
     ServeFunctionForm:
       type: object
       properties:
@@ -14621,7 +15058,7 @@ components:
           format: uuid
         gram_urn:
           type: string
-          description: Gram URN filter
+          description: Gram URN filter (single URN, use gram_urns for multiple)
         to:
           type: string
           description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
@@ -15405,6 +15842,34 @@ components:
           items:
             type: string
           description: List of tool URNs to include in the toolset
+    UploadChatAttachmentForm:
+      type: object
+      properties:
+        apikey_token:
+          type: string
+        content_length:
+          type: integer
+          format: int64
+        content_type:
+          type: string
+        project_slug_input:
+          type: string
+        session_token:
+          type: string
+      required:
+        - content_type
+        - content_length
+    UploadChatAttachmentResult:
+      type: object
+      properties:
+        asset:
+          $ref: '#/components/schemas/Asset'
+        url:
+          type: string
+          description: The URL to serve the chat attachment
+      required:
+        - asset
+        - url
     UploadFunctionsForm:
       type: object
       properties:

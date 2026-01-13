@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -142,10 +143,11 @@ func unfoldExternalMCPTools(ctx context.Context, logger *slog.Logger, tools []*t
 		if proxy.RequiresOauth && oauthToken != "" {
 			opts = &externalmcp.ClientOptions{
 				Authorization: "Bearer " + oauthToken,
+				TransportType: externalmcptypes.TransportType(proxy.TransportType),
 			}
 		}
 
-		mcpClient, err := externalmcp.NewClient(ctx, logger, proxy.RemoteURL, opts)
+		mcpClient, err := externalmcp.NewClient(ctx, logger, proxy.RemoteURL, externalmcptypes.TransportType(proxy.TransportType), opts)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP").Log(ctx, logger)
 		}

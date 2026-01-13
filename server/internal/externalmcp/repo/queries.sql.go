@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 )
 
 const createExternalMCPAttachment = `-- name: CreateExternalMCPAttachment :one
@@ -64,6 +65,7 @@ INSERT INTO external_mcp_tool_definitions (
   external_mcp_attachment_id,
   tool_urn,
   remote_url,
+  transport_type,
   requires_oauth,
   oauth_version,
   oauth_authorization_endpoint,
@@ -80,7 +82,8 @@ VALUES (
   $6,
   $7,
   $8,
-  $9
+  $9,
+  $10
 )
 RETURNING id, external_mcp_attachment_id, tool_urn, remote_url, requires_oauth,
   oauth_version, oauth_authorization_endpoint, oauth_token_endpoint,
@@ -91,6 +94,7 @@ type CreateExternalMCPToolDefinitionParams struct {
 	ExternalMcpAttachmentID    uuid.UUID
 	ToolUrn                    string
 	RemoteUrl                  string
+	TransportType              types.TransportType
 	RequiresOauth              bool
 	OauthVersion               string
 	OauthAuthorizationEndpoint pgtype.Text
@@ -119,6 +123,7 @@ func (q *Queries) CreateExternalMCPToolDefinition(ctx context.Context, arg Creat
 		arg.ExternalMcpAttachmentID,
 		arg.ToolUrn,
 		arg.RemoteUrl,
+		arg.TransportType,
 		arg.RequiresOauth,
 		arg.OauthVersion,
 		arg.OauthAuthorizationEndpoint,
@@ -150,6 +155,7 @@ SELECT
   t.external_mcp_attachment_id,
   t.tool_urn,
   t.remote_url,
+  t.transport_type,
   t.requires_oauth,
   t.oauth_version,
   t.oauth_authorization_endpoint,
@@ -175,6 +181,7 @@ type GetExternalMCPToolDefinitionByURNRow struct {
 	ExternalMcpAttachmentID    uuid.UUID
 	ToolUrn                    string
 	RemoteUrl                  string
+	TransportType              types.TransportType
 	RequiresOauth              bool
 	OauthVersion               string
 	OauthAuthorizationEndpoint pgtype.Text
@@ -198,6 +205,7 @@ func (q *Queries) GetExternalMCPToolDefinitionByURN(ctx context.Context, toolUrn
 		&i.ExternalMcpAttachmentID,
 		&i.ToolUrn,
 		&i.RemoteUrl,
+		&i.TransportType,
 		&i.RequiresOauth,
 		&i.OauthVersion,
 		&i.OauthAuthorizationEndpoint,
@@ -380,6 +388,7 @@ SELECT
   t.external_mcp_attachment_id,
   t.tool_urn,
   t.remote_url,
+  t.transport_type,
   t.requires_oauth,
   t.oauth_version,
   t.oauth_authorization_endpoint,
@@ -406,6 +415,7 @@ type ListExternalMCPToolDefinitionsRow struct {
 	ExternalMcpAttachmentID    uuid.UUID
 	ToolUrn                    string
 	RemoteUrl                  string
+	TransportType              types.TransportType
 	RequiresOauth              bool
 	OauthVersion               string
 	OauthAuthorizationEndpoint pgtype.Text
@@ -435,6 +445,7 @@ func (q *Queries) ListExternalMCPToolDefinitions(ctx context.Context, deployment
 			&i.ExternalMcpAttachmentID,
 			&i.ToolUrn,
 			&i.RemoteUrl,
+			&i.TransportType,
 			&i.RequiresOauth,
 			&i.OauthVersion,
 			&i.OauthAuthorizationEndpoint,

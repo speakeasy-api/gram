@@ -1,5 +1,54 @@
 # server
 
+## 0.17.3
+
+### Patch Changes
+
+- 54a32f4: Updated the function deployment temporal activity so it spawns multiple goroutines to deploy functions in parallel. This should in theory speed up deployments with several functions.
+
+## 0.17.2
+
+### Patch Changes
+
+- ecafb6f: Fixes an issue where we weren't properly pulling the chat session header, which caused private MCP servers to fail when connected to via elements.
+
+## 0.17.1
+
+### Patch Changes
+
+- f0dad26: Adds support for UNSAFE_apiKey in Elements. This will be used during onboarding to allow users to quickly trial elements without needing to set up the sessions endpoint in their backend
+
+## 0.17.0
+
+### Minor Changes
+
+- bef31df: Added two new API endpoints for uploading and serving chat attachments.
+
+  The `/rpc/assets.serveChatAttachment` endpoint can be accessed with an API key or session cookie. `Gram-Project` is not used on that endpoint to make it easy for session-based clients to embed attachments in chat such as with `<img>` tags for images e.g. `<img src="/rpc/assets.serveChatAttachment?id=...&project_id=..." />`.
+
+## 0.16.0
+
+### Minor Changes
+
+- 5bc733e: Added a new API endpoint `/rpc/projects.get` to Gram server that allows clients to retrieve project details given a project slug. The project must exist within the organization referenced by the provided `gram-session` cookie or `Gram-Key` header.
+
+### Patch Changes
+
+- 122209b: Updated auth logic allowing API keys that have producer scope to access chat session APIs. In other, producer scope becomes a superset of chat and consumer scopes.
+- 417c0c6: feat: Support external MCP servers that only have an SSE remote available.
+
+  Previously, Gram could only support external MCP servers that used the
+  Streamable HTTP transport. Now, servers that still use the deprecated SSE
+  type will be transparently adapted to Streamable HTTP. MCP clients will
+  still use Streamable HTTP to interact with the external MCP server via Gram:
+
+  ```
+  CLIENT <-(Streamable HTTP)-> GRAM <-(SSE)-> EXTERNAL MCP SERVER
+  ```
+
+- d972d1b: Adds ability to filter telemetry logs by multiple Gram URNs
+- 3a82c2e: Adds enabled field to telemetry API response indicating whether logging is enabled or not
+
 ## 0.15.1
 
 ### Patch Changes

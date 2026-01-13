@@ -10,6 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 export default defineConfig({
   plugins: [react(), dts(), tailwindcss()],
   build: {
+    sourcemap: true,
     minify: 'esbuild',
     lib: {
       entry: {
@@ -25,8 +26,6 @@ export default defineConfig({
         'react-dom',
         'react/jsx-runtime',
         // Externalize heavy dependencies - consumers must install these
-        '@assistant-ui/react',
-        '@assistant-ui/react-markdown',
         'motion',
         'motion/react',
         'motion/react-m',
@@ -35,14 +34,13 @@ export default defineConfig({
         'remark-gfm',
         'vega',
         'shiki',
-        // Server dependencies (optional)
-        'openai',
       ],
       output: {
         globals: {
           react: 'React',
           'react-dom': 'ReactDOM',
         },
+        sourcemapExcludeSources: true,
       },
     },
   },
@@ -50,5 +48,9 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, 'src'),
     },
+  },
+  define: {
+    __GRAM_API_URL__: JSON.stringify(process.env['GRAM_API_URL'] || ''),
+    __GRAM_GIT_SHA__: JSON.stringify(process.env['GRAM_GIT_SHA'] || ''),
   },
 })

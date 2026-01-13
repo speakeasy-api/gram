@@ -41,6 +41,10 @@ func EncodeCreateRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 		if !ok {
 			return goahttp.ErrInvalidType("chatSessions", "create", "*chatsessions.CreatePayload", v)
 		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
@@ -278,6 +282,10 @@ func EncodeRevokeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 		p, ok := v.(*chatsessions.RevokePayload)
 		if !ok {
 			return goahttp.ErrInvalidType("chatSessions", "revoke", "*chatsessions.RevokePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken

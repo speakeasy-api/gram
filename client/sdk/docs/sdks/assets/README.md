@@ -9,9 +9,11 @@ Manages assets used by Gram projects.
 
 * [fetchOpenAPIv3FromURL](#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 * [listAssets](#listassets) - listAssets assets
+* [serveChatAttachment](#servechatattachment) - serveChatAttachment assets
 * [serveFunction](#servefunction) - serveFunction assets
 * [serveImage](#serveimage) - serveImage assets
 * [serveOpenAPIv3](#serveopenapiv3) - serveOpenAPIv3 assets
+* [uploadChatAttachment](#uploadchatattachment) - uploadChatAttachment assets
 * [uploadFunctions](#uploadfunctions) - uploadFunctions assets
 * [uploadImage](#uploadimage) - uploadImage assets
 * [uploadOpenAPIv3](#uploadopenapiv3) - uploadOpenAPIv3 assets
@@ -196,6 +198,108 @@ import {
 ### Response
 
 **Promise\<[components.ListAssetsResult](../../models/components/listassetsresult.md)\>**
+
+### Errors
+
+| Error Type                        | Status Code                       | Content Type                      |
+| --------------------------------- | --------------------------------- | --------------------------------- |
+| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
+| errors.ServiceError               | 500, 502                          | application/json                  |
+| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+
+## serveChatAttachment
+
+Serve a chat attachment from Gram.
+
+### Example Usage
+
+<!-- UsageSnippet language="typescript" operationID="serveChatAttachment" method="get" path="/rpc/assets.serveChatAttachment" -->
+```typescript
+import { Gram } from "@gram/client";
+
+const gram = new Gram();
+
+async function run() {
+  const result = await gram.assets.serveChatAttachment({
+    id: "<id>",
+    projectId: "<id>",
+  });
+
+  console.log(result);
+}
+
+run();
+```
+
+### Standalone function
+
+The standalone function version of this method:
+
+```typescript
+import { GramCore } from "@gram/client/core.js";
+import { assetsServeChatAttachment } from "@gram/client/funcs/assetsServeChatAttachment.js";
+
+// Use `GramCore` for best tree-shaking performance.
+// You can create one instance of it to use across an application.
+const gram = new GramCore();
+
+async function run() {
+  const res = await assetsServeChatAttachment(gram, {
+    id: "<id>",
+    projectId: "<id>",
+  });
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("assetsServeChatAttachment failed:", res.error);
+  }
+}
+
+run();
+```
+
+### React hooks and utilities
+
+This method can be used in React components through the following hooks and
+associated utilities.
+
+> Check out [this guide][hook-guide] for information about each of the utilities
+> below and how to get started using React hooks.
+
+[hook-guide]: ../../../REACT_QUERY.md
+
+```tsx
+import {
+  // Query hooks for fetching data.
+  useServeChatAttachment,
+  useServeChatAttachmentSuspense,
+
+  // Utility for prefetching data during server-side rendering and in React
+  // Server Components that will be immediately available to client components
+  // using the hooks.
+  prefetchServeChatAttachment,
+  
+  // Utilities to invalidate the query cache for this query in response to
+  // mutations and other user actions.
+  invalidateServeChatAttachment,
+  invalidateAllServeChatAttachment,
+} from "@gram/client/react-query/assetsServeChatAttachment.js";
+```
+
+### Parameters
+
+| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`                                                                                                                                                                      | [operations.ServeChatAttachmentRequest](../../models/operations/servechatattachmentrequest.md)                                                                                 | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `security`                                                                                                                                                                     | [operations.ServeChatAttachmentSecurity](../../models/operations/servechatattachmentsecurity.md)                                                                               | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
+| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+
+### Response
+
+**Promise\<[operations.ServeChatAttachmentResponse](../../models/operations/servechatattachmentresponse.md)\>**
 
 ### Errors
 
@@ -508,6 +612,95 @@ import {
 | errors.ServiceError               | 500, 502                          | application/json                  |
 | errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
 
+## uploadChatAttachment
+
+Upload a chat attachment to Gram.
+
+### Example Usage
+
+<!-- UsageSnippet language="typescript" operationID="uploadChatAttachment" method="post" path="/rpc/assets.uploadChatAttachment" -->
+```typescript
+import { Gram } from "@gram/client";
+
+const gram = new Gram();
+
+async function run() {
+  const result = await gram.assets.uploadChatAttachment({
+    contentLength: 709790,
+  });
+
+  console.log(result);
+}
+
+run();
+```
+
+### Standalone function
+
+The standalone function version of this method:
+
+```typescript
+import { GramCore } from "@gram/client/core.js";
+import { assetsUploadChatAttachment } from "@gram/client/funcs/assetsUploadChatAttachment.js";
+
+// Use `GramCore` for best tree-shaking performance.
+// You can create one instance of it to use across an application.
+const gram = new GramCore();
+
+async function run() {
+  const res = await assetsUploadChatAttachment(gram, {
+    contentLength: 709790,
+  });
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("assetsUploadChatAttachment failed:", res.error);
+  }
+}
+
+run();
+```
+
+### React hooks and utilities
+
+This method can be used in React components through the following hooks and
+associated utilities.
+
+> Check out [this guide][hook-guide] for information about each of the utilities
+> below and how to get started using React hooks.
+
+[hook-guide]: ../../../REACT_QUERY.md
+
+```tsx
+import {
+  // Mutation hook for triggering the API call.
+  useUploadChatAttachmentMutation
+} from "@gram/client/react-query/assetsUploadChatAttachment.js";
+```
+
+### Parameters
+
+| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`                                                                                                                                                                      | [operations.UploadChatAttachmentRequest](../../models/operations/uploadchatattachmentrequest.md)                                                                               | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `security`                                                                                                                                                                     | [operations.UploadChatAttachmentSecurity](../../models/operations/uploadchatattachmentsecurity.md)                                                                             | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
+| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+
+### Response
+
+**Promise\<[components.UploadChatAttachmentResult](../../models/components/uploadchatattachmentresult.md)\>**
+
+### Errors
+
+| Error Type                        | Status Code                       | Content Type                      |
+| --------------------------------- | --------------------------------- | --------------------------------- |
+| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
+| errors.ServiceError               | 500, 502                          | application/json                  |
+| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+
 ## uploadFunctions
 
 Upload functions to Gram.
@@ -517,12 +710,14 @@ Upload functions to Gram.
 <!-- UsageSnippet language="typescript" operationID="uploadFunctions" method="post" path="/rpc/assets.uploadFunctions" -->
 ```typescript
 import { Gram } from "@gram/client";
+import { openAsBlob } from "node:fs";
 
 const gram = new Gram();
 
 async function run() {
   const result = await gram.assets.uploadFunctions({
     contentLength: 858625,
+    requestBody: await openAsBlob("example.file"),
   });
 
   console.log(result);
@@ -538,6 +733,7 @@ The standalone function version of this method:
 ```typescript
 import { GramCore } from "@gram/client/core.js";
 import { assetsUploadFunctions } from "@gram/client/funcs/assetsUploadFunctions.js";
+import { openAsBlob } from "node:fs";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -546,6 +742,7 @@ const gram = new GramCore();
 async function run() {
   const res = await assetsUploadFunctions(gram, {
     contentLength: 858625,
+    requestBody: await openAsBlob("example.file"),
   });
   if (res.ok) {
     const { value: result } = res;
@@ -606,12 +803,14 @@ Upload an image to Gram.
 <!-- UsageSnippet language="typescript" operationID="uploadImage" method="post" path="/rpc/assets.uploadImage" -->
 ```typescript
 import { Gram } from "@gram/client";
+import { openAsBlob } from "node:fs";
 
 const gram = new Gram();
 
 async function run() {
   const result = await gram.assets.uploadImage({
     contentLength: 768839,
+    requestBody: await openAsBlob("example.file"),
   });
 
   console.log(result);
@@ -627,6 +826,7 @@ The standalone function version of this method:
 ```typescript
 import { GramCore } from "@gram/client/core.js";
 import { assetsUploadImage } from "@gram/client/funcs/assetsUploadImage.js";
+import { openAsBlob } from "node:fs";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -635,6 +835,7 @@ const gram = new GramCore();
 async function run() {
   const res = await assetsUploadImage(gram, {
     contentLength: 768839,
+    requestBody: await openAsBlob("example.file"),
   });
   if (res.ok) {
     const { value: result } = res;
@@ -695,12 +896,14 @@ Upload an OpenAPI v3 document to Gram.
 <!-- UsageSnippet language="typescript" operationID="uploadOpenAPIv3Asset" method="post" path="/rpc/assets.uploadOpenAPIv3" -->
 ```typescript
 import { Gram } from "@gram/client";
+import { openAsBlob } from "node:fs";
 
 const gram = new Gram();
 
 async function run() {
   const result = await gram.assets.uploadOpenAPIv3({
     contentLength: 513080,
+    requestBody: await openAsBlob("example.file"),
   });
 
   console.log(result);
@@ -716,6 +919,7 @@ The standalone function version of this method:
 ```typescript
 import { GramCore } from "@gram/client/core.js";
 import { assetsUploadOpenAPIv3 } from "@gram/client/funcs/assetsUploadOpenAPIv3.js";
+import { openAsBlob } from "node:fs";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -724,6 +928,7 @@ const gram = new GramCore();
 async function run() {
   const res = await assetsUploadOpenAPIv3(gram, {
     contentLength: 513080,
+    requestBody: await openAsBlob("example.file"),
   });
   if (res.ok) {
     const { value: result } = res;

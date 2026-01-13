@@ -1,5 +1,41 @@
 # dashboard
 
+## 0.26.1
+
+### Patch Changes
+
+- Updated dependencies [856576b]
+- Updated dependencies [a1231be]
+- Updated dependencies [748c52e]
+  - @gram-ai/elements@1.19.0
+
+## 0.26.0
+
+### Minor Changes
+
+- eefebf6: Add updated elements onboarding
+
+### Patch Changes
+
+- Updated dependencies [f744f2b]
+  - @gram-ai/elements@1.18.8
+
+## 0.25.2
+
+### Patch Changes
+
+- f0dad26: Adds support for UNSAFE_apiKey in Elements. This will be used during onboarding to allow users to quickly trial elements without needing to set up the sessions endpoint in their backend
+
+## 0.25.1
+
+### Patch Changes
+
+- 8ad0455: Ensure delete source dialog closes after completion
+- 0583dc0: Improves logs side panel to make it wider and more human-readable
+- Updated dependencies [d972d1b]
+- Updated dependencies [3a82c2e]
+  - @gram/client@0.25.8
+
 ## 0.25.0
 
 ### Minor Changes

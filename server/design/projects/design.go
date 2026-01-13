@@ -16,6 +16,28 @@ var _ = Service("projects", func() {
 	Security(security.Session)
 	shared.DeclareErrorResponses()
 
+	Method("getProject", func() {
+		Description("Get project details by slug.")
+
+		Payload(func() {
+			Extend(GetProjectForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+		Result(GetProjectResult)
+
+		HTTP(func() {
+			GET("/rpc/projects.get")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Param("slug")
+		})
+
+		Meta("openapi:operationId", "getProject")
+		Meta("openapi:extension:x-speakeasy-name-override", "read")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Project"}`)
+	})
+
 	Method("createProject", func() {
 		Description("Create a new project.")
 
@@ -166,6 +188,16 @@ var _ = Service("projects", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteById")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteProject"}`)
 	})
+})
+
+var GetProjectForm = Type("GetProjectForm", func() {
+	Required("slug")
+	Attribute("slug", shared.Slug, "The slug of the project to get")
+})
+
+var GetProjectResult = Type("GetProjectResult", func() {
+	Required("project")
+	Attribute("project", shared.Project, "Project details")
 })
 
 var CreateProjectForm = Type("CreateProjectForm", func() {

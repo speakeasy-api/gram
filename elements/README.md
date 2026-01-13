@@ -4,19 +4,23 @@ Elements is a library built for the agentic age. We provide customizable and ele
 
 ## Setup
 
-### Package Exports
-
-This package provides two separate exports with different dependencies:
-
-- **`@gram-ai/elements`** - React UI components (requires React and related dependencies)
-- **`@gram-ai/elements/server`** - Server-side handlers (does NOT require React)
-
 ### Frontend Setup
 
-First ensure that you have installed the required peer dependencies:
+The easiest way to install Elements and all its peer dependencies:
 
 ```bash
-pnpm add react react-dom @assistant-ui/react @assistant-ui/react-markdown motion remark-gfm zustand vega shiki
+npx @gram-ai/elements install
+```
+
+This will automatically detect your package manager and install everything you need.
+
+<details>
+<summary>Manual installation</summary>
+
+If you prefer to install manually, first install the peer dependencies:
+
+```bash
+pnpm add react react-dom motion remark-gfm zustand vega shiki
 ```
 
 Then install Elements:
@@ -25,9 +29,11 @@ Then install Elements:
 pnpm add @gram-ai/elements
 ```
 
+</details>
+
 ### Backend Setup
 
-If you're only using the server handlers (`@gram-ai/elements/server`), you can install without React:
+If you're only using the server handlers (`@gram-ai/elements/server`), you can install without needing to install any of the React peer dependencies:
 
 ```bash
 pnpm add @gram-ai/elements
@@ -48,7 +54,16 @@ const app = express()
 
 app.use(express.json())
 
-app.post('/chat/completions', handlers.chat)
+app.post('/chat/session', (req, res) =>
+  handlers.session(req, res, {
+    // The origin from which the token will be used
+    embedOrigin: 'http://localhost:3000',
+    // A free-form user identifier
+    userIdentifier: 'user-123',
+    // Token expiration in seconds (max / default 3600)
+    expiresAfter: 3600,
+  })
+)
 ```
 
 You will need to add an environment variable to your backend and make it available to the process:
@@ -71,8 +86,6 @@ import '@gram-ai/elements/elements.css'
 const config: ElementsConfig = {
   projectSlug: 'xxx',
   mcp: 'https://app.getgram.ai/mcp/{your_slug}',
-  // Points to your backend endpoint
-  chatEndpoint: '/chat/completions',
   variant: 'widget',
   welcome: {
     title: 'Hello!',
@@ -95,6 +108,37 @@ export const App = () => {
 }
 ```
 
+### Custom Session Endpoint
+
+By default, Elements expects the session endpoint on your backend to be located at `/chat/session`. If you've mounted your session endpoint at a different path, you can provide a custom `getSession` function in the `ElementsProvider`:
+
+```jsx
+import { GramElementsProvider, Chat, type ElementsConfig, type GetSessionFn } from '@gram-ai/elements'
+import '@gram-ai/elements/elements.css'
+
+const config: ElementsConfig = {
+  projectSlug: 'xxx',
+  mcp: 'https://app.getgram.ai/mcp/{your_slug}',
+  // ... other config
+}
+
+const customGetSession: GetSessionFn = async () => {
+  const response = await fetch('/api/custom-session-endpoint', {
+    method: 'POST',
+  })
+  const data = await response.json()
+  return data.client_token
+}
+
+export const App = () => {
+  return (
+    <GramElementsProvider config={config} getSession={customGetSession}>
+      <Chat />
+    </GramElementsProvider>
+  )
+}
+```
+
 ## Configuration
 
 For complete configuration options and TypeScript type definitions, see the [API documentation](./docs/interfaces/ElementsConfig.md).
@@ -108,7 +152,6 @@ import '@gram-ai/elements/elements.css'
 const config: ElementsConfig = {
   projectSlug: 'your-project',
   mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
-  chatEndpoint: '/chat/completions',
   variant: 'widget', // 'widget' | 'sidecar' | 'standalone'
   welcome: {
     title: 'Hello!',

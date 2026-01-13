@@ -1,12 +1,11 @@
-[**@gram-ai/elements v1.16.3**](README.md)
+[**@gram-ai/elements v1.19.0**](README.md)
 
 ***
 
-# @gram-ai/elements v1.16.3
+# @gram-ai/elements v1.19.0
 
 ## Interfaces
 
-- [ElementsProviderProps](interfaces/ElementsProviderProps.md)
 - [ElementsConfig](interfaces/ElementsConfig.md)
 - [ModelConfig](interfaces/ModelConfig.md)
 - [ThemeConfig](interfaces/ThemeConfig.md)
@@ -25,12 +24,21 @@
 ## Type Aliases
 
 - [FrontendTool](type-aliases/FrontendTool.md)
+- [GetSessionFn](type-aliases/GetSessionFn.md)
+- [VARIANTS](type-aliases/VARIANTS.md)
 - [Variant](type-aliases/Variant.md)
 - [Model](type-aliases/Model.md)
+- [DENSITIES](type-aliases/DENSITIES.md)
 - [Density](type-aliases/Density.md)
+- [COLOR\_SCHEMES](type-aliases/COLOR_SCHEMES.md)
 - [ColorScheme](type-aliases/ColorScheme.md)
+- [RADII](type-aliases/RADII.md)
 - [Radius](type-aliases/Radius.md)
 - [ModalTriggerPosition](type-aliases/ModalTriggerPosition.md)
+
+## Variables
+
+- [MODELS](variables/MODELS.md)
 
 ## Functions
 

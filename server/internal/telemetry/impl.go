@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -27,25 +28,27 @@ import (
 )
 
 type Service struct {
-	tcm    ToolMetricsProvider
-	db     *pgxpool.Pool
-	tracer trace.Tracer
-	logger *slog.Logger
-	auth   *auth.Auth
+	auth          *auth.Auth
+	db            *pgxpool.Pool
+	featureClient *productfeatures.Client
+	logger        *slog.Logger
+	tcm           ToolMetricsProvider
+	tracer        trace.Tracer
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, tcm ToolMetricsProvider) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, tcm ToolMetricsProvider, features *productfeatures.Client) *Service {
 	logger = logger.With(attr.SlogComponent("logs"))
 
 	return &Service{
-		tracer: otel.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
-		auth:   auth.New(logger, db, sessions),
-		logger: logger,
-		tcm:    tcm,
-		db:     db,
+		auth:          auth.New(logger, db, sessions),
+		db:            db,
+		logger:        logger,
+		featureClient: features,
+		tcm:           tcm,
+		tracer:        otel.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
 	}
 }
 
@@ -81,7 +84,7 @@ func (s *Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (r
 
 	projectID := authCtx.ProjectID
 
-	logsEnabled, err := s.tcm.ShouldLog(ctx, authCtx.ActiveOrganizationID)
+	logsEnabled, err := s.isLogsEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error checking if tool metrics logging is enabled").
 			Log(ctx, s.logger, attr.SlogProjectID(projectID.String()))
@@ -311,47 +314,27 @@ func toToolExecutionLog(r repo.ToolLog) *gen.ToolExecutionLog {
 
 // SearchLogs retrieves unified telemetry logs with pagination.
 func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsPayload) (res *telem_gen.SearchLogsResult, err error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	projectID := authCtx.ProjectID
-
-	limit := payload.Limit
-	if limit < 1 || limit > 1000 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "limit must be between 1 and 1000")
-	}
-
-	sortOrder := "desc"
-	if payload.Sort != "desc" && payload.Sort != "asc" && payload.Sort != "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "sort order must be one of 'asc' or 'desc'")
-	}
-
-	// if a non-empty sort string is passed we can assume it's a valid sort as we validated it above
-	if payload.Sort != "" {
-		sortOrder = payload.Sort
-	}
-
-	// Empty string cursor for first page
-	cursor := ""
-	if payload.Cursor != nil {
-		cursor = *payload.Cursor
-	}
-
-	from := int64(0)
-	to := time.Now().UnixNano()
-
-	// Extract filter values
-	var gramURN, traceID, deploymentID, functionID, severityText, httpRoute, httpMethod, serviceName string
-	var httpStatusCode int32
+	var from, to *string
 	if payload.Filter != nil {
-		from, to, err = parseTimeRange(payload.Filter.From, payload.Filter.To)
-		if err != nil {
-			return nil, err
-		}
+		from, to = payload.Filter.From, payload.Filter.To
+	}
 
-		gramURN = conv.PtrValOr(payload.Filter.GramUrn, "")
+	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	if !params.enabled {
+		return &telem_gen.SearchLogsResult{Logs: []*telem_gen.TelemetryLogRecord{}, Enabled: false, NextCursor: nil}, nil
+	}
+
+	// Extract SearchLogs-specific filter fields
+	var traceID, deploymentID, functionID, severityText, httpRoute, httpMethod, serviceName string
+	var httpStatusCode int32
+	var gramURNs []string
+	if payload.Filter != nil {
+		// Handle both gram_urn (single) and gram_urns (array) for backwards compatibility
+		gramURNs = resolveGramURNs(payload.Filter.GramUrn, payload.Filter.GramUrns)
 		traceID = conv.PtrValOr(payload.Filter.TraceID, "")
 		deploymentID = conv.PtrValOr(payload.Filter.DeploymentID, "")
 		functionID = conv.PtrValOr(payload.Filter.FunctionID, "")
@@ -364,10 +347,10 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 
 	// Query with limit+1 to detect if there are more results
 	items, err := s.tcm.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
-		GramProjectID:          projectID.String(),
-		TimeStart:              from,
-		TimeEnd:                to,
-		GramURN:                gramURN,
+		GramProjectID:          params.projectID,
+		TimeStart:              params.timeStart,
+		TimeEnd:                params.timeEnd,
+		GramURNs:               gramURNs,
 		TraceID:                traceID,
 		GramDeploymentID:       deploymentID,
 		GramFunctionID:         functionID,
@@ -376,9 +359,9 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		HTTPRoute:              httpRoute,
 		HTTPRequestMethod:      httpMethod,
 		ServiceName:            serviceName,
-		SortOrder:              sortOrder,
-		Cursor:                 cursor,
-		Limit:                  limit + 1, // +1 for overflow detection
+		SortOrder:              params.sortOrder,
+		Cursor:                 params.cursor,
+		Limit:                  params.limit + 1,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing telemetry logs")
@@ -386,11 +369,9 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 
 	// Compute next cursor using limit+1 pattern
 	var nextCursor *string
-	if len(items) > limit {
-		// More results exist - set cursor to last item in the page
-		nextCursor = conv.Ptr(items[limit-1].ID)
-		// Trim to requested page size
-		items = items[:limit]
+	if len(items) > params.limit {
+		nextCursor = conv.Ptr(items[params.limit-1].ID)
+		items = items[:params.limit]
 	}
 
 	// Convert repo models to Goa types
@@ -405,65 +386,46 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 
 	return &telem_gen.SearchLogsResult{
 		Logs:       telemetryLogs,
+		Enabled:    true,
 		NextCursor: nextCursor,
 	}, nil
 }
 
 // SearchToolCalls retrieves tool call summaries with pagination.
 func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.SearchToolCallsPayload) (res *telem_gen.SearchToolCallsResult, err error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	projectID := authCtx.ProjectID
-
-	limit := payload.Limit
-	if limit < 1 || limit > 1000 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "limit must be between 1 and 1000")
-	}
-
-	sortOrder := "desc"
-	if payload.Sort != "desc" && payload.Sort != "asc" && payload.Sort != "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "sort order must be one of 'asc' or 'desc'")
-	}
-
-	// if a non-empty sort string is passed we can assume it's a valid sort as we validated it above
-	if payload.Sort != "" {
-		sortOrder = payload.Sort
-	}
-
-	// Empty string cursor for first page
-	cursor := ""
-	if payload.Cursor != nil {
-		cursor = *payload.Cursor
-	}
-
-	from := int64(0)
-	to := time.Now().UnixNano()
-
-	// Extract filter values
-	var deploymentID, functionID string
+	var from, to *string
 	if payload.Filter != nil {
-		from, to, err = parseTimeRange(payload.Filter.From, payload.Filter.To)
-		if err != nil {
-			return nil, err
-		}
+		from, to = payload.Filter.From, payload.Filter.To
+	}
+
+	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	if !params.enabled {
+		return &telem_gen.SearchToolCallsResult{ToolCalls: []*telem_gen.ToolCallSummary{}, Enabled: false, NextCursor: nil}, nil
+	}
+
+	// Extract SearchToolCalls-specific filter fields
+	var deploymentID, functionID, gramURN string
+	if payload.Filter != nil {
 		deploymentID = conv.PtrValOr(payload.Filter.DeploymentID, "")
 		functionID = conv.PtrValOr(payload.Filter.FunctionID, "")
-		// TODO: gram_urn filtering not yet supported for tool calls aggregation
+		gramURN = conv.PtrValOr(payload.Filter.GramUrn, "")
 	}
 
 	// Query with limit+1 to detect if there are more results
 	items, err := s.tcm.ListTraces(ctx, repo.ListTracesParams{
-		GramProjectID:    projectID.String(),
-		TimeStart:        from,
-		TimeEnd:          to,
+		GramProjectID:    params.projectID,
+		TimeStart:        params.timeStart,
+		TimeEnd:          params.timeEnd,
 		GramDeploymentID: deploymentID,
 		GramFunctionID:   functionID,
-		SortOrder:        sortOrder,
-		Cursor:           cursor,
-		Limit:            limit + 1, // +1 for overflow detection
+		GramURN:          gramURN,
+		SortOrder:        params.sortOrder,
+		Cursor:           params.cursor,
+		Limit:            params.limit + 1,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing traces")
@@ -471,10 +433,9 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 
 	// Compute next cursor using limit+1 pattern
 	var nextCursor *string
-	if len(items) > limit {
-		// More results exist - set cursor to last item's trace_id
-		nextCursor = &items[limit-1].TraceID
-		items = items[:limit]
+	if len(items) > params.limit {
+		nextCursor = &items[params.limit-1].TraceID
+		items = items[:params.limit]
 	}
 
 	// Convert repo models to Goa types
@@ -491,8 +452,75 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 
 	return &telem_gen.SearchToolCallsResult{
 		ToolCalls:  toolCalls,
+		Enabled:    true,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// searchParams contains common validated parameters for telemetry search endpoints.
+type searchParams struct {
+	projectID string
+	enabled   bool
+	limit     int
+	sortOrder string
+	cursor    string
+	timeStart int64
+	timeEnd   int64
+}
+
+// prepareTelemetrySearch validates and prepares common search parameters.
+func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort string, cursor *string, from, to *string) (*searchParams, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logsEnabled, err := s.isLogsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if limit < 1 || limit > 1000 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "limit must be between 1 and 1000")
+	}
+
+	sortOrder := "desc"
+	if sort != "" && sort != "desc" && sort != "asc" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "sort order must be one of 'asc' or 'desc'")
+	}
+	if sort != "" {
+		sortOrder = sort
+	}
+
+	cursorVal := ""
+	if cursor != nil {
+		cursorVal = *cursor
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	return &searchParams{
+		projectID: authCtx.ProjectID.String(),
+		enabled:   logsEnabled,
+		limit:     limit,
+		sortOrder: sortOrder,
+		cursor:    cursorVal,
+		timeStart: timeStart,
+		timeEnd:   timeEnd,
+	}, nil
+}
+
+func (s *Service) isLogsEnabled(ctx context.Context, orgID string) (bool, error) {
+	logsEnabled, err := s.featureClient.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureLogs)
+	if err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled").
+			Log(ctx, s.logger, attr.SlogError(err), attr.SlogOrganizationID(orgID))
+	}
+
+	return logsEnabled, nil
 }
 
 // parseTimeRange extracts and parses the time range from a telemetry filter.
@@ -519,6 +547,18 @@ func parseTimeRange(from, to *string) (timeStart, timeEnd int64, err error) {
 	}
 
 	return timeStart, timeEnd, nil
+}
+
+// resolveGramURNs handles backwards compatibility between gram_urn (single) and gram_urns (array).
+// If gram_urns is provided, it takes precedence; otherwise gram_urn is used as a single-element array.
+func resolveGramURNs(gramURN *string, gramURNs []string) []string {
+	if len(gramURNs) > 0 {
+		return gramURNs
+	}
+	if gramURN != nil && *gramURN != "" {
+		return []string{*gramURN}
+	}
+	return nil
 }
 
 // toTelemetryLogPayload converts a ClickHouse telemetry log record to the API response format.

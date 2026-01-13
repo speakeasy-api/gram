@@ -17,6 +17,8 @@ import (
 
 // Manages projects in Gram.
 type Service interface {
+	// Get project details by slug.
+	GetProject(context.Context, *GetProjectPayload) (res *GetProjectResult, err error)
 	// Create a new project.
 	CreateProject(context.Context, *CreateProjectPayload) (res *CreateProjectResult, err error)
 	// List all projects for an organization.
@@ -51,7 +53,7 @@ const ServiceName = "projects"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"createProject", "listProjects", "setLogo", "listAllowedOrigins", "upsertAllowedOrigin", "deleteProject"}
+var MethodNames = [7]string{"getProject", "createProject", "listProjects", "setLogo", "listAllowedOrigins", "upsertAllowedOrigin", "deleteProject"}
 
 type AllowedOrigin struct {
 	// The ID of the allowed origin
@@ -92,6 +94,22 @@ type DeleteProjectPayload struct {
 	ID           string
 	ApikeyToken  *string
 	SessionToken *string
+}
+
+// GetProjectPayload is the payload type of the projects service getProject
+// method.
+type GetProjectPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// The slug of the project to get
+	Slug types.Slug
+}
+
+// GetProjectResult is the result type of the projects service getProject
+// method.
+type GetProjectResult struct {
+	// Project details
+	Project *Project
 }
 
 // ListAllowedOriginsPayload is the payload type of the projects service

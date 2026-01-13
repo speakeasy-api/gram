@@ -1,7 +1,7 @@
 'use client'
 
 import { type FC } from 'react'
-import { PanelRightClose, PanelRightOpen } from 'lucide-react'
+import { Loader, PanelRightClose, PanelRightOpen } from 'lucide-react'
 import { Thread } from '@/components/assistant-ui/thread'
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
 import { useThemeProps } from '@/hooks/useThemeProps'
@@ -49,11 +49,18 @@ export const AssistantSidecar: FC = () => {
         <div className="aui-sidecar-header flex h-14 items-center justify-between border-b px-4">
           <span
             className={cn(
-              'flex items-center gap-2 text-sm font-medium',
+              'text-md flex items-center gap-2 font-medium',
               isGenerating && 'shimmer'
             )}
           >
             {title}
+
+            {isGenerating && (
+              <Loader
+                className="text-muted-foreground size-4.5 animate-spin"
+                strokeWidth={1.25}
+              />
+            )}
           </span>
           <div className="aui-sidecar-header-actions flex items-center gap-1">
             <TooltipIconButton

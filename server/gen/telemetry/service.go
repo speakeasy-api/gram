@@ -58,6 +58,8 @@ type SearchLogsFilter struct {
 	HTTPMethod *string
 	// Service name filter
 	ServiceName *string
+	// Gram URN filter (one or more URNs)
+	GramUrns []string
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
 	From *string
 	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
@@ -66,7 +68,7 @@ type SearchLogsFilter struct {
 	DeploymentID *string
 	// Function ID filter
 	FunctionID *string
-	// Gram URN filter
+	// Gram URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string
 }
 
@@ -93,6 +95,8 @@ type SearchLogsResult struct {
 	Logs []*TelemetryLogRecord
 	// Cursor for next page
 	NextCursor *string
+	// Whether tool metrics are enabled for the organization
+	Enabled bool
 }
 
 // Filter criteria for searching tool calls
@@ -105,7 +109,7 @@ type SearchToolCallsFilter struct {
 	DeploymentID *string
 	// Function ID filter
 	FunctionID *string
-	// Gram URN filter
+	// Gram URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string
 }
 
@@ -132,6 +136,8 @@ type SearchToolCallsResult struct {
 	ToolCalls []*ToolCallSummary
 	// Cursor for next page
 	NextCursor *string
+	// Whether tool metrics are enabled for the organization
+	Enabled bool
 }
 
 // Service information

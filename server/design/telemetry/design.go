@@ -100,7 +100,7 @@ var TelemetryFilter = Type("TelemetryFilter", func() {
 	Attribute("function_id", String, "Function ID filter", func() {
 		Format(FormatUUID)
 	})
-	Attribute("gram_urn", String, "Gram URN filter")
+	Attribute("gram_urn", String, "Gram URN filter (single URN, use gram_urns for multiple)")
 })
 
 var SearchLogsFilter = Type("SearchLogsFilter", func() {
@@ -120,6 +120,7 @@ var SearchLogsFilter = Type("SearchLogsFilter", func() {
 		Enum("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
 	})
 	Attribute("service_name", String, "Service name filter")
+	Attribute("gram_urns", ArrayOf(String), "Gram URN filter (one or more URNs)")
 })
 
 var SearchLogsPayload = Type("SearchLogsPayload", func() {
@@ -143,8 +144,9 @@ var SearchLogsResult = Type("SearchLogsResult", func() {
 
 	Attribute("logs", ArrayOf(TelemetryLogRecord), "List of telemetry log records")
 	Attribute("next_cursor", String, "Cursor for next page")
+	Attribute("enabled", Boolean, "Whether tool metrics are enabled for the organization")
 
-	Required("logs")
+	Required("logs", "enabled")
 })
 
 var TelemetryLogRecord = Type("TelemetryLogRecord", func() {
@@ -211,8 +213,9 @@ var SearchToolCallsResult = Type("SearchToolCallsResult", func() {
 
 	Attribute("tool_calls", ArrayOf(ToolCallSummary), "List of tool call summaries")
 	Attribute("next_cursor", String, "Cursor for next page")
+	Attribute("enabled", Boolean, "Whether tool metrics are enabled for the organization")
 
-	Required("tool_calls")
+	Required("tool_calls", "enabled")
 })
 
 var ToolCallSummary = Type("ToolCallSummary", func() {

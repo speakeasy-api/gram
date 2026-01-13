@@ -45,6 +45,14 @@ WHERE
   id = @id AND kind = 'functions'
   AND project_id = @project_id;
 
+-- name: GetChatAttachmentAssetURL :one
+SELECT url, content_type, content_length, updated_at
+FROM assets
+WHERE
+  id = @id AND kind = 'chat_attachment'
+  AND project_id = @project_id
+  AND deleted = false;
+
 -- name: ListAssets :many
 SELECT * FROM assets WHERE project_id = @project_id;
 

@@ -16,6 +16,7 @@ import (
 
 // Endpoints wraps the "projects" service endpoints.
 type Endpoints struct {
+	GetProject          goa.Endpoint
 	CreateProject       goa.Endpoint
 	ListProjects        goa.Endpoint
 	SetLogo             goa.Endpoint
@@ -29,6 +30,7 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
+		GetProject:          NewGetProjectEndpoint(s, a.APIKeyAuth),
 		CreateProject:       NewCreateProjectEndpoint(s, a.APIKeyAuth),
 		ListProjects:        NewListProjectsEndpoint(s, a.APIKeyAuth),
 		SetLogo:             NewSetLogoEndpoint(s, a.APIKeyAuth),
@@ -40,12 +42,48 @@ func NewEndpoints(s Service) *Endpoints {
 
 // Use applies the given middleware to all the "projects" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.GetProject = m(e.GetProject)
 	e.CreateProject = m(e.CreateProject)
 	e.ListProjects = m(e.ListProjects)
 	e.SetLogo = m(e.SetLogo)
 	e.ListAllowedOrigins = m(e.ListAllowedOrigins)
 	e.UpsertAllowedOrigin = m(e.UpsertAllowedOrigin)
 	e.DeleteProject = m(e.DeleteProject)
+}
+
+// NewGetProjectEndpoint returns an endpoint function that calls the method
+// "getProject" of service "projects".
+func NewGetProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetProjectPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetProject(ctx, p)
+	}
 }
 
 // NewCreateProjectEndpoint returns an endpoint function that calls the method

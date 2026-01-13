@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.16.3**](../README.md)
+[**@gram-ai/elements v1.19.0**](../README.md)
 
 ***
 
@@ -6,13 +6,13 @@
 
 # Function: GramElementsProvider()
 
-> **GramElementsProvider**(`__namedParameters`): `Element`
+> **GramElementsProvider**(`props`): `Element`
 
 ## Parameters
 
-### \_\_namedParameters
+### props
 
-[`ElementsProviderProps`](../interfaces/ElementsProviderProps.md)
+`ElementsProviderProps`
 
 ## Returns
 

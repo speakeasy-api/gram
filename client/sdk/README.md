@@ -30,6 +30,7 @@ Gram API Description: Gram is the tools platform for AI agents
   * [Available Resources and Operations](#available-resources-and-operations)
   * [Standalone functions](#standalone-functions)
   * [React hooks with TanStack Query](#react-hooks-with-tanstack-query)
+  * [File uploads](#file-uploads)
   * [Retries](#retries)
   * [Error Handling](#error-handling)
   * [Server Selection](#server-selection)
@@ -122,24 +123,26 @@ run();
 <details open>
 <summary>Available methods</summary>
 
-### [agents](docs/sdks/agents/README.md)
+### [Agents](docs/sdks/agents/README.md)
 
 * [delete](docs/sdks/agents/README.md#delete) - deleteResponse agents
 * [get](docs/sdks/agents/README.md#get) - getResponse agents
 * [create](docs/sdks/agents/README.md#create) - createResponse agents
 
-### [assets](docs/sdks/assets/README.md)
+### [Assets](docs/sdks/assets/README.md)
 
 * [fetchOpenAPIv3FromURL](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 * [listAssets](docs/sdks/assets/README.md#listassets) - listAssets assets
+* [serveChatAttachment](docs/sdks/assets/README.md#servechatattachment) - serveChatAttachment assets
 * [serveFunction](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 * [serveImage](docs/sdks/assets/README.md#serveimage) - serveImage assets
 * [serveOpenAPIv3](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
+* [uploadChatAttachment](docs/sdks/assets/README.md#uploadchatattachment) - uploadChatAttachment assets
 * [uploadFunctions](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 * [uploadImage](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 * [uploadOpenAPIv3](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 
-### [auth](docs/sdks/auth/README.md)
+### [Auth](docs/sdks/auth/README.md)
 
 * [callback](docs/sdks/auth/README.md#callback) - callback auth
 * [info](docs/sdks/auth/README.md#info) - info auth
@@ -148,18 +151,18 @@ run();
 * [register](docs/sdks/auth/README.md#register) - register auth
 * [switchScopes](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 
-### [chat](docs/sdks/chat/README.md)
+### [Chat](docs/sdks/chat/README.md)
 
 * [creditUsage](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 * [list](docs/sdks/chat/README.md#list) - listChats chat
 * [load](docs/sdks/chat/README.md#load) - loadChat chat
 
-### [chatSessions](docs/sdks/chatsessions/README.md)
+### [ChatSessions](docs/sdks/chatsessions/README.md)
 
 * [create](docs/sdks/chatsessions/README.md#create) - create chatSessions
 * [revoke](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
 
-### [deployments](docs/sdks/deployments/README.md)
+### [Deployments](docs/sdks/deployments/README.md)
 
 * [active](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 * [create](docs/sdks/deployments/README.md#create) - createDeployment deployments
@@ -170,13 +173,13 @@ run();
 * [logs](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 * [redeployDeployment](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 
-### [domains](docs/sdks/domains/README.md)
+### [Domains](docs/sdks/domains/README.md)
 
 * [deleteDomain](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 * [getDomain](docs/sdks/domains/README.md#getdomain) - getDomain domains
 * [registerDomain](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 
-### [environments](docs/sdks/environments/README.md)
+### [Environments](docs/sdks/environments/README.md)
 
 * [create](docs/sdks/environments/README.md#create) - createEnvironment environments
 * [deleteBySlug](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
@@ -189,41 +192,41 @@ run();
 * [setToolsetLink](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 * [updateBySlug](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 
-### [features](docs/sdks/features/README.md)
+### [Features](docs/sdks/features/README.md)
 
 * [set](docs/sdks/features/README.md#set) - setProductFeature features
 
-### [instances](docs/sdks/instances/README.md)
+### [Instances](docs/sdks/instances/README.md)
 
 * [getBySlug](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 
-### [integrations](docs/sdks/integrations/README.md)
+### [Integrations](docs/sdks/integrations/README.md)
 
 * [integrationsNumberGet](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
 * [list](docs/sdks/integrations/README.md#list) - list integrations
 
-### [keys](docs/sdks/keys/README.md)
+### [Keys](docs/sdks/keys/README.md)
 
 * [create](docs/sdks/keys/README.md#create) - createKey keys
 * [list](docs/sdks/keys/README.md#list) - listKeys keys
 * [revokeById](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 * [validate](docs/sdks/keys/README.md#validate) - verifyKey keys
 
-### [logs](docs/sdks/logs/README.md)
+### [Logs](docs/sdks/logs/README.md)
 
 * [list](docs/sdks/logs/README.md#list) - listLogs logs
 * [listToolExecutionLogs](docs/sdks/logs/README.md#listtoolexecutionlogs) - listToolExecutionLogs logs
 
-### [mcpMetadata](docs/sdks/mcpmetadata/README.md)
+### [McpMetadata](docs/sdks/mcpmetadata/README.md)
 
 * [get](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 * [set](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 
-### [mcpRegistries](docs/sdks/mcpregistries/README.md)
+### [McpRegistries](docs/sdks/mcpregistries/README.md)
 
 * [listCatalog](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
 
-### [packages](docs/sdks/packages/README.md)
+### [Packages](docs/sdks/packages/README.md)
 
 * [create](docs/sdks/packages/README.md#create) - createPackage packages
 * [list](docs/sdks/packages/README.md#list) - listPackages packages
@@ -231,20 +234,21 @@ run();
 * [publish](docs/sdks/packages/README.md#publish) - publish packages
 * [update](docs/sdks/packages/README.md#update) - updatePackage packages
 
-### [projects](docs/sdks/projects/README.md)
+### [Projects](docs/sdks/projects/README.md)
 
 * [create](docs/sdks/projects/README.md#create) - createProject projects
 * [deleteById](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
+* [read](docs/sdks/projects/README.md#read) - getProject projects
 * [list](docs/sdks/projects/README.md#list) - listProjects projects
 * [listAllowedOrigins](docs/sdks/projects/README.md#listallowedorigins) - listAllowedOrigins projects
 * [setLogo](docs/sdks/projects/README.md#setlogo) - setLogo projects
 * [upsertAllowedOrigin](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 
-### [resources](docs/sdks/resources/README.md)
+### [Resources](docs/sdks/resources/README.md)
 
 * [list](docs/sdks/resources/README.md#list) - listResources resources
 
-### [slack](docs/sdks/slack/README.md)
+### [Slack](docs/sdks/slack/README.md)
 
 * [slackLogin](docs/sdks/slack/README.md#slacklogin) - login slack
 * [slackCallback](docs/sdks/slack/README.md#slackcallback) - callback slack
@@ -252,12 +256,12 @@ run();
 * [getSlackConnection](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
 * [updateSlackConnection](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
 
-### [telemetry](docs/sdks/telemetry/README.md)
+### [Telemetry](docs/sdks/telemetry/README.md)
 
 * [searchLogs](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 * [searchToolCalls](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
 
-### [templates](docs/sdks/templates/README.md)
+### [Templates](docs/sdks/templates/README.md)
 
 * [create](docs/sdks/templates/README.md#create) - createTemplate templates
 * [delete](docs/sdks/templates/README.md#delete) - deleteTemplate templates
@@ -267,11 +271,11 @@ run();
 * [render](docs/sdks/templates/README.md#render) - renderTemplate templates
 * [update](docs/sdks/templates/README.md#update) - updateTemplate templates
 
-### [tools](docs/sdks/tools/README.md)
+### [Tools](docs/sdks/tools/README.md)
 
 * [list](docs/sdks/tools/README.md#list) - listTools tools
 
-### [toolsets](docs/sdks/toolsets/README.md)
+### [Toolsets](docs/sdks/toolsets/README.md)
 
 * [addExternalOAuthServer](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 * [addOAuthProxyServer](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
@@ -279,23 +283,19 @@ run();
 * [cloneBySlug](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 * [create](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 * [deleteBySlug](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
-* [discardDraft](docs/sdks/toolsets/README.md#discarddraft) - discardDraft toolsets
 * [getBySlug](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
-* [getDraft](docs/sdks/toolsets/README.md#getdraft) - getDraftToolset toolsets
 * [list](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
-* [promoteDraft](docs/sdks/toolsets/README.md#promotedraft) - promoteDraft toolsets
 * [removeOAuthServer](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
-* [setIterationMode](docs/sdks/toolsets/README.md#setiterationmode) - setIterationMode toolsets
 * [updateBySlug](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 
-### [usage](docs/sdks/usage/README.md)
+### [Usage](docs/sdks/usage/README.md)
 
 * [createCheckout](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 * [createCustomerSession](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 * [getPeriodUsage](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
 * [getUsageTiers](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 
-### [variations](docs/sdks/variations/README.md)
+### [Variations](docs/sdks/variations/README.md)
 
 * [deleteGlobal](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 * [listGlobal](docs/sdks/variations/README.md#listglobal) - listGlobal variations
@@ -324,9 +324,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`agentsGet`](docs/sdks/agents/README.md#get) - getResponse agents
 - [`assetsFetchOpenAPIv3FromURL`](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 - [`assetsListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
+- [`assetsServeChatAttachment`](docs/sdks/assets/README.md#servechatattachment) - serveChatAttachment assets
 - [`assetsServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 - [`assetsServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`assetsServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
+- [`assetsUploadChatAttachment`](docs/sdks/assets/README.md#uploadchatattachment) - uploadChatAttachment assets
 - [`assetsUploadFunctions`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 - [`assetsUploadImage`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`assetsUploadOpenAPIv3`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
@@ -384,6 +386,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`projectsDeleteById`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
 - [`projectsList`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`projectsListAllowedOrigins`](docs/sdks/projects/README.md#listallowedorigins) - listAllowedOrigins projects
+- [`projectsRead`](docs/sdks/projects/README.md#read) - getProject projects
 - [`projectsSetLogo`](docs/sdks/projects/README.md#setlogo) - setLogo projects
 - [`projectsUpsertAllowedOrigin`](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
@@ -407,13 +410,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`toolsetsCloneBySlug`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 - [`toolsetsCreate`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`toolsetsDeleteBySlug`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
-- [`toolsetsDiscardDraft`](docs/sdks/toolsets/README.md#discarddraft) - discardDraft toolsets
 - [`toolsetsGetBySlug`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
-- [`toolsetsGetDraft`](docs/sdks/toolsets/README.md#getdraft) - getDraftToolset toolsets
 - [`toolsetsList`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
-- [`toolsetsPromoteDraft`](docs/sdks/toolsets/README.md#promotedraft) - promoteDraft toolsets
 - [`toolsetsRemoveOAuthServer`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
-- [`toolsetsSetIterationMode`](docs/sdks/toolsets/README.md#setiterationmode) - setIterationMode toolsets
 - [`toolsetsUpdateBySlug`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`toolsList`](docs/sdks/tools/README.md#list) - listTools tools
 - [`usageCreateCheckout`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
@@ -479,8 +478,6 @@ To learn about this feature and how to get started, check
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
-- [`useDiscardDraftMutation`](docs/sdks/toolsets/README.md#discarddraft) - discardDraft toolsets
-- [`useDraftToolset`](docs/sdks/toolsets/README.md#getdraft) - getDraftToolset toolsets
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`useFeaturesSetMutation`](docs/sdks/features/README.md#set) - setProductFeature features
 - [`useFetchOpenAPIv3FromURLMutation`](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
@@ -514,7 +511,7 @@ To learn about this feature and how to get started, check
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
 - [`useMcpMetadataSetMutation`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
-- [`usePromoteDraftMutation`](docs/sdks/toolsets/README.md#promotedraft) - promoteDraft toolsets
+- [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
@@ -525,11 +522,11 @@ To learn about this feature and how to get started, check
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useSearchLogsMutation`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`useSearchToolCallsMutation`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
+- [`useServeChatAttachment`](docs/sdks/assets/README.md#servechatattachment) - serveChatAttachment assets
 - [`useServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
-- [`useSetIterationModeMutation`](docs/sdks/toolsets/README.md#setiterationmode) - setIterationMode toolsets
 - [`useSetProjectLogoMutation`](docs/sdks/projects/README.md#setlogo) - setLogo projects
 - [`useSetSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`useSetToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
@@ -543,6 +540,7 @@ To learn about this feature and how to get started, check
 - [`useUpdateSlackConnectionMutation`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
+- [`useUploadChatAttachmentMutation`](docs/sdks/assets/README.md#uploadchatattachment) - uploadChatAttachment assets
 - [`useUploadFunctionsMutation`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 - [`useUploadImageMutation`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
@@ -552,6 +550,40 @@ To learn about this feature and how to get started, check
 
 </details>
 <!-- End React hooks with TanStack Query [react-query] -->
+
+<!-- Start File uploads [file-upload] -->
+## File uploads
+
+Certain SDK methods accept files as part of a multi-part request. It is possible and typically recommended to upload files as a stream rather than reading the entire contents into memory. This avoids excessive memory consumption and potentially crashing with out-of-memory errors when working with very large files. The following example demonstrates how to attach a file stream to a request.
+
+> [!TIP]
+>
+> Depending on your JavaScript runtime, there are convenient utilities that return a handle to a file without reading the entire contents into memory:
+>
+> - **Node.js v20+:** Since v20, Node.js comes with a native `openAsBlob` function in [`node:fs`](https://nodejs.org/docs/latest-v20.x/api/fs.html#fsopenasblobpath-options).
+> - **Bun:** The native [`Bun.file`](https://bun.sh/docs/api/file-io#reading-files-bun-file) function produces a file handle that can be used for streaming file uploads.
+> - **Browsers:** All supported browsers return an instance to a [`File`](https://developer.mozilla.org/en-US/docs/Web/API/File) when reading the value from an `<input type="file">` element.
+> - **Node.js v18:** A file stream can be created using the `fileFrom` helper from [`fetch-blob/from.js`](https://www.npmjs.com/package/fetch-blob).
+
+```typescript
+import { Gram } from "@gram/client";
+import { openAsBlob } from "node:fs";
+
+const gram = new Gram();
+
+async function run() {
+  const result = await gram.assets.uploadFunctions({
+    contentLength: 858625,
+    requestBody: await openAsBlob("example.file"),
+  });
+
+  console.log(result);
+}
+
+run();
+
+```
+<!-- End File uploads [file-upload] -->
 
 <!-- Start Retries [retries] -->
 ## Retries

@@ -3704,6 +3704,7 @@ func unmarshalExternalMCPToolDefinitionResponseBodyToTypesExternalMCPToolDefinit
 		Name:                       *v.Name,
 		Slug:                       *v.Slug,
 		RemoteURL:                  *v.RemoteURL,
+		TransportType:              *v.TransportType,
 		RequiresOauth:              *v.RequiresOauth,
 		OauthVersion:               *v.OauthVersion,
 		OauthAuthorizationEndpoint: v.OauthAuthorizationEndpoint,

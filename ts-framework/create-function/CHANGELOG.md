@@ -1,5 +1,11 @@
 # @gram-ai/create-function
 
+## 0.12.1
+
+### Patch Changes
+
+- 095b298: Add a fallback for when symlink creation fails when creating gram functions
+
 ## 0.12.0
 
 ## 0.11.2
