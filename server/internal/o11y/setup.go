@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
+	braintrust "github.com/braintrustdata/braintrust-sdk-go"
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
@@ -27,11 +29,13 @@ import (
 )
 
 type SetupOTelSDKOptions struct {
-	ServiceName    string
-	ServiceVersion string
-	GitSHA         string
-	EnableTracing  bool
-	EnableMetrics  bool
+	ServiceName       string
+	ServiceVersion    string
+	GitSHA            string
+	EnableTracing     bool
+	EnableMetrics     bool
+	BraintrustProject string
+	BraintrustAPIKey  string
 }
 
 // SetupOTelSDK bootstraps the OpenTelemetry pipeline.
@@ -95,14 +99,13 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 	}
 
 	cfg, err := newClueConfig(
-		ctx,
 		options.ServiceName,
 		options.ServiceVersion,
 		options.GitSHA,
 		metricExporter,
 		spanExporter,
 		prop,
-		clue.AdaptiveSampler(2, 10),
+		NewLLMPrioritySampler(clue.AdaptiveSampler(2, 10)),
 		otel.ErrorHandlerFunc(func(err error) {
 			logger.ErrorContext(ctx, "otel error", attr.SlogError(err))
 		}),
@@ -125,8 +128,65 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 	return
 }
 
+// GetBraintrustTracerProvider creates a TracerProvider that sends spans to Braintrust.
+// This allows specific services (like chat) to use Braintrust without affecting the global tracer.
+func GetBraintrustTracerProvider(ctx context.Context, logger *slog.Logger, apiKey, projectName string) (trace.TracerProvider, func(context.Context) error, error) {
+	if apiKey == "" {
+		logger.InfoContext(ctx, "braintrust disabled: API key not set")
+		return tracenoop.NewTracerProvider(), func(context.Context) error { return nil }, nil
+	}
+
+	if projectName == "" {
+		logger.InfoContext(ctx, "braintrust disabled: project not configured")
+		return tracenoop.NewTracerProvider(), func(context.Context) error { return nil }, nil
+	}
+
+	logger.InfoContext(ctx, "initializing braintrust tracer", attr.SlogProjectName(projectName))
+
+	// Create a simple TracerProvider specifically for Braintrust
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+	)
+
+	// HACK WARNING
+	// Temporarily unset OTEL_EXPORTER_OTLP_ENDPOINT to prevent Braintrust's internal
+	// OTLP client from reading it. The Braintrust SDK creates its own OTLP exporter
+	// which reads this env var and ignores our WithAPIURL option.
+	originalEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if originalEndpoint != "" {
+		if err := os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT"); err != nil {
+			logger.WarnContext(ctx, "failed to unset OTEL_EXPORTER_OTLP_ENDPOINT", attr.SlogError(err))
+		}
+	}
+
+	_, err := braintrust.New(
+		tp,
+		braintrust.WithProject(projectName),
+		braintrust.WithAPIKey(apiKey),
+	)
+
+	// Restore the original OTLP endpoint
+	if originalEndpoint != "" {
+		if restoreErr := os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", originalEndpoint); restoreErr != nil {
+			logger.WarnContext(ctx, "failed to restore OTEL_EXPORTER_OTLP_ENDPOINT", attr.SlogError(restoreErr))
+		}
+	}
+
+	if err != nil {
+		logger.WarnContext(ctx, "failed to initialize braintrust", attr.SlogError(err))
+		return tracenoop.NewTracerProvider(), func(context.Context) error { return nil }, err
+	}
+
+	logger.InfoContext(ctx, "braintrust tracer initialized successfully")
+
+	shutdown := func(ctx context.Context) error {
+		return tp.Shutdown(ctx)
+	}
+
+	return tp, shutdown, nil
+}
+
 func newClueConfig(
-	ctx context.Context,
 	svcName string,
 	svcVersion string,
 	gitSHA string,
@@ -162,15 +222,17 @@ func newClueConfig(
 		)
 	}
 	var tracerProvider trace.TracerProvider
+	var sdkTP *sdktrace.TracerProvider
 	if spanExporter == nil {
 		tracerProvider = tracenoop.NewTracerProvider()
 	} else {
 		sampler := sdktrace.ParentBased(sampler)
-		tracerProvider = sdktrace.NewTracerProvider(
+		sdkTP = sdktrace.NewTracerProvider(
 			sdktrace.WithResource(res),
 			sdktrace.WithSampler(sampler),
 			sdktrace.WithBatcher(spanExporter),
 		)
+		tracerProvider = sdkTP
 	}
 	return &clue.Config{
 		MeterProvider:  meterProvider,

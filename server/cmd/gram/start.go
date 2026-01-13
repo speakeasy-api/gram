@@ -159,6 +159,16 @@ func newStartCommand() *cli.Command {
 			EnvVars: []string{"GRAM_ENABLE_OTEL_METRICS"},
 		},
 		&cli.StringFlag{
+			Name:    "braintrust-api-key",
+			Usage:   "Braintrust API key for LLM tracing",
+			EnvVars: []string{"BRAINTRUST_API_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "braintrust-project",
+			Usage:   "Braintrust project name for LLM tracing",
+			EnvVars: []string{"BRAINTRUST_PROJECT"},
+		},
+		&cli.StringFlag{
 			Name:     "assets-backend",
 			Usage:    "The backend to use for managing assets",
 			EnvVars:  []string{"GRAM_ASSETS_BACKEND"},
@@ -355,11 +365,13 @@ func newStartCommand() *cli.Command {
 			defer cancel()
 
 			shutdown, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
-				ServiceName:    serviceName,
-				ServiceVersion: shortGitSHA(),
-				GitSHA:         GitSHA,
-				EnableTracing:  c.Bool("with-otel-tracing"),
-				EnableMetrics:  c.Bool("with-otel-metrics"),
+				ServiceName:       serviceName,
+				ServiceVersion:    shortGitSHA(),
+				GitSHA:            GitSHA,
+				EnableTracing:     c.Bool("with-otel-tracing"),
+				EnableMetrics:     c.Bool("with-otel-metrics"),
+				BraintrustAPIKey:  c.String("braintrust-api-key"),
+				BraintrustProject: c.String("braintrust-project"),
 			})
 			if err != nil {
 				return fmt.Errorf("setup opentelemetry sdk: %w", err)
@@ -576,7 +588,7 @@ func newStartCommand() *cli.Command {
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager))
 			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, posthogClient, serverURL, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, oauthService, billingTracker, billingRepo, tcm, productFeatures, ragService, temporalClient), mcpMetadataService)
-			chat.Attach(mux, chat.NewService(logger, db, sessionManager, chatSessionsManager, openRouter, &background.FallbackModelUsageTracker{Temporal: temporalClient}))
+			chat.Attach(mux, chat.NewService(logger, db, sessionManager, chatSessionsManager, openRouter, &background.FallbackModelUsageTracker{Temporal: temporalClient}, c.String("braintrust-api-key"), c.String("braintrust-project")))
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
 					GramServerURL:      c.String("server-url"),

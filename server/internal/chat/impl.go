@@ -21,6 +21,7 @@ import (
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -54,6 +55,7 @@ type Service struct {
 	auth                 *auth.Auth
 	repo                 *repo.Queries
 	tracer               trace.Tracer
+	braintrustTracer     trace.Tracer
 	openRouter           openrouter.Provisioner
 	logger               *slog.Logger
 	sessions             *sessions.Manager
@@ -69,8 +71,16 @@ func NewService(
 	chatSessions *chatsessions.Manager,
 	openRouter openrouter.Provisioner,
 	fallbackUsageTracker FallbackModelUsageTracker,
+	braintrustAPIKey string,
+	braintrustProject string,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
+
+	// Initialize Braintrust-specific tracer for LLM tracing
+	braintrustTP, _, err := o11y.GetBraintrustTracerProvider(context.Background(), logger, braintrustAPIKey, braintrustProject)
+	if err != nil {
+		logger.WarnContext(context.Background(), "failed to initialize braintrust tracer", attr.SlogError(err))
+	}
 
 	return &Service{
 		auth:                 auth.New(logger, db, sessions),
@@ -79,6 +89,7 @@ func NewService(
 		logger:               logger,
 		repo:                 repo.New(db),
 		tracer:               otel.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
+		braintrustTracer:     braintrustTP.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
 		openRouter:           openRouter,
 		proxyTransport:       cleanhttp.DefaultPooledTransport(),
 		fallbackUsageTracker: fallbackUsageTracker,
@@ -313,6 +324,21 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	chatIDHeader := r.Header.Get("Gram-Chat-ID")
 
+	// Create a root span for Braintrust LLM tracing using the Braintrust-specific tracer
+	ctx, llmSpan := s.braintrustTracer.Start(ctx, "llm.chat.completions", trace.WithNewRoot())
+	defer llmSpan.End()
+
+	// Set Braintrust input attributes
+	setBraintrustJSONAttr(llmSpan, "braintrust.input_json", chatRequest.Messages)
+	setBraintrustJSONAttr(llmSpan, "braintrust.metadata", map[string]any{
+		"model":       chatRequest.Model,
+		"temperature": chatRequest.Temperature,
+		"stream":      chatRequest.Stream,
+	})
+	setBraintrustJSONAttr(llmSpan, "braintrust.span_attributes", map[string]any{
+		"type": "llm",
+	})
+
 	respCaptor := w
 
 	if chatIDHeader != "" {
@@ -349,6 +375,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 				TotalTokens:      0,
 			},
 			usageSet: false,
+			llmSpan:  llmSpan,
 		}
 	}
 
@@ -465,6 +492,15 @@ func (s *Service) CreditUsage(ctx context.Context, payload *gen.CreditUsagePaylo
 	}, nil
 }
 
+// setBraintrustJSONAttr marshals a value to JSON and sets it as a span attribute for Braintrust
+func setBraintrustJSONAttr(span trace.Span, key string, value any) {
+	jsonBytes, err := json.Marshal(value)
+	if err != nil {
+		return
+	}
+	span.SetAttributes(attribute.String(key, string(jsonBytes)))
+}
+
 func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID uuid.UUID, userID string, chatIDHeader string, request openrouter.OpenAIChatRequest) (uuid.UUID, error) {
 	chatID, err := uuid.Parse(chatIDHeader)
 	if err != nil {
@@ -546,6 +582,7 @@ type responseCaptor struct {
 	toolCallID           string
 	accumulatedToolCalls map[int]openrouter.ToolCall // Map of index to accumulated tool call data
 	usage                openrouter.Usage
+	llmSpan              trace.Span // Braintrust tracing span
 }
 
 func (r *responseCaptor) WriteHeader(statusCode int) {
@@ -632,6 +669,24 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 			r.logger.ErrorContext(r.ctx, "failed to store chat message", attr.SlogError(err))
 		}
 		r.messageWritten = true
+
+		// Set Braintrust output attributes
+		if r.llmSpan != nil {
+			output := map[string]any{
+				"role":    "assistant",
+				"content": r.messageContent.String(),
+			}
+			if len(r.accumulatedToolCalls) > 0 {
+				toolCallsArr := slices.Collect(maps.Values(r.accumulatedToolCalls))
+				output["tool_calls"] = toolCallsArr
+			}
+			setBraintrustJSONAttr(r.llmSpan, "braintrust.output_json", output)
+			setBraintrustJSONAttr(r.llmSpan, "braintrust.metrics", map[string]any{
+				"tokens":            r.usage.TotalTokens,
+				"prompt_tokens":     r.usage.PromptTokens,
+				"completion_tokens": r.usage.CompletionTokens,
+			})
+		}
 	}
 
 	n, err := r.ResponseWriter.Write(b)
