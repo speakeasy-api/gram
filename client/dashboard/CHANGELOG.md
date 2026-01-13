@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.26.3
+
+### Patch Changes
+
+- 12e825c: Add hide/show toggle for environment variable inputs
+
 ## 0.26.2
 
 ### Patch Changes
