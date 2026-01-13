@@ -76,7 +76,7 @@ func NewService(
 		db:             db,
 		repo:           repo.New(db),
 		externalmcp:    externalmcpRepo.New(db),
-		registryClient: externalmcp.NewRegistryClient(logger),
+		registryClient: externalmcp.NewRegistryClient(logger, tracerProvider),
 		auth:           auth.New(logger, db, sessions),
 		assets:         assetsRepo.New(db),
 		packages:       packagesRepo.New(db),
