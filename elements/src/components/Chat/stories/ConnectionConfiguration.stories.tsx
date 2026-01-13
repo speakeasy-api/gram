@@ -1,7 +1,7 @@
-import { Chat } from '..'
-import type { Meta, StoryFn } from '@storybook/react-vite'
-import { google } from '@ai-sdk/google'
 import { GetSessionFn } from '@/types'
+import { google } from '@ai-sdk/google'
+import type { Meta, StoryFn } from '@storybook/react-vite'
+import { Chat } from '..'
 
 const meta: Meta<typeof Chat> = {
   title: 'Chat/Connection Configuration',
@@ -68,12 +68,12 @@ WithExplicitSessionAuth.parameters = {
 
 // NOTE: api key auth is currently non functional due to concerns with security
 // Update this story when api key auth is secure
-export const WithExplicitAPIKeyAuth: Story = () => <Chat />
-WithExplicitAPIKeyAuth.storyName = 'With Explicit API Key Auth'
-WithExplicitAPIKeyAuth.parameters = {
+export const WithStaticSessionAuth: Story = () => <Chat />
+WithStaticSessionAuth.storyName = 'With Static Session Auth'
+WithStaticSessionAuth.parameters = {
   elements: {
     config: {
-      api: { UNSAFE_apiKey: 'test' },
+      api: { sessionToken: 'test' },
     },
   },
 }

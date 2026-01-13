@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ElementsConfig } from '@/types'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 describe('getApiUrl', () => {
   beforeEach(() => {
@@ -16,7 +16,7 @@ describe('getApiUrl', () => {
     const getApiUrl = await loadGetApiUrl('https://env.example.com')
     const config: ElementsConfig = {
       projectSlug: 'test',
-      api: { url: 'https://config.example.com', UNSAFE_apiKey: 'test-key' },
+      api: { url: 'https://config.example.com', sessionToken: 'test-key' },
     }
 
     expect(getApiUrl(config)).toBe('https://config.example.com')
@@ -26,7 +26,7 @@ describe('getApiUrl', () => {
     const getApiUrl = await loadGetApiUrl('https://env.example.com')
     const config: ElementsConfig = {
       projectSlug: 'test',
-      api: { UNSAFE_apiKey: 'test-key' },
+      api: { sessionToken: 'test-key' },
     }
 
     expect(getApiUrl(config)).toBe('https://env.example.com')
@@ -63,7 +63,7 @@ describe('getApiUrl', () => {
     const getApiUrl = await loadGetApiUrl('https://env.example.com')
     const config: ElementsConfig = {
       projectSlug: 'test',
-      api: { url: '', UNSAFE_apiKey: 'test-key' },
+      api: { url: '', sessionToken: 'test-key' },
     }
 
     expect(getApiUrl(config)).toBe('https://env.example.com')
@@ -73,7 +73,7 @@ describe('getApiUrl', () => {
     const getApiUrl = await loadGetApiUrl('')
     const config: ElementsConfig = {
       projectSlug: 'test',
-      api: { url: 'https://config.example.com///', UNSAFE_apiKey: 'test-key' },
+      api: { url: 'https://config.example.com///', sessionToken: 'test-key' },
     }
 
     expect(getApiUrl(config)).toBe('https://config.example.com')
