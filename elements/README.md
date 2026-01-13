@@ -9,7 +9,7 @@ Elements is a library built for the agentic age. We provide customizable and ele
 First ensure that you have installed the required peer dependencies:
 
 ```bash
-pnpm add react react-dom @assistant-ui/react @assistant-ui/react-markdown motion remark-gfm zustand vega shiki
+pnpm add react react-dom motion remark-gfm zustand vega shiki
 ```
 
 Then install Elements:
