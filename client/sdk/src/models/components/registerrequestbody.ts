@@ -3,8 +3,11 @@
  * @generated-id: 882ea7192e6e
  */
 
-import * as z from "zod/v3";
+import * as z from "zod";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type RegisterRequestBody = {
   /**
@@ -12,6 +15,19 @@ export type RegisterRequestBody = {
    */
   orgName: string;
 };
+
+/** @internal */
+export const RegisterRequestBody$inboundSchema: z.ZodType<
+  RegisterRequestBody,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  org_name: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "org_name": "orgName",
+  });
+});
 
 /** @internal */
 export type RegisterRequestBody$Outbound = {
@@ -31,10 +47,33 @@ export const RegisterRequestBody$outboundSchema: z.ZodType<
   });
 });
 
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace RegisterRequestBody$ {
+  /** @deprecated use `RegisterRequestBody$inboundSchema` instead. */
+  export const inboundSchema = RegisterRequestBody$inboundSchema;
+  /** @deprecated use `RegisterRequestBody$outboundSchema` instead. */
+  export const outboundSchema = RegisterRequestBody$outboundSchema;
+  /** @deprecated use `RegisterRequestBody$Outbound` instead. */
+  export type Outbound = RegisterRequestBody$Outbound;
+}
+
 export function registerRequestBodyToJSON(
   registerRequestBody: RegisterRequestBody,
 ): string {
   return JSON.stringify(
     RegisterRequestBody$outboundSchema.parse(registerRequestBody),
+  );
+}
+
+export function registerRequestBodyFromJSON(
+  jsonString: string,
+): SafeParseResult<RegisterRequestBody, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => RegisterRequestBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RegisterRequestBody' from JSON`,
   );
 }

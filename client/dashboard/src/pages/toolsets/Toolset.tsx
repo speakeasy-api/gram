@@ -15,23 +15,29 @@ import {
 } from "@/contexts/Telemetry";
 import { useToolset } from "@/hooks/toolTypes";
 import { handleAPIError } from "@/lib/errors";
-import { Tool, useGroupedTools } from "@/lib/toolTypes";
+import { asTools, Tool, useGroupedTools } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Confirm } from "@gram/client/models/components";
 import { invalidateTemplate } from "@gram/client/react-query";
 import {
+  invalidateAllDraftToolset,
   queryKeyInstance,
   useCloneToolsetMutation,
   useCreateToolsetMutation,
   useDeleteToolsetMutation,
+  useDiscardDraftMutation,
+  useDraftToolset,
+  usePromoteDraftMutation,
+  useSetIterationModeMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
+import { ReleaseChangesPopover } from "@/components/release-changes-popover";
 import { MCPDetails, MCPEnableButton } from "../mcp/MCPDetails";
 import { AddToolsDialog } from "./AddToolsDialog";
 import { PromptsTabContent } from "./PromptsTab";
@@ -256,17 +262,45 @@ export function ToolsetView({
   const telemetry = useTelemetry();
   const client = useSdkClient();
   const { data: toolset, refetch } = useToolset(toolsetSlug);
+
+  const { data: draftToolset } = useDraftToolset(
+    { slug: toolsetSlug },
+    undefined,
+    { enabled: toolset?.iterationMode && toolset?.hasDraftChanges },
+  );
+
   const { addActions, removeActions } = useCommandPalette();
   const location = useLocation();
   const navigate = useNavigate();
 
-  const tools = toolset?.tools ?? [];
+  const tools =
+    toolset?.iterationMode && toolset?.hasDraftChanges && draftToolset?.tools
+      ? asTools(draftToolset.tools)
+      : (toolset?.tools ?? []);
+
+  const stagedToolUrns = useMemo(() => {
+    if (
+      !toolset?.iterationMode ||
+      !toolset?.hasDraftChanges ||
+      !draftToolset?.draftToolUrns
+    ) {
+      return new Set<string>();
+    }
+    const productionUrns = new Set(toolset.toolUrns || []);
+    return new Set(
+      draftToolset.draftToolUrns.filter((urn) => !productionUrns.has(urn)),
+    );
+  }, [
+    toolset?.iterationMode,
+    toolset?.hasDraftChanges,
+    toolset?.toolUrns,
+    draftToolset?.draftToolUrns,
+  ]);
 
   const isExternalMcp = toolset?.kind === "external-mcp";
 
-  // Get initial tab from URL hash, default depends on toolset kind
   const getTabFromHash = (): ToolsetTabs => {
-    const hash = location.hash.slice(1); // Remove the # character
+    const hash = location.hash.slice(1);
     const validTabs: ToolsetTabs[] = [
       "tools",
       "prompts",
@@ -282,7 +316,6 @@ export function ToolsetView({
 
   const [activeTab, setActiveTab] = useState<ToolsetTabs>(getTabFromHash());
 
-  // Update tab when hash changes (e.g., browser back/forward)
   useEffect(() => {
     const newTab = getTabFromHash();
     if (newTab !== activeTab) {
@@ -290,7 +323,6 @@ export function ToolsetView({
     }
   }, [location.hash]);
 
-  // Redirect to appropriate default tab based on toolset kind
   useEffect(() => {
     if (!toolset) return;
 
@@ -300,17 +332,14 @@ export function ToolsetView({
         activeTab === "resources" ||
         activeTab === "prompts")
     ) {
-      // External MCP toolsets should show "server" tab instead of tools/resources/prompts
       setActiveTab("server");
       navigate("#server", { replace: true });
     } else if (!isExternalMcp && activeTab === "server") {
-      // Default toolsets shouldn't show "server" tab
       setActiveTab("tools");
       navigate("#tools", { replace: true });
     }
   }, [toolset?.kind]);
 
-  // Update URL hash when tab changes
   const handleTabChange = (tab: ToolsetTabs) => {
     setActiveTab(tab);
     navigate(`#${tab}`, { replace: true });
@@ -327,13 +356,10 @@ export function ToolsetView({
 
   const cloneToolset = useCloneToolset();
 
-  // Register page-specific command palette actions
-  // Note: routes changes on every render, so we exclude it from deps
   useEffect(() => {
     if (!toolset) return;
 
     const pageActions = [
-      // Only show "Add tools" for default toolsets
       ...(toolset.kind !== "external-mcp"
         ? [
             {
@@ -366,11 +392,8 @@ export function ToolsetView({
     return () => {
       removeActions(pageActions.map((a) => a.id));
     };
-    // addActions and removeActions are memoized in CommandPaletteContext with empty deps
-    // so they're stable and don't need to be in the dependency array
-  }, [toolsetSlug, toolset?.kind]); // Re-run when toolset slug or kind changes
+  }, [toolsetSlug, toolset?.kind]);
 
-  // Refetch any loaded instances of this toolset on update (primarily for the playground)
   const refetchInstance = () => {
     const queryKey = queryKeyInstance({
       toolsetSlug,
@@ -382,6 +405,9 @@ export function ToolsetView({
   const onUpdate = () => {
     refetch?.();
     refetchInstance();
+    if (toolset?.iterationMode) {
+      invalidateAllDraftToolset(queryClient);
+    }
   };
 
   const updateToolsetMutation = useUpdateToolsetMutation({
@@ -433,7 +459,10 @@ export function ToolsetView({
 
   const handleToolsRemove = useCallback(
     (removedUrns: string[]) => {
-      const currentUrns = toolset?.toolUrns || [];
+      const currentUrns =
+        toolset?.iterationMode && draftToolset?.draftToolUrns
+          ? draftToolset.draftToolUrns
+          : toolset?.toolUrns || [];
       const updatedUrns = currentUrns.filter(
         (urn) => !removedUrns.includes(urn),
       );
@@ -467,7 +496,12 @@ export function ToolsetView({
         },
       );
     },
-    [toolset?.toolUrns, toolsetSlug],
+    [
+      toolset?.toolUrns,
+      toolset?.iterationMode,
+      draftToolset?.draftToolUrns,
+      toolsetSlug,
+    ],
   );
 
   const handleTestInPlayground = useCallback(() => {
@@ -492,7 +526,6 @@ export function ToolsetView({
         tool_count: selectedToolUrns.length,
       });
 
-      // Add the selected tools to the new toolset
       await client.toolsets.updateBySlug({
         slug: data.slug,
         updateToolsetRequestBody: {
@@ -533,10 +566,114 @@ export function ToolsetView({
     },
   });
 
+  const promoteDraftMutation = usePromoteDraftMutation({
+    onSuccess: () => {
+      telemetry.capture("toolset_event", { action: "draft_promoted" });
+      toast.success("Draft changes promoted to production");
+      onUpdate();
+    },
+    onError: (error) => {
+      handleAPIError(error, "Failed to promote draft changes");
+    },
+  });
+
+  const discardDraftMutation = useDiscardDraftMutation({
+    onSuccess: () => {
+      telemetry.capture("toolset_event", { action: "draft_discarded" });
+      toast.success("Draft changes discarded");
+      onUpdate();
+    },
+    onError: (error) => {
+      handleAPIError(error, "Failed to discard draft changes");
+    },
+  });
+
+  const setIterationModeMutation = useSetIterationModeMutation({
+    onSuccess: () => {
+      telemetry.capture("toolset_event", { action: "staging_disabled" });
+      toast.success(
+        "Staging disabled - changes will now apply directly to production",
+      );
+      onUpdate();
+    },
+    onError: (error) => {
+      handleAPIError(error, "Failed to disable staging");
+    },
+  });
+
+  const handleDisableStaging = () => {
+    if (
+      confirm(
+        "⚠️ DANGER: This will disable staging mode.\n\nAll future changes will apply DIRECTLY to your live MCP server without review.\n\nAre you absolutely sure?",
+      )
+    ) {
+      setIterationModeMutation.mutate({
+        request: {
+          slug: toolsetSlug,
+          setIterationModeRequestBody: {
+            iterationMode: false,
+          },
+        },
+      });
+    }
+  };
+
+  const handlePromoteDraft = () => {
+    if (
+      confirm(
+        "Are you sure you want to promote draft changes to production? This will make your changes live.",
+      )
+    ) {
+      promoteDraftMutation.mutate({
+        request: {
+          slug: toolsetSlug,
+        },
+      });
+    }
+  };
+
+  const handleDiscardDraft = () => {
+    if (
+      confirm(
+        "Are you sure you want to discard all draft changes? This action cannot be undone.",
+      )
+    ) {
+      discardDraftMutation.mutate({
+        request: {
+          slug: toolsetSlug,
+        },
+      });
+    }
+  };
+
+  const hasDraftChanges = toolset?.hasDraftChanges ?? false;
+  const isStaging = toolset?.iterationMode ?? true;
+
   const actions = (
     <Stack direction="horizontal" gap={2} align="center">
+      {hasDraftChanges && (
+        <>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleDiscardDraft}
+            disabled={discardDraftMutation.isPending}
+          >
+            <Button.Text>Discard</Button.Text>
+          </Button>
+          <ReleaseChangesPopover
+            toolset={toolset}
+            onRelease={handlePromoteDraft}
+            isPending={promoteDraftMutation.isPending}
+          />
+        </>
+      )}
       {!isExternalMcp && (
-        <Button onClick={gotoAddTools} size="sm">
+        <Button
+          onClick={gotoAddTools}
+          size="sm"
+          variant={hasDraftChanges ? "secondary" : "primary"}
+        >
           <Button.LeftIcon>
             <Icon name="plus" className="h-4 w-4" />
           </Button.LeftIcon>
@@ -552,6 +689,16 @@ export function ToolsetView({
             },
             icon: "message-circle",
           },
+          ...(isStaging && !hasDraftChanges
+            ? [
+                {
+                  label: "Disable Staging",
+                  onClick: handleDisableStaging,
+                  icon: "alert-triangle" as const,
+                  destructive: true,
+                },
+              ]
+            : []),
           {
             label: "Delete Toolset",
             onClick: () => {
@@ -583,8 +730,6 @@ export function ToolsetView({
     />
   );
 
-  // Filter tools based on selected groups
-  // Map unified Tool[] from toolset to group keys, then filter tools
   const groupedToolNames = new Set(
     grouped
       .filter((group) => selectedGroups.includes(group.key))
@@ -592,9 +737,6 @@ export function ToolsetView({
   );
 
   let toolsToDisplay = tools.filter((tool) => groupedToolNames.has(tool.name));
-
-  // If no tools are selected, show all tools
-  // Mostly a failsafe for if the filtering doesn't work as expected
   if (toolsToDisplay.length === 0) {
     toolsToDisplay = tools;
   }
@@ -636,6 +778,7 @@ export function ToolsetView({
             <ToolList
               tools={toolsToDisplay}
               toolset={toolset}
+              stagedToolUrns={stagedToolUrns}
               onToolUpdate={handleToolUpdate}
               onToolsRemove={handleToolsRemove}
               onCreateToolset={handleCreateToolset}
@@ -691,7 +834,10 @@ export function ToolsetView({
           onOpenChange={setAddToolsDialogOpen}
           toolset={toolset}
           onAddTools={async (toolUrns) => {
-            const currentUrns = toolset.toolUrns || [];
+            const currentUrns =
+              toolset.iterationMode && draftToolset?.draftToolUrns
+                ? draftToolset.draftToolUrns
+                : toolset.toolUrns || [];
             const newUrns = [...new Set([...currentUrns, ...toolUrns])];
 
             await client.toolsets.updateBySlug({

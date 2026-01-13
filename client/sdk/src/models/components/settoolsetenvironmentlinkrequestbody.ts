@@ -3,8 +3,11 @@
  * @generated-id: 72458d6b75fd
  */
 
-import * as z from "zod/v3";
+import * as z from "zod";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type SetToolsetEnvironmentLinkRequestBody = {
   /**
@@ -16,6 +19,21 @@ export type SetToolsetEnvironmentLinkRequestBody = {
    */
   toolsetId: string;
 };
+
+/** @internal */
+export const SetToolsetEnvironmentLinkRequestBody$inboundSchema: z.ZodType<
+  SetToolsetEnvironmentLinkRequestBody,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  environment_id: z.string(),
+  toolset_id: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "environment_id": "environmentId",
+    "toolset_id": "toolsetId",
+  });
+});
 
 /** @internal */
 export type SetToolsetEnvironmentLinkRequestBody$Outbound = {
@@ -38,6 +56,21 @@ export const SetToolsetEnvironmentLinkRequestBody$outboundSchema: z.ZodType<
   });
 });
 
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace SetToolsetEnvironmentLinkRequestBody$ {
+  /** @deprecated use `SetToolsetEnvironmentLinkRequestBody$inboundSchema` instead. */
+  export const inboundSchema =
+    SetToolsetEnvironmentLinkRequestBody$inboundSchema;
+  /** @deprecated use `SetToolsetEnvironmentLinkRequestBody$outboundSchema` instead. */
+  export const outboundSchema =
+    SetToolsetEnvironmentLinkRequestBody$outboundSchema;
+  /** @deprecated use `SetToolsetEnvironmentLinkRequestBody$Outbound` instead. */
+  export type Outbound = SetToolsetEnvironmentLinkRequestBody$Outbound;
+}
+
 export function setToolsetEnvironmentLinkRequestBodyToJSON(
   setToolsetEnvironmentLinkRequestBody: SetToolsetEnvironmentLinkRequestBody,
 ): string {
@@ -45,5 +78,16 @@ export function setToolsetEnvironmentLinkRequestBodyToJSON(
     SetToolsetEnvironmentLinkRequestBody$outboundSchema.parse(
       setToolsetEnvironmentLinkRequestBody,
     ),
+  );
+}
+
+export function setToolsetEnvironmentLinkRequestBodyFromJSON(
+  jsonString: string,
+): SafeParseResult<SetToolsetEnvironmentLinkRequestBody, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) =>
+      SetToolsetEnvironmentLinkRequestBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'SetToolsetEnvironmentLinkRequestBody' from JSON`,
   );
 }

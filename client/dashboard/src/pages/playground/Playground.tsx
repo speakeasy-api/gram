@@ -20,8 +20,10 @@ import { asTools, Tool } from "@/lib/toolTypes";
 import { capitalize } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
+  invalidateAllDraftToolset,
   queryKeyInstance,
   queryKeyListToolsets,
+  useDraftToolset,
   useInstance,
   useListChats,
   useListEnvironments,
@@ -71,10 +73,8 @@ function PlaygroundInner() {
   const [model, setModel] = useState("anthropic/claude-sonnet-4.5");
   const [maxTokens, setMaxTokens] = useState(4096);
 
-  // Get prompt from URL params if available
   const initialPrompt = searchParams.get("prompt");
 
-  // We use a ref so that we can hot-swap the toolset and environment without causing a re-render
   const chatConfigRef = useRef({
     toolsetSlug: selectedToolset,
     environmentSlug: selectedEnvironment,
@@ -87,14 +87,12 @@ function PlaygroundInner() {
     isOnboarding: false,
   };
 
-  // Fetch toolsets and instance data
   const { data: toolsetsData } = useListToolsets();
   const toolsets = toolsetsData?.toolsets;
   const toolset = toolsets?.find((ts) => ts.slug === selectedToolset);
 
   const environmentData = useEnvironment(selectedEnvironment ?? undefined);
 
-  // Check auth status
   const authStatus = useMemo(() => {
     if (!toolset || !environmentData) {
       return null;
@@ -272,6 +270,9 @@ export function ToolsetPanel({
     string | undefined
   >();
   const [editingTool, setEditingTool] = useState<Tool | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState<
+    "staged" | "production"
+  >("production");
 
   const { data: toolsetsData } = useListToolsets();
   const { data: environmentsData } = useListEnvironments();
@@ -286,10 +287,18 @@ export function ToolsetPanel({
   const selectedEnvironment = configRef.current.environmentSlug;
 
   const toolset = toolsets?.find((toolset) => toolset.slug === selectedToolset);
+  const hasDraftChanges = toolset?.hasDraftChanges ?? false;
+
+  useEffect(() => {
+    if (hasDraftChanges) {
+      setSelectedVersion("staged");
+    } else {
+      setSelectedVersion("production");
+    }
+  }, [hasDraftChanges, selectedToolset]);
 
   const environmentData = useEnvironment(selectedEnvironment ?? undefined);
 
-  // Fetch instance data to get tools
   const { data: instanceData } = useInstance(
     {
       toolsetSlug: selectedToolset ?? "",
@@ -297,6 +306,16 @@ export function ToolsetPanel({
     undefined,
     {
       enabled: !!selectedToolset && !!selectedEnvironment,
+    },
+  );
+
+  // Fetch draft toolset when viewing staged version
+  const { data: draftToolset } = useDraftToolset(
+    { slug: selectedToolset ?? "" },
+    undefined,
+    {
+      enabled:
+        !!selectedToolset && hasDraftChanges && selectedVersion === "staged",
     },
   );
 
@@ -340,16 +359,15 @@ export function ToolsetPanel({
     }
   }, [configRef, setSelectedEnvironment, toolset]);
 
-  // Transform tools data for the config panel
-  const tools = useMemo(
-    () => asTools(instanceData?.tools ?? []),
-    [instanceData?.tools],
-  );
+  const tools = useMemo(() => {
+    if (selectedVersion === "staged" && draftToolset?.tools) {
+      return asTools(draftToolset.tools);
+    }
+    return asTools(instanceData?.tools ?? []);
+  }, [instanceData?.tools, draftToolset?.tools, selectedVersion]);
 
-  // Track which tools are selected for bulk actions
   const [enabledTools, setEnabledTools] = useState<Set<string>>(new Set());
 
-  // Handler for adding tools to the toolset
   const handleAddTools = (toolUrns: string[]) => {
     if (!toolset) return;
     const currentUrns = toolset.toolUrns || [];
@@ -366,19 +384,17 @@ export function ToolsetPanel({
       },
       {
         onSuccess: () => {
-          // Invalidate both toolsets and instance queries to refresh the UI
           queryClient.invalidateQueries({
             queryKey: queryKeyListToolsets({}),
           });
           if (selectedToolset) {
-            // Use partial query key (toolsetSlug only) to match all instances
-            // of this toolset, regardless of environment
             queryClient.invalidateQueries({
               queryKey: queryKeyInstance({
                 toolsetSlug: selectedToolset,
               }),
             });
           }
+          invalidateAllDraftToolset(queryClient);
           toast.success(
             `Added ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""}`,
           );
@@ -390,7 +406,6 @@ export function ToolsetPanel({
     );
   };
 
-  // Handler for removing tools from the toolset
   const handleRemoveTools = (toolUrns: string[]) => {
     if (!toolset) return;
     const currentUrns = toolset.toolUrns || [];
@@ -407,19 +422,17 @@ export function ToolsetPanel({
       },
       {
         onSuccess: () => {
-          // Invalidate both toolsets and instance queries to refresh the UI
           queryClient.invalidateQueries({
             queryKey: queryKeyListToolsets({}),
           });
           if (selectedToolset) {
-            // Use partial query key (toolsetSlug only) to match all instances
-            // of this toolset, regardless of environment
             queryClient.invalidateQueries({
               queryKey: queryKeyInstance({
                 toolsetSlug: selectedToolset,
               }),
             });
           }
+          invalidateAllDraftToolset(queryClient);
           toast.success(
             `Removed ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""}`,
           );
@@ -495,6 +508,24 @@ export function ToolsetPanel({
               ))}
             </SelectContent>
           </Select>
+        }
+        versionSelector={
+          hasDraftChanges ? (
+            <Select
+              value={selectedVersion}
+              onValueChange={(v) =>
+                setSelectedVersion(v as "staged" | "production")
+              }
+            >
+              <SelectTrigger size="sm" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="staged">Staged (Draft)</SelectItem>
+                <SelectItem value="production">Production (Live)</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : undefined
         }
         authSettings={
           toolset && environmentData ? (

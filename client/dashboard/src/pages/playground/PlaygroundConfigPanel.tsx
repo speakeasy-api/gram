@@ -60,6 +60,7 @@ interface ToolsetSectionProps {
   onMaxTokensChange?: (tokens: number) => void;
   toolsetSelector?: React.ReactNode;
   environmentSelector?: React.ReactNode;
+  versionSelector?: React.ReactNode;
   authSettings?: React.ReactNode;
   toolsetInfo?: ToolsetInfo;
   onToolsetUpdate?: (updates: { name?: string; description?: string }) => void;
@@ -241,6 +242,7 @@ export function PlaygroundConfigPanel({
   onMaxTokensChange,
   toolsetSelector,
   environmentSelector,
+  versionSelector,
   authSettings,
   toolsetInfo: _toolsetInfo,
   onToolsetUpdate: _onToolsetUpdate,
@@ -296,6 +298,16 @@ export function PlaygroundConfigPanel({
             Environment
           </Label>
           {environmentSelector}
+        </div>
+      )}
+
+      {/* Version Selector - shown when toolset has draft changes */}
+      {versionSelector && (
+        <div className="px-4 py-3 border-b">
+          <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5 block">
+            Version
+          </Label>
+          {versionSelector}
         </div>
       )}
 

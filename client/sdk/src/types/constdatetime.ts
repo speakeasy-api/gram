@@ -3,7 +3,7 @@
  * @generated-id: 32c28cdd4f84
  */
 
-import * as z from "zod/v3";
+import * as z from "zod";
 
 export function constDateTime(
   val: string,

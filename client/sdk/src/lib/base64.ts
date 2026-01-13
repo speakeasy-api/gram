@@ -3,7 +3,7 @@
  * @generated-id: 30e000934207
  */
 
-import * as z from "zod/v3";
+import * as z from "zod";
 
 export function bytesToBase64(u8arr: Uint8Array): string {
   return btoa(String.fromCodePoint(...u8arr));

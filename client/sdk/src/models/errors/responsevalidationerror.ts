@@ -3,7 +3,7 @@
  * @generated-id: 5fd491ea0096
  */
 
-import * as z from "zod/v3";
+import * as z from "zod";
 import { GramError } from "./gramerror.js";
 import { formatZodError } from "./sdkvalidationerror.js";
 

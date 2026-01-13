@@ -6,30 +6,27 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
+  QueryFunctionContext,
+  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramCore } from "../core.js";
+import { assetsServeImage } from "../funcs/assetsServeImage.js";
+import { combineSignals } from "../lib/primitives.js";
+import { RequestOptions } from "../lib/sdks.js";
 import * as operations from "../models/operations/index.js";
+import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
-import {
-  buildServeImageQuery,
-  prefetchServeImage,
-  queryKeyServeImage,
-  ServeImageQueryData,
-} from "./serveImage.core.js";
-export {
-  buildServeImageQuery,
-  prefetchServeImage,
-  queryKeyServeImage,
-  type ServeImageQueryData,
-};
+
+export type ServeImageQueryData = operations.ServeImageResponse;
 
 /**
  * serveImage assets
@@ -73,6 +70,19 @@ export function useServeImageSuspense(
   });
 }
 
+export function prefetchServeImage(
+  queryClient: QueryClient,
+  client$: GramCore,
+  request: operations.ServeImageRequest,
+): Promise<void> {
+  return queryClient.prefetchQuery({
+    ...buildServeImageQuery(
+      client$,
+      request,
+    ),
+  });
+}
+
 export function setServeImageData(
   client: QueryClient,
   queryKeyBase: [parameters: { id: string }],
@@ -102,4 +112,36 @@ export function invalidateAllServeImage(
     ...filters,
     queryKey: ["@gram/client", "assets", "serveImage"],
   });
+}
+
+export function buildServeImageQuery(
+  client$: GramCore,
+  request: operations.ServeImageRequest,
+  options?: RequestOptions,
+): {
+  queryKey: QueryKey;
+  queryFn: (context: QueryFunctionContext) => Promise<ServeImageQueryData>;
+} {
+  return {
+    queryKey: queryKeyServeImage({ id: request.id }),
+    queryFn: async function serveImageQueryFn(
+      ctx,
+    ): Promise<ServeImageQueryData> {
+      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
+      const mergedOptions = {
+        ...options,
+        fetchOptions: { ...options?.fetchOptions, signal: sig },
+      };
+
+      return unwrapAsync(assetsServeImage(
+        client$,
+        request,
+        mergedOptions,
+      ));
+    },
+  };
+}
+
+export function queryKeyServeImage(parameters: { id: string }): QueryKey {
+  return ["@gram/client", "assets", "serveImage", parameters];
 }

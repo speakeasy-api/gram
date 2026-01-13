@@ -3,7 +3,7 @@
  * @generated-id: c4826c7b1367
  */
 
-import * as z from "zod/v3";
+import * as z from "zod";
 import { GramCore } from "../core.js";
 import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";

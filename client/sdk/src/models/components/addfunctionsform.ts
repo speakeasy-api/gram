@@ -3,8 +3,11 @@
  * @generated-id: 8efc9b8d5141
  */
 
-import * as z from "zod/v3";
+import * as z from "zod";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type AddFunctionsForm = {
   /**
@@ -24,6 +27,22 @@ export type AddFunctionsForm = {
    */
   slug: string;
 };
+
+/** @internal */
+export const AddFunctionsForm$inboundSchema: z.ZodType<
+  AddFunctionsForm,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  asset_id: z.string(),
+  name: z.string(),
+  runtime: z.string(),
+  slug: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "asset_id": "assetId",
+  });
+});
 
 /** @internal */
 export type AddFunctionsForm$Outbound = {
@@ -49,10 +68,33 @@ export const AddFunctionsForm$outboundSchema: z.ZodType<
   });
 });
 
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace AddFunctionsForm$ {
+  /** @deprecated use `AddFunctionsForm$inboundSchema` instead. */
+  export const inboundSchema = AddFunctionsForm$inboundSchema;
+  /** @deprecated use `AddFunctionsForm$outboundSchema` instead. */
+  export const outboundSchema = AddFunctionsForm$outboundSchema;
+  /** @deprecated use `AddFunctionsForm$Outbound` instead. */
+  export type Outbound = AddFunctionsForm$Outbound;
+}
+
 export function addFunctionsFormToJSON(
   addFunctionsForm: AddFunctionsForm,
 ): string {
   return JSON.stringify(
     AddFunctionsForm$outboundSchema.parse(addFunctionsForm),
+  );
+}
+
+export function addFunctionsFormFromJSON(
+  jsonString: string,
+): SafeParseResult<AddFunctionsForm, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => AddFunctionsForm$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AddFunctionsForm' from JSON`,
   );
 }

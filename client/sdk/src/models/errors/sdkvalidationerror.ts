@@ -3,7 +3,7 @@
  * @generated-id: c415134f39d7
  */
 
-import * as z from "zod/v3";
+import * as z from "zod";
 
 export class SDKValidationError extends Error {
   /**
