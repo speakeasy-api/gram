@@ -1,5 +1,13 @@
 # dashboard
 
+## 0.26.2
+
+### Patch Changes
+
+- 81be736: Updates dashboard to only use telemetry API
+- Updated dependencies [f2fa135]
+  - @gram-ai/elements@1.19.1
+
 ## 0.26.1
 
 ### Patch Changes

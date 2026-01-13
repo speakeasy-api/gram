@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.19.1
+
+### Patch Changes
+
+- f2fa135: Fix bin script
+
 ## 1.19.0
 
 ### Minor Changes
