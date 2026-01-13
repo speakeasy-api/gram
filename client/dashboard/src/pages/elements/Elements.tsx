@@ -3,6 +3,8 @@ import { useSlugs } from "@/contexts/Sdk";
 import { useProject, useSession } from "@/contexts/Auth";
 import { cn, getServerURL } from "@/lib/utils";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate";
+import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
+import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -698,6 +700,61 @@ function InstallationGuide({
   const [selectedFramework, setSelectedFramework] = useState<
     "nextjs" | "react" | null
   >(null);
+  const [generatedApiKey, setGeneratedApiKey] = useState<string | null>(null);
+  const [keyCreationAttempted, setKeyCreationAttempted] = useState(false);
+
+  const { data: existingKeys } = useListAPIKeys(
+    {},
+    { sessionHeaderGramSession: "" },
+  );
+
+  const createApiKeyMutation = useCreateAPIKeyMutation();
+
+  // Create API key when entering step 3
+  useEffect(() => {
+    if (
+      currentStep >= 3 &&
+      !generatedApiKey &&
+      !keyCreationAttempted &&
+      !createApiKeyMutation.isPending &&
+      existingKeys
+    ) {
+      setKeyCreationAttempted(true);
+
+      // Generate a unique name by checking existing keys
+      const baseKeyName = `Elements - ${projectSlug}`;
+      const existingNames = new Set(
+        existingKeys.keys?.map((k) => k.name) ?? [],
+      );
+
+      let keyName = baseKeyName;
+      let suffix = 1;
+      while (existingNames.has(keyName)) {
+        keyName = `${baseKeyName} (${suffix})`;
+        suffix++;
+      }
+
+      createApiKeyMutation.mutate(
+        {
+          security: { sessionHeaderGramSession: "" },
+          request: {
+            createKeyForm: {
+              name: keyName,
+              scopes: ["chat"],
+            },
+          },
+        },
+        {
+          onSuccess: (data) => {
+            if (data.key) {
+              setGeneratedApiKey(data.key);
+            }
+          },
+        },
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, existingKeys]);
 
   const mcpUrl = config.mcp || `https://app.getgram.ai/mcp/${projectSlug}`;
 
@@ -712,8 +769,9 @@ function InstallationGuide({
   };
 
   const getEnvContent = () => {
-    return `GRAM_API_KEY=your_api_key_here
-EMBED_ORIGIN=http://localhost:3000`;
+    const apiKey = generatedApiKey || "your_api_key_here";
+    return `GRAM_API_KEY=${apiKey}
+EMBED_ORIGIN=http://localhost:3000 # Replace with your actual origin`;
   };
 
   const getNextjsApiRoute = () => {
