@@ -1169,7 +1169,6 @@ export default function GramChat() {
                 <CodeBlockCopyButton />
               </CodeBlock>
             </SetupStep>
-
           </div>
         )}
       </WizardStep>

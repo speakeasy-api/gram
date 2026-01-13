@@ -10,5 +10,5 @@ import { ElementsEmbedStandalone } from "./pages/elements/ElementsEmbedStandalon
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ElementsEmbedStandalone />
-  </StrictMode>
+  </StrictMode>,
 );
