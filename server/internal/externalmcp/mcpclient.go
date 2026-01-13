@@ -74,9 +74,11 @@ func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, trans
 	httpClient := retryClient.StandardClient()
 
 	client := mcp.NewClient(&mcp.Implementation{
-		Name:    "gram-server",
-		Version: "1.0.0",
-		Title:   "",
+		Name:       "gram-server",
+		Version:    "1.0.0",
+		Title:      "",
+		WebsiteURL: "https://getgram.ai",
+		Icons:      nil,
 	}, nil)
 
 	var transport mcp.Transport
