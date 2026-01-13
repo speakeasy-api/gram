@@ -105,7 +105,7 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 		metricExporter,
 		spanExporter,
 		prop,
-		NewLLMPrioritySampler(clue.AdaptiveSampler(2, 10)),
+		clue.AdaptiveSampler(2, 10),
 		otel.ErrorHandlerFunc(func(err error) {
 			logger.ErrorContext(ctx, "otel error", attr.SlogError(err))
 		}),
