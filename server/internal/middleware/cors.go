@@ -32,7 +32,7 @@ func CORSMiddleware(env string, serverURL string, chatSessionsManager *chatsessi
 			}
 
 			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-			w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, Authorization, User-Agent, Gram-Session, Gram-Project, Gram-Token, Gram-Key, idempotency-key, Gram-Admin-Override, Gram-Chat-ID, Gram-Chat-Session, MCP-Protocol-Version")
+			w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, Authorization, User-Agent, Gram-Session, Gram-Project, Gram-Token, idempotency-key, Gram-Admin-Override, Gram-Chat-ID, Gram-Chat-Session, MCP-Protocol-Version")
 			w.Header().Set("Access-Control-Expose-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, x-trace-id, Gram-Session, Gram-Chat-ID, Gram-Chat-Session")
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 
