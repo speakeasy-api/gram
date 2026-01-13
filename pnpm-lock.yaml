@@ -102,6 +102,9 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@19.2.0)
+      '@gram-ai/elements':
+        specifier: workspace:*
+        version: link:../../elements
       '@gram/client':
         specifier: workspace:*
         version: link:../sdk
