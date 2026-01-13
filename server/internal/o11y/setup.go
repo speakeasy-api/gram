@@ -222,17 +222,15 @@ func newClueConfig(
 		)
 	}
 	var tracerProvider trace.TracerProvider
-	var sdkTP *sdktrace.TracerProvider
 	if spanExporter == nil {
 		tracerProvider = tracenoop.NewTracerProvider()
 	} else {
 		sampler := sdktrace.ParentBased(sampler)
-		sdkTP = sdktrace.NewTracerProvider(
+		tracerProvider = sdktrace.NewTracerProvider(
 			sdktrace.WithResource(res),
 			sdktrace.WithSampler(sampler),
 			sdktrace.WithBatcher(spanExporter),
 		)
-		tracerProvider = sdkTP
 	}
 	return &clue.Config{
 		MeterProvider:  meterProvider,
