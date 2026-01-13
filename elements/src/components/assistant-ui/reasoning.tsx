@@ -11,10 +11,10 @@ import {
 } from 'react'
 
 import {
-  useScrollLock,
   useAssistantState,
-  type ReasoningMessagePartComponent,
+  useScrollLock,
   type ReasoningGroupComponent,
+  type ReasoningMessagePartComponent,
 } from '@assistant-ui/react'
 
 import { MarkdownText } from '@/components/assistant-ui/markdown-text'

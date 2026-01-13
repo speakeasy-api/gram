@@ -206,7 +206,7 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 	body, err := json.Marshal(rpcError{
 		ID:      msgID{format: 0, String: "", Number: 0},
 		Code:    methodNotAllowed,
-		Message: methodNotAllowed.UserMessage(),
+		Message: "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication.",
 		Data:    nil,
 	})
 	if err != nil {
@@ -388,6 +388,10 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		token = r.Header.Get(constants.ChatSessionsTokenHeader)
 	}
 	var tokenInputs []oauthTokenInputs
+
+	if token == "" {
+		token = r.Header.Get(constants.ChatSessionsTokenHeader)
+	}
 
 	var oAuthProxyProvider *oauth_repo.OauthProxyProvider
 	if toolset.OauthProxyServerID.Valid {

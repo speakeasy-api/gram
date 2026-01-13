@@ -1,5 +1,11 @@
 # server
 
+## 0.17.2
+
+### Patch Changes
+
+- ecafb6f: Fixes an issue where we weren't properly pulling the chat session header, which caused private MCP servers to fail when connected to via elements.
+
 ## 0.17.1
 
 ### Patch Changes

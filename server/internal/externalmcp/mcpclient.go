@@ -77,7 +77,7 @@ func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, trans
 		Name:       "gram-server",
 		Version:    "1.0.0",
 		Title:      "",
-		WebsiteURL: "",
+		WebsiteURL: "https://getgram.ai",
 		Icons:      nil,
 	}, nil)
 
