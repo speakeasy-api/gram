@@ -327,4 +327,18 @@ const config: ElementsConfig = {
 
 ### api?
 
-> `optional` **api**: \{ url?: string \| undefined; \} & AuthConfig
+> `optional` **api**: `ApiConfig`
+
+The API configuration to use for the Elements library.
+
+Use this to override the default API URL, or add explicit auth configuration
+
+#### Example
+
+```ts
+const config: ElementsConfig = {
+  api: {
+    url: 'https://api.getgram.ai',
+  },
+}
+```
