@@ -109,23 +109,14 @@ ${c.bold}⚡ Installing Gram Elements${c.reset}
 ${c.dim}Package manager:${c.reset} ${c.cyan}${pm}${c.reset}
 `)
 
-  // Install peer dependencies first
-  console.log(`${c.yellow}○${c.reset} Installing peer dependencies...`)
-  const peerCmd = getInstallCommand(pm, PEER_DEPS)
-  if (!run(peerCmd)) {
-    console.error(`\n${c.red}✖${c.reset} Failed to install peer dependencies`)
+  // Install everything in one command
+  console.log(`${c.yellow}○${c.reset} Installing ${c.cyan}@gram-ai/elements${c.reset} and peer dependencies...`)
+  const allPackages = [...PEER_DEPS, PACKAGE_NAME]
+  const cmd = getInstallCommand(pm, allPackages)
+  if (!run(cmd)) {
+    console.error(`\n${c.red}✖${c.reset} Failed to install packages`)
     process.exit(1)
   }
-  console.log(`${c.green}✔${c.reset} Peer dependencies installed\n`)
-
-  // Install the main package
-  console.log(`${c.yellow}○${c.reset} Installing @gram-ai/elements...`)
-  const mainCmd = getInstallCommand(pm, [PACKAGE_NAME])
-  if (!run(mainCmd)) {
-    console.error(`\n${c.red}✖${c.reset} Failed to install @gram-ai/elements`)
-    process.exit(1)
-  }
-  console.log(`${c.green}✔${c.reset} @gram-ai/elements installed\n`)
 
   console.log(`
 ${c.green}${c.bold}✔ Installation complete!${c.reset}
