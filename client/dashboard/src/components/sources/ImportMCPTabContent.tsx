@@ -8,7 +8,7 @@ import type { ExternalMCPServer } from "@gram/client/models/components";
 import { Input } from "@speakeasy-api/moonshine";
 import { SearchIcon, ServerIcon, Loader2Icon } from "lucide-react";
 import React from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 function generateSlug(name: string): string {
   // Extract the last part after "/" for reverse-DNS names like "ai.exa/exa"

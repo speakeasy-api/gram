@@ -12,7 +12,7 @@ import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
 import { Tool, Toolset } from "@/lib/toolTypes";
 import { Button } from "@speakeasy-api/moonshine";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { EditToolDialog } from "./EditToolDialog";
 
 function getToolSource(

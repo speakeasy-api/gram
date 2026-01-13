@@ -33,7 +33,7 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { useMemo, useState, useEffect } from "react";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { SourceToolsetsCard } from "@/components/sources/SourceToolsetsCard";
 import { ViewSourceDialogContent } from "@/components/sources/ViewSourceDialogContent";
 import ExternalMCPDetails from "./external-mcp/ExternalMCPDetails";

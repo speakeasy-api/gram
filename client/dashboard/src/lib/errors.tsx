@@ -1,6 +1,6 @@
 import { Type } from "@/components/ui/type";
 import { Stack } from "@speakeasy-api/moonshine";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 interface ErrorHandlerOptions {
   title?: string;

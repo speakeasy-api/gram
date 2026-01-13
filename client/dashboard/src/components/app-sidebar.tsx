@@ -28,6 +28,7 @@ import { useState } from "react";
 import { ChangelogModal } from "./changelog-modal";
 import { FeatureRequestModal } from "./FeatureRequestModal";
 import { GramLogo } from "./gram-logo";
+import { NotificationBell } from "./notification-bell";
 import { ProjectMenu } from "./project-menu";
 import { Button } from "./ui/button";
 import { Type } from "./ui/type";
@@ -63,11 +64,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem className="group/logo">
-            <routes.home.Link className="hover:no-underline!">
-              <SidebarMenuButton className="data-[slot=sidebar-menu-button]:!p-1.5 h-12">
-                <GramLogo className="w-25" />
-              </SidebarMenuButton>
-            </routes.home.Link>
+            <Stack direction="horizontal" align="center" justify="between" className="w-full">
+              <routes.home.Link className="hover:no-underline!">
+                <SidebarMenuButton className="data-[slot=sidebar-menu-button]:!p-1.5 h-12">
+                  <GramLogo className="w-25" />
+                </SidebarMenuButton>
+              </routes.home.Link>
+              <NotificationBell />
+            </Stack>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>

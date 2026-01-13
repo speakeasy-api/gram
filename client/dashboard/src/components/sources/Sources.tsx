@@ -15,7 +15,7 @@ import {
 import { Button, Dialog, Icon } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
 import { useMemo } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { create } from "zustand";
 import AddSourceDialogContent from "./AddSourceDialogContent";
 import { AttachEnvironmentDialogContent } from "./AttachEnvironmentDialogContent";

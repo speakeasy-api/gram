@@ -2,7 +2,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Button } from "@speakeasy-api/moonshine";
 import { LucideIcon } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { useRoutes } from "@/routes";
 
 interface FeatureRequestModalProps {

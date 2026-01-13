@@ -19,7 +19,7 @@ import { useEffect, useState } from "react";
 import { FileCode, FunctionSquare, TriangleAlertIcon } from "lucide-react";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useRoutes } from "@/routes";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 interface AttachEnvironmentDialogContentProps {
   asset: NamedAsset;

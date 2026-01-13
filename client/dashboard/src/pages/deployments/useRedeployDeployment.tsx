@@ -6,7 +6,7 @@ import {
   useRedeployDeploymentMutation,
 } from "@gram/client/react-query/redeployDeployment.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 /**
  * A wrapper around the useRedeployDeploymentMutation hook that adds UI

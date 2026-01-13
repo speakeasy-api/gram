@@ -8,6 +8,7 @@ import { createContext, useContext, useEffect, useMemo, useRef } from "react";
 import { useLocation, useParams } from "react-router";
 import { useTelemetry } from "./Telemetry";
 import { handleError } from "@/lib/errors";
+import { initializeToastClient } from "@/lib/toast";
 
 export const SdkContext = createContext<Gram>({} as Gram);
 
@@ -98,6 +99,11 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
       previousProjectSlug.current = projectSlug;
     }
   }, [projectSlug, queryClient]);
+
+  // Initialize toast client for notification persistence
+  useEffect(() => {
+    initializeToastClient(gram);
+  }, [gram]);
 
   return (
     <QueryClientProvider client={queryClient}>

@@ -10,10 +10,8 @@ package client
 import (
 	"encoding/json"
 	"fmt"
-	"unicode/utf8"
 
 	telemetry "github.com/speakeasy-api/gram/server/gen/telemetry"
-	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildSearchLogsPayload builds the payload for the telemetry searchLogs
@@ -24,7 +22,7 @@ func BuildSearchLogsPayload(telemetrySearchLogsBody string, telemetrySearchLogsA
 	{
 		err = json.Unmarshal([]byte(telemetrySearchLogsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Officiis aperiam doloribus cumque debitis.\",\n      \"filter\": {\n         \"deployment_id\": \"cc95e0d4-134d-4b7a-ae2b-4cbbad7a1164\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"9b235b94-5287-408b-b75e-6f994c9857fc\",\n         \"gram_urn\": \"Aliquam distinctio sapiente pariatur et.\",\n         \"gram_urns\": [\n            \"Debitis voluptatem.\",\n            \"Voluptatibus qui fugit pariatur sint sequi ratione.\"\n         ],\n         \"http_method\": \"PUT\",\n         \"http_route\": \"Explicabo cumque fugit.\",\n         \"http_status_code\": 67963776,\n         \"service_name\": \"Consequatur quia culpa sed cumque.\",\n         \"severity_text\": \"FATAL\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"5e4466348999aa198e863bcac1341c27\"\n      },\n      \"limit\": 394,\n      \"sort\": \"asc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Rerum voluptas laboriosam.\",\n      \"filter\": {\n         \"deployment_id\": \"17ae3873-b592-4080-9b99-f60babf76ac5\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"82618edf-1a1a-4652-993a-2606427451d3\",\n         \"gram_urn\": \"Est rem odit non sit et sapiente.\",\n         \"gram_urns\": [\n            \"Eveniet aut impedit nemo ratione ipsum.\",\n            \"Repellat distinctio.\",\n            \"Ullam qui ex ducimus.\"\n         ],\n         \"http_method\": \"GET\",\n         \"http_route\": \"Vero qui nobis hic assumenda possimus quod.\",\n         \"http_status_code\": 1148685577,\n         \"service_name\": \"Inventore laudantium nam quidem.\",\n         \"severity_text\": \"FATAL\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"dc2e5f46ee574134993dbecb09d61aad\"\n      },\n      \"limit\": 953,\n      \"sort\": \"asc\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -80,7 +78,7 @@ func BuildSearchToolCallsPayload(telemetrySearchToolCallsBody string, telemetryS
 	{
 		err = json.Unmarshal([]byte(telemetrySearchToolCallsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Eos tenetur.\",\n      \"filter\": {\n         \"deployment_id\": \"9b4524ad-0b95-4498-8388-d5603da0d257\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"a2723eaa-d3f6-4efc-ba9c-0734702e0f96\",\n         \"gram_urn\": \"Autem quis.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 238,\n      \"sort\": \"desc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Aut atque cupiditate.\",\n      \"filter\": {\n         \"deployment_id\": \"f1a72f9f-cc14-47d0-ad4e-6f828779f97d\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"e30916c8-50ad-49c4-bb40-1f57560e65ee\",\n         \"gram_urn\": \"Debitis aut ut.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 484,\n      \"sort\": \"desc\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -124,70 +122,6 @@ func BuildSearchToolCallsPayload(telemetrySearchToolCallsBody string, telemetryS
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildCaptureEventPayload builds the payload for the telemetry captureEvent
-// endpoint from CLI flags.
-func BuildCaptureEventPayload(telemetryCaptureEventBody string, telemetryCaptureEventApikeyToken string, telemetryCaptureEventSessionToken string, telemetryCaptureEventProjectSlugInput string, telemetryCaptureEventChatSessionsToken string) (*telemetry.CaptureEventPayload, error) {
-	var err error
-	var body CaptureEventRequestBody
-	{
-		err = json.Unmarshal([]byte(telemetryCaptureEventBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"distinct_id\": \"Quidem praesentium eos consequuntur delectus.\",\n      \"event\": \"button_clicked\",\n      \"properties\": {\n         \"button_name\": \"submit\",\n         \"page\": \"checkout\",\n         \"value\": 100\n      }\n   }'")
-		}
-		if utf8.RuneCountInString(body.Event) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.event", body.Event, utf8.RuneCountInString(body.Event), 1, true))
-		}
-		if utf8.RuneCountInString(body.Event) > 255 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.event", body.Event, utf8.RuneCountInString(body.Event), 255, false))
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var apikeyToken *string
-	{
-		if telemetryCaptureEventApikeyToken != "" {
-			apikeyToken = &telemetryCaptureEventApikeyToken
-		}
-	}
-	var sessionToken *string
-	{
-		if telemetryCaptureEventSessionToken != "" {
-			sessionToken = &telemetryCaptureEventSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if telemetryCaptureEventProjectSlugInput != "" {
-			projectSlugInput = &telemetryCaptureEventProjectSlugInput
-		}
-	}
-	var chatSessionsToken *string
-	{
-		if telemetryCaptureEventChatSessionsToken != "" {
-			chatSessionsToken = &telemetryCaptureEventChatSessionsToken
-		}
-	}
-	v := &telemetry.CaptureEventPayload{
-		Event:      body.Event,
-		DistinctID: body.DistinctID,
-	}
-	if body.Properties != nil {
-		v.Properties = make(map[string]any, len(body.Properties))
-		for key, val := range body.Properties {
-			tk := key
-			tv := val
-			v.Properties[tk] = tv
-		}
-	}
-	v.ApikeyToken = apikeyToken
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-	v.ChatSessionsToken = chatSessionsToken
 
 	return v, nil
 }

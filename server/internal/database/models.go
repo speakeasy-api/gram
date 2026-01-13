@@ -379,6 +379,23 @@ type McpRegistry struct {
 	Deleted   bool
 }
 
+type Notification struct {
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	Type         string
+	Level        string
+	Title        string
+	Message      pgtype.Text
+	ActorUserID  pgtype.Text
+	ResourceType pgtype.Text
+	ResourceID   pgtype.Text
+	ArchivedAt   pgtype.Timestamptz
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
+}
+
 type OauthProxyClientInfo struct {
 	McpSlug                 string
 	ClientID                string

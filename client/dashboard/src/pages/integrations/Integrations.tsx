@@ -22,7 +22,7 @@ import {
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 export default function Integrations() {
   const { data: integrations, refetch } = useListIntegrations();
