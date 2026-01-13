@@ -96,26 +96,43 @@ normalize_files() {
   done
 }
 
-transform_callouts() {
-  echo "==> Transforming blockquote notes to Callout components"
+transform_to_mdx() {
+  echo "==> Transforming markdown to MDX (callouts, h3 separators)"
 
+  # Process .md files - transform and convert to .mdx
   find "$dest_path" -type f -name '*.md' | while read -r f; do
-    # Check if file contains any note/warning/tip blockquotes
+    has_callouts=""
+    has_h3=""
+
+    # Check for callouts and h3 headings
     if grep -qE '^> \*\*(Note|Warning|Tip|Important|Caution):\*\*' "$f"; then
-      tmp=$(mktemp)
+      has_callouts="true"
+    fi
+    if grep -qE '^### ' "$f"; then
+      has_h3="true"
+    fi
 
-      # Transform blockquotes to Callout components
-      # Maps: Note/Tip -> info, Warning/Important/Caution -> warning
-      perl -pe '
-        s/^> \*\*Note:\*\* ?(.*)$/<Callout type="info">$1<\/Callout>/;
-        s/^> \*\*Tip:\*\* ?(.*)$/<Callout type="info">$1<\/Callout>/;
-        s/^> \*\*Warning:\*\* ?(.*)$/<Callout type="warning">$1<\/Callout>/;
-        s/^> \*\*Important:\*\* ?(.*)$/<Callout type="warning">$1<\/Callout>/;
-        s/^> \*\*Caution:\*\* ?(.*)$/<Callout type="warning">$1<\/Callout>/;
-      ' "$f" > "$tmp"
+    # Skip if no transformations needed
+    if [ -z "$has_callouts" ] && [ -z "$has_h3" ]; then
+      continue
+    fi
 
-      # Add import statement after frontmatter
-      # Find the closing --- of frontmatter and insert import after it
+    tmp=$(mktemp)
+
+    # Transform callouts and add hr before h3 headings
+    perl -pe '
+      # Transform callouts
+      s/^> \*\*Note:\*\* ?(.*)$/<Callout type="info">$1<\/Callout>/;
+      s/^> \*\*Tip:\*\* ?(.*)$/<Callout type="info">$1<\/Callout>/;
+      s/^> \*\*Warning:\*\* ?(.*)$/<Callout type="warning">$1<\/Callout>/;
+      s/^> \*\*Important:\*\* ?(.*)$/<Callout type="warning">$1<\/Callout>/;
+      s/^> \*\*Caution:\*\* ?(.*)$/<Callout type="warning">$1<\/Callout>/;
+      # Add hr separator before h3 headings
+      s/^(### .*)$/\n<hr className="api-docs-separator" \/>\n\n$1/;
+    ' "$f" > "$tmp"
+
+    # Add import statement after frontmatter if callouts were used
+    if [ -n "$has_callouts" ]; then
       perl -i -pe '
         if (/^---$/ && $seen_first) {
           $_ .= "\nimport { Callout } from \"\@/mdx/components\";\n";
@@ -123,14 +140,14 @@ transform_callouts() {
         }
         $seen_first = 1 if /^---$/ && !$seen_first;
       ' "$tmp"
-
-      mv "$tmp" "$f"
-
-      # Rename .md to .mdx
-      new_file="${f%.md}.mdx"
-      mv "$f" "$new_file"
-      echo "  Converted to MDX with Callouts: $(basename "$new_file")"
     fi
+
+    mv "$tmp" "$f"
+
+    # Rename .md to .mdx
+    new_file="${f%.md}.mdx"
+    mv "$f" "$new_file"
+    echo "  Converted to MDX: $(basename "$new_file")"
   done
 }
 
@@ -260,7 +277,7 @@ transform_links() {
 # Run all steps
 sync_docs
 normalize_files
-transform_callouts
+transform_to_mdx
 generate_indexes
 transform_links
 
