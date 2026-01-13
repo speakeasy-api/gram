@@ -811,7 +811,8 @@ app.use(express.json());
 
 app.post("/chat/session", (req, res) =>
   handlers.session(req, res, {
-    embedOrigin: "http://localhost:5173",
+    // Replace with your actual origin
+    embedOrigin: process.env.EMBED_ORIGIN || "http://localhost:3000",
     userIdentifier: "user-123", // Replace with actual user ID
     expiresAfter: 3600,
   })
