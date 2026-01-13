@@ -1,6 +1,7 @@
-import { isApiKeyAuth } from '@/lib/auth'
-import { AuthConfig } from '../types'
+import { hasExplicitSessionAuth, isApiKeyAuth } from '@/lib/auth'
+import { ApiConfig } from '../types'
 import { useSession } from './useSession'
+import { useMemo } from 'react'
 
 export type Auth =
   | {
@@ -33,17 +34,24 @@ export const useAuth = ({
   projectSlug,
   auth,
 }: {
-  auth?: AuthConfig
+  auth?: ApiConfig
   projectSlug: string
 }): Auth => {
+  const getSession = useMemo(() => {
+    if (isApiKeyAuth(auth)) {
+      return null
+    }
+    return !isApiKeyAuth(auth) && hasExplicitSessionAuth(auth)
+      ? auth.sessionFn
+      : defaultGetSession
+  }, [auth])
   // The session request is only neccessary if we are not using an API key auth
   // configuration. If a custom session fetcher is provided, we use it,
   // otherwise we fallback to the default session fetcher
   const session = useSession({
+    // We want to check it's NOT API key auth, as the default auth scheme is session auth (if the user hasn't provided an explicit API config, we have a session auth config by default)
     enabled: !isApiKeyAuth(auth),
-    getSession: !isApiKeyAuth(auth)
-      ? (auth?.sessionFn ?? defaultGetSession)
-      : null,
+    getSession,
     projectSlug,
   })
 
