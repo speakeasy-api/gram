@@ -6,7 +6,18 @@ Elements is a library built for the agentic age. We provide customizable and ele
 
 ### Frontend Setup
 
-First ensure that you have installed the required peer dependencies:
+The easiest way to install Elements and all its peer dependencies:
+
+```bash
+npx @gram-ai/elements install
+```
+
+This will automatically detect your package manager and install everything you need.
+
+<details>
+<summary>Manual installation</summary>
+
+If you prefer to install manually, first install the peer dependencies:
 
 ```bash
 pnpm add react react-dom motion remark-gfm zustand vega shiki
@@ -18,9 +29,11 @@ Then install Elements:
 pnpm add @gram-ai/elements
 ```
 
+</details>
+
 ### Backend Setup
 
-If you're only using the server handlers (`@gram-ai/elements/server`), you can install without React:
+If you're only using the server handlers (`@gram-ai/elements/server`), you can install without needing to install any of the React peer dependencies:
 
 ```bash
 pnpm add @gram-ai/elements
