@@ -22,9 +22,13 @@
     },
     "./elements.css": "./dist/elements.css"
   },
+  "bin": {
+    "elements": "./bin/cli.js"
+  },
   "files": [
     "dist",
-    "src"
+    "src",
+    "bin"
   ],
   "repository": {
     "type": "git",
