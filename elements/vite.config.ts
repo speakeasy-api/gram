@@ -26,8 +26,6 @@ export default defineConfig({
         'react-dom',
         'react/jsx-runtime',
         // Externalize heavy dependencies - consumers must install these
-        '@assistant-ui/react',
-        '@assistant-ui/react-markdown',
         'motion',
         'motion/react',
         'motion/react-m',
@@ -36,8 +34,6 @@ export default defineConfig({
         'remark-gfm',
         'vega',
         'shiki',
-        // Server dependencies (optional)
-        'openai',
       ],
       output: {
         globals: {
