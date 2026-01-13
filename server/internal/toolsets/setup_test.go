@@ -84,11 +84,12 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 
 	enc := testenv.NewEncryptionClient(t)
 	funcs := testenv.NewFunctionsTestOrchestrator(t)
+	mcpRegistryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
 
 	f := &feature.InMemory{}
 
 	temporal, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs))
+	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs, mcpRegistryClient))
 	t.Cleanup(func() {
 		worker.Stop()
 		temporal.Close()
@@ -109,7 +110,7 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	svc := toolsets.NewService(logger, conn, sessionManager, nil)
-	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t))
+	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient)
 	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage)
 	packagesSvc := packages.NewService(logger, conn, sessionManager)
 
