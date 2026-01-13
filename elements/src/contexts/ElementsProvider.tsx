@@ -69,7 +69,7 @@ const ElementsProviderWithApproval = ({
   config,
 }: ElementsProviderProps) => {
   const apiUrl = getApiUrl(config)
-  const [chatId] = useState(() => config.chatId ?? uuidv7())
+  const [chatId] = useState(() => uuidv7())
   const auth = useAuth({
     auth: config.api,
     projectSlug: config.projectSlug,
@@ -103,7 +103,7 @@ const ElementsProviderWithApproval = ({
     auth,
     mcp: config.mcp,
     environment: config.environment ?? {},
-    envSlug: config.envSlug,
+    gramEnvironment: config.gramEnvironment,
   })
 
   // Store approval helpers in ref so they can be used in async contexts
@@ -225,13 +225,11 @@ const ElementsProviderWithApproval = ({
       mcpToolsLoading,
       getApprovalHelpers,
       apiUrl,
-      // Note: auth.headers accessed via authRef to ensure current value at send time
     ]
   )
 
   const runtime = useChatRuntime({
     transport,
-    messages: config.initialMessages,
   })
 
   return (

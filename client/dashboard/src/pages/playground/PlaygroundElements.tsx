@@ -15,8 +15,6 @@ import {
 } from "./PlaygroundElementsOverrides";
 import { useEnvironment } from "../environments/Environment";
 import { getAuthStatus } from "./PlaygroundAuth";
-import { useChatContext } from "./ChatContext";
-import { useChatHistory } from "./ChatHistory";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 
@@ -44,14 +42,7 @@ export function PlaygroundElements({
   const session = useSession();
   const project = useProject();
   const createSessionMutation = useChatSessionsCreateMutation();
-  const chat = useChatContext();
   const { resolvedTheme } = useTheme();
-
-  // Load existing chat messages if chatId is from URL
-  const { chatHistory, isLoading: isChatHistoryLoading } = useChatHistory(
-    chat.id,
-  );
-  const hasExistingChat = chatHistory.length > 0;
 
   // Get toolset data to construct MCP URL
   const { data: toolsetsData } = useListToolsets();
@@ -107,15 +98,6 @@ export function PlaygroundElements({
     );
   }
 
-  // Don't render until chat history is loaded (to avoid showing empty then populated)
-  if (isChatHistoryLoading) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <Type muted>Loading...</Type>
-      </div>
-    );
-  }
-
   return (
     <GramElementsProvider
       config={{
@@ -125,11 +107,8 @@ export function PlaygroundElements({
           sessionFn: getSession,
         },
         mcp: mcpUrl,
-        envSlug: environmentSlug ?? undefined,
+        gramEnvironment: environmentSlug ?? undefined,
         variant: "standalone",
-        // Always pass chatId to ensure dashboard and Elements use the same ID
-        chatId: chat.id,
-        initialMessages: hasExistingChat ? chatHistory : undefined,
         model: {
           defaultModel: model as Model,
           showModelPicker: false,

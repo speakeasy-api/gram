@@ -7,7 +7,7 @@ import {
   TextMessagePartComponent,
   ToolCallMessagePartComponent,
 } from '@assistant-ui/react'
-import { LanguageModel, UIMessage } from 'ai'
+import { LanguageModel } from 'ai'
 import {
   ComponentType,
   Dispatch,
@@ -112,14 +112,14 @@ export interface ElementsConfig {
   environment?: Record<string, unknown>
 
   /**
-   * The environment slug for server-side environment variable resolution.
+   * The Gram environment slug for server-side environment variable resolution.
    * When provided, the MCP server will resolve environment variables
    * from the stored environment instead of using client-provided values.
    *
    * This is useful for authenticated contexts where you don't want to
    * expose environment variable values to the client.
    */
-  envSlug?: string
+  gramEnvironment?: string
 
   /**
    * The layout variant for the chat interface.
@@ -282,18 +282,6 @@ export interface ElementsConfig {
      */
     url?: string
   } & AuthConfig
-
-  /**
-   * The chat ID to use. If not provided, a new one will be generated.
-   * Pass this when loading a previously saved conversation.
-   */
-  chatId?: string
-
-  /**
-   * Initial messages to display in the chat.
-   * Used when loading a previously saved conversation.
-   */
-  initialMessages?: UIMessage[]
 }
 
 export type SessionAuthConfig = {
