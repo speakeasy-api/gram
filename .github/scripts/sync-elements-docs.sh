@@ -97,29 +97,33 @@ normalize_files() {
 }
 
 transform_to_mdx() {
-  echo "==> Transforming markdown to MDX (callouts, h3 separators)"
+  echo "==> Transforming markdown to MDX (callouts, h3 separators, h4 to italic)"
 
   # Process .md files - transform and convert to .mdx
   find "$dest_path" -type f -name '*.md' | while read -r f; do
     has_callouts=""
     has_h3=""
+    has_h4=""
 
-    # Check for callouts and h3 headings
+    # Check for callouts and h3/h4 headings
     if grep -qE '^> \*\*(Note|Warning|Tip|Important|Caution):\*\*' "$f"; then
       has_callouts="true"
     fi
     if grep -qE '^### ' "$f"; then
       has_h3="true"
     fi
+    if grep -qE '^#### ' "$f"; then
+      has_h4="true"
+    fi
 
     # Skip if no transformations needed
-    if [ -z "$has_callouts" ] && [ -z "$has_h3" ]; then
+    if [ -z "$has_callouts" ] && [ -z "$has_h3" ] && [ -z "$has_h4" ]; then
       continue
     fi
 
     tmp=$(mktemp)
 
-    # Transform callouts and add hr before h3 headings
+    # Transform callouts, add hr before h3 headings, convert h4 to italic
     perl -pe '
       # Transform callouts
       s/^> \*\*Note:\*\* ?(.*)$/<Callout type="info">$1<\/Callout>/;
@@ -129,6 +133,8 @@ transform_to_mdx() {
       s/^> \*\*Caution:\*\* ?(.*)$/<Callout type="warning">$1<\/Callout>/;
       # Add hr separator before h3 headings
       s/^(### .*)$/\n<hr className="api-docs-separator" \/>\n\n$1/;
+      # Convert h4 headings to italic
+      s/^#### (.*)$/*$1*/;
     ' "$f" > "$tmp"
 
     # Add import statement after frontmatter if callouts were used
