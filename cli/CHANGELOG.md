@@ -1,5 +1,11 @@
 # cli
 
+## 0.15.2
+
+### Patch Changes
+
+- 98be8a0: CLI opens deployment URL in browser after `gram push`
+
 ## 0.15.1
 
 ### Patch Changes

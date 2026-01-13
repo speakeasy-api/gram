@@ -1,5 +1,16 @@
 # dashboard
 
+## 0.26.0
+
+### Minor Changes
+
+- eefebf6: Add updated elements onboarding
+
+### Patch Changes
+
+- Updated dependencies [f744f2b]
+  - @gram-ai/elements@1.18.8
+
 ## 0.25.2
 
 ### Patch Changes
