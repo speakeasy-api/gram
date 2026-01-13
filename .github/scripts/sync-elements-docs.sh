@@ -33,6 +33,11 @@ sync_docs() {
     touch "$dest_path/.keep" 2>/dev/null || true
 
     # Use _media/README.md as quickstart.md at root level
+    # Remove old .mdx version if it exists
+    if [ -f "$dest_path/quickstart.mdx" ]; then
+      rm "$dest_path/quickstart.mdx"
+      echo "  Removed: quickstart.mdx (replaced by quickstart.md)"
+    fi
     if [ -f "$src_path/_media/README.md" ]; then
       cp "$src_path/_media/README.md" "$dest_path/quickstart.md"
       echo "  Copied: _media/README.md -> quickstart.md"
