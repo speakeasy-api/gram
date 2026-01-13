@@ -319,9 +319,9 @@ export default function ChatElements() {
       </Page.Header>
       <Page.Body>
         <Page.Section>
-          <Page.Section.Title>Gram Elements</Page.Section.Title>
+          <Page.Section.Title>Chat Elements</Page.Section.Title>
           <Page.Section.Description>
-            Embeddable AI chat components for your applications
+            Embeddable AI chat experience for your applications
           </Page.Section.Description>
           <Page.Section.CTA>
             <Tabs

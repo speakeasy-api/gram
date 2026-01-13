@@ -127,9 +127,9 @@ const ROUTE_STRUCTURE = {
     component: Playground,
   },
   elements: {
-    title: "Elements",
+    title: "Chat Elements",
     url: "elements",
-    icon: "dock",
+    icon: "atom",
     component: Elements,
   },
   integrations: {
