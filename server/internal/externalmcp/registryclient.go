@@ -12,6 +12,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-retryablehttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -26,10 +28,15 @@ type RegistryClient struct {
 }
 
 // NewRegistryClient creates a new registry client.
-func NewRegistryClient(logger *slog.Logger) *RegistryClient {
+func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider) *RegistryClient {
 	return &RegistryClient{
-		httpClient: retryablehttp.NewClient().StandardClient(),
-		logger:     logger,
+		httpClient: &http.Client{
+			Transport: otelhttp.NewTransport(
+				retryablehttp.NewClient().StandardClient().Transport,
+				otelhttp.WithTracerProvider(tracerProvider),
+			),
+		},
+		logger: logger,
 	}
 }
 
@@ -65,7 +72,7 @@ type serverJSON struct {
 	Version     string  `json:"version"`
 	Title       *string `json:"title"`
 	WebsiteURL  *string `json:"websiteUrl"`
-	Icons []struct {
+	Icons       []struct {
 		Src string `json:"src"`
 	} `json:"icons"`
 	Remotes []serverRemote `json:"remotes"`

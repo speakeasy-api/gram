@@ -79,7 +79,7 @@ func NewProcessDeployment(
 		projects:       projectsRepo.New(db),
 		billingRepo:    billingRepo,
 		externalmcp:    externalmcpRepo.New(db),
-		registryClient: externalmcp.NewRegistryClient(logger),
+		registryClient: externalmcp.NewRegistryClient(logger, tracerProvider),
 	}
 }
 

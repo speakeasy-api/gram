@@ -1,5 +1,11 @@
 # server
 
+## 0.17.3
+
+### Patch Changes
+
+- 54a32f4: Updated the function deployment temporal activity so it spawns multiple goroutines to deploy functions in parallel. This should in theory speed up deployments with several functions.
+
 ## 0.17.2
 
 ### Patch Changes
