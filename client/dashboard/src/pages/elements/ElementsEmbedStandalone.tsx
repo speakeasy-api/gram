@@ -59,14 +59,15 @@ export function ElementsEmbedStandalone() {
     // Signal to parent that we're ready
     window.parent.postMessage(
       { type: "ELEMENTS_READY" },
-      window.location.origin
+      window.location.origin,
     );
 
     return () => window.removeEventListener("message", handleMessage);
   }, []);
 
   const gradientStyle = {
-    background: "linear-gradient(135deg, #89CFF0 0%, #5DADE2 25%, #3498DB 50%, #85C1E9 75%, #AED6F1 100%)",
+    background:
+      "linear-gradient(135deg, #89CFF0 0%, #5DADE2 25%, #3498DB 50%, #85C1E9 75%, #AED6F1 100%)",
   };
 
   if (!config || !sessionToken) {
@@ -120,7 +121,7 @@ export function ElementsEmbedStandalone() {
         style={{
           height: "100vh",
           width: "100vw",
-          padding: "24px",
+          padding: "60px",
           boxSizing: "border-box",
           ...gradientStyle,
         }}
@@ -129,9 +130,11 @@ export function ElementsEmbedStandalone() {
           style={{
             height: "100%",
             width: "100%",
-            borderRadius: "12px",
+            borderRadius: "24px",
             overflow: "hidden",
             boxShadow: "0 8px 32px rgba(0, 0, 0, 0.15)",
+            top: "20px",
+            position: "relative",
           }}
         >
           <GramElementsProvider config={elementsConfig}>
