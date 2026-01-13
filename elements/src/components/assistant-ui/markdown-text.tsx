@@ -9,7 +9,7 @@ import {
   useIsMarkdownCodeBlock,
 } from '@assistant-ui/react-markdown'
 import { CheckIcon, CopyIcon } from 'lucide-react'
-import { type FC, memo, useState } from 'react'
+import { type FC, useState } from 'react'
 import remarkGfm from 'remark-gfm'
 
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
@@ -18,7 +18,7 @@ import { useElements } from '@/hooks/useElements'
 import { useComponentsByLanguage } from '@/hooks/usePluginComponents'
 import { useAssistantState } from '@assistant-ui/react'
 
-const MarkdownTextImpl = () => {
+export const MarkdownText = () => {
   const { plugins } = useElements()
   const componentsByLanguage = useComponentsByLanguage(plugins)
 
@@ -28,11 +28,10 @@ const MarkdownTextImpl = () => {
       className="aui-md"
       components={defaultComponents}
       componentsByLanguage={componentsByLanguage}
+      smooth={false}
     />
   )
 }
-
-export const MarkdownText = memo(MarkdownTextImpl)
 
 const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
   const message = useAssistantState(({ message }) => message)

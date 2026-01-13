@@ -14,7 +14,7 @@ export const ChartRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<View | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const messageIsComplete = message.status?.type === 'complete'
+  // const messageIsComplete = message.status?.type === 'complete'
   const r = useRadius()
   const d = useDensity()
 
@@ -24,14 +24,25 @@ export const ChartRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
     if (!trimmedCode) return null
 
     try {
-      return JSON.parse(trimmedCode) as Record<string, unknown>
+      const spec = JSON.parse(trimmedCode) as Record<string, unknown>
+
+      // Validate that data array exists and has at least one record with values
+      const dataArray = spec.data as Array<{ values?: unknown[] }> | undefined
+      if (!dataArray?.length) return null
+
+      const hasValidData = dataArray.some((d) =>
+        Array.isArray(d.values) && d.values.length > 0
+      )
+      if (!hasValidData) return null
+
+      return spec
     } catch {
       return null
     }
   }, [code])
 
   // Only render when we have valid JSON AND message is complete
-  const shouldRender = messageIsComplete && parsedSpec !== null
+  const shouldRender = parsedSpec !== null
 
   useEffect(() => {
     if (!containerRef.current || !shouldRender) {
@@ -78,7 +89,7 @@ export const ChartRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
     <div
       className={cn(
         // the after:hidden is to prevent assistant-ui from showing its default code block loading indicator
-        'relative flex min-h-[400px] w-fit max-w-full min-w-[400px] items-center justify-center border p-6 after:hidden',
+        'relative flex min-h-[400px] w-fit max-w-full min-w-[400px] items-center justify-center overflow-scroll border p-6 after:hidden',
         r('lg'),
         d('p-lg')
       )}

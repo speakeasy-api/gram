@@ -32,6 +32,9 @@ const DEFAULT_ELEMENTS_CONFIG: ElementsConfig = {
     placeholder: 'Ask me anything...',
     attachments: true,
   },
+  model: {
+    defaultModel: 'google/gemini-3-pro-preview',
+  },
   modal: {
     defaultOpen: true,
     expandable: true,
