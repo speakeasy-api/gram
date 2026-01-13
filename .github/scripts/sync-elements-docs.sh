@@ -33,11 +33,6 @@ sync_docs() {
     touch "$dest_path/.keep" 2>/dev/null || true
 
     # Use _media/README.md as quickstart.md at root level
-    # Remove old .mdx version if it exists
-    if [ -f "$dest_path/quickstart.mdx" ]; then
-      rm "$dest_path/quickstart.mdx"
-      echo "  Removed: quickstart.mdx (replaced by quickstart.md)"
-    fi
     if [ -f "$src_path/_media/README.md" ]; then
       cp "$src_path/_media/README.md" "$dest_path/quickstart.md"
       echo "  Copied: _media/README.md -> quickstart.md"
@@ -101,6 +96,44 @@ normalize_files() {
   done
 }
 
+transform_callouts() {
+  echo "==> Transforming blockquote notes to Callout components"
+
+  find "$dest_path" -type f -name '*.md' | while read -r f; do
+    # Check if file contains any note/warning/tip blockquotes
+    if grep -qE '^> \*\*(Note|Warning|Tip|Important|Caution):\*\*' "$f"; then
+      tmp=$(mktemp)
+
+      # Transform blockquotes to Callout components
+      # Maps: Note/Tip -> info, Warning/Important/Caution -> warning
+      perl -pe '
+        s/^> \*\*Note:\*\* ?(.*)$/<Callout type="info">$1<\/Callout>/;
+        s/^> \*\*Tip:\*\* ?(.*)$/<Callout type="info">$1<\/Callout>/;
+        s/^> \*\*Warning:\*\* ?(.*)$/<Callout type="warning">$1<\/Callout>/;
+        s/^> \*\*Important:\*\* ?(.*)$/<Callout type="warning">$1<\/Callout>/;
+        s/^> \*\*Caution:\*\* ?(.*)$/<Callout type="warning">$1<\/Callout>/;
+      ' "$f" > "$tmp"
+
+      # Add import statement after frontmatter
+      # Find the closing --- of frontmatter and insert import after it
+      perl -i -pe '
+        if (/^---$/ && $seen_first) {
+          $_ .= "\nimport { Callout } from \"\@/mdx/components\";\n";
+          $done = 1;
+        }
+        $seen_first = 1 if /^---$/ && !$seen_first;
+      ' "$tmp"
+
+      mv "$tmp" "$f"
+
+      # Rename .md to .mdx
+      new_file="${f%.md}.mdx"
+      mv "$f" "$new_file"
+      echo "  Converted to MDX with Callouts: $(basename "$new_file")"
+    fi
+  done
+}
+
 generate_indexes() {
   echo "==> Generating index.md for subdirectories"
 
@@ -125,9 +158,10 @@ generate_indexes() {
       echo "---" >> "$index_file"
       echo "" >> "$index_file"
 
-      # List all .md files except index.md, sorted alphabetically
-      for f in $(find "$dir_path" -maxdepth 1 -name '*.md' ! -name 'index.md' -type f | sort); do
-        filename=$(basename "$f" .md)
+      # List all .md and .mdx files except index.md, sorted alphabetically
+      for f in $(find "$dir_path" -maxdepth 1 \( -name '*.md' -o -name '*.mdx' \) ! -name 'index.md' -type f | sort); do
+        # Strip either .md or .mdx extension
+        filename=$(basename "$f" | sed 's/\.mdx\?$//')
         # Extract original title from frontmatter
         file_title=$(sed -n 's/^title: //p' "$f" | head -1)
         if [ -z "$file_title" ]; then
@@ -226,6 +260,7 @@ transform_links() {
 # Run all steps
 sync_docs
 normalize_files
+transform_callouts
 generate_indexes
 transform_links
 
