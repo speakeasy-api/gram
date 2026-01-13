@@ -8,12 +8,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Type } from "@/components/ui/type";
 import {
-  MessagePrimitive,
+  useGramElements,
   ThreadPrimitive,
+  MessagePrimitive,
   useAssistantApi,
   useAssistantState,
-} from "@assistant-ui/react";
-import { useGramElements } from "@gram-ai/elements";
+} from "@gram-ai/elements";
 import { type FC } from "react";
 import { usePlaygroundAuthWarning } from "./PlaygroundElements";
 import { useRoutes } from "@/routes";

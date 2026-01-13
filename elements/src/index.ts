@@ -43,3 +43,19 @@ export type {
 export { MODELS } from './lib/models'
 
 export type { Plugin } from './types/plugins'
+
+export {
+  ActionBarPrimitive,
+  AssistantModalPrimitive,
+  AttachmentPrimitive,
+  BranchPickerPrimitive,
+  ComposerPrimitive,
+  ErrorPrimitive,
+  MessagePartPrimitive,
+  MessagePrimitive,
+  ThreadListItemPrimitive,
+  ThreadListPrimitive,
+  ThreadPrimitive,
+  useAssistantApi,
+  useAssistantState,
+} from '@assistant-ui/react'
