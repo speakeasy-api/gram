@@ -103,7 +103,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	require.NoError(t, worker.Start(), "start temporal worker")
 
 	toolsSvc := tools.NewService(logger, conn, sessionManager)
-	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthog)
+	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t))
 	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage)
 	packagesSvc := packages.NewService(logger, conn, sessionManager)
 	toolsetsSvc := toolsets.NewService(logger, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient))
