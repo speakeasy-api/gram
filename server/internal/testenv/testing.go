@@ -2,18 +2,30 @@ package testenv
 
 import (
 	"log/slog"
+	"net/url"
 	"os"
 	"testing"
 
-	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/functions"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 	tracernoop "go.opentelemetry.io/otel/trace/noop"
+
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
+
+func DefaultSiteURL(t *testing.T) *url.URL {
+	t.Helper()
+	val := conv.Default(os.Getenv("GRAM_SITE_URL"), "https://localhost:5173")
+	parsed, err := url.Parse(val)
+	require.NoError(t, err, "expected default site URL to parse")
+	return parsed
+
+}
 
 func NewFunctionsTestOrchestrator(t *testing.T) functions.Orchestrator {
 	t.Helper()
