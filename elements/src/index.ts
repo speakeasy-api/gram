@@ -25,6 +25,7 @@ export type {
   Dimensions,
   ElementsConfig,
   GetSessionFn,
+  HistoryConfig,
   ModalConfig,
   ModalTriggerPosition,
   Model,
