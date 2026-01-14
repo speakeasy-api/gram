@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -350,4 +351,267 @@ func TestService_ServeChatAttachment_CrossProjectAccess(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
+func TestService_ServeChatAttachment_WithChatSessionToken_Success(t *testing.T) {
+	t.Parallel()
+
+	baseCtx, ti := newTestAssetsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(baseCtx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	require.NotNil(t, authCtx.ProjectSlug)
+
+	projectID := *authCtx.ProjectID
+
+	token, _, err := ti.chatSessionsManager.GenerateToken(t.Context(), chatsessions.ChatSessionClaims{
+		OrgID:            authCtx.ActiveOrganizationID,
+		ProjectID:        projectID.String(),
+		OrganizationSlug: authCtx.OrganizationSlug,
+		ProjectSlug:      *authCtx.ProjectSlug,
+	}, "http://localhost", 3600)
+	require.NoError(t, err)
+
+	ctx, err := ti.chatSessionsManager.Authorize(t.Context(), token)
+	require.NoError(t, err)
+
+	contentType := "text/plain"
+	testContent := "chat session served attachment content"
+	contentLength := int64(len(testContent))
+	filename := "chat-session-attachment.txt"
+
+	// Setup storage with test content
+	writer, uri, err := ti.storage.Write(ctx, filename, contentType, contentLength)
+	require.NoError(t, err)
+
+	_, err = io.Copy(writer, strings.NewReader(testContent))
+	require.NoError(t, err)
+
+	err = writer.Close()
+	require.NoError(t, err)
+
+	// Create asset in database
+	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
+		Name:          filename,
+		Url:           uri.String(),
+		ProjectID:     projectID,
+		Sha256:        "chatsessionhash123",
+		Kind:          "chat_attachment",
+		ContentType:   contentType,
+		ContentLength: contentLength,
+	})
+	require.NoError(t, err)
+
+	// Call ServeChatAttachment with chat session token
+	result, body, err := ti.service.ServeChatAttachment(ctx, &assets.ServeChatAttachmentForm{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ChatSessionsToken: &token,
+		ProjectID:         projectID.String(),
+		ID:                asset.ID.String(),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, body)
+
+	require.Equal(t, contentType, result.ContentType)
+	require.Equal(t, contentLength, result.ContentLength)
+	require.NotEmpty(t, result.LastModified)
+
+	bodyBytes, err := io.ReadAll(body)
+	require.NoError(t, err)
+	require.Equal(t, testContent, string(bodyBytes))
+
+	err = body.Close()
+	require.NoError(t, err)
+}
+
+func TestService_ServeChatAttachment_WithChatSessionToken_AssetNotFound(t *testing.T) {
+	t.Parallel()
+
+	baseCtx, ti := newTestAssetsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(baseCtx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	require.NotNil(t, authCtx.ProjectSlug)
+
+	projectID := *authCtx.ProjectID
+
+	token, _, err := ti.chatSessionsManager.GenerateToken(t.Context(), chatsessions.ChatSessionClaims{
+		OrgID:            authCtx.ActiveOrganizationID,
+		ProjectID:        projectID.String(),
+		OrganizationSlug: authCtx.OrganizationSlug,
+		ProjectSlug:      *authCtx.ProjectSlug,
+	}, "http://localhost", 3600)
+	require.NoError(t, err)
+
+	ctx, err := ti.chatSessionsManager.Authorize(t.Context(), token)
+	require.NoError(t, err)
+
+	nonExistentID := uuid.New()
+
+	_, _, err = ti.service.ServeChatAttachment(ctx, &assets.ServeChatAttachmentForm{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ChatSessionsToken: &token,
+		ProjectID:         projectID.String(),
+		ID:                nonExistentID.String(),
+	})
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
+func TestService_ServeChatAttachment_WithChatSessionToken_WrongProject(t *testing.T) {
+	t.Parallel()
+
+	// Use two separate test instances to get two different projects
+	baseCtx1, ti := newTestAssetsService(t)
+
+	authCtx1, ok := contextvalues.GetAuthContext(baseCtx1)
+	require.True(t, ok)
+	require.NotNil(t, authCtx1.ProjectID)
+	require.NotNil(t, authCtx1.ProjectSlug)
+
+	project1ID := *authCtx1.ProjectID
+
+	// Create a second project in the same organization
+	baseCtx2 := testenv.InitAuthContext(t, t.Context(), ti.conn, ti.sessionManager)
+	authCtx2, ok := contextvalues.GetAuthContext(baseCtx2)
+	require.True(t, ok)
+	require.NotNil(t, authCtx2.ProjectID)
+	require.NotNil(t, authCtx2.ProjectSlug)
+
+	project2ID := *authCtx2.ProjectID
+	require.NotEqual(t, project1ID, project2ID)
+
+	// Create asset in project1
+	token1, _, err := ti.chatSessionsManager.GenerateToken(t.Context(), chatsessions.ChatSessionClaims{
+		OrgID:            authCtx1.ActiveOrganizationID,
+		ProjectID:        project1ID.String(),
+		OrganizationSlug: authCtx1.OrganizationSlug,
+		ProjectSlug:      *authCtx1.ProjectSlug,
+	}, "http://localhost", 3600)
+	require.NoError(t, err)
+
+	ctx1, err := ti.chatSessionsManager.Authorize(t.Context(), token1)
+	require.NoError(t, err)
+
+	contentType := "text/plain"
+	testContent := "project1 attachment content"
+	contentLength := int64(len(testContent))
+	filename := "project1-attachment.txt"
+
+	writer, uri, err := ti.storage.Write(ctx1, filename, contentType, contentLength)
+	require.NoError(t, err)
+
+	_, err = io.Copy(writer, strings.NewReader(testContent))
+	require.NoError(t, err)
+
+	err = writer.Close()
+	require.NoError(t, err)
+
+	asset, err := ti.repo.CreateAsset(ctx1, repo.CreateAssetParams{
+		Name:          filename,
+		Url:           uri.String(),
+		ProjectID:     project1ID,
+		Sha256:        "project1hash",
+		Kind:          "chat_attachment",
+		ContentType:   contentType,
+		ContentLength: contentLength,
+	})
+	require.NoError(t, err)
+
+	// Create chat session for project2
+	token2, _, err := ti.chatSessionsManager.GenerateToken(t.Context(), chatsessions.ChatSessionClaims{
+		OrgID:            authCtx2.ActiveOrganizationID,
+		ProjectID:        project2ID.String(),
+		OrganizationSlug: authCtx2.OrganizationSlug,
+		ProjectSlug:      *authCtx2.ProjectSlug,
+	}, "http://localhost", 3600)
+	require.NoError(t, err)
+
+	ctx2, err := ti.chatSessionsManager.Authorize(t.Context(), token2)
+	require.NoError(t, err)
+
+	// Try to access project1's asset from project2's context
+	_, _, err = ti.service.ServeChatAttachment(ctx2, &assets.ServeChatAttachmentForm{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ChatSessionsToken: &token2,
+		ProjectID:         project2ID.String(),
+		ID:                asset.ID.String(),
+	})
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
+func TestService_ServeChatAttachment_WithChatSessionToken_UploadAndServe(t *testing.T) {
+	t.Parallel()
+
+	baseCtx, ti := newTestAssetsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(baseCtx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	require.NotNil(t, authCtx.ProjectSlug)
+
+	projectID := *authCtx.ProjectID
+
+	token, _, err := ti.chatSessionsManager.GenerateToken(t.Context(), chatsessions.ChatSessionClaims{
+		OrgID:            authCtx.ActiveOrganizationID,
+		ProjectID:        projectID.String(),
+		OrganizationSlug: authCtx.OrganizationSlug,
+		ProjectSlug:      *authCtx.ProjectSlug,
+	}, "http://localhost", 3600)
+	require.NoError(t, err)
+
+	ctx, err := ti.chatSessionsManager.Authorize(t.Context(), token)
+	require.NoError(t, err)
+
+	// Upload via chat session
+	content := "end-to-end chat session attachment test"
+	contentType := "text/plain"
+	contentLength := int64(len(content))
+
+	uploadResult, err := ti.service.UploadChatAttachment(ctx, &assets.UploadChatAttachmentForm{
+		ApikeyToken:       nil,
+		SessionToken:      nil,
+		ProjectSlugInput:  nil,
+		ChatSessionsToken: &token,
+		ContentType:       contentType,
+		ContentLength:     contentLength,
+	}, io.NopCloser(strings.NewReader(content)))
+	require.NoError(t, err)
+	require.NotNil(t, uploadResult)
+	require.NotNil(t, uploadResult.Asset)
+
+	// Serve via chat session
+	serveResult, body, err := ti.service.ServeChatAttachment(ctx, &assets.ServeChatAttachmentForm{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ChatSessionsToken: &token,
+		ProjectID:         projectID.String(),
+		ID:                uploadResult.Asset.ID,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, serveResult)
+	require.NotNil(t, body)
+
+	require.Equal(t, contentType, serveResult.ContentType)
+	require.Equal(t, contentLength, serveResult.ContentLength)
+
+	bodyBytes, err := io.ReadAll(body)
+	require.NoError(t, err)
+	require.Equal(t, content, string(bodyBytes))
+
+	err = body.Close()
+	require.NoError(t, err)
 }

@@ -85,6 +85,7 @@ export function setServeChatAttachmentData(
       projectId: string;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
+      gramChatSession?: string | undefined;
     },
   ],
   data: ServeChatAttachmentQueryData,
@@ -102,6 +103,7 @@ export function invalidateServeChatAttachment(
       projectId: string;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
+      gramChatSession?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,

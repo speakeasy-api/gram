@@ -1845,12 +1845,13 @@ func EncodeUploadChatAttachmentResponse(encoder func(context.Context, http.Respo
 func DecodeUploadChatAttachmentRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*assets.UploadChatAttachmentForm, error) {
 	return func(r *http.Request) (*assets.UploadChatAttachmentForm, error) {
 		var (
-			contentType      string
-			contentLength    int64
-			apikeyToken      *string
-			projectSlugInput *string
-			sessionToken     *string
-			err              error
+			contentType       string
+			contentLength     int64
+			apikeyToken       *string
+			projectSlugInput  *string
+			sessionToken      *string
+			chatSessionsToken *string
+			err               error
 		)
 		contentType = r.Header.Get("Content-Type")
 		if contentType == "" {
@@ -1879,10 +1880,14 @@ func DecodeUploadChatAttachmentRequest(mux goahttp.Muxer, decoder func(*http.Req
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
+		chatSessionsTokenRaw := r.Header.Get("Gram-Chat-Session")
+		if chatSessionsTokenRaw != "" {
+			chatSessionsToken = &chatSessionsTokenRaw
+		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewUploadChatAttachmentForm(contentType, contentLength, apikeyToken, projectSlugInput, sessionToken)
+		payload := NewUploadChatAttachmentForm(contentType, contentLength, apikeyToken, projectSlugInput, sessionToken, chatSessionsToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1902,6 +1907,13 @@ func DecodeUploadChatAttachmentRequest(mux goahttp.Muxer, decoder func(*http.Req
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
+			}
+		}
+		if payload.ChatSessionsToken != nil {
+			if strings.Contains(*payload.ChatSessionsToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ChatSessionsToken, " ", 2)[1]
+				payload.ChatSessionsToken = &cred
 			}
 		}
 
@@ -2087,11 +2099,12 @@ func EncodeServeChatAttachmentResponse(encoder func(context.Context, http.Respon
 func DecodeServeChatAttachmentRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*assets.ServeChatAttachmentForm, error) {
 	return func(r *http.Request) (*assets.ServeChatAttachmentForm, error) {
 		var (
-			id           string
-			projectID    string
-			apikeyToken  *string
-			sessionToken *string
-			err          error
+			id                string
+			projectID         string
+			apikeyToken       *string
+			sessionToken      *string
+			chatSessionsToken *string
+			err               error
 		)
 		qp := r.URL.Query()
 		id = qp.Get("id")
@@ -2110,10 +2123,14 @@ func DecodeServeChatAttachmentRequest(mux goahttp.Muxer, decoder func(*http.Requ
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
+		chatSessionsTokenRaw := r.Header.Get("Gram-Chat-Session")
+		if chatSessionsTokenRaw != "" {
+			chatSessionsToken = &chatSessionsTokenRaw
+		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewServeChatAttachmentForm(id, projectID, apikeyToken, sessionToken)
+		payload := NewServeChatAttachmentForm(id, projectID, apikeyToken, sessionToken, chatSessionsToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2126,6 +2143,13 @@ func DecodeServeChatAttachmentRequest(mux goahttp.Muxer, decoder func(*http.Requ
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
+			}
+		}
+		if payload.ChatSessionsToken != nil {
+			if strings.Contains(*payload.ChatSessionsToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ChatSessionsToken, " ", 2)[1]
+				payload.ChatSessionsToken = &cred
 			}
 		}
 

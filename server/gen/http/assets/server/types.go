@@ -3508,25 +3508,27 @@ func NewListAssetsPayload(sessionToken *string, projectSlugInput *string, apikey
 
 // NewUploadChatAttachmentForm builds a assets service uploadChatAttachment
 // endpoint payload.
-func NewUploadChatAttachmentForm(contentType string, contentLength int64, apikeyToken *string, projectSlugInput *string, sessionToken *string) *assets.UploadChatAttachmentForm {
+func NewUploadChatAttachmentForm(contentType string, contentLength int64, apikeyToken *string, projectSlugInput *string, sessionToken *string, chatSessionsToken *string) *assets.UploadChatAttachmentForm {
 	v := &assets.UploadChatAttachmentForm{}
 	v.ContentType = contentType
 	v.ContentLength = contentLength
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.SessionToken = sessionToken
+	v.ChatSessionsToken = chatSessionsToken
 
 	return v
 }
 
 // NewServeChatAttachmentForm builds a assets service serveChatAttachment
 // endpoint payload.
-func NewServeChatAttachmentForm(id string, projectID string, apikeyToken *string, sessionToken *string) *assets.ServeChatAttachmentForm {
+func NewServeChatAttachmentForm(id string, projectID string, apikeyToken *string, sessionToken *string, chatSessionsToken *string) *assets.ServeChatAttachmentForm {
 	v := &assets.ServeChatAttachmentForm{}
 	v.ID = id
 	v.ProjectID = projectID
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
+	v.ChatSessionsToken = chatSessionsToken
 
 	return v
 }

@@ -2121,6 +2121,10 @@ func EncodeUploadChatAttachmentRequest(encoder func(*http.Request) goahttp.Encod
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		if p.ChatSessionsToken != nil {
+			head := *p.ChatSessionsToken
+			req.Header.Set("Gram-Chat-Session", head)
+		}
 		return nil
 	}
 }
@@ -2368,6 +2372,10 @@ func EncodeServeChatAttachmentRequest(encoder func(*http.Request) goahttp.Encode
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
+		}
+		if p.ChatSessionsToken != nil {
+			head := *p.ChatSessionsToken
+			req.Header.Set("Gram-Chat-Session", head)
 		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)

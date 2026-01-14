@@ -51,6 +51,7 @@ export function buildServeChatAttachmentQuery(
       projectId: request.projectId,
       gramKey: request.gramKey,
       gramSession: request.gramSession,
+      gramChatSession: request.gramChatSession,
     }),
     queryFn: async function serveChatAttachmentQueryFn(
       ctx,
@@ -82,6 +83,7 @@ export function queryKeyServeChatAttachment(
     projectId: string;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
+    gramChatSession?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "assets", "serveChatAttachment", parameters];

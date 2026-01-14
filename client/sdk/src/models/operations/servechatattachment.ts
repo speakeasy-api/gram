@@ -12,6 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 export type ServeChatAttachmentSecurity = {
   apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
+  chatSessionsTokenHeaderGramChatSession?: string | undefined;
 };
 
 export type ServeChatAttachmentRequest = {
@@ -31,6 +32,10 @@ export type ServeChatAttachmentRequest = {
    * Session header
    */
   gramSession?: string | undefined;
+  /**
+   * Chat Sessions token header
+   */
+  gramChatSession?: string | undefined;
 };
 
 export type ServeChatAttachmentResponse = {
@@ -42,6 +47,7 @@ export type ServeChatAttachmentResponse = {
 export type ServeChatAttachmentSecurity$Outbound = {
   "apikey_header_Gram-Key"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
+  "chat_sessions_token_header_Gram-Chat-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -52,10 +58,13 @@ export const ServeChatAttachmentSecurity$outboundSchema: z.ZodType<
 > = z.object({
   apikeyHeaderGramKey: z.string().optional(),
   sessionHeaderGramSession: z.string().optional(),
+  chatSessionsTokenHeaderGramChatSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     apikeyHeaderGramKey: "apikey_header_Gram-Key",
     sessionHeaderGramSession: "session_header_Gram-Session",
+    chatSessionsTokenHeaderGramChatSession:
+      "chat_sessions_token_header_Gram-Chat-Session",
   });
 });
 
@@ -75,6 +84,7 @@ export type ServeChatAttachmentRequest$Outbound = {
   project_id: string;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
+  "Gram-Chat-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -87,11 +97,13 @@ export const ServeChatAttachmentRequest$outboundSchema: z.ZodType<
   projectId: z.string(),
   gramKey: z.string().optional(),
   gramSession: z.string().optional(),
+  gramChatSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     projectId: "project_id",
     gramKey: "Gram-Key",
     gramSession: "Gram-Session",
+    gramChatSession: "Gram-Chat-Session",
   });
 });
 
