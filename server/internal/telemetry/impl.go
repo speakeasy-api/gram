@@ -632,9 +632,16 @@ func (s *Service) CaptureEvent(ctx context.Context, payload *telem_gen.CaptureEv
 	properties["user_id"] = authCtx.UserID
 	properties["external_user_id"] = authCtx.ExternalUserID
 
+	// Capture event in PostHog
+	if err := s.posthog.CaptureEvent(ctx, payload.Event, distinctID, properties); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to capture event").
+			Log(ctx, s.logger,
+				attr.SlogEvent(payload.Event),
+			)
+	}
+
 	s.logger.DebugContext(ctx, "captured telemetry event",
 		attr.SlogEvent(payload.Event),
-		attr.SlogDistinctID(distinctID),
 	)
 
 	return &telem_gen.CaptureEventResult{
