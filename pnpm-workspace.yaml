@@ -25,6 +25,7 @@ catalog:
 minimumReleaseAge: 10080
 
 minimumReleaseAgeExclude:
+  - 'react-router'
   - '@speakeasy-api/moonshine'
 
 onlyBuiltDependencies:
