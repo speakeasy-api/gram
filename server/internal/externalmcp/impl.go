@@ -36,7 +36,7 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient) *Service {
 	logger = logger.With(attr.SlogComponent("externalmcp"))
 
 	return &Service{
@@ -45,7 +45,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		db:             db,
 		repo:           repo.New(db),
 		auth:           auth.New(logger, db, sessions),
-		registryClient: NewRegistryClient(logger, tracerProvider),
+		registryClient: registryClient,
 	}
 }
 

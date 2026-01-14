@@ -24,8 +24,6 @@ import (
 	polargo "github.com/polarsource/polar-go"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
-	"github.com/speakeasy-api/gram/server/internal/inv"
-	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/superfly/fly-go/tokens"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
@@ -40,12 +38,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -544,4 +546,20 @@ func newFunctionOrchestrator(
 	default:
 		return nil, nilShutdown, fmt.Errorf("unrecognized functions provider: %s", provider)
 	}
+}
+
+type mcpRegistryClientOptions struct {
+	pulseTenantID string
+	pulseAPIKey   conv.Secret
+}
+
+func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, opts mcpRegistryClientOptions) (*externalmcp.RegistryClient, error) {
+	pulseURL, err := url.Parse("https://api.pulsemcp.com")
+	if err != nil {
+		return nil, fmt.Errorf("parse pulse registry url: %w", err)
+	}
+
+	backend := externalmcp.NewPulseBackend(pulseURL, opts.pulseTenantID, opts.pulseAPIKey)
+
+	return externalmcp.NewRegistryClient(logger, tracerProvider, backend), nil
 }

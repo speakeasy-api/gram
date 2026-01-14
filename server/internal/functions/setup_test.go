@@ -80,9 +80,10 @@ func newTestFunctionsService(t *testing.T) (context.Context, *testInstance) {
 
 	assetStorage := assetstest.NewTestBlobStore(t)
 	tigrisStore := assets.NewTigrisStore(assetStorage)
+	mcpRegistryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
 
 	temporal, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs))
+	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs, mcpRegistryClient))
 	t.Cleanup(func() {
 		worker.Stop()
 		temporal.Close()
@@ -103,7 +104,7 @@ func newTestFunctionsService(t *testing.T) (context.Context, *testInstance) {
 	ph := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
 	svc := functions.NewService(logger, tracerProvider, conn, enc, tigrisStore)
-	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, ph, testenv.DefaultSiteURL(t))
+	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, ph, testenv.DefaultSiteURL(t), mcpRegistryClient)
 	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage)
 
 	return ctx, &testInstance{

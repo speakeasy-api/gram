@@ -9,11 +9,24 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	tracernoop "go.opentelemetry.io/otel/trace/noop"
+
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type PassthroughBackend struct{}
+
+var _ RegistryBackend = (*PassthroughBackend)(nil)
+
+func (p *PassthroughBackend) Authorize(req *http.Request) error {
+	return nil
+}
+
+func (p *PassthroughBackend) Match(req *http.Request) bool {
+	return false
+}
 
 func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 	t.Parallel()
@@ -42,7 +55,7 @@ func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, testenv.NewTracerProvider(t))
+	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{})
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -87,7 +100,7 @@ func TestGetServerDetails_OnlySSE(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, testenv.NewTracerProvider(t))
+	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{})
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -133,7 +146,7 @@ func TestGetServerDetails_PrefersStreamableHTTPOverSSE(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, testenv.NewTracerProvider(t))
+	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{})
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),

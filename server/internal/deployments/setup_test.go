@@ -69,11 +69,12 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 
 	enc := testenv.NewEncryptionClient(t)
 	funcs := testenv.NewFunctionsTestOrchestrator(t)
+	mcpRegistryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
 
 	f := &feature.InMemory{}
 
 	temporal, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs))
+	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs, mcpRegistryClient))
 	t.Cleanup(func() {
 		worker.Stop()
 		temporal.Close()
@@ -93,7 +94,7 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
-	svc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t))
+	svc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient)
 	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage)
 	packagesSvc := packages.NewService(logger, conn, sessionManager)
 
