@@ -14,7 +14,11 @@ import {
 import { recommended } from '@/plugins'
 import { ElementsConfig, Model } from '@/types'
 import { Plugin } from '@/types/plugins'
-import { AssistantRuntimeProvider } from '@assistant-ui/react'
+import {
+  AssistantRuntimeProvider,
+  AssistantTool,
+  unstable_useRemoteThreadListRuntime as useRemoteThreadListRuntime,
+} from '@assistant-ui/react'
 import {
   frontendTools as convertFrontendToolsToAISDKTools,
   useChatRuntime,
@@ -41,6 +45,7 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { ElementsContext } from './contexts'
 import { ToolApprovalProvider } from './ToolApprovalContext'
+import { useGramThreadListAdapter } from '@/hooks/useGramThreadListAdapter'
 
 export interface ElementsProviderProps {
   children: ReactNode
@@ -117,7 +122,7 @@ const ElementsProviderWithApproval = ({
     plugins
   )
 
-  const { data: mcpTools, isLoading: mcpToolsLoading } = useMCPTools({
+  const { data: mcpTools } = useMCPTools({
     auth,
     mcp: config.mcp,
     environment: config.environment ?? {},
@@ -160,9 +165,12 @@ const ElementsProviderWithApproval = ({
     }
   }, [config.tools?.toolsRequiringApproval, getApprovalHelpers])
 
-  // Create custom transport
-  const transport = useMemo<ChatTransport<UIMessage> | undefined>(
-    () => ({
+  // Store runtime ref for use in transport
+  const runtimeRef = useRef<ReturnType<typeof useChatRuntime> | null>(null)
+
+  // Create custom transport factory - returns transport config
+  const createTransport = useCallback(
+    (): ChatTransport<UIMessage> => ({
       sendMessages: async ({ messages, abortSignal }) => {
         const usingCustomModel = !!config.languageModel
 
@@ -170,7 +178,7 @@ const ElementsProviderWithApproval = ({
           throw new Error('Session is loading')
         }
 
-        const context = runtime.thread.getModelContext()
+        const context = runtimeRef.current?.thread.getModelContext()
         const frontendTools = toAISDKTools(
           getEnabledTools(context?.tools ?? {})
         )
@@ -236,47 +244,161 @@ const ElementsProviderWithApproval = ({
       },
     }),
     [
-      config,
       config.languageModel,
+      config.tools?.toolsRequiringApproval,
       model,
       systemPrompt,
       mcpTools,
-      mcpToolsLoading,
       getApprovalHelpers,
       apiUrl,
       auth.headers,
+      auth.isLoading,
     ]
   )
 
-  const runtime = useChatRuntime({
-    transport,
+  // Create transport instance
+  const transport = useMemo(() => createTransport(), [createTransport])
+
+  // Check if history is enabled
+  const historyEnabled = config.history?.enabled ?? false
+
+  // Shared context value
+  const contextValue = useMemo(
+    () => ({
+      config,
+      setModel,
+      model,
+      isExpanded,
+      setIsExpanded,
+      isOpen: isOpen ?? false,
+      setIsOpen,
+      plugins,
+    }),
+    [config, model, isExpanded, isOpen, plugins]
+  )
+
+  // Memoize frontendTools to avoid unnecessary re-renders
+  const frontendTools = useMemo(
+    () => config.tools?.frontendTools ?? {},
+    [config.tools?.frontendTools]
+  )
+
+  // Render the appropriate runtime provider based on history config
+  // We use separate components to avoid conditional hook calls
+  if (historyEnabled && !auth.isLoading) {
+    return (
+      <ElementsProviderWithHistory
+        transport={transport}
+        apiUrl={apiUrl}
+        headers={auth.headers}
+        contextValue={contextValue}
+        runtimeRef={runtimeRef}
+        frontendTools={frontendTools}
+      >
+        {children}
+      </ElementsProviderWithHistory>
+    )
+  }
+
+  return (
+    <ElementsProviderWithoutHistory
+      transport={transport}
+      contextValue={contextValue}
+      runtimeRef={runtimeRef}
+      frontendTools={frontendTools}
+    >
+      {children}
+    </ElementsProviderWithoutHistory>
+  )
+}
+
+// Separate component for history-enabled mode to avoid conditional hook calls
+interface ElementsProviderWithHistoryProps {
+  children: ReactNode
+  transport: ChatTransport<UIMessage>
+  apiUrl: string
+  headers: Record<string, string>
+  contextValue: React.ContextType<typeof ElementsContext>
+  runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>
+  frontendTools: Record<string, AssistantTool>
+}
+
+const ElementsProviderWithHistory = ({
+  children,
+  transport,
+  apiUrl,
+  headers,
+  contextValue,
+  runtimeRef,
+  frontendTools,
+}: ElementsProviderWithHistoryProps) => {
+  // Create thread list adapter with hook (stable component identity)
+  const threadListAdapter = useGramThreadListAdapter({ apiUrl, headers })
+
+  // Hook factory for creating the base chat runtime
+  const useChatRuntimeHook = useCallback(() => {
+    return useChatRuntime({ transport })
+  }, [transport])
+
+  const runtime = useRemoteThreadListRuntime({
+    adapter: threadListAdapter,
+    runtimeHook: useChatRuntimeHook,
   })
+
+  // Update runtime ref
+  runtimeRef.current = runtime as ReturnType<typeof useChatRuntime>
+
+  // Get the Provider from our adapter to wrap the content
+  const HistoryProvider =
+    threadListAdapter.unstable_Provider ??
+    (({ children }: { children: React.ReactNode }) => <>{children}</>)
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <ElementsContext.Provider
-        value={{
-          config,
-          setModel,
-          model,
-          isExpanded,
-          setIsExpanded,
-          isOpen: isOpen ?? false,
-          setIsOpen,
-          plugins,
-        }}
-      >
-        {children}
+      <HistoryProvider>
+        <ElementsContext.Provider value={contextValue}>
+          {children}
+          <FrontendTools tools={frontendTools} />
+        </ElementsContext.Provider>
+      </HistoryProvider>
+    </AssistantRuntimeProvider>
+  )
+}
 
-        {/* Doesn't render anything, but is used to register frontend tools */}
-        <FrontendTools tools={config.tools?.frontendTools ?? {}} />
+// Separate component for non-history mode to avoid conditional hook calls
+interface ElementsProviderWithoutHistoryProps {
+  children: ReactNode
+  transport: ChatTransport<UIMessage>
+  contextValue: React.ContextType<typeof ElementsContext>
+  runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>
+  frontendTools: Record<string, AssistantTool>
+}
+
+const ElementsProviderWithoutHistory = ({
+  children,
+  transport,
+  contextValue,
+  runtimeRef,
+  frontendTools,
+}: ElementsProviderWithoutHistoryProps) => {
+  const runtime = useChatRuntime({ transport })
+
+  // Update runtime ref
+  runtimeRef.current = runtime
+
+  return (
+    <AssistantRuntimeProvider runtime={runtime}>
+      <ElementsContext.Provider value={contextValue}>
+        {children}
+        <FrontendTools tools={frontendTools} />
       </ElementsContext.Provider>
     </AssistantRuntimeProvider>
   )
 }
 
+const queryClient = new QueryClient()
+
 export const ElementsProvider = (props: ElementsProviderProps) => {
-  const queryClient = new QueryClient()
   return (
     <QueryClientProvider client={queryClient}>
       <ToolApprovalProvider>
