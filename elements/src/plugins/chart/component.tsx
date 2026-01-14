@@ -86,7 +86,7 @@ export const ChartRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
     <div
       className={cn(
         // the after:hidden is to prevent assistant-ui from showing its default code block loading indicator
-        'relative flex min-h-[400px] w-fit max-w-full min-w-[400px] items-center justify-center overflow-scroll border p-6 after:hidden',
+        'relative min-h-[400px] w-fit max-w-full min-w-[400px] overflow-auto border p-6 after:hidden',
         r('lg'),
         d('p-lg')
       )}
