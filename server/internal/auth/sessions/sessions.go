@@ -99,6 +99,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 		SessionID:            &session.SessionID,
 		ActiveOrganizationID: session.ActiveOrganizationID,
 		UserID:               session.UserID,
+		ExternalUserID:       "",
 		ProjectID:            nil,
 		OrganizationSlug:     "",
 		Email:                nil,

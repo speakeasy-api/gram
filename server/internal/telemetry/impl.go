@@ -14,6 +14,7 @@ import (
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -34,12 +35,16 @@ type Service struct {
 	logger        *slog.Logger
 	tcm           ToolMetricsProvider
 	tracer        trace.Tracer
+	posthog       PosthogClient
+	chatSessions  *chatsessions.Manager
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
+var _ telem_gen.Service = (*Service)(nil)
+var _ telem_gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, tcm ToolMetricsProvider, features *productfeatures.Client) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, chatSessions *chatsessions.Manager, tcm ToolMetricsProvider, features *productfeatures.Client, posthogClient PosthogClient) *Service {
 	logger = logger.With(attr.SlogComponent("logs"))
 
 	return &Service{
@@ -49,6 +54,8 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		featureClient: features,
 		tcm:           tcm,
 		tracer:        otel.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
+		posthog:       posthogClient,
+		chatSessions:  chatSessions,
 	}
 }
 
@@ -74,6 +81,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JWTScheme) (context.Context, error) {
+	return s.chatSessions.Authorize(ctx, token)
 }
 
 func (s *Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (res *gen.ListToolLogResponse, err error) {
@@ -589,5 +600,44 @@ func toTelemetryLogPayload(log repo.TelemetryLog) (*telem_gen.TelemetryLogRecord
 			Name:    log.ServiceName,
 			Version: log.ServiceVersion,
 		},
+	}, nil
+}
+
+// CaptureEvent captures a telemetry event and forwards it to PostHog.
+func (s *Service) CaptureEvent(ctx context.Context, payload *telem_gen.CaptureEventPayload) (res *telem_gen.CaptureEventResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Use provided distinct_id or default to organization ID
+	distinctID := authCtx.ActiveOrganizationID
+	if payload.DistinctID != nil && *payload.DistinctID != "" {
+		distinctID = *payload.DistinctID
+	}
+
+	// Build event properties
+	properties := make(map[string]interface{})
+	if payload.Properties != nil {
+		properties = payload.Properties
+	}
+
+	if authCtx.Email != nil {
+		properties["email"] = *authCtx.Email
+	}
+	if authCtx.ProjectSlug != nil {
+		properties["project_slug"] = *authCtx.ProjectSlug
+	}
+	properties["organization_slug"] = authCtx.OrganizationSlug
+	properties["user_id"] = authCtx.UserID
+	properties["external_user_id"] = authCtx.ExternalUserID
+
+	s.logger.DebugContext(ctx, "captured telemetry event",
+		attr.SlogEvent(payload.Event),
+		attr.SlogDistinctID(distinctID),
+	)
+
+	return &telem_gen.CaptureEventResult{
+		Success: true,
 	}, nil
 }

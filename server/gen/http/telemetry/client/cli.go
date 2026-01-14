@@ -10,8 +10,10 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	telemetry "github.com/speakeasy-api/gram/server/gen/telemetry"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildSearchLogsPayload builds the payload for the telemetry searchLogs
@@ -122,6 +124,70 @@ func BuildSearchToolCallsPayload(telemetrySearchToolCallsBody string, telemetryS
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCaptureEventPayload builds the payload for the telemetry captureEvent
+// endpoint from CLI flags.
+func BuildCaptureEventPayload(telemetryCaptureEventBody string, telemetryCaptureEventApikeyToken string, telemetryCaptureEventSessionToken string, telemetryCaptureEventProjectSlugInput string, telemetryCaptureEventChatSessionsToken string) (*telemetry.CaptureEventPayload, error) {
+	var err error
+	var body CaptureEventRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryCaptureEventBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"distinct_id\": \"Occaecati iste sed vel eos.\",\n      \"event\": \"button_clicked\",\n      \"properties\": {\n         \"button_name\": \"submit\",\n         \"page\": \"checkout\",\n         \"value\": 100\n      }\n   }'")
+		}
+		if utf8.RuneCountInString(body.Event) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.event", body.Event, utf8.RuneCountInString(body.Event), 1, true))
+		}
+		if utf8.RuneCountInString(body.Event) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.event", body.Event, utf8.RuneCountInString(body.Event), 255, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryCaptureEventApikeyToken != "" {
+			apikeyToken = &telemetryCaptureEventApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryCaptureEventSessionToken != "" {
+			sessionToken = &telemetryCaptureEventSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryCaptureEventProjectSlugInput != "" {
+			projectSlugInput = &telemetryCaptureEventProjectSlugInput
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if telemetryCaptureEventChatSessionsToken != "" {
+			chatSessionsToken = &telemetryCaptureEventChatSessionsToken
+		}
+	}
+	v := &telemetry.CaptureEventPayload{
+		Event:      body.Event,
+		DistinctID: body.DistinctID,
+	}
+	if body.Properties != nil {
+		v.Properties = make(map[string]any, len(body.Properties))
+		for key, val := range body.Properties {
+			tk := key
+			tv := val
+			v.Properties[tk] = tv
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
 
 	return v, nil
 }

@@ -11,6 +11,7 @@ type contextKey string
 type AuthContext struct {
 	ActiveOrganizationID string
 	UserID               string
+	ExternalUserID       string // Customer-provided user identifier (e.g., from chat session JWTs)
 	SessionID            *string
 	ProjectID            *uuid.UUID
 	OrganizationSlug     string

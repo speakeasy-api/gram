@@ -7761,6 +7761,120 @@ paths:
             x-speakeasy-name-override: updateSlackConnection
             x-speakeasy-react-hook:
                 name: updateSlackConnection
+    /rpc/telemetry.captureEvent:
+        post:
+            description: Capture a telemetry event and forward it to PostHog
+            operationId: captureEvent
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+                - allowEmptyValue: true
+                  description: Chat Sessions token header
+                  in: header
+                  name: Gram-Chat-Session
+                  schema:
+                    description: Chat Sessions token header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CaptureEventPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CaptureEventResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - chat_sessions_token_header_Gram-Chat-Session: []
+            summary: captureEvent telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: captureEvent
     /rpc/telemetry.searchLogs:
         post:
             description: Search and list telemetry logs that match a search filter
@@ -11070,6 +11184,38 @@ components:
                 - variation_id
                 - name
                 - description
+        CaptureEventPayload:
+            type: object
+            properties:
+                distinct_id:
+                    type: string
+                    description: Distinct ID for the user or entity (defaults to organization ID if not provided)
+                event:
+                    type: string
+                    description: Event name
+                    example: button_clicked
+                    minLength: 1
+                    maxLength: 255
+                properties:
+                    type: object
+                    description: Event properties as key-value pairs
+                    example:
+                        button_name: submit
+                        page: checkout
+                        value: 100
+                    additionalProperties: true
+            description: Payload for capturing a telemetry event
+            required:
+                - event
+        CaptureEventResult:
+            type: object
+            properties:
+                success:
+                    type: boolean
+                    description: Whether the event was successfully captured
+            description: Result of capturing a telemetry event
+            required:
+                - success
         Chat:
             type: object
             properties:

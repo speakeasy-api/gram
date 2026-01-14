@@ -595,7 +595,7 @@ func newStartCommand() *cli.Command {
 			variations.Attach(mux, variations.NewService(logger, db, sessionManager))
 			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
 			usage.Attach(mux, usage.NewService(logger, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter))
-			tm.Attach(mux, tm.NewService(logger, db, sessionManager, tcm, productFeatures))
+			tm.Attach(mux, tm.NewService(logger, db, sessionManager, chatSessionsManager, tcm, productFeatures, posthogClient))
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 
 			srv := &http.Server{

@@ -40,12 +40,13 @@ const (
 	URLOriginalKey                    = semconv.URLOriginalKey
 	UserIDKey                         = semconv.UserIDKey
 
-	ActualKey   = attribute.Key("actual")
-	EventKey    = attribute.Key("event")
-	ExpectedKey = attribute.Key("expected")
-	NameKey     = attribute.Key("name")
-	ReasonKey   = attribute.Key("reason")
-	ValueKey    = attribute.Key("value")
+	ActualKey     = attribute.Key("actual")
+	DistinctIDKey = attribute.Key("distinct_id")
+	EventKey      = attribute.Key("event")
+	ExpectedKey   = attribute.Key("expected")
+	NameKey       = attribute.Key("name")
+	ReasonKey     = attribute.Key("reason")
+	ValueKey      = attribute.Key("value")
 
 	SpanIDKey              = attribute.Key("span.id")
 	TraceIDKey             = attribute.Key("trace.id")
@@ -289,6 +290,9 @@ func SlogUserID(v string) slog.Attr      { return slog.String(string(UserIDKey),
 
 func Actual(v any) attribute.KeyValue { return ActualKey.String(fmt.Sprintf("%v", v)) }
 func SlogActual(v any) slog.Attr      { return slog.Any(string(ActualKey), v) }
+
+func DistinctID(v string) attribute.KeyValue { return DistinctIDKey.String(v) }
+func SlogDistinctID(v string) slog.Attr      { return slog.String(string(DistinctIDKey), v) }
 
 func Event(v string) attribute.KeyValue { return EventKey.String(v) }
 func SlogEvent(v string) slog.Attr      { return slog.String(string(EventKey), v) }
