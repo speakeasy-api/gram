@@ -322,6 +322,11 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_LOCAL_FEATURE_FLAGS_CSV"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:    "custom-domain-cname",
+			Usage:   "The expected CNAME target for custom domain verification (e.g., cname.getgram.ai.)",
+			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_CNAME"},
+		},
 		&cli.PathFlag{
 			Name:     "config-file",
 			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",
@@ -632,7 +637,7 @@ func newStartCommand() *cli.Command {
 						OpenRouterChatClient: baseChatClient,
 						OpenRouter:           openRouter,
 						K8sClient:            k8sClient,
-						ExpectedTargetCNAME:  customdomains.GetCustomDomainCNAME(c.String("environment")),
+						ExpectedTargetCNAME:  c.String("custom-domain-cname"),
 						BillingTracker:       billingTracker,
 						BillingRepository:    billingRepo,
 						RedisClient:          redisClient,
