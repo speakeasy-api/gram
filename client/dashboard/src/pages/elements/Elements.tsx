@@ -5,6 +5,7 @@ import { cn, getServerURL } from "@/lib/utils";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
+import { useListToolsets } from "@gram/client/react-query/index.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,8 +23,10 @@ import {
   Check,
   ChevronDown,
   Pencil,
+  Plus,
   RefreshCw,
   Search,
+  Server,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { Button } from "@/components/ui/button";
@@ -32,6 +35,7 @@ import {
   CodeBlock,
   CodeBlockCopyButton,
 } from "@/components/ai-elements/code-block";
+import { useRoutes } from "@/routes";
 
 type ColorScheme = "light" | "dark" | "system";
 type Density = "compact" | "normal" | "spacious";
@@ -65,7 +69,7 @@ interface ElementsFormConfig {
 }
 
 const defaultConfig: ElementsFormConfig = {
-  mcp: "https://chat.speakeasy.com/mcp/speakeasy-team-my_api",
+  mcp: "",
   colorScheme: "system",
   density: "normal",
   radius: "soft",
@@ -183,7 +187,34 @@ export default function ChatElements() {
   );
 
   const [config, setConfig] = useState<ElementsFormConfig>(defaultConfig);
-  const [openSection, setOpenSection] = useState<string | null>("appearance");
+  const [openSection, setOpenSection] = useState<string | null>("connection");
+  const routes = useRoutes();
+
+  // Load available MCP servers (toolsets)
+  const { data: toolsetsData, isLoading: toolsetsLoading } = useListToolsets();
+  const toolsets = useMemo(
+    () =>
+      toolsetsData?.toolsets.sort((a, b) => a.name.localeCompare(b.name)) || [],
+    [toolsetsData],
+  );
+
+  // Helper to get MCP URL for a toolset
+  const getMcpUrl = (toolset: (typeof toolsets)[0]) => {
+    const urlSuffix = toolset.mcpSlug
+      ? toolset.mcpSlug
+      : `${project.slug}/${toolset.slug}/${toolset.defaultEnvironmentSlug}`;
+    return `${getServerURL()}/mcp/${urlSuffix}`;
+  };
+
+  // Set first available toolset as default when toolsets load
+  useEffect(() => {
+    if (toolsets.length > 0 && !config.mcp) {
+      const firstEnabledToolset = toolsets.find((t) => t.mcpEnabled);
+      if (firstEnabledToolset) {
+        updateConfig("mcp", getMcpUrl(firstEnabledToolset));
+      }
+    }
+  }, [toolsets]);
 
   const updateConfig = <K extends keyof ElementsFormConfig>(
     key: K,
@@ -348,6 +379,75 @@ export default function ChatElements() {
                   {/* Config Panel */}
 
                   <div className="w-1/3 h-full overflow-y-auto pr-4 space-y-6">
+                    {/* Connection */}
+                    <ConfigSection
+                      title="MCP"
+                      isOpen={openSection === "connection"}
+                      onToggle={() =>
+                        setOpenSection((prev) =>
+                          prev === "connection" ? null : "connection",
+                        )
+                      }
+                    >
+                      <ConfigField
+                        label="Connected Server"
+                        description="The chosen server's tools will be loaded into the chat context"
+                      >
+                        <div className="space-y-3">
+                          {toolsetsLoading ? (
+                            <div className="text-sm text-muted-foreground">
+                              Loading MCP servers...
+                            </div>
+                          ) : toolsets.length === 0 ? (
+                            <div className="text-sm text-muted-foreground">
+                              No MCP servers available. Add a source to create
+                              one.
+                            </div>
+                          ) : (
+                            <Select
+                              value={config.mcp}
+                              onValueChange={(v) => updateConfig("mcp", v)}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select an MCP server" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {toolsets.map((toolset) => {
+                                  const mcpUrl = getMcpUrl(toolset);
+                                  return (
+                                    <SelectItem
+                                      key={toolset.id}
+                                      value={mcpUrl}
+                                      disabled={!toolset.mcpEnabled}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <Server className="h-4 w-4 text-muted-foreground" />
+                                        <span>{toolset.name}</span>
+                                        {!toolset.mcpEnabled && (
+                                          <span className="text-xs text-muted-foreground">
+                                            (disabled)
+                                          </span>
+                                        )}
+                                      </div>
+                                    </SelectItem>
+                                  );
+                                })}
+                              </SelectContent>
+                            </Select>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            onClick={() => routes.toolsets.goTo()}
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add New MCP Server
+                          </Button>
+                        </div>
+                      </ConfigField>
+                    </ConfigSection>
+
                     {/* Appearance */}
                     <ConfigSection
                       title="Appearance"
@@ -619,28 +719,6 @@ export default function ChatElements() {
                           updateConfig("expandToolGroupsByDefault", checked)
                         }
                       />
-                    </ConfigSection>
-
-                    {/* Connection */}
-                    <ConfigSection
-                      title="Connection"
-                      isOpen={openSection === "connection"}
-                      onToggle={() =>
-                        setOpenSection((prev) =>
-                          prev === "connection" ? null : "connection",
-                        )
-                      }
-                    >
-                      <ConfigField
-                        label="MCP Server URL"
-                        description="The URL of your MCP server"
-                      >
-                        <Input
-                          value={config.mcp}
-                          onChange={(value) => updateConfig("mcp", value)}
-                          placeholder="https://..."
-                        />
-                      </ConfigField>
                     </ConfigSection>
                   </div>
 
