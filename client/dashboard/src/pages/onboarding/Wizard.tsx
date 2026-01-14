@@ -439,7 +439,7 @@ export const InitialChoiceStep = ({
         <ChoiceCard
           onClick={() => {
             onChoiceSelected("deploy_data_integrated_chat");
-            routes.deployChat.goTo();
+            routes.elements.goTo();
           }}
           icon={MessageSquare}
           title="Deploy Chat Connected To Your Data"

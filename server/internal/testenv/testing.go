@@ -2,18 +2,31 @@ package testenv
 
 import (
 	"log/slog"
+	"net/url"
 	"os"
 	"testing"
 
-	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/functions"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 	tracernoop "go.opentelemetry.io/otel/trace/noop"
+
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
+
+func DefaultSiteURL(t *testing.T) *url.URL {
+	t.Helper()
+	val := conv.Default(os.Getenv("GRAM_SITE_URL"), "https://localhost:5173")
+	parsed, err := url.Parse(val)
+	require.NoError(t, err, "expected default site URL to parse")
+	return parsed
+
+}
 
 func NewFunctionsTestOrchestrator(t *testing.T) functions.Orchestrator {
 	t.Helper()
@@ -57,4 +70,20 @@ func NewMeterProvider(t *testing.T) metric.MeterProvider {
 	t.Helper()
 
 	return metricnoop.NewMeterProvider()
+}
+
+func NewMCPRegistryClient(t *testing.T, logger *slog.Logger, tracerProvider trace.TracerProvider) *externalmcp.RegistryClient {
+	t.Helper()
+
+	pulseURL, err := url.Parse("https://api.pulsemcp.com")
+	require.NoError(t, err, "expected pulse URL to parse")
+
+	client := externalmcp.NewRegistryClient(
+		NewLogger(t),
+		tracerProvider,
+		externalmcp.NewPulseBackend(pulseURL, "test-tenant-id", conv.NewSecret([]byte("test-api-key"))),
+	)
+	require.NoError(t, err, "expected mcp registry client to initialize without error")
+
+	return client
 }

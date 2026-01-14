@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/assets"
 	srv "github.com/speakeasy-api/gram/server/gen/http/assets/server"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -411,4 +412,221 @@ func TestService_UploadChatAttachment_InvalidContentType(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnsupportedMedia, oopsErr.Code)
+}
+
+func TestService_UploadChatAttachment_WithChatSessionToken_Success(t *testing.T) {
+	t.Parallel()
+
+	// Get the base context (with auth context containing real org/project) and test instance
+	baseCtx, ti := newTestAssetsService(t)
+
+	// Get the auth context that was set up with real org/project
+	authCtx, ok := contextvalues.GetAuthContext(baseCtx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	require.NotNil(t, authCtx.ProjectSlug)
+
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+	orgSlug := authCtx.OrganizationSlug
+	projectSlug := *authCtx.ProjectSlug
+
+	// Generate a chat session token using the real org/project IDs
+	token, _, err := ti.chatSessionsManager.GenerateToken(t.Context(), chatsessions.ChatSessionClaims{
+		OrgID:            orgID,
+		ProjectID:        projectID.String(),
+		OrganizationSlug: orgSlug,
+		ProjectSlug:      projectSlug,
+	}, "http://localhost", 3600)
+	require.NoError(t, err)
+
+	// Authorize with the token to get context with auth
+	ctx, err := ti.chatSessionsManager.Authorize(t.Context(), token)
+	require.NoError(t, err)
+
+	content := "chat session uploaded content"
+	sha := sha256.Sum256([]byte(content))
+	expectedSha256 := hex.EncodeToString(sha[:])
+	contentType := "text/plain"
+	contentLength := int64(len(content))
+
+	result, err := ti.service.UploadChatAttachment(ctx, &assets.UploadChatAttachmentForm{
+		ApikeyToken:       nil,
+		SessionToken:      nil,
+		ProjectSlugInput:  nil,
+		ChatSessionsToken: &token,
+		ContentType:       contentType,
+		ContentLength:     contentLength,
+	}, io.NopCloser(strings.NewReader(content)))
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Asset)
+
+	require.NotEqual(t, uuid.Nil.String(), result.Asset.ID)
+	require.Equal(t, "chat_attachment", result.Asset.Kind)
+	require.Equal(t, contentType, result.Asset.ContentType)
+	require.Equal(t, contentLength, result.Asset.ContentLength)
+	require.Equal(t, expectedSha256, result.Asset.Sha256)
+	require.NotEmpty(t, result.Asset.CreatedAt)
+	require.NotEmpty(t, result.Asset.UpdatedAt)
+
+	// Verify the URL is correctly formatted with the project ID from the token
+	expectedURL := fmt.Sprintf("%s?id=%s&project_id=%s", srv.ServeChatAttachmentAssetsPath(), result.Asset.ID, projectID.String())
+	require.Equal(t, expectedURL, result.URL)
+}
+
+func TestService_UploadChatAttachment_WithChatSessionToken_ImagePng(t *testing.T) {
+	t.Parallel()
+
+	baseCtx, ti := newTestAssetsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(baseCtx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	require.NotNil(t, authCtx.ProjectSlug)
+
+	token, _, err := ti.chatSessionsManager.GenerateToken(t.Context(), chatsessions.ChatSessionClaims{
+		OrgID:            authCtx.ActiveOrganizationID,
+		ProjectID:        authCtx.ProjectID.String(),
+		OrganizationSlug: authCtx.OrganizationSlug,
+		ProjectSlug:      *authCtx.ProjectSlug,
+	}, "http://localhost", 3600)
+	require.NoError(t, err)
+
+	ctx, err := ti.chatSessionsManager.Authorize(t.Context(), token)
+	require.NoError(t, err)
+
+	content := "fake png image content uploaded via chat session"
+	sha := sha256.Sum256([]byte(content))
+	expectedSha256 := hex.EncodeToString(sha[:])
+	contentType := "image/png"
+	contentLength := int64(len(content))
+
+	result, err := ti.service.UploadChatAttachment(ctx, &assets.UploadChatAttachmentForm{
+		ApikeyToken:       nil,
+		SessionToken:      nil,
+		ProjectSlugInput:  nil,
+		ChatSessionsToken: &token,
+		ContentType:       contentType,
+		ContentLength:     contentLength,
+	}, io.NopCloser(strings.NewReader(content)))
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Asset)
+
+	require.NotEqual(t, uuid.Nil.String(), result.Asset.ID)
+	require.Equal(t, "chat_attachment", result.Asset.Kind)
+	require.Equal(t, contentType, result.Asset.ContentType)
+	require.Equal(t, contentLength, result.Asset.ContentLength)
+	require.Equal(t, expectedSha256, result.Asset.Sha256)
+}
+
+func TestService_UploadChatAttachment_WithChatSessionToken_AudioMp3(t *testing.T) {
+	t.Parallel()
+
+	baseCtx, ti := newTestAssetsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(baseCtx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	require.NotNil(t, authCtx.ProjectSlug)
+
+	token, _, err := ti.chatSessionsManager.GenerateToken(t.Context(), chatsessions.ChatSessionClaims{
+		OrgID:            authCtx.ActiveOrganizationID,
+		ProjectID:        authCtx.ProjectID.String(),
+		OrganizationSlug: authCtx.OrganizationSlug,
+		ProjectSlug:      *authCtx.ProjectSlug,
+	}, "http://localhost", 3600)
+	require.NoError(t, err)
+
+	ctx, err := ti.chatSessionsManager.Authorize(t.Context(), token)
+	require.NoError(t, err)
+
+	content := "fake mp3 audio content uploaded via chat session"
+	sha := sha256.Sum256([]byte(content))
+	expectedSha256 := hex.EncodeToString(sha[:])
+	contentType := "audio/mpeg"
+	contentLength := int64(len(content))
+
+	result, err := ti.service.UploadChatAttachment(ctx, &assets.UploadChatAttachmentForm{
+		ApikeyToken:       nil,
+		SessionToken:      nil,
+		ProjectSlugInput:  nil,
+		ChatSessionsToken: &token,
+		ContentType:       contentType,
+		ContentLength:     contentLength,
+	}, io.NopCloser(strings.NewReader(content)))
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Asset)
+
+	require.NotEqual(t, uuid.Nil.String(), result.Asset.ID)
+	require.Equal(t, "chat_attachment", result.Asset.Kind)
+	require.Equal(t, contentType, result.Asset.ContentType)
+	require.Equal(t, contentLength, result.Asset.ContentLength)
+	require.Equal(t, expectedSha256, result.Asset.Sha256)
+}
+
+func TestService_UploadChatAttachment_WithChatSessionToken_DuplicateAsset(t *testing.T) {
+	t.Parallel()
+
+	baseCtx, ti := newTestAssetsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(baseCtx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	require.NotNil(t, authCtx.ProjectSlug)
+
+	projectID := *authCtx.ProjectID
+
+	token, _, err := ti.chatSessionsManager.GenerateToken(t.Context(), chatsessions.ChatSessionClaims{
+		OrgID:            authCtx.ActiveOrganizationID,
+		ProjectID:        projectID.String(),
+		OrganizationSlug: authCtx.OrganizationSlug,
+		ProjectSlug:      *authCtx.ProjectSlug,
+	}, "http://localhost", 3600)
+	require.NoError(t, err)
+
+	ctx, err := ti.chatSessionsManager.Authorize(t.Context(), token)
+	require.NoError(t, err)
+
+	content := "duplicate chat attachment content via chat session"
+	contentType := "text/plain"
+	contentLength := int64(len(content))
+
+	// Upload the first attachment
+	result1, err := ti.service.UploadChatAttachment(ctx, &assets.UploadChatAttachmentForm{
+		ApikeyToken:       nil,
+		SessionToken:      nil,
+		ProjectSlugInput:  nil,
+		ChatSessionsToken: &token,
+		ContentType:       contentType,
+		ContentLength:     contentLength,
+	}, io.NopCloser(strings.NewReader(content)))
+	require.NoError(t, err)
+	require.NotNil(t, result1)
+
+	// Upload the same attachment again
+	result2, err := ti.service.UploadChatAttachment(ctx, &assets.UploadChatAttachmentForm{
+		ApikeyToken:       nil,
+		SessionToken:      nil,
+		ProjectSlugInput:  nil,
+		ChatSessionsToken: &token,
+		ContentType:       contentType,
+		ContentLength:     contentLength,
+	}, io.NopCloser(strings.NewReader(content)))
+	require.NoError(t, err)
+	require.NotNil(t, result2)
+
+	// Should return the same asset
+	require.Equal(t, result1.Asset.ID, result2.Asset.ID)
+	require.Equal(t, result1.Asset.Sha256, result2.Asset.Sha256)
+
+	// Both should have the same URL
+	expectedURL := fmt.Sprintf("%s?id=%s&project_id=%s", srv.ServeChatAttachmentAssetsPath(), result1.Asset.ID, projectID.String())
+	require.Equal(t, expectedURL, result1.URL)
+	require.Equal(t, expectedURL, result2.URL)
 }

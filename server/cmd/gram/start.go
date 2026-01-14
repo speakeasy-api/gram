@@ -331,8 +331,8 @@ func newStartCommand() *cli.Command {
 	}
 
 	flags = append(flags, clickHouseFlags...)
-
 	flags = append(flags, functionsFlags...)
+	flags = append(flags, pulseMCPFlags...)
 
 	return &cli.Command{
 		Name:  "start",
@@ -537,6 +537,13 @@ func newStartCommand() *cli.Command {
 
 			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator)
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, baseChatClient)
+			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
+				pulseTenantID: c.String("pulse-registry-tenant"),
+				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create mcp registry client: %w", err)
+			}
 
 			mux := goahttp.NewMuxer()
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessionsManager))
@@ -562,8 +569,8 @@ func newStartCommand() *cli.Command {
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, db, sessionManager))
 			templates.Attach(mux, templates.NewService(logger, db, sessionManager, toolsetsSvc))
-			assets.Attach(mux, assets.NewService(logger, db, sessionManager, assetStorage))
-			deployments.Attach(mux, deployments.NewService(logger, tracerProvider, db, temporalClient, sessionManager, assetStorage, posthogClient))
+			assets.Attach(mux, assets.NewService(logger, db, sessionManager, chatSessionsManager, assetStorage))
+			deployments.Attach(mux, deployments.NewService(logger, tracerProvider, db, temporalClient, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient))
 			keys.Attach(mux, keys.NewService(logger, db, sessionManager, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, db, sessionManager, chatSessionsManager))
 			environments.Attach(mux, environments.NewService(logger, db, sessionManager, encryptionClient))
@@ -574,7 +581,7 @@ func newStartCommand() *cli.Command {
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, billingTracker, tcm, productFeatures, serverURL))
 			mcpMetadataService := mcpmetadata.NewService(logger, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient))
 			mcpmetadata.Attach(mux, mcpMetadataService)
-			externalmcp.Attach(mux, externalmcp.NewService(logger, db, sessionManager))
+			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient))
 			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, posthogClient, serverURL, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, oauthService, billingTracker, billingRepo, tcm, productFeatures, ragService, temporalClient), mcpMetadataService)
 			chat.Attach(mux, chat.NewService(logger, db, sessionManager, chatSessionsManager, openRouter, &background.FallbackModelUsageTracker{Temporal: temporalClient}))
 			if slackClient.Enabled() {
@@ -634,6 +641,7 @@ func newStartCommand() *cli.Command {
 						FunctionsVersion:     runnerVersion,
 						RagService:           ragService,
 						AgentsService:        agentsWorkerSvc,
+						MCPRegistryClient:    mcpRegistryClient,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))

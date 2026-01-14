@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/sdk/client"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -69,11 +70,12 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 
 	enc := testenv.NewEncryptionClient(t)
 	funcs := testenv.NewFunctionsTestOrchestrator(t)
+	mcpRegistryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
 
 	f := &feature.InMemory{}
 
 	temporal, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs))
+	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs, mcpRegistryClient))
 	t.Cleanup(func() {
 		worker.Stop()
 		temporal.Close()
@@ -89,12 +91,14 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "", billingClient)
 	require.NoError(t, err)
 
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
-	svc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthog)
-	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage)
+	svc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient)
+	assetsSvc := assets.NewService(logger, conn, sessionManager, chatSessionsManager, assetStorage)
 	packagesSvc := packages.NewService(logger, conn, sessionManager)
 
 	return ctx, &testInstance{

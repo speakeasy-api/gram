@@ -102,6 +102,11 @@ async function $do(
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
+    "Gram-Chat-Session": encodeSimple(
+      "Gram-Chat-Session",
+      payload["Gram-Chat-Session"],
+      { explode: false, charEncoding: "none" },
+    ),
     "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
       explode: false,
       charEncoding: "none",
@@ -125,6 +130,13 @@ async function $do(
         fieldName: "Gram-Session",
         type: "apiKey:header",
         value: security?.sessionHeaderGramSession,
+      },
+    ],
+    [
+      {
+        fieldName: "Authorization",
+        type: "http:bearer",
+        value: security?.chatSessionsTokenHeaderGramChatSession,
       },
     ],
   );

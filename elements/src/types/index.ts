@@ -275,17 +275,38 @@ export interface ElementsConfig {
    */
   history?: HistoryConfig
 
-  api?: {
-    /**
-     * The Gram API URL to use for the Elements library.
-     *
-     * @example
-     * const config: ElementsConfig = {
-     *   apiURL: 'https://api.getgram.ai',
-     * }
-     */
-    url?: string
-  } & AuthConfig
+  /**
+   * The API configuration to use for the Elements library.
+   *
+   * Use this to override the default API URL, or add explicit auth configuration
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   api: {
+   *     url: 'https://api.getgram.ai',
+   *   },
+   * }
+   */
+  api?: ApiConfig
+}
+
+
+
+/**
+ * Base API configuration with the server URL.
+ */
+export type BaseApiConfig = {
+  /**
+   * The Gram API URL to use for the Elements library.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   api: {
+   *     url: 'https://api.getgram.ai',
+   *   },
+   * }
+   */
+  url?: string
 }
 
 export type SessionAuthConfig = {
@@ -334,7 +355,13 @@ export type ApiKeyAuthConfig = {
   UNSAFE_apiKey: string
 }
 
-export type AuthConfig = SessionAuthConfig | ApiKeyAuthConfig | undefined
+/**
+ * API configuration - can be just the URL, or URL with session auth, or URL with API key auth.
+ */
+export type ApiConfig =
+  | BaseApiConfig
+  | (BaseApiConfig & SessionAuthConfig)
+  | (BaseApiConfig & ApiKeyAuthConfig)
 
 /**
  * The LLM model to use for the Elements library.

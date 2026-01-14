@@ -19,3 +19,4 @@ let value: ServeChatAttachmentRequest = {
 | `projectId`                                   | *string*                                      | :heavy_check_mark:                            | The project ID that the attachment belongs to |
 | `gramKey`                                     | *string*                                      | :heavy_minus_sign:                            | API Key header                                |
 | `gramSession`                                 | *string*                                      | :heavy_minus_sign:                            | Session header                                |
+| `gramChatSession`                             | *string*                                      | :heavy_minus_sign:                            | Chat Sessions token header                    |

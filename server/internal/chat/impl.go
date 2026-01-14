@@ -442,7 +442,15 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 				}
 			}()
 		} else {
-			s.logger.ErrorContext(ctx, "failed to track model usage", attr.SlogError(errors.New("no message ID")))
+			msg := "no message ID"
+			if respCaptorWithTracking != nil {
+				msg += "; model: " + respCaptorWithTracking.model
+				msg += "; org ID: " + respCaptorWithTracking.orgID
+				msg += "; project ID: " + respCaptorWithTracking.projectID.String()
+				msg += "; chat ID: " + respCaptorWithTracking.chatID.String()
+				msg += fmt.Sprintf("; isStreaming: %t", respCaptorWithTracking.isStreaming)
+			}
+			s.logger.ErrorContext(ctx, "failed to track model usage", attr.SlogError(errors.New(msg)))
 		}
 	}()
 

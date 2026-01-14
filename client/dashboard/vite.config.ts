@@ -24,10 +24,20 @@ export default defineConfig({
     target: "es2022",
     sourcemap: true,
     rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, "index.html"),
+        embed: path.resolve(__dirname, "embed.html"),
+      },
       output: {
         manualChunks: {
           "lucide-react": ["lucide-react"],
           moonshine: ["@speakeasy-api/moonshine"],
+          three: [
+            "@react-three/drei",
+            "@react-three/fiber",
+            "@react-three/postprocessing",
+            "three",
+          ],
           externals: [
             "posthog-js",
             "react",

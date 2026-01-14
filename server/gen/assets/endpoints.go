@@ -114,8 +114,8 @@ func NewEndpoints(s Service) *Endpoints {
 		ServeOpenAPIv3:        NewServeOpenAPIv3Endpoint(s, a.APIKeyAuth),
 		ServeFunction:         NewServeFunctionEndpoint(s, a.APIKeyAuth),
 		ListAssets:            NewListAssetsEndpoint(s, a.APIKeyAuth),
-		UploadChatAttachment:  NewUploadChatAttachmentEndpoint(s, a.APIKeyAuth),
-		ServeChatAttachment:   NewServeChatAttachmentEndpoint(s, a.APIKeyAuth),
+		UploadChatAttachment:  NewUploadChatAttachmentEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		ServeChatAttachment:   NewServeChatAttachmentEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 	}
 }
 
@@ -521,7 +521,7 @@ func NewListAssetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 
 // NewUploadChatAttachmentEndpoint returns an endpoint function that calls the
 // method "uploadChatAttachment" of service "assets".
-func NewUploadChatAttachmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewUploadChatAttachmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJWTFn security.AuthJWTFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		ep := req.(*UploadChatAttachmentRequestData)
 		var err error
@@ -572,6 +572,30 @@ func NewUploadChatAttachmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 			}
 		}
 		if err != nil {
+			sc := security.JWTScheme{
+				Name:           "chat_sessions_token",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var token string
+			if ep.Payload.ChatSessionsToken != nil {
+				token = *ep.Payload.ChatSessionsToken
+			}
+			ctx, err = authJWTFn(ctx, token, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if ep.Payload.ProjectSlugInput != nil {
+					key = *ep.Payload.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
 			return nil, err
 		}
 		return s.UploadChatAttachment(ctx, ep.Payload, ep.Body)
@@ -580,7 +604,7 @@ func NewUploadChatAttachmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 
 // NewServeChatAttachmentEndpoint returns an endpoint function that calls the
 // method "serveChatAttachment" of service "assets".
-func NewServeChatAttachmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewServeChatAttachmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJWTFn security.AuthJWTFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*ServeChatAttachmentForm)
 		var err error
@@ -605,6 +629,18 @@ func NewServeChatAttachmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 				key = *p.SessionToken
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.JWTScheme{
+				Name:           "chat_sessions_token",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var token string
+			if p.ChatSessionsToken != nil {
+				token = *p.ChatSessionsToken
+			}
+			ctx, err = authJWTFn(ctx, token, &sc)
 		}
 		if err != nil {
 			return nil, err

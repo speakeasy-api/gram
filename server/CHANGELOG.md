@@ -1,5 +1,17 @@
 # server
 
+## 0.17.4
+
+### Patch Changes
+
+- 6cd7978: This change adds an `Accept: */*` header to requests from the tool proxy. This resolves issues with some APIs (eg. https://api.intercom.io) which rely on the Accept header's presence to return content
+
+## 0.17.3
+
+### Patch Changes
+
+- 54a32f4: Updated the function deployment temporal activity so it spawns multiple goroutines to deploy functions in parallel. This should in theory speed up deployments with several functions.
+
 ## 0.17.2
 
 ### Patch Changes

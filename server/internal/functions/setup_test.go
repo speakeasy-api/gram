@@ -16,6 +16,7 @@ import (
 	dgen "github.com/speakeasy-api/gram/server/gen/deployments"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -80,9 +81,10 @@ func newTestFunctionsService(t *testing.T) (context.Context, *testInstance) {
 
 	assetStorage := assetstest.NewTestBlobStore(t)
 	tigrisStore := assets.NewTigrisStore(assetStorage)
+	mcpRegistryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
 
 	temporal, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs))
+	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs, mcpRegistryClient))
 	t.Cleanup(func() {
 		worker.Stop()
 		temporal.Close()
@@ -98,13 +100,15 @@ func newTestFunctionsService(t *testing.T) (context.Context, *testInstance) {
 	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "", billingClient)
 	require.NoError(t, err)
 
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	ph := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
 	svc := functions.NewService(logger, tracerProvider, conn, enc, tigrisStore)
-	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, ph)
-	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage)
+	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, ph, testenv.DefaultSiteURL(t), mcpRegistryClient)
+	assetsSvc := assets.NewService(logger, conn, sessionManager, chatSessionsManager, assetStorage)
 
 	return ctx, &testInstance{
 		service:        svc,

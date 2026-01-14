@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.18.7**](../README.md)
+[**@gram-ai/elements v1.19.1**](../README.md)
 
 ***
 
@@ -327,4 +327,18 @@ const config: ElementsConfig = {
 
 ### api?
 
-> `optional` **api**: \{ url?: string \| undefined; \} & AuthConfig
+> `optional` **api**: `ApiConfig`
+
+The API configuration to use for the Elements library.
+
+Use this to override the default API URL, or add explicit auth configuration
+
+#### Example
+
+```ts
+const config: ElementsConfig = {
+  api: {
+    url: 'https://api.getgram.ai',
+  },
+}
+```
