@@ -83,6 +83,7 @@ function cleanMessagesForModel(messages: UIMessage[]): UIMessage[] {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cleanedParts = partsArray.map((part: any) => {
       // Strip providerOptions and providerMetadata from all remaining parts
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { callProviderMetadata: _, ...cleanPart } = part
       return cleanPart
     })

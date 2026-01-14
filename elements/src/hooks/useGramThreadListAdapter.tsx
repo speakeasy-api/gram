@@ -82,6 +82,7 @@ class GramThreadHistoryAdapter {
   // Required by ThreadHistoryAdapter - wraps adapter with format conversion.
   // The _formatAdapter param is part of the interface but unused since we handle conversion ourselves.
   // Using arrow functions to capture `this` lexically.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   withFormat(_formatAdapter: unknown) {
     return {
       load: async () => {

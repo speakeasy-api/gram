@@ -290,8 +290,6 @@ export interface ElementsConfig {
   api?: ApiConfig
 }
 
-
-
 /**
  * Base API configuration with the server URL.
  */
