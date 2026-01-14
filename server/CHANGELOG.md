@@ -1,5 +1,15 @@
 # server
 
+## 0.18.0
+
+### Minor Changes
+
+- dc1b2b8: Updated the assets service to allow chat session to upload and read attachments via the `/rpc/assets.uploadChatAttachment` and `/rpc/assets.serveChatAttachment` endpoints.
+
+### Patch Changes
+
+- 98783c3: fix: return 401 for ext oauth servers even if gram-chat-session is present
+
 ## 0.17.4
 
 ### Patch Changes
