@@ -1,5 +1,15 @@
 # dashboard
 
+## 0.26.4
+
+### Patch Changes
+
+- 45dd841: Updated the dashboard and vite config so that monaco editor and various three.js dependencies are not included in the main app bundle. This was causing extreme bloat of that bundle which ultimately slows down loading times of the web app.
+- bd81e47: Adds MCP server selection into elements configurator
+- Updated dependencies [950419c]
+- Updated dependencies [45eb983]
+  - @gram-ai/elements@1.20.0
+
 ## 0.26.3
 
 ### Patch Changes
