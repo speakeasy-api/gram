@@ -1,4 +1,3 @@
-import React from 'react'
 import { Chat } from '..'
 import type { Meta, StoryFn } from '@storybook/react-vite'
 
@@ -43,4 +42,53 @@ export const Sidecar: Story = () => (
 )
 Sidecar.parameters = {
   elements: { config: { variant: 'sidecar' } },
+}
+
+export const ModalWithHistory: Story = () => (
+  <div className="flex h-full w-full flex-col gap-4 p-10">
+    <h1 className="text-2xl font-bold">Modal with Chat History</h1>
+    <p>
+      Click the button in the bottom right corner. The thread list sidebar shows
+      your chat history.
+    </p>
+    <Chat />
+  </div>
+)
+ModalWithHistory.parameters = {
+  elements: {
+    config: {
+      variant: 'widget',
+      modal: {
+        defaultOpen: true,
+        expandable: true,
+        dimensions: {
+          default: { width: '700px', height: '600px', maxHeight: '100vh' },
+          expanded: { width: '90vw', height: '90vh' },
+        },
+      },
+      history: {
+        enabled: true,
+        showThreadList: true,
+      },
+    },
+  },
+}
+
+export const SidecarWithHistory: Story = () => (
+  <div className="mr-[600px] p-10">
+    <h1 className="text-2xl font-bold">Sidecar with Chat History</h1>
+    <p>The sidecar includes a thread list sidebar for chat history.</p>
+    <Chat />
+  </div>
+)
+SidecarWithHistory.parameters = {
+  elements: {
+    config: {
+      variant: 'sidecar',
+      history: {
+        enabled: true,
+        showThreadList: true,
+      },
+    },
+  },
 }

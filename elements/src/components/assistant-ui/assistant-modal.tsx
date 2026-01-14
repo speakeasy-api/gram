@@ -12,6 +12,7 @@ import { LazyMotion, domMax, AnimatePresence, MotionConfig } from 'motion/react'
 import * as m from 'motion/react-m'
 
 import { Thread } from '@/components/assistant-ui/thread'
+import { ThreadList } from '@/components/assistant-ui/thread-list'
 import { useThemeProps } from '@/hooks/useThemeProps'
 import { useRadius } from '@/hooks/useRadius'
 import { useDensity } from '@/hooks/useDensity'
@@ -43,6 +44,10 @@ export const AssistantModal: FC = () => {
   const { expandable, isExpanded, setIsExpanded } = useExpanded()
   const title = config.modal?.title
   const customIcon = config.modal?.icon
+
+  // Check if thread list should be shown
+  const showThreadList =
+    config.history?.enabled && config.history?.showThreadList !== false
 
   const position = config.modal?.position ?? 'bottom-right'
   const anchorPositionClass = positionClassname(position)
@@ -210,9 +215,9 @@ export const AssistantModal: FC = () => {
                   </div>
                 </m.div>
 
-                {/* Thread content */}
+                {/* Main content area */}
                 <m.div
-                  className="aui-modal-thread w-full flex-1 overflow-hidden"
+                  className="aui-modal-body flex flex-1 overflow-hidden"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{
@@ -221,7 +226,17 @@ export const AssistantModal: FC = () => {
                     ease: EASE_OUT_QUINT,
                   }}
                 >
-                  <Thread />
+                  {/* Thread list sidebar (when history enabled) */}
+                  {showThreadList && (
+                    <div className="aui-modal-thread-list w-56 shrink-0 overflow-y-auto border-r">
+                      <ThreadList />
+                    </div>
+                  )}
+
+                  {/* Thread content */}
+                  <div className="aui-modal-thread w-full flex-1 overflow-hidden">
+                    <Thread />
+                  </div>
                 </m.div>
               </m.div>
             )}
