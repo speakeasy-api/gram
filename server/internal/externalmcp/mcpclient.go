@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // AuthRequiredError is returned when an external MCP server requires authentication.
@@ -95,7 +96,7 @@ func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, trans
 			HTTPClient: httpClient,
 		}
 	default:
-		return nil, fmt.Errorf("unsupported transport type: %s", transportType)
+		return nil, oops.Permanent(fmt.Errorf("unsupported transport type: %s", transportType))
 	}
 
 	session, err := client.Connect(ctx, transport, nil)

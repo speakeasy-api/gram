@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"runtime"
@@ -462,9 +463,8 @@ func (p *ProcessDeployment) doExternalMCPs(
 
 				// Fail deployment if legacy OAuth 2.0 is detected
 				if oauthDiscovery.Version == externalmcp.OAuthVersion20 {
-					return oops.E(oops.CodeUnexpected, nil,
-						"external MCP server uses legacy OAuth 2.0 which requires static client registration; "+
-							"dynamic client registration is not supported").Log(ctx, logger)
+					err := oops.Permanent(fmt.Errorf("external MCP server uses legacy OAuth 2.0 which requires static client registration; dynamic client registration is not supported"))
+					return oops.E(oops.CodeUnexpected, err, "unsupported OAuth version").Log(ctx, logger)
 				}
 			} else if err != nil {
 				return oops.E(oops.CodeUnexpected, err, "external mcp server unavailable").Log(ctx, logger)

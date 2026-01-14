@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // RegistryClient handles communication with external MCP registries.
@@ -232,7 +233,10 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("registry returned status %d", resp.StatusCode)
+		if resp.StatusCode >= 500 {
+			return nil, fmt.Errorf("registry returned status %d for server %s", resp.StatusCode, serverName)
+		}
+		return nil, oops.Permanent(fmt.Errorf("registry returned status %d for server %s", resp.StatusCode, serverName))
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -242,7 +246,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 
 	var serverResp getServerResponse
 	if err := json.Unmarshal(body, &serverResp); err != nil {
-		return nil, fmt.Errorf("decode external mcp server details response: %w", err)
+		return nil, oops.Permanent(fmt.Errorf("decode external mcp server details response: %w", err))
 	}
 
 	// Find the remote URL, preferring streamable-http over sse
@@ -260,7 +264,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 	}
 
 	if remoteURL == "" {
-		return nil, fmt.Errorf("server %s has no streamable-http or sse remote", serverName)
+		return nil, oops.Permanent(fmt.Errorf("server %s has no streamable-http or sse remote", serverName))
 	}
 
 	return &ServerDetails{
