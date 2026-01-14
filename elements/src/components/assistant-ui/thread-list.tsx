@@ -23,7 +23,7 @@ const ThreadListNew: FC = () => {
   return (
     <ThreadListPrimitive.New asChild>
       <Button
-        className="aui-thread-list-new hover:bg-muted data-active:bg-muted flex cursor-pointer items-center justify-start gap-1 rounded-lg px-2.5 py-2 text-start"
+        className="aui-thread-list-new hover:bg-muted data-[active=true]:bg-accent data-[active=true]:text-accent-foreground flex cursor-pointer items-center justify-start gap-1 rounded-lg px-2.5 py-2 text-start"
         variant="ghost"
       >
         <PlusIcon />
@@ -63,7 +63,7 @@ const ThreadListSkeleton: FC = () => {
 
 const ThreadListItem: FC = () => {
   return (
-    <ThreadListItemPrimitive.Root className="aui-thread-list-item hover:bg-muted focus-visible:bg-muted focus-visible:ring-ring data-active:bg-muted flex items-center gap-2 rounded-lg transition-all focus-visible:ring-2 focus-visible:outline-none">
+    <ThreadListItemPrimitive.Root className="aui-thread-list-item hover:bg-muted focus-visible:bg-muted focus-visible:ring-ring data-[active=true]:bg-accent data-[active=true]:text-accent-foreground flex items-center gap-2 rounded-lg transition-all focus-visible:ring-2 focus-visible:outline-none">
       <ThreadListItemPrimitive.Trigger className="aui-thread-list-item-trigger grow cursor-pointer px-3 py-2 text-start">
         <ThreadListItemTitle />
       </ThreadListItemPrimitive.Trigger>
