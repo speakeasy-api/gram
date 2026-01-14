@@ -63,6 +63,7 @@ func NewProcessDeployment(
 	features feature.Provider,
 	assetStorage assets.BlobStore,
 	billingRepo billing.Repository,
+	registryClient *externalmcp.RegistryClient,
 ) *ProcessDeployment {
 	return &ProcessDeployment{
 		logger:         logger,
@@ -79,7 +80,7 @@ func NewProcessDeployment(
 		projects:       projectsRepo.New(db),
 		billingRepo:    billingRepo,
 		externalmcp:    externalmcpRepo.New(db),
-		registryClient: externalmcp.NewRegistryClient(logger),
+		registryClient: registryClient,
 	}
 }
 

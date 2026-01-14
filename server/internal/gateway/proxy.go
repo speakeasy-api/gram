@@ -536,6 +536,10 @@ func (tp *ToolProxy) doHTTP(
 
 	req.Header.Set("X-Gram-Proxy", "1")
 
+	if req.Header.Get("Accept") == "" {
+		req.Header.Set("Accept", "*/*")
+	}
+
 	return reverseProxyRequest(ctx, ReverseProxyOptions{
 		Logger:                    logger,
 		Tracer:                    tp.tracer,

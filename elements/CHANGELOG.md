@@ -1,5 +1,22 @@
 # @gram-ai/elements
 
+## 1.19.1
+
+### Patch Changes
+
+- f2fa135: Fix bin script
+
+## 1.19.0
+
+### Minor Changes
+
+- 748c52e: No longer externalize assistant-ui
+
+### Patch Changes
+
+- 856576b: Fixes elements changelog due to prior failures to update
+- a1231be: Adds install script to elements package
+
 ## 1.18.8
 
 ### Patch Changes

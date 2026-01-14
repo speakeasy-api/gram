@@ -13,7 +13,7 @@ import {
   useToolset,
   useUpdateEnvironmentMutation,
 } from "@gram/client/react-query/index.js";
-import { AlertCircle, Plus, Trash2, X } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useEnvironments } from "./Environments";
@@ -189,10 +189,12 @@ export default function EnvironmentPage() {
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [newEntryName, setNewEntryName] = useState("");
   const [newEntryValue, setNewEntryValue] = useState("");
+  const [newEntryVisible, setNewEntryVisible] = useState(false);
   const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
     open: boolean;
     varName: string;
   }>({ open: false, varName: "" });
+  const [visibleFields, setVisibleFields] = useState<Set<string>>(new Set());
 
   useRegisterEnvironmentTelemetry({
     environmentSlug: environment?.slug ?? "",
@@ -240,6 +242,7 @@ export default function EnvironmentPage() {
     setHasChanges(false);
     setSaveError(null);
     setFocusedField(null);
+    setVisibleFields(new Set());
   }, [environment?.slug]);
 
   const { data: selectedToolset } = useToolset(
@@ -320,6 +323,18 @@ export default function EnvironmentPage() {
     setFocusedField(null);
   }, []);
 
+  const handleToggleVisibility = useCallback((varName: string) => {
+    setVisibleFields((prev) => {
+      const next = new Set(prev);
+      if (next.has(varName)) {
+        next.delete(varName);
+      } else {
+        next.add(varName);
+      }
+      return next;
+    });
+  }, []);
+
   const handleCancel = useCallback(() => {
     setEnvValues({});
     setEditedFields(new Set());
@@ -327,6 +342,7 @@ export default function EnvironmentPage() {
     setHasChanges(false);
     setSaveError(null);
     setFocusedField(null);
+    setVisibleFields(new Set());
     setIsAddingNew(false);
     setNewEntryName("");
     setNewEntryValue("");
@@ -377,6 +393,7 @@ export default function EnvironmentPage() {
     setIsAddingNew(false);
     setNewEntryName("");
     setNewEntryValue("");
+    setNewEntryVisible(false);
     setDeletedFields(new Set());
   }, [
     environment,
@@ -396,6 +413,7 @@ export default function EnvironmentPage() {
     setIsAddingNew(false);
     setNewEntryName("");
     setNewEntryValue("");
+    setNewEntryVisible(false);
   }, []);
 
   const validateEntryName = (name: string) => {
@@ -520,7 +538,11 @@ export default function EnvironmentPage() {
                                 ? "Replace existing value"
                                 : "Enter value"
                             }
-                            type="text"
+                            type={
+                              visibleFields.has(entry.name)
+                                ? "text"
+                                : "password"
+                            }
                             className={`font-mono text-sm w-full ${isEdited ? "ring-1 ring-blue-500" : ""}`}
                             disabled={isSaving}
                           />
@@ -529,11 +551,33 @@ export default function EnvironmentPage() {
                           variant="tertiary"
                           size="sm"
                           className="h-8 w-8 flex-shrink-0 self-start mt-[1px]"
+                          onClick={() => handleToggleVisibility(entry.name)}
+                          disabled={isSaving}
+                          aria-label={
+                            visibleFields.has(entry.name)
+                              ? `Hide ${entry.name}`
+                              : `Show ${entry.name}`
+                          }
+                        >
+                          <Button.LeftIcon>
+                            {visibleFields.has(entry.name) ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button.LeftIcon>
+                        </Button>
+                        <Button
+                          variant="tertiary"
+                          size="sm"
+                          className="h-8 w-8 flex-shrink-0 self-start mt-[1px]"
                           onClick={() => handleRemoveVariable(entry.name)}
                           disabled={isSaving}
                           aria-label={`Remove ${entry.name}`}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Button.LeftIcon>
+                            <Trash2 className="h-4 w-4" />
+                          </Button.LeftIcon>
                         </Button>
                       </div>
                     </div>
@@ -564,6 +608,7 @@ export default function EnvironmentPage() {
                             value={newEntryValue}
                             onChange={setNewEntryValue}
                             placeholder="Value"
+                            type={newEntryVisible ? "text" : "password"}
                             className="font-mono text-sm w-full"
                             disabled={isSaving}
                           />
@@ -572,11 +617,31 @@ export default function EnvironmentPage() {
                           variant="tertiary"
                           size="sm"
                           className="h-8 w-8 flex-shrink-0 self-start mt-[1px]"
+                          onClick={() => setNewEntryVisible(!newEntryVisible)}
+                          disabled={isSaving}
+                          aria-label={
+                            newEntryVisible ? "Hide value" : "Show value"
+                          }
+                        >
+                          <Button.LeftIcon>
+                            {newEntryVisible ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button.LeftIcon>
+                        </Button>
+                        <Button
+                          variant="tertiary"
+                          size="sm"
+                          className="h-8 w-8 flex-shrink-0 self-start mt-[1px]"
                           onClick={handleCancelNewEntry}
                           disabled={isSaving}
                           aria-label="Cancel new entry"
                         >
-                          <X className="h-4 w-4" />
+                          <Button.LeftIcon>
+                            <X className="h-4 w-4" />
+                          </Button.LeftIcon>
                         </Button>
                       </div>
                     </div>

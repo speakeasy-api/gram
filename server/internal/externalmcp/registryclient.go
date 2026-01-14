@@ -8,10 +8,11 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-retryablehttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -19,17 +20,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
+type RegistryBackend interface {
+	Match(req *http.Request) bool
+	Authorize(req *http.Request) error
+}
+
 // RegistryClient handles communication with external MCP registries.
 type RegistryClient struct {
 	httpClient *http.Client
 	logger     *slog.Logger
+	backend    RegistryBackend
 }
 
 // NewRegistryClient creates a new registry client.
-func NewRegistryClient(logger *slog.Logger) *RegistryClient {
+func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, backend RegistryBackend) *RegistryClient {
 	return &RegistryClient{
-		httpClient: retryablehttp.NewClient().StandardClient(),
-		logger:     logger,
+		httpClient: &http.Client{
+			Transport: otelhttp.NewTransport(
+				retryablehttp.NewClient().StandardClient().Transport,
+				otelhttp.WithTracerProvider(tracerProvider),
+			),
+		},
+		logger:  logger.With(attr.SlogComponent("mcp-registry-client")),
+		backend: backend,
 	}
 }
 
@@ -65,7 +78,7 @@ type serverJSON struct {
 	Version     string  `json:"version"`
 	Title       *string `json:"title"`
 	WebsiteURL  *string `json:"websiteUrl"`
-	Icons []struct {
+	Icons       []struct {
 		Src string `json:"src"`
 	} `json:"icons"`
 	Remotes []serverRemote `json:"remotes"`
@@ -74,31 +87,6 @@ type serverJSON struct {
 type serverRemote struct {
 	URL  string `json:"url"`
 	Type string `json:"type"`
-}
-
-// checkForPulseCredentials returns headers for Pulse MCP registry authentication.
-// TODO: Add registry_organizations and registry_environments tables to have a better
-// system for managing registry credentials.
-func checkForPulseCredentials(registryURL string) http.Header {
-	headers := make(http.Header)
-
-	parsed, err := url.Parse(registryURL)
-	if err != nil {
-		return headers
-	}
-
-	if parsed.Scheme != "https" || parsed.Host != "api.pulsemcp.com" {
-		return headers
-	}
-
-	if tenantID := os.Getenv("PULSE_REGISTRY_TENANT"); tenantID != "" {
-		headers.Set("X-Tenant-ID", tenantID)
-	}
-	if apiKey := os.Getenv("PULSE_REGISTRY_KEY"); apiKey != "" {
-		headers.Set("X-Api-Key", apiKey)
-	}
-
-	return headers
 }
 
 // ListServers fetches servers from the given registry.
@@ -115,12 +103,12 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("create list servers request: %w", err)
 	}
 
-	for key, values := range checkForPulseCredentials(registry.URL) {
-		for _, value := range values {
-			req.Header.Set(key, value)
+	if c.backend.Match(req) {
+		if err := c.backend.Authorize(req); err != nil {
+			return nil, fmt.Errorf("authorize list servers request: %w", err)
 		}
 	}
 
@@ -212,9 +200,9 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		return nil, fmt.Errorf("create external mcp server details request: %w", err)
 	}
 
-	for key, values := range checkForPulseCredentials(registry.URL) {
-		for _, value := range values {
-			req.Header.Set(key, value)
+	if c.backend.Match(req) {
+		if err := c.backend.Authorize(req); err != nil {
+			return nil, fmt.Errorf("authorize external mcp server details request: %w", err)
 		}
 	}
 

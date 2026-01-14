@@ -22,7 +22,7 @@ export default tseslint.config(
   includeIgnoreFile(gitignorePath),
   ...storybook.configs['flat/recommended'],
   {
-    ignores: ['scripts/generate-utility-docs.js'],
+    ignores: ['scripts/generate-utility-docs.js', 'bin/cli.js'],
   },
   {
     languageOptions: {
