@@ -83,8 +83,7 @@ function cleanMessagesForModel(messages: UIMessage[]): UIMessage[] {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cleanedParts = partsArray.map((part: any) => {
       // Strip providerOptions and providerMetadata from all remaining parts
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars, unused-imports/no-unused-vars
-      const { callProviderMetadata, ...cleanPart } = part
+      const { callProviderMetadata: _, ...cleanPart } = part
       return cleanPart
     })
 
@@ -95,6 +94,10 @@ function cleanMessagesForModel(messages: UIMessage[]): UIMessage[] {
   })
 }
 
+/**
+ * Main provider component that sets up auth, tools, and transport.
+ * Delegates to either WithHistory or WithoutHistory based on config.
+ */
 const ElementsProviderWithApproval = ({
   children,
   config,
@@ -114,7 +117,6 @@ const ElementsProviderWithApproval = ({
   )
   const [isOpen, setIsOpen] = useState(config.modal?.defaultOpen)
 
-  // If there are any user provided plugins, use them, otherwise use the recommended plugins
   const plugins = config.plugins ?? recommended
 
   const systemPrompt = mergeInternalSystemPromptWith(
@@ -165,12 +167,14 @@ const ElementsProviderWithApproval = ({
     }
   }, [config.tools?.toolsRequiringApproval, getApprovalHelpers])
 
-  // Store runtime ref for use in transport
+  // Ref to access runtime from within transport's sendMessages.
+  // This solves a circular dependency: transport needs runtime.thread.getModelContext(),
+  // but runtime is created using transport. The ref gets populated after runtime creation.
   const runtimeRef = useRef<ReturnType<typeof useChatRuntime> | null>(null)
 
-  // Create custom transport factory - returns transport config
-  const createTransport = useCallback(
-    (): ChatTransport<UIMessage> => ({
+  // Create chat transport configuration
+  const transport = useMemo<ChatTransport<UIMessage>>(
+    () => ({
       sendMessages: async ({ messages, abortSignal }) => {
         const usingCustomModel = !!config.languageModel
 
@@ -239,7 +243,6 @@ const ElementsProviderWithApproval = ({
         }
       },
       reconnectToStream: async () => {
-        // Not implemented for client-side streaming
         throw new Error('Stream reconnection not supported')
       },
     }),
@@ -256,13 +259,9 @@ const ElementsProviderWithApproval = ({
     ]
   )
 
-  // Create transport instance
-  const transport = useMemo(() => createTransport(), [createTransport])
-
-  // Check if history is enabled
   const historyEnabled = config.history?.enabled ?? false
 
-  // Shared context value
+  // Shared context value for ElementsContext
   const contextValue = useMemo(
     () => ({
       config,
@@ -277,14 +276,10 @@ const ElementsProviderWithApproval = ({
     [config, model, isExpanded, isOpen, plugins]
   )
 
-  // Memoize frontendTools to avoid unnecessary re-renders
-  const frontendTools = useMemo(
-    () => config.tools?.frontendTools ?? {},
-    [config.tools?.frontendTools]
-  )
+  const frontendTools = config.tools?.frontendTools ?? {}
 
-  // Render the appropriate runtime provider based on history config
-  // We use separate components to avoid conditional hook calls
+  // Render the appropriate runtime provider based on history config.
+  // We use separate components to avoid conditional hook calls.
   if (historyEnabled && !auth.isLoading) {
     return (
       <ElementsProviderWithHistory
@@ -332,7 +327,6 @@ const ElementsProviderWithHistory = ({
   runtimeRef,
   frontendTools,
 }: ElementsProviderWithHistoryProps) => {
-  // Create thread list adapter with hook (stable component identity)
   const threadListAdapter = useGramThreadListAdapter({ apiUrl, headers })
 
   // Hook factory for creating the base chat runtime
@@ -345,8 +339,10 @@ const ElementsProviderWithHistory = ({
     runtimeHook: useChatRuntimeHook,
   })
 
-  // Update runtime ref
-  runtimeRef.current = runtime as ReturnType<typeof useChatRuntime>
+  // Populate runtimeRef so transport can access thread context
+  useEffect(() => {
+    runtimeRef.current = runtime as ReturnType<typeof useChatRuntime>
+  }, [runtime, runtimeRef])
 
   // Get the Provider from our adapter to wrap the content
   const HistoryProvider =
@@ -383,8 +379,10 @@ const ElementsProviderWithoutHistory = ({
 }: ElementsProviderWithoutHistoryProps) => {
   const runtime = useChatRuntime({ transport })
 
-  // Update runtime ref
-  runtimeRef.current = runtime
+  // Populate runtimeRef so transport can access thread context
+  useEffect(() => {
+    runtimeRef.current = runtime
+  }, [runtime, runtimeRef])
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
