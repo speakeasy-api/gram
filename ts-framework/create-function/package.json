@@ -41,7 +41,7 @@
     "@gram-ai/functions": "workspace:^",
     "@modelcontextprotocol/sdk": "catalog:",
     "@types/node": "22.x",
-    "prettier": "^3.6.2",
+    "prettier": "^3.7.4",
     "typescript": "catalog:",
     "zod": "^3.25.76"
   }

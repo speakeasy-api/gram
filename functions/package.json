@@ -15,8 +15,8 @@
   "packageManager": "pnpm@10.18.2",
   "devDependencies": {
     "@types/node": "^22.13.17",
-    "msw": "^2.12.3",
+    "msw": "^2.12.7",
     "typescript": "catalog:",
-    "vitest": "^4.0.13"
+    "vitest": "^4.0.16"
   }
 }
