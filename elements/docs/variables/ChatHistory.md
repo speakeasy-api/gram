@@ -1,0 +1,9 @@
+[**@gram-ai/elements v1.19.1**](../README.md)
+
+***
+
+[@gram-ai/elements](../globals.md) / ChatHistory
+
+# Variable: ChatHistory
+
+> `const` **ChatHistory**: `FC`

@@ -19,6 +19,7 @@
 - [ComposerConfig](interfaces/ComposerConfig.md)
 - [AttachmentsConfig](interfaces/AttachmentsConfig.md)
 - [SidecarConfig](interfaces/SidecarConfig.md)
+- [HistoryConfig](interfaces/HistoryConfig.md)
 - [Plugin](interfaces/Plugin.md)
 
 ## Type Aliases
@@ -38,6 +39,7 @@
 
 ## Variables
 
+- [ChatHistory](variables/ChatHistory.md)
 - [MODELS](variables/MODELS.md)
 
 ## Functions
@@ -45,3 +47,9 @@
 - [Chat](functions/Chat.md)
 - [GramElementsProvider](functions/GramElementsProvider.md)
 - [defineFrontendTool](functions/defineFrontendTool.md)
+
+## References
+
+### ElementsProvider
+
+Renames and re-exports [GramElementsProvider](functions/GramElementsProvider.md)

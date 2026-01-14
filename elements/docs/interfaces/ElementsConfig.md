@@ -325,6 +325,26 @@ const config: ElementsConfig = {
 
 ***
 
+### history?
+
+> `optional` **history**: [`HistoryConfig`](HistoryConfig.md)
+
+Configuration for chat history and thread persistence.
+When enabled, conversations are saved and the thread list is shown.
+
+#### Example
+
+```ts
+const config: ElementsConfig = {
+  history: {
+    enabled: true,
+    showThreadList: true,
+  },
+}
+```
+
+***
+
 ### api?
 
 > `optional` **api**: `ApiConfig`
