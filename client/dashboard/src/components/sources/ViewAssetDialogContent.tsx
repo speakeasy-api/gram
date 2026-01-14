@@ -1,4 +1,3 @@
-import { MonacoEditor } from "@/components/monaco-editor";
 import { SkeletonCode } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
@@ -7,6 +6,7 @@ import { getServerURL } from "@/lib/utils";
 import { Button, Dialog } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";
 import { NamedAsset } from "./SourceCard";
+import MonacoEditorLazy from "../monaco-editor.lazy";
 
 interface ViewAssetDialogContentProps {
   asset: NamedAsset;
@@ -133,7 +133,7 @@ export function ViewAssetDialogContent({ asset }: ViewAssetDialogContentProps) {
             </Button>
           </div>
         ) : assetContent ? (
-          <MonacoEditor
+          <MonacoEditorLazy
             value={assetContent.content}
             language={assetContent.language}
             height="calc(90vh - 120px)"
