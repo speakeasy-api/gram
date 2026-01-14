@@ -103,7 +103,7 @@ class GramThreadHistoryAdapter {
 
           const chat = (await response.json()) as GramChat
 
-          // Filter out system messages and convert to AI SDK UIMessage format
+          // Filter out system messages (assistant-ui doesn't support them in the import path)
           const filteredMessages = chat.messages.filter(
             (msg) => msg.role !== 'system'
           )
@@ -115,17 +115,19 @@ class GramThreadHistoryAdapter {
           // Convert to the format expected by useExternalHistory
           // It expects UIMessage format with role and parts array
           let prevId: string | null = null
-          const messages = filteredMessages.map((msg) => {
+          const messages = filteredMessages.map((msg, index) => {
+            // Generate a fallback ID if missing (required by assistant-ui's MessageRepository)
+            const messageId = msg.id || `fallback-${index}-${Date.now()}`
             const uiMessage = {
               parentId: prevId,
               message: {
-                id: msg.id,
+                id: messageId,
                 role: msg.role as 'user' | 'assistant',
                 parts: [{ type: 'text' as const, text: msg.content || '' }],
-                createdAt: new Date(msg.createdAt),
+                createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
               },
             }
-            prevId = msg.id
+            prevId = messageId
             return uiMessage
           })
 
