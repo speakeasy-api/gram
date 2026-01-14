@@ -161,17 +161,22 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 
 func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) (*gen.ListChatsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil || authCtx.SessionID == nil {
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
+	result := make([]*gen.ChatOverview, 0)
+	var userInfo *sessions.CachedUserInfo
+	var err error
+	if authCtx.SessionID != nil {
+		userInfo, _, err = s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
+		}
 	}
 
-	result := make([]*gen.ChatOverview, 0)
-	if userInfo.Admin {
+	// if the user is Admin, we list chat for a whole project
+	if userInfo != nil && userInfo.Admin {
 		chats, err := s.repo.ListChats(ctx, *authCtx.ProjectID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats").Log(ctx, s.logger)
@@ -187,30 +192,35 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 				UpdatedAt:   chat.UpdatedAt.Time.Format(time.RFC3339),
 			})
 		}
-	} else {
-		chats, err := s.repo.ListChatsForUser(ctx, repo.ListChatsForUserParams{
-			ProjectID: *authCtx.ProjectID,
-			UserID:    conv.ToPGText(authCtx.UserID), // TODO: make this work for external user ids (Elements)
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats").Log(ctx, s.logger)
-		}
 
-		for _, chat := range chats {
-			result = append(result, &gen.ChatOverview{
-				ID:          chat.ID.String(),
-				UserID:      chat.UserID.String,
-				Title:       chat.Title.String,
-				NumMessages: int(chat.NumMessages),
-				CreatedAt:   chat.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:   chat.UpdatedAt.Time.Format(time.RFC3339),
-			})
-		}
+		return &gen.ListChatsResult{Chats: result}, nil
 	}
 
-	return &gen.ListChatsResult{
-		Chats: result,
-	}, nil
+	// at this point if there's no UserID in authCtx then the request is unauthorized
+	if authCtx.UserID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	chats, err := s.repo.ListChatsForUser(ctx, repo.ListChatsForUserParams{
+		ProjectID: *authCtx.ProjectID,
+		UserID:    conv.ToPGText(authCtx.UserID),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats").Log(ctx, s.logger)
+	}
+
+	for _, chat := range chats {
+		result = append(result, &gen.ChatOverview{
+			ID:          chat.ID.String(),
+			UserID:      chat.UserID.String,
+			Title:       chat.Title.String,
+			NumMessages: int(chat.NumMessages),
+			CreatedAt:   chat.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:   chat.UpdatedAt.Time.Format(time.RFC3339),
+		})
+	}
+
+	return &gen.ListChatsResult{Chats: result}, nil
 }
 
 func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*gen.Chat, error) {
