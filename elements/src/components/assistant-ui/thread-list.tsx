@@ -10,8 +10,6 @@ import { Button } from '@/components/ui/button'
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 
-// NOTE: These components are currently not used but they will be
-// when we add support for thread / chat history
 export const ThreadList: FC = () => {
   return (
     <ThreadListPrimitive.Root className="aui-root aui-thread-list-root flex flex-col items-stretch gap-1.5">
@@ -25,7 +23,7 @@ const ThreadListNew: FC = () => {
   return (
     <ThreadListPrimitive.New asChild>
       <Button
-        className="aui-thread-list-new hover:bg-muted data-active:bg-muted flex items-center justify-start gap-1 rounded-lg px-2.5 py-2 text-start"
+        className="aui-thread-list-new hover:bg-muted data-active:bg-muted flex cursor-pointer items-center justify-start gap-1 rounded-lg px-2.5 py-2 text-start"
         variant="ghost"
       >
         <PlusIcon />
@@ -66,7 +64,7 @@ const ThreadListSkeleton: FC = () => {
 const ThreadListItem: FC = () => {
   return (
     <ThreadListItemPrimitive.Root className="aui-thread-list-item hover:bg-muted focus-visible:bg-muted focus-visible:ring-ring data-active:bg-muted flex items-center gap-2 rounded-lg transition-all focus-visible:ring-2 focus-visible:outline-none">
-      <ThreadListItemPrimitive.Trigger className="aui-thread-list-item-trigger grow px-3 py-2 text-start">
+      <ThreadListItemPrimitive.Trigger className="aui-thread-list-item-trigger grow cursor-pointer px-3 py-2 text-start">
         <ThreadListItemTitle />
       </ThreadListItemPrimitive.Trigger>
       <ThreadListItemArchive />
@@ -86,7 +84,7 @@ const ThreadListItemArchive: FC = () => {
   return (
     <ThreadListItemPrimitive.Archive asChild>
       <TooltipIconButton
-        className="aui-thread-list-item-archive text-foreground hover:text-primary mr-3 ml-auto size-4 p-0"
+        className="aui-thread-list-item-archive text-foreground hover:text-primary mr-3 ml-auto size-4 cursor-pointer p-0"
         variant="ghost"
         tooltip="Archive thread"
       >
