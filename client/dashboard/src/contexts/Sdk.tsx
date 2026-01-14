@@ -100,7 +100,6 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [projectSlug, queryClient]);
 
-  // Initialize toast client for notification persistence
   useEffect(() => {
     initializeToastClient(gram);
   }, [gram]);

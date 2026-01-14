@@ -83,6 +83,61 @@ function PlaygroundInner() {
     environmentSlug: selectedEnvironment ?? "",
   });
 
+  const chatHistoryItems: DropdownItem[] =
+    chatsData?.chats
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+      .map((chat) => ({
+        label: capitalize(dateTimeFormatters.humanize(chat.updatedAt)),
+        value: chat.id,
+      })) ?? [];
+
+  chatHistoryItems.unshift({
+    icon: <Icon name="plus" />,
+    label: "New chat",
+    value: uuidv7(),
+  });
+
+  const chatHistoryButton = (
+    <Combobox
+      items={chatHistoryItems}
+      onSelectionChange={(item) => {
+        chat.setId(item.value);
+      }}
+      selected={chat.id}
+      variant="ghost"
+      onOpenChange={(open) => {
+        if (open) {
+          refetchChats();
+        }
+      }}
+      className="w-fit"
+    >
+      <Stack direction="horizontal" gap={2} align="center">
+        <Icon name="history" className="opacity-50" />
+        <Type variant="small" className="font-medium">
+          Chat History
+        </Type>
+      </Stack>
+    </Combobox>
+  );
+
+  const shareChatButton = (
+    <Button
+      size="sm"
+      variant="ghost"
+      icon="link"
+      onClick={() => {
+        telemetry.capture("chat_event", {
+          action: "chat_shared",
+        });
+        navigator.clipboard.writeText(chat.url);
+        toast.success("Chat link copied to clipboard", { persist: true });
+      }}
+    >
+      Share chat
+    </Button>
+  );
+
   const logsButton = (
     <Button size="sm" variant="ghost" onClick={() => setShowLogs(!showLogs)}>
       <ScrollTextIcon className="size-4 mr-2" />
@@ -277,10 +332,11 @@ export function ToolsetPanel({
           }
           toast.success(
             `Added ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""}`,
+            { persist: true },
           );
         },
         onError: () => {
-          toast.error("Failed to add tools");
+          toast.error("Failed to add tools", { persist: true });
         },
       },
     );
@@ -318,10 +374,11 @@ export function ToolsetPanel({
           }
           toast.success(
             `Removed ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""}`,
+            { persist: true },
           );
         },
         onError: () => {
-          toast.error("Failed to remove tools");
+          toast.error("Failed to remove tools", { persist: true });
         },
       },
     );
@@ -460,7 +517,7 @@ export function ToolsetPanel({
         functionIdToName={functionIdToName}
         onSave={() => {
           // TODO: Implement tool variation updates
-          toast.success("Tool updated");
+          toast.success("Tool updated", { persist: true });
           setEditingTool(null);
         }}
         onRemove={() => {

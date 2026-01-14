@@ -176,7 +176,7 @@ export default function Sources() {
           : type === "function"
             ? "Function"
             : "External MCP";
-      toast.success(`${typeLabel} source deleted successfully`);
+      toast.success(`${typeLabel} source deleted successfully`, { persist: true });
     } catch (error) {
       console.error(`Failed to delete ${type} source:`, error);
       const typeLabel =
@@ -185,7 +185,7 @@ export default function Sources() {
           : type === "function"
             ? "function"
             : "external MCP";
-      toast.error(`Failed to delete ${typeLabel} source. Please try again.`);
+      toast.error(`Failed to delete ${typeLabel} source. Please try again.`, { persist: true });
     }
   };
 

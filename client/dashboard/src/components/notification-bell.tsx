@@ -41,7 +41,7 @@ export function NotificationBell() {
   const queryClient = useQueryClient();
 
   const { data: unreadData } = useNotificationsUnreadCount(
-    lastViewedAt ? { since: lastViewedAt } : undefined,
+    lastViewedAt ? { since: new Date(lastViewedAt) } : undefined,
     undefined,
     {
       refetchInterval: 30000, // Refresh every 30 seconds
@@ -69,7 +69,7 @@ export function NotificationBell() {
       });
       queryClient.invalidateQueries({
         queryKey: queryKeyNotificationsUnreadCount(
-          lastViewedAt ? { since: lastViewedAt } : undefined
+          lastViewedAt ? { since: new Date(lastViewedAt) } : undefined
         ),
       });
     },
@@ -86,7 +86,9 @@ export function NotificationBell() {
 
   const handleArchive = useCallback(
     (id: string) => {
-      archiveMutation.mutate({ request: { id } });
+      archiveMutation.mutate({
+        request: { archiveNotificationRequestBody: { id } },
+      });
     },
     [archiveMutation]
   );

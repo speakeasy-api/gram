@@ -47,6 +47,7 @@ export function OpenApiSourceInput({
     onError: (error) => {
       toast.error(
         error instanceof Error ? error.message : "Failed to fetch URL",
+        { persist: true },
       );
     },
   });
@@ -54,14 +55,14 @@ export function OpenApiSourceInput({
   const handleSubmit = () => {
     const trimmedUrl = url.trim();
     if (!trimmedUrl) {
-      toast.error("Please enter a URL");
+      toast.error("Please enter a URL", { persist: true });
       return;
     }
 
     try {
       new URL(trimmedUrl);
     } catch {
-      toast.error("Please enter a valid URL");
+      toast.error("Please enter a valid URL", { persist: true });
       return;
     }
 

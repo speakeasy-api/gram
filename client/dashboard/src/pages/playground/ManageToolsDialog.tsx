@@ -264,12 +264,12 @@ export function ManageToolsDialog({
         onSave={(updates) => {
           // TODO: Implement save functionality
           console.log("Save tool:", editingTool?.name, updates);
-          toast.success("Tool updated");
+          toast.success("Tool updated", { persist: true });
         }}
         onRemove={() => {
           if (editingTool?.toolUrn) {
             onRemoveTools([editingTool.toolUrn]);
-            toast.success("Tool removed");
+            toast.success("Tool removed", { persist: true });
           }
         }}
       />

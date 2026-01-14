@@ -30,10 +30,10 @@ export function UploadOpenApiDialogContent({
     setIsDeploying(true);
     try {
       await createDeployment(documentSlug);
-      toast.success("OpenAPI document deployed");
+      toast.success("OpenAPI document deployed", { persist: true });
       onSuccess();
     } catch (error) {
-      toast.error("Failed to deploy OpenAPI document");
+      toast.error("Failed to deploy OpenAPI document", { persist: true });
       console.error("Failed to deploy:", error);
     } finally {
       setIsDeploying(false);

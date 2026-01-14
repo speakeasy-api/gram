@@ -47,7 +47,7 @@ export function SettingsProjectsTable() {
         },
       ]);
 
-      toast.success("Project deleted successfully");
+      toast.success("Project deleted successfully", { persist: true });
 
       if (shouldNavigate) {
         // Navigate to the default project after deleting the current project
@@ -56,7 +56,7 @@ export function SettingsProjectsTable() {
     },
     onError: (error) => {
       console.error("Failed to delete project:", error);
-      toast.error("Failed to delete project");
+      toast.error("Failed to delete project", { persist: true });
       isDeletingCurrentProject.current = false;
     },
   });

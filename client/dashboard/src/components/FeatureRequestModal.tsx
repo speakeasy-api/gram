@@ -37,10 +37,10 @@ export function FeatureRequestModal({
         action: actionType,
         ...telemetryData,
       });
-      toast.success("Feature requested");
+      toast.success("Feature requested", { persist: true });
       onClose();
     } catch {
-      toast.error("Failed to request feature");
+      toast.error("Failed to request feature", { persist: true });
     }
   };
 

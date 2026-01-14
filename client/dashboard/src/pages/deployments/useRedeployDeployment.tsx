@@ -43,7 +43,7 @@ export const useRedeployDeployment = (
     },
     onError: (err, vars, onMutateResult, ctx) => {
       console.error("Failed to redeploy:", err);
-      toast.error(`Failed to redeploy. Please try again.`);
+      toast.error(`Failed to redeploy. Please try again.`, { persist: true });
       options?.onError?.(err, vars, onMutateResult, ctx);
     },
     onSettled: (data, err, vars, onMutateResult, ctx) => {

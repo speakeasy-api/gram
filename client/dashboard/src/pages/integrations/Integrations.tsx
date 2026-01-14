@@ -338,7 +338,7 @@ function RequestIntegrationDialog({
       integration_name: integrationName,
     });
     onOpenChange(false);
-    toast.success("Integration requested successfully");
+    toast.success("Integration requested successfully", { persist: true });
   };
 
   return (

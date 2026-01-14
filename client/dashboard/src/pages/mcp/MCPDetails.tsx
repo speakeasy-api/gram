@@ -173,6 +173,7 @@ export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
           });
           toast.success(
             toolset.mcpEnabled ? "MCP server disabled" : "MCP server enabled",
+            { persist: true },
           );
         },
       },
@@ -271,7 +272,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
       invalidateAllToolset(queryClient);
-      toast.success("MCP settings saved successfully");
+      toast.success("MCP settings saved successfully", { persist: true });
       telemetry.capture("mcp_event", {
         action: "mcp_settings_saved",
         slug: toolset.slug,
@@ -1078,7 +1079,7 @@ function GramOAuthProxyModal({
   const addOAuthProxyMutation = useAddOAuthProxyServerMutation({
     onSuccess: () => {
       invalidateAllToolset(queryClient);
-      toast.success("Gram OAuth configured successfully");
+      toast.success("Gram OAuth configured successfully", { persist: true });
       telemetry.capture("mcp_event", {
         action: "gram_oauth_proxy_configured",
         slug: toolset.slug,
@@ -1091,6 +1092,7 @@ function GramOAuthProxyModal({
         error instanceof Error
           ? error.message
           : "Failed to configure Gram OAuth",
+        { persist: true },
       );
     },
   });
@@ -1182,7 +1184,7 @@ function ConnectOAuthModal({
       toolset={toolset}
       onSuccess={() => {
         invalidateAllToolset(queryClient);
-        toast.success("External OAuth server configured successfully");
+        toast.success("External OAuth server configured successfully", { persist: true });
         onClose();
       }}
     />
@@ -1240,6 +1242,7 @@ function OAuthTabModal({
       console.error("Failed to configure external OAuth:", error);
       toast.error(
         error instanceof Error ? error.message : "Failed to configure OAuth",
+        { persist: true },
       );
     },
   });
@@ -1261,6 +1264,7 @@ function OAuthTabModal({
         error instanceof Error
           ? error.message
           : "Failed to configure OAuth proxy",
+        { persist: true },
       );
     },
   });
@@ -1276,7 +1280,7 @@ function OAuthTabModal({
     }
 
     if (!externalSlug.trim()) {
-      toast.error("Please provide a slug for the OAuth server");
+      toast.error("Please provide a slug for the OAuth server", { persist: true });
       return;
     }
 

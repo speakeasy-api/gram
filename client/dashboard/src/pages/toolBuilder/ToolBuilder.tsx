@@ -461,7 +461,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
             routes.customTools.toolBuilder.goTo(name);
           }
 
-          toast.success("Tool saved successfully");
+          toast.success("Tool saved successfully", { persist: true });
         } catch (error) {
           handleAPIError(error, "Failed to save tool");
         }

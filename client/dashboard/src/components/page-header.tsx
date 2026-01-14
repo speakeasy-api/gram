@@ -5,6 +5,7 @@ import { capitalize, cn } from "@/lib/utils.ts";
 import React from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { Heading } from "./ui/heading.tsx";
+import { NotificationBell } from "./notification-bell";
 
 function PageHeaderComponent({
   className,
@@ -27,6 +28,9 @@ function PageHeaderComponent({
           className="data-[orientation=vertical]:h-4"
         />
         {children}
+        <div className="ml-auto">
+          <NotificationBell />
+        </div>
       </div>
     </header>
   );

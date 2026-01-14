@@ -94,11 +94,11 @@ export default function SourceDetails() {
 
   const setSourceEnvironmentMutation = useSetSourceEnvironmentLinkMutation({
     onSuccess: () => {
-      toast.success("Environment attached successfully");
+      toast.success("Environment attached successfully", { persist: true });
       setInitialEnvironmentId(activeEnvironmentId);
     },
     onError: (error) => {
-      toast.error("Failed to attach environment. Please try again.");
+      toast.error("Failed to attach environment. Please try again.", { persist: true });
       console.error("Failed to attach environment:", error);
     },
     onSettled: () => {
@@ -109,11 +109,11 @@ export default function SourceDetails() {
   const deleteSourceEnvironmentMutation =
     useDeleteSourceEnvironmentLinkMutation({
       onSuccess: () => {
-        toast.success("Environment detached successfully");
+        toast.success("Environment detached successfully", { persist: true });
         setInitialEnvironmentId(undefined);
       },
       onError: (error) => {
-        toast.error("Failed to detach environment. Please try again.");
+        toast.error("Failed to detach environment. Please try again.", { persist: true });
         console.error("Failed to detach environment:", error);
       },
       onSettled: () => {
