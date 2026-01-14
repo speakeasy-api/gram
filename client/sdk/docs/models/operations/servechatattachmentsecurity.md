@@ -10,7 +10,8 @@ let value: ServeChatAttachmentSecurity = {};
 
 ## Fields
 
-| Field                      | Type                       | Required                   | Description                |
-| -------------------------- | -------------------------- | -------------------------- | -------------------------- |
-| `apikeyHeaderGramKey`      | *string*                   | :heavy_minus_sign:         | N/A                        |
-| `sessionHeaderGramSession` | *string*                   | :heavy_minus_sign:         | N/A                        |
+| Field                                    | Type                                     | Required                                 | Description                              |
+| ---------------------------------------- | ---------------------------------------- | ---------------------------------------- | ---------------------------------------- |
+| `apikeyHeaderGramKey`                    | *string*                                 | :heavy_minus_sign:                       | N/A                                      |
+| `sessionHeaderGramSession`               | *string*                                 | :heavy_minus_sign:                       | N/A                                      |
+| `chatSessionsTokenHeaderGramChatSession` | *string*                                 | :heavy_minus_sign:                       | N/A                                      |

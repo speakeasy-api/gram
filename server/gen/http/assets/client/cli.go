@@ -291,7 +291,7 @@ func BuildListAssetsPayload(assetsListAssetsSessionToken string, assetsListAsset
 
 // BuildUploadChatAttachmentPayload builds the payload for the assets
 // uploadChatAttachment endpoint from CLI flags.
-func BuildUploadChatAttachmentPayload(assetsUploadChatAttachmentContentType string, assetsUploadChatAttachmentContentLength string, assetsUploadChatAttachmentApikeyToken string, assetsUploadChatAttachmentProjectSlugInput string, assetsUploadChatAttachmentSessionToken string) (*assets.UploadChatAttachmentForm, error) {
+func BuildUploadChatAttachmentPayload(assetsUploadChatAttachmentContentType string, assetsUploadChatAttachmentContentLength string, assetsUploadChatAttachmentApikeyToken string, assetsUploadChatAttachmentProjectSlugInput string, assetsUploadChatAttachmentSessionToken string, assetsUploadChatAttachmentChatSessionsToken string) (*assets.UploadChatAttachmentForm, error) {
 	var err error
 	var contentType string
 	{
@@ -322,19 +322,26 @@ func BuildUploadChatAttachmentPayload(assetsUploadChatAttachmentContentType stri
 			sessionToken = &assetsUploadChatAttachmentSessionToken
 		}
 	}
+	var chatSessionsToken *string
+	{
+		if assetsUploadChatAttachmentChatSessionsToken != "" {
+			chatSessionsToken = &assetsUploadChatAttachmentChatSessionsToken
+		}
+	}
 	v := &assets.UploadChatAttachmentForm{}
 	v.ContentType = contentType
 	v.ContentLength = contentLength
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.SessionToken = sessionToken
+	v.ChatSessionsToken = chatSessionsToken
 
 	return v, nil
 }
 
 // BuildServeChatAttachmentPayload builds the payload for the assets
 // serveChatAttachment endpoint from CLI flags.
-func BuildServeChatAttachmentPayload(assetsServeChatAttachmentID string, assetsServeChatAttachmentProjectID string, assetsServeChatAttachmentApikeyToken string, assetsServeChatAttachmentSessionToken string) (*assets.ServeChatAttachmentForm, error) {
+func BuildServeChatAttachmentPayload(assetsServeChatAttachmentID string, assetsServeChatAttachmentProjectID string, assetsServeChatAttachmentApikeyToken string, assetsServeChatAttachmentSessionToken string, assetsServeChatAttachmentChatSessionsToken string) (*assets.ServeChatAttachmentForm, error) {
 	var id string
 	{
 		id = assetsServeChatAttachmentID
@@ -355,11 +362,18 @@ func BuildServeChatAttachmentPayload(assetsServeChatAttachmentID string, assetsS
 			sessionToken = &assetsServeChatAttachmentSessionToken
 		}
 	}
+	var chatSessionsToken *string
+	{
+		if assetsServeChatAttachmentChatSessionsToken != "" {
+			chatSessionsToken = &assetsServeChatAttachmentChatSessionsToken
+		}
+	}
 	v := &assets.ServeChatAttachmentForm{}
 	v.ID = id
 	v.ProjectID = projectID
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
+	v.ChatSessionsToken = chatSessionsToken
 
 	return v, nil
 }

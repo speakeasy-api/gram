@@ -84,7 +84,7 @@ func UsageExamples() string {
 	return os.Args[0] + " " + "about openapi" + "\n" +
 		os.Args[0] + " " + "agents create-response --body '{\n      \"async\": false,\n      \"input\": \"Quidem aperiam reprehenderit.\",\n      \"instructions\": \"Omnis ut itaque alias.\",\n      \"model\": \"Quis qui et sapiente temporibus possimus.\",\n      \"previous_response_id\": \"Culpa voluptate qui molestiae quisquam est.\",\n      \"store\": true,\n      \"sub_agents\": [\n         {\n            \"description\": \"Ad vel ad voluptatibus consequatur.\",\n            \"environment_slug\": \"Facere soluta aperiam qui.\",\n            \"instructions\": \"Magni voluptatem in natus.\",\n            \"name\": \"Rerum voluptatum ducimus.\",\n            \"tools\": [\n               \"Eveniet eum et.\",\n               \"Deserunt et impedit quod soluta voluptatibus cum.\",\n               \"Adipisci consequatur provident deleniti consectetur.\",\n               \"Omnis aut veniam non quod voluptatem.\"\n            ],\n            \"toolsets\": [\n               {\n                  \"environment_slug\": \"Corrupti mollitia facilis officiis.\",\n                  \"toolset_slug\": \"Voluptas dolores sit placeat.\"\n               },\n               {\n                  \"environment_slug\": \"Corrupti mollitia facilis officiis.\",\n                  \"toolset_slug\": \"Voluptas dolores sit placeat.\"\n               }\n            ]\n         },\n         {\n            \"description\": \"Ad vel ad voluptatibus consequatur.\",\n            \"environment_slug\": \"Facere soluta aperiam qui.\",\n            \"instructions\": \"Magni voluptatem in natus.\",\n            \"name\": \"Rerum voluptatum ducimus.\",\n            \"tools\": [\n               \"Eveniet eum et.\",\n               \"Deserunt et impedit quod soluta voluptatibus cum.\",\n               \"Adipisci consequatur provident deleniti consectetur.\",\n               \"Omnis aut veniam non quod voluptatem.\"\n            ],\n            \"toolsets\": [\n               {\n                  \"environment_slug\": \"Corrupti mollitia facilis officiis.\",\n                  \"toolset_slug\": \"Voluptas dolores sit placeat.\"\n               },\n               {\n                  \"environment_slug\": \"Corrupti mollitia facilis officiis.\",\n                  \"toolset_slug\": \"Voluptas dolores sit placeat.\"\n               }\n            ]\n         },\n         {\n            \"description\": \"Ad vel ad voluptatibus consequatur.\",\n            \"environment_slug\": \"Facere soluta aperiam qui.\",\n            \"instructions\": \"Magni voluptatem in natus.\",\n            \"name\": \"Rerum voluptatum ducimus.\",\n            \"tools\": [\n               \"Eveniet eum et.\",\n               \"Deserunt et impedit quod soluta voluptatibus cum.\",\n               \"Adipisci consequatur provident deleniti consectetur.\",\n               \"Omnis aut veniam non quod voluptatem.\"\n            ],\n            \"toolsets\": [\n               {\n                  \"environment_slug\": \"Corrupti mollitia facilis officiis.\",\n                  \"toolset_slug\": \"Voluptas dolores sit placeat.\"\n               },\n               {\n                  \"environment_slug\": \"Corrupti mollitia facilis officiis.\",\n                  \"toolset_slug\": \"Voluptas dolores sit placeat.\"\n               }\n            ]\n         },\n         {\n            \"description\": \"Ad vel ad voluptatibus consequatur.\",\n            \"environment_slug\": \"Facere soluta aperiam qui.\",\n            \"instructions\": \"Magni voluptatem in natus.\",\n            \"name\": \"Rerum voluptatum ducimus.\",\n            \"tools\": [\n               \"Eveniet eum et.\",\n               \"Deserunt et impedit quod soluta voluptatibus cum.\",\n               \"Adipisci consequatur provident deleniti consectetur.\",\n               \"Omnis aut veniam non quod voluptatem.\"\n            ],\n            \"toolsets\": [\n               {\n                  \"environment_slug\": \"Corrupti mollitia facilis officiis.\",\n                  \"toolset_slug\": \"Voluptas dolores sit placeat.\"\n               },\n               {\n                  \"environment_slug\": \"Corrupti mollitia facilis officiis.\",\n                  \"toolset_slug\": \"Voluptas dolores sit placeat.\"\n               }\n            ]\n         }\n      ],\n      \"temperature\": 0.884372782145245,\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"Corrupti mollitia facilis officiis.\",\n            \"toolset_slug\": \"Voluptas dolores sit placeat.\"\n         },\n         {\n            \"environment_slug\": \"Corrupti mollitia facilis officiis.\",\n            \"toolset_slug\": \"Voluptas dolores sit placeat.\"\n         },\n         {\n            \"environment_slug\": \"Corrupti mollitia facilis officiis.\",\n            \"toolset_slug\": \"Voluptas dolores sit placeat.\"\n         }\n      ]\n   }' --apikey-token \"Doloremque officia beatae voluptate error pariatur et.\" --project-slug-input \"Hic et libero.\"" + "\n" +
 		os.Args[0] + " " + "assets serve-image --id \"Non enim dicta est sit.\"" + "\n" +
-		os.Args[0] + " " + "auth callback --code \"Fugit nihil dignissimos et.\" --state \"Quos officia quisquam doloremque adipisci suscipit.\"" + "\n" +
+		os.Args[0] + " " + "auth callback --code \"Provident qui temporibus.\" --state \"Impedit vel accusantium provident qui ut.\"" + "\n" +
 		os.Args[0] + " " + "chat list-chats --session-token \"Ipsa consequuntur eveniet et vel.\" --project-slug-input \"Repellendus cum dolorum.\" --chat-sessions-token \"Expedita repellat sed dolores perferendis.\"" + "\n" +
 		""
 }
@@ -172,19 +172,21 @@ func ParseEndpoint(
 		assetsListAssetsProjectSlugInputFlag = assetsListAssetsFlags.String("project-slug-input", "", "")
 		assetsListAssetsApikeyTokenFlag      = assetsListAssetsFlags.String("apikey-token", "", "")
 
-		assetsUploadChatAttachmentFlags                = flag.NewFlagSet("upload-chat-attachment", flag.ExitOnError)
-		assetsUploadChatAttachmentContentTypeFlag      = assetsUploadChatAttachmentFlags.String("content-type", "REQUIRED", "")
-		assetsUploadChatAttachmentContentLengthFlag    = assetsUploadChatAttachmentFlags.String("content-length", "REQUIRED", "")
-		assetsUploadChatAttachmentApikeyTokenFlag      = assetsUploadChatAttachmentFlags.String("apikey-token", "", "")
-		assetsUploadChatAttachmentProjectSlugInputFlag = assetsUploadChatAttachmentFlags.String("project-slug-input", "", "")
-		assetsUploadChatAttachmentSessionTokenFlag     = assetsUploadChatAttachmentFlags.String("session-token", "", "")
-		assetsUploadChatAttachmentStreamFlag           = assetsUploadChatAttachmentFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
+		assetsUploadChatAttachmentFlags                 = flag.NewFlagSet("upload-chat-attachment", flag.ExitOnError)
+		assetsUploadChatAttachmentContentTypeFlag       = assetsUploadChatAttachmentFlags.String("content-type", "REQUIRED", "")
+		assetsUploadChatAttachmentContentLengthFlag     = assetsUploadChatAttachmentFlags.String("content-length", "REQUIRED", "")
+		assetsUploadChatAttachmentApikeyTokenFlag       = assetsUploadChatAttachmentFlags.String("apikey-token", "", "")
+		assetsUploadChatAttachmentProjectSlugInputFlag  = assetsUploadChatAttachmentFlags.String("project-slug-input", "", "")
+		assetsUploadChatAttachmentSessionTokenFlag      = assetsUploadChatAttachmentFlags.String("session-token", "", "")
+		assetsUploadChatAttachmentChatSessionsTokenFlag = assetsUploadChatAttachmentFlags.String("chat-sessions-token", "", "")
+		assetsUploadChatAttachmentStreamFlag            = assetsUploadChatAttachmentFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
 
-		assetsServeChatAttachmentFlags            = flag.NewFlagSet("serve-chat-attachment", flag.ExitOnError)
-		assetsServeChatAttachmentIDFlag           = assetsServeChatAttachmentFlags.String("id", "REQUIRED", "")
-		assetsServeChatAttachmentProjectIDFlag    = assetsServeChatAttachmentFlags.String("project-id", "REQUIRED", "")
-		assetsServeChatAttachmentApikeyTokenFlag  = assetsServeChatAttachmentFlags.String("apikey-token", "", "")
-		assetsServeChatAttachmentSessionTokenFlag = assetsServeChatAttachmentFlags.String("session-token", "", "")
+		assetsServeChatAttachmentFlags                 = flag.NewFlagSet("serve-chat-attachment", flag.ExitOnError)
+		assetsServeChatAttachmentIDFlag                = assetsServeChatAttachmentFlags.String("id", "REQUIRED", "")
+		assetsServeChatAttachmentProjectIDFlag         = assetsServeChatAttachmentFlags.String("project-id", "REQUIRED", "")
+		assetsServeChatAttachmentApikeyTokenFlag       = assetsServeChatAttachmentFlags.String("apikey-token", "", "")
+		assetsServeChatAttachmentSessionTokenFlag      = assetsServeChatAttachmentFlags.String("session-token", "", "")
+		assetsServeChatAttachmentChatSessionsTokenFlag = assetsServeChatAttachmentFlags.String("chat-sessions-token", "", "")
 
 		authFlags = flag.NewFlagSet("auth", flag.ContinueOnError)
 
@@ -1483,13 +1485,13 @@ func ParseEndpoint(
 				data, err = assetsc.BuildListAssetsPayload(*assetsListAssetsSessionTokenFlag, *assetsListAssetsProjectSlugInputFlag, *assetsListAssetsApikeyTokenFlag)
 			case "upload-chat-attachment":
 				endpoint = c.UploadChatAttachment()
-				data, err = assetsc.BuildUploadChatAttachmentPayload(*assetsUploadChatAttachmentContentTypeFlag, *assetsUploadChatAttachmentContentLengthFlag, *assetsUploadChatAttachmentApikeyTokenFlag, *assetsUploadChatAttachmentProjectSlugInputFlag, *assetsUploadChatAttachmentSessionTokenFlag)
+				data, err = assetsc.BuildUploadChatAttachmentPayload(*assetsUploadChatAttachmentContentTypeFlag, *assetsUploadChatAttachmentContentLengthFlag, *assetsUploadChatAttachmentApikeyTokenFlag, *assetsUploadChatAttachmentProjectSlugInputFlag, *assetsUploadChatAttachmentSessionTokenFlag, *assetsUploadChatAttachmentChatSessionsTokenFlag)
 				if err == nil {
 					data, err = assetsc.BuildUploadChatAttachmentStreamPayload(data, *assetsUploadChatAttachmentStreamFlag)
 				}
 			case "serve-chat-attachment":
 				endpoint = c.ServeChatAttachment()
-				data, err = assetsc.BuildServeChatAttachmentPayload(*assetsServeChatAttachmentIDFlag, *assetsServeChatAttachmentProjectIDFlag, *assetsServeChatAttachmentApikeyTokenFlag, *assetsServeChatAttachmentSessionTokenFlag)
+				data, err = assetsc.BuildServeChatAttachmentPayload(*assetsServeChatAttachmentIDFlag, *assetsServeChatAttachmentProjectIDFlag, *assetsServeChatAttachmentApikeyTokenFlag, *assetsServeChatAttachmentSessionTokenFlag, *assetsServeChatAttachmentChatSessionsTokenFlag)
 			}
 		case "auth":
 			c := authc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2195,6 +2197,7 @@ func assetsUploadChatAttachmentUsage() {
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -chat-sessions-token STRING")
 	fmt.Fprint(os.Stderr, " -stream STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -2208,11 +2211,12 @@ func assetsUploadChatAttachmentUsage() {
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -chat-sessions-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -stream STRING: path to file containing the streamed request body`)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assets upload-chat-attachment --content-type \"Eos atque.\" --content-length 4656141927516254522 --apikey-token \"Ut in vero perspiciatis iusto est.\" --project-slug-input \"Quis et.\" --session-token \"Eum aperiam.\" --stream \"goa.png\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assets upload-chat-attachment --content-type \"Eos atque.\" --content-length 4656141927516254522 --apikey-token \"Ut in vero perspiciatis iusto est.\" --project-slug-input \"Quis et.\" --session-token \"Eum aperiam.\" --chat-sessions-token \"Est sed.\" --stream \"goa.png\"")
 }
 
 func assetsServeChatAttachmentUsage() {
@@ -2222,6 +2226,7 @@ func assetsServeChatAttachmentUsage() {
 	fmt.Fprint(os.Stderr, " -project-id STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -chat-sessions-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -2233,10 +2238,11 @@ func assetsServeChatAttachmentUsage() {
 	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -chat-sessions-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assets serve-chat-attachment --id \"Qui accusamus ea quidem dolores dignissimos aut.\" --project-id \"Culpa illum reiciendis qui error et.\" --apikey-token \"Enim quia nobis.\" --session-token \"Atque cumque perferendis accusantium voluptate vel.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assets serve-chat-attachment --id \"Vel culpa illum reiciendis qui error.\" --project-id \"Soluta enim quia nobis facilis.\" --apikey-token \"Cumque perferendis.\" --session-token \"Voluptate vel est vel quibusdam.\" --chat-sessions-token \"At placeat velit voluptas fugit nostrum.\"")
 }
 
 // authUsage displays the usage of the auth command and its subcommands.
@@ -2271,7 +2277,7 @@ func authCallbackUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth callback --code \"Fugit nihil dignissimos et.\" --state \"Quos officia quisquam doloremque adipisci suscipit.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth callback --code \"Provident qui temporibus.\" --state \"Impedit vel accusantium provident qui ut.\"")
 }
 
 func authLoginUsage() {
@@ -2289,7 +2295,7 @@ func authLoginUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth login --redirect \"Quae aliquam ad labore dolor.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth login --redirect \"Debitis ab consequatur error.\"")
 }
 
 func authSwitchScopesUsage() {
@@ -2311,7 +2317,7 @@ func authSwitchScopesUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth switch-scopes --organization-id \"Et sint odio a a modi.\" --project-id \"Aperiam iure est quia perspiciatis.\" --session-token \"Ea cum esse officia ipsam omnis dolores.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth switch-scopes --organization-id \"Cum esse officia.\" --project-id \"Omnis dolores.\" --session-token \"Minima voluptatem.\"")
 }
 
 func authLogoutUsage() {
@@ -2329,7 +2335,7 @@ func authLogoutUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth logout --session-token \"Quia minus eos suscipit fuga.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth logout --session-token \"Porro ipsa quo placeat.\"")
 }
 
 func authRegisterUsage() {

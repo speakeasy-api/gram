@@ -3,6 +3,7 @@
 import { type FC } from 'react'
 import { Loader, PanelRightClose, PanelRightOpen } from 'lucide-react'
 import { Thread } from '@/components/assistant-ui/thread'
+import { ThreadList } from '@/components/assistant-ui/thread-list'
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
 import { useThemeProps } from '@/hooks/useThemeProps'
 import { useElements } from '@/hooks/useElements'
@@ -23,6 +24,10 @@ export const AssistantSidecar: FC = () => {
   const isGenerating = thread.messages.some(
     (message) => message.status?.type === 'running'
   )
+
+  // Check if thread list should be shown
+  const showThreadList =
+    config.history?.enabled && config.history?.showThreadList !== false
 
   return (
     <LazyMotion features={domMax}>
@@ -78,9 +83,19 @@ export const AssistantSidecar: FC = () => {
           </div>
         </div>
 
-        {/* Thread content */}
-        <div className="aui-sidecar-content h-[calc(100%-3.5rem)] overflow-hidden">
-          <Thread />
+        {/* Main content area */}
+        <div className="aui-sidecar-body flex h-[calc(100%-3.5rem)] overflow-hidden">
+          {/* Thread list sidebar (when history enabled) */}
+          {showThreadList && (
+            <div className="aui-sidecar-thread-list w-56 shrink-0 overflow-y-auto border-r">
+              <ThreadList />
+            </div>
+          )}
+
+          {/* Thread content */}
+          <div className="aui-sidecar-content flex-1 overflow-hidden">
+            <Thread />
+          </div>
         </div>
       </m.div>
     </LazyMotion>

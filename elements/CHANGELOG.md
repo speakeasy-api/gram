@@ -1,5 +1,15 @@
 # @gram-ai/elements
 
+## 1.20.0
+
+### Minor Changes
+
+- 950419c: Adds chat threads and history to elements
+
+### Patch Changes
+
+- 45eb983: Some charting improvements, both to style and reliability. Expands the plugin prompt, hopefully helping more models produce valid Vega
+
 ## 1.19.1
 
 ### Patch Changes

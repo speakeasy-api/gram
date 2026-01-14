@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -56,24 +57,26 @@ type Service struct {
 	auth    *auth.Auth
 	storage BlobStore
 
-	projects *projectsRepo.Queries
-	repo     *repo.Queries
+	chatSessions *chatsessions.Manager
+	projects     *projectsRepo.Queries
+	repo         *repo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, storage BlobStore) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, chatSessions *chatsessions.Manager, storage BlobStore) *Service {
 	logger = logger.With(attr.SlogComponent("assets"))
 
 	return &Service{
-		tracer:   otel.Tracer("github.com/speakeasy-api/gram/server/internal/assets"),
-		logger:   logger,
-		db:       db,
-		auth:     auth.New(logger, db, sessions),
-		storage:  storage,
-		projects: projectsRepo.New(db),
-		repo:     repo.New(db),
+		tracer:       otel.Tracer("github.com/speakeasy-api/gram/server/internal/assets"),
+		logger:       logger,
+		db:           db,
+		auth:         auth.New(logger, db, sessions),
+		storage:      storage,
+		chatSessions: chatSessions,
+		projects:     projectsRepo.New(db),
+		repo:         repo.New(db),
 	}
 }
 
@@ -85,6 +88,14 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
+}
+
+func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	return s.auth.Authorize(ctx, key, schema)
+}
+
+func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JWTScheme) (context.Context, error) {
+	return s.chatSessions.Authorize(ctx, token)
 }
 
 func (s *Service) ListAssets(ctx context.Context, payload *gen.ListAssetsPayload) (*gen.ListAssetsResult, error) {
@@ -155,10 +166,6 @@ func (s *Service) ServeImage(ctx context.Context, payload *gen.ServeImageForm) (
 		LastModified:             row.UpdatedAt.Time.Format(time.RFC1123),
 		AccessControlAllowOrigin: conv.Ptr("*"),
 	}, body, nil
-}
-
-func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
 }
 
 func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm, reader io.ReadCloser) (res *gen.UploadImageResult, err error) {

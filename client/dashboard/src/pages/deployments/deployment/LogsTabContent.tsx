@@ -24,12 +24,6 @@ interface ParsedLogEntry {
   originalEvent: string;
 }
 
-const SOURCE_PATTERNS = [
-  /^(\w+):\s+(.*)$/,
-  /^\[(\w+)\]\s*(.*)$/,
-  /^(\w+)\s*\|\s*(.*)$/,
-];
-
 const TIMESTAMP_PATTERNS = [
   /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)\s+(.*)$/,
   /^(\d{1,2}:\d{2}:\d{2}\.\d{3})\s+(.*)$/,
@@ -40,15 +34,6 @@ const LEVEL_PATTERN = /^\[?(WARN|WARNING|INFO|DEBUG|ERROR|OK)\]?\s+(.*)$/i;
 function parseLogMessage(message: string, event: string): ParsedLogEntry {
   let source: string | undefined;
   let cleanMessage = message;
-
-  for (const pattern of SOURCE_PATTERNS) {
-    const match = message.match(pattern);
-    if (match && match[1] && match[2]) {
-      source = match[1];
-      cleanMessage = match[2];
-      break;
-    }
-  }
 
   const lowerMsg = message.toLowerCase();
   const isSkipped =

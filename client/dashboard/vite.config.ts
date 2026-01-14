@@ -32,6 +32,12 @@ export default defineConfig({
         manualChunks: {
           "lucide-react": ["lucide-react"],
           moonshine: ["@speakeasy-api/moonshine"],
+          three: [
+            "@react-three/drei",
+            "@react-three/fiber",
+            "@react-three/postprocessing",
+            "three",
+          ],
           externals: [
             "posthog-js",
             "react",

@@ -3,10 +3,13 @@ import './global.css'
 
 // Context Providers
 export { ElementsProvider as GramElementsProvider } from './contexts/ElementsProvider'
+export { ElementsProvider } from './contexts/ElementsProvider'
 export { useElements as useGramElements } from './hooks/useElements'
+export { useElements } from './hooks/useElements'
 
 // Core Components
 export { Chat } from '@/components/Chat'
+export { ThreadList as ChatHistory } from '@/components/assistant-ui/thread-list'
 
 // Frontend Tools
 export { defineFrontendTool } from './lib/tools'
@@ -25,6 +28,7 @@ export type {
   Dimensions,
   ElementsConfig,
   GetSessionFn,
+  HistoryConfig,
   ModalConfig,
   ModalTriggerPosition,
   Model,

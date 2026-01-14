@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 type RegistryBackend interface {
@@ -189,7 +190,7 @@ type getServerResponse struct {
 func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry, serverName string) (*ServerDetails, error) {
 	u, err := url.Parse(registry.URL)
 	if err != nil {
-		return nil, fmt.Errorf("parse external mcp registry url: %w", err)
+		return nil, oops.Permanent(fmt.Errorf("parse external mcp registry url: %w", err))
 	}
 	u = u.JoinPath("v0.1", "servers", url.PathEscape(serverName), "versions", "latest")
 
@@ -197,7 +198,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("create external mcp server details request: %w", err)
+		return nil, oops.Permanent(fmt.Errorf("create external mcp server details request: %w", err))
 	}
 
 	if c.backend.Match(req) {
@@ -210,10 +211,15 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 	if err != nil {
 		return nil, fmt.Errorf("send external mcp server details request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("registry returned status %d", resp.StatusCode)
+		err := fmt.Errorf("registry returned status %d", resp.StatusCode)
+		isRetryable := resp.StatusCode == 429 || resp.StatusCode >= 500 && resp.StatusCode < 600
+		if !isRetryable {
+			err = oops.Permanent(err)
+		}
+		return nil, err
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -241,7 +247,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 	}
 
 	if remoteURL == "" {
-		return nil, fmt.Errorf("server %s has no streamable-http or sse remote", serverName)
+		return nil, oops.Permanent(fmt.Errorf("server %s has no streamable-http or sse remote", serverName))
 	}
 
 	return &ServerDetails{

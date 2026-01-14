@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.19.1**](../README.md)
+[**@gram-ai/elements v1.20.0**](../README.md)
 
 ***
 
@@ -319,6 +319,26 @@ const config: ElementsConfig = {
     components: {
       fetchUrl: FetchToolComponent,
     },
+  },
+}
+```
+
+***
+
+### history?
+
+> `optional` **history**: [`HistoryConfig`](HistoryConfig.md)
+
+Configuration for chat history and thread persistence.
+When enabled, conversations are saved and the thread list is shown.
+
+#### Example
+
+```ts
+const config: ElementsConfig = {
+  history: {
+    enabled: true,
+    showThreadList: true,
   },
 }
 ```

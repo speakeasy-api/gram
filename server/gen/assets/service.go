@@ -59,6 +59,8 @@ type Service interface {
 type Auther interface {
 	// APIKeyAuth implements the authorization logic for the APIKey security scheme.
 	APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error)
+	// JWTAuth implements the authorization logic for the JWT security scheme.
+	JWTAuth(ctx context.Context, token string, schema *security.JWTScheme) (context.Context, error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -120,8 +122,9 @@ type ListAssetsResult struct {
 // ServeChatAttachmentForm is the payload type of the assets service
 // serveChatAttachment method.
 type ServeChatAttachmentForm struct {
-	ApikeyToken  *string
-	SessionToken *string
+	ApikeyToken       *string
+	SessionToken      *string
+	ChatSessionsToken *string
 	// The ID of the attachment to serve
 	ID string
 	// The project ID that the attachment belongs to
@@ -191,11 +194,12 @@ type ServeOpenAPIv3Result struct {
 // UploadChatAttachmentForm is the payload type of the assets service
 // uploadChatAttachment method.
 type UploadChatAttachmentForm struct {
-	ApikeyToken      *string
-	SessionToken     *string
-	ProjectSlugInput *string
-	ContentType      string
-	ContentLength    int64
+	ApikeyToken       *string
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
+	ContentType       string
+	ContentLength     int64
 }
 
 // UploadChatAttachmentResult is the result type of the assets service

@@ -272,6 +272,20 @@ export interface ElementsConfig {
   tools?: ToolsConfig
 
   /**
+   * Configuration for chat history and thread persistence.
+   * When enabled, conversations are saved and the thread list is shown.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   history: {
+   *     enabled: true,
+   *     showThreadList: true,
+   *   },
+   * }
+   */
+  history?: HistoryConfig
+
+  /**
    * The API configuration to use for the Elements library.
    *
    * Use this to override the default API URL, or add explicit auth configuration
@@ -744,6 +758,34 @@ export interface SidecarConfig extends ExpandableConfig {
    * @default 'Chat'
    */
   title?: string
+}
+
+/**
+ * Configuration for chat history persistence.
+ * When enabled, threads are persisted and can be restored from the thread list.
+ *
+ * @example
+ * const config: ElementsConfig = {
+ *   history: {
+ *     enabled: true,
+ *     showThreadList: true,
+ *   },
+ * }
+ */
+export interface HistoryConfig {
+  /**
+   * Whether to enable chat history persistence.
+   * When true, threads will be saved and can be loaded from the thread list.
+   * @default false
+   */
+  enabled: boolean
+
+  /**
+   * Whether to show the thread list sidebar/panel.
+   * Only applies when history is enabled.
+   * @default true when history.enabled is true
+   */
+  showThreadList?: boolean
 }
 
 /**

@@ -379,19 +379,15 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	}
 	hasExternalMCPOAuth := externalmcp.ResolveOAuthConfig(fullToolset) != nil
 
-	token := r.Header.Get("Authorization")
-	token = strings.TrimPrefix(token, "Bearer ")
-	token = strings.TrimPrefix(token, "bearer ")
+	// Extract tokens from headers separately:
+	// - authToken: from Authorization header (for OAuth flows)
+	// - sessionToken: from Gram-Chat-Session header (for chat session fallback on non-OAuth endpoints)
+	authToken := r.Header.Get("Authorization")
+	authToken = strings.TrimPrefix(authToken, "Bearer ")
+	authToken = strings.TrimPrefix(authToken, "bearer ")
+	sessionToken := r.Header.Get(constants.ChatSessionsTokenHeader)
 
-	// Also check for chat session token if no Authorization header
-	if token == "" {
-		token = r.Header.Get(constants.ChatSessionsTokenHeader)
-	}
 	var tokenInputs []oauthTokenInputs
-
-	if token == "" {
-		token = r.Header.Get(constants.ChatSessionsTokenHeader)
-	}
 
 	var oAuthProxyProvider *oauth_repo.OauthProxyProvider
 	if toolset.OauthProxyServerID.Valid {
@@ -415,8 +411,8 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 	switch {
 	case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
-		// External OAuth server flow
-		if token == "" {
+		// External OAuth server flow - only accept Authorization header
+		if authToken == "" {
 			s.logger.WarnContext(ctx, "No authorization token provided")
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
 			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
@@ -424,25 +420,26 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 		tokenInputs = append(tokenInputs, oauthTokenInputs{
 			securityKeys: []string{},
-			Token:        token,
+			Token:        authToken,
 		})
 	case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
-		// Custom OAuth provider flow
-		token, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
+		// Custom OAuth provider flow - only accept Authorization header
+		oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
 		if err != nil {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
 			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
 		}
 		s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()))
 
-		for _, externalSecret := range token.ExternalSecrets {
+		for _, externalSecret := range oauthToken.ExternalSecrets {
 			tokenInputs = append(tokenInputs, oauthTokenInputs{
 				securityKeys: externalSecret.SecurityKeys,
 				Token:        externalSecret.Token,
 			})
 		}
 	case toolset.McpIsPublic && hasExternalMCPOAuth:
-		if token == "" {
+		// External MCP OAuth flow - only accept Authorization header
+		if authToken == "" {
 			w.Header().Set(
 				"WWW-Authenticate",
 				fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
@@ -452,10 +449,15 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		// Token provided - pass it through as OAuth token for external MCP
 		tokenInputs = append(tokenInputs, oauthTokenInputs{
 			securityKeys: []string{},
-			Token:        token,
+			Token:        authToken,
 		})
 	case !toolset.McpIsPublic:
+		// Private MCP - for OAuth-capable servers, only use authToken; otherwise allow sessionToken fallback
 		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
+		token := authToken
+		if !isOAuthCapable && token == "" {
+			token = sessionToken
+		}
 
 		ctx, err = s.authenticateToken(ctx, token, toolset.ID, isOAuthCapable)
 		if err == nil {
@@ -471,6 +473,11 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 		return oops.E(oops.CodeUnauthorized, nil, "expired or invalid access token")
 	default:
+		// Public MCP without OAuth - allow sessionToken fallback
+		token := authToken
+		if token == "" {
+			token = sessionToken
+		}
 		if token != "" {
 			ctx, err = s.authenticateToken(ctx, token, toolset.ID, false)
 			if err != nil {
