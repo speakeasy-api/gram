@@ -4,9 +4,18 @@ import { ElementsDecorator } from './GlobalDecorator'
 import React from 'react'
 import '../src/global.css'
 import type { ElementsConfig } from '../src/types'
+import { allModes } from './modes.ts'
+import { withThemeByClassName } from '@storybook/addon-themes'
 
 const preview: Preview = {
   parameters: {
+    chromatic: {
+      delay: 500,
+      modes: {
+        'light desktop': allModes['light desktop'],
+        'dark desktop': allModes['dark desktop'],
+      },
+    },
     controls: {
       matchers: {
         color: /(background|color)$/i,
@@ -25,6 +34,13 @@ const preview: Preview = {
     mcpUrl: { control: 'text' },
   },
   decorators: [
+    withThemeByClassName({
+      themes: {
+        light: 'light',
+        dark: 'dark',
+      },
+      defaultTheme: 'light',
+    }),
     (Story, context) => {
       // Stories can override config via parameters.elements
       const elementsParams = context.parameters.elements ?? {}

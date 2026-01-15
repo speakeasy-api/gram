@@ -1,0 +1,102 @@
+name: Chromatic
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  changes:
+    name: Check for elements changes
+    runs-on: ubicloud-standard-4
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      elements: ${{ steps.gates.outputs.elements }}
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        name: Check for changed packages
+        id: filter
+        with:
+          filters: .github/filters.yaml
+      - id: gates
+        name: Set outputs
+        run: |
+          if [[ "${{ steps.filter.outputs.elements }}" == "true" || "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "elements=true" >> $GITHUB_OUTPUT
+            echo "Elements jobs will run."
+          else
+            echo "Elements jobs will be skipped."
+          fi
+
+  chromatic:
+    name: Visual regression tests
+    runs-on: ubicloud-standard-4
+    needs: changes
+    steps:
+      - name: Skip if no elements changes exist
+        if: ${{ needs.changes.outputs.elements != 'true' }}
+        run: echo "No elements changes detected — skipping chromatic job."
+
+      - name: Checkout
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Setup Mise
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3.5.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: mise run github
+
+      - name: Cache PNPM
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+        with:
+          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_PNPM_KEY }}
+            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+          path: |
+            ${{ env.PNPM_STORE_PATH }}
+
+      - name: Install dependencies
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Storybook
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: pnpm build-storybook
+        working-directory: elements
+
+      - name: Run Chromatic
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        uses: chromaui/action@v11
+        with:
+          workingDir: elements
+          storybookBuildDir: storybook-static
+          projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          exitZeroOnChanges: true
+          autoAcceptChanges: main
+          onlyChanged: true
+
+      - name: Prune PNPM store
+        if: ${{ needs.changes.outputs.elements == 'true' && success() }}
+        run: pnpm store prune
