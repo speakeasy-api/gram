@@ -160,7 +160,7 @@ func (s *Service) GetDeploymentLogs(ctx context.Context, form *gen.GetDeployment
 
 	var cursorSeq pgtype.Int8
 	if form.Cursor != nil && *form.Cursor != "" {
-		seq, err := decodeCursor(*form.Cursor)
+		seq, _, err := decodeCursor(*form.Cursor)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
 		}
@@ -200,7 +200,7 @@ func (s *Service) GetDeploymentLogs(ctx context.Context, form *gen.GetDeployment
 	var nextCursor *string
 	limit := 50
 	if len(rows) >= limit+1 {
-		nextCursor = conv.Ptr(encodeCursor(rows[limit].Seq))
+		nextCursor = conv.Ptr(encodeCursor(rows[limit].Seq, rows[limit].ID))
 		items = items[:limit]
 	}
 
