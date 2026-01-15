@@ -191,6 +191,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		for _, chat := range chats {
 			result = append(result, &gen.ChatOverview{
 				ID:             chat.ID.String(),
+				UserID:         nil,
 				ExternalUserID: &chat.ExternalUserID.String,
 				Title:          chat.Title.String,
 				NumMessages:    int(chat.NumMessages),
@@ -209,12 +210,13 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 
 		for _, chat := range chats {
 			result = append(result, &gen.ChatOverview{
-				ID:          chat.ID.String(),
-				UserID:      &chat.UserID.String,
-				Title:       chat.Title.String,
-				NumMessages: int(chat.NumMessages),
-				CreatedAt:   chat.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:   chat.UpdatedAt.Time.Format(time.RFC3339),
+				ID:             chat.ID.String(),
+				UserID:         &chat.UserID.String,
+				ExternalUserID: nil,
+				Title:          chat.Title.String,
+				NumMessages:    int(chat.NumMessages),
+				CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:      chat.UpdatedAt.Time.Format(time.RFC3339),
 			})
 		}
 
@@ -236,12 +238,13 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 
 	for _, chat := range chats {
 		result = append(result, &gen.ChatOverview{
-			ID:          chat.ID.String(),
-			UserID:      &chat.UserID.String,
-			Title:       chat.Title.String,
-			NumMessages: int(chat.NumMessages),
-			CreatedAt:   chat.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:   chat.UpdatedAt.Time.Format(time.RFC3339),
+			ID:             chat.ID.String(),
+			UserID:         &chat.UserID.String,
+			ExternalUserID: nil,
+			Title:          chat.Title.String,
+			NumMessages:    int(chat.NumMessages),
+			CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:      chat.UpdatedAt.Time.Format(time.RFC3339),
 		})
 	}
 
@@ -752,6 +755,7 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 			TotalTokens:      int64(r.usage.TotalTokens),
 			FinishReason:     conv.PtrToPGText(r.finishReason),
 			UserID:           conv.ToPGTextEmpty(""), // These are agent messages, not user messages
+			ExternalUserID:   conv.ToPGTextEmpty(""), // These are agent messages, not user messages
 		}})
 		if err != nil {
 			r.logger.ErrorContext(r.ctx, "failed to store chat message", attr.SlogError(err))
