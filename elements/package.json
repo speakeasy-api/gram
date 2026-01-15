@@ -2,7 +2,7 @@
   "name": "@gram-ai/elements",
   "description": "Gram Elements is a library of UI primitives for building chat-like experiences for MCP Servers.",
   "type": "module",
-  "version": "1.20.0",
+  "version": "1.20.2",
   "main": "dist/index.js",
   "exports": {
     ".": {
@@ -99,8 +99,9 @@
   "dependencies": {
     "@ai-sdk/mcp": "^0.0.11",
     "@assistant-ui/react": "^0.11.0",
-    "@assistant-ui/react-markdown": "^0.11.0",
     "@assistant-ui/react-ai-sdk": "^1.1.16",
+    "@assistant-ui/react-markdown": "^0.11.0",
+    "@datadog/browser-rum": "^6.24.1",
     "@openrouter/ai-sdk-provider": "^1.4.1",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-collapsible": "^1.1.12",
@@ -138,6 +139,8 @@
     "motion": "^12.23.14",
     "prettier": "^3.7.4",
     "prettier-plugin-tailwindcss": "^0.7.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
     "remark-gfm": "^4.0.1",
     "storybook": "^10.0.8",
     "tailwindcss": "^4.1.13",

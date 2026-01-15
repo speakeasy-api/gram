@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.20.0**](../README.md)
+[**@gram-ai/elements v1.20.2**](../README.md)
 
 ***
 
@@ -359,6 +359,25 @@ Use this to override the default API URL, or add explicit auth configuration
 const config: ElementsConfig = {
   api: {
     url: 'https://api.getgram.ai',
+  },
+}
+```
+
+***
+
+### errorTracking?
+
+> `optional` **errorTracking**: [`ErrorTrackingConfigOption`](ErrorTrackingConfigOption.md)
+
+Error tracking configuration.
+By default, errors are reported to help improve the Elements library.
+
+#### Example
+
+```ts
+const config: ElementsConfig = {
+  errorTracking: {
+    enabled: false, // Opt out of error reporting
   },
 }
 ```
