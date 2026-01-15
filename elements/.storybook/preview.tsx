@@ -6,9 +6,9 @@ import '../src/global.css'
 import type { ElementsConfig } from '../src/types'
 import { allModes } from './modes.ts'
 import { withThemeByClassName } from '@storybook/addon-themes'
-import isChromatic from 'chromatic/isChromatic'
 
-// Production defaults for Chromatic visual testing
+// Production defaults for Chromatic visual testing (set via STORYBOOK_CHROMATIC=true in CI)
+const IS_CHROMATIC = import.meta.env.STORYBOOK_CHROMATIC === 'true'
 const CHROMATIC_PROJECT_SLUG = 'adamtest'
 const CHROMATIC_MCP_URL = 'https://chat.speakeasy.com/mcp/speakeasy-team-my_api'
 
@@ -30,10 +30,10 @@ const preview: Preview = {
   },
   // Global args for all stories - used by the decorator to configure ElementsProvider
   args: {
-    projectSlug: isChromatic()
+    projectSlug: IS_CHROMATIC
       ? CHROMATIC_PROJECT_SLUG
       : (import.meta.env.VITE_GRAM_ELEMENTS_STORYBOOK_PROJECT_SLUG ?? ''),
-    mcpUrl: isChromatic()
+    mcpUrl: IS_CHROMATIC
       ? CHROMATIC_MCP_URL
       : (import.meta.env.VITE_GRAM_ELEMENTS_STORYBOOK_MCP_URL ?? ''),
   },
