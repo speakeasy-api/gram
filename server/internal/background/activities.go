@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -30,6 +31,7 @@ import (
 type Activities struct {
 	collectPlatformUsageMetrics   *activities.CollectPlatformUsageMetrics
 	customDomainIngress           *activities.CustomDomainIngress
+	listActiveCustomDomains       *activities.ListActiveCustomDomains
 	fallbackModelUsageTracking    *activities.FallbackModelUsageTracking
 	firePlatformUsageMetrics      *activities.FirePlatformUsageMetrics
 	freeTierReportingUsageMetrics *activities.FreeTierReportingUsageMetrics
@@ -80,6 +82,7 @@ func NewActivities(
 	return &Activities{
 		collectPlatformUsageMetrics:   activities.NewCollectPlatformUsageMetrics(logger, db),
 		customDomainIngress:           activities.NewCustomDomainIngress(logger, db, k8sClient),
+		listActiveCustomDomains:       activities.NewListActiveCustomDomains(logger, db),
 		fallbackModelUsageTracking:    activities.NewFallbackModelUsageTracking(logger, openrouterProvisioner),
 		firePlatformUsageMetrics:      activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		freeTierReportingUsageMetrics: activities.NewFreeTierReportingMetrics(logger, db, billingRepo, posthogClient),
@@ -199,4 +202,15 @@ func (a *Activities) FallbackModelUsageTracking(ctx context.Context, input activ
 
 func (a *Activities) RecordAgentExecution(ctx context.Context, input activities.RecordAgentExecutionInput) error {
 	return a.recordAgentExecution.Do(ctx, input)
+}
+
+func (a *Activities) ListActiveCustomDomains(ctx context.Context, args activities.ListActiveCustomDomainsArgs) ([]string, error) {
+	return a.listActiveCustomDomains.Do(ctx, args)
+}
+
+func (a *Activities) EnsureCustomDomainIngress(ctx context.Context, args activities.EnsureCustomDomainIngressArgs) error {
+	if err := a.customDomainIngress.Ensure(ctx, args); err != nil {
+		return fmt.Errorf("ensure custom domain ingress: %w", err)
+	}
+	return nil
 }

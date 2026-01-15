@@ -75,6 +75,10 @@ func InitializeK8sClient(ctx context.Context, logger *slog.Logger, env string) (
 	return k8sClients, initErr
 }
 
+func (k *KubernetesClients) Enabled() bool {
+	return k.enabled
+}
+
 func (k *KubernetesClients) CreateOrUpdateIngress(ctx context.Context, ingressName string, ingress *networkingv1.Ingress) error {
 	existingIngress, err := k.GetIngress(ctx, ingressName)
 	if err != nil {

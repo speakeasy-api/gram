@@ -195,6 +195,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ExecuteModelCall)
 	temporalWorker.RegisterActivity(activities.LoadAgentTools)
 	temporalWorker.RegisterActivity(activities.RecordAgentExecution)
+	temporalWorker.RegisterActivity(activities.ListActiveCustomDomains)
+	temporalWorker.RegisterActivity(activities.EnsureCustomDomainIngress)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
@@ -208,6 +210,7 @@ func NewTemporalWorker(
 	// Agent runner related workflows
 	temporalWorker.RegisterWorkflow(AgentsResponseWorkflow)
 	temporalWorker.RegisterWorkflow(SubAgentWorkflow)
+	temporalWorker.RegisterWorkflow(CustomDomainReconcileWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), client); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -218,6 +221,12 @@ func NewTemporalWorker(
 	if err := AddRefreshBillingUsageSchedule(context.Background(), client); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add refresh billing usage schedule", attr.SlogError(err))
+		}
+	}
+
+	if err := AddCustomDomainReconcileSchedule(context.Background(), client); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add custom domain reconcile schedule", attr.SlogError(err))
 		}
 	}
 

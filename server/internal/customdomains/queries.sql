@@ -49,3 +49,13 @@ UPDATE custom_domains
 SET deleted_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND deleted IS FALSE;
+
+-- name: ListActiveCustomDomains :many
+SELECT * FROM custom_domains
+WHERE activated = true AND deleted = false;
+
+-- name: ListActiveCustomDomainsByOrg :many
+SELECT * FROM custom_domains
+WHERE activated = true
+  AND deleted = false
+  AND organization_id = @organization_id;

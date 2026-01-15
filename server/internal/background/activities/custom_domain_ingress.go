@@ -41,6 +41,10 @@ type CustomDomainIngressArgs struct {
 	Action CustomDomainIngressAction
 }
 
+type EnsureCustomDomainIngressArgs struct {
+	Domain string
+}
+
 func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressArgs) error {
 	customDomain, err := c.domains.GetCustomDomainByDomain(ctx, args.Domain)
 	if err != nil {
@@ -100,6 +104,43 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to delete custom domain ingress").Log(ctx, c.logger)
 		}
+	}
+
+	return nil
+}
+
+// Ensure reconciles ingress state for an activated domain. Idempotent; does not write DB.
+func (c *CustomDomainIngress) Ensure(ctx context.Context, args EnsureCustomDomainIngressArgs) error {
+	if c.k8s == nil || !c.k8s.Enabled() {
+		c.logger.InfoContext(ctx, "k8s client not enabled, skipping ingress ensure",
+			attr.SlogURLDomain(args.Domain))
+		return nil
+	}
+
+	customDomain, err := c.domains.GetCustomDomainByDomain(ctx, args.Domain)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to get custom domain").Log(ctx, c.logger)
+	}
+
+	if !customDomain.Activated {
+		c.logger.InfoContext(ctx, "skipping non-activated domain",
+			attr.SlogURLDomain(args.Domain))
+		return nil
+	}
+
+	ingressName, secretName, ingress, err := c.k8s.CreateCustomDomainIngressCharts(customDomain.Domain)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to create ingress charts").Log(ctx, c.logger)
+	}
+
+	c.logger.InfoContext(ctx, "ensuring custom domain ingress exists",
+		attr.SlogURLDomain(args.Domain),
+		attr.SlogIngressName(ingressName),
+		attr.SlogSecretName(secretName),
+	)
+
+	if err := c.k8s.CreateOrUpdateIngress(ctx, ingressName, ingress); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to ensure ingress").Log(ctx, c.logger)
 	}
 
 	return nil

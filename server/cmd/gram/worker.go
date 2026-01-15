@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/urfave/cli/v2"
@@ -426,6 +427,21 @@ func newWorkerCommand() *cli.Command {
 				AgentsService:        agentsService,
 				MCPRegistryClient:    mcpRegistryClient,
 			})
+
+			// Trigger custom domain reconciliation immediately on boot for DR scenarios.
+			// Safe to call from multiple replicas - Temporal deduplicates by workflow ID.
+			if k8sClient != nil && k8sClient.Enabled() {
+				go func() {
+					// Small delay to ensure worker is ready to process
+					time.Sleep(5 * time.Second)
+					if err := background.TriggerCustomDomainReconcile(context.Background(), temporalClient); err != nil {
+						logger.ErrorContext(context.Background(), "failed to trigger startup custom domain reconciliation",
+							attr.SlogError(err))
+					} else {
+						logger.InfoContext(context.Background(), "triggered startup custom domain reconciliation")
+					}
+				}()
+			}
 
 			return temporalWorker.Run(worker.InterruptCh())
 		},
