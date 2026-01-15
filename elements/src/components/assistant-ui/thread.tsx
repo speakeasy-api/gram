@@ -68,7 +68,11 @@ const ApiKeyWarning = () => (
   </div>
 )
 
-export const Thread: FC = () => {
+interface ThreadProps {
+  className?: string
+}
+
+export const Thread: FC<ThreadProps> = ({ className }) => {
   const themeProps = useThemeProps()
   const d = useDensity()
   const { config } = useElements()
@@ -81,7 +85,8 @@ export const Thread: FC = () => {
         <ThreadPrimitive.Root
           className={cn(
             'aui-root aui-thread-root bg-background @container flex h-full flex-col',
-            themeProps.className
+            themeProps.className,
+            className
           )}
         >
           <ThreadPrimitive.Viewport

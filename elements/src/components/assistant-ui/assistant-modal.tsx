@@ -11,6 +11,7 @@ import {
 import { LazyMotion, domMax, AnimatePresence, MotionConfig } from 'motion/react'
 import * as m from 'motion/react-m'
 
+import { ErrorBoundary } from '@/components/assistant-ui/error-boundary'
 import { Thread } from '@/components/assistant-ui/thread'
 import { ThreadList } from '@/components/assistant-ui/thread-list'
 import { useThemeProps } from '@/hooks/useThemeProps'
@@ -35,7 +36,11 @@ type Dimensions = {
   maxHeight?: string | number | `${number}%`
 }
 
-export const AssistantModal: FC = () => {
+interface AssistantModalProps {
+  className?: string
+}
+
+export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
   const { config } = useElements()
   const themeProps = useThemeProps()
   const r = useRadius()
@@ -93,7 +98,8 @@ export const AssistantModal: FC = () => {
             anchorPositionClass,
             themeProps.className,
             r('lg'),
-            isOpen && 'shadow-xl'
+            isOpen && 'shadow-xl',
+            className
           )}
         >
           <AnimatePresence mode="wait">
@@ -235,7 +241,9 @@ export const AssistantModal: FC = () => {
 
                   {/* Thread content */}
                   <div className="aui-modal-thread w-full flex-1 overflow-hidden">
-                    <Thread />
+                    <ErrorBoundary>
+                      <Thread />
+                    </ErrorBoundary>
                   </div>
                 </m.div>
               </m.div>

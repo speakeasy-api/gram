@@ -173,6 +173,10 @@ const ElementsProviderWithApproval = ({
   // but runtime is created using transport. The ref gets populated after runtime creation.
   const runtimeRef = useRef<ReturnType<typeof useChatRuntime> | null>(null)
 
+  // Generate a stable chat ID for server-side persistence (when history is disabled)
+  // When history is enabled, the thread adapter manages chat IDs instead
+  const chatIdRef = useRef<string | null>(null)
+
   // Create chat transport configuration
   const transport = useMemo<ChatTransport<UIMessage>>(
     () => ({
@@ -183,10 +187,21 @@ const ElementsProviderWithApproval = ({
           throw new Error('Session is loading')
         }
 
+        // Generate chat ID on first message if not already set
+        if (!chatIdRef.current) {
+          chatIdRef.current = crypto.randomUUID()
+        }
+
         const context = runtimeRef.current?.thread.getModelContext()
         const frontendTools = toAISDKTools(
           getEnabledTools(context?.tools ?? {})
         )
+
+        // Include Gram-Chat-ID header for chat persistence
+        const headersWithChatId = {
+          ...auth.headers,
+          'Gram-Chat-ID': chatIdRef.current,
+        }
 
         // Create OpenRouter model (only needed when not using custom model)
         const openRouterModel = usingCustomModel
@@ -194,7 +209,7 @@ const ElementsProviderWithApproval = ({
           : createOpenRouter({
               baseURL: apiUrl,
               apiKey: 'unused, but must be set',
-              headers: auth.headers,
+              headers: headersWithChatId,
             })
 
         if (config.languageModel) {
