@@ -6,4 +6,4 @@
 
 # Variable: ChatHistory
 
-> `const` **ChatHistory**: `FC`
+> `const` **ChatHistory**: `FC`\<`ThreadListProps`\>

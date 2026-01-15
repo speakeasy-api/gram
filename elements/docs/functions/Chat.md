@@ -6,7 +6,13 @@
 
 # Function: Chat()
 
-> **Chat**(): `Element`
+> **Chat**(`__namedParameters`): `Element`
+
+## Parameters
+
+### \_\_namedParameters
+
+`ChatProps`
 
 ## Returns
 
