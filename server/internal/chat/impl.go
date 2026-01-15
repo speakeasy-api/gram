@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
 var _ gen.Service = (*Service)(nil)
@@ -61,6 +62,7 @@ type Service struct {
 	chatSessions         *chatsessions.Manager
 	proxyTransport       http.RoundTripper
 	fallbackUsageTracker FallbackModelUsageTracker
+	posthog              *posthog.Posthog
 }
 
 func NewService(
@@ -71,6 +73,7 @@ func NewService(
 	openRouter openrouter.Provisioner,
 	chatClient *openrouter.ChatClient,
 	fallbackUsageTracker FallbackModelUsageTracker,
+	posthog *posthog.Posthog,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
@@ -85,6 +88,7 @@ func NewService(
 		chatClient:           chatClient,
 		proxyTransport:       cleanhttp.DefaultPooledTransport(),
 		fallbackUsageTracker: fallbackUsageTracker,
+		posthog:              posthog,
 	}
 }
 
@@ -328,6 +332,19 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	orgID := authCtx.ActiveOrganizationID
 	userID := authCtx.UserID
 
+	eventProperties := map[string]any{
+		"action":            "chat_request_received",
+		"organization_slug": authCtx.OrganizationSlug,
+		"project_slug":      *authCtx.ProjectSlug,
+		"success":           false,
+	}
+
+	defer func() {
+		if err := s.posthog.CaptureEvent(ctx, "elements_event", authCtx.ActiveOrganizationID, eventProperties); err != nil {
+			s.logger.ErrorContext(ctx, "failed to capture elements event", attr.SlogError(err))
+		}
+	}()
+
 	slogArgs := []any{
 		attr.SlogProjectID(authCtx.ProjectID.String()),
 		attr.SlogOrganizationID(orgID),
@@ -363,6 +380,9 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	}
 
 	chatIDHeader := r.Header.Get("Gram-Chat-ID")
+
+	eventProperties["model"] = chatRequest.Model
+	eventProperties["chat_id"] = chatIDHeader
 
 	respCaptor := w
 
@@ -496,6 +516,8 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	}()
 
 	proxy.ServeHTTP(respCaptor, r)
+
+	eventProperties["success"] = true
 
 	return nil
 }

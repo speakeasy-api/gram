@@ -319,9 +319,6 @@ const LHS = ({
                 setSelectedPath={setSelectedPath}
                 routes={routes}
                 isFunctionsEnabled={isFunctionsEnabled}
-                onChoiceSelected={(choice) => {
-                  telemetry.capture("onboarding_choice_selected", { choice });
-                }}
               />
             )}
             {currentStep === "first-party-choice" && (
@@ -385,15 +382,28 @@ export const InitialChoiceStep = ({
   setSelectedPath,
   routes,
   isFunctionsEnabled,
-  onChoiceSelected,
 }: {
   setCurrentStep?: (step: OnboardingStep) => void;
   setSelectedPath?: (path: OnboardingPath) => void;
   routes: RoutesWithGoTo;
   isFunctionsEnabled: boolean;
-  onChoiceSelected: (choice: string) => void;
 }) => {
   const navigate = useNavigate();
+  const telemetry = useTelemetry();
+
+  const onChoiceSelected = (
+    choice:
+      | "connect_to_data"
+      | "deploy_data_integrated_chat"
+      | "connect_to_popular_mcps",
+  ) => {
+    telemetry.capture("onboarding_choice_selected", { choice });
+    if (choice === "deploy_data_integrated_chat") {
+      telemetry.capture("elements_event", {
+        action: "elements_onboarding_choice_selected",
+      });
+    }
+  };
 
   const handleConnectToData = () => {
     onChoiceSelected("connect_to_data");
