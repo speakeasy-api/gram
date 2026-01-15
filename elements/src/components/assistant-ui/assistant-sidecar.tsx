@@ -14,7 +14,11 @@ import * as m from 'motion/react-m'
 import { EASE_OUT_QUINT } from '@/lib/easing'
 import { useAssistantState } from '@assistant-ui/react'
 
-export const AssistantSidecar: FC = () => {
+interface AssistantSidecarProps {
+  className?: string
+}
+
+export const AssistantSidecar: FC<AssistantSidecarProps> = ({ className }) => {
   const { config } = useElements()
   const themeProps = useThemeProps()
   const sidecarConfig = config.sidecar ?? {}
@@ -47,7 +51,8 @@ export const AssistantSidecar: FC = () => {
         transition={{ duration: 0.3, ease: EASE_OUT_QUINT }}
         className={cn(
           'aui-root aui-sidecar bg-popover text-popover-foreground fixed top-0 right-0 border-l',
-          themeProps.className
+          themeProps.className,
+          className
         )}
       >
         {/* Header */}
