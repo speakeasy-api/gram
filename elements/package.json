@@ -44,7 +44,7 @@
     "lint": "eslint src",
     "analyze": "pnpm dlx vite-bundle-visualizer",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build",
+    "build-storybook": "storybook build --stats-json",
     "chromatic": "chromatic --exit-zero-on-changes",
     "type-check": "tsc --noEmit",
     "docs": "typedoc",
