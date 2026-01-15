@@ -24,7 +24,7 @@ CustomIcon.parameters = {
         icon: (state: 'open' | 'closed' | undefined) => (
           <ZapIcon
             data-state={state}
-            className="aui-modal-button-closed-icon absolute transition-all data-[state=closed]:scale-100 data-[state=closed]:rotate-0 data-[state=open]:scale-0 data-[state=open]:rotate-90"
+            className="aui-modal-button-closed-icon gramel:absolute gramel:transition-all data-[state=closed]:scale-100 data-[state=closed]:rotate-0 data-[state=open]:scale-0 data-[state=open]:rotate-90"
           />
         ),
       },

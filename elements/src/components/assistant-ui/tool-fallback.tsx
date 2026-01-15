@@ -87,11 +87,10 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
 
   return (
     <div
-      className={cn(
-        'aui-tool-fallback-root flex w-full flex-col',
+      className={cn('aui-tool-fallback-root gramel:flex gramel:w-full gramel:flex-col',
         matchingMessagePartIndex !== -1 &&
           matchingMessagePartIndex !== toolParts.length - 1 &&
-          'border-b'
+          'gramel:border-b'
       )}
     >
       <ToolUI
@@ -104,7 +103,7 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
           pendingApproval ? handleApproveForSession : undefined
         }
         onDeny={pendingApproval ? handleDeny : undefined}
-        className="rounded-none border-0"
+        className="gramel:rounded-none gramel:border-0"
       />
     </div>
   )

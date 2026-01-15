@@ -1,6 +1,6 @@
-@import "tailwindcss";
-@import "tw-animate-css";
-@import "tw-shimmer";
+@import 'tailwindcss' prefix(gramel);
+@import 'tw-animate-css';
+@import 'tw-shimmer';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -114,10 +114,10 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply gramel:border-border gramel:outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply gramel:bg-background gramel:text-foreground;
   }
 }
 

@@ -381,7 +381,9 @@ const ElementsProviderWithHistory = ({
     <AssistantRuntimeProvider runtime={runtime}>
       <HistoryProvider>
         <ElementsContext.Provider value={contextValue}>
-          {children}
+          <div className="gramel:gram-elements gramel:h-full">
+            {children}
+          </div>
           <FrontendTools tools={frontendTools} />
         </ElementsContext.Provider>
       </HistoryProvider>
@@ -415,7 +417,9 @@ const ElementsProviderWithoutHistory = ({
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ElementsContext.Provider value={contextValue}>
-        {children}
+        <div className="gramel:gram-elements gramel:h-full">
+          {children}
+        </div>
         <FrontendTools tools={frontendTools} />
       </ElementsContext.Provider>
     </AssistantRuntimeProvider>

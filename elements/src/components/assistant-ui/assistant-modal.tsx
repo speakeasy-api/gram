@@ -93,12 +93,11 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
       {/* reducedMotion="user" respects prefers-reduced-motion */}
       <MotionConfig reducedMotion="user" transition={LAYOUT_TRANSITION}>
         <div
-          className={cn(
-            'aui-root aui-modal-anchor fixed z-10',
+          className={cn('aui-root aui-modal-anchor gramel:fixed gramel:z-10',
             anchorPositionClass,
             themeProps.className,
             r('lg'),
-            isOpen && 'shadow-xl',
+            isOpen && 'gramel:shadow-xl',
             className
           )}
         >
@@ -109,8 +108,7 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
                 layout
                 layoutId="chat-container"
                 onClick={() => setIsOpen(true)}
-                className={cn(
-                  'aui-modal-button bg-primary text-primary-foreground flex size-12 cursor-pointer items-center justify-center border shadow-lg transition-shadow hover:shadow-xl',
+                className={cn('aui-modal-button gramel:bg-primary gramel:text-primary-foreground gramel:flex gramel:size-12 gramel:cursor-pointer gramel:items-center gramel:justify-center gramel:border gramel:shadow-lg gramel:transition-shadow gramel:hover:shadow-xl',
                   r('full')
                 )}
                 initial={false}
@@ -122,12 +120,12 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.8 }}
                   transition={{ duration: 0.2, ease: EASE_OUT_QUINT }}
-                  className="flex size-full items-center justify-center"
+                  className="gramel:flex gramel:size-full gramel:items-center gramel:justify-center"
                 >
                   {customIcon ? (
                     customIcon('closed')
                   ) : (
-                    <MessageCircleIcon className="size-6" />
+                    <MessageCircleIcon className="gramel:size-6" />
                   )}
                 </m.div>
               </m.button>
@@ -136,8 +134,7 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
                 key="chat"
                 layout
                 layoutId="chat-container"
-                className={cn(
-                  'aui-modal-content bg-popover text-popover-foreground flex flex-col overflow-hidden border [&>.aui-thread-root]:bg-inherit',
+                className={cn('aui-modal-content gramel:bg-popover gramel:text-popover-foreground gramel:flex gramel:flex-col gramel:overflow-hidden gramel:border gramel:[&>.aui-thread-root]:bg-inherit',
                   r('lg')
                 )}
                 initial={false}
@@ -150,10 +147,9 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
                 }}
               >
                 <m.div
-                  className={cn(
-                    'aui-modal-header flex shrink-0 items-center justify-between border-b',
-                    d('h-header'),
-                    d('px-lg')
+                  className={cn('aui-modal-header gramel:flex gramel:shrink-0 gramel:items-center gramel:justify-between gramel:border-b',
+                    d('gramel:h-header'),
+                    d('gramel:px-lg')
                   )}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -163,31 +159,29 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
                     ease: EASE_OUT_QUINT,
                   }}
                 >
-                  <div className={cn('flex min-w-0 items-center')}>
+                  <div className={cn('gramel:flex gramel:min-w-0 gramel:items-center')}>
                     <span
-                      className={cn(
-                        'text-md flex items-center gap-2 truncate font-medium',
-                        isGenerating && 'shimmer'
+                      className={cn('gramel:text-md gramel:flex gramel:items-center gramel:gap-2 gramel:truncate gramel:font-medium',
+                        isGenerating && 'gramel:shimmer'
                       )}
                     >
-                      <span className="truncate">{title}</span>
+                      <span className="gramel:truncate">{title}</span>
 
                       {isGenerating && (
                         <Loader
-                          className="text-muted-foreground size-4.5 animate-spin"
+                          className="gramel:text-muted-foreground gramel:size-4.5 gramel:animate-spin"
                           strokeWidth={1.25}
                         />
                       )}
                     </span>
                   </div>
 
-                  <div className="flex flex-row items-center justify-end gap-1">
+                  <div className="gramel:flex gramel:flex-row gramel:items-center gramel:justify-end gramel:gap-1">
                     {expandable ? (
                       <button
                         type="button"
                         onClick={() => setIsExpanded((v) => !v)}
-                        className={cn(
-                          'text-muted-foreground hover:text-foreground hover:bg-accent flex h-8 cursor-pointer items-center rounded-md px-2 text-xs transition-colors'
+                        className={cn('gramel:text-muted-foreground gramel:hover:text-foreground gramel:hover:bg-accent gramel:flex gramel:h-8 gramel:cursor-pointer gramel:items-center gramel:rounded-md gramel:px-2 gramel:text-xs gramel:transition-colors'
                         )}
                         aria-pressed={isExpanded}
                         aria-label={
@@ -197,12 +191,12 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
                         {isExpanded ? (
                           <Minimize
                             strokeWidth={2}
-                            className="size-3.5 rotate-90"
+                            className="gramel:size-3.5 gramel:rotate-90"
                           />
                         ) : (
                           <Maximize
                             strokeWidth={2}
-                            className="size-3.5 rotate-90"
+                            className="gramel:size-3.5 gramel:rotate-90"
                           />
                         )}
                       </button>
@@ -213,17 +207,17 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
                         // Optional: reset expansion when closing
                         setIsExpanded(false)
                       }}
-                      className="text-muted-foreground hover:text-foreground hover:bg-accent -mr-1 flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors"
+                      className="gramel:text-muted-foreground gramel:hover:text-foreground gramel:hover:bg-accent gramel:-mr-1 gramel:flex gramel:size-8 gramel:cursor-pointer gramel:items-center gramel:justify-center gramel:rounded-md gramel:transition-colors"
                       aria-label={`Close ${title}`}
                     >
-                      <XIcon className="size-4.5" />
+                      <XIcon className="gramel:size-4.5" />
                     </button>
                   </div>
                 </m.div>
 
                 {/* Main content area */}
                 <m.div
-                  className="aui-modal-body flex flex-1 overflow-hidden"
+                  className="aui-modal-body gramel:flex gramel:flex-1 gramel:overflow-hidden"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{
@@ -234,13 +228,13 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
                 >
                   {/* Thread list sidebar (when history enabled) */}
                   {showThreadList && (
-                    <div className="aui-modal-thread-list w-56 shrink-0 overflow-y-auto border-r">
+                    <div className="aui-modal-thread-list gramel:w-56 gramel:shrink-0 gramel:overflow-y-auto gramel:border-r">
                       <ThreadList />
                     </div>
                   )}
 
                   {/* Thread content */}
-                  <div className="aui-modal-thread w-full flex-1 overflow-hidden">
+                  <div className="aui-modal-thread gramel:w-full gramel:flex-1 gramel:overflow-hidden">
                     <ErrorBoundary>
                       <Thread />
                     </ErrorBoundary>
@@ -265,13 +259,13 @@ function positionClassname(
 ): string {
   switch (position) {
     case 'bottom-left':
-      return 'left-4 bottom-4'
+      return 'gramel:left-4 gramel:bottom-4'
     case 'top-right':
-      return 'right-4 top-4'
+      return 'gramel:right-4 gramel:top-4'
     case 'top-left':
-      return 'left-4 top-4'
+      return 'gramel:left-4 gramel:top-4'
     case 'bottom-right':
-      return 'right-4 bottom-4'
+      return 'gramel:right-4 gramel:bottom-4'
     default:
       assertNever(position)
   }

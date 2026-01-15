@@ -27,8 +27,7 @@ function PopoverContent({
         data-slot="popover-content"
         align={align}
         sideOffset={sideOffset}
-        className={cn(
-          'bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-20 w-72 origin-(--radix-popover-content-transform-origin) rounded-md border p-4 shadow-md outline-hidden',
+        className={cn('gramel:bg-popover gramel:text-popover-foreground gramel:data-[state=open]:animate-in gramel:data-[state=closed]:animate-out gramel:data-[state=closed]:fade-out-0 gramel:data-[state=open]:fade-in-0 gramel:data-[state=closed]:zoom-out-95 gramel:data-[state=open]:zoom-in-95 gramel:data-[side=bottom]:slide-in-from-top-2 gramel:data-[side=left]:slide-in-from-right-2 gramel:data-[side=right]:slide-in-from-left-2 gramel:data-[side=top]:slide-in-from-bottom-2 gramel:z-20 gramel:w-72 gramel:origin-(--radix-popover-content-transform-origin) gramel:rounded-md gramel:border gramel:p-4 gramel:shadow-md gramel:outline-hidden',
           className
         )}
         {...props}

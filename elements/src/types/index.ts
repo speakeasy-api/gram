@@ -713,8 +713,8 @@ export interface ModalConfig extends ExpandableConfig {
    * const config: ElementsConfig = {
    *   modal: {
    *     icon: (state) => {
-   *       return <div className={cn('size-6', state === 'open' ? 'rotate-90' : 'rotate-0')}>
-   *         <MessageCircleIcon className="size-6" />
+   *       return <div className={cn('gramel:size-6', state === 'open' ? 'rotate-90' : 'rotate-0')}>
+   *         <MessageCircleIcon className="gramel:size-6" />
    *       </div>
    *     },
    *   },

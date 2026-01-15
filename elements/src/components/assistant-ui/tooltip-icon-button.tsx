@@ -39,11 +39,11 @@ export const TooltipIconButton = forwardRef<
             variant="ghost"
             size="icon"
             {...rest}
-            className={cn('aui-button-icon size-6 p-1', className)}
+            className={cn('aui-button-icon gramel:size-6 gramel:p-1', className)}
             ref={ref}
           >
             <Slottable>{children}</Slottable>
-            <span className="aui-sr-only sr-only">{tooltip}</span>
+            <span className="aui-sr-only gramel:sr-only">{tooltip}</span>
           </Button>
         </TooltipTrigger>
         <TooltipContent side={side} align={align}>

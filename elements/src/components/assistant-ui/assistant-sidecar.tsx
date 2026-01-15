@@ -50,56 +50,54 @@ export const AssistantSidecar: FC<AssistantSidecarProps> = ({ className }) => {
             : (dimensions?.default?.height ?? '100vh'),
         }}
         transition={{ duration: 0.3, ease: EASE_OUT_QUINT }}
-        className={cn(
-          'aui-root aui-sidecar bg-popover text-popover-foreground fixed top-0 right-0 border-l',
+        className={cn('aui-root aui-sidecar gramel:bg-popover gramel:text-popover-foreground gramel:fixed gramel:top-0 gramel:right-0 gramel:border-l',
           themeProps.className,
           className
         )}
       >
         {/* Header */}
-        <div className="aui-sidecar-header flex h-14 items-center justify-between border-b px-4">
+        <div className="aui-sidecar-header gramel:flex gramel:h-14 gramel:items-center gramel:justify-between gramel:border-b gramel:px-4">
           <span
-            className={cn(
-              'text-md flex items-center gap-2 font-medium',
-              isGenerating && 'shimmer'
+            className={cn('gramel:text-md gramel:flex gramel:items-center gramel:gap-2 gramel:font-medium',
+              isGenerating && 'gramel:shimmer'
             )}
           >
             {title}
 
             {isGenerating && (
               <Loader
-                className="text-muted-foreground size-4.5 animate-spin"
+                className="gramel:text-muted-foreground gramel:size-4.5 gramel:animate-spin"
                 strokeWidth={1.25}
               />
             )}
           </span>
-          <div className="aui-sidecar-header-actions flex items-center gap-1">
+          <div className="aui-sidecar-header-actions gramel:flex gramel:items-center gramel:gap-1">
             <TooltipIconButton
               tooltip={isExpanded ? 'Collapse' : 'Pop out'}
               variant="ghost"
-              className="aui-sidecar-popout size-8"
+              className="aui-sidecar-popout gramel:size-8"
               onClick={() => setIsExpanded((v) => !v)}
             >
               {!isExpanded ? (
-                <PanelRightOpen className="size-4.5" />
+                <PanelRightOpen className="gramel:size-4.5" />
               ) : (
-                <PanelRightClose className="size-4.5" />
+                <PanelRightClose className="gramel:size-4.5" />
               )}
             </TooltipIconButton>
           </div>
         </div>
 
         {/* Main content area */}
-        <div className="aui-sidecar-body flex h-[calc(100%-3.5rem)] overflow-hidden">
+        <div className="aui-sidecar-body gramel:flex gramel:h-[calc(100%-3.5rem)] gramel:overflow-hidden">
           {/* Thread list sidebar (when history enabled) */}
           {showThreadList && (
-            <div className="aui-sidecar-thread-list w-56 shrink-0 overflow-y-auto border-r">
+            <div className="aui-sidecar-thread-list gramel:w-56 gramel:shrink-0 gramel:overflow-y-auto gramel:border-r">
               <ThreadList />
             </div>
           )}
 
           {/* Thread content */}
-          <div className="aui-sidecar-content flex-1 overflow-hidden">
+          <div className="aui-sidecar-content gramel:flex-1 gramel:overflow-hidden">
             <ErrorBoundary>
               <Thread />
             </ErrorBoundary>

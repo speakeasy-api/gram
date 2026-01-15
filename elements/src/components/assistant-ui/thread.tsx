@@ -53,14 +53,14 @@ import {
 import { ToolGroup } from './tool-group'
 
 const ApiKeyWarning = () => (
-  <div className="m-2 rounded-md border border-amber-500 bg-amber-100 px-4 py-3 text-sm text-amber-800 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-200">
+  <div className="gramel:m-2 gramel:rounded-md gramel:border gramel:border-amber-500 gramel:bg-amber-100 gramel:px-4 gramel:py-3 gramel:text-sm gramel:text-amber-800 gramel:dark:border-amber-600 gramel:dark:bg-amber-900/30 gramel:dark:text-amber-200">
     <strong>Warning:</strong> You are using an API key directly in the client.
     Please{' '}
     <a
       href="https://github.com/speakeasy-api/gram/tree/main/elements#setting-up-your-backend"
       target="_blank"
       rel="noopener noreferrer"
-      className="text-amber-700 underline hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200"
+      className="gramel:text-amber-700 gramel:underline gramel:hover:text-amber-800 gramel:dark:text-amber-300 gramel:dark:hover:text-amber-200"
     >
       set up a session endpoint
     </a>{' '}
@@ -83,16 +83,14 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
     <LazyMotion features={domAnimation}>
       <MotionConfig reducedMotion="user">
         <ThreadPrimitive.Root
-          className={cn(
-            'aui-root aui-thread-root bg-background @container flex h-full flex-col',
+          className={cn('aui-root aui-thread-root gramel:bg-background @container gramel:flex gramel:h-full gramel:flex-col',
             themeProps.className,
             className
           )}
         >
           <ThreadPrimitive.Viewport
-            className={cn(
-              'aui-thread-viewport relative mx-auto flex w-full flex-1 flex-col overflow-x-auto overflow-y-scroll pb-0!',
-              d('p-lg')
+            className={cn('aui-thread-viewport gramel:relative gramel:mx-auto gramel:flex gramel:w-full gramel:flex-1 gramel:flex-col gramel:overflow-x-auto gramel:overflow-y-scroll gramel:pb-0!',
+              d('gramel:p-lg')
             )}
           >
             <ThreadPrimitive.If empty>
@@ -115,7 +113,7 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
             />
 
             <ThreadPrimitive.If empty={false}>
-              <div className="aui-thread-viewport-spacer min-h-8 grow" />
+              <div className="aui-thread-viewport-spacer gramel:min-h-8 gramel:grow" />
             </ThreadPrimitive.If>
 
             <Composer />
@@ -132,7 +130,7 @@ const ThreadScrollToBottom: FC = () => {
       <TooltipIconButton
         tooltip="Scroll to bottom"
         variant="outline"
-        className="aui-thread-scroll-to-bottom dark:bg-background dark:hover:bg-accent absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
+        className="aui-thread-scroll-to-bottom gramel:dark:bg-background gramel:dark:hover:bg-accent gramel:absolute gramel:-top-12 gramel:z-10 gramel:self-center gramel:rounded-full gramel:p-4 gramel:disabled:invisible"
       >
         <ArrowDownIcon />
       </TooltipIconButton>
@@ -148,25 +146,22 @@ const ThreadWelcome: FC = () => {
 
   return (
     <div
-      className={cn(
-        'aui-thread-welcome-root my-auto flex w-full grow flex-col',
-        isStandalone ? 'items-center justify-center' : '',
-        d('gap-lg')
+      className={cn('aui-thread-welcome-root gramel:my-auto gramel:flex gramel:w-full gramel:grow gramel:flex-col',
+        isStandalone ? 'gramel:items-center gramel:justify-center' : '',
+        d('gramel:gap-lg')
       )}
     >
       <div
-        className={cn(
-          'aui-thread-welcome-center flex w-full grow flex-col items-center justify-start'
+        className={cn('aui-thread-welcome-center gramel:flex gramel:w-full gramel:grow gramel:flex-col gramel:items-center gramel:justify-start'
         )}
       >
         <div
-          className={cn(
-            'aui-thread-welcome-message flex flex-col',
+          className={cn('aui-thread-welcome-message gramel:flex gramel:flex-col',
             isStandalone
-              ? 'items-center text-center'
-              : 'size-full justify-start',
-            d('gap-sm'),
-            !isStandalone && d('py-md')
+              ? 'gramel:items-center gramel:text-center'
+              : 'gramel:size-full gramel:justify-start',
+            d('gramel:gap-sm'),
+            !isStandalone && d('gramel:py-md')
           )}
         >
           <m.div
@@ -174,9 +169,8 @@ const ThreadWelcome: FC = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
             transition={{ duration: 0.25, ease: EASE_OUT_QUINT }}
-            className={cn(
-              'aui-thread-welcome-message-motion-1 text-foreground font-semibold',
-              d('text-title')
+            className={cn('aui-thread-welcome-message-motion-1 gramel:text-foreground gramel:font-semibold',
+              d('gramel:text-title')
             )}
           >
             {title}
@@ -186,9 +180,8 @@ const ThreadWelcome: FC = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
             transition={{ duration: 0.25, delay: 0.05, ease: EASE_OUT_QUINT }}
-            className={cn(
-              'aui-thread-welcome-message-motion-2 text-muted-foreground/65',
-              d('text-subtitle')
+            className={cn('aui-thread-welcome-message-motion-2 gramel:text-muted-foreground/65',
+              d('gramel:text-subtitle')
             )}
           >
             {subtitle}
@@ -211,15 +204,14 @@ const ThreadSuggestions: FC = () => {
 
   return (
     <div
-      className={cn(
-        'aui-thread-welcome-suggestions w-full',
-        d('gap-md'),
-        d('py-lg'),
+      className={cn('aui-thread-welcome-suggestions gramel:w-full',
+        d('gramel:gap-md'),
+        d('gramel:py-lg'),
         isStandalone
-          ? 'flex flex-wrap items-center justify-center'
+          ? 'gramel:flex gramel:flex-wrap gramel:items-center gramel:justify-center'
           : suggestions.length === 1
-            ? 'flex'
-            : 'grid max-w-fit @md:grid-cols-2'
+            ? 'gramel:flex'
+            : 'gramel:grid gramel:max-w-fit @md:gramel:grid-cols-2'
       )}
     >
       {suggestions.map((suggestion, index) => (
@@ -233,27 +225,25 @@ const ThreadSuggestions: FC = () => {
             ease: EASE_OUT_QUINT,
           }}
           key={`suggested-action-${suggestion.title}-${index}`}
-          className={cn(
-            'aui-thread-welcome-suggestion-display',
-            !isStandalone && 'nth-[n+3]:hidden @md:nth-[n+3]:block'
+          className={cn('aui-thread-welcome-suggestion-display',
+            !isStandalone && 'gramel:nth-[n+3]:hidden @md:gramel:nth-[n+3]:block'
           )}
         >
           <ThreadPrimitive.Suggestion prompt={suggestion.action} send asChild>
             <Button
               variant="ghost"
-              className={cn(
-                'aui-thread-welcome-suggestion dark:hover:bg-accent/60 h-auto w-full border text-left whitespace-break-spaces',
-                d('text-base'),
+              className={cn('aui-thread-welcome-suggestion gramel:dark:hover:bg-accent/60 gramel:h-auto gramel:w-full gramel:border gramel:text-left gramel:whitespace-break-spaces',
+                d('gramel:text-base'),
                 isStandalone
-                  ? `flex-row items-center ${d('gap-sm')} ${d('px-md')} ${d('py-sm')} ${r('full')}`
-                  : `w-full flex-1 flex-col flex-wrap items-start justify-start ${d('gap-sm')} ${d('px-lg')} ${d('py-md')} ${r('xl')}`
+                  ? `gramel:flex-row gramel:items-center ${d('gramel:gap-sm')} ${d('gramel:px-md')} ${d('gramel:py-sm')} ${r('full')}`
+                  : `gramel:w-full gramel:flex-1 gramel:flex-col gramel:flex-wrap gramel:items-start gramel:justify-start ${d('gramel:gap-sm')} ${d('gramel:px-lg')} ${d('gramel:py-md')} ${r('xl')}`
               )}
               aria-label={suggestion.action}
             >
-              <span className="aui-thread-welcome-suggestion-text-1 text-foreground text-sm font-medium">
+              <span className="aui-thread-welcome-suggestion-text-1 gramel:text-foreground gramel:text-sm gramel:font-medium">
                 {suggestion.title}
               </span>
-              <span className="aui-thread-welcome-suggestion-text-2 text-muted-foreground text-sm">
+              <span className="aui-thread-welcome-suggestion-text-2 gramel:text-muted-foreground gramel:text-sm">
                 {suggestion.label}
               </span>
             </Button>
@@ -280,17 +270,15 @@ const Composer: FC = () => {
 
   return (
     <div
-      className={cn(
-        'aui-composer-wrapper bg-background sticky bottom-0 flex w-full flex-col overflow-visible',
-        d('gap-md'),
-        d('py-md'),
+      className={cn('aui-composer-wrapper gramel:bg-background gramel:sticky gramel:bottom-0 gramel:flex gramel:w-full gramel:flex-col gramel:overflow-visible',
+        d('gramel:gap-md'),
+        d('gramel:py-md'),
         r('xl')
       )}
     >
       <ThreadScrollToBottom />
       <ComposerPrimitive.Root
-        className={cn(
-          'aui-composer-root group/input-group border-input bg-background has-[textarea:focus-visible]:border-ring has-[textarea:focus-visible]:ring-ring/5 dark:bg-background relative flex w-full flex-col border px-1 pt-2 shadow-xs transition-[color,box-shadow] outline-none has-[textarea:focus-visible]:ring-1',
+        className={cn('aui-composer-root gramel:group/input-group gramel:border-input gramel:bg-background gramel:has-[textarea:focus-visible]:border-ring gramel:has-[textarea:focus-visible]:ring-ring/5 gramel:dark:bg-background gramel:relative gramel:flex gramel:w-full gramel:flex-col gramel:border gramel:px-1 gramel:pt-2 gramel:shadow-xs gramel:transition-[color,box-shadow] gramel:outline-none gramel:has-[textarea:focus-visible]:ring-1',
           r('xl')
         )}
       >
@@ -298,10 +286,9 @@ const Composer: FC = () => {
 
         <ComposerPrimitive.Input
           placeholder={composerConfig.placeholder}
-          className={cn(
-            'aui-composer-input placeholder:text-muted-foreground mb-1 max-h-32 w-full resize-none bg-transparent px-3.5 pt-1.5 pb-3 outline-none focus-visible:ring-0',
-            d('h-input'),
-            d('text-base')
+          className={cn('aui-composer-input placeholder:text-muted-foreground gramel:mb-1 gramel:max-h-32 gramel:w-full gramel:resize-none gramel:bg-transparent gramel:px-3.5 gramel:pt-1.5 gramel:pb-3 gramel:outline-none gramel:focus-visible:ring-0',
+            d('gramel:h-input'),
+            d('gramel:text-base')
           )}
           rows={1}
           autoFocus
@@ -356,21 +343,21 @@ const ComposerModelPicker: FC = () => {
                 variant="ghost"
                 size="icon"
                 data-state={popoverOpen ? 'open' : 'closed'}
-                className="aui-composer-model-picker data-[state=open]:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30 flex w-fit items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold"
+                className="aui-composer-model-picker data-[state=open]:bg-muted-foreground/15 gramel:dark:border-muted-foreground/15 gramel:dark:hover:bg-muted-foreground/30 gramel:flex gramel:w-fit gramel:items-center gramel:gap-2 gramel:rounded-full gramel:px-2.5 gramel:py-1 gramel:text-xs gramel:font-semibold"
                 aria-label="Model Settings"
               >
-                <Settings2 className="aui-attachment-add-icon size-5 stroke-[1.5px]" />
+                <Settings2 className="aui-attachment-add-icon gramel:size-5 gramel:stroke-[1.5px]" />
               </Button>
             </PopoverTrigger>
           </TooltipTrigger>
           <PopoverContent
             side="top"
             align="start"
-            className="w-min p-0 shadow-none"
+            className="gramel:w-min gramel:p-0 gramel:shadow-none"
           >
             <div
               ref={scrollContainerRef}
-              className="max-h-48 overflow-y-auto"
+              className="gramel:max-h-48 gramel:overflow-y-auto"
               onScroll={handleScroll}
             >
               {MODELS.map((m) => (
@@ -380,14 +367,14 @@ const ComposerModelPicker: FC = () => {
                     setModel(m)
                   }}
                   variant="ghost"
-                  className="w-full justify-start gap-2 rounded-none px-2"
+                  className="gramel:w-full gramel:justify-start gramel:gap-2 gramel:rounded-none gramel:px-2"
                 >
                   {m === model ? (
                     <div>
-                      <CheckIcon className="size-4 text-emerald-500" />
+                      <CheckIcon className="gramel:size-4 gramel:text-emerald-500" />
                     </div>
                   ) : (
-                    <div className="size-4">&nbsp;</div>
+                    <div className="gramel:size-4">&nbsp;</div>
                   )}
                   {m}
                 </Button>
@@ -408,8 +395,8 @@ const ComposerAction: FC = () => {
   const r = useRadius()
   const composerConfig = config.composer ?? { attachments: true }
   return (
-    <div className="aui-composer-action-wrapper relative mx-1 mt-2 mb-2 flex items-center justify-between">
-      <div className="aui-composer-action-wrapper-inner flex items-center">
+    <div className="aui-composer-action-wrapper gramel:relative gramel:mx-1 gramel:mt-2 gramel:mb-2 gramel:flex gramel:items-center gramel:justify-between">
+      <div className="aui-composer-action-wrapper-inner gramel:flex gramel:items-center">
         {composerConfig.attachments ? (
           <ComposerAddAttachment />
         ) : (
@@ -429,10 +416,10 @@ const ComposerAction: FC = () => {
             type="submit"
             variant="default"
             size="icon"
-            className={cn('aui-composer-send size-[34px] p-1', r('full'))}
+            className={cn('aui-composer-send gramel:size-[34px] gramel:p-1', r('full'))}
             aria-label="Send message"
           >
-            <ArrowUpIcon className="aui-composer-send-icon size-5" />
+            <ArrowUpIcon className="aui-composer-send-icon gramel:size-5" />
           </TooltipIconButton>
         </ComposerPrimitive.Send>
       </ThreadPrimitive.If>
@@ -443,13 +430,12 @@ const ComposerAction: FC = () => {
             type="button"
             variant="default"
             size="icon"
-            className={cn(
-              'aui-composer-cancel border-muted-foreground/60 hover:bg-primary/75 dark:border-muted-foreground/90 size-[34px] border',
+            className={cn('aui-composer-cancel gramel:border-muted-foreground/60 gramel:hover:bg-primary/75 gramel:dark:border-muted-foreground/90 gramel:size-[34px] gramel:border',
               r('full')
             )}
             aria-label="Stop generating"
           >
-            <Square className="aui-composer-cancel-icon size-3.5 fill-white dark:fill-black" />
+            <Square className="aui-composer-cancel-icon gramel:size-3.5 gramel:fill-white gramel:dark:fill-black" />
           </Button>
         </ComposerPrimitive.Cancel>
       </ThreadPrimitive.If>
@@ -460,8 +446,8 @@ const ComposerAction: FC = () => {
 const MessageError: FC = () => {
   return (
     <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/5 mt-2 rounded-md border p-3 text-sm dark:text-red-200">
-        <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2" />
+      <ErrorPrimitive.Root className="aui-message-error-root gramel:border-destructive gramel:bg-destructive/10 gramel:text-destructive gramel:dark:bg-destructive/5 gramel:mt-2 gramel:rounded-md gramel:border gramel:p-3 gramel:text-sm gramel:dark:text-red-200">
+        <ErrorPrimitive.Message className="aui-message-error-message gramel:line-clamp-2" />
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
   )
@@ -474,10 +460,10 @@ const AssistantMessage: FC = () => {
   return (
     <MessagePrimitive.Root asChild>
       <div
-        className="aui-assistant-message-root animate-in fade-in slide-in-from-bottom-1 relative mx-auto w-full py-4 duration-150 ease-out last:mb-24"
+        className="aui-assistant-message-root gramel:animate-in gramel:fade-in gramel:slide-in-from-bottom-1 gramel:relative gramel:mx-auto gramel:w-full gramel:py-4 gramel:duration-150 gramel:ease-out gramel:last:mb-24"
         data-role="assistant"
       >
-        <div className="aui-assistant-message-content text-foreground mx-2 leading-7 wrap-break-word">
+        <div className="aui-assistant-message-content gramel:text-foreground gramel:mx-2 gramel:leading-7 gramel:wrap-break-word">
           <MessagePrimitive.Parts
             components={{
               Text: components.Text ?? MarkdownText,
@@ -494,7 +480,7 @@ const AssistantMessage: FC = () => {
           <MessageError />
         </div>
 
-        <div className="aui-assistant-message-footer mt-2 ml-2 flex">
+        <div className="aui-assistant-message-footer gramel:mt-2 gramel:ml-2 gramel:flex">
           <BranchPicker />
           <AssistantActionBar />
         </div>
@@ -513,7 +499,7 @@ const AssistantActionBar: FC = () => {
       hideWhenRunning
       autohide="not-last"
       autohideFloat="single-branch"
-      className="aui-assistant-action-bar-root text-muted-foreground data-floating:bg-background col-start-3 row-start-2 -ml-1 flex gap-1 data-floating:absolute data-floating:rounded-md data-floating:border data-floating:p-1 data-floating:shadow-sm"
+      className="aui-assistant-action-bar-root gramel:text-muted-foreground gramel:data-floating:bg-background gramel:col-start-3 gramel:row-start-2 gramel:-ml-1 gramel:flex gramel:gap-1 gramel:data-floating:absolute gramel:data-floating:rounded-md gramel:data-floating:border gramel:data-floating:p-1 gramel:data-floating:shadow-sm"
     >
       <ActionBarPrimitive.Copy asChild>
         <TooltipIconButton tooltip="Copy">
@@ -539,26 +525,25 @@ const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root asChild>
       <div
-        className="aui-user-message-root animate-in fade-in slide-in-from-bottom-1 mx-auto grid w-full auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] gap-y-2 px-2 py-4 duration-150 ease-out first:mt-3 last:mb-5 [&:where(>*)]:col-start-2"
+        className="aui-user-message-root gramel:animate-in gramel:fade-in gramel:slide-in-from-bottom-1 gramel:mx-auto gramel:grid gramel:w-full gramel:auto-rows-auto gramel:grid-cols-[minmax(72px,1fr)_auto] gramel:gap-y-2 gramel:px-2 gramel:py-4 gramel:duration-150 gramel:ease-out gramel:first:mt-3 gramel:last:mb-5 gramel:[&:where(>*)]:col-start-2"
         data-role="user"
       >
         <UserMessageAttachments />
 
-        <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
+        <div className="aui-user-message-content-wrapper gramel:relative gramel:col-start-2 gramel:min-w-0">
           <div
-            className={cn(
-              'aui-user-message-content bg-muted text-foreground px-5 py-2.5 wrap-break-word',
+            className={cn('aui-user-message-content gramel:bg-muted gramel:text-foreground gramel:px-5 gramel:py-2.5 gramel:wrap-break-word',
               r('xl')
             )}
           >
             <MessagePrimitive.Parts />
           </div>
-          <div className="aui-user-action-bar-wrapper absolute top-1/2 left-0 -translate-x-full -translate-y-1/2 pr-2">
+          <div className="aui-user-action-bar-wrapper gramel:absolute gramel:top-1/2 gramel:left-0 gramel:-translate-x-full gramel:-translate-y-1/2 gramel:pr-2">
             <UserActionBar />
           </div>
         </div>
 
-        <BranchPicker className="aui-user-branch-picker col-span-full col-start-1 row-start-3 -mr-1 justify-end" />
+        <BranchPicker className="aui-user-branch-picker gramel:col-span-full gramel:col-start-1 gramel:row-start-3 gramel:-mr-1 gramel:justify-end" />
       </div>
     </MessagePrimitive.Root>
   )
@@ -569,10 +554,10 @@ const UserActionBar: FC = () => {
     <ActionBarPrimitive.Root
       hideWhenRunning
       autohide="not-last"
-      className="aui-user-action-bar-root flex flex-col items-end"
+      className="aui-user-action-bar-root gramel:flex gramel:flex-col gramel:items-end"
     >
       <ActionBarPrimitive.Edit asChild>
-        <TooltipIconButton tooltip="Edit" className="aui-user-action-edit p-4">
+        <TooltipIconButton tooltip="Edit" className="aui-user-action-edit gramel:p-4">
           <PencilIcon />
         </TooltipIconButton>
       </ActionBarPrimitive.Edit>
@@ -582,14 +567,14 @@ const UserActionBar: FC = () => {
 
 const EditComposer: FC = () => {
   return (
-    <div className="aui-edit-composer-wrapper mx-auto flex w-full flex-col gap-4 px-2 first:mt-4">
-      <ComposerPrimitive.Root className="aui-edit-composer-root bg-muted ml-auto flex w-full max-w-7/8 flex-col rounded-xl">
+    <div className="aui-edit-composer-wrapper gramel:mx-auto gramel:flex gramel:w-full gramel:flex-col gramel:gap-4 gramel:px-2 gramel:first:mt-4">
+      <ComposerPrimitive.Root className="aui-edit-composer-root gramel:bg-muted gramel:ml-auto gramel:flex gramel:w-full gramel:max-w-7/8 gramel:flex-col gramel:rounded-xl">
         <ComposerPrimitive.Input
-          className="aui-edit-composer-input text-foreground flex min-h-[60px] w-full resize-none bg-transparent p-4 outline-none"
+          className="aui-edit-composer-input gramel:text-foreground gramel:flex gramel:min-h-[60px] gramel:w-full gramel:resize-none gramel:bg-transparent gramel:p-4 gramel:outline-none"
           autoFocus
         />
 
-        <div className="aui-edit-composer-footer mx-3 mb-3 flex items-center justify-center gap-2 self-end">
+        <div className="aui-edit-composer-footer gramel:mx-3 gramel:mb-3 gramel:flex gramel:items-center gramel:justify-center gramel:gap-2 gramel:self-end">
           <ComposerPrimitive.Cancel asChild>
             <Button variant="ghost" size="sm" aria-label="Cancel edit">
               Cancel
@@ -613,8 +598,7 @@ const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
   return (
     <BranchPickerPrimitive.Root
       hideWhenSingleBranch
-      className={cn(
-        'aui-branch-picker-root text-muted-foreground mr-2 -ml-2 inline-flex items-center text-xs',
+      className={cn('aui-branch-picker-root gramel:text-muted-foreground gramel:mr-2 gramel:-ml-2 gramel:inline-flex gramel:items-center gramel:text-xs',
         className
       )}
       {...rest}
@@ -624,7 +608,7 @@ const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
           <ChevronLeftIcon />
         </TooltipIconButton>
       </BranchPickerPrimitive.Previous>
-      <span className="aui-branch-picker-state font-medium">
+      <span className="aui-branch-picker-state gramel:font-medium">
         <BranchPickerPrimitive.Number /> / <BranchPickerPrimitive.Count />
       </span>
       <BranchPickerPrimitive.Next asChild>

@@ -10,7 +10,7 @@ const meta: Meta<typeof Chat> = {
   },
   decorators: [
     (Story) => (
-      <div className="m-auto flex h-screen w-full max-w-3xl flex-col">
+      <div className="gramel:m-auto gramel:flex gramel:h-screen gramel:w-full gramel:max-w-3xl gramel:flex-col">
         <Story />
       </div>
     ),

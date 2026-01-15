@@ -35,8 +35,7 @@ function DialogOverlay({
   return (
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
-      className={cn(
-        'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50',
+      className={cn('gramel:data-[state=open]:animate-in gramel:data-[state=closed]:animate-out gramel:data-[state=closed]:fade-out-0 gramel:data-[state=open]:fade-in-0 gramel:fixed gramel:inset-0 gramel:z-50 gramel:bg-black/50',
         className
       )}
       {...props}
@@ -57,8 +56,7 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
-        className={cn(
-          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg',
+        className={cn('gramel:bg-background gramel:data-[state=open]:animate-in gramel:data-[state=closed]:animate-out gramel:data-[state=closed]:fade-out-0 gramel:data-[state=open]:fade-in-0 gramel:data-[state=closed]:zoom-out-95 gramel:data-[state=open]:zoom-in-95 gramel:fixed gramel:top-[50%] gramel:left-[50%] gramel:z-50 gramel:grid gramel:w-full gramel:max-w-[calc(100%-2rem)] gramel:translate-x-[-50%] gramel:translate-y-[-50%] gramel:gap-4 gramel:rounded-lg gramel:border gramel:p-6 gramel:shadow-lg gramel:duration-200 gramel:sm:max-w-lg',
           className
         )}
         {...props}
@@ -67,10 +65,10 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className="gramel:ring-offset-background gramel:focus:ring-ring gramel:data-[state=open]:bg-accent gramel:data-[state=open]:text-muted-foreground gramel:absolute gramel:top-4 gramel:right-4 gramel:rounded-xs gramel:opacity-70 gramel:transition-opacity gramel:hover:opacity-100 gramel:focus:ring-2 gramel:focus:ring-offset-2 gramel:focus:outline-hidden gramel:disabled:pointer-events-none gramel:[&_svg]:pointer-events-none gramel:[&_svg]:shrink-0 gramel:[&_svg:not([class*='size-'])]:size-4"
           >
             <XIcon />
-            <span className="sr-only">Close</span>
+            <span className="gramel:sr-only">Close</span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Content>
@@ -82,7 +80,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn('flex flex-col gap-2 text-center sm:text-left', className)}
+      className={cn('gramel:flex gramel:flex-col gramel:gap-2 gramel:text-center gramel:sm:text-left', className)}
       {...props}
     />
   )
@@ -92,8 +90,7 @@ function DialogFooter({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="dialog-footer"
-      className={cn(
-        'flex flex-col-reverse gap-2 sm:flex-row sm:justify-end',
+      className={cn('gramel:flex gramel:flex-col-reverse gramel:gap-2 gramel:sm:flex-row gramel:sm:justify-end',
         className
       )}
       {...props}
@@ -108,7 +105,7 @@ function DialogTitle({
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn('text-lg leading-none font-semibold', className)}
+      className={cn('gramel:text-lg gramel:leading-none gramel:font-semibold', className)}
       {...props}
     />
   )
@@ -121,7 +118,7 @@ function DialogDescription({
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
-      className={cn('text-muted-foreground text-sm', className)}
+      className={cn('gramel:text-muted-foreground gramel:text-sm', className)}
       {...props}
     />
   )

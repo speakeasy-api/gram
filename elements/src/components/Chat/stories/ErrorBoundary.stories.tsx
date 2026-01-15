@@ -48,10 +48,10 @@ const ThrowingThreadWelcome: FC = () => {
 
   // Render a simple welcome that matches the default styling
   return (
-    <div className="my-auto flex w-full grow flex-col items-center justify-center gap-4 p-6">
-      <h2 className="text-foreground text-2xl font-semibold">Hello there!</h2>
-      <p className="text-muted-foreground">How can I help you today?</p>
-      <p className="text-muted-foreground/60 mt-4 text-sm">
+    <div className="gramel:my-auto gramel:flex gramel:w-full gramel:grow gramel:flex-col gramel:items-center gramel:justify-center gramel:gap-4 gramel:p-6">
+      <h2 className="gramel:text-foreground gramel:text-2xl gramel:font-semibold">Hello there!</h2>
+      <p className="gramel:text-muted-foreground">How can I help you today?</p>
+      <p className="gramel:text-muted-foreground/60 gramel:mt-4 gramel:text-sm">
         Click &quot;Trigger Error&quot; above to see the error boundary
       </p>
     </div>
@@ -77,8 +77,8 @@ const ErrorControls: FC<{
   onReset: () => void
   hasError: boolean
 }> = ({ onTriggerError, onReset, hasError }) => (
-  <div className="bg-muted/50 border-border flex items-center gap-3 border-b px-4 py-2">
-    <span className="text-muted-foreground text-sm font-medium">
+  <div className="gramel:bg-muted/50 gramel:border-border gramel:flex gramel:items-center gramel:gap-3 gramel:border-b gramel:px-4 gramel:py-2">
+    <span className="gramel:text-muted-foreground gramel:text-sm gramel:font-medium">
       Error Boundary Demo:
     </span>
     <Button
@@ -105,7 +105,7 @@ export const Modal: Story = () => {
       shouldThrow={shouldThrow}
       onReset={() => setShouldThrow(false)}
     >
-      <div className="flex h-full w-full flex-col">
+      <div className="gramel:flex gramel:h-full gramel:w-full gramel:flex-col">
         <ErrorControls
           onTriggerError={() => setShouldThrow(true)}
           onReset={() => {
@@ -114,8 +114,8 @@ export const Modal: Story = () => {
           }}
           hasError={shouldThrow}
         />
-        <div className="flex h-full w-full flex-col gap-4 p-10">
-          <h1 className="text-2xl font-bold">Modal Variant</h1>
+        <div className="gramel:flex gramel:h-full gramel:w-full gramel:flex-col gramel:gap-4 gramel:p-10">
+          <h1 className="gramel:text-2xl gramel:font-bold">Modal Variant</h1>
           <p>
             Click the button in the bottom right corner to open the chat, then
             trigger an error.
@@ -148,7 +148,7 @@ export const Standalone: Story = () => {
       shouldThrow={shouldThrow}
       onReset={() => setShouldThrow(false)}
     >
-      <div className="flex h-screen w-full flex-col">
+      <div className="gramel:flex gramel:h-screen gramel:w-full gramel:flex-col">
         <ErrorControls
           onTriggerError={() => setShouldThrow(true)}
           onReset={() => {
@@ -157,7 +157,7 @@ export const Standalone: Story = () => {
           }}
           hasError={shouldThrow}
         />
-        <div className="m-auto flex w-full max-w-3xl flex-1 flex-col">
+        <div className="gramel:m-auto gramel:flex gramel:w-full gramel:max-w-3xl gramel:flex-1 gramel:flex-col">
           <Chat key={key} />
         </div>
       </div>
@@ -185,7 +185,7 @@ export const Sidecar: Story = () => {
       shouldThrow={shouldThrow}
       onReset={() => setShouldThrow(false)}
     >
-      <div className="flex h-full w-full flex-col">
+      <div className="gramel:flex gramel:h-full gramel:w-full gramel:flex-col">
         <ErrorControls
           onTriggerError={() => setShouldThrow(true)}
           onReset={() => {
@@ -194,8 +194,8 @@ export const Sidecar: Story = () => {
           }}
           hasError={shouldThrow}
         />
-        <div className="mr-[400px] p-10">
-          <h1 className="text-2xl font-bold">Sidecar Variant</h1>
+        <div className="gramel:mr-[400px] gramel:p-10">
+          <h1 className="gramel:text-2xl gramel:font-bold">Sidecar Variant</h1>
           <p>
             The sidebar is always visible on the right. Trigger an error to see
             the error boundary.

@@ -6,25 +6,25 @@ import { useElements } from './useElements'
  */
 const radiusClasses: Record<Radius, Record<RadiusSize, string>> = {
   sharp: {
-    sm: 'rounded-sm',
-    md: 'rounded',
-    lg: 'rounded-md',
-    xl: 'rounded-lg',
-    full: 'rounded-lg',
+    sm: 'gramel:rounded-sm',
+    md: 'gramel:rounded',
+    lg: 'gramel:rounded-md',
+    xl: 'gramel:rounded-lg',
+    full: 'gramel:rounded-lg',
   },
   soft: {
-    sm: 'rounded',
-    md: 'rounded-lg',
-    lg: 'rounded-xl',
-    xl: 'rounded-2xl',
-    full: 'rounded-full',
+    sm: 'gramel:rounded',
+    md: 'gramel:rounded-lg',
+    lg: 'gramel:rounded-xl',
+    xl: 'gramel:rounded-2xl',
+    full: 'gramel:rounded-full',
   },
   round: {
-    sm: 'rounded-lg',
-    md: 'rounded-xl',
-    lg: 'rounded-2xl',
-    xl: 'rounded-3xl',
-    full: 'rounded-full',
+    sm: 'gramel:rounded-lg',
+    md: 'gramel:rounded-xl',
+    lg: 'gramel:rounded-2xl',
+    xl: 'gramel:rounded-3xl',
+    full: 'gramel:rounded-full',
   },
 } as const
 
@@ -32,7 +32,7 @@ type RadiusSize = 'sm' | 'md' | 'lg' | 'xl' | 'full'
 
 /**
  * Hook to get radius classes based on theme config
- * Use: const r = useRadius(); then r('lg') returns the appropriate rounded class
+ * Use: const r = useRadius(); then r('lg') returns the appropriate gramel:rounded class
  */
 export const useRadius = () => {
   const { config } = useElements()

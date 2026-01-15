@@ -13,7 +13,7 @@ const meta: Meta<typeof Chat> = {
   },
   decorators: [
     (Story) => (
-      <div className="m-auto flex h-screen w-full max-w-3xl flex-col">
+      <div className="gramel:m-auto gramel:flex gramel:h-screen gramel:w-full gramel:max-w-3xl gramel:flex-col">
         <Story />
       </div>
     ),
@@ -53,21 +53,21 @@ const FetchToolComponent = ({ result, args }: ToolCallMessagePartProps) => {
   const [isLoading, setIsLoading] = React.useState(true)
 
   return (
-    <div className="my-5 flex w-full flex-col overflow-hidden rounded-lg border shadow-lg">
+    <div className="gramel:my-5 gramel:flex gramel:w-full gramel:flex-col gramel:overflow-hidden gramel:rounded-lg gramel:border gramel:shadow-lg">
       {/* macOS Window Controls Bar */}
-      <div className="bg-muted flex flex-col border-b">
-        <div className="flex items-center gap-2 px-3 py-2">
+      <div className="gramel:bg-muted gramel:flex gramel:flex-col gramel:border-b">
+        <div className="gramel:flex gramel:items-center gramel:gap-2 gramel:px-3 gramel:py-2">
           {/* Traffic lights */}
-          <div className="flex gap-2">
-            <div className="h-3 w-3 rounded-full bg-red-500" />
-            <div className="h-3 w-3 rounded-full bg-yellow-500" />
-            <div className="h-3 w-3 rounded-full bg-green-500" />
+          <div className="gramel:flex gramel:gap-2">
+            <div className="gramel:h-3 gramel:w-3 gramel:rounded-full gramel:bg-red-500" />
+            <div className="gramel:h-3 gramel:w-3 gramel:rounded-full gramel:bg-yellow-500" />
+            <div className="gramel:h-3 gramel:w-3 gramel:rounded-full gramel:bg-green-500" />
           </div>
 
           {/* Address bar */}
-          <div className="bg-background mx-4 flex flex-1 items-center rounded-md px-3 py-1">
+          <div className="gramel:bg-background gramel:mx-4 gramel:flex gramel:flex-1 gramel:items-center gramel:rounded-md gramel:px-3 gramel:py-1">
             <svg
-              className="text-muted-foreground mr-2 h-4 w-4"
+              className="gramel:text-muted-foreground gramel:mr-2 gramel:h-4 gramel:w-4"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -79,7 +79,7 @@ const FetchToolComponent = ({ result, args }: ToolCallMessagePartProps) => {
                 d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
               />
             </svg>
-            <span className="text-muted-foreground truncate text-sm">
+            <span className="gramel:text-muted-foreground gramel:truncate gramel:text-sm">
               {url}
             </span>
           </div>
@@ -87,9 +87,9 @@ const FetchToolComponent = ({ result, args }: ToolCallMessagePartProps) => {
 
         {/* Loading bar */}
         {isLoading && (
-          <div className="h-0.5 w-full overflow-hidden">
+          <div className="gramel:h-0.5 gramel:w-full gramel:overflow-hidden">
             <div
-              className="h-full w-1/3 animate-pulse bg-blue-500"
+              className="gramel:h-full gramel:w-1/3 gramel:animate-pulse gramel:bg-blue-500"
               style={{
                 animation: 'slide 1.5s ease-in-out infinite',
               }}
@@ -99,10 +99,10 @@ const FetchToolComponent = ({ result, args }: ToolCallMessagePartProps) => {
       </div>
 
       {/* Content */}
-      <div className="bg-background h-96">
+      <div className="gramel:bg-background gramel:h-96">
         <iframe
           srcDoc={result as string}
-          className="h-full w-full"
+          className="gramel:h-full gramel:w-full"
           onLoad={() => setIsLoading(false)}
         />
       </div>

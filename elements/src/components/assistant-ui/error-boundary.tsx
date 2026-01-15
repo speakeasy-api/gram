@@ -28,28 +28,27 @@ interface ErrorFallbackProps {
 const ErrorFallback = ({ error, onRetry }: ErrorFallbackProps) => {
   return (
     <div
-      className={cn(
-        'aui-root aui-error-boundary bg-background flex h-full w-full flex-col items-center justify-center p-6'
+      className={cn('aui-root aui-error-boundary gramel:bg-background gramel:flex gramel:h-full gramel:w-full gramel:flex-col gramel:items-center gramel:justify-center gramel:p-6'
       )}
     >
-      <div className="flex flex-col items-center gap-4 text-center">
-        <div className="text-destructive">
-          <AlertCircle className="size-12 stroke-[1.5px]" />
+      <div className="gramel:flex gramel:flex-col gramel:items-center gramel:gap-4 gramel:text-center">
+        <div className="gramel:text-destructive">
+          <AlertCircle className="gramel:size-12 gramel:stroke-[1.5px]" />
         </div>
-        <div className="flex flex-col gap-2">
-          <h3 className="text-foreground text-xl font-semibold">
+        <div className="gramel:flex gramel:flex-col gramel:gap-2">
+          <h3 className="gramel:text-foreground gramel:text-xl gramel:font-semibold">
             Something went wrong
           </h3>
-          <p className="text-muted-foreground text-base">
+          <p className="gramel:text-muted-foreground gramel:text-base">
             An error occurred while loading the chat.
           </p>
           {error && (
-            <p className="text-muted-foreground/60 max-w-md truncate text-sm">
+            <p className="gramel:text-muted-foreground/60 gramel:max-w-md gramel:truncate gramel:text-sm">
               {error.message}
             </p>
           )}
         </div>
-        <Button onClick={onRetry} variant="default" className="mt-2">
+        <Button onClick={onRetry} variant="default" className="gramel:mt-2">
           Try again
         </Button>
       </div>

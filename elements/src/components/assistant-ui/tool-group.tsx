@@ -36,8 +36,8 @@ export const ToolGroup: FC<
   // For single tool calls, render without the group wrapper
   if (toolCallParts.length === 1) {
     return (
-      <div className={cn('my-4 w-full max-w-xl')}>
-        <div className="border-border bg-card overflow-hidden rounded-lg border">
+      <div className={cn('gramel:my-4 gramel:w-full gramel:max-w-xl')}>
+        <div className="gramel:border-border gramel:bg-card gramel:overflow-hidden gramel:rounded-lg gramel:border">
           {children}
         </div>
       </div>
@@ -46,7 +46,7 @@ export const ToolGroup: FC<
 
   // For multiple tool calls, use the group component
   return (
-    <div className="my-4 w-full max-w-xl">
+    <div className="gramel:my-4 gramel:w-full gramel:max-w-xl">
       <ToolUIGroup
         title={groupTitle}
         status={anyMessagePartsAreRunning ? 'running' : 'complete'}

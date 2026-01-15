@@ -86,25 +86,25 @@ export const ChartRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
     <div
       className={cn(
         // the after:hidden is to prevent assistant-ui from showing its default code block loading indicator
-        'relative min-h-[400px] w-fit max-w-full min-w-[400px] overflow-auto border p-6 after:hidden',
+        'gramel:relative gramel:min-h-[400px] gramel:w-fit gramel:max-w-full gramel:min-w-[400px] gramel:overflow-auto gramel:border gramel:p-6 gramel:after:hidden',
         r('lg'),
-        d('p-lg')
+        d('gramel:p-lg')
       )}
     >
       {!shouldRender && !error && (
-        <div className="shimmer text-muted-foreground bg-background/80 absolute inset-0 z-10 flex items-center justify-center">
+        <div className="gramel:shimmer gramel:text-muted-foreground gramel:bg-background/80 gramel:absolute gramel:inset-0 gramel:z-10 gramel:flex gramel:items-center gramel:justify-center">
           Rendering chart...
         </div>
       )}
 
       {error && (
-        <div className="bg-background absolute inset-0 z-10 flex items-center justify-center gap-2 text-rose-500">
-          <AlertCircleIcon name="alert-circle" className="h-4 w-4" />
+        <div className="gramel:bg-background gramel:absolute gramel:inset-0 gramel:z-10 gramel:flex gramel:items-center gramel:justify-center gramel:gap-2 gramel:text-rose-500">
+          <AlertCircleIcon name="alert-circle" className="gramel:h-4 gramel:w-4" />
           {error}
         </div>
       )}
 
-      <div ref={containerRef} className={!shouldRender ? 'hidden' : 'block'} />
+      <div ref={containerRef} className={!shouldRender ? 'gramel:hidden' : 'gramel:block'} />
     </div>
   )
 }

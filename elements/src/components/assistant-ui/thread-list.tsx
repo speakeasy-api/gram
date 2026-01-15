@@ -20,26 +20,23 @@ export const ThreadList: FC<ThreadListProps> = ({ className }) => {
   const d = useDensity()
   return (
     <ThreadListPrimitive.Root
-      className={cn(
-        'aui-root aui-thread-list-root bg-background flex flex-col items-stretch',
-        d('gap-sm'),
+      className={cn('aui-root aui-thread-list-root gramel:bg-background gramel:flex gramel:flex-col gramel:items-stretch',
+        d('gramel:gap-sm'),
         className
       )}
     >
       <div
-        className={cn(
-          'aui-thread-list-new-section border-b pb-2',
-          d('py-sm'),
-          d('px-sm')
+        className={cn('aui-thread-list-new-section gramel:border-b gramel:pb-2',
+          d('gramel:py-sm'),
+          d('gramel:px-sm')
         )}
       >
         <ThreadListNew />
       </div>
       <div
-        className={cn(
-          'aui-thread-list-items-section flex flex-col gap-1',
-          d('py-xs'),
-          d('px-sm')
+        className={cn('aui-thread-list-items-section gramel:flex gramel:flex-col gramel:gap-1',
+          d('gramel:py-xs'),
+          d('gramel:px-sm')
         )}
       >
         <ThreadListItems />
@@ -53,10 +50,9 @@ const ThreadListNew: FC = () => {
   return (
     <ThreadListPrimitive.New asChild>
       <Button
-        className={cn(
-          'aui-thread-list-new hover:bg-muted-foreground/10 data-[active=true]:bg-muted-foreground/20! flex w-full cursor-pointer items-center justify-start gap-1 rounded-lg px-2.5 py-2 text-start',
-          d('p-sm'),
-          d('py-xs')
+        className={cn('aui-thread-list-new gramel:hover:bg-muted-foreground/10 gramel:data-[active=true]:bg-muted-foreground/20! gramel:flex gramel:w-full gramel:cursor-pointer gramel:items-center gramel:justify-start gramel:gap-1 gramel:rounded-lg gramel:px-2.5 gramel:py-2 gramel:text-start',
+          d('gramel:p-sm'),
+          d('gramel:py-xs')
         )}
         variant="ghost"
       >
@@ -86,9 +82,9 @@ const ThreadListSkeleton: FC = () => {
           role="status"
           aria-label="Loading threads"
           aria-live="polite"
-          className="aui-thread-list-skeleton-wrapper flex items-center gap-2 rounded-md px-3 py-2"
+          className="aui-thread-list-skeleton-wrapper gramel:flex gramel:items-center gramel:gap-2 gramel:rounded-md gramel:px-3 gramel:py-2"
         >
-          <Skeleton className="aui-thread-list-skeleton h-[22px] grow" />
+          <Skeleton className="aui-thread-list-skeleton gramel:h-[22px] gramel:grow" />
         </div>
       ))}
     </>
@@ -100,16 +96,14 @@ const ThreadListItem: FC = () => {
   const d = useDensity()
   return (
     <ThreadListItemPrimitive.Root
-      className={cn(
-        'aui-thread-list-item group hover:bg-muted focus-visible:bg-muted focus-visible:ring-ring data-[active=true]:bg-muted-foreground/20 flex items-center gap-2 rounded-lg transition-all focus-visible:ring-2 focus-visible:outline-none',
+      className={cn('aui-thread-list-item gramel:group gramel:hover:bg-muted gramel:focus-visible:bg-muted gramel:focus-visible:ring-ring gramel:data-[active=true]:bg-muted-foreground/20 gramel:flex gramel:items-center gramel:gap-2 gramel:rounded-lg gramel:transition-all gramel:focus-visible:ring-2 gramel:focus-visible:outline-none',
         r('md')
       )}
     >
       <ThreadListItemPrimitive.Trigger
-        className={cn(
-          'aui-thread-list-item-trigger flex grow cursor-pointer items-center text-start',
-          d('px-lg'),
-          d('py-sm')
+        className={cn('aui-thread-list-item-trigger gramel:flex gramel:grow gramel:cursor-pointer gramel:items-center gramel:text-start',
+          d('gramel:px-lg'),
+          d('gramel:py-sm')
         )}
       >
         <ThreadListItemTitle />
@@ -122,7 +116,7 @@ const ThreadListItem: FC = () => {
 
 const ThreadListItemTitle: FC = () => {
   return (
-    <span className="aui-thread-list-item-title text-sm">
+    <span className="aui-thread-list-item-title gramel:text-sm">
       <ThreadListItemPrimitive.Title fallback="New Chat" />
     </span>
   )

@@ -13,7 +13,7 @@ const meta: Meta<typeof ToolUI> = {
   },
   decorators: [
     (Story) => (
-      <div className="w-[400px] p-4">
+      <div className="gramel:w-[400px] gramel:p-4">
         <Story />
       </div>
     ),
@@ -86,7 +86,7 @@ export const WithoutProvider: Story = () => (
 export const WithCustomIcon: Story = () => (
   <ToolUI
     provider="Notion"
-    icon={<span className="text-base">📝</span>}
+    icon={<span className="gramel:text-base">📝</span>}
     name="create-page"
     status="complete"
     request={{ title: 'Meeting Notes', parent: 'Workspace' }}
@@ -127,7 +127,7 @@ export const LongContent: Story = () => (
 )
 
 export const MultipleTools: Story = () => (
-  <div className="flex flex-col gap-3">
+  <div className="gramel:flex gramel:flex-col gramel:gap-3">
     <ToolUI
       provider="Notion"
       name="notion-search"

@@ -55,7 +55,7 @@ const ReasoningRoot: FC<
       ref={collapsibleRef}
       open={isOpen}
       onOpenChange={handleOpenChange}
-      className={cn('aui-reasoning-root mb-4 w-full', className)}
+      className={cn('aui-reasoning-root gramel:mb-4 gramel:w-full', className)}
       style={
         {
           '--animation-duration': `${ANIMATION_DURATION}ms`,
@@ -75,16 +75,15 @@ ReasoningRoot.displayName = 'ReasoningRoot'
  */
 const GradientFade: FC<{ className?: string }> = ({ className }) => (
   <div
-    className={cn(
-      'aui-reasoning-fade pointer-events-none absolute inset-x-0 bottom-0 z-10 h-16',
-      'bg-[linear-gradient(to_top,var(--color-background),transparent)]',
-      'fade-in-0 animate-in',
-      'group-data-[state=open]/collapsible-content:animate-out',
-      'group-data-[state=open]/collapsible-content:fade-out-0',
-      'group-data-[state=open]/collapsible-content:delay-[calc(var(--animation-duration)*0.75)]', // calc for timing the delay
-      'group-data-[state=open]/collapsible-content:fill-mode-forwards',
-      'duration-(--animation-duration)',
-      'group-data-[state=open]/collapsible-content:duration-(--animation-duration)',
+    className={cn('aui-reasoning-fade gramel:pointer-events-none gramel:absolute gramel:inset-x-0 gramel:bottom-0 gramel:z-10 gramel:h-16',
+      'gramel:bg-[linear-gradient(to_top,var(--color-background),transparent)]',
+      'gramel:fade-in-0 gramel:animate-in',
+      'gramel:group-data-[state=open]/collapsible-content:animate-out',
+      'gramel:group-data-[state=open]/collapsible-content:fade-out-0',
+      'gramel:group-data-[state=open]/collapsible-content:delay-[calc(var(--animation-duration)*0.75)]', // calc for timing the delay
+      'gramel:group-data-[state=open]/collapsible-content:fill-mode-forwards',
+      'gramel:duration-(--animation-duration)',
+      'gramel:group-data-[state=open]/collapsible-content:duration-(--animation-duration)',
       className
     )}
   />
@@ -99,30 +98,28 @@ const ReasoningTrigger: FC<{ active: boolean; className?: string }> = ({
   className,
 }) => (
   <CollapsibleTrigger
-    className={cn(
-      'aui-reasoning-trigger group/trigger text-muted-foreground hover:text-foreground -mb-2 flex max-w-[75%] items-center gap-2 py-2 text-sm transition-colors',
+    className={cn('aui-reasoning-trigger group/trigger gramel:text-muted-foreground gramel:hover:text-foreground gramel:-mb-2 gramel:flex gramel:max-w-[75%] gramel:items-center gramel:gap-2 gramel:py-2 gramel:text-sm gramel:transition-colors',
       className,
-      active && 'shimmer'
+      active && 'gramel:shimmer'
     )}
   >
-    <BrainIcon className="aui-reasoning-trigger-icon size-4 shrink-0" />
-    <span className="aui-reasoning-trigger-label-wrapper relative inline-block leading-none">
+    <BrainIcon className="aui-reasoning-trigger-icon gramel:size-4 gramel:shrink-0" />
+    <span className="aui-reasoning-trigger-label-wrapper gramel:relative gramel:inline-block gramel:leading-none">
       <span>Reasoning</span>
       {active ? (
         <span
           aria-hidden
-          className="aui-reasoning-trigger-shimmer shimmer pointer-events-none absolute inset-0 motion-reduce:animate-none"
+          className="aui-reasoning-trigger-shimmer gramel:shimmer gramel:pointer-events-none gramel:absolute gramel:inset-0 gramel:motion-reduce:animate-none"
         >
           Reasoning
         </span>
       ) : null}
     </span>
     <ChevronDownIcon
-      className={cn(
-        'aui-reasoning-trigger-chevron mt-0.5 size-4 shrink-0',
-        'transition-transform duration-(--animation-duration) ease-out',
-        'group-data-[state=closed]/trigger:-rotate-90',
-        'group-data-[state=open]/trigger:rotate-0'
+      className={cn('aui-reasoning-trigger-chevron gramel:mt-0.5 gramel:size-4 gramel:shrink-0',
+        'gramel:transition-transform gramel:duration-(--animation-duration) gramel:ease-out',
+        'gramel:group-data-[state=closed]/trigger:-rotate-90',
+        'gramel:group-data-[state=open]/trigger:rotate-0'
       )}
     />
   </CollapsibleTrigger>
@@ -140,15 +137,14 @@ const ReasoningContent: FC<
   }>
 > = ({ className, children, 'aria-busy': ariaBusy }) => (
   <CollapsibleContent
-    className={cn(
-      'aui-reasoning-content text-muted-foreground relative overflow-hidden text-sm outline-none',
-      'group/collapsible-content ease-out',
-      'data-[state=closed]:animate-collapsible-up',
-      'data-[state=open]:animate-collapsible-down',
-      'data-[state=closed]:fill-mode-forwards',
-      'data-[state=closed]:pointer-events-none',
-      'data-[state=open]:duration-(--animation-duration)',
-      'data-[state=closed]:duration-(--animation-duration)',
+    className={cn('aui-reasoning-content gramel:text-muted-foreground gramel:relative gramel:overflow-hidden gramel:text-sm gramel:outline-none',
+      'gramel:group/collapsible-content gramel:ease-out',
+      'gramel:data-[state=closed]:animate-collapsible-up',
+      'gramel:data-[state=open]:animate-collapsible-down',
+      'gramel:data-[state=closed]:fill-mode-forwards',
+      'gramel:data-[state=closed]:pointer-events-none',
+      'gramel:data-[state=open]:duration-(--animation-duration)',
+      'gramel:data-[state=closed]:duration-(--animation-duration)',
       className
     )}
     aria-busy={ariaBusy}
@@ -171,18 +167,17 @@ const ReasoningText: FC<
   }>
 > = ({ className, children }) => (
   <div
-    className={cn(
-      'aui-reasoning-text relative z-0 space-y-4 pt-4 pl-6 leading-relaxed',
-      'transform-gpu transition-[transform,opacity]',
-      'group-data-[state=open]/collapsible-content:animate-in',
-      'group-data-[state=closed]/collapsible-content:animate-out',
-      'group-data-[state=open]/collapsible-content:fade-in-0',
-      'group-data-[state=closed]/collapsible-content:fade-out-0',
-      'group-data-[state=open]/collapsible-content:slide-in-from-top-4',
-      'group-data-[state=closed]/collapsible-content:slide-out-to-top-4',
-      'group-data-[state=open]/collapsible-content:duration-(--animation-duration)',
-      'group-data-[state=closed]/collapsible-content:duration-(--animation-duration)',
-      '[&_p]:-mb-2',
+    className={cn('aui-reasoning-text gramel:relative gramel:z-0 gramel:space-y-4 gramel:pt-4 gramel:pl-6 gramel:leading-relaxed',
+      'gramel:transform-gpu gramel:transition-[transform,opacity]',
+      'gramel:group-data-[state=open]/collapsible-content:animate-in',
+      'gramel:group-data-[state=closed]/collapsible-content:animate-out',
+      'gramel:group-data-[state=open]/collapsible-content:fade-in-0',
+      'gramel:group-data-[state=closed]/collapsible-content:fade-out-0',
+      'gramel:group-data-[state=open]/collapsible-content:slide-in-from-top-4',
+      'gramel:group-data-[state=closed]/collapsible-content:slide-out-to-top-4',
+      'gramel:group-data-[state=open]/collapsible-content:duration-(--animation-duration)',
+      'gramel:group-data-[state=closed]/collapsible-content:duration-(--animation-duration)',
+      'gramel:[&_p]:-mb-2',
       className
     )}
   >

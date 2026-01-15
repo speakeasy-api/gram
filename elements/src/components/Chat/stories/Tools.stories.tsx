@@ -11,7 +11,7 @@ const meta: Meta<typeof Chat> = {
   },
   decorators: [
     (Story) => (
-      <div className="m-auto flex h-screen w-full max-w-3xl flex-col">
+      <div className="gramel:m-auto gramel:flex gramel:h-screen gramel:w-full gramel:max-w-3xl gramel:flex-col">
         <Story />
       </div>
     ),
@@ -55,93 +55,93 @@ const CardPinRevealComponent = ({
   }
 
   return (
-    <div className="my-4 perspective-[1000px]">
+    <div className="gramel:my-4 gramel:perspective-[1000px]">
       <div
-        className={`relative h-48 w-80 cursor-pointer transition-transform duration-700 [transform-style:preserve-3d] ${
+        className={`gramel:relative gramel:h-48 gramel:w-80 gramel:cursor-pointer gramel:transition-transform gramel:duration-700 gramel:[transform-style:preserve-3d] ${
           isFlipped ? 'transform-[rotateY(180deg)]' : ''
         }`}
         onClick={() => setIsFlipped(!isFlipped)}
       >
         {/* Front of card */}
-        <div className="absolute inset-0 backface-hidden">
-          <div className="relative h-full w-full overflow-hidden rounded-xl bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 p-6 text-white shadow-2xl">
+        <div className="gramel:absolute gramel:inset-0 gramel:backface-hidden">
+          <div className="gramel:relative gramel:h-full gramel:w-full gramel:overflow-hidden gramel:rounded-xl gramel:bg-gradient-to-br gramel:from-indigo-600 gramel:via-purple-600 gramel:to-pink-500 gramel:p-6 gramel:text-white gramel:shadow-2xl">
             {/* Card pattern overlay */}
-            <div className="absolute inset-0 opacity-10">
-              <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-white"></div>
-              <div className="absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-white"></div>
+            <div className="gramel:absolute gramel:inset-0 gramel:opacity-10">
+              <div className="gramel:absolute gramel:-top-10 gramel:-right-10 gramel:h-40 gramel:w-40 gramel:rounded-full gramel:bg-white"></div>
+              <div className="gramel:absolute gramel:-bottom-10 gramel:-left-10 gramel:h-32 gramel:w-32 gramel:rounded-full gramel:bg-white"></div>
             </div>
 
             {/* Card content */}
-            <div className="relative z-10 flex h-full flex-col justify-between">
-              <div className="flex items-center justify-between">
-                <div className="text-2xl font-bold">VISA</div>
-                <div className="h-8 w-12 rounded bg-white/20"></div>
+            <div className="gramel:relative gramel:z-10 gramel:flex gramel:h-full gramel:flex-col gramel:justify-between">
+              <div className="gramel:flex gramel:items-center gramel:justify-between">
+                <div className="gramel:text-2xl gramel:font-bold">VISA</div>
+                <div className="gramel:h-8 gramel:w-12 gramel:rounded gramel:bg-white/20"></div>
               </div>
 
-              <div className="space-y-2">
-                <div className="font-mono text-2xl tracking-wider">
+              <div className="gramel:space-y-2">
+                <div className="gramel:font-mono gramel:text-2xl gramel:tracking-wider">
                   {cardNumber}
                 </div>
-                <div className="flex items-center justify-between text-sm">
+                <div className="gramel:flex gramel:items-center gramel:justify-between gramel:text-sm">
                   <div>
-                    <div className="text-xs opacity-70">CARDHOLDER</div>
-                    <div className="font-semibold">{cardHolder}</div>
+                    <div className="gramel:text-xs gramel:opacity-70">CARDHOLDER</div>
+                    <div className="gramel:font-semibold">{cardHolder}</div>
                   </div>
                   <div>
-                    <div className="text-xs opacity-70">EXPIRES</div>
-                    <div className="font-semibold">{expiry}</div>
+                    <div className="gramel:text-xs gramel:opacity-70">EXPIRES</div>
+                    <div className="gramel:font-semibold">{expiry}</div>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Click hint */}
-            <div className="absolute right-2 bottom-2 text-xs opacity-50">
+            <div className="gramel:absolute gramel:right-2 gramel:bottom-2 gramel:text-xs gramel:opacity-50">
               Click to flip
             </div>
           </div>
         </div>
 
         {/* Back of card */}
-        <div className="absolute inset-0 transform-[rotateY(180deg)] backface-hidden">
-          <div className="relative h-full w-full overflow-hidden rounded-xl bg-gradient-to-br from-slate-800 via-slate-700 to-slate-900 p-6 text-white shadow-2xl">
+        <div className="gramel:absolute gramel:inset-0 gramel:transform-[rotateY(180deg)] gramel:backface-hidden">
+          <div className="gramel:relative gramel:h-full gramel:w-full gramel:overflow-hidden gramel:rounded-xl gramel:bg-gradient-to-br gramel:from-slate-800 gramel:via-slate-700 gramel:to-slate-900 gramel:p-6 gramel:text-white gramel:shadow-2xl">
             {/* Magnetic strip */}
-            <div className="absolute top-8 right-0 left-0 h-12 bg-black"></div>
+            <div className="gramel:absolute gramel:top-8 gramel:right-0 gramel:left-0 gramel:h-12 gramel:bg-black"></div>
 
             {/* Card content */}
-            <div className="relative z-10 flex h-full flex-col justify-between">
-              <div className="mt-16 space-y-4">
-                <div className="flex items-center gap-2">
-                  <div className="h-8 flex-1 rounded bg-white/10 px-3 py-2 text-right font-mono text-sm">
+            <div className="gramel:relative gramel:z-10 gramel:flex gramel:h-full gramel:flex-col gramel:justify-between">
+              <div className="gramel:mt-16 gramel:space-y-4">
+                <div className="gramel:flex gramel:items-center gramel:gap-2">
+                  <div className="gramel:h-8 gramel:flex-1 gramel:rounded gramel:bg-white/10 gramel:px-3 gramel:py-2 gramel:text-right gramel:font-mono gramel:text-sm">
                     {cvv}
                   </div>
-                  <div className="text-xs opacity-70">CVV</div>
+                  <div className="gramel:text-xs gramel:opacity-70">CVV</div>
                 </div>
 
                 {/* PIN Display */}
-                <div className="mt-6 space-y-2">
-                  <div className="text-xs opacity-70">PIN</div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-gradient-to-br from-yellow-400 to-orange-500 shadow-lg">
-                      <span className="text-2xl font-bold text-white">
+                <div className="gramel:mt-6 gramel:space-y-2">
+                  <div className="gramel:text-xs gramel:opacity-70">PIN</div>
+                  <div className="gramel:flex gramel:items-center gramel:gap-3">
+                    <div className="gramel:flex gramel:h-16 gramel:w-16 gramel:items-center gramel:justify-center gramel:rounded-lg gramel:bg-gradient-to-br gramel:from-yellow-400 gramel:to-orange-500 gramel:shadow-lg">
+                      <span className="gramel:text-2xl gramel:font-bold gramel:text-white">
                         {pin}
                       </span>
                     </div>
-                    <div className="text-xs opacity-60">
+                    <div className="gramel:text-xs gramel:opacity-60">
                       Keep this PIN secure
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-xs opacity-50">
+              <div className="gramel:flex gramel:items-center gramel:justify-between gramel:text-xs gramel:opacity-50">
                 <div>VISA</div>
                 <div>{cardNumber}</div>
               </div>
             </div>
 
             {/* Click hint */}
-            <div className="absolute bottom-2 left-2 text-xs opacity-50">
+            <div className="gramel:absolute gramel:bottom-2 gramel:left-2 gramel:text-xs gramel:opacity-50">
               Click to flip back
             </div>
           </div>

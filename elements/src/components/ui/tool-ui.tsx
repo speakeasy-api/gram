@@ -18,16 +18,15 @@ import { Popover, PopoverContent, PopoverTrigger } from './popover'
  * Status indicator styles
  * -------------------------------------------------------------------------- */
 
-const statusVariants = cva(
-  'flex size-5 items-center justify-center rounded-full',
+const statusVariants = cva('gramel:flex gramel:size-5 gramel:items-center gramel:justify-center gramel:rounded-full',
   {
     variants: {
       status: {
-        pending: 'border border-dashed border-muted-foreground/50',
-        running: 'text-primary',
-        complete: 'text-green-600 dark:text-green-500',
-        error: 'text-destructive',
-        approval: 'text-amber-500',
+        pending: 'gramel:border gramel:border-dashed gramel:border-muted-foreground/50',
+        running: 'gramel:text-primary',
+        complete: 'gramel:text-green-600 gramel:dark:text-green-500',
+        error: 'gramel:text-destructive',
+        approval: 'gramel:text-amber-500',
       },
     },
     defaultVariants: {
@@ -142,11 +141,11 @@ function StatusIndicator({ status }: { status: ToolStatus }) {
   return (
     <div className={cn(statusVariants({ status }))}>
       {status === 'pending' && null}
-      {status === 'running' && <LoaderIcon className="size-4 animate-spin" />}
-      {status === 'complete' && <CheckIcon className="size-4" />}
-      {status === 'error' && <XIcon className="size-4" />}
+      {status === 'running' && <LoaderIcon className="gramel:size-4 gramel:animate-spin" />}
+      {status === 'complete' && <CheckIcon className="gramel:size-4" />}
+      {status === 'error' && <XIcon className="gramel:size-4" />}
       {status === 'approval' && (
-        <LoaderIcon className="text-muted-foreground size-4 animate-spin" />
+        <LoaderIcon className="gramel:text-muted-foreground gramel:size-4 gramel:animate-spin" />
       )}
     </div>
   )
@@ -165,13 +164,13 @@ function CopyButton({ content }: { content: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="text-muted-foreground hover:bg-accent hover:text-foreground rounded p-1 transition-colors"
+      className="gramel:text-muted-foreground gramel:hover:bg-accent gramel:hover:text-foreground gramel:rounded gramel:p-1 gramel:transition-colors"
       aria-label="Copy to clipboard"
     >
       {copied ? (
-        <CheckIcon className="size-4" />
+        <CheckIcon className="gramel:size-4" />
       ) : (
-        <CopyIcon className="size-4" />
+        <CopyIcon className="gramel:size-4" />
       )}
     </button>
   )
@@ -202,7 +201,7 @@ function SyntaxHighlightedCode({
         {
           pre(node) {
             node.properties.class =
-              'w-full py-3 px-4 max-h-[300px] overflow-y-auto whitespace-pre-wrap text-left text-sm'
+              'gramel:w-full gramel:py-3 gramel:px-4 gramel:max-h-[300px] gramel:overflow-y-auto gramel:whitespace-pre-wrap gramel:text-left gramel:text-sm'
           },
         },
       ],
@@ -212,8 +211,7 @@ function SyntaxHighlightedCode({
   if (!highlightedCode) {
     return (
       <pre
-        className={cn(
-          'w-full bg-slate-800/90 px-4 py-3 text-sm whitespace-pre-wrap text-slate-100',
+        className={cn('gramel:w-full gramel:bg-slate-800/90 gramel:px-4 gramel:py-3 gramel:text-sm gramel:whitespace-pre-wrap gramel:text-slate-100',
           className
         )}
       >
@@ -224,7 +222,7 @@ function SyntaxHighlightedCode({
 
   return (
     <div
-      className={cn('w-full bg-slate-800/90', className)}
+      className={cn('gramel:w-full gramel:bg-slate-800/90', className)}
       dangerouslySetInnerHTML={{ __html: highlightedCode }}
     />
   )
@@ -238,7 +236,7 @@ function ImageContent({ data }: { data: string }) {
   const image = `data:image/png;base64,${data}`
   return (
     <div
-      className="flex items-center justify-center rounded-lg p-5"
+      className="gramel:flex gramel:items-center gramel:justify-center gramel:rounded-lg gramel:p-5"
       style={{
         backgroundImage: `linear-gradient(45deg, #ccc 25%, transparent 25%), 
                           linear-gradient(135deg, #ccc 25%, transparent 25%),
@@ -248,7 +246,7 @@ function ImageContent({ data }: { data: string }) {
         backgroundPosition: '0 0, 12.5px 0, 12.5px -12.5px, 0px 12.5px',
       }}
     >
-      <img src={image} className="max-h-[300px] max-w-full object-contain" />
+      <img src={image} className="gramel:max-h-[300px] gramel:max-w-full gramel:object-contain" />
     </div>
   )
 }
@@ -263,7 +261,7 @@ function StructuredResultContent({
   content: { content: ContentItem[] }
 }) {
   return (
-    <div className="w-full">
+    <div className="gramel:w-full">
       {content.content.map((item, index) => {
         switch (item.type) {
           case 'text': {
@@ -286,7 +284,7 @@ function StructuredResultContent({
             return (
               <pre
                 key={index}
-                className="px-4 py-3 text-sm whitespace-pre-wrap"
+                className="gramel:px-4 gramel:py-3 gramel:text-sm gramel:whitespace-pre-wrap"
               >
                 {JSON.stringify(item, null, 2)}
               </pre>
@@ -319,30 +317,29 @@ function ToolUISection({
       : JSON.stringify(content, null, 2)
 
   return (
-    <div data-slot="tool-ui-section" className="border-border border-t">
+    <div data-slot="tool-ui-section" className="gramel:border-border gramel:border-t">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="hover:bg-accent/50 flex w-full cursor-pointer items-center justify-between px-4 py-2.5 text-left transition-colors"
+        className="gramel:hover:bg-accent/50 gramel:flex gramel:w-full gramel:cursor-pointer gramel:items-center gramel:justify-between gramel:px-4 gramel:py-2.5 gramel:text-left gramel:transition-colors"
       >
-        <span className="text-muted-foreground text-sm">{title}</span>
-        <div className="flex items-center gap-1">
+        <span className="gramel:text-muted-foreground gramel:text-sm">{title}</span>
+        <div className="gramel:flex gramel:items-center gramel:gap-1">
           <CopyButton content={contentString} />
           <ChevronRightIcon
-            className={cn(
-              'text-muted-foreground size-4 transition-transform duration-200',
-              isExpanded && 'rotate-90'
+            className={cn('gramel:text-muted-foreground gramel:size-4 gramel:transition-transform gramel:duration-200',
+              isExpanded && 'gramel:rotate-90'
             )}
           />
         </div>
       </button>
       {isExpanded && (
-        <div className="border-border border-t">
+        <div className="gramel:border-border gramel:border-t">
           {isStructured ? (
             <StructuredResultContent content={content} />
           ) : highlightSyntax ? (
             <SyntaxHighlightedCode text={contentString} language={language} />
           ) : (
-            <pre className="text-foreground overflow-x-auto px-4 py-3 text-sm whitespace-pre-wrap">
+            <pre className="gramel:text-foreground gramel:overflow-x-auto gramel:px-4 gramel:py-3 gramel:text-sm gramel:whitespace-pre-wrap">
               {contentString}
             </pre>
           )}
@@ -400,8 +397,7 @@ function ToolUI({
   return (
     <div
       data-slot="tool-ui"
-      className={cn(
-        'border-border bg-card overflow-hidden rounded-lg border',
+      className={cn('gramel:border-border gramel:bg-card gramel:overflow-hidden gramel:rounded-lg gramel:border',
         className
       )}
     >
@@ -409,20 +405,19 @@ function ToolUI({
       {provider && (
         <div
           data-slot="tool-ui-provider"
-          className={cn(
-            'border-border flex items-center gap-2 border-b px-4 py-2.5'
+          className={cn('gramel:border-border gramel:flex gramel:items-center gramel:gap-2 gramel:border-b gramel:px-4 gramel:py-2.5'
           )}
         >
           {icon ? (
-            <span className="flex size-5 items-center justify-center">
+            <span className="gramel:flex gramel:size-5 gramel:items-center gramel:justify-center">
               {icon}
             </span>
           ) : (
-            <span className="bg-muted flex size-5 items-center justify-center rounded text-xs font-medium">
+            <span className="gramel:bg-muted gramel:flex gramel:size-5 gramel:items-center gramel:justify-center gramel:rounded gramel:text-xs gramel:font-medium">
               {provider.charAt(0).toUpperCase()}
             </span>
           )}
-          <span className="text-sm font-medium">{provider}</span>
+          <span className="gramel:text-sm gramel:font-medium">{provider}</span>
         </div>
       )}
 
@@ -430,25 +425,22 @@ function ToolUI({
       <button
         onClick={() => hasContent && setIsExpanded(!isExpanded)}
         disabled={!hasContent}
-        className={cn(
-          'flex w-full items-center gap-2 px-4 py-3 text-left',
-          hasContent && 'hover:bg-accent/50 cursor-pointer transition-colors'
+        className={cn('gramel:flex gramel:w-full gramel:items-center gramel:gap-2 gramel:px-4 gramel:py-3 gramel:text-left',
+          hasContent && 'gramel:hover:bg-accent/50 gramel:cursor-pointer gramel:transition-colors'
         )}
       >
         <StatusIndicator status={status} />
         <span
-          className={cn(
-            'flex-1 text-sm',
-            !provider && isApprovalPending && 'shimmer'
+          className={cn('gramel:flex-1 gramel:text-sm',
+            !provider && isApprovalPending && 'gramel:shimmer'
           )}
         >
           {name}
         </span>
         {hasContent && (
           <ChevronDownIcon
-            className={cn(
-              'text-muted-foreground size-4 transition-transform duration-200',
-              isExpanded && 'rotate-180'
+            className={cn('gramel:text-muted-foreground gramel:size-4 gramel:transition-transform gramel:duration-200',
+              isExpanded && 'gramel:rotate-180'
             )}
           />
         )}
@@ -482,35 +474,35 @@ function ToolUI({
       {isApprovalPending && (
         <div
           data-slot="tool-ui-approval-actions"
-          className="border-border flex items-center justify-end gap-2 border-t px-4 py-3"
+          className="gramel:border-border gramel:flex gramel:items-center gramel:justify-end gramel:gap-2 gramel:border-t gramel:px-4 gramel:py-3"
         >
           <div>
-            <span className="text-muted-foreground text-sm">
+            <span className="gramel:text-muted-foreground gramel:text-sm">
               This tool requires approval
             </span>
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="gramel:ml-auto gramel:flex gramel:items-center gramel:gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={onDeny}
-              className="text-destructive hover:bg-destructive/10"
+              className="gramel:text-destructive gramel:hover:bg-destructive/10"
             >
-              <XIcon className="mr-1 size-3" />
+              <XIcon className="gramel:mr-1 gramel:size-3" />
               Deny
             </Button>
             {/* Split button: main approve + dropdown for options */}
-            <div className="flex items-center">
+            <div className="gramel:flex gramel:items-center">
               <Button
                 variant="default"
                 size="sm"
                 onClick={handleApprove}
-                className="flex cursor-pointer justify-between gap-1 rounded-r-none bg-emerald-600 hover:bg-emerald-700"
+                className="gramel:flex gramel:cursor-pointer gramel:justify-between gramel:gap-1 gramel:rounded-r-none gramel:bg-emerald-600 gramel:hover:bg-emerald-700"
               >
-                <CheckIcon className="mr-1 size-3" />
+                <CheckIcon className="gramel:mr-1 gramel:size-3" />
 
-                {/* The min-width is needed to prevent the button from shifting when the text changes */}
-                <span className="min-w-[110px]">
+                {/* The gramel:min-width is needed to prevent the button from shifting when the text changes */}
+                <span className="gramel:min-w-[110px]">
                   {approvalMode === 'one-time'
                     ? 'Approve this time'
                     : 'Approve always'}
@@ -521,28 +513,27 @@ function ToolUI({
                   <Button
                     variant="default"
                     size="sm"
-                    className="cursor-pointer rounded-l-none border-l border-emerald-700 bg-emerald-600 px-2 hover:bg-emerald-700"
+                    className="gramel:cursor-pointer gramel:rounded-l-none gramel:border-l gramel:border-emerald-700 gramel:bg-emerald-600 gramel:px-2 gramel:hover:bg-emerald-700"
                   >
-                    <ChevronDownIcon className="size-3" />
+                    <ChevronDownIcon className="gramel:size-3" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-64 p-1" sideOffset={4}>
+                <PopoverContent align="end" className="gramel:w-64 gramel:p-1" sideOffset={4}>
                   <button
                     onClick={() => {
                       setApprovalMode('one-time')
                       setIsDropdownOpen(false)
                     }}
-                    className="hover:bg-accent relative flex w-full items-start gap-2 rounded-sm px-2 py-2 text-left"
+                    className="gramel:hover:bg-accent gramel:relative gramel:flex gramel:w-full gramel:items-start gramel:gap-2 gramel:rounded-sm gramel:px-2 gramel:py-2 gramel:text-left"
                   >
                     <CheckIcon
-                      className={cn(
-                        'relative top-1 mt-0.5 size-3 shrink-0',
-                        approvalMode !== 'one-time' && 'invisible'
+                      className={cn('gramel:relative gramel:top-1 gramel:mt-0.5 gramel:size-3 gramel:shrink-0',
+                        approvalMode !== 'one-time' && 'gramel:invisible'
                       )}
                     />
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-sm">Approve only once</span>
-                      <span className="text-muted-foreground text-xs">
+                    <div className="gramel:flex gramel:flex-col gramel:gap-0.5">
+                      <span className="gramel:text-sm">Approve only once</span>
+                      <span className="gramel:text-muted-foreground gramel:text-xs">
                         You'll be asked again next time
                       </span>
                     </div>
@@ -553,17 +544,16 @@ function ToolUI({
                         setApprovalMode('for-session')
                         setIsDropdownOpen(false)
                       }}
-                      className="hover:bg-accent relative flex w-full items-start gap-2 rounded-sm px-2 py-2 text-left"
+                      className="gramel:hover:bg-accent gramel:relative gramel:flex gramel:w-full gramel:items-start gramel:gap-2 gramel:rounded-sm gramel:px-2 gramel:py-2 gramel:text-left"
                     >
                       <CheckIcon
-                        className={cn(
-                          'relative top-1 mt-0.5 size-3 shrink-0',
-                          approvalMode !== 'for-session' && 'invisible'
+                        className={cn('gramel:relative gramel:top-1 gramel:mt-0.5 gramel:size-3 gramel:shrink-0',
+                          approvalMode !== 'for-session' && 'gramel:invisible'
                         )}
                       />
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-sm">Approve always</span>
-                        <span className="text-muted-foreground text-xs">
+                      <div className="gramel:flex gramel:flex-col gramel:gap-0.5">
+                        <span className="gramel:text-sm">Approve always</span>
+                        <span className="gramel:text-muted-foreground gramel:text-xs">
                           Trust this tool for the session
                         </span>
                       </div>
@@ -611,15 +601,14 @@ function ToolUIGroup({
   return (
     <div
       data-slot="tool-ui-group"
-      className={cn(
-        'border-border bg-card overflow-hidden rounded-lg border',
+      className={cn('gramel:border-border gramel:bg-card gramel:overflow-hidden gramel:rounded-lg gramel:border',
         className
       )}
     >
       {/* Group header */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="hover:bg-accent/50 flex w-full items-center gap-2 px-4 py-3 text-left transition-colors"
+        className="gramel:hover:bg-accent/50 gramel:flex gramel:w-full gramel:items-center gramel:gap-2 gramel:px-4 gramel:py-3 gramel:text-left gramel:transition-colors"
       >
         {icon || (
           <StatusIndicator
@@ -627,17 +616,15 @@ function ToolUIGroup({
           />
         )}
         <span
-          className={cn(
-            'flex-1 text-sm font-medium',
-            status === 'running' && 'shimmer'
+          className={cn('gramel:flex-1 gramel:text-sm gramel:font-medium',
+            status === 'running' && 'gramel:shimmer'
           )}
         >
           {title}
         </span>
         <ChevronDownIcon
-          className={cn(
-            'text-muted-foreground size-4 transition-transform duration-200',
-            isExpanded && 'rotate-180'
+          className={cn('gramel:text-muted-foreground gramel:size-4 gramel:transition-transform gramel:duration-200',
+            isExpanded && 'gramel:rotate-180'
           )}
         />
       </button>
@@ -646,7 +633,7 @@ function ToolUIGroup({
       {isExpanded && (
         <div
           data-slot="tool-ui-group-content"
-          className="border-border border-t"
+          className="gramel:border-border gramel:border-t"
         >
           {children}
         </div>
