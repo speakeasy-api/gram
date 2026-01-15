@@ -20,6 +20,8 @@ type Service interface {
 	ListChats(context.Context, *ListChatsPayload) (res *ListChatsResult, err error)
 	// Load a chat by its ID
 	LoadChat(context.Context, *LoadChatPayload) (res *Chat, err error)
+	// Generate a title for a chat based on its messages
+	GenerateTitle(context.Context, *GenerateTitlePayload) (res *GenerateTitleResult, err error)
 	// Load a chat by its ID
 	CreditUsage(context.Context, *CreditUsagePayload) (res *CreditUsageResult, err error)
 }
@@ -46,7 +48,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"listChats", "loadChat", "creditUsage"}
+var MethodNames = [4]string{"listChats", "loadChat", "generateTitle", "creditUsage"}
 
 // Chat is the result type of the chat service loadChat method.
 type Chat struct {
@@ -116,6 +118,23 @@ type CreditUsageResult struct {
 	CreditsUsed float64
 	// The number of monthly credits
 	MonthlyCredits int
+}
+
+// GenerateTitlePayload is the payload type of the chat service generateTitle
+// method.
+type GenerateTitlePayload struct {
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
+	// The ID of the chat
+	ID string
+}
+
+// GenerateTitleResult is the result type of the chat service generateTitle
+// method.
+type GenerateTitleResult struct {
+	// The generated title
+	Title string
 }
 
 // ListChatsPayload is the payload type of the chat service listChats method.
