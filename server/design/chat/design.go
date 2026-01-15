@@ -65,6 +65,34 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "LoadChat"}`)
 	})
 
+	Method("generateTitle", func() {
+		Description("Generate a title for a chat based on its messages")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			security.ChatSessionsTokenPayload()
+			Attribute("id", String, "The ID of the chat")
+			Required("id")
+		})
+
+		Result(func() {
+			Attribute("title", String, "The generated title")
+			Required("title")
+		})
+
+		HTTP(func() {
+			POST("/rpc/chat.generateTitle")
+			security.SessionHeader()
+			security.ProjectHeader()
+			security.ChatSessionsTokenHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "generateTitle")
+		Meta("openapi:extension:x-speakeasy-name-override", "generateTitle")
+	})
+
 	Method("creditUsage", func() {
 		Description("Load a chat by its ID")
 
