@@ -34,6 +34,7 @@ export default defineConfig({
         'remark-gfm',
         'vega',
         'shiki',
+        '@assistant-ui/react',
       ],
       output: {
         globals: {

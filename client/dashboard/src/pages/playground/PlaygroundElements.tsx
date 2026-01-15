@@ -14,7 +14,7 @@ import {
   GramThreadWelcome,
   GramUserMessage,
 } from "./PlaygroundElementsOverrides";
-import "@gram-ai/elements/elements-embedded.css";
+import "@gram-ai/elements/elements.css";
 
 // Context for passing auth warning to the Composer component
 type AuthWarningValue = { missingCount: number; toolsetSlug: string } | null;
@@ -133,7 +133,7 @@ export function PlaygroundElements({
         },
         components: {
           ThreadWelcome: GramThreadWelcome,
-          UserMessage: GramUserMessage,
+          // UserMessage: GramUserMessage,
         },
       }}
     >
