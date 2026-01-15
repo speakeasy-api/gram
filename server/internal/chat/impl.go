@@ -478,6 +478,68 @@ func (s *Service) CreditUsage(ctx context.Context, payload *gen.CreditUsagePaylo
 	}, nil
 }
 
+func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitlePayload) (*gen.GenerateTitleResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	chatID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID")
+	}
+
+	// Load the chat to verify access and get messages
+	chat, err := s.repo.GetChat(ctx, chatID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
+	}
+
+	if chat.ProjectID != *authCtx.ProjectID {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Load messages to find the first user message for title generation
+	messages, err := s.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
+		ChatID:    chat.ID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat messages").Log(ctx, s.logger)
+	}
+
+	// Find the first user message
+	var firstUserMessage string
+	for _, msg := range messages {
+		if msg.Role == "user" && msg.Content != "" {
+			firstUserMessage = msg.Content
+			break
+		}
+	}
+
+	if firstUserMessage == "" {
+		return &gen.GenerateTitleResult{Title: "New Chat"}, nil
+	}
+
+	// Generate the title
+	title := s.generateChatTitle(ctx, authCtx.ActiveOrganizationID, firstUserMessage)
+
+	// Update the chat title in the database
+	err = s.repo.UpdateChatTitle(ctx, repo.UpdateChatTitleParams{
+		ID:    chatID,
+		Title: conv.ToPGText(title),
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to update chat title", attr.SlogError(err))
+		// Still return the generated title even if the update fails
+	}
+
+	return &gen.GenerateTitleResult{Title: title}, nil
+}
+
 func (s *Service) generateChatTitle(ctx context.Context, orgID, firstMessage string) string {
 	if s.chatClient == nil {
 		return "New Chat"
@@ -518,23 +580,13 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 		chatCount = 0
 	}
 
-	// Generate title for new chats using the first user message
-	title := "New Chat"
-	if chatCount == 0 {
-		for _, msg := range request.Messages {
-			if msg.Role == "user" && msg.Content != "" {
-				title = s.generateChatTitle(ctx, orgID, msg.Content)
-				break
-			}
-		}
-	}
-
+	// Create chat with placeholder title - title generation happens via the generateTitle RPC
 	_, err = s.repo.UpsertChat(ctx, repo.UpsertChatParams{
 		ID:             chatID,
 		ProjectID:      projectID,
 		OrganizationID: orgID,
 		UserID:         conv.ToPGText(userID),
-		Title:          conv.ToPGText(title),
+		Title:          conv.ToPGText("New Chat"),
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to create chat", attr.SlogError(err))
