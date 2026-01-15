@@ -1,5 +1,12 @@
 # @gram-ai/elements
 
+## 1.20.1
+
+### Patch Changes
+
+- 7506a42: Update elements react pinned version to match Gram
+- b3ac308: Allow className to be passed to Chat component and update stories
+
 ## 1.20.0
 
 ### Minor Changes
