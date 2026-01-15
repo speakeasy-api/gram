@@ -157,7 +157,7 @@ const ElementsProviderWithApproval = ({
 
   // Set up frontend tool approval config for runtime checking
   useEffect(() => {
-    if (config.tools?.toolsRequiringApproval?.length) {
+    if (config.tools?.toolsRequiringApproval) {
       setFrontendToolApprovalConfig(
         getApprovalHelpers(),
         config.tools.toolsRequiringApproval
