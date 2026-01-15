@@ -992,3 +992,23 @@ jobs:
       - name: Prune PNPM store
         if: ${{ needs.changes.outputs.elements == 'true' && success() }}
         run: pnpm store prune
+
+  preview-label:
+    runs-on: ubicloud-standard-2
+    needs: [changes, docker-build-server, docker-build-client]
+    if: |
+      github.event_name == 'pull_request' &&
+      !github.event.pull_request.head.repo.fork &&
+      (needs.changes.outputs.server == 'true' || needs.changes.outputs.client == 'true')
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Add preview label
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              ...context.repo,
+              issue_number: context.payload.pull_request.number,
+              labels: ['preview']
+            });
