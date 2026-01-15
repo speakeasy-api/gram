@@ -78,6 +78,73 @@ func (q *Queries) GetFirstUserChatMessage(ctx context.Context, chatID uuid.UUID)
 	return content, err
 }
 
+const listAllChats = `-- name: ListAllChats :many
+SELECT 
+    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    (
+        COALESCE(
+            (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
+            0
+        )
+    )::integer as num_messages 
+    , (
+        COALESCE(
+            (SELECT SUM(total_tokens) FROM chat_messages WHERE chat_id = c.id),
+            0
+        )
+    )::integer as total_tokens
+FROM chats c 
+WHERE c.project_id = $1
+`
+
+type ListAllChatsRow struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	Title          pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+	NumMessages    int32
+	TotalTokens    int32
+}
+
+func (q *Queries) ListAllChats(ctx context.Context, projectID uuid.UUID) ([]ListAllChatsRow, error) {
+	rows, err := q.db.Query(ctx, listAllChats, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAllChatsRow
+	for rows.Next() {
+		var i ListAllChatsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.UserID,
+			&i.ExternalUserID,
+			&i.Title,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.NumMessages,
+			&i.TotalTokens,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatMessages = `-- name: ListChatMessages :many
 SELECT id, chat_id, project_id, role, content, model, message_id, tool_call_id, user_id, external_user_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, created_at FROM chat_messages WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid)
 `
@@ -140,8 +207,13 @@ SELECT
         )
     )::integer as total_tokens
 FROM chats c 
-WHERE c.project_id = $1
+WHERE c.project_id = $1 AND c.external_user_id = $2
 `
+
+type ListChatsParams struct {
+	ProjectID      uuid.UUID
+	ExternalUserID pgtype.Text
+}
 
 type ListChatsRow struct {
 	ID             uuid.UUID
@@ -158,8 +230,8 @@ type ListChatsRow struct {
 	TotalTokens    int32
 }
 
-func (q *Queries) ListChats(ctx context.Context, projectID uuid.UUID) ([]ListChatsRow, error) {
-	rows, err := q.db.Query(ctx, listChats, projectID)
+func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListChatsRow, error) {
+	rows, err := q.db.Query(ctx, listChats, arg.ProjectID, arg.ExternalUserID)
 	if err != nil {
 		return nil, err
 	}

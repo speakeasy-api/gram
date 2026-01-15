@@ -179,8 +179,8 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	}
 
 	// if the user is Admin, we list chat for a whole project
-	if userInfo != nil && userInfo.Admin {
-		chats, err := s.repo.ListChats(ctx, *authCtx.ProjectID)
+	if userInfo != nil && userInfo.Admin && authCtx.ExternalUserID == nil {
+		chats, err := s.repo.ListAllChats(ctx, *authCtx.ProjectID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats").Log(ctx, s.logger)
 		}
