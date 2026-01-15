@@ -407,6 +407,9 @@ importers:
       '@assistant-ui/react-markdown':
         specifier: ^0.11.0
         version: 0.11.9(@assistant-ui/react@0.11.53(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(immer@11.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(use-sync-external-store@1.6.0(react@19.2.3)))(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@datadog/browser-rum':
+        specifier: ^6.24.1
+        version: 6.24.1
       '@openrouter/ai-sdk-provider':
         specifier: ^1.4.1
         version: 1.5.4(ai@5.0.90(zod@4.2.1))(zod@4.2.1)

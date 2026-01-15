@@ -75,6 +75,10 @@ jobs:
           setupGitUser: false
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+          # Datadog RUM credentials for @gram-ai/elements error tracking
+          VITE_DATADOG_APPLICATION_ID: ${{ secrets.VITE_DATADOG_APPLICATION_ID }}
+          VITE_DATADOG_CLIENT_TOKEN: ${{ secrets.VITE_DATADOG_CLIENT_TOKEN }}
+          VITE_DATADOG_SITE: ${{ secrets.VITE_DATADOG_SITE }}
 
       - name: Prune PNPM store
         run: pnpm store prune

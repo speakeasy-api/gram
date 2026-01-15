@@ -2,6 +2,7 @@ import { FrontendTools } from '@/components/FrontendTools'
 import { useMCPTools } from '@/hooks/useMCPTools'
 import { useToolApproval } from '@/hooks/useToolApproval'
 import { getApiUrl } from '@/lib/api'
+import { initErrorTracking, trackError } from '@/lib/errorTracking'
 import { MODELS } from '@/lib/models'
 import {
   clearFrontendToolApprovalConfig,
@@ -124,6 +125,15 @@ const ElementsProviderWithApproval = ({
     config.systemPrompt,
     plugins
   )
+
+  // Initialize error tracking on mount
+  useEffect(() => {
+    initErrorTracking({
+      enabled: config.errorTracking?.enabled,
+      projectSlug: config.projectSlug,
+      variant: config.variant,
+    })
+  }, [config.errorTracking?.enabled, config.projectSlug, config.variant])
 
   const { data: mcpTools } = useMCPTools({
     auth,
@@ -249,12 +259,14 @@ const ElementsProviderWithApproval = ({
             abortSignal,
             onError: ({ error }) => {
               console.error('Stream error in onError callback:', error)
+              trackError(error, { source: 'streaming' })
             },
           })
 
           return result.toUIMessageStream()
         } catch (error) {
           console.error('Error creating stream:', error)
+          trackError(error, { source: 'stream-creation' })
           throw error
         }
       },
