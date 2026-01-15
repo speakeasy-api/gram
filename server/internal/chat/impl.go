@@ -573,13 +573,6 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 		return uuid.Nil, oops.E(oops.CodeInvalid, err, "invalid chat ID in header")
 	}
 
-	// Get the number of already-stored messages so we can detect new chats
-	chatCount, err := s.repo.CountChatMessages(ctx, chatID)
-	if err != nil {
-		// Chat doesn't exist yet, treat as new (count = 0)
-		chatCount = 0
-	}
-
 	// Create chat with placeholder title - title generation happens via the generateTitle RPC
 	_, err = s.repo.UpsertChat(ctx, repo.UpsertChatParams{
 		ID:             chatID,
@@ -591,6 +584,13 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to create chat", attr.SlogError(err))
 		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "failed to create chat")
+	}
+
+	// Get the number of already-stored messages so we can insert any new ones
+	chatCount, err := s.repo.CountChatMessages(ctx, chatID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to get chat history", attr.SlogError(err))
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "failed to get chat history")
 	}
 
 	// This shouldn't happen, and also it doesn't really matter if it does, but we error anyway so we can fix it
