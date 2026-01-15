@@ -133,7 +133,9 @@ function AddToToolsetDialog({
         target_toolset: selectedToolsetSlug,
         tool_count: toolUrns.length,
       });
-      toast.success(`Added ${toolUrns.length} tool(s) to toolset`, { persist: true });
+      toast.success(`Added ${toolUrns.length} tool(s) to toolset`, {
+        persist: true,
+      });
       onOpenChange(false);
       setSelectedToolsetSlug("");
     },

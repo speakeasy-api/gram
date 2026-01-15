@@ -15,7 +15,7 @@ import {
   useArchiveNotificationMutation,
   queryKeyListNotifications,
   queryKeyNotificationsUnreadCount,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 
@@ -35,7 +35,7 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"active" | "archived">("active");
   const [lastViewedAt, setLastViewedAtState] = useState<string | null>(
-    getLastViewedAt
+    getLastViewedAt,
   );
 
   const queryClient = useQueryClient();
@@ -45,7 +45,7 @@ export function NotificationBell() {
     undefined,
     {
       refetchInterval: 30000, // Refresh every 30 seconds
-    }
+    },
   );
 
   const { data: notificationsData, isLoading } = useListNotifications(
@@ -56,7 +56,7 @@ export function NotificationBell() {
     undefined,
     {
       enabled: open,
-    }
+    },
   );
 
   const archiveMutation = useArchiveNotificationMutation({
@@ -69,7 +69,7 @@ export function NotificationBell() {
       });
       queryClient.invalidateQueries({
         queryKey: queryKeyNotificationsUnreadCount(
-          lastViewedAt ? { since: new Date(lastViewedAt) } : undefined
+          lastViewedAt ? { since: new Date(lastViewedAt) } : undefined,
         ),
       });
     },
@@ -90,7 +90,7 @@ export function NotificationBell() {
         request: { archiveNotificationRequestBody: { id } },
       });
     },
-    [archiveMutation]
+    [archiveMutation],
   );
 
   const unreadCount = unreadData?.count ?? 0;
@@ -213,26 +213,33 @@ function NotificationItem({
   onArchive,
   showArchiveButton,
 }: NotificationItemProps) {
-  const LevelIcon = {
-    info: Info,
-    success: Check,
-    warning: AlertTriangle,
-    error: AlertCircle,
-  }[notification.level] ?? Info;
+  const LevelIcon =
+    {
+      info: Info,
+      success: Check,
+      warning: AlertTriangle,
+      error: AlertCircle,
+    }[notification.level] ?? Info;
 
-  const levelColorClass = {
-    info: "text-muted-foreground",
-    success: "text-green-600",
-    warning: "text-yellow-600",
-    error: "text-destructive",
-  }[notification.level] ?? "text-muted-foreground";
+  const levelColorClass =
+    {
+      info: "text-muted-foreground",
+      success: "text-green-600",
+      warning: "text-yellow-600",
+      error: "text-destructive",
+    }[notification.level] ?? "text-muted-foreground";
 
   return (
     <div className="p-3 border-b last:border-b-0 hover:bg-muted/50 transition-colors">
       <Stack direction="horizontal" gap={2} align="start">
         <LevelIcon className={`h-4 w-4 mt-0.5 shrink-0 ${levelColorClass}`} />
         <Stack direction="vertical" gap={1} className="flex-1 min-w-0">
-          <Stack direction="horizontal" justify="between" align="start" gap={2}>
+          <Stack
+            direction="horizontal"
+            justify="space-between"
+            align="start"
+            gap={2}
+          >
             <div className="min-w-0 flex-1">
               <Type small className="font-medium line-clamp-2">
                 {notification.title}

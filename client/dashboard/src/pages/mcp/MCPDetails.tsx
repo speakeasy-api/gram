@@ -1184,7 +1184,9 @@ function ConnectOAuthModal({
       toolset={toolset}
       onSuccess={() => {
         invalidateAllToolset(queryClient);
-        toast.success("External OAuth server configured successfully", { persist: true });
+        toast.success("External OAuth server configured successfully", {
+          persist: true,
+        });
         onClose();
       }}
     />
@@ -1280,7 +1282,9 @@ function OAuthTabModal({
     }
 
     if (!externalSlug.trim()) {
-      toast.error("Please provide a slug for the OAuth server", { persist: true });
+      toast.error("Please provide a slug for the OAuth server", {
+        persist: true,
+      });
       return;
     }
 

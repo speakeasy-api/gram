@@ -25,7 +25,7 @@ export function clearToastClient() {
 async function persistNotification(
   level: NotificationLevel,
   title: string,
-  options?: ToastOptions
+  options?: ToastOptions,
 ) {
   if (options?.persist !== true || !sdkClient) {
     return;

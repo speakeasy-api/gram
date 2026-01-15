@@ -98,7 +98,9 @@ export default function SourceDetails() {
       setInitialEnvironmentId(activeEnvironmentId);
     },
     onError: (error) => {
-      toast.error("Failed to attach environment. Please try again.", { persist: true });
+      toast.error("Failed to attach environment. Please try again.", {
+        persist: true,
+      });
       console.error("Failed to attach environment:", error);
     },
     onSettled: () => {
@@ -113,7 +115,9 @@ export default function SourceDetails() {
         setInitialEnvironmentId(undefined);
       },
       onError: (error) => {
-        toast.error("Failed to detach environment. Please try again.", { persist: true });
+        toast.error("Failed to detach environment. Please try again.", {
+          persist: true,
+        });
         console.error("Failed to detach environment:", error);
       },
       onSettled: () => {

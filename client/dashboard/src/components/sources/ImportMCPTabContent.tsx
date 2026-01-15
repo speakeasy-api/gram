@@ -130,7 +130,9 @@ export default function ImportMCPTabContent({
       });
 
       await refetchDeployment();
-      toast.success(`Imported ${server.title ?? server.registrySpecifier}`, { persist: true });
+      toast.success(`Imported ${server.title ?? server.registrySpecifier}`, {
+        persist: true,
+      });
       onSuccess?.();
     } catch (err) {
       console.error("Failed to import external MCP:", err);

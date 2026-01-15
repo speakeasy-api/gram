@@ -584,7 +584,9 @@ const CliSetupStep = ({
     if (tools.tools.length > 0) {
       setCurrentStep("toolset");
     } else {
-      toast.error("No tools found. Please retry the build command.", { persist: true });
+      toast.error("No tools found. Please retry the build command.", {
+        persist: true,
+      });
     }
   };
 
@@ -770,7 +772,9 @@ const UploadStep = ({
       deployment?.status === "failed"
     ) {
       setDeploymentToShowLogsFor(deployment?.id);
-      toast.error("Unable to create tools from your OpenAPI spec", { persist: true });
+      toast.error("Unable to create tools from your OpenAPI spec", {
+        persist: true,
+      });
       return;
     }
 
