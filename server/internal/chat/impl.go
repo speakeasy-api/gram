@@ -55,6 +55,7 @@ type Service struct {
 	repo                 *repo.Queries
 	tracer               trace.Tracer
 	openRouter           openrouter.Provisioner
+	chatClient           *openrouter.ChatClient
 	logger               *slog.Logger
 	sessions             *sessions.Manager
 	chatSessions         *chatsessions.Manager
@@ -68,6 +69,7 @@ func NewService(
 	sessions *sessions.Manager,
 	chatSessions *chatsessions.Manager,
 	openRouter openrouter.Provisioner,
+	chatClient *openrouter.ChatClient,
 	fallbackUsageTracker FallbackModelUsageTracker,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
@@ -80,6 +82,7 @@ func NewService(
 		repo:                 repo.New(db),
 		tracer:               otel.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
 		openRouter:           openRouter,
+		chatClient:           chatClient,
 		proxyTransport:       cleanhttp.DefaultPooledTransport(),
 		fallbackUsageTracker: fallbackUsageTracker,
 	}
@@ -475,10 +478,55 @@ func (s *Service) CreditUsage(ctx context.Context, payload *gen.CreditUsagePaylo
 	}, nil
 }
 
+func (s *Service) generateChatTitle(ctx context.Context, orgID, firstMessage string) string {
+	if s.chatClient == nil {
+		return "New Chat"
+	}
+
+	// Use a detached context with timeout so title generation doesn't block the main request
+	// or get cancelled if the client disconnects
+	titleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+
+	msg, err := s.chatClient.GetCompletion(titleCtx, orgID,
+		"Generate a concise title (3-6 words) for this conversation. Return only the title text, no quotes or explanation.",
+		firstMessage,
+		nil,
+	)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to generate chat title", attr.SlogError(err))
+		return "New Chat"
+	}
+
+	title := strings.TrimSpace(msg.Content)
+	if title == "" {
+		return "New Chat"
+	}
+	return title
+}
+
 func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID uuid.UUID, userID string, chatIDHeader string, request openrouter.OpenAIChatRequest) (uuid.UUID, error) {
 	chatID, err := uuid.Parse(chatIDHeader)
 	if err != nil {
 		return uuid.Nil, oops.E(oops.CodeInvalid, err, "invalid chat ID in header")
+	}
+
+	// Get the number of already-stored messages so we can detect new chats
+	chatCount, err := s.repo.CountChatMessages(ctx, chatID)
+	if err != nil {
+		// Chat doesn't exist yet, treat as new (count = 0)
+		chatCount = 0
+	}
+
+	// Generate title for new chats using the first user message
+	title := "New Chat"
+	if chatCount == 0 {
+		for _, msg := range request.Messages {
+			if msg.Role == "user" && msg.Content != "" {
+				title = s.generateChatTitle(ctx, orgID, msg.Content)
+				break
+			}
+		}
 	}
 
 	_, err = s.repo.UpsertChat(ctx, repo.UpsertChatParams{
@@ -486,18 +534,11 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 		ProjectID:      projectID,
 		OrganizationID: orgID,
 		UserID:         conv.ToPGText(userID),
-		Title:          conv.ToPGText("New Chat"), // TODO title
+		Title:          conv.ToPGText(title),
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to create chat", attr.SlogError(err))
 		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "failed to create chat")
-	}
-
-	// Get the number of already-stored messages so we can insert any new ones
-	chatCount, err := s.repo.CountChatMessages(ctx, chatID)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to get chat history", attr.SlogError(err))
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "failed to get chat history")
 	}
 
 	// This shouldn't happen, and also it doesn't really matter if it does, but we error anyway so we can fix it
