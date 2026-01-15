@@ -47,7 +47,7 @@ export function initErrorTracking(config: ErrorTrackingConfig = {}): void {
       env: process.env.NODE_ENV || 'production',
       sessionSampleRate: 100,
       sessionReplaySampleRate: 100,
-      trackUserInteractions: true, // Focus on errors only
+      trackUserInteractions: true,
       trackResources: true,
       trackLongTasks: true,
 
