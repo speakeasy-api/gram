@@ -9,7 +9,6 @@ import { Type } from "@/components/ui/type";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { getServerURL } from "@/lib/utils";
 import {
-  Composer,
   GramThreadWelcome,
   GramUserMessage,
 } from "./PlaygroundElementsOverrides";
@@ -130,7 +129,6 @@ export function PlaygroundElements({
         components: {
           ThreadWelcome: GramThreadWelcome,
           UserMessage: GramUserMessage,
-          Composer: Composer,
         },
       }}
     >
@@ -141,12 +139,13 @@ export function PlaygroundElements({
             : null
         }
       >
-        {/* Action buttons rendered inside provider so ShareChatButton can access chatId */}
-        <div className="flex items-center justify-end gap-2 py-3">
-          {additionalActions}
-        </div>
-        <div className="h-full bg-surface-primary [&_.aui-thread-root]:bg-transparent [&_.aui-composer-wrapper]:bg-transparent rounded-br-xl">
-          <Chat />
+        <div className="h-full flex flex-col min-h-0">
+          <div className="flex items-center justify-end gap-2 py-3 shrink-0">
+            {additionalActions}
+          </div>
+          <div className="flex-1 min-h-0 overflow-hidden bg-surface-primary [&_.aui-thread-root]:bg-transparent [&_.aui-composer-root]:rounded [&_.aui-composer-wrapper]:bg-transparent rounded-br-xl">
+            <Chat />
+          </div>
         </div>
       </PlaygroundAuthWarningContext.Provider>
     </GramElementsProvider>

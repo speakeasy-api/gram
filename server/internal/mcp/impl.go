@@ -452,10 +452,10 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			Token:        authToken,
 		})
 	case !toolset.McpIsPublic:
-		// Private MCP - for OAuth-capable servers, only use authToken; otherwise allow sessionToken fallback
+		// Private MCP - always allow sessionToken fallback since private servers require user authentication
 		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
 		token := authToken
-		if !isOAuthCapable && token == "" {
+		if token == "" {
 			token = sessionToken
 		}
 

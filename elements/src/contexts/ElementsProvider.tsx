@@ -42,7 +42,6 @@ import {
   useRef,
   useState,
 } from 'react'
-import { v7 as uuidv7 } from 'uuid'
 import { useAuth } from '../hooks/useAuth'
 import { ElementsContext } from './contexts'
 import { ToolApprovalProvider } from './ToolApprovalContext'
@@ -105,18 +104,10 @@ const ElementsProviderWithApproval = ({
   config,
 }: ElementsProviderProps) => {
   const apiUrl = getApiUrl(config)
-  const [chatId] = useState(() => uuidv7())
   const auth = useAuth({
     auth: config.api,
     projectSlug: config.projectSlug,
-    chatId,
   })
-
-  // Store auth in ref so transport always accesses current headers
-  // This ensures the Gram-Chat-ID header is included even if auth loads after transport creation
-  const authRef = useRef(auth)
-  authRef.current = auth
-
   const toolApproval = useToolApproval()
 
   const [model, setModel] = useState<Model>(
@@ -138,7 +129,6 @@ const ElementsProviderWithApproval = ({
     auth,
     mcp: config.mcp,
     environment: config.environment ?? {},
-    gramEnvironment: config.gramEnvironment,
   })
 
   // Store approval helpers in ref so they can be used in async contexts
@@ -189,9 +179,7 @@ const ElementsProviderWithApproval = ({
       sendMessages: async ({ messages, abortSignal }) => {
         const usingCustomModel = !!config.languageModel
 
-        // Access auth via ref to ensure we always have current headers
-        const currentAuth = authRef.current
-        if (currentAuth.isLoading) {
+        if (auth.isLoading) {
           throw new Error('Session is loading')
         }
 
@@ -206,7 +194,7 @@ const ElementsProviderWithApproval = ({
           : createOpenRouter({
               baseURL: apiUrl,
               apiKey: 'unused, but must be set',
-              headers: currentAuth.headers,
+              headers: auth.headers,
             })
 
         if (config.languageModel) {

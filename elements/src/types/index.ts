@@ -112,16 +112,6 @@ export interface ElementsConfig {
   environment?: Record<string, unknown>
 
   /**
-   * The Gram environment slug for server-side environment variable resolution.
-   * When provided, the MCP server will resolve environment variables
-   * from the stored environment instead of using client-provided values.
-   *
-   * This is useful for authenticated contexts where you don't want to
-   * expose environment variable values to the client.
-   */
-  gramEnvironment?: string
-
-  /**
    * The layout variant for the chat interface.
    *
    * - `widget`: A popup modal anchored to the bottom-right corner (default)
@@ -800,5 +790,4 @@ export type ElementsContextType = {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
   plugins: Plugin[]
-  chatId: string
 }

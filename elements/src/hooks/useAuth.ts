@@ -33,11 +33,9 @@ async function defaultGetSession(init: {
 export const useAuth = ({
   projectSlug,
   auth,
-  chatId,
 }: {
   auth?: ApiConfig
   projectSlug: string
-  chatId?: string
 }): Auth => {
   const getSession = useMemo(() => {
     if (isApiKeyAuth(auth)) {
@@ -62,7 +60,6 @@ export const useAuth = ({
       headers: {
         'Gram-Project': projectSlug,
         'Gram-Key': auth.UNSAFE_apiKey,
-        ...(chatId && { 'Gram-Chat-ID': chatId }),
       },
       isLoading: false,
     }
@@ -76,7 +73,6 @@ export const useAuth = ({
         headers: {
           'Gram-Project': projectSlug,
           'Gram-Chat-Session': session,
-          ...(chatId && { 'Gram-Chat-ID': chatId }),
         },
         isLoading: false,
       }

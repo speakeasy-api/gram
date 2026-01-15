@@ -1,24 +1,12 @@
-import {
-  PromptInput,
-  PromptInputBody,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTextarea,
-} from "@/components/ai-elements/prompt-input";
 import { Button } from "@/components/ui/button";
 import { Type } from "@/components/ui/type";
+import { useTelemetry } from "@/contexts/Telemetry";
 import {
-  useGramElements,
-  ThreadPrimitive,
   MessagePrimitive,
-  useAssistantApi,
-  useAssistantState,
+  ThreadPrimitive,
+  useGramElements,
 } from "@gram-ai/elements";
 import { type FC } from "react";
-import { usePlaygroundAuthWarning } from "./PlaygroundElements";
-import { useRoutes } from "@/routes";
-import { AlertCircle } from "lucide-react";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { toast } from "sonner";
 
 /**
@@ -72,56 +60,6 @@ export const GramUserMessage: FC = () => (
     </div>
   </MessagePrimitive.Root>
 );
-
-export const Composer: FC = () => {
-  const threadState = useAssistantState((s) => s.thread);
-  const threadApi = useAssistantApi();
-  const authWarning = usePlaygroundAuthWarning();
-  const routes = useRoutes();
-
-  const handleSubmit = () => {
-    threadApi.composer().send();
-  };
-
-  const handleChange = (value: string) => {
-    threadApi.composer().setText(value);
-  };
-
-  return (
-    <div className="flex flex-col gap-3">
-      {authWarning && (
-        <div className="flex items-center gap-2 px-3 py-2 bg-warning/10 border border-warning/20 rounded-md text-sm text-warning-foreground">
-          <AlertCircle className="size-4 shrink-0" />
-          <span>
-            {authWarning.missingCount} authentication{" "}
-            {authWarning.missingCount === 1 ? "variable" : "variables"} not
-            configured.{" "}
-            <routes.toolsets.toolset.Link
-              params={[authWarning.toolsetSlug]}
-              hash="auth"
-              className="underline hover:text-foreground font-medium"
-            >
-              Configure now
-            </routes.toolsets.toolset.Link>
-          </span>
-        </div>
-      )}
-      <PromptInput onSubmit={handleSubmit}>
-        <PromptInputBody>
-          <PromptInputTextarea
-            placeholder="Send a message..."
-            onChange={handleChange}
-          />
-        </PromptInputBody>
-        <PromptInputFooter className="bg-secondary border-t border-neutral-softest rounded-bl-lg rounded-br-lg">
-          <PromptInputSubmit
-            disabled={threadState.isLoading || threadState.isRunning}
-          />
-        </PromptInputFooter>
-      </PromptInput>
-    </div>
-  );
-};
 
 /**
  * Share chat button that gets the chatId from Elements context.
