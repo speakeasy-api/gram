@@ -362,3 +362,22 @@ const config: ElementsConfig = {
   },
 }
 ```
+
+***
+
+### errorTracking?
+
+> `optional` **errorTracking**: [`ErrorTrackingConfigOption`](ErrorTrackingConfigOption.md)
+
+Error tracking configuration.
+By default, errors are reported to help improve the Elements library.
+
+#### Example
+
+```ts
+const config: ElementsConfig = {
+  errorTracking: {
+    enabled: false, // Opt out of error reporting
+  },
+}
+```
