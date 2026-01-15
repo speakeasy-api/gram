@@ -123,13 +123,13 @@ run();
 <details open>
 <summary>Available methods</summary>
 
-### [agents](docs/sdks/agents/README.md)
+### [Agents](docs/sdks/agents/README.md)
 
 * [delete](docs/sdks/agents/README.md#delete) - deleteResponse agents
 * [get](docs/sdks/agents/README.md#get) - getResponse agents
 * [create](docs/sdks/agents/README.md#create) - createResponse agents
 
-### [assets](docs/sdks/assets/README.md)
+### [Assets](docs/sdks/assets/README.md)
 
 * [fetchOpenAPIv3FromURL](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 * [listAssets](docs/sdks/assets/README.md#listassets) - listAssets assets
@@ -142,7 +142,7 @@ run();
 * [uploadImage](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 * [uploadOpenAPIv3](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 
-### [auth](docs/sdks/auth/README.md)
+### [Auth](docs/sdks/auth/README.md)
 
 * [callback](docs/sdks/auth/README.md#callback) - callback auth
 * [info](docs/sdks/auth/README.md#info) - info auth
@@ -151,18 +151,18 @@ run();
 * [register](docs/sdks/auth/README.md#register) - register auth
 * [switchScopes](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 
-### [chat](docs/sdks/chat/README.md)
+### [Chat](docs/sdks/chat/README.md)
 
 * [creditUsage](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 * [list](docs/sdks/chat/README.md#list) - listChats chat
 * [load](docs/sdks/chat/README.md#load) - loadChat chat
 
-### [chatSessions](docs/sdks/chatsessions/README.md)
+### [ChatSessions](docs/sdks/chatsessions/README.md)
 
 * [create](docs/sdks/chatsessions/README.md#create) - create chatSessions
 * [revoke](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
 
-### [deployments](docs/sdks/deployments/README.md)
+### [Deployments](docs/sdks/deployments/README.md)
 
 * [active](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 * [create](docs/sdks/deployments/README.md#create) - createDeployment deployments
@@ -173,13 +173,13 @@ run();
 * [logs](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 * [redeployDeployment](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 
-### [domains](docs/sdks/domains/README.md)
+### [Domains](docs/sdks/domains/README.md)
 
 * [deleteDomain](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 * [getDomain](docs/sdks/domains/README.md#getdomain) - getDomain domains
 * [registerDomain](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 
-### [environments](docs/sdks/environments/README.md)
+### [Environments](docs/sdks/environments/README.md)
 
 * [create](docs/sdks/environments/README.md#create) - createEnvironment environments
 * [deleteBySlug](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
@@ -192,48 +192,41 @@ run();
 * [setToolsetLink](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 * [updateBySlug](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 
-### [features](docs/sdks/features/README.md)
+### [Features](docs/sdks/features/README.md)
 
 * [set](docs/sdks/features/README.md#set) - setProductFeature features
 
-### [instances](docs/sdks/instances/README.md)
+### [Instances](docs/sdks/instances/README.md)
 
 * [getBySlug](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 
-### [integrations](docs/sdks/integrations/README.md)
+### [Integrations](docs/sdks/integrations/README.md)
 
 * [integrationsNumberGet](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
 * [list](docs/sdks/integrations/README.md#list) - list integrations
 
-### [keys](docs/sdks/keys/README.md)
+### [Keys](docs/sdks/keys/README.md)
 
 * [create](docs/sdks/keys/README.md#create) - createKey keys
 * [list](docs/sdks/keys/README.md#list) - listKeys keys
 * [revokeById](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 * [validate](docs/sdks/keys/README.md#validate) - verifyKey keys
 
-### [logs](docs/sdks/logs/README.md)
+### [Logs](docs/sdks/logs/README.md)
 
 * [list](docs/sdks/logs/README.md#list) - listLogs logs
 * [listToolExecutionLogs](docs/sdks/logs/README.md#listtoolexecutionlogs) - listToolExecutionLogs logs
 
-### [mcpMetadata](docs/sdks/mcpmetadata/README.md)
+### [McpMetadata](docs/sdks/mcpmetadata/README.md)
 
 * [get](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 * [set](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 
-### [mcpRegistries](docs/sdks/mcpregistries/README.md)
+### [McpRegistries](docs/sdks/mcpregistries/README.md)
 
 * [listCatalog](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
 
-### [notifications](docs/sdks/notifications/README.md)
-
-* [archive](docs/sdks/notifications/README.md#archive) - archiveNotification notifications
-* [create](docs/sdks/notifications/README.md#create) - createNotification notifications
-* [list](docs/sdks/notifications/README.md#list) - listNotifications notifications
-* [unreadCount](docs/sdks/notifications/README.md#unreadcount) - getUnreadCount notifications
-
-### [packages](docs/sdks/packages/README.md)
+### [Packages](docs/sdks/packages/README.md)
 
 * [create](docs/sdks/packages/README.md#create) - createPackage packages
 * [list](docs/sdks/packages/README.md#list) - listPackages packages
@@ -241,7 +234,7 @@ run();
 * [publish](docs/sdks/packages/README.md#publish) - publish packages
 * [update](docs/sdks/packages/README.md#update) - updatePackage packages
 
-### [projects](docs/sdks/projects/README.md)
+### [Projects](docs/sdks/projects/README.md)
 
 * [create](docs/sdks/projects/README.md#create) - createProject projects
 * [deleteById](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
@@ -251,11 +244,11 @@ run();
 * [setLogo](docs/sdks/projects/README.md#setlogo) - setLogo projects
 * [upsertAllowedOrigin](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 
-### [resources](docs/sdks/resources/README.md)
+### [Resources](docs/sdks/resources/README.md)
 
 * [list](docs/sdks/resources/README.md#list) - listResources resources
 
-### [slack](docs/sdks/slack/README.md)
+### [Slack](docs/sdks/slack/README.md)
 
 * [slackLogin](docs/sdks/slack/README.md#slacklogin) - login slack
 * [slackCallback](docs/sdks/slack/README.md#slackcallback) - callback slack
@@ -263,12 +256,12 @@ run();
 * [getSlackConnection](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
 * [updateSlackConnection](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
 
-### [telemetry](docs/sdks/telemetry/README.md)
+### [Telemetry](docs/sdks/telemetry/README.md)
 
 * [searchLogs](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 * [searchToolCalls](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
 
-### [templates](docs/sdks/templates/README.md)
+### [Templates](docs/sdks/templates/README.md)
 
 * [create](docs/sdks/templates/README.md#create) - createTemplate templates
 * [delete](docs/sdks/templates/README.md#delete) - deleteTemplate templates
@@ -278,11 +271,11 @@ run();
 * [render](docs/sdks/templates/README.md#render) - renderTemplate templates
 * [update](docs/sdks/templates/README.md#update) - updateTemplate templates
 
-### [tools](docs/sdks/tools/README.md)
+### [Tools](docs/sdks/tools/README.md)
 
 * [list](docs/sdks/tools/README.md#list) - listTools tools
 
-### [toolsets](docs/sdks/toolsets/README.md)
+### [Toolsets](docs/sdks/toolsets/README.md)
 
 * [addExternalOAuthServer](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 * [addOAuthProxyServer](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
@@ -295,14 +288,14 @@ run();
 * [removeOAuthServer](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
 * [updateBySlug](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 
-### [usage](docs/sdks/usage/README.md)
+### [Usage](docs/sdks/usage/README.md)
 
 * [createCheckout](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 * [createCustomerSession](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 * [getPeriodUsage](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
 * [getUsageTiers](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 
-### [variations](docs/sdks/variations/README.md)
+### [Variations](docs/sdks/variations/README.md)
 
 * [deleteGlobal](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 * [listGlobal](docs/sdks/variations/README.md#listglobal) - listGlobal variations
@@ -384,10 +377,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpMetadataGet`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 - [`mcpMetadataSet`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`mcpRegistriesListCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
-- [`notificationsArchive`](docs/sdks/notifications/README.md#archive) - archiveNotification notifications
-- [`notificationsCreate`](docs/sdks/notifications/README.md#create) - createNotification notifications
-- [`notificationsList`](docs/sdks/notifications/README.md#list) - listNotifications notifications
-- [`notificationsUnreadCount`](docs/sdks/notifications/README.md#unreadcount) - getUnreadCount notifications
 - [`packagesCreate`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`packagesList`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`packagesListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
@@ -465,7 +454,6 @@ To learn about this feature and how to get started, check
 - [`useAgentsCreateMutation`](docs/sdks/agents/README.md#create) - createResponse agents
 - [`useAgentsDeleteMutation`](docs/sdks/agents/README.md#delete) - deleteResponse agents
 - [`useAgentsGet`](docs/sdks/agents/README.md#get) - getResponse agents
-- [`useArchiveNotificationMutation`](docs/sdks/notifications/README.md#archive) - archiveNotification notifications
 - [`useChatSessionsCreateMutation`](docs/sdks/chatsessions/README.md#create) - create chatSessions
 - [`useChatSessionsRevokeMutation`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
@@ -475,7 +463,6 @@ To learn about this feature and how to get started, check
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
-- [`useCreateNotificationMutation`](docs/sdks/notifications/README.md#create) - createNotification notifications
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreateProjectMutation`](docs/sdks/projects/README.md#create) - createProject projects
 - [`useCreateTemplateMutation`](docs/sdks/templates/README.md#create) - createTemplate templates
@@ -514,7 +501,6 @@ To learn about this feature and how to get started, check
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
 - [`useListIntegrations`](docs/sdks/integrations/README.md#list) - list integrations
 - [`useListMCPCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
-- [`useListNotifications`](docs/sdks/notifications/README.md#list) - listNotifications notifications
 - [`useListPackages`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListResources`](docs/sdks/resources/README.md#list) - listResources resources
@@ -525,7 +511,6 @@ To learn about this feature and how to get started, check
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
 - [`useMcpMetadataSetMutation`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
-- [`useNotificationsUnreadCount`](docs/sdks/notifications/README.md#unreadcount) - getUnreadCount notifications
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
