@@ -232,7 +232,12 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	chat, err := s.repo.GetChat(ctx, uuid.MustParse(payload.ID))
+	chatID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID")
+	}
+
+	chat, err := s.repo.GetChat(ctx, chatID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
