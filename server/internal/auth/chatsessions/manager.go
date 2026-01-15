@@ -109,7 +109,7 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 		Email:                nil,
 		AccountType:          "",
 		APIKeyScopes:         nil,
-		SessionID:            &claims.ID, // JWT ID serves as session identifier
+		SessionID:            nil,
 	}
 
 	return contextvalues.SetAuthContext(ctx, authCtx), nil

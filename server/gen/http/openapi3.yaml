@@ -11324,6 +11324,9 @@ components:
                     type: string
                     description: When the chat was created.
                     format: date-time
+                external_user_id:
+                    type: string
+                    description: The ID of the external user who created the chat
                 id:
                     type: string
                     description: The ID of the chat
@@ -11350,7 +11353,6 @@ components:
                 - messages
                 - id
                 - title
-                - user_id
                 - num_messages
                 - created_at
                 - updated_at
@@ -11364,6 +11366,9 @@ components:
                     type: string
                     description: When the message was created.
                     format: date-time
+                external_user_id:
+                    type: string
+                    description: The ID of the external user who created the message
                 finish_reason:
                     type: string
                     description: The finish reason of the message
@@ -11397,6 +11402,9 @@ components:
                     type: string
                     description: When the chat was created.
                     format: date-time
+                external_user_id:
+                    type: string
+                    description: The ID of the external user who created the chat
                 id:
                     type: string
                     description: The ID of the chat
@@ -11417,7 +11425,6 @@ components:
             required:
                 - id
                 - title
-                - user_id
                 - num_messages
                 - created_at
                 - updated_at
