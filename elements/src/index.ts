@@ -15,6 +15,10 @@ export { ThreadList as ChatHistory } from '@/components/assistant-ui/thread-list
 export { defineFrontendTool } from './lib/tools'
 export type { FrontendTool } from './lib/tools'
 
+// Error Tracking
+export { trackError } from './lib/errorTracking'
+export type { ErrorContext } from './lib/errorTracking'
+
 // Types
 export type {
   AttachmentsConfig,
@@ -27,6 +31,7 @@ export type {
   Dimension,
   Dimensions,
   ElementsConfig,
+  ErrorTrackingConfigOption,
   GetSessionFn,
   HistoryConfig,
   ModalConfig,
