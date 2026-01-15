@@ -1,13 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Type } from "@/components/ui/type";
-import { useTelemetry } from "@/contexts/Telemetry";
-import {
-  MessagePrimitive,
-  ThreadPrimitive,
-  useGramElements,
-} from "@gram-ai/elements";
+import { useGramElements } from "@gram-ai/elements";
 import { type FC } from "react";
-import { toast } from "sonner";
+import { ThreadPrimitive, MessagePrimitive } from "@assistant-ui/react";
 
 /**
  * Custom ThreadWelcome component using Gram design system.
@@ -60,26 +55,3 @@ export const GramUserMessage: FC = () => (
     </div>
   </MessagePrimitive.Root>
 );
-
-/**
- * Share chat button that gets the chatId from Elements context.
- */
-export const ShareChatButton: FC = () => {
-  const { chatId } = useGramElements();
-  const telemetry = useTelemetry();
-
-  const handleShare = () => {
-    const url = new URL(window.location.href);
-    url.searchParams.set("chatId", chatId);
-
-    telemetry.capture("chat_event", { action: "chat_shared" });
-    navigator.clipboard.writeText(url.toString());
-    toast.success("Chat link copied to clipboard");
-  };
-
-  return (
-    <Button size="sm" variant="ghost" icon="link" onClick={handleShare}>
-      Share chat
-    </Button>
-  );
-};

@@ -20,7 +20,8 @@
       "import": "./dist/plugins.js",
       "require": "./dist/plugins.cjs"
     },
-    "./elements.css": "./dist/elements.css"
+    "./elements.css": "./dist/elements.css",
+    "./elements-embedded.css": "./dist/elements-embedded.css"
   },
   "bin": {
     "elements": "./bin/cli.js"
@@ -38,7 +39,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && vite build --config vite.embedded.config.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src",

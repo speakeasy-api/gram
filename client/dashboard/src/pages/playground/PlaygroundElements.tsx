@@ -1,21 +1,20 @@
-import { GramElementsProvider, Chat, type Model } from "@gram-ai/elements";
-// Note: Not importing Elements CSS as it conflicts with dashboard's Tailwind styles
-// The dashboard's Tailwind should provide necessary utility classes
-import { createContext, useCallback, useContext } from "react";
-import { useProject, useSession } from "@/contexts/Auth";
-import { useMcpUrl } from "../mcp/MCPDetails";
-import { useListToolsets } from "@gram/client/react-query/index.js";
+import { Chat, GramElementsProvider, type Model } from "@gram-ai/elements";
 import { Type } from "@/components/ui/type";
-import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
+import { useProject, useSession } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
+import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
+import { useListToolsets } from "@gram/client/react-query/index.js";
+import { useTheme } from "next-themes";
+import { createContext, useCallback, useContext } from "react";
+import { toast } from "sonner";
+import { useEnvironment } from "../environments/Environment";
+import { useMcpUrl } from "../mcp/MCPDetails";
+import { getAuthStatus } from "./PlaygroundAuth";
 import {
   GramThreadWelcome,
   GramUserMessage,
 } from "./PlaygroundElementsOverrides";
-import { useEnvironment } from "../environments/Environment";
-import { getAuthStatus } from "./PlaygroundAuth";
-import { useTheme } from "next-themes";
-import { toast } from "sonner";
+import "@gram-ai/elements/elements-embedded.css";
 
 // Context for passing auth warning to the Composer component
 type AuthWarningValue = { missingCount: number; toolsetSlug: string } | null;
@@ -69,9 +68,11 @@ export function PlaygroundElements({
     try {
       const result = await createSessionMutation.mutateAsync({
         request: {
+          gramProject: project.id,
           createRequestBody: {
             embedOrigin: window.location.origin,
             expiresAfter: 3600,
+            userIdentifier: session.user.id,
           },
         },
         security: {
@@ -104,6 +105,10 @@ export function PlaygroundElements({
         api: {
           url: getServerURL(),
           sessionFn: getSession,
+        },
+        history: {
+          enabled: true,
+          showThreadList: true,
         },
         mcp: mcpUrl,
         gramEnvironment: environmentSlug ?? undefined,
