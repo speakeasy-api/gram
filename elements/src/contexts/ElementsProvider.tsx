@@ -133,7 +133,7 @@ const ElementsProviderWithApproval = ({
       projectSlug: config.projectSlug,
       variant: config.variant,
     })
-  }, [config.errorTracking?.enabled, config.projectSlug, config.variant])
+  }, [])
 
   const { data: mcpTools } = useMCPTools({
     auth,
