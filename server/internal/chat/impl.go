@@ -491,10 +491,10 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 
 	// Load the chat to verify access and get messages
 	chat, err := s.repo.GetChat(ctx, chatID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, oops.C(oops.CodeNotFound)
-		}
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
 	}
 
