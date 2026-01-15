@@ -60,6 +60,7 @@ type Chat struct {
 	ProjectID      uuid.UUID
 	OrganizationID string
 	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
 	Title          pgtype.Text
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
@@ -77,6 +78,7 @@ type ChatMessage struct {
 	MessageID        pgtype.Text
 	ToolCallID       pgtype.Text
 	UserID           pgtype.Text
+	ExternalUserID   pgtype.Text
 	FinishReason     pgtype.Text
 	ToolCalls        []byte
 	PromptTokens     int64
