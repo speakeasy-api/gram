@@ -38,7 +38,7 @@ export const useRedeployDeployment = (
       const href = data.deployment?.id
         ? routes.deployments.deployment.href(data.deployment.id)
         : undefined;
-      toast.success(() => <RedeploySuccessToast href={href} />);
+      toast.success(<RedeploySuccessToast href={href} />);
       options?.onSuccess?.(data, vars, onMutateResult, ctx);
     },
     onError: (err, vars, onMutateResult, ctx) => {

@@ -69,7 +69,7 @@ export function NotificationBell() {
       });
       queryClient.invalidateQueries({
         queryKey: queryKeyNotificationsUnreadCount(
-          lastViewedAt ? { since: new Date(lastViewedAt) } : undefined,
+          lastViewedAt ? { since: new Date(lastViewedAt) } : {},
         ),
       });
     },
@@ -149,8 +149,8 @@ interface Notification {
   level: string;
   title: string;
   message?: string | null;
-  createdAt: string;
-  archivedAt?: string | null;
+  createdAt: Date;
+  archivedAt?: Date | null;
 }
 
 interface NotificationListProps {
@@ -262,7 +262,7 @@ function NotificationItem({
             </Type>
           )}
           <Type small muted className="text-xs">
-            {formatDistanceToNow(new Date(notification.createdAt), {
+            {formatDistanceToNow(notification.createdAt, {
               addSuffix: true,
             })}
           </Type>
