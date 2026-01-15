@@ -198,6 +198,8 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 				CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:      chat.UpdatedAt.Time.Format(time.RFC3339),
 			})
+
+			return &gen.ListChatsResult{Chats: result}, nil
 		}
 	}
 
