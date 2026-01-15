@@ -2,6 +2,7 @@
 
 import { type FC } from 'react'
 import { Loader, PanelRightClose, PanelRightOpen } from 'lucide-react'
+import { ErrorBoundary } from '@/components/assistant-ui/error-boundary'
 import { Thread } from '@/components/assistant-ui/thread'
 import { ThreadList } from '@/components/assistant-ui/thread-list'
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
@@ -99,7 +100,9 @@ export const AssistantSidecar: FC<AssistantSidecarProps> = ({ className }) => {
 
           {/* Thread content */}
           <div className="aui-sidecar-content flex-1 overflow-hidden">
-            <Thread />
+            <ErrorBoundary>
+              <Thread />
+            </ErrorBoundary>
           </div>
         </div>
       </m.div>
