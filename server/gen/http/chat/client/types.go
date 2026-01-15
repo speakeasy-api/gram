@@ -37,6 +37,8 @@ type LoadChatResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// The ID of the user who created the chat
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// The ID of the external user who created the chat
+	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// The number of messages in the chat
 	NumMessages *int `form:"num_messages,omitempty" json:"num_messages,omitempty" xml:"num_messages,omitempty"`
 	// When the chat was created.
@@ -792,6 +794,8 @@ type ChatOverviewResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// The ID of the user who created the chat
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// The ID of the external user who created the chat
+	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// The number of messages in the chat
 	NumMessages *int `form:"num_messages,omitempty" json:"num_messages,omitempty" xml:"num_messages,omitempty"`
 	// When the chat was created.
@@ -818,6 +822,8 @@ type ChatMessageResponseBody struct {
 	FinishReason *string `form:"finish_reason,omitempty" json:"finish_reason,omitempty" xml:"finish_reason,omitempty"`
 	// The ID of the user who created the message
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// The ID of the external user who created the message
+	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// When the message was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 }
@@ -999,12 +1005,13 @@ func NewListChatsGatewayError(body *ListChatsGatewayErrorResponseBody) *goa.Serv
 // HTTP "OK" response.
 func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 	v := &chat.Chat{
-		ID:          *body.ID,
-		Title:       *body.Title,
-		UserID:      *body.UserID,
-		NumMessages: *body.NumMessages,
-		CreatedAt:   *body.CreatedAt,
-		UpdatedAt:   *body.UpdatedAt,
+		ID:             *body.ID,
+		Title:          *body.Title,
+		UserID:         body.UserID,
+		ExternalUserID: body.ExternalUserID,
+		NumMessages:    *body.NumMessages,
+		CreatedAt:      *body.CreatedAt,
+		UpdatedAt:      *body.UpdatedAt,
 	}
 	v.Messages = make([]*chat.ChatMessage, len(body.Messages))
 	for i, val := range body.Messages {
@@ -1512,9 +1519,6 @@ func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 	}
 	if body.Title == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
-	}
-	if body.UserID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
 	}
 	if body.NumMessages == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("num_messages", "body"))
@@ -2530,9 +2534,6 @@ func ValidateChatOverviewResponseBody(body *ChatOverviewResponseBody) (err error
 	}
 	if body.Title == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
-	}
-	if body.UserID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
 	}
 	if body.NumMessages == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("num_messages", "body"))

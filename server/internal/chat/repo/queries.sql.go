@@ -32,6 +32,7 @@ type CreateChatMessageParams struct {
 	MessageID        pgtype.Text
 	ToolCallID       pgtype.Text
 	UserID           pgtype.Text
+	ExternalUserID   pgtype.Text
 	FinishReason     pgtype.Text
 	ToolCalls        []byte
 	PromptTokens     int64
@@ -191,7 +192,7 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 	return items, nil
 }
 
-const listChats = `-- name: ListChats :many
+const listChatsForExternalUser = `-- name: ListChatsForExternalUser :many
 SELECT 
     c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
@@ -210,12 +211,12 @@ FROM chats c
 WHERE c.project_id = $1 AND c.external_user_id = $2
 `
 
-type ListChatsParams struct {
+type ListChatsForExternalUserParams struct {
 	ProjectID      uuid.UUID
 	ExternalUserID pgtype.Text
 }
 
-type ListChatsRow struct {
+type ListChatsForExternalUserRow struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID
 	OrganizationID string
@@ -230,15 +231,15 @@ type ListChatsRow struct {
 	TotalTokens    int32
 }
 
-func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListChatsRow, error) {
-	rows, err := q.db.Query(ctx, listChats, arg.ProjectID, arg.ExternalUserID)
+func (q *Queries) ListChatsForExternalUser(ctx context.Context, arg ListChatsForExternalUserParams) ([]ListChatsForExternalUserRow, error) {
+	rows, err := q.db.Query(ctx, listChatsForExternalUser, arg.ProjectID, arg.ExternalUserID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListChatsRow
+	var items []ListChatsForExternalUserRow
 	for rows.Next() {
-		var i ListChatsRow
+		var i ListChatsForExternalUserRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
@@ -355,6 +356,7 @@ INSERT INTO chats (
   , project_id
   , organization_id
   , user_id
+  , external_user_id
   , title
   , created_at
   , updated_at
@@ -365,11 +367,12 @@ VALUES (
     $3,
     $4,
     $5,
+    $6,
     NOW(),
     NOW()
 )
 ON CONFLICT (id) DO UPDATE SET 
-    title = $5,
+    title = $6,
     updated_at = NOW()
 RETURNING id
 `
@@ -379,6 +382,7 @@ type UpsertChatParams struct {
 	ProjectID      uuid.UUID
 	OrganizationID string
 	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
 	Title          pgtype.Text
 }
 
@@ -388,6 +392,7 @@ func (q *Queries) UpsertChat(ctx context.Context, arg UpsertChatParams) (uuid.UU
 		arg.ProjectID,
 		arg.OrganizationID,
 		arg.UserID,
+		arg.ExternalUserID,
 		arg.Title,
 	)
 	var id uuid.UUID

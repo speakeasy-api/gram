@@ -981,12 +981,13 @@ func DecodeCreditUsageResponse(decoder func(*http.Response) goahttp.Decoder, res
 // *chat.ChatOverview from a value of type *ChatOverviewResponseBody.
 func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponseBody) *chat.ChatOverview {
 	res := &chat.ChatOverview{
-		ID:          *v.ID,
-		Title:       *v.Title,
-		UserID:      *v.UserID,
-		NumMessages: *v.NumMessages,
-		CreatedAt:   *v.CreatedAt,
-		UpdatedAt:   *v.UpdatedAt,
+		ID:             *v.ID,
+		Title:          *v.Title,
+		UserID:         v.UserID,
+		ExternalUserID: v.ExternalUserID,
+		NumMessages:    *v.NumMessages,
+		CreatedAt:      *v.CreatedAt,
+		UpdatedAt:      *v.UpdatedAt,
 	}
 
 	return res
@@ -996,15 +997,16 @@ func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponse
 // *chat.ChatMessage from a value of type *ChatMessageResponseBody.
 func unmarshalChatMessageResponseBodyToChatChatMessage(v *ChatMessageResponseBody) *chat.ChatMessage {
 	res := &chat.ChatMessage{
-		ID:           *v.ID,
-		Role:         *v.Role,
-		Content:      v.Content,
-		Model:        *v.Model,
-		ToolCallID:   v.ToolCallID,
-		ToolCalls:    v.ToolCalls,
-		FinishReason: v.FinishReason,
-		UserID:       v.UserID,
-		CreatedAt:    *v.CreatedAt,
+		ID:             *v.ID,
+		Role:           *v.Role,
+		Content:        v.Content,
+		Model:          *v.Model,
+		ToolCallID:     v.ToolCallID,
+		ToolCalls:      v.ToolCalls,
+		FinishReason:   v.FinishReason,
+		UserID:         v.UserID,
+		ExternalUserID: v.ExternalUserID,
+		CreatedAt:      *v.CreatedAt,
 	}
 
 	return res

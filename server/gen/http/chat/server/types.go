@@ -36,7 +36,9 @@ type LoadChatResponseBody struct {
 	// The title of the chat
 	Title string `form:"title" json:"title" xml:"title"`
 	// The ID of the user who created the chat
-	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// The ID of the external user who created the chat
+	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// The number of messages in the chat
 	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
 	// When the chat was created.
@@ -791,7 +793,9 @@ type ChatOverviewResponseBody struct {
 	// The title of the chat
 	Title string `form:"title" json:"title" xml:"title"`
 	// The ID of the user who created the chat
-	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// The ID of the external user who created the chat
+	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// The number of messages in the chat
 	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
 	// When the chat was created.
@@ -818,6 +822,8 @@ type ChatMessageResponseBody struct {
 	FinishReason *string `form:"finish_reason,omitempty" json:"finish_reason,omitempty" xml:"finish_reason,omitempty"`
 	// The ID of the user who created the message
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// The ID of the external user who created the message
+	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// When the message was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 }
@@ -845,12 +851,13 @@ func NewListChatsResponseBody(res *chat.ListChatsResult) *ListChatsResponseBody 
 // "loadChat" endpoint of the "chat" service.
 func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 	body := &LoadChatResponseBody{
-		ID:          res.ID,
-		Title:       res.Title,
-		UserID:      res.UserID,
-		NumMessages: res.NumMessages,
-		CreatedAt:   res.CreatedAt,
-		UpdatedAt:   res.UpdatedAt,
+		ID:             res.ID,
+		Title:          res.Title,
+		UserID:         res.UserID,
+		ExternalUserID: res.ExternalUserID,
+		NumMessages:    res.NumMessages,
+		CreatedAt:      res.CreatedAt,
+		UpdatedAt:      res.UpdatedAt,
 	}
 	if res.Messages != nil {
 		body.Messages = make([]*ChatMessageResponseBody, len(res.Messages))
