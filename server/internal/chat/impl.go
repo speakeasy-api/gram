@@ -502,26 +502,13 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// Load messages to find the first user message for title generation
-	messages, err := s.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
-		ChatID:    chat.ID,
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat messages").Log(ctx, s.logger)
-	}
-
-	// Find the first user message
-	var firstUserMessage string
-	for _, msg := range messages {
-		if msg.Role == "user" && msg.Content != "" {
-			firstUserMessage = msg.Content
-			break
-		}
-	}
-
-	if firstUserMessage == "" {
+	// Get the first user message for title generation
+	firstUserMessage, err := s.repo.GetFirstUserChatMessage(ctx, chatID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
 		return &gen.GenerateTitleResult{Title: "New Chat"}, nil
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get first user message").Log(ctx, s.logger)
 	}
 
 	// Generate the title

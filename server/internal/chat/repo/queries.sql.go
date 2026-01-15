@@ -60,6 +60,23 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 	return i, err
 }
 
+const getFirstUserChatMessage = `-- name: GetFirstUserChatMessage :one
+SELECT content FROM chat_messages
+WHERE chat_id = $1
+  AND role = 'user'
+  AND content IS NOT NULL
+  AND content != ''
+ORDER BY created_at ASC
+LIMIT 1
+`
+
+func (q *Queries) GetFirstUserChatMessage(ctx context.Context, chatID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getFirstUserChatMessage, chatID)
+	var content string
+	err := row.Scan(&content)
+	return content, err
+}
+
 const listChatMessages = `-- name: ListChatMessages :many
 SELECT id, chat_id, project_id, role, content, model, message_id, tool_call_id, user_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, created_at FROM chat_messages WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid)
 `

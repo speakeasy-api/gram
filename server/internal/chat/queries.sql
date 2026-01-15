@@ -87,3 +87,12 @@ SELECT COUNT(*) FROM chat_messages WHERE chat_id = @chat_id;
 
 -- name: UpdateChatTitle :exec
 UPDATE chats SET title = @title, updated_at = NOW() WHERE id = @id;
+
+-- name: GetFirstUserChatMessage :one
+SELECT content FROM chat_messages
+WHERE chat_id = @chat_id
+  AND role = 'user'
+  AND content IS NOT NULL
+  AND content != ''
+ORDER BY created_at ASC
+LIMIT 1;
