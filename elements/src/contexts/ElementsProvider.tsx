@@ -45,7 +45,10 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { ElementsContext } from './contexts'
 import { ToolApprovalProvider } from './ToolApprovalContext'
-import { useGramThreadListAdapter } from '@/hooks/useGramThreadListAdapter'
+import {
+  isLocalThreadId,
+  useGramThreadListAdapter,
+} from '@/hooks/useGramThreadListAdapter'
 
 export interface ElementsProviderProps {
   children: ReactNode
@@ -177,6 +180,9 @@ const ElementsProviderWithApproval = ({
   // When history is enabled, the thread adapter manages chat IDs instead
   const chatIdRef = useRef<string | null>(null)
 
+  // Map to share local thread IDs to UUIDs between adapter and transport (for history mode)
+  const localIdToUuidMapRef = useRef(new Map<string, string>())
+
   // Create chat transport configuration
   const transport = useMemo<ChatTransport<UIMessage>>(
     () => ({
@@ -187,9 +193,47 @@ const ElementsProviderWithApproval = ({
           throw new Error('Session is loading')
         }
 
-        // Generate chat ID on first message if not already set
-        if (!chatIdRef.current) {
-          chatIdRef.current = crypto.randomUUID()
+        // Get chat ID - try runtime's thread remoteId first (history mode),
+        // fall back to generated ID (non-history mode)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const runtimeAny = runtimeRef.current as any
+
+        // Try multiple paths to get thread info
+        const threadListItemState = runtimeAny?.threadListItem?.getState?.()
+        const threadsState = runtimeAny?.threads?.getState?.()
+
+        // Get the thread ID - try different sources
+        const threadRemoteId = threadListItemState?.remoteId as
+          | string
+          | undefined
+        const localThreadId = (threadListItemState?.id ??
+          threadsState?.mainThreadId ??
+          threadsState?.threadIds?.[0]) as string | undefined
+
+        let chatId = threadRemoteId
+
+        if (isLocalThreadId(chatId) || (!chatId && localThreadId)) {
+          const lookupKey = chatId ?? localThreadId
+          if (lookupKey) {
+            // For local thread IDs, check if we already have a UUID mapping
+            const existingUuid = localIdToUuidMapRef.current.get(lookupKey)
+            if (existingUuid) {
+              chatId = existingUuid
+            } else {
+              // Generate a new UUID and store the mapping
+              const newUuid = crypto.randomUUID()
+              localIdToUuidMapRef.current.set(lookupKey, newUuid)
+              chatId = newUuid
+            }
+          }
+        }
+
+        if (!chatId) {
+          // Non-history mode fallback - use stable chatIdRef
+          if (!chatIdRef.current) {
+            chatIdRef.current = crypto.randomUUID()
+          }
+          chatId = chatIdRef.current
         }
 
         const context = runtimeRef.current?.thread.getModelContext()
@@ -200,7 +244,7 @@ const ElementsProviderWithApproval = ({
         // Include Gram-Chat-ID header for chat persistence
         const headersWithChatId = {
           ...auth.headers,
-          'Gram-Chat-ID': chatIdRef.current,
+          'Gram-Chat-ID': chatId,
         }
 
         // Create OpenRouter model (only needed when not using custom model)
@@ -305,6 +349,7 @@ const ElementsProviderWithApproval = ({
         contextValue={contextValue}
         runtimeRef={runtimeRef}
         frontendTools={frontendTools}
+        localIdToUuidMap={localIdToUuidMapRef.current}
       >
         {children}
       </ElementsProviderWithHistory>
@@ -332,6 +377,7 @@ interface ElementsProviderWithHistoryProps {
   contextValue: React.ContextType<typeof ElementsContext>
   runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>
   frontendTools: Record<string, AssistantTool>
+  localIdToUuidMap: Map<string, string>
 }
 
 const ElementsProviderWithHistory = ({
@@ -342,8 +388,13 @@ const ElementsProviderWithHistory = ({
   contextValue,
   runtimeRef,
   frontendTools,
+  localIdToUuidMap,
 }: ElementsProviderWithHistoryProps) => {
-  const threadListAdapter = useGramThreadListAdapter({ apiUrl, headers })
+  const threadListAdapter = useGramThreadListAdapter({
+    apiUrl,
+    headers,
+    localIdToUuidMap,
+  })
 
   // Hook factory for creating the base chat runtime
   const useChatRuntimeHook = useCallback(() => {
