@@ -12,6 +12,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// GenerateTitleRequestBody is the type of the "chat" service "generateTitle"
+// endpoint HTTP request body.
+type GenerateTitleRequestBody struct {
+	// The ID of the chat
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
 // ListChatsResponseBody is the type of the "chat" service "listChats" endpoint
 // HTTP response body.
 type ListChatsResponseBody struct {
@@ -36,6 +43,13 @@ type LoadChatResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the chat was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// GenerateTitleResponseBody is the type of the "chat" service "generateTitle"
+// endpoint HTTP response body.
+type GenerateTitleResponseBody struct {
+	// The generated title
+	Title string `form:"title" json:"title" xml:"title"`
 }
 
 // CreditUsageResponseBody is the type of the "chat" service "creditUsage"
@@ -407,6 +421,188 @@ type LoadChatGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GenerateTitleUnauthorizedResponseBody is the type of the "chat" service
+// "generateTitle" endpoint HTTP response body for the "unauthorized" error.
+type GenerateTitleUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GenerateTitleForbiddenResponseBody is the type of the "chat" service
+// "generateTitle" endpoint HTTP response body for the "forbidden" error.
+type GenerateTitleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GenerateTitleBadRequestResponseBody is the type of the "chat" service
+// "generateTitle" endpoint HTTP response body for the "bad_request" error.
+type GenerateTitleBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GenerateTitleNotFoundResponseBody is the type of the "chat" service
+// "generateTitle" endpoint HTTP response body for the "not_found" error.
+type GenerateTitleNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GenerateTitleConflictResponseBody is the type of the "chat" service
+// "generateTitle" endpoint HTTP response body for the "conflict" error.
+type GenerateTitleConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GenerateTitleUnsupportedMediaResponseBody is the type of the "chat" service
+// "generateTitle" endpoint HTTP response body for the "unsupported_media"
+// error.
+type GenerateTitleUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GenerateTitleInvalidResponseBody is the type of the "chat" service
+// "generateTitle" endpoint HTTP response body for the "invalid" error.
+type GenerateTitleInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GenerateTitleInvariantViolationResponseBody is the type of the "chat"
+// service "generateTitle" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GenerateTitleInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GenerateTitleUnexpectedResponseBody is the type of the "chat" service
+// "generateTitle" endpoint HTTP response body for the "unexpected" error.
+type GenerateTitleUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GenerateTitleGatewayErrorResponseBody is the type of the "chat" service
+// "generateTitle" endpoint HTTP response body for the "gateway_error" error.
+type GenerateTitleGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // CreditUsageUnauthorizedResponseBody is the type of the "chat" service
 // "creditUsage" endpoint HTTP response body for the "unauthorized" error.
 type CreditUsageUnauthorizedResponseBody struct {
@@ -667,6 +863,15 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		}
 	} else {
 		body.Messages = []*ChatMessageResponseBody{}
+	}
+	return body
+}
+
+// NewGenerateTitleResponseBody builds the HTTP response body from the result
+// of the "generateTitle" endpoint of the "chat" service.
+func NewGenerateTitleResponseBody(res *chat.GenerateTitleResult) *GenerateTitleResponseBody {
+	body := &GenerateTitleResponseBody{
+		Title: res.Title,
 	}
 	return body
 }
@@ -961,6 +1166,146 @@ func NewLoadChatGatewayErrorResponseBody(res *goa.ServiceError) *LoadChatGateway
 	return body
 }
 
+// NewGenerateTitleUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "generateTitle" endpoint of the "chat" service.
+func NewGenerateTitleUnauthorizedResponseBody(res *goa.ServiceError) *GenerateTitleUnauthorizedResponseBody {
+	body := &GenerateTitleUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGenerateTitleForbiddenResponseBody builds the HTTP response body from the
+// result of the "generateTitle" endpoint of the "chat" service.
+func NewGenerateTitleForbiddenResponseBody(res *goa.ServiceError) *GenerateTitleForbiddenResponseBody {
+	body := &GenerateTitleForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGenerateTitleBadRequestResponseBody builds the HTTP response body from
+// the result of the "generateTitle" endpoint of the "chat" service.
+func NewGenerateTitleBadRequestResponseBody(res *goa.ServiceError) *GenerateTitleBadRequestResponseBody {
+	body := &GenerateTitleBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGenerateTitleNotFoundResponseBody builds the HTTP response body from the
+// result of the "generateTitle" endpoint of the "chat" service.
+func NewGenerateTitleNotFoundResponseBody(res *goa.ServiceError) *GenerateTitleNotFoundResponseBody {
+	body := &GenerateTitleNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGenerateTitleConflictResponseBody builds the HTTP response body from the
+// result of the "generateTitle" endpoint of the "chat" service.
+func NewGenerateTitleConflictResponseBody(res *goa.ServiceError) *GenerateTitleConflictResponseBody {
+	body := &GenerateTitleConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGenerateTitleUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "generateTitle" endpoint of the "chat" service.
+func NewGenerateTitleUnsupportedMediaResponseBody(res *goa.ServiceError) *GenerateTitleUnsupportedMediaResponseBody {
+	body := &GenerateTitleUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGenerateTitleInvalidResponseBody builds the HTTP response body from the
+// result of the "generateTitle" endpoint of the "chat" service.
+func NewGenerateTitleInvalidResponseBody(res *goa.ServiceError) *GenerateTitleInvalidResponseBody {
+	body := &GenerateTitleInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGenerateTitleInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "generateTitle" endpoint of the "chat" service.
+func NewGenerateTitleInvariantViolationResponseBody(res *goa.ServiceError) *GenerateTitleInvariantViolationResponseBody {
+	body := &GenerateTitleInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGenerateTitleUnexpectedResponseBody builds the HTTP response body from
+// the result of the "generateTitle" endpoint of the "chat" service.
+func NewGenerateTitleUnexpectedResponseBody(res *goa.ServiceError) *GenerateTitleUnexpectedResponseBody {
+	body := &GenerateTitleUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGenerateTitleGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "generateTitle" endpoint of the "chat" service.
+func NewGenerateTitleGatewayErrorResponseBody(res *goa.ServiceError) *GenerateTitleGatewayErrorResponseBody {
+	body := &GenerateTitleGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreditUsageUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "creditUsage" endpoint of the "chat" service.
 func NewCreditUsageUnauthorizedResponseBody(res *goa.ServiceError) *CreditUsageUnauthorizedResponseBody {
@@ -1122,6 +1467,18 @@ func NewLoadChatPayload(id string, sessionToken *string, projectSlugInput *strin
 	return v
 }
 
+// NewGenerateTitlePayload builds a chat service generateTitle endpoint payload.
+func NewGenerateTitlePayload(body *GenerateTitleRequestBody, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.GenerateTitlePayload {
+	v := &chat.GenerateTitlePayload{
+		ID: *body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v
+}
+
 // NewCreditUsagePayload builds a chat service creditUsage endpoint payload.
 func NewCreditUsagePayload(sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.CreditUsagePayload {
 	v := &chat.CreditUsagePayload{}
@@ -1130,4 +1487,13 @@ func NewCreditUsagePayload(sessionToken *string, projectSlugInput *string, chatS
 	v.ChatSessionsToken = chatSessionsToken
 
 	return v
+}
+
+// ValidateGenerateTitleRequestBody runs the validations defined on
+// GenerateTitleRequestBody
+func ValidateGenerateTitleRequestBody(body *GenerateTitleRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	return
 }

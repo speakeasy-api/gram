@@ -8,6 +8,9 @@
 package client
 
 import (
+	"encoding/json"
+	"fmt"
+
 	chat "github.com/speakeasy-api/gram/server/gen/chat"
 )
 
@@ -67,6 +70,45 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatSessionToken string
 	}
 	v := &chat.LoadChatPayload{}
 	v.ID = id
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v, nil
+}
+
+// BuildGenerateTitlePayload builds the payload for the chat generateTitle
+// endpoint from CLI flags.
+func BuildGenerateTitlePayload(chatGenerateTitleBody string, chatGenerateTitleSessionToken string, chatGenerateTitleProjectSlugInput string, chatGenerateTitleChatSessionsToken string) (*chat.GenerateTitlePayload, error) {
+	var err error
+	var body GenerateTitleRequestBody
+	{
+		err = json.Unmarshal([]byte(chatGenerateTitleBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"Sed qui.\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if chatGenerateTitleSessionToken != "" {
+			sessionToken = &chatGenerateTitleSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatGenerateTitleProjectSlugInput != "" {
+			projectSlugInput = &chatGenerateTitleProjectSlugInput
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if chatGenerateTitleChatSessionsToken != "" {
+			chatSessionsToken = &chatGenerateTitleChatSessionsToken
+		}
+	}
+	v := &chat.GenerateTitlePayload{
+		ID: body.ID,
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

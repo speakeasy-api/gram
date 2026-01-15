@@ -12,6 +12,7 @@ export * from "./addOAuthProxyServer.js";
 export * from "./agentsCreate.js";
 export * from "./agentsDelete.js";
 export * from "./agentsGet.js";
+export * from "./chatGenerateTitle.js";
 export * from "./chatSessionsCreate.js";
 export * from "./chatSessionsRevoke.js";
 export * from "./checkMCPSlugAvailability.js";
