@@ -50,7 +50,10 @@ export function initErrorTracking(config: ErrorTrackingConfig = {}): void {
       trackUserInteractions: true, // Focus on errors only
       trackResources: true,
       trackLongTasks: true,
-      defaultPrivacyLevel: 'mask-user-input',
+
+      // Note: we need to mask everything, not just user input, as sensitive data may be echo-ed
+      // back in the LLM messages or the user messages in the chat window
+      defaultPrivacyLevel: 'mask',
     })
 
     // Set global context
