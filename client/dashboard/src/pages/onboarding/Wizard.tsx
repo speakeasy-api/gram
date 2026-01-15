@@ -215,7 +215,6 @@ const LHS = ({
   const [showTopBlur, setShowTopBlur] = useState(false);
   const [showBottomBlur, setShowBottomBlur] = useState(false);
   const contentScrollRef = useRef<HTMLDivElement>(null);
-  const telemetry = useTelemetry();
 
   // Check scroll position to show/hide blur gradients
   const handleScroll = () => {
