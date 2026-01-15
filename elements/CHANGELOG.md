@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.20.2
+
+### Patch Changes
+
+- adc02ce: Adds error boundary to the Elements library
+
 ## 1.20.1
 
 ### Patch Changes
