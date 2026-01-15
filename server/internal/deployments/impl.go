@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -157,20 +158,19 @@ func (s *Service) GetDeploymentLogs(ctx context.Context, form *gen.GetDeployment
 		return nil, oops.E(oops.CodeBadRequest, err, "bad deployment id").Log(ctx, s.logger)
 	}
 
-	var cursor uuid.NullUUID
-	if form.Cursor != nil {
-		c, err := uuid.Parse(*form.Cursor)
+	var cursorSeq pgtype.Int8
+	if form.Cursor != nil && *form.Cursor != "" {
+		seq, err := decodeCursor(*form.Cursor)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
 		}
-
-		cursor = uuid.NullUUID{UUID: c, Valid: true}
+		cursorSeq = pgtype.Int8{Int64: seq, Valid: true}
 	}
 
 	rows, err := s.repo.GetDeploymentLogs(ctx, repo.GetDeploymentLogsParams{
 		DeploymentID: id,
 		ProjectID:    *authCtx.ProjectID,
-		Cursor:       cursor,
+		CursorSeq:    cursorSeq,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting deployment logs").Log(ctx, s.logger)
@@ -199,8 +199,8 @@ func (s *Service) GetDeploymentLogs(ctx context.Context, form *gen.GetDeployment
 
 	var nextCursor *string
 	limit := 50
-	if len(items) >= limit+1 {
-		nextCursor = conv.Ptr(items[limit].ID)
+	if len(rows) >= limit+1 {
+		nextCursor = conv.Ptr(encodeCursor(rows[limit].Seq))
 		items = items[:limit]
 	}
 
