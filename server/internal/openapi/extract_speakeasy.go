@@ -263,14 +263,14 @@ func (p *ToolExtractor) doSpeakeasy(
 					if task.OnOperationSkipped != nil {
 						task.OnOperationSkipped(err)
 					}
-					_ = oops.E(
-						oops.CodeUnexpected,
-						err,
-						"%s: %s: skipped operation due to error: %s",
-						docInfo.Name,
-						item.opID,
-						err.Error(),
-					).Log(ctx, logger)
+					logger.WarnContext(ctx,
+						fmt.Sprintf(
+							"%s: %s: skipped operation due to error: %s",
+							docInfo.Name,
+							item.opID,
+							err.Error(),
+						),
+					)
 
 					resultChan <- operationResult{
 						def:              nil,

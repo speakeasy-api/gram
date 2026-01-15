@@ -59,7 +59,9 @@ type Chat struct {
 	// The title of the chat
 	Title string
 	// The ID of the user who created the chat
-	UserID string
+	UserID *string
+	// The ID of the external user who created the chat
+	ExternalUserID *string
 	// The number of messages in the chat
 	NumMessages int
 	// When the chat was created.
@@ -85,6 +87,8 @@ type ChatMessage struct {
 	FinishReason *string
 	// The ID of the user who created the message
 	UserID *string
+	// The ID of the external user who created the message
+	ExternalUserID *string
 	// When the message was created.
 	CreatedAt string
 }
@@ -95,7 +99,9 @@ type ChatOverview struct {
 	// The title of the chat
 	Title string
 	// The ID of the user who created the chat
-	UserID string
+	UserID *string
+	// The ID of the external user who created the chat
+	ExternalUserID *string
 	// The number of messages in the chat
 	NumMessages int
 	// When the chat was created.

@@ -226,9 +226,18 @@ jobs:
         if: ${{ needs.changes.outputs.server == 'true' }}
         run: mise run go:tidy
 
+      - name: Run migrations
+        if: ${{ needs.changes.outputs.server == 'true' }}
+        run: mise run db:migrate
+      - name: Diff database with schema
+        if: ${{ needs.changes.outputs.server == 'true' }}
+        run: mise run db:diff out-of-sync
+
       - name: Check for dirty files
         if: ${{ needs.changes.outputs.server == 'true' }}
-        run: mise run git:porcelain
+        run: |
+          mise run db:migrate --dry
+          mise run git:porcelain
 
   cli-build-lint:
     runs-on: ubicloud-standard-4
