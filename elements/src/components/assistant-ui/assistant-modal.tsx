@@ -35,7 +35,11 @@ type Dimensions = {
   maxHeight?: string | number | `${number}%`
 }
 
-export const AssistantModal: FC = () => {
+interface AssistantModalProps {
+  className?: string
+}
+
+export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
   const { config } = useElements()
   const themeProps = useThemeProps()
   const r = useRadius()
@@ -93,7 +97,8 @@ export const AssistantModal: FC = () => {
             anchorPositionClass,
             themeProps.className,
             r('lg'),
-            isOpen && 'shadow-xl'
+            isOpen && 'shadow-xl',
+            className
           )}
         >
           <AnimatePresence mode="wait">

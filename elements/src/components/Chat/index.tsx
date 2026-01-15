@@ -5,17 +5,21 @@ import { AssistantModal } from '../assistant-ui/assistant-modal'
 import { AssistantSidecar } from '../assistant-ui/assistant-sidecar'
 import { Thread } from '../assistant-ui/thread'
 
-export const Chat = () => {
+interface ChatProps {
+  className?: string
+}
+
+export const Chat = ({ className }: ChatProps) => {
   const { config } = useElements()
 
   switch (config.variant) {
     case 'standalone':
-      return <Thread />
+      return <Thread className={className} />
     case 'sidecar':
-      return <AssistantSidecar />
+      return <AssistantSidecar className={className} />
 
     // If no variant is provided then fallback to the modal
     default:
-      return <AssistantModal />
+      return <AssistantModal className={className} />
   }
 }
