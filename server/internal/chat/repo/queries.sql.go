@@ -40,7 +40,7 @@ type CreateChatMessageParams struct {
 }
 
 const getChat = `-- name: GetChat :one
-SELECT id, project_id, organization_id, user_id, title, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1
+SELECT id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1
 `
 
 func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
@@ -51,6 +51,7 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 		&i.ProjectID,
 		&i.OrganizationID,
 		&i.UserID,
+		&i.ExternalUserID,
 		&i.Title,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -78,7 +79,7 @@ func (q *Queries) GetFirstUserChatMessage(ctx context.Context, chatID uuid.UUID)
 }
 
 const listChatMessages = `-- name: ListChatMessages :many
-SELECT id, chat_id, project_id, role, content, model, message_id, tool_call_id, user_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, created_at FROM chat_messages WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid)
+SELECT id, chat_id, project_id, role, content, model, message_id, tool_call_id, user_id, external_user_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, created_at FROM chat_messages WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid)
 `
 
 type ListChatMessagesParams struct {
@@ -105,6 +106,7 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 			&i.MessageID,
 			&i.ToolCallID,
 			&i.UserID,
+			&i.ExternalUserID,
 			&i.FinishReason,
 			&i.ToolCalls,
 			&i.PromptTokens,
@@ -124,7 +126,7 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 
 const listChats = `-- name: ListChats :many
 SELECT 
-    c.id, c.project_id, c.organization_id, c.user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
@@ -146,6 +148,7 @@ type ListChatsRow struct {
 	ProjectID      uuid.UUID
 	OrganizationID string
 	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
 	Title          pgtype.Text
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
@@ -169,6 +172,7 @@ func (q *Queries) ListChats(ctx context.Context, projectID uuid.UUID) ([]ListCha
 			&i.ProjectID,
 			&i.OrganizationID,
 			&i.UserID,
+			&i.ExternalUserID,
 			&i.Title,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -189,7 +193,7 @@ func (q *Queries) ListChats(ctx context.Context, projectID uuid.UUID) ([]ListCha
 
 const listChatsForUser = `-- name: ListChatsForUser :many
 SELECT 
-    c.id, c.project_id, c.organization_id, c.user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
@@ -216,6 +220,7 @@ type ListChatsForUserRow struct {
 	ProjectID      uuid.UUID
 	OrganizationID string
 	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
 	Title          pgtype.Text
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
@@ -239,6 +244,7 @@ func (q *Queries) ListChatsForUser(ctx context.Context, arg ListChatsForUserPara
 			&i.ProjectID,
 			&i.OrganizationID,
 			&i.UserID,
+			&i.ExternalUserID,
 			&i.Title,
 			&i.CreatedAt,
 			&i.UpdatedAt,
