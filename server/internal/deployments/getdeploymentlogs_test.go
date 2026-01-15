@@ -2,6 +2,7 @@ package deployments_test
 
 import (
 	"bytes"
+	"encoding/base64"
 	"io"
 	"testing"
 
@@ -202,8 +203,9 @@ func TestDeploymentsService_GetDeploymentLogs_ValidCursor(t *testing.T) {
 	})
 	require.NoError(t, err, "create deployment")
 
-	// Test with valid cursor (using a valid UUID format)
-	validCursor := uuid.New().String()
+	// Test with valid cursor (using base64-encoded "seq:uuid" format)
+	// A cursor pointing to a very high seq number should return empty results
+	validCursor := base64.RawURLEncoding.EncodeToString([]byte("999999999:" + uuid.New().String()))
 	result, err := ti.service.GetDeploymentLogs(ctx, &gen.GetDeploymentLogsPayload{
 		DeploymentID:     created.Deployment.ID,
 		Cursor:           &validCursor,
@@ -214,5 +216,85 @@ func TestDeploymentsService_GetDeploymentLogs_ValidCursor(t *testing.T) {
 	require.NoError(t, err, "should not error with valid cursor format")
 	require.NotEmpty(t, result.Status, "status should not be empty")
 	require.NotNil(t, result.Events, "events should not be nil")
-	require.Empty(t, result.Events, "events should be empty")
+	require.Empty(t, result.Events, "events should be empty with cursor past all logs")
+}
+
+func TestDeploymentsService_GetDeploymentLogs_InvalidCursorNotBase64(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Test with invalid base64 string
+	deploymentID := uuid.New().String()
+	invalidCursor := "not-valid-base64!!!"
+	_, err := ti.service.GetDeploymentLogs(ctx, &gen.GetDeploymentLogsPayload{
+		DeploymentID:     deploymentID,
+		Cursor:           &invalidCursor,
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid cursor")
+}
+
+func TestDeploymentsService_GetDeploymentLogs_InvalidCursorNotNumeric(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Test with valid base64 and format but non-numeric seq
+	deploymentID := uuid.New().String()
+	invalidCursor := base64.RawURLEncoding.EncodeToString([]byte("not-a-number:" + uuid.New().String()))
+	_, err := ti.service.GetDeploymentLogs(ctx, &gen.GetDeploymentLogsPayload{
+		DeploymentID:     deploymentID,
+		Cursor:           &invalidCursor,
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid cursor")
+}
+
+func TestDeploymentsService_GetDeploymentLogs_InvalidCursorBadFormat(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Test with valid base64 but missing colon separator
+	deploymentID := uuid.New().String()
+	invalidCursor := base64.RawURLEncoding.EncodeToString([]byte("12345"))
+	_, err := ti.service.GetDeploymentLogs(ctx, &gen.GetDeploymentLogsPayload{
+		DeploymentID:     deploymentID,
+		Cursor:           &invalidCursor,
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid cursor")
+}
+
+func TestDeploymentsService_GetDeploymentLogs_InvalidCursorBadUUID(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Test with valid seq but invalid UUID
+	deploymentID := uuid.New().String()
+	invalidCursor := base64.RawURLEncoding.EncodeToString([]byte("12345:not-a-uuid"))
+	_, err := ti.service.GetDeploymentLogs(ctx, &gen.GetDeploymentLogsPayload{
+		DeploymentID:     deploymentID,
+		Cursor:           &invalidCursor,
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid cursor")
 }

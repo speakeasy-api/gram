@@ -4,6 +4,7 @@
  */
 
 import { chatCreditUsage } from "../funcs/chatCreditUsage.js";
+import { chatGenerateTitle } from "../funcs/chatGenerateTitle.js";
 import { chatList } from "../funcs/chatList.js";
 import { chatLoad } from "../funcs/chatLoad.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -24,6 +25,25 @@ export class Chat extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.CreditUsageResponseBody> {
     return unwrapAsync(chatCreditUsage(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * generateTitle chat
+   *
+   * @remarks
+   * Generate a title for a chat based on its messages
+   */
+  async generateTitle(
+    request: operations.GenerateTitleRequest,
+    security?: operations.GenerateTitleSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.GenerateTitleResponseBody> {
+    return unwrapAsync(chatGenerateTitle(
       this,
       request,
       security,
