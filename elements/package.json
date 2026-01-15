@@ -154,6 +154,7 @@
     "typescript-eslint": "^8.48.1",
     "vite": "^7.1.6",
     "vite-plugin-dts": "^4.5.4",
+    "vite-plugin-turbosnap": "^1.0.3",
     "vitest": "^4.0.13",
     "zustand": "^5.0.8"
   }

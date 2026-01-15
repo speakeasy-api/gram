@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv, Plugin, ViteDevServer } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import turbosnap from 'vite-plugin-turbosnap'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createElementsServerHandlers } from '../src/server'
@@ -33,7 +34,12 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   return {
-    plugins: [react(), tailwindcss(), apiMiddlewarePlugin()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      apiMiddlewarePlugin(),
+      turbosnap({ rootDir: resolve(__dirname, '..') }),
+    ],
     resolve: {
       alias: {
         '@': resolve(__dirname, '../src'),
