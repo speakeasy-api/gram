@@ -171,7 +171,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	result := make([]*gen.ChatOverview, 0)
 	var userInfo *sessions.CachedUserInfo
 	var err error
-	if authCtx.SessionID != nil {
+	if authCtx.SessionID != nil && authCtx.UserID != "" {
 		userInfo, _, err = s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
@@ -363,11 +363,12 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	}
 
 	chatIDHeader := r.Header.Get("Gram-Chat-ID")
+	isRegenerate := r.Header.Get("Gram-Chat-Regenerate") == "true"
 
 	respCaptor := w
 
 	if chatIDHeader != "" {
-		chatID, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatIDHeader, chatRequest)
+		chatID, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatIDHeader, chatRequest, isRegenerate)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to start or resume chat").Log(ctx, s.logger)
 		}
@@ -592,7 +593,15 @@ func (s *Service) generateChatTitle(ctx context.Context, orgID, firstMessage str
 	return title
 }
 
-func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID uuid.UUID, userID string, externalUserID string, chatIDHeader string, request openrouter.OpenAIChatRequest) (uuid.UUID, error) {
+func (s *Service) startOrResumeChat(
+	ctx context.Context,
+	orgID string,
+	projectID uuid.UUID,
+	userID string,
+	externalUserID string,
+	chatIDHeader string,
+	request openrouter.OpenAIChatRequest,
+	isRegenerate bool) (uuid.UUID, error) {
 	chatID, err := uuid.Parse(chatIDHeader)
 	if err != nil {
 		return uuid.Nil, oops.E(oops.CodeInvalid, err, "invalid chat ID in header")
@@ -619,14 +628,23 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "failed to get chat history")
 	}
 
-	// This shouldn't happen, and also it doesn't really matter if it does, but we error anyway so we can fix it
-	if int(chatCount) > len(request.Messages) {
-		return uuid.Nil, oops.E(oops.CodeInvalid, nil, "chat history mismatch")
+	// When regenerating a response (user clicked refresh), delete the old assistant
+	// messages so the new response can be stored without duplicates.
+	// We only do this when isRegenerate is explicitly true (from Gram-Chat-Regenerate header).
+	requestMsgCount := len(request.Messages)
+	if isRegenerate && int(chatCount) > requestMsgCount {
+		err = s.repo.DeleteChatMessagesAfterOffset(ctx, repo.DeleteChatMessagesAfterOffsetParams{
+			ChatID:    chatID,
+			KeepCount: int32(requestMsgCount), //nolint:gosec // requestMsgCount is bounded by request size
+		})
+		if err != nil {
+			s.logger.ErrorContext(ctx, "failed to delete old messages during regeneration", attr.SlogError(err))
+		}
 	}
 
 	// If the stored chat history is shorter than the request, insert the missing messages
 	// Most of the time, this just serves to store the new message the user just sent
-	if int(chatCount) < len(request.Messages) {
+	if int(chatCount) < requestMsgCount {
 		for _, msg := range request.Messages[int(chatCount):] {
 			_, err := s.repo.CreateChatMessage(ctx, []repo.CreateChatMessageParams{{
 				ChatID:           chatID,

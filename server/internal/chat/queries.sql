@@ -19,8 +19,7 @@ VALUES (
     NOW(),
     NOW()
 )
-ON CONFLICT (id) DO UPDATE SET 
-    title = @title,
+ON CONFLICT (id) DO UPDATE SET
     updated_at = NOW()
 RETURNING id;
 
@@ -118,3 +117,14 @@ WHERE chat_id = @chat_id
   AND content != ''
 ORDER BY created_at ASC
 LIMIT 1;
+
+-- name: DeleteChatMessagesAfterOffset :exec
+-- Deletes messages after a given offset (keeps the first N messages ordered by created_at).
+-- Used when regenerating responses to remove old responses before storing new ones.
+DELETE FROM chat_messages
+WHERE id IN (
+    SELECT cm.id FROM chat_messages cm
+    WHERE cm.chat_id = @chat_id
+    ORDER BY cm.created_at ASC
+    OFFSET @keep_count
+);

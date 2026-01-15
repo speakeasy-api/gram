@@ -190,7 +190,7 @@ const ElementsProviderWithApproval = ({
   // Create chat transport configuration
   const transport = useMemo<ChatTransport<UIMessage>>(
     () => ({
-      sendMessages: async ({ messages, abortSignal }) => {
+      sendMessages: async ({ messages, abortSignal, trigger }) => {
         const usingCustomModel = !!config.languageModel
 
         if (auth.isLoading) {
@@ -208,9 +208,15 @@ const ElementsProviderWithApproval = ({
         )
 
         // Include Gram-Chat-ID header for chat persistence
-        const headersWithChatId = {
+        // Include Gram-Chat-Regenerate header when user clicks refresh button
+        const extraHeaders: Record<string, string> = {
           ...auth.headers,
           'Gram-Chat-ID': chatIdRef.current,
+        }
+        
+        const isRegenerating = trigger === 'regenerate-message'
+        if (isRegenerating) {
+          extraHeaders['Gram-Chat-Regenerate'] = 'true'
         }
 
         // Create OpenRouter model (only needed when not using custom model)
@@ -219,7 +225,7 @@ const ElementsProviderWithApproval = ({
           : createOpenRouter({
               baseURL: apiUrl,
               apiKey: 'unused, but must be set',
-              headers: headersWithChatId,
+              headers: extraHeaders,
             })
 
         if (config.languageModel) {

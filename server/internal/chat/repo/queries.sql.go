@@ -40,6 +40,28 @@ type CreateChatMessageParams struct {
 	TotalTokens      int64
 }
 
+const deleteChatMessagesAfterOffset = `-- name: DeleteChatMessagesAfterOffset :exec
+DELETE FROM chat_messages
+WHERE id IN (
+    SELECT cm.id FROM chat_messages cm
+    WHERE cm.chat_id = $1
+    ORDER BY cm.created_at ASC
+    OFFSET $2
+)
+`
+
+type DeleteChatMessagesAfterOffsetParams struct {
+	ChatID    uuid.UUID
+	KeepCount int32
+}
+
+// Deletes messages after a given offset (keeps the first N messages ordered by created_at).
+// Used when regenerating responses to remove old responses before storing new ones.
+func (q *Queries) DeleteChatMessagesAfterOffset(ctx context.Context, arg DeleteChatMessagesAfterOffsetParams) error {
+	_, err := q.db.Exec(ctx, deleteChatMessagesAfterOffset, arg.ChatID, arg.KeepCount)
+	return err
+}
+
 const getChat = `-- name: GetChat :one
 SELECT id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1
 `
@@ -371,8 +393,7 @@ VALUES (
     NOW(),
     NOW()
 )
-ON CONFLICT (id) DO UPDATE SET 
-    title = $6,
+ON CONFLICT (id) DO UPDATE SET
     updated_at = NOW()
 RETURNING id
 `
