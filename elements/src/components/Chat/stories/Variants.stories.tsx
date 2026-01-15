@@ -1,5 +1,6 @@
 import { Chat } from '..'
-import type { Meta, StoryFn } from '@storybook/react-vite'
+import type { Meta, StoryFn, StoryObj } from '@storybook/react-vite'
+import { ThreadList } from '@/components/assistant-ui/thread-list'
 
 const meta: Meta<typeof Chat> = {
   title: 'Chat/Variants',
@@ -32,6 +33,32 @@ Standalone.decorators = [
     </div>
   ),
 ]
+
+export const StandaloneWithHistory: StoryObj<typeof Chat> = {
+  name: 'Standalone with History',
+  args: {},
+  render: () => (
+    <div className="bg-background flex h-10/12 max-h-[800px] w-1/2 flex-row gap-4 overflow-hidden rounded-lg border shadow-xl sm:w-3/4">
+      <ThreadList className="w-56 flex-none shrink-0 border-r" />
+      <Chat className="flex-3 grow" />
+    </div>
+  ),
+}
+StandaloneWithHistory.decorators = [
+  (Story) => (
+    <div className="m-auto flex h-screen w-full items-center justify-center border bg-linear-to-r from-violet-600 to-indigo-800">
+      <Story />
+    </div>
+  ),
+]
+StandaloneWithHistory.parameters = {
+  elements: {
+    config: {
+      variant: 'standalone',
+      history: { enabled: true, showThreadList: true },
+    },
+  },
+}
 
 export const Sidecar: Story = () => (
   <div className="mr-[400px] p-10">

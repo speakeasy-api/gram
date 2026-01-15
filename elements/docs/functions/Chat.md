@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.20.0**](../README.md)
+[**@gram-ai/elements v1.20.1**](../README.md)
 
 ***
 
@@ -6,7 +6,13 @@
 
 # Function: Chat()
 
-> **Chat**(): `Element`
+> **Chat**(`__namedParameters`): `Element`
+
+## Parameters
+
+### \_\_namedParameters
+
+`ChatProps`
 
 ## Returns
 

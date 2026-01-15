@@ -12,13 +12,18 @@ import { useRadius } from '@/hooks/useRadius'
 import { cn } from '@/lib/utils'
 import { useDensity } from '@/hooks/useDensity'
 
-export const ThreadList: FC = () => {
+interface ThreadListProps {
+  className?: string
+}
+
+export const ThreadList: FC<ThreadListProps> = ({ className }) => {
   const d = useDensity()
   return (
     <ThreadListPrimitive.Root
       className={cn(
-        'aui-root aui-thread-list-root flex flex-col items-stretch',
-        d('gap-sm')
+        'aui-root aui-thread-list-root bg-background flex flex-col items-stretch',
+        d('gap-sm'),
+        className
       )}
     >
       <div
