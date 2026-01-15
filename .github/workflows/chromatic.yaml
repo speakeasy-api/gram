@@ -86,7 +86,7 @@ jobs:
         run: pnpm build-storybook
         working-directory: elements
         env:
-          STORYBOOK_CHROMATIC: 'true'
+          STORYBOOK_CHROMATIC: "true"
 
       - name: Run Chromatic
         if: ${{ needs.changes.outputs.elements == 'true' }}

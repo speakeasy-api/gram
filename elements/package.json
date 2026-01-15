@@ -141,6 +141,8 @@
     "eslint-plugin-unused-imports": "^4.3.0",
     "lodash.merge": "^4.6.2",
     "motion": "^12.23.14",
+    "msw": "^2.12.3",
+    "msw-storybook-addon": "^2.0.6",
     "prettier": "^3.7.4",
     "prettier-plugin-tailwindcss": "^0.7.2",
     "react": "^19.2.0",
@@ -157,5 +159,10 @@
     "vite-plugin-turbosnap": "^1.0.3",
     "vitest": "^4.0.13",
     "zustand": "^5.0.8"
+  },
+  "msw": {
+    "workerDirectory": [
+      ".storybook/public"
+    ]
   }
 }
