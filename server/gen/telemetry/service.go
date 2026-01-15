@@ -20,12 +20,16 @@ type Service interface {
 	SearchLogs(context.Context, *SearchLogsPayload) (res *SearchLogsResult, err error)
 	// Search and list tool calls that match a search filter
 	SearchToolCalls(context.Context, *SearchToolCallsPayload) (res *SearchToolCallsResult, err error)
+	// Capture a telemetry event and forward it to PostHog
+	CaptureEvent(context.Context, *CaptureEventPayload) (res *CaptureEventResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
 type Auther interface {
 	// APIKeyAuth implements the authorization logic for the APIKey security scheme.
 	APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error)
+	// JWTAuth implements the authorization logic for the JWT security scheme.
+	JWTAuth(ctx context.Context, token string, schema *security.JWTScheme) (context.Context, error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -42,7 +46,30 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"searchLogs", "searchToolCalls"}
+var MethodNames = [3]string{"searchLogs", "searchToolCalls", "captureEvent"}
+
+// CaptureEventPayload is the payload type of the telemetry service
+// captureEvent method.
+type CaptureEventPayload struct {
+	ApikeyToken       *string
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
+	// Event name
+	Event string
+	// Distinct ID for the user or entity (defaults to organization ID if not
+	// provided)
+	DistinctID *string
+	// Event properties as key-value pairs
+	Properties map[string]any
+}
+
+// CaptureEventResult is the result type of the telemetry service captureEvent
+// method.
+type CaptureEventResult struct {
+	// Whether the event was successfully captured
+	Success bool
+}
 
 // Filter criteria for searching logs
 type SearchLogsFilter struct {

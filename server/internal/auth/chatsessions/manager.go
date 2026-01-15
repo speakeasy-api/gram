@@ -94,9 +94,9 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 	}
 
 	// Set auth context from JWT claims
-	userID := ""
-	if claims.UserIdentifier != nil {
-		userID = *claims.UserIdentifier
+	externalUserID := ""
+	if claims.ExternalUserID != nil {
+		externalUserID = *claims.ExternalUserID
 	}
 
 	authCtx := &contextvalues.AuthContext{
@@ -104,11 +104,12 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 		ProjectID:            &projectID,
 		OrganizationSlug:     claims.OrganizationSlug,
 		ProjectSlug:          &claims.ProjectSlug,
-		UserID:               userID,
+		UserID:               "",
+		ExternalUserID:       externalUserID,
 		Email:                nil,
 		AccountType:          "",
 		APIKeyScopes:         nil,
-		SessionID:            nil,
+		SessionID:            &claims.ID, // JWT ID serves as session identifier
 	}
 
 	return contextvalues.SetAuthContext(ctx, authCtx), nil

@@ -8,6 +8,8 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	telemetry "github.com/speakeasy-api/gram/server/gen/telemetry"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -38,6 +40,18 @@ type SearchToolCallsRequestBody struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
 }
 
+// CaptureEventRequestBody is the type of the "telemetry" service
+// "captureEvent" endpoint HTTP request body.
+type CaptureEventRequestBody struct {
+	// Event name
+	Event *string `form:"event,omitempty" json:"event,omitempty" xml:"event,omitempty"`
+	// Distinct ID for the user or entity (defaults to organization ID if not
+	// provided)
+	DistinctID *string `form:"distinct_id,omitempty" json:"distinct_id,omitempty" xml:"distinct_id,omitempty"`
+	// Event properties as key-value pairs
+	Properties map[string]any `form:"properties,omitempty" json:"properties,omitempty" xml:"properties,omitempty"`
+}
+
 // SearchLogsResponseBody is the type of the "telemetry" service "searchLogs"
 // endpoint HTTP response body.
 type SearchLogsResponseBody struct {
@@ -58,6 +72,13 @@ type SearchToolCallsResponseBody struct {
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 	// Whether tool metrics are enabled for the organization
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+}
+
+// CaptureEventResponseBody is the type of the "telemetry" service
+// "captureEvent" endpoint HTTP response body.
+type CaptureEventResponseBody struct {
+	// Whether the event was successfully captured
+	Success bool `form:"success" json:"success" xml:"success"`
 }
 
 // SearchLogsUnauthorizedResponseBody is the type of the "telemetry" service
@@ -426,6 +447,188 @@ type SearchToolCallsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CaptureEventUnauthorizedResponseBody is the type of the "telemetry" service
+// "captureEvent" endpoint HTTP response body for the "unauthorized" error.
+type CaptureEventUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CaptureEventForbiddenResponseBody is the type of the "telemetry" service
+// "captureEvent" endpoint HTTP response body for the "forbidden" error.
+type CaptureEventForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CaptureEventBadRequestResponseBody is the type of the "telemetry" service
+// "captureEvent" endpoint HTTP response body for the "bad_request" error.
+type CaptureEventBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CaptureEventNotFoundResponseBody is the type of the "telemetry" service
+// "captureEvent" endpoint HTTP response body for the "not_found" error.
+type CaptureEventNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CaptureEventConflictResponseBody is the type of the "telemetry" service
+// "captureEvent" endpoint HTTP response body for the "conflict" error.
+type CaptureEventConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CaptureEventUnsupportedMediaResponseBody is the type of the "telemetry"
+// service "captureEvent" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CaptureEventUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CaptureEventInvalidResponseBody is the type of the "telemetry" service
+// "captureEvent" endpoint HTTP response body for the "invalid" error.
+type CaptureEventInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CaptureEventInvariantViolationResponseBody is the type of the "telemetry"
+// service "captureEvent" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CaptureEventInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CaptureEventUnexpectedResponseBody is the type of the "telemetry" service
+// "captureEvent" endpoint HTTP response body for the "unexpected" error.
+type CaptureEventUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CaptureEventGatewayErrorResponseBody is the type of the "telemetry" service
+// "captureEvent" endpoint HTTP response body for the "gateway_error" error.
+type CaptureEventGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // TelemetryLogRecordResponseBody is used to define fields on response body
 // types.
 type TelemetryLogRecordResponseBody struct {
@@ -556,6 +759,15 @@ func NewSearchToolCallsResponseBody(res *telemetry.SearchToolCallsResult) *Searc
 		}
 	} else {
 		body.ToolCalls = []*ToolCallSummaryResponseBody{}
+	}
+	return body
+}
+
+// NewCaptureEventResponseBody builds the HTTP response body from the result of
+// the "captureEvent" endpoint of the "telemetry" service.
+func NewCaptureEventResponseBody(res *telemetry.CaptureEventResult) *CaptureEventResponseBody {
+	body := &CaptureEventResponseBody{
+		Success: res.Success,
 	}
 	return body
 }
@@ -841,6 +1053,146 @@ func NewSearchToolCallsGatewayErrorResponseBody(res *goa.ServiceError) *SearchTo
 	return body
 }
 
+// NewCaptureEventUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "captureEvent" endpoint of the "telemetry" service.
+func NewCaptureEventUnauthorizedResponseBody(res *goa.ServiceError) *CaptureEventUnauthorizedResponseBody {
+	body := &CaptureEventUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCaptureEventForbiddenResponseBody builds the HTTP response body from the
+// result of the "captureEvent" endpoint of the "telemetry" service.
+func NewCaptureEventForbiddenResponseBody(res *goa.ServiceError) *CaptureEventForbiddenResponseBody {
+	body := &CaptureEventForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCaptureEventBadRequestResponseBody builds the HTTP response body from the
+// result of the "captureEvent" endpoint of the "telemetry" service.
+func NewCaptureEventBadRequestResponseBody(res *goa.ServiceError) *CaptureEventBadRequestResponseBody {
+	body := &CaptureEventBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCaptureEventNotFoundResponseBody builds the HTTP response body from the
+// result of the "captureEvent" endpoint of the "telemetry" service.
+func NewCaptureEventNotFoundResponseBody(res *goa.ServiceError) *CaptureEventNotFoundResponseBody {
+	body := &CaptureEventNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCaptureEventConflictResponseBody builds the HTTP response body from the
+// result of the "captureEvent" endpoint of the "telemetry" service.
+func NewCaptureEventConflictResponseBody(res *goa.ServiceError) *CaptureEventConflictResponseBody {
+	body := &CaptureEventConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCaptureEventUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "captureEvent" endpoint of the "telemetry" service.
+func NewCaptureEventUnsupportedMediaResponseBody(res *goa.ServiceError) *CaptureEventUnsupportedMediaResponseBody {
+	body := &CaptureEventUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCaptureEventInvalidResponseBody builds the HTTP response body from the
+// result of the "captureEvent" endpoint of the "telemetry" service.
+func NewCaptureEventInvalidResponseBody(res *goa.ServiceError) *CaptureEventInvalidResponseBody {
+	body := &CaptureEventInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCaptureEventInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "captureEvent" endpoint of the "telemetry" service.
+func NewCaptureEventInvariantViolationResponseBody(res *goa.ServiceError) *CaptureEventInvariantViolationResponseBody {
+	body := &CaptureEventInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCaptureEventUnexpectedResponseBody builds the HTTP response body from the
+// result of the "captureEvent" endpoint of the "telemetry" service.
+func NewCaptureEventUnexpectedResponseBody(res *goa.ServiceError) *CaptureEventUnexpectedResponseBody {
+	body := &CaptureEventUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCaptureEventGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "captureEvent" endpoint of the "telemetry" service.
+func NewCaptureEventGatewayErrorResponseBody(res *goa.ServiceError) *CaptureEventGatewayErrorResponseBody {
+	body := &CaptureEventGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewSearchLogsPayload builds a telemetry service searchLogs endpoint payload.
 func NewSearchLogsPayload(body *SearchLogsRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.SearchLogsPayload {
 	v := &telemetry.SearchLogsPayload{
@@ -896,6 +1248,29 @@ func NewSearchToolCallsPayload(body *SearchToolCallsRequestBody, apikeyToken *st
 	return v
 }
 
+// NewCaptureEventPayload builds a telemetry service captureEvent endpoint
+// payload.
+func NewCaptureEventPayload(body *CaptureEventRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *telemetry.CaptureEventPayload {
+	v := &telemetry.CaptureEventPayload{
+		Event:      *body.Event,
+		DistinctID: body.DistinctID,
+	}
+	if body.Properties != nil {
+		v.Properties = make(map[string]any, len(body.Properties))
+		for key, val := range body.Properties {
+			tk := key
+			tv := val
+			v.Properties[tk] = tv
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v
+}
+
 // ValidateSearchLogsRequestBody runs the validations defined on
 // SearchLogsRequestBody
 func ValidateSearchLogsRequestBody(body *SearchLogsRequestBody) (err error) {
@@ -943,6 +1318,25 @@ func ValidateSearchToolCallsRequestBody(body *SearchToolCallsRequestBody) (err e
 	if body.Limit != nil {
 		if *body.Limit > 1000 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1000, false))
+		}
+	}
+	return
+}
+
+// ValidateCaptureEventRequestBody runs the validations defined on
+// CaptureEventRequestBody
+func ValidateCaptureEventRequestBody(body *CaptureEventRequestBody) (err error) {
+	if body.Event == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("event", "body"))
+	}
+	if body.Event != nil {
+		if utf8.RuneCountInString(*body.Event) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.event", *body.Event, utf8.RuneCountInString(*body.Event), 1, true))
+		}
+	}
+	if body.Event != nil {
+		if utf8.RuneCountInString(*body.Event) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.event", *body.Event, utf8.RuneCountInString(*body.Event), 255, false))
 		}
 	}
 	return

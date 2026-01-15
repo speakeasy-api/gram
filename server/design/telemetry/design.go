@@ -81,6 +81,41 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "searchToolCalls")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SearchToolCalls"}`)
 	})
+
+	Method("captureEvent", func() {
+		Description("Capture a telemetry event and forward it to PostHog")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("consumer")
+		})
+		Security(security.ByKey, security.ProjectSlug)
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ChatSessionsToken)
+
+		Payload(func() {
+			Extend(CaptureEventPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			security.ChatSessionsTokenPayload()
+		})
+
+		Result(CaptureEventResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.captureEvent")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			security.ChatSessionsTokenHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "captureEvent")
+		Meta("openapi:extension:x-speakeasy-name-override", "captureEvent")
+	})
 })
 
 var TelemetryFilter = Type("TelemetryFilter", func() {
@@ -235,4 +270,32 @@ var ToolCallSummary = Type("ToolCallSummary", func() {
 		"log_count",
 		"gram_urn",
 	)
+})
+
+var CaptureEventPayload = Type("CaptureEventPayload", func() {
+	Description("Payload for capturing a telemetry event")
+
+	Attribute("event", String, "Event name", func() {
+		MinLength(1)
+		MaxLength(255)
+		Example("button_clicked")
+	})
+	Attribute("distinct_id", String, "Distinct ID for the user or entity (defaults to organization ID if not provided)")
+	Attribute("properties", MapOf(String, Any), "Event properties as key-value pairs", func() {
+		Example(map[string]any{
+			"button_name": "submit",
+			"page":        "checkout",
+			"value":       100,
+		})
+	})
+
+	Required("event")
+})
+
+var CaptureEventResult = Type("CaptureEventResult", func() {
+	Description("Result of capturing a telemetry event")
+
+	Attribute("success", Boolean, "Whether the event was successfully captured")
+
+	Required("success")
 })

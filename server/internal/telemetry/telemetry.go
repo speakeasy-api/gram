@@ -39,6 +39,11 @@ type ToolMetricsProvider interface {
 	InsertTelemetryLog(ctx context.Context, params repo.InsertTelemetryLogParams) error
 }
 
+// PosthogClient defines the interface for capturing events in PostHog.
+type PosthogClient interface {
+	CaptureEvent(ctx context.Context, eventName string, distinctID string, eventProperties map[string]interface{}) error
+}
+
 // ToolCallLogger represents a logging strategy for tool HTTP requests.
 // Implementations may be backed by a real ToolHTTPRequest or behave as no-ops.
 type ToolCallLogger interface {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -22,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
 var (
@@ -73,6 +75,8 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-test"), "", billingClient)
 	require.NoError(t, err)
 
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	chConn, err := infra.NewClickhouseClient(t)
@@ -94,7 +98,9 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 	})
 	require.NoError(t, err, "failed to enable logs feature for test organization")
 
-	svc := telemetry.NewService(logger, conn, sessionManager, chClient, featClient)
+	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
+
+	svc := telemetry.NewService(logger, conn, sessionManager, chatSessionsManager, chClient, featClient, posthogClient)
 
 	return ctx, &testInstance{
 		service:        svc,
