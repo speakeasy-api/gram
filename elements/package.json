@@ -102,8 +102,8 @@
     "@assistant-ui/react": "^0.11.0",
     "@assistant-ui/react-ai-sdk": "^1.1.16",
     "@assistant-ui/react-markdown": "^0.11.0",
-    "@datadog/browser-rum": "^6.24.1",
     "@chromatic-com/storybook": "^5.0.0",
+    "@datadog/browser-rum": "^6.24.1",
     "@openrouter/ai-sdk-provider": "^1.4.1",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-collapsible": "^1.1.12",
@@ -120,6 +120,7 @@
     "lucide-react": "^0.544.0",
     "tailwind-merge": "^3.3.1",
     "tw-shimmer": "^0.4.0",
+    "vite-plugin-externalize-deps": "^0.10.0",
     "zod": "^4.1.13"
   },
   "devDependencies": {
