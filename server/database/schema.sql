@@ -1157,3 +1157,16 @@ CREATE TABLE IF NOT EXISTS project_allowed_origins (
 CREATE UNIQUE INDEX IF NOT EXISTS project_allowed_origins_project_id_origin_key
 ON project_allowed_origins (project_id, origin)
 WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS example_table (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+  description TEXT CHECK (description <> '' AND CHAR_LENGTH(description) <= 500),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT example_table_pkey PRIMARY KEY (id)
+);
