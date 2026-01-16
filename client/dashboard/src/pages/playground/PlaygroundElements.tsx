@@ -10,10 +10,7 @@ import { toast } from "sonner";
 import { useEnvironment } from "../environments/Environment";
 import { useMcpUrl } from "../mcp/MCPDetails";
 import { getAuthStatus } from "./PlaygroundAuth";
-import {
-  GramThreadWelcome,
-  GramUserMessage,
-} from "./PlaygroundElementsOverrides";
+import { GramThreadWelcome } from "./PlaygroundElementsOverrides";
 import "@gram-ai/elements/elements.css";
 
 // Context for passing auth warning to the Composer component

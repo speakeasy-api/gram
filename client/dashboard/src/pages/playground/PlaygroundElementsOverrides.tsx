@@ -41,17 +41,3 @@ export const GramThreadWelcome: FC = () => {
     </div>
   );
 };
-
-/**
- * Custom UserMessage component using Gram design system.
- * Displays user messages as primary-colored bubbles aligned to the right.
- */
-export const GramUserMessage: FC = () => (
-  <MessagePrimitive.Root asChild>
-    <div className="flex w-full justify-end py-4 px-2" data-role="user">
-      <div className="flex flex-col gap-2 overflow-hidden rounded-lg max-w-[80%] bg-secondary px-4 py-3 text-foreground">
-        <MessagePrimitive.Content />
-      </div>
-    </div>
-  </MessagePrimitive.Root>
-);
