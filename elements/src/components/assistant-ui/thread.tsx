@@ -494,7 +494,7 @@ const AssistantMessage: FC = () => {
         </div>
 
         <div className="aui-assistant-message-footer mt-2 ml-2 flex">
-          <BranchPicker />
+          {/* <BranchPicker /> */}
           <AssistantActionBar />
         </div>
       </div>
@@ -524,11 +524,11 @@ const AssistantActionBar: FC = () => {
           </MessagePrimitive.If>
         </TooltipIconButton>
       </ActionBarPrimitive.Copy>
-      <ActionBarPrimitive.Reload asChild>
+      {/* <ActionBarPrimitive.Reload asChild>
         <TooltipIconButton tooltip="Refresh">
           <RefreshCwIcon />
         </TooltipIconButton>
-      </ActionBarPrimitive.Reload>
+      </ActionBarPrimitive.Reload> */}
     </ActionBarPrimitive.Root>
   )
 }
