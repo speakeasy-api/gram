@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.25.12
+
+### Patch Changes
+
+- 0fd8d39: Adds a new Gram endpoint to update a chat title
+
 ## 0.25.8
 
 ### Patch Changes

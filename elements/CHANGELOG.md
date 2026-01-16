@@ -1,5 +1,17 @@
 # @gram-ai/elements
 
+## 1.21.0
+
+### Minor Changes
+
+- 03f7cbe: Support passing a function for toolsRequiringApproval within the Elements human-in-the-loop configuration object
+- 8b20bcf: Scopes all Elements tailwindcss to a root selector (.gram-elements) which wraps the component tree. The aim of this is to prevent Elements CSS polluting the application's CSS in which it is embedded
+- 3be7ac7: Add error tracking and session replay capture to Elements library
+
+### Patch Changes
+
+- 5d14e1a: Add chromatic to Elements library to track visual regressions
+
 ## 1.20.2
 
 ### Patch Changes

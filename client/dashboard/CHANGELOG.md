@@ -1,5 +1,18 @@
 # dashboard
 
+## 0.26.7
+
+### Patch Changes
+
+- 848e623: Fixed a couple of issues in the dashboard that were causing production errors: 1. Setup the monaco editor environment to properly load web workers for different languages 2. Add missing `Dialog.Title` elements in dialog headers to ensure accessibility compliance.
+- Updated dependencies [03f7cbe]
+- Updated dependencies [5d14e1a]
+- Updated dependencies [0fd8d39]
+- Updated dependencies [8b20bcf]
+- Updated dependencies [3be7ac7]
+  - @gram-ai/elements@1.21.0
+  - @gram/client@0.25.12
+
 ## 0.26.6
 
 ### Patch Changes
