@@ -1,4 +1,5 @@
 import { assert } from '@/lib/utils'
+import { ToolsFilter } from '@/types'
 import { experimental_createMCPClient as createMCPClient } from '@ai-sdk/mcp'
 import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { Auth } from './useAuth'
@@ -11,10 +12,12 @@ export function useMCPTools({
   auth,
   mcp,
   environment,
+  toolsToInclude,
 }: {
   auth: Auth
   mcp: string | undefined
   environment: Record<string, unknown>
+  toolsToInclude?: ToolsFilter
 }): UseQueryResult<MCPToolsResult, Error> {
   const authQueryKey = Object.entries(auth.headers ?? {}).map(
     (k, v) => `${k}:${v}`
@@ -39,7 +42,17 @@ export function useMCPTools({
       })
 
       const mcpTools = await mcpClient.tools()
-      return mcpTools
+      if (!toolsToInclude) {
+        return mcpTools
+      }
+
+      return Object.fromEntries(
+        Object.entries(mcpTools).filter(([name]) =>
+          typeof toolsToInclude === 'function'
+            ? toolsToInclude({ toolName: name })
+            : toolsToInclude.includes(name)
+        )
+      )
     },
     enabled: !auth.isLoading && !!mcp,
     staleTime: Infinity,

@@ -1,4 +1,5 @@
 import { FrontendTools } from '@/components/FrontendTools'
+import { useGramThreadListAdapter } from '@/hooks/useGramThreadListAdapter'
 import { useMCPTools } from '@/hooks/useMCPTools'
 import { useToolApproval } from '@/hooks/useToolApproval'
 import { getApiUrl } from '@/lib/api'
@@ -46,7 +47,6 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { ElementsContext } from './contexts'
 import { ToolApprovalProvider } from './ToolApprovalContext'
-import { useGramThreadListAdapter } from '@/hooks/useGramThreadListAdapter'
 
 export interface ElementsProviderProps {
   children: ReactNode
@@ -139,6 +139,7 @@ const ElementsProviderWithApproval = ({
     auth,
     mcp: config.mcp,
     environment: config.environment ?? {},
+    toolsToInclude: config.tools?.toolsToInclude,
   })
 
   // Store approval helpers in ref so they can be used in async contexts

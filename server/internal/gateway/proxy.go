@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -736,9 +737,25 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 		OrganizationID: opts.OrganizationID,
 	}
 
+	// Extract hostname from request URL to check against allowed hosts
+	hostname := opts.Request.URL.Hostname()
+
+	// Use unrestricted dialer for allowed internal hosts, policy dialer for all others
+	var dialContext func(ctx context.Context, network, addr string) (net.Conn, error)
+	if opts.Policy.IsHostAllowed(hostname) {
+		standardDialer := &net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}
+		dialContext = standardDialer.DialContext
+	} else {
+		dialContext = opts.Policy.Dialer().DialContext
+	}
+
 	transport := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           opts.Policy.Dialer().DialContext,
+		DialContext:           dialContext,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,

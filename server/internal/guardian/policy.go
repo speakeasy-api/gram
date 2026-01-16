@@ -54,6 +54,7 @@ var defaultBlockedCIDRBlocks = []*net.IPNet{
 
 type Policy struct {
 	blockedCIDRBlocks []*net.IPNet
+	allowedHosts      map[string]bool
 }
 
 // NewDefaultPolicy creates a new Policy that blocks common private and reserved
@@ -61,6 +62,21 @@ type Policy struct {
 func NewDefaultPolicy() *Policy {
 	return &Policy{
 		blockedCIDRBlocks: defaultBlockedCIDRBlocks,
+		allowedHosts:      make(map[string]bool),
+	}
+}
+
+// NewPolicyWithAllowedHosts creates a new Policy that blocks common private and
+// reserved IP ranges, but allows specific hosts to bypass these restrictions.
+// This is useful for internal tool-to-tool communication.
+func NewPolicyWithAllowedHosts(allowedHosts []string) *Policy {
+	hostsMap := make(map[string]bool)
+	for _, host := range allowedHosts {
+		hostsMap[host] = true
+	}
+	return &Policy{
+		blockedCIDRBlocks: defaultBlockedCIDRBlocks,
+		allowedHosts:      hostsMap,
 	}
 }
 
@@ -78,7 +94,17 @@ func NewUnsafePolicy(disallowedCIDRBlocks []string) (*Policy, error) {
 		disallowedBlocks = append(disallowedBlocks, block)
 	}
 
-	return &Policy{blockedCIDRBlocks: disallowedBlocks}, nil
+	return &Policy{
+		blockedCIDRBlocks: disallowedBlocks,
+		allowedHosts:      make(map[string]bool),
+	}, nil
+}
+
+// IsHostAllowed checks if a hostname is in the allowed hosts list.
+// This should be checked before making requests to bypass IP blocking
+// for internal tool-to-tool communication.
+func (p *Policy) IsHostAllowed(host string) bool {
+	return p.allowedHosts[host]
 }
 
 func (p *Policy) PooledClient() *http.Client {

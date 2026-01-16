@@ -2,27 +2,32 @@
 
 //MISE description="Seed the local database with data"
 
-import path from "node:path";
-import fs from "node:fs/promises";
 import assert from "node:assert";
+import fs from "node:fs/promises";
+import path from "node:path";
 
-import { $ } from "zx";
+import { intro, log, outro } from "@clack/prompts";
 import { GramCore } from "@gram/client/core.js";
-import { authInfo } from "@gram/client/funcs/authInfo.js";
-import { projectsCreate } from "@gram/client/funcs/projectsCreate.js";
 import { assetsUploadOpenAPIv3 } from "@gram/client/funcs/assetsUploadOpenAPIv3.js";
+import { authInfo } from "@gram/client/funcs/authInfo.js";
 import { deploymentsEvolveDeployment } from "@gram/client/funcs/deploymentsEvolveDeployment.js";
-import { toolsList } from "@gram/client/funcs/toolsList.js";
-import { toolsetsCreate } from "@gram/client/funcs/toolsetsCreate.js";
-import { ServiceError } from "@gram/client/models/errors";
-import { toolsetsUpdateBySlug } from "@gram/client/funcs/toolsetsUpdateBySlug.js";
-import { projectsRead } from "@gram/client/funcs/projectsRead.js";
 import { keysCreate } from "@gram/client/funcs/keysCreate.js";
 import { keysList } from "@gram/client/funcs/keysList.js";
-import { intro, log, outro } from "@clack/prompts";
 import { keysValidate } from "@gram/client/funcs/keysValidate.js";
+import { projectsCreate } from "@gram/client/funcs/projectsCreate.js";
+import { projectsRead } from "@gram/client/funcs/projectsRead.js";
+import { toolsList } from "@gram/client/funcs/toolsList.js";
+import { toolsetsCreate } from "@gram/client/funcs/toolsetsCreate.js";
+import { toolsetsUpdateBySlug } from "@gram/client/funcs/toolsetsUpdateBySlug.js";
+import { ServiceError } from "@gram/client/models/errors";
+import { $ } from "zx";
 
-type Asset = { type: "openapi"; slug: string; filename: string };
+type Asset = {
+  type: "openapi";
+  slug: string;
+  filename: string;
+  storybookDefault?: boolean;
+};
 
 const SEED_PROJECTS: {
   name: string;
@@ -41,6 +46,12 @@ const SEED_PROJECTS: {
         type: "openapi",
         slug: "kitchen-sink",
         filename: path.join("local", "openapi", "kitchen-sink.json"),
+        storybookDefault: true,
+      },
+      {
+        type: "openapi",
+        slug: "gram",
+        filename: path.join("server", "gen", "http", "openapi3.yaml"),
       },
     ],
   },
@@ -130,21 +141,26 @@ async function seed() {
       `Deployed assets into '${projectSlug}' (deployment_id = ${deploymentId})`,
     );
 
-    const toolset = await upsertToolset({
-      gram,
-      serverURL,
-      sessionId,
-      projectSlug,
-      mcpPublic,
-    });
-    verb = toolset.created ? "Created" : "Updated";
-    log.info(
-      `${verb} toolset '${toolset.slug}' for project '${projectSlug}' (mcp_url = ${toolset.mcpURL})`,
-    );
+    for (const asset of assets) {
+      const toolset = await upsertToolset({
+        gram,
+        serverURL,
+        sessionId,
+        projectSlug,
+        assetSlug: asset.slug,
+        mcpPublic,
+      });
+      verb = toolset.created ? "Created" : "Updated";
+      log.info(
+        `${verb} toolset '${toolset.slug}' for project '${projectSlug}' (mcp_url = ${toolset.mcpURL})`,
+      );
 
-    await $`mise set --file mise.local.toml \
+      if (asset.storybookDefault) {
+        await $`mise set --file mise.local.toml \
         VITE_GRAM_ELEMENTS_STORYBOOK_PROJECT_SLUG=${projectSlug} \
         VITE_GRAM_ELEMENTS_STORYBOOK_MCP_URL=${toolset.mcpURL}`;
+      }
+    }
   }
 
   success = true;
@@ -321,9 +337,11 @@ async function upsertToolset(init: {
   serverURL: string;
   sessionId: string;
   projectSlug: string;
+  assetSlug: string;
   mcpPublic: boolean;
 }): Promise<Toolset> {
-  const { gram, serverURL, sessionId, projectSlug, mcpPublic } = init;
+  const { gram, serverURL, sessionId, projectSlug, assetSlug, mcpPublic } =
+    init;
   const toolRes = await toolsList(
     gram,
     {
@@ -354,14 +372,18 @@ async function upsertToolset(init: {
   });
 
   let toolset: Toolset;
-  let mcpURL = "";
-  const name = projectSlug + "-seed";
+  const name = assetSlug + "-seed";
+
+  const urnsForSource = toolUrns.filter((urn) =>
+    urn.startsWith(`tools:http:${assetSlug}:`),
+  );
+
   const createRes = await toolsetsCreate(
     gram,
     {
       createToolsetRequestBody: {
         name,
-        toolUrns,
+        toolUrns: urnsForSource,
       },
     },
     {
@@ -426,6 +448,7 @@ async function upsertToolset(init: {
       slug: toolset.slug,
       updateToolsetRequestBody: {
         mcpIsPublic: true,
+        mcpEnabled: true,
       },
     },
     {
@@ -441,6 +464,8 @@ async function upsertToolset(init: {
       updateRes.error,
     );
   }
+
+  toolset.mcpURL = `${serverURL}/mcp/${updateRes.value.mcpSlug}`;
 
   log.info(`${toolset.mcpURL} visibility was changed to public`);
 

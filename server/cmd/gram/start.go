@@ -509,7 +509,12 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to parse site url: %w", err)
 			}
 
-			guardianPolicy := guardian.NewDefaultPolicy()
+			// Allow internal tool-to-tool communication by whitelisting the server's own hostname
+			allowedHosts := []string{
+				"localhost",
+				serverURL.Hostname(),
+			}
+			guardianPolicy := guardian.NewPolicyWithAllowedHosts(allowedHosts)
 			blockedCIDRs := c.StringSlice("disallowed-cidr-blocks")
 			if blockedCIDRs != nil {
 				guardianPolicy, err = guardian.NewUnsafePolicy(blockedCIDRs)
