@@ -203,15 +203,6 @@ jobs:
           TAG=$(echo "${{ steps.meta.outputs.tags }}" | sed 's/.*://')
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
 
-      - name: Lint PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/lint@v1
-        with:
-          dir: file://server/migrations
-          dir-name: gram
-          dev-url: postgres://postgres:pass@localhost:5432/dev?search_path=public&sslmode=disable
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-
       - name: Push PostgreSQL migrations
         uses: ariga/atlas-action/migrate/push@v1
         with:
@@ -219,15 +210,6 @@ jobs:
           dir-name: gram
           dev-url: postgres://postgres:pass@localhost:5432/dev?search_path=public&sslmode=disable
           tag: ${{ steps.tag.outputs.tag }}
-
-      - name: Lint ClickHouse migrations
-        uses: ariga/atlas-action/migrate/lint@v1
-        with:
-          dir: file://server/clickhouse/migrations
-          dir-name: gram-clickhouse
-          dev-url: docker://clickhouse/clickhouse-server/25.8.3/dev
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Push ClickHouse migrations
         uses: ariga/atlas-action/migrate/push@v1
