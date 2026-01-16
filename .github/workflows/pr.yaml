@@ -39,15 +39,17 @@ jobs:
           filters: .github/filters.yaml
       - id: gates
         name: Set outputs
+        env:
+          HAS_PREVIEW_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'preview') }}
         run: |
-          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" ]]; then
+          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_PREVIEW_LABEL" == "true" ]]; then
             echo "server=true" >> $GITHUB_OUTPUT
             echo "Server jobs will run."
           else
             echo "Server jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" ]]; then
+          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_PREVIEW_LABEL" == "true" ]]; then
             echo "client=true" >> $GITHUB_OUTPUT
             echo "Client jobs will run."
           else
