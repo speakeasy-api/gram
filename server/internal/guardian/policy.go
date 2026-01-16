@@ -54,7 +54,7 @@ var defaultBlockedCIDRBlocks = []*net.IPNet{
 
 type Policy struct {
 	blockedCIDRBlocks []*net.IPNet
-	allowedHosts      map[string]bool
+	allowLoopback     bool
 }
 
 // NewDefaultPolicy creates a new Policy that blocks common private and reserved
@@ -62,21 +62,17 @@ type Policy struct {
 func NewDefaultPolicy() *Policy {
 	return &Policy{
 		blockedCIDRBlocks: defaultBlockedCIDRBlocks,
-		allowedHosts:      make(map[string]bool),
+		allowLoopback:     false,
 	}
 }
 
-// NewPolicyWithAllowedHosts creates a new Policy that blocks common private and
-// reserved IP ranges, but allows specific hosts to bypass these restrictions.
-// This is useful for internal tool-to-tool communication.
-func NewPolicyWithAllowedHosts(allowedHosts []string) *Policy {
-	hostsMap := make(map[string]bool)
-	for _, host := range allowedHosts {
-		hostsMap[host] = true
-	}
+// NewPolicyWithLoopbackAllowed creates a new Policy that blocks common private and
+// reserved IP ranges, but allows loopback addresses (127.0.0.0/8 and ::1/128).
+// This should only be used in local development environments for internal tool-to-tool communication.
+func NewPolicyWithLoopbackAllowed() *Policy {
 	return &Policy{
 		blockedCIDRBlocks: defaultBlockedCIDRBlocks,
-		allowedHosts:      hostsMap,
+		allowLoopback:     true,
 	}
 }
 
@@ -96,15 +92,8 @@ func NewUnsafePolicy(disallowedCIDRBlocks []string) (*Policy, error) {
 
 	return &Policy{
 		blockedCIDRBlocks: disallowedBlocks,
-		allowedHosts:      make(map[string]bool),
+		allowLoopback:     false,
 	}, nil
-}
-
-// IsHostAllowed checks if a hostname is in the allowed hosts list.
-// This should be checked before making requests to bypass IP blocking
-// for internal tool-to-tool communication.
-func (p *Policy) IsHostAllowed(host string) bool {
-	return p.allowedHosts[host]
 }
 
 func (p *Policy) PooledClient() *http.Client {
@@ -135,6 +124,11 @@ func (p *Policy) Dialer() *net.Dialer {
 			ip := net.ParseIP(host)
 			if ip == nil {
 				return fmt.Errorf("%s: %w: bad ip", address, ErrBadHost)
+			}
+
+			// Allow loopback addresses in development environments
+			if p.allowLoopback && ip.IsLoopback() {
+				return nil
 			}
 
 			for _, block := range p.blockedCIDRBlocks {

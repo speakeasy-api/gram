@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -360,18 +359,15 @@ func newWorkerCommand() *cli.Command {
 				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{Temporal: temporalClient}, productFeatures, billingTracker)
 			}
 
-			serverURL, err := url.Parse(c.String("server-url"))
-			if err != nil {
-				return fmt.Errorf("failed to parse server url: %w", err)
+			// In local development, allow loopback addresses for internal tool-to-tool communication
+			var guardianPolicy *guardian.Policy
+			if c.String("environment") == "local" {
+				guardianPolicy = guardian.NewPolicyWithLoopbackAllowed()
+			} else {
+				guardianPolicy = guardian.NewDefaultPolicy()
 			}
-
-			// Allow internal tool-to-tool communication by whitelisting the server's own hostname
-			allowedHosts := []string{
-				"localhost",
-				serverURL.Hostname(),
-			}
-			guardianPolicy := guardian.NewPolicyWithAllowedHosts(allowedHosts)
 			if s := c.StringSlice("disallowed-cidr-blocks"); s != nil {
+				var err error
 				guardianPolicy, err = guardian.NewUnsafePolicy(s)
 				if err != nil {
 					return fmt.Errorf("failed to create unsafe http guardian policy: %w", err)

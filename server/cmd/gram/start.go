@@ -509,12 +509,13 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to parse site url: %w", err)
 			}
 
-			// Allow internal tool-to-tool communication by whitelisting the server's own hostname
-			allowedHosts := []string{
-				"localhost",
-				serverURL.Hostname(),
+			// In local development, allow loopback addresses for internal tool-to-tool communication
+			var guardianPolicy *guardian.Policy
+			if c.String("environment") == "local" {
+				guardianPolicy = guardian.NewPolicyWithLoopbackAllowed()
+			} else {
+				guardianPolicy = guardian.NewDefaultPolicy()
 			}
-			guardianPolicy := guardian.NewPolicyWithAllowedHosts(allowedHosts)
 			blockedCIDRs := c.StringSlice("disallowed-cidr-blocks")
 			if blockedCIDRs != nil {
 				guardianPolicy, err = guardian.NewUnsafePolicy(blockedCIDRs)
