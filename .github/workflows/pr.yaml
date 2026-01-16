@@ -87,6 +87,8 @@ jobs:
   docker-build-server:
     runs-on: ubicloud-standard-4
     needs: [changes, server-build-lint]
+    outputs:
+      image-tag: ${{ steps.set-tag.outputs.tag }}
     env:
       GOMAXPROCS: 4
     steps:
@@ -141,6 +143,84 @@ jobs:
           docker pull ${{ steps.build.outputs.image-tag }}
           echo "Running image..."
           docker run --rm ${{ steps.build.outputs.image-tag }} version
+
+      - name: Extract tag for downstream jobs
+        id: set-tag
+        if: ${{ needs.changes.outputs.server == 'true' }}
+        run: |
+          # Extract just the tag portion (e.g., "sha-abc1234") from full image path
+          TAG=$(echo "${{ steps.build.outputs.image-tag }}" | sed 's/.*://')
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+
+  atlas-push:
+    name: Push migrations to Atlas Registry
+    runs-on: ubicloud-standard-4
+    needs: [changes, docker-build-server]
+    if: needs.changes.outputs.server == 'true'
+    permissions:
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: atlas-push-${{ github.ref }}
+      cancel-in-progress: true
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: dev
+          POSTGRES_PASSWORD: pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-start-period 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Setup Atlas
+        uses: ariga/setup-atlas@v0
+        with:
+          cloud-token: ${{ secrets.ATLAS_CLOUD_TOKEN }}
+
+      - name: Lint PostgreSQL migrations
+        uses: ariga/atlas-action/migrate/lint@v1
+        with:
+          dir: file://server/migrations
+          dir-name: gram-postgres
+          dev-url: postgres://postgres:pass@localhost:5432/dev?search_path=public&sslmode=disable
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Push PostgreSQL migrations
+        uses: ariga/atlas-action/migrate/push@v1
+        with:
+          dir: file://server/migrations
+          dir-name: gram-postgres
+          dev-url: postgres://postgres:pass@localhost:5432/dev?search_path=public&sslmode=disable
+          tag: ${{ needs.docker-build-server.outputs.image-tag }}
+
+      - name: Lint ClickHouse migrations
+        uses: ariga/atlas-action/migrate/lint@v1
+        with:
+          dir: file://server/clickhouse/migrations
+          dir-name: gram-clickhouse
+          dev-url: docker://clickhouse/clickhouse-server/25.8.3/dev
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Push ClickHouse migrations
+        uses: ariga/atlas-action/migrate/push@v1
+        with:
+          dir: file://server/clickhouse/migrations
+          dir-name: gram-clickhouse
+          dev-url: docker://clickhouse/clickhouse-server/25.8.3/dev
+          tag: ${{ needs.docker-build-server.outputs.image-tag }}
 
   server-build-lint:
     runs-on: ubicloud-standard-4
