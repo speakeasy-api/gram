@@ -184,6 +184,7 @@ func handleResourcesRead(
 	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), gateway.ToolCallEnv{
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,
+		UserAgent:  "",
 	}, plan, toolCallLogger)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").Log(ctx, logger)

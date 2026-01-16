@@ -8,6 +8,8 @@
 package client
 
 import (
+	"unicode/utf8"
+
 	mcpmetadata "github.com/speakeasy-api/gram/server/gen/mcp_metadata"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
@@ -24,6 +26,8 @@ type SetMcpMetadataRequestBody struct {
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Custom User-Agent header for HTTP requests made by this MCP
+	UserAgent *string `form:"user_agent,omitempty" json:"user_agent,omitempty" xml:"user_agent,omitempty"`
 }
 
 // GetMcpMetadataResponseBody is the type of the "mcpMetadata" service
@@ -46,6 +50,8 @@ type SetMcpMetadataResponseBody struct {
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Custom User-Agent header for HTTP requests made by this MCP
+	UserAgent *string `form:"user_agent,omitempty" json:"user_agent,omitempty" xml:"user_agent,omitempty"`
 	// When the metadata entry was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the metadata entry was last updated
@@ -436,6 +442,8 @@ type McpMetadataResponseBody struct {
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Custom User-Agent header for HTTP requests made by this MCP
+	UserAgent *string `form:"user_agent,omitempty" json:"user_agent,omitempty" xml:"user_agent,omitempty"`
 	// When the metadata entry was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the metadata entry was last updated
@@ -450,6 +458,7 @@ func NewSetMcpMetadataRequestBody(p *mcpmetadata.SetMcpMetadataPayload) *SetMcpM
 		LogoAssetID:              p.LogoAssetID,
 		ExternalDocumentationURL: p.ExternalDocumentationURL,
 		Instructions:             p.Instructions,
+		UserAgent:                p.UserAgent,
 	}
 	return body
 }
@@ -624,6 +633,7 @@ func NewSetMcpMetadataMcpMetadataOK(body *SetMcpMetadataResponseBody) *types.Mcp
 		LogoAssetID:              body.LogoAssetID,
 		ExternalDocumentationURL: body.ExternalDocumentationURL,
 		Instructions:             body.Instructions,
+		UserAgent:                body.UserAgent,
 		CreatedAt:                *body.CreatedAt,
 		UpdatedAt:                *body.UpdatedAt,
 	}
@@ -815,6 +825,11 @@ func ValidateSetMcpMetadataResponseBody(body *SetMcpMetadataResponseBody) (err e
 	}
 	if body.ExternalDocumentationURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_documentation_url", *body.ExternalDocumentationURL, goa.FormatURI))
+	}
+	if body.UserAgent != nil {
+		if utf8.RuneCountInString(*body.UserAgent) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_agent", *body.UserAgent, utf8.RuneCountInString(*body.UserAgent), 500, false))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -1328,6 +1343,11 @@ func ValidateMcpMetadataResponseBody(body *McpMetadataResponseBody) (err error) 
 	}
 	if body.ExternalDocumentationURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_documentation_url", *body.ExternalDocumentationURL, goa.FormatURI))
+	}
+	if body.UserAgent != nil {
+		if utf8.RuneCountInString(*body.UserAgent) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_agent", *body.UserAgent, utf8.RuneCountInString(*body.UserAgent), 500, false))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

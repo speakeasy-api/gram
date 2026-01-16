@@ -35,6 +35,7 @@ interface MetadataParams {
   logoAssetId: string | undefined;
   externalDocumentationUrl: string | undefined;
   instructions: string | undefined;
+  userAgent: string | undefined;
 }
 
 type ValidationResult =
@@ -65,6 +66,10 @@ interface UseMcpMetadataMetadataFormResult {
     value: string | undefined;
     onChange: ChangeEventHandler<HTMLTextAreaElement>;
   };
+  userAgentHandlers: {
+    value: string | undefined;
+    onChange: ChangeEventHandler<HTMLInputElement>;
+  };
   reset: () => void;
   save: () => void;
 }
@@ -92,6 +97,7 @@ function useMcpMetadataMetadataForm(
       currentMetadata?.externalDocumentationUrl ?? undefined,
     logoAssetId: currentMetadata?.logoAssetId ?? undefined,
     instructions: currentMetadata?.instructions ?? undefined,
+    userAgent: currentMetadata?.userAgent ?? undefined,
   });
 
   const [urlValid, setUrlValid] = useState<ValidationResult>({ valid: true });
@@ -111,6 +117,7 @@ function useMcpMetadataMetadataForm(
         externalDocumentationUrl: currentMetadata?.externalDocumentationUrl,
         logoAssetId: currentMetadata?.logoAssetId,
         instructions: currentMetadata?.instructions,
+        userAgent: currentMetadata?.userAgent,
       });
     }
   }, [currentMetadata]);
@@ -173,6 +180,7 @@ function useMcpMetadataMetadataForm(
       logoAssetId: currentMetadata?.logoAssetId,
       externalDocumentationUrl: currentMetadata?.externalDocumentationUrl,
       instructions: currentMetadata?.instructions,
+      userAgent: currentMetadata?.userAgent,
     });
   }, [currentMetadata]);
 
@@ -222,6 +230,14 @@ function useMcpMetadataMetadataForm(
         setMetadataParams((prev) => ({
           ...prev,
           instructions: e.target.value === "" ? undefined : e.target.value,
+        })),
+    },
+    userAgentHandlers: {
+      value: metadataParams.userAgent ?? "",
+      onChange: (e) =>
+        setMetadataParams((prev) => ({
+          ...prev,
+          userAgent: e.target.value === "" ? undefined : e.target.value,
         })),
     },
     reset,
@@ -334,6 +350,24 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
                     placeholder="Enter instructions for LLMs using your MCP server..."
                     className="w-full min-h-[120px]"
                     {...form.instructionsHandlers}
+                  />
+                </div>
+                <div>
+                  <Heading> Custom User-Agent </Heading>
+                  <Type muted small className="max-w-2xl">
+                    A custom User-Agent header sent with HTTP requests made by
+                    your MCP. Useful when connecting to APIs that require
+                    specific identification.
+                  </Type>
+                </div>
+                <div>
+                  <Input
+                    type="text"
+                    placeholder="MyMCP/1.0 (https://example.com)"
+                    className="w-full"
+                    value={form.userAgentHandlers.value}
+                    onChange={form.userAgentHandlers.onChange}
+                    maxLength={500}
                   />
                 </div>
                 <div className="rounded-md bg-neutral-50 dark:bg-neutral-900 p-3 text-xs">

@@ -922,6 +922,8 @@ CREATE TABLE IF NOT EXISTS mcp_metadata (
   external_documentation_url TEXT,
   logo_id UUID,
   instructions TEXT,
+  -- Custom User-Agent header for HTTP requests made by this MCP
+  user_agent TEXT CHECK (user_agent <> '' AND CHAR_LENGTH(user_agent) <= 500),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

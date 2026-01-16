@@ -23,6 +23,10 @@ export type SetMcpMetadataRequestBody = {
    * The slug of the toolset associated with this install page metadata
    */
   toolsetSlug: string;
+  /**
+   * Custom User-Agent header for HTTP requests made by this MCP
+   */
+  userAgent?: string | undefined;
 };
 
 /** @internal */
@@ -31,6 +35,7 @@ export type SetMcpMetadataRequestBody$Outbound = {
   instructions?: string | undefined;
   logo_asset_id?: string | undefined;
   toolset_slug: string;
+  user_agent?: string | undefined;
 };
 
 /** @internal */
@@ -43,11 +48,13 @@ export const SetMcpMetadataRequestBody$outboundSchema: z.ZodType<
   instructions: z.string().optional(),
   logoAssetId: z.string().optional(),
   toolsetSlug: z.string(),
+  userAgent: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     externalDocumentationUrl: "external_documentation_url",
     logoAssetId: "logo_asset_id",
     toolsetSlug: "toolset_slug",
+    userAgent: "user_agent",
   });
 });
 

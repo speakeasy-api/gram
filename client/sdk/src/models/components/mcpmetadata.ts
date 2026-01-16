@@ -41,6 +41,10 @@ export type McpMetadata = {
    * When the metadata entry was last updated
    */
   updatedAt: Date;
+  /**
+   * Custom User-Agent header for HTTP requests made by this MCP
+   */
+  userAgent?: string | undefined;
 };
 
 /** @internal */
@@ -56,6 +60,7 @@ export const McpMetadata$inboundSchema: z.ZodType<
   logo_asset_id: z.string().optional(),
   toolset_id: z.string(),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
+  user_agent: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "created_at": "createdAt",
@@ -63,6 +68,7 @@ export const McpMetadata$inboundSchema: z.ZodType<
     "logo_asset_id": "logoAssetId",
     "toolset_id": "toolsetId",
     "updated_at": "updatedAt",
+    "user_agent": "userAgent",
   });
 });
 

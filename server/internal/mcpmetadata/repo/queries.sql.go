@@ -19,6 +19,7 @@ SELECT id,
        external_documentation_url,
        logo_id,
        instructions,
+       user_agent,
        created_at,
        updated_at
 FROM mcp_metadata
@@ -37,6 +38,7 @@ func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID
 		&i.ExternalDocumentationUrl,
 		&i.LogoID,
 		&i.Instructions,
+		&i.UserAgent,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -49,13 +51,15 @@ INSERT INTO mcp_metadata (
     project_id,
     external_documentation_url,
     logo_id,
-    instructions
-) VALUES ($1, $2, $3, $4, $5)
+    instructions,
+    user_agent
+) VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (toolset_id)
 DO UPDATE SET project_id = EXCLUDED.project_id,
               external_documentation_url = EXCLUDED.external_documentation_url,
               logo_id = EXCLUDED.logo_id,
               instructions = EXCLUDED.instructions,
+              user_agent = EXCLUDED.user_agent,
               updated_at = clock_timestamp()
 RETURNING id,
           toolset_id,
@@ -63,6 +67,7 @@ RETURNING id,
           external_documentation_url,
           logo_id,
           instructions,
+          user_agent,
           created_at,
           updated_at
 `
@@ -73,6 +78,7 @@ type UpsertMetadataParams struct {
 	ExternalDocumentationUrl pgtype.Text
 	LogoID                   uuid.NullUUID
 	Instructions             pgtype.Text
+	UserAgent                pgtype.Text
 }
 
 func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) (McpMetadatum, error) {
@@ -82,6 +88,7 @@ func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) 
 		arg.ExternalDocumentationUrl,
 		arg.LogoID,
 		arg.Instructions,
+		arg.UserAgent,
 	)
 	var i McpMetadatum
 	err := row.Scan(
@@ -91,6 +98,7 @@ func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) 
 		&i.ExternalDocumentationUrl,
 		&i.LogoID,
 		&i.Instructions,
+		&i.UserAgent,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

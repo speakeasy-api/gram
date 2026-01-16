@@ -354,6 +354,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	err = s.toolProxy.Do(ctx, interceptor, requestBody, gateway.ToolCallEnv{
 		SystemEnv:  systemConfig,
 		UserConfig: ciEnv,
+		UserAgent:  "",
 	}, plan, toolCallLogger)
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)

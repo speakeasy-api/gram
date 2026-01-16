@@ -22,6 +22,9 @@ var McpMetadata = Type("McpMetadata", func() {
 		Format(FormatURI)
 	})
 	Attribute("instructions", String, "Server instructions returned in the MCP initialize response")
+	Attribute("user_agent", String, "Custom User-Agent header for HTTP requests made by this MCP", func() {
+		MaxLength(500)
+	})
 	Attribute("created_at", String, "When the metadata entry was created", func() {
 		Format(FormatDateTime)
 	})
@@ -75,6 +78,9 @@ var _ = Service("mcpMetadata", func() {
 			Attribute("logo_asset_id", String, "The asset ID for the MCP install page logo")
 			Attribute("external_documentation_url", String, "A link to external documentation for the MCP install page")
 			Attribute("instructions", String, "Server instructions returned in the MCP initialize response")
+			Attribute("user_agent", String, "Custom User-Agent header for HTTP requests made by this MCP", func() {
+				MaxLength(500)
+			})
 
 			Required("toolset_slug")
 
