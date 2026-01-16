@@ -145,10 +145,10 @@ export function PlaygroundElements({
         }
       >
         <div className="h-full flex flex-col min-h-0">
-          <div className="flex items-center justify-end gap-2 py-3 shrink-0">
+          <div className="flex items-center justify-end gap-2 py-3 shrink-0 border-b-border border-b">
             {additionalActions}
           </div>
-          <div className="flex-1 min-h-0 overflow-hidden bg-surface-primary [&_.aui-thread-root]:bg-transparent [&_.aui-composer-root]:rounded [&_.aui-composer-wrapper]:bg-transparent rounded-br-xl">
+          <div className="h-full overflow-hidden">
             <Chat />
           </div>
         </div>

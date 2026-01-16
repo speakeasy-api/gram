@@ -349,32 +349,27 @@ export type SessionAuthConfig = {
 }
 
 /**
- * The API key auth config is used to authenticate the Elements library using an API key only.
- *
- * NOTE: This is not recommended for production use, and a warning
- * will be displayed in the chat interface if you use this config.
- * Define a session endpoint instead to avoid this warning.
+ * The static session auth config is used to authenticate the Elements library using a static session token only.
  *
  * @example
  * const config: ElementsConfig = {
  *   api: {
- *     UNSAFE_apiKey: 'your-api-key',
+ *     sessionToken: 'your-session-token',
  *   },
  * }
  */
-export type ApiKeyAuthConfig = {
+export type StaticSessionAuthConfig = {
   /**
-   * The API key to use if you haven't yet configured a session endpoint.
-   * Do not use this in production.
+   * A static session token to use if you haven't yet configured a session endpoint.
    *
    * @example
    * const config: ElementsConfig = {
    *   api: {
-   *     UNSAFE_apiKey: 'your-api-key',
+   *     sessionToken: 'your-session-token',
    *   },
    * }
    */
-  UNSAFE_apiKey: string
+  sessionToken: string
 }
 
 /**
@@ -383,7 +378,7 @@ export type ApiKeyAuthConfig = {
 export type ApiConfig =
   | BaseApiConfig
   | (BaseApiConfig & SessionAuthConfig)
-  | (BaseApiConfig & ApiKeyAuthConfig)
+  | (BaseApiConfig & StaticSessionAuthConfig)
 
 /**
  * The LLM model to use for the Elements library.
@@ -514,6 +509,10 @@ export interface ComponentOverrides {
   >
 }
 
+export type ToolsRequiringApproval =
+  | string[]
+  | (({ toolName }: { toolName: string }) => boolean)
+
 /**
  * ToolsConfig is used to configure tool support in the Elements library.
  * At the moment, you can override the default React components used by
@@ -528,7 +527,6 @@ export interface ComponentOverrides {
  *   },
  * }
  */
-
 export interface ToolsConfig {
   /**
    * Whether individual tool calls within a group should be expanded by default.
@@ -608,17 +606,27 @@ export interface ToolsConfig {
 
   /**
    * List of tool names that require confirmation from the end user before
-   * being executed. The user can choose to approve once or approve for the
+   * being executed. A function can also be provided to dynamically determine if a tool requires approval.
+   * The user can choose to approve once or approve for the
    * entire session via the UI.
    *
-   * @example
+   * @example Using an array of tool names
    * ```ts
    * tools: {
    *   toolsRequiringApproval: ['delete_file', 'send_email'],
    * }
    * ```
+   *
+   * @example Using a function to dynamically determine if a tool requires approval
+   * ```ts
+   * tools: {
+   *   toolsRequiringApproval: (toolName) => {
+   *     return toolName.startsWith('protected_')
+   *   },
+   * }
+   * ```
    */
-  toolsRequiringApproval?: string[]
+  toolsRequiringApproval?: ToolsRequiringApproval
 }
 
 export interface WelcomeConfig {

@@ -52,19 +52,18 @@ import {
 } from '../ui/tooltip'
 import { ToolGroup } from './tool-group'
 
-const ApiKeyWarning = () => (
+const StaticSessionWarning = () => (
   <div className="m-2 rounded-md border border-amber-500 bg-amber-100 px-4 py-3 text-sm text-amber-800 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-200">
-    <strong>Warning:</strong> You are using an API key directly in the client.
-    Please{' '}
+    <strong>Warning:</strong> You are using a static session token in the
+    client. It will expire shortly. Please{' '}
     <a
       href="https://github.com/speakeasy-api/gram/tree/main/elements#setting-up-your-backend"
       target="_blank"
       rel="noopener noreferrer"
       className="text-amber-700 underline hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200"
     >
-      set up a session endpoint
-    </a>{' '}
-    before deploying to production.
+      set up a session endpoint to avoid this warning.
+    </a>
   </div>
 )
 
@@ -77,7 +76,7 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   const d = useDensity()
   const { config } = useElements()
   const components = config.components ?? {}
-  const showApiKeyWarning = config.api && 'UNSAFE_apiKey' in config.api
+  const showStaticSessionWarning = config.api && 'sessionToken' in config.api
 
   return (
     <LazyMotion features={domAnimation}>
@@ -103,7 +102,7 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
               )}
             </ThreadPrimitive.If>
 
-            {showApiKeyWarning && <ApiKeyWarning />}
+            {showStaticSessionWarning && <StaticSessionWarning />}
 
             <ThreadPrimitive.Messages
               components={{

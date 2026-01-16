@@ -42,27 +42,28 @@ export function ChangelogModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <Dialog.Content className="max-w-4xl max-h-[80vh] flex flex-col">
-        {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-linear-to-br from-brand-500/10 to-brand-600/10 border border-brand-500/20">
-              <GramLogo variant="icon" className="size-8" />
+        <Dialog.Header>
+          <Dialog.Title className="mb-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-linear-to-br from-brand-500/10 to-brand-600/10 border border-brand-500/20">
+                <GramLogo variant="icon" className="size-8" />
+              </div>
+              <div className="flex-1">
+                <Heading className="flex items-center gap-3 text-xl">
+                  What's new in Gram
+                  {entry && (
+                    <Badge variant="success" className="text-sm px-3 py-1">
+                      {entry.version}
+                    </Badge>
+                  )}
+                </Heading>
+                <Text className="text-muted-foreground text-base mt-2">
+                  Latest updates and features for the Gram platform
+                </Text>
+              </div>
             </div>
-            <div className="flex-1">
-              <Heading className="flex items-center gap-3 text-xl">
-                What's new in Gram
-                {entry && (
-                  <Badge variant="success" className="text-sm px-3 py-1">
-                    {entry.version}
-                  </Badge>
-                )}
-              </Heading>
-              <Text className="text-muted-foreground text-base mt-2">
-                Latest updates and features for the Gram platform
-              </Text>
-            </div>
-          </div>
-        </div>
+          </Dialog.Title>
+        </Dialog.Header>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto min-h-0 -mx-2 px-2">

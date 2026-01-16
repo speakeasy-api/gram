@@ -125,14 +125,15 @@ export function EditToolDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <Dialog.Content className="min-w-2xl max-w-3xl">
-        {/* Header with source and type */}
-        <div className="flex items-center gap-2 pb-4">
-          <ToolIcon className="size-4 text-muted-foreground" />
-          <span className="text-sm font-medium">{source}</span>
-          <Badge variant="secondary" className="text-xs">
-            {typeLabel}
-          </Badge>
-        </div>
+        <Dialog.Header>
+          <Dialog.Title className="flex items-center gap-2">
+            <ToolIcon className="size-4 text-muted-foreground" />
+            <span>{source}</span>
+            <Badge variant="secondary" className="text-xs">
+              {typeLabel}
+            </Badge>
+          </Dialog.Title>
+        </Dialog.Header>
 
         {/* Editable fields */}
         <div className="py-4 space-y-4">

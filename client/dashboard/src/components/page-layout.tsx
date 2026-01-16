@@ -187,9 +187,6 @@ export function EmptyState({
         <InitialChoiceStep
           routes={routes}
           isFunctionsEnabled={isFunctionsEnabled}
-          onChoiceSelected={(choice) => {
-            telemetry.capture("onboarding_choice_selected", { choice });
-          }}
         />
       </Stack>
     );

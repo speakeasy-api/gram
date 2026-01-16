@@ -117,16 +117,25 @@ const config: ElementsConfig = {
 
 ### toolsRequiringApproval?
 
-> `optional` **toolsRequiringApproval**: `string`[]
+> `optional` **toolsRequiringApproval**: `ToolsRequiringApproval`
 
 List of tool names that require confirmation from the end user before
-being executed. The user can choose to approve once or approve for the
+being executed. A function can also be provided to dynamically determine if a tool requires approval.
+The user can choose to approve once or approve for the
 entire session via the UI.
 
-#### Example
+#### Examples
 
 ```ts
 tools: {
   toolsRequiringApproval: ['delete_file', 'send_email'],
+}
+```
+
+```ts
+tools: {
+  toolsRequiringApproval: (toolName) => {
+    return toolName.startsWith('protected_')
+  },
 }
 ```
