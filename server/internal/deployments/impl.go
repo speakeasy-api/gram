@@ -437,6 +437,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 			name:                    add.Name,
 			slug:                    string(add.Slug),
 			registryServerSpecifier: add.RegistryServerSpecifier,
+			userAgent:               conv.PtrValOr(add.UserAgent, ""),
 		})
 	}
 
@@ -620,6 +621,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 			name:                    add.Name,
 			slug:                    string(add.Slug),
 			registryServerSpecifier: add.RegistryServerSpecifier,
+			userAgent:               conv.PtrValOr(add.UserAgent, ""),
 		})
 	}
 

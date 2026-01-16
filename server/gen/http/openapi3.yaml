@@ -10805,6 +10805,11 @@ components:
                     description: A short url-friendly label that uniquely identifies a resource.
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
+                user_agent:
+                    type: string
+                    description: Optional custom User-Agent header to send with requests to this MCP server.
+                    example: MyApp/1.0
+                    maxLength: 500
             required:
                 - registry_id
                 - name
@@ -11976,6 +11981,9 @@ components:
                     description: A short url-friendly label that uniquely identifies a resource.
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
+                user_agent:
+                    type: string
+                    description: Optional custom User-Agent header to send with requests to this MCP server.
             required:
                 - id
                 - registry_id
@@ -12355,6 +12363,9 @@ components:
                     type: string
                     description: When the tool definition was last updated.
                     format: date-time
+                user_agent:
+                    type: string
+                    description: Custom User-Agent header to send with requests to this MCP server
             description: A proxy tool that references an external MCP server
             required:
                 - id

@@ -13,6 +13,7 @@ let value: CreateDeploymentRequestBody = {
       registryId: "dc2de89f-c791-4883-835b-59b1b715de3a",
       registryServerSpecifier: "slack",
       slug: "<value>",
+      userAgent: "MyApp/1.0",
     },
   ],
   githubPr: "1234",

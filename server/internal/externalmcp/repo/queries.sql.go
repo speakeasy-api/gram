@@ -14,9 +14,9 @@ import (
 )
 
 const createExternalMCPAttachment = `-- name: CreateExternalMCPAttachment :one
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at
+INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier, user_agent)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, user_agent, created_at, updated_at
 `
 
 type CreateExternalMCPAttachmentParams struct {
@@ -25,6 +25,7 @@ type CreateExternalMCPAttachmentParams struct {
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
+	UserAgent               pgtype.Text
 }
 
 type CreateExternalMCPAttachmentRow struct {
@@ -34,6 +35,7 @@ type CreateExternalMCPAttachmentRow struct {
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
+	UserAgent               pgtype.Text
 	CreatedAt               pgtype.Timestamptz
 	UpdatedAt               pgtype.Timestamptz
 }
@@ -45,6 +47,7 @@ func (q *Queries) CreateExternalMCPAttachment(ctx context.Context, arg CreateExt
 		arg.Name,
 		arg.Slug,
 		arg.RegistryServerSpecifier,
+		arg.UserAgent,
 	)
 	var i CreateExternalMCPAttachmentRow
 	err := row.Scan(
@@ -54,6 +57,7 @@ func (q *Queries) CreateExternalMCPAttachment(ctx context.Context, arg CreateExt
 		&i.Name,
 		&i.Slug,
 		&i.RegistryServerSpecifier,
+		&i.UserAgent,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -168,7 +172,8 @@ SELECT
   e.registry_id,
   e.name,
   e.slug,
-  e.registry_server_specifier
+  e.registry_server_specifier,
+  e.user_agent
 FROM external_mcp_tool_definitions t
 JOIN external_mcp_attachments e ON t.external_mcp_attachment_id = e.id
 WHERE t.tool_urn = $1
@@ -195,6 +200,7 @@ type GetExternalMCPToolDefinitionByURNRow struct {
 	Name                       string
 	Slug                       string
 	RegistryServerSpecifier    string
+	UserAgent                  pgtype.Text
 }
 
 func (q *Queries) GetExternalMCPToolDefinitionByURN(ctx context.Context, toolUrn string) (GetExternalMCPToolDefinitionByURNRow, error) {
@@ -219,6 +225,7 @@ func (q *Queries) GetExternalMCPToolDefinitionByURN(ctx context.Context, toolUrn
 		&i.Name,
 		&i.Slug,
 		&i.RegistryServerSpecifier,
+		&i.UserAgent,
 	)
 	return i, err
 }
@@ -241,7 +248,8 @@ SELECT
   e.registry_id,
   e.name,
   e.slug,
-  e.registry_server_specifier
+  e.registry_server_specifier,
+  e.user_agent
 FROM external_mcp_tool_definitions t
 JOIN external_mcp_attachments e ON t.external_mcp_attachment_id = e.id
 WHERE e.deployment_id = $1
@@ -268,6 +276,7 @@ type GetExternalMCPToolsRequiringOAuthRow struct {
 	Name                       string
 	Slug                       string
 	RegistryServerSpecifier    string
+	UserAgent                  pgtype.Text
 }
 
 func (q *Queries) GetExternalMCPToolsRequiringOAuth(ctx context.Context, deploymentID uuid.UUID) ([]GetExternalMCPToolsRequiringOAuthRow, error) {
@@ -297,6 +306,7 @@ func (q *Queries) GetExternalMCPToolsRequiringOAuth(ctx context.Context, deploym
 			&i.Name,
 			&i.Slug,
 			&i.RegistryServerSpecifier,
+			&i.UserAgent,
 		); err != nil {
 			return nil, err
 		}
@@ -336,7 +346,7 @@ func (q *Queries) GetMCPRegistryByID(ctx context.Context, id uuid.UUID) (GetMCPR
 }
 
 const listExternalMCPAttachments = `-- name: ListExternalMCPAttachments :many
-SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at
+SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, user_agent, created_at, updated_at
 FROM external_mcp_attachments
 WHERE deployment_id = $1 AND deleted IS FALSE
 ORDER BY created_at ASC
@@ -349,6 +359,7 @@ type ListExternalMCPAttachmentsRow struct {
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
+	UserAgent               pgtype.Text
 	CreatedAt               pgtype.Timestamptz
 	UpdatedAt               pgtype.Timestamptz
 }
@@ -369,6 +380,7 @@ func (q *Queries) ListExternalMCPAttachments(ctx context.Context, deploymentID u
 			&i.Name,
 			&i.Slug,
 			&i.RegistryServerSpecifier,
+			&i.UserAgent,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -401,7 +413,8 @@ SELECT
   e.registry_id,
   e.name,
   e.slug,
-  e.registry_server_specifier
+  e.registry_server_specifier,
+  e.user_agent
 FROM external_mcp_tool_definitions t
 JOIN external_mcp_attachments e ON t.external_mcp_attachment_id = e.id
 WHERE e.deployment_id = $1
@@ -429,6 +442,7 @@ type ListExternalMCPToolDefinitionsRow struct {
 	Name                       string
 	Slug                       string
 	RegistryServerSpecifier    string
+	UserAgent                  pgtype.Text
 }
 
 func (q *Queries) ListExternalMCPToolDefinitions(ctx context.Context, deploymentID uuid.UUID) ([]ListExternalMCPToolDefinitionsRow, error) {
@@ -459,6 +473,7 @@ func (q *Queries) ListExternalMCPToolDefinitions(ctx context.Context, deployment
 			&i.Name,
 			&i.Slug,
 			&i.RegistryServerSpecifier,
+			&i.UserAgent,
 		); err != nil {
 			return nil, err
 		}

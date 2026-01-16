@@ -74,6 +74,8 @@ type AddExternalMCPForm struct {
 	// The canonical server name used to look up the server in the registry (e.g.,
 	// 'slack', 'ai.exa/exa').
 	RegistryServerSpecifier string
+	// Optional custom User-Agent header to send with requests to this MCP server.
+	UserAgent *string
 }
 
 type AddFunctionsForm struct {

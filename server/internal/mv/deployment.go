@@ -120,6 +120,7 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 				Name:                    r.ExternalMcpName.String,
 				Slug:                    types.Slug(r.ExternalMcpSlug.String),
 				RegistryServerSpecifier: r.ExternalMcpRegistryServerSpecifier.String,
+				UserAgent:               conv.FromPGText[string](r.ExternalMcpUserAgent),
 			})
 			seenExternalMCPs[externalMCPID] = true
 		}

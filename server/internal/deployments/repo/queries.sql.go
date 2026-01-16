@@ -67,18 +67,19 @@ func (q *Queries) CloneDeployment(ctx context.Context, arg CloneDeploymentParams
 }
 
 const cloneDeploymentExternalMCPs = `-- name: CloneDeploymentExternalMCPs :many
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
+INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier, user_agent)
 SELECT
   $1
   , current.registry_id
   , current.name
   , current.slug
   , current.registry_server_specifier
+  , current.user_agent
 FROM external_mcp_attachments as current
 WHERE current.deployment_id = $2
   AND current.deleted IS FALSE
   AND current.slug <> ALL ($3::text[])
-RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier
+RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, user_agent
 `
 
 type CloneDeploymentExternalMCPsParams struct {
@@ -94,6 +95,7 @@ type CloneDeploymentExternalMCPsRow struct {
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
+	UserAgent               pgtype.Text
 }
 
 func (q *Queries) CloneDeploymentExternalMCPs(ctx context.Context, arg CloneDeploymentExternalMCPsParams) ([]CloneDeploymentExternalMCPsRow, error) {
@@ -112,6 +114,7 @@ func (q *Queries) CloneDeploymentExternalMCPs(ctx context.Context, arg CloneDepl
 			&i.Name,
 			&i.Slug,
 			&i.RegistryServerSpecifier,
+			&i.UserAgent,
 		); err != nil {
 			return nil, err
 		}
@@ -1267,7 +1270,8 @@ SELECT
   external_mcp_attachments.registry_id as external_mcp_registry_id,
   external_mcp_attachments.name as external_mcp_name,
   external_mcp_attachments.slug as external_mcp_slug,
-  external_mcp_attachments.registry_server_specifier as external_mcp_registry_server_specifier
+  external_mcp_attachments.registry_server_specifier as external_mcp_registry_server_specifier,
+  external_mcp_attachments.user_agent as external_mcp_user_agent
 FROM deployments
 LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
 LEFT JOIN deployments_functions ON deployments.id = deployments_functions.deployment_id
@@ -1312,6 +1316,7 @@ type GetDeploymentWithAssetsRow struct {
 	ExternalMcpName                    pgtype.Text
 	ExternalMcpSlug                    pgtype.Text
 	ExternalMcpRegistryServerSpecifier pgtype.Text
+	ExternalMcpUserAgent               pgtype.Text
 }
 
 func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeploymentWithAssetsParams) ([]GetDeploymentWithAssetsRow, error) {
@@ -1362,6 +1367,7 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 			&i.ExternalMcpName,
 			&i.ExternalMcpSlug,
 			&i.ExternalMcpRegistryServerSpecifier,
+			&i.ExternalMcpUserAgent,
 		); err != nil {
 			return nil, err
 		}
@@ -1441,7 +1447,7 @@ func (q *Queries) GetLatestDeploymentID(ctx context.Context, projectID uuid.UUID
 }
 
 const listDeploymentExternalMCPs = `-- name: ListDeploymentExternalMCPs :many
-SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at
+SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, user_agent, created_at, updated_at
 FROM external_mcp_attachments
 WHERE deployment_id = $1 AND deleted IS FALSE
 ORDER BY created_at ASC
@@ -1454,6 +1460,7 @@ type ListDeploymentExternalMCPsRow struct {
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
+	UserAgent               pgtype.Text
 	CreatedAt               pgtype.Timestamptz
 	UpdatedAt               pgtype.Timestamptz
 }
@@ -1474,6 +1481,7 @@ func (q *Queries) ListDeploymentExternalMCPs(ctx context.Context, deploymentID u
 			&i.Name,
 			&i.Slug,
 			&i.RegistryServerSpecifier,
+			&i.UserAgent,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -1666,15 +1674,16 @@ func (q *Queries) TransitionDeployment(ctx context.Context, arg TransitionDeploy
 }
 
 const upsertDeploymentExternalMCP = `-- name: UpsertDeploymentExternalMCP :one
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier, user_agent)
+VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (deployment_id, slug) WHERE deleted IS FALSE
 DO UPDATE SET
   registry_id = EXCLUDED.registry_id,
   name = EXCLUDED.name,
   registry_server_specifier = EXCLUDED.registry_server_specifier,
+  user_agent = EXCLUDED.user_agent,
   updated_at = clock_timestamp()
-RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at
+RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, user_agent, created_at, updated_at
 `
 
 type UpsertDeploymentExternalMCPParams struct {
@@ -1683,6 +1692,7 @@ type UpsertDeploymentExternalMCPParams struct {
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
+	UserAgent               pgtype.Text
 }
 
 type UpsertDeploymentExternalMCPRow struct {
@@ -1692,6 +1702,7 @@ type UpsertDeploymentExternalMCPRow struct {
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
+	UserAgent               pgtype.Text
 	CreatedAt               pgtype.Timestamptz
 	UpdatedAt               pgtype.Timestamptz
 }
@@ -1703,6 +1714,7 @@ func (q *Queries) UpsertDeploymentExternalMCP(ctx context.Context, arg UpsertDep
 		arg.Name,
 		arg.Slug,
 		arg.RegistryServerSpecifier,
+		arg.UserAgent,
 	)
 	var i UpsertDeploymentExternalMCPRow
 	err := row.Scan(
@@ -1712,6 +1724,7 @@ func (q *Queries) UpsertDeploymentExternalMCP(ctx context.Context, arg UpsertDep
 		&i.Name,
 		&i.Slug,
 		&i.RegistryServerSpecifier,
+		&i.UserAgent,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

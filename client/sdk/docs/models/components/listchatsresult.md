@@ -13,7 +13,6 @@ let value: ListChatsResult = {
       numMessages: 841848,
       title: "<value>",
       updatedAt: new Date("2025-09-09T09:20:23.777Z"),
-      userId: "<id>",
     },
   ],
 };

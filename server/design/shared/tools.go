@@ -116,6 +116,7 @@ var ExternalMCPToolDefinition = Type("ExternalMCPToolDefinition", func() {
 		Description("The transport type used to connect to the MCP server")
 		Enum(string(extmcptypes.TransportTypeStreamableHTTP), string(extmcptypes.TransportTypeSSE))
 	})
+	Attribute("user_agent", String, "Custom User-Agent header to send with requests to this MCP server")
 	Attribute("requires_oauth", Boolean, "Whether the external MCP server requires OAuth authentication")
 
 	// OAuth metadata

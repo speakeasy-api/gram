@@ -569,13 +569,15 @@ func handleExternalMCPToolCall(
 		}
 	}
 
-	// Build client options with OAuth token if the proxy requires it
-	var opts *externalmcp.ClientOptions
+	// Build client options with OAuth token and/or custom User-Agent if needed
+	opts := &externalmcp.ClientOptions{
+		TransportType: externalmcptypes.TransportType(proxy.TransportType),
+	}
 	if proxy.RequiresOauth && oauthToken != "" {
-		opts = &externalmcp.ClientOptions{
-			Authorization: "Bearer " + oauthToken,
-			TransportType: externalmcptypes.TransportType(proxy.TransportType),
-		}
+		opts.Authorization = "Bearer " + oauthToken
+	}
+	if proxy.UserAgent != nil {
+		opts.UserAgent = *proxy.UserAgent
 	}
 
 	// Create client and call tool

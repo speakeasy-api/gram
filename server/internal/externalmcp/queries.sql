@@ -10,12 +10,12 @@ FROM mcp_registries
 WHERE id = @id AND deleted IS FALSE;
 
 -- name: CreateExternalMCPAttachment :one
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
-VALUES (@deployment_id, @registry_id, @name, @slug, @registry_server_specifier)
-RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at;
+INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier, user_agent)
+VALUES (@deployment_id, @registry_id, @name, @slug, @registry_server_specifier, @user_agent)
+RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, user_agent, created_at, updated_at;
 
 -- name: ListExternalMCPAttachments :many
-SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at
+SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, user_agent, created_at, updated_at
 FROM external_mcp_attachments
 WHERE deployment_id = @deployment_id AND deleted IS FALSE
 ORDER BY created_at ASC;
@@ -68,7 +68,8 @@ SELECT
   e.registry_id,
   e.name,
   e.slug,
-  e.registry_server_specifier
+  e.registry_server_specifier,
+  e.user_agent
 FROM external_mcp_tool_definitions t
 JOIN external_mcp_attachments e ON t.external_mcp_attachment_id = e.id
 WHERE e.deployment_id = @deployment_id
@@ -95,7 +96,8 @@ SELECT
   e.registry_id,
   e.name,
   e.slug,
-  e.registry_server_specifier
+  e.registry_server_specifier,
+  e.user_agent
 FROM external_mcp_tool_definitions t
 JOIN external_mcp_attachments e ON t.external_mcp_attachment_id = e.id
 WHERE t.tool_urn = @tool_urn
@@ -120,7 +122,8 @@ SELECT
   e.registry_id,
   e.name,
   e.slug,
-  e.registry_server_specifier
+  e.registry_server_specifier,
+  e.user_agent
 FROM external_mcp_tool_definitions t
 JOIN external_mcp_attachments e ON t.external_mcp_attachment_id = e.id
 WHERE e.deployment_id = @deployment_id

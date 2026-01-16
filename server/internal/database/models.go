@@ -193,6 +193,7 @@ type ExternalMcpAttachment struct {
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
+	UserAgent               pgtype.Text
 	CreatedAt               pgtype.Timestamptz
 	UpdatedAt               pgtype.Timestamptz
 	DeletedAt               pgtype.Timestamptz

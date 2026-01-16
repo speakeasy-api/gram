@@ -155,6 +155,9 @@ var DeploymentExternalMCP = Type("DeploymentExternalMCP", func() {
 	Attribute("registry_server_specifier", String, func() {
 		Description("The canonical server name used to look up the server in the registry.")
 	})
+	Attribute("user_agent", String, func() {
+		Description("Optional custom User-Agent header to send with requests to this MCP server.")
+	})
 
 	Meta("struct:pkg:path", "types")
 })

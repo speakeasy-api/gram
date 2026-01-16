@@ -1088,6 +1088,7 @@ CREATE TABLE IF NOT EXISTS external_mcp_attachments (
   name TEXT NOT NULL CHECK (name <> ''),
   slug TEXT NOT NULL CHECK (slug <> ''),
   registry_server_specifier TEXT NOT NULL CHECK (registry_server_specifier <> ''),
+  user_agent TEXT CHECK (user_agent IS NULL OR CHAR_LENGTH(user_agent) <= 500),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

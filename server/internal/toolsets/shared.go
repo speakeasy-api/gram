@@ -302,6 +302,7 @@ func (t *Toolsets) extractExternalMCPToolCallPlan(ctx context.Context, tool exte
 		ToolName:      toolUrn.Name, // "proxy" for proxy tools, actual tool name for direct calls
 		Slug:          tool.Slug,
 		RequiresOAuth: tool.RequiresOauth,
+		UserAgent:     tool.UserAgent.String, // Empty string if not set (pgtype.Text.String is empty when null)
 	}
 
 	return gateway.NewExternalMCPToolCallPlan(descriptor, plan), nil

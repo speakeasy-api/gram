@@ -361,6 +361,11 @@ var AddExternalMCPForm = Type("AddExternalMCPForm", func() {
 		Description("The canonical server name used to look up the server in the registry (e.g., 'slack', 'ai.exa/exa').")
 		Example("slack")
 	})
+	Attribute("user_agent", String, func() {
+		Description("Optional custom User-Agent header to send with requests to this MCP server.")
+		Example("MyApp/1.0")
+		MaxLength(500)
+	})
 })
 
 var CreateDeploymentResult = Type("CreateDeploymentResult", func() {
