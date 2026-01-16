@@ -3,6 +3,7 @@ on:
   pull_request:
     branches:
       - main
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches:
       - main
@@ -141,6 +142,69 @@ jobs:
           docker pull ${{ steps.build.outputs.image-tag }}
           echo "Running image..."
           docker run --rm ${{ steps.build.outputs.image-tag }} version
+
+  atlas-push:
+    name: Push migrations to Atlas Registry
+    runs-on: ubicloud-standard-4
+    needs: [changes, server-build-lint]
+    if: needs.changes.outputs.server == 'true'
+    permissions:
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: atlas-push-${{ github.ref }}
+      cancel-in-progress: true
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: dev
+          POSTGRES_PASSWORD: pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-start-period 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Setup Atlas
+        uses: ariga/setup-atlas@v0
+        with:
+          cloud-token: ${{ secrets.ATLAS_TOKEN }}
+
+      - name: Generate tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            SHORT_SHA=$(echo "${{ github.event.pull_request.head.sha }}" | cut -c1-8)
+            echo "tag=pr-${{ github.event.pull_request.number }}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          else
+            SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+            echo "tag=sha-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Push PostgreSQL migrations
+        uses: ariga/atlas-action/migrate/push@v1
+        with:
+          dir: file://server/migrations
+          dir-name: gram
+          dev-url: postgres://postgres:pass@localhost:5432/dev?search_path=public&sslmode=disable
+          tag: ${{ steps.tag.outputs.tag }}
+
+      - name: Push ClickHouse migrations
+        uses: ariga/atlas-action/migrate/push@v1
+        with:
+          dir: file://server/clickhouse/migrations
+          dir-name: gram-clickhouse
+          dev-url: docker://clickhouse/clickhouse-server/25.8.3/dev
+          tag: ${{ steps.tag.outputs.tag }}
 
   server-build-lint:
     runs-on: ubicloud-standard-4
