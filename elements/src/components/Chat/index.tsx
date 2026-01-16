@@ -16,11 +16,7 @@ interface ChatProps {
 function RootWrapper({ children }: { children: React.ReactNode }) {
   const containerRef = useRef<HTMLDivElement>(null)
   return (
-    <div
-      ref={containerRef}
-      className={ROOT_SELECTOR}
-      style={{ height: 'inherit', width: 'inherit' }}
-    >
+    <div ref={containerRef} className={ROOT_SELECTOR} style={{ width: '100%' }}>
       <PortalContainerProvider containerRef={containerRef}>
         {children}
       </PortalContainerProvider>
