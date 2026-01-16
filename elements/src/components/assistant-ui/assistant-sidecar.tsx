@@ -37,10 +37,7 @@ export const AssistantSidecar: FC<AssistantSidecarProps> = ({ className }) => {
   return (
     <LazyMotion features={domMax}>
       <m.div
-        initial={{
-          width: dimensions?.default?.width ?? '400px',
-          height: dimensions?.default?.height ?? '100vh',
-        }}
+        initial={false}
         animate={{
           width: isExpanded
             ? (dimensions?.expanded?.width ?? '800px')

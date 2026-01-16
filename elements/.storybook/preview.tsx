@@ -21,6 +21,7 @@ if (IS_CHROMATIC) {
 
 const preview: Preview = {
   parameters: {
+    layout: 'fullscreen',
     chromatic: {
       delay: 500,
       modes: {
