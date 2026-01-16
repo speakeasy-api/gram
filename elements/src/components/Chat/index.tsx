@@ -13,7 +13,10 @@ interface ChatProps {
 
 function wrapWithRootSelector<T extends React.ReactNode>(children: T) {
   return (
-    <div className={ROOT_SELECTOR} style={{ height: 'inherit' }}>
+    <div
+      className={ROOT_SELECTOR}
+      style={{ height: 'inherit', width: 'inherit' }}
+    >
       {children}
     </div>
   )

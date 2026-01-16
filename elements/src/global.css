@@ -117,6 +117,7 @@
 @layer base {
   .gram-elements {
     @tailwind utilities;
+
     * {
       @apply border-border outline-ring/50;
     }

@@ -3,6 +3,7 @@ import React, { useMemo } from 'react'
 import { ElementsProvider } from '../src/contexts/ElementsProvider'
 import { recommended } from '../src/plugins'
 import { ElementsConfig } from '../src/types'
+import { ROOT_SELECTOR } from '../src/constants/tailwind'
 
 interface ElementsDecoratorProps {
   children: React.ReactNode
@@ -74,8 +75,10 @@ export const ElementsDecorator: React.FC<ElementsDecoratorProps> = ({
   }
 
   return (
-    <ElementsProvider config={finalConfig}>
-      <div style={{ height: '100vh', width: '100vw' }}>{children}</div>
-    </ElementsProvider>
+    <div className={ROOT_SELECTOR}>
+      <ElementsProvider config={finalConfig}>
+        <div className="h-screen bg-zinc-50">{children}</div>
+      </ElementsProvider>
+    </div>
   )
 }

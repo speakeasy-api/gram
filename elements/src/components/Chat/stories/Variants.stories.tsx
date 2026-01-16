@@ -1,6 +1,7 @@
 import { Chat } from '..'
 import type { Meta, StoryFn, StoryObj } from '@storybook/react-vite'
 import { ThreadList } from '@/components/assistant-ui/thread-list'
+import { ROOT_SELECTOR } from '@/constants/tailwind'
 
 const meta: Meta<typeof Chat> = {
   title: 'Chat/Variants',
@@ -46,8 +47,10 @@ export const StandaloneWithHistory: StoryObj<typeof Chat> = {
 }
 StandaloneWithHistory.decorators = [
   (Story) => (
-    <div className="m-auto flex h-screen w-full items-center justify-center border bg-linear-to-r from-violet-600 to-indigo-800">
-      <Story />
+    <div className={ROOT_SELECTOR}>
+      <div className="m-auto flex h-screen w-full items-center justify-center border bg-linear-to-r from-violet-600 to-indigo-800">
+        <Story />
+      </div>
     </div>
   ),
 ]
