@@ -1,12 +1,12 @@
-import { ApiKeyAuthConfig, ApiConfig, SessionAuthConfig } from '@/types'
+import { ApiConfig, SessionAuthConfig, StaticSessionAuthConfig } from '@/types'
 
 /**
  * Checks if the auth config is an API key auth config
  */
-export function isApiKeyAuth(
+export function isStaticSessionAuth(
   auth: ApiConfig | undefined
-): auth is ApiKeyAuthConfig {
-  return !!auth && 'UNSAFE_apiKey' in auth
+): auth is StaticSessionAuthConfig {
+  return !!auth && 'sessionToken' in auth
 }
 
 export function hasExplicitSessionAuth(
