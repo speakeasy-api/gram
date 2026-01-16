@@ -88,8 +88,6 @@ jobs:
   docker-build-server:
     runs-on: ubicloud-standard-4
     needs: [changes, server-build-lint]
-    outputs:
-      image-tag: ${{ steps.set-tag.outputs.tag }}
     env:
       GOMAXPROCS: 4
     steps:
@@ -144,14 +142,6 @@ jobs:
           docker pull ${{ steps.build.outputs.image-tag }}
           echo "Running image..."
           docker run --rm ${{ steps.build.outputs.image-tag }} version
-
-      - name: Extract tag for downstream jobs
-        id: set-tag
-        if: ${{ needs.changes.outputs.server == 'true' }}
-        run: |
-          # Extract just the tag portion (e.g., "sha-abc1234") from full image path
-          TAG=$(echo "${{ steps.build.outputs.image-tag }}" | sed 's/.*://')
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
 
   atlas-push:
     name: Push migrations to Atlas Registry
