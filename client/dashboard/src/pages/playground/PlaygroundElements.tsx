@@ -81,7 +81,13 @@ export function PlaygroundElements({
       toast.error("Failed to create chat session. Please try again.");
       throw error;
     }
-  }, [createSessionMutation, session.session, session.user.id, project.id, project.slug]);
+  }, [
+    createSessionMutation,
+    session.session,
+    session.user.id,
+    project.id,
+    project.slug,
+  ]);
 
   // Don't render until we have a valid MCP URL
   if (!mcpUrl || !toolsetSlug) {
