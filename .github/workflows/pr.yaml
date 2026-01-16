@@ -372,17 +372,19 @@ jobs:
     needs: changes
     env:
       GRAM_GIT_SHA: "${{ github.sha }}"
+      # Build dashboard docker image when server OR client changes exist (needed for preview environments)
+      SHOULD_BUILD_DOCKER: ${{ needs.changes.outputs.client == 'true' || needs.changes.outputs.server == 'true' }}
     steps:
-      - name: Skip if no client changes exist
-        if: ${{ needs.changes.outputs.client != 'true' }}
-        run: echo "No client changes detected — skipping client-build job."
+      - name: Skip if no relevant changes exist
+        if: ${{ env.SHOULD_BUILD_DOCKER != 'true' }}
+        run: echo "No server or client changes detected — skipping dashboard build job."
 
       - name: Checkout
-        if: ${{ needs.changes.outputs.client == 'true' }}
+        if: ${{ env.SHOULD_BUILD_DOCKER == 'true' }}
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
 
       - name: Setup Mise
-        if: ${{ needs.changes.outputs.client == 'true' }}
+        if: ${{ env.SHOULD_BUILD_DOCKER == 'true' }}
         uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3.5.1
         with:
           install: true
@@ -390,11 +392,11 @@ jobs:
           env: false
 
       - name: Prepare GitHub Actions environment
-        if: ${{ needs.changes.outputs.client == 'true' }}
+        if: ${{ env.SHOULD_BUILD_DOCKER == 'true' }}
         run: mise run github
 
       - name: Cache PNPM
-        if: ${{ needs.changes.outputs.client == 'true' }}
+        if: ${{ env.SHOULD_BUILD_DOCKER == 'true' }}
         uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
@@ -405,23 +407,23 @@ jobs:
             ${{ env.PNPM_STORE_PATH }}
 
       - name: Install dependencies
-        if: ${{ needs.changes.outputs.client == 'true' }}
+        if: ${{ env.SHOULD_BUILD_DOCKER == 'true' }}
         run: pnpm install --frozen-lockfile
 
       - name: Build
-        if: ${{ needs.changes.outputs.client == 'true' }}
+        if: ${{ env.SHOULD_BUILD_DOCKER == 'true' }}
         env:
           NODE_ENV: production
         run: mise exec --env viteprod -- pnpm build
 
       - name: Upload source maps to DataDog
-        if: ${{ needs.changes.outputs.client == 'true' }}
+        if: ${{ env.SHOULD_BUILD_DOCKER == 'true' }}
         env:
           DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
         run: mise run datadog:sourcemaps --git-sha "${{ github.sha }}"
 
       - id: "auth"
-        if: needs.changes.outputs.client == 'true'
+        if: env.SHOULD_BUILD_DOCKER == 'true'
         name: "Authenticate to Google Cloud"
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
@@ -429,7 +431,7 @@ jobs:
           workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
           service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
       - name: Login to GCR
-        if: needs.changes.outputs.client == 'true'
+        if: env.SHOULD_BUILD_DOCKER == 'true'
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         with:
           registry: gcr.io/linen-analyst-344721
@@ -437,7 +439,7 @@ jobs:
           password: ${{ steps.auth.outputs.access_token }}
       - name: Build and Push Registry image to GCR
         id: build
-        if: needs.changes.outputs.client == 'true'
+        if: env.SHOULD_BUILD_DOCKER == 'true'
         uses: ./.github/workflows/composite/build-push
         with:
           registry: ${{ env.REGISTRY }}
@@ -449,7 +451,7 @@ jobs:
           git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
 
       - name: Prune PNPM store
-        if: ${{ needs.changes.outputs.client == 'true' && success() }}
+        if: ${{ env.SHOULD_BUILD_DOCKER == 'true' && success() }}
         run: pnpm store prune
 
   client-build-lint:

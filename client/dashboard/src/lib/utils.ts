@@ -27,3 +27,16 @@ export function assert(condition: unknown, message: string): asserts condition {
     throw new Error(message);
   }
 }
+
+export function getCustomDomainCNAME(): string {
+  try {
+    const url = new URL(getServerURL());
+    const parts = url.hostname.split(".");
+    if (parts.length > 2) {
+      parts[0] = parts[0] === "app" ? "cname" : `cname.${parts[0]}`;
+    }
+    return `${parts.join(".")}.`;
+  } catch {
+    return "cname.getgram.ai.";
+  }
+}
