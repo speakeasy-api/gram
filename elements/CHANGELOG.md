@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.21.1
+
+### Patch Changes
+
+- ed50d35: Automatically sync peer dependencies into the rollupOptions.externals list
+
 ## 1.21.0
 
 ### Minor Changes
