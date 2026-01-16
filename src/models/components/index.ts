@@ -19,6 +19,8 @@ export * from "./agenttoolset.js";
 export * from "./allowedorigin.js";
 export * from "./asset.js";
 export * from "./canonicaltoolattributes.js";
+export * from "./captureeventpayload.js";
+export * from "./captureeventresult.js";
 export * from "./chat.js";
 export * from "./chatmessage.js";
 export * from "./chatoverview.js";

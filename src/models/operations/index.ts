@@ -7,6 +7,7 @@ export * from "./addexternaloauthserver.js";
 export * from "./addoauthproxyserver.js";
 export * from "./authcallback.js";
 export * from "./authlogin.js";
+export * from "./captureevent.js";
 export * from "./checkmcpslugavailability.js";
 export * from "./clonetoolset.js";
 export * from "./createagentresponse.js";
