@@ -838,7 +838,7 @@ function OAuthDetailsModal({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <Dialog.Content className="max-w-2xl max-h-[80vh] flex flex-col">
-        <Dialog.Header className="flex-shrink-0">
+        <Dialog.Header className="shrink-0">
           <Dialog.Title>
             {toolset.externalOauthServer
               ? "External OAuth Configuration"
