@@ -139,6 +139,7 @@ const ElementsProviderWithApproval = ({
     auth,
     mcp: config.mcp,
     environment: config.environment ?? {},
+    gramEnvironment: config.gramEnvironment,
   })
 
   // Store approval helpers in ref so they can be used in async contexts
@@ -207,10 +208,13 @@ const ElementsProviderWithApproval = ({
           getEnabledTools(context?.tools ?? {})
         )
 
-        // Include Gram-Chat-ID header for chat persistence
+        // Include Gram-Chat-ID header for chat persistence and Gram-Environment for environment selection
         const headersWithChatId = {
           ...auth.headers,
           'Gram-Chat-ID': chatIdRef.current,
+          ...(config.gramEnvironment && {
+            'Gram-Environment': config.gramEnvironment,
+          }),
         }
 
         // Create OpenRouter model (only needed when not using custom model)

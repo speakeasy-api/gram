@@ -112,6 +112,13 @@ export interface ElementsConfig {
   environment?: Record<string, unknown>
 
   /**
+   * The environment slug to use for resolving secrets.
+   * When specified, this is sent as the Gram-Environment header to select
+   * which environment's secrets to use for tool execution.
+   */
+  gramEnvironment?: string
+
+  /**
    * The layout variant for the chat interface.
    *
    * - `widget`: A popup modal anchored to the bottom-right corner (default)
