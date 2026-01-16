@@ -1,6 +1,8 @@
-@import "tailwindcss";
-@import "tw-animate-css";
-@import "tw-shimmer";
+@import 'tw-animate-css';
+@import 'tw-shimmer';
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/preflight.css' layer(base);
 
 @custom-variant dark (&:is(.dark *));
 
@@ -113,11 +115,11 @@
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
+  .gram-elements {
+    @tailwind utilities;
+    * {
+      @apply border-border outline-ring/50;
+    }
   }
 }
 

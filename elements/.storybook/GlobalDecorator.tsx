@@ -75,7 +75,7 @@ export const ElementsDecorator: React.FC<ElementsDecoratorProps> = ({
 
   return (
     <ElementsProvider config={finalConfig}>
-      <div className="h-screen bg-zinc-50">{children}</div>
+      <div style={{ height: '100vh', width: '100vw' }}>{children}</div>
     </ElementsProvider>
   )
 }
