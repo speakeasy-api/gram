@@ -1725,8 +1725,6 @@ type DeploymentExternalMCPResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// The canonical server name used to look up the server in the registry.
 	RegistryServerSpecifier string `form:"registry_server_specifier" json:"registry_server_specifier" xml:"registry_server_specifier"`
-	// Optional custom User-Agent header to send with requests to this MCP server.
-	UserAgent *string `form:"user_agent,omitempty" json:"user_agent,omitempty" xml:"user_agent,omitempty"`
 }
 
 // DeploymentResponseBody is used to define fields on response body types.
@@ -1858,8 +1856,6 @@ type AddExternalMCPFormRequestBody struct {
 	// The canonical server name used to look up the server in the registry (e.g.,
 	// 'slack', 'ai.exa/exa').
 	RegistryServerSpecifier *string `form:"registry_server_specifier,omitempty" json:"registry_server_specifier,omitempty" xml:"registry_server_specifier,omitempty"`
-	// Optional custom User-Agent header to send with requests to this MCP server.
-	UserAgent *string `form:"user_agent,omitempty" json:"user_agent,omitempty" xml:"user_agent,omitempty"`
 }
 
 // AddPackageFormRequestBody is used to define fields on request body types.
@@ -3550,11 +3546,6 @@ func ValidateAddExternalMCPFormRequestBody(body *AddExternalMCPFormRequestBody) 
 	if body.Slug != nil {
 		if utf8.RuneCountInString(*body.Slug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
-		}
-	}
-	if body.UserAgent != nil {
-		if utf8.RuneCountInString(*body.UserAgent) > 500 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_agent", *body.UserAgent, utf8.RuneCountInString(*body.UserAgent), 500, false))
 		}
 	}
 	return

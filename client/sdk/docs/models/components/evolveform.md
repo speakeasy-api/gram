@@ -13,7 +13,6 @@ let value: EvolveForm = {
       registryId: "f1d0bf1d-70c9-4a3a-9de8-8ddb27c0c81b",
       registryServerSpecifier: "slack",
       slug: "<value>",
-      userAgent: "MyApp/1.0",
     },
   ],
 };

@@ -141,8 +141,6 @@ type ExternalMCPToolCallPlan struct {
 	RequiresOAuth bool `json:"requires_oauth" yaml:"requires_oauth"`
 	// TransportType is the transport type to use when communicating with the external MCP.
 	TransportType externalmcptypes.TransportType `json:"transport_type" yaml:"transport_type"`
-	// UserAgent is an optional custom User-Agent header to send with requests to this MCP server.
-	UserAgent string `json:"user_agent,omitempty" yaml:"user_agent,omitempty"`
 }
 
 type ResourceFunctionCallPlan struct {

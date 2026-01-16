@@ -18,6 +18,4 @@ type DeploymentExternalMCP struct {
 	Slug Slug
 	// The canonical server name used to look up the server in the registry.
 	RegistryServerSpecifier string
-	// Optional custom User-Agent header to send with requests to this MCP server.
-	UserAgent *string
 }

@@ -762,7 +762,6 @@ func readToolsetTools(
 					Slug:                       def.Slug,
 					RemoteURL:                  def.RemoteUrl,
 					TransportType:              def.TransportType.String(),
-					UserAgent:                  conv.FromPGText[string](def.UserAgent),
 					RequiresOauth:              def.RequiresOauth,
 					OauthVersion:               def.OauthVersion,
 					OauthAuthorizationEndpoint: conv.FromPGText[string](def.OauthAuthorizationEndpoint),

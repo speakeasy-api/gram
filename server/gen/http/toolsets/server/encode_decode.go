@@ -2696,7 +2696,6 @@ func marshalTypesExternalMCPToolDefinitionToExternalMCPToolDefinitionResponseBod
 		Slug:                       v.Slug,
 		RemoteURL:                  v.RemoteURL,
 		TransportType:              v.TransportType,
-		UserAgent:                  v.UserAgent,
 		RequiresOauth:              v.RequiresOauth,
 		OauthVersion:               v.OauthVersion,
 		OauthAuthorizationEndpoint: v.OauthAuthorizationEndpoint,

@@ -43,7 +43,6 @@ type upsertExternalMCP struct {
 	name                    string
 	slug                    string
 	registryServerSpecifier string
-	userAgent               string
 }
 
 type deploymentFields struct {
@@ -282,7 +281,6 @@ func amendDeployment(
 			Name:                    e.name,
 			Slug:                    e.slug,
 			RegistryServerSpecifier: e.registryServerSpecifier,
-			UserAgent:               conv.ToPGTextEmpty(e.userAgent),
 		})
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return oops.E(oops.CodeUnexpected, err, "error adding deployment external mcp").Log(ctx, logger)

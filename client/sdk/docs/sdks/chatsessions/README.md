@@ -1,5 +1,4 @@
 # ChatSessions
-(*chatSessions*)
 
 ## Overview
 

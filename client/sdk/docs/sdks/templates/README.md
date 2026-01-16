@@ -1,5 +1,4 @@
 # Templates
-(*templates*)
 
 ## Overview
 

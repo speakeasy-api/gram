@@ -132,14 +132,12 @@ func unfoldExternalMCPTools(ctx context.Context, logger *slog.Logger, tools []*t
 
 		proxy := tool.ExternalMcpToolDefinition
 
-		opts := &externalmcp.ClientOptions{
-			TransportType: externalmcptypes.TransportType(proxy.TransportType),
-		}
+		var opts *externalmcp.ClientOptions
 		if proxy.RequiresOauth && oauthToken != "" {
-			opts.Authorization = "Bearer " + oauthToken
-		}
-		if proxy.UserAgent != nil {
-			opts.UserAgent = *proxy.UserAgent
+			opts = &externalmcp.ClientOptions{
+				Authorization: "Bearer " + oauthToken,
+				TransportType: externalmcptypes.TransportType(proxy.TransportType),
+			}
 		}
 
 		mcpClient, err := externalmcp.NewClient(ctx, logger, proxy.RemoteURL, externalmcptypes.TransportType(proxy.TransportType), opts)

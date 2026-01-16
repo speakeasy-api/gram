@@ -2013,7 +2013,6 @@ func unmarshalDeploymentExternalMCPResponseBodyToTypesDeploymentExternalMCP(v *D
 		Name:                    *v.Name,
 		Slug:                    types.Slug(*v.Slug),
 		RegistryServerSpecifier: *v.RegistryServerSpecifier,
-		UserAgent:               v.UserAgent,
 	}
 
 	return res
@@ -2142,7 +2141,6 @@ func marshalDeploymentsAddExternalMCPFormToAddExternalMCPFormRequestBody(v *depl
 		Name:                    v.Name,
 		Slug:                    string(v.Slug),
 		RegistryServerSpecifier: v.RegistryServerSpecifier,
-		UserAgent:               v.UserAgent,
 	}
 
 	return res
@@ -2208,7 +2206,6 @@ func marshalAddExternalMCPFormRequestBodyToDeploymentsAddExternalMCPForm(v *AddE
 		Name:                    v.Name,
 		Slug:                    types.Slug(v.Slug),
 		RegistryServerSpecifier: v.RegistryServerSpecifier,
-		UserAgent:               v.UserAgent,
 	}
 
 	return res

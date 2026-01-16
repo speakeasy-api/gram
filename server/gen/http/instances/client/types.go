@@ -459,8 +459,6 @@ type ExternalMCPToolDefinitionResponseBody struct {
 	RemoteURL *string `form:"remote_url,omitempty" json:"remote_url,omitempty" xml:"remote_url,omitempty"`
 	// The transport type used to connect to the MCP server
 	TransportType *string `form:"transport_type,omitempty" json:"transport_type,omitempty" xml:"transport_type,omitempty"`
-	// Custom User-Agent header to send with requests to this MCP server
-	UserAgent *string `form:"user_agent,omitempty" json:"user_agent,omitempty" xml:"user_agent,omitempty"`
 	// Whether the external MCP server requires OAuth authentication
 	RequiresOauth *bool `form:"requires_oauth,omitempty" json:"requires_oauth,omitempty" xml:"requires_oauth,omitempty"`
 	// OAuth version: '2.1' (MCP OAuth), '2.0' (legacy), or 'none'

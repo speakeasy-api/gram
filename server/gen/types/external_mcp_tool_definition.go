@@ -27,8 +27,6 @@ type ExternalMCPToolDefinition struct {
 	RemoteURL string
 	// The transport type used to connect to the MCP server
 	TransportType string
-	// Custom User-Agent header to send with requests to this MCP server
-	UserAgent *string
 	// Whether the external MCP server requires OAuth authentication
 	RequiresOauth bool
 	// OAuth version: '2.1' (MCP OAuth), '2.0' (legacy), or 'none'

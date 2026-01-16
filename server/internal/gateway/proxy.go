@@ -603,17 +603,15 @@ func (tp *ToolProxy) doExternalMCP(
 		return oops.E(oops.CodeBadRequest, err, "failed to read tool arguments").Log(ctx, logger)
 	}
 
-	// Build client options with OAuth token if required and custom User-Agent if specified
-	opts := &externalmcp.ClientOptions{
-		TransportType: plan.TransportType,
-	}
+	// Build client options with OAuth token if required and available
+	var opts *externalmcp.ClientOptions
 	if plan.RequiresOAuth {
 		if token := env.UserConfig.Get(ExternalMCPOAuthTokenKey); token != "" {
-			opts.Authorization = "Bearer " + token
+			opts = &externalmcp.ClientOptions{
+				Authorization: "Bearer " + token,
+				TransportType: plan.TransportType,
+			}
 		}
-	}
-	if plan.UserAgent != "" {
-		opts.UserAgent = plan.UserAgent
 	}
 
 	// Create client and call tool

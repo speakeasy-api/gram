@@ -38,9 +38,6 @@ type ClientOptions struct {
 	// Authorization is the value for the Authorization header (e.g., "Bearer token").
 	// If empty, no Authorization header is sent.
 	Authorization string
-	// UserAgent is the value for the User-Agent header.
-	// If empty, Go's default User-Agent is used.
-	UserAgent     string
 	TransportType types.TransportType
 }
 
@@ -67,7 +64,6 @@ func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, trans
 	authRT := &authRoundTripper{
 		base:            http.DefaultTransport,
 		authorization:   opts.Authorization,
-		userAgent:       opts.UserAgent,
 		authRequired:    false,
 		wwwAuthenticate: "",
 	}
@@ -231,12 +227,11 @@ func (c *Client) CallTool(ctx context.Context, toolName string, arguments json.R
 	}, nil
 }
 
-// authRoundTripper is an http.RoundTripper that adds Authorization and User-Agent headers
+// authRoundTripper is an http.RoundTripper that adds Authorization headers
 // and captures 401 responses.
 type authRoundTripper struct {
 	base          http.RoundTripper
 	authorization string
-	userAgent     string
 
 	// Captured from 401 response
 	authRequired    bool
@@ -244,14 +239,9 @@ type authRoundTripper struct {
 }
 
 func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	if rt.authorization != "" || rt.userAgent != "" {
+	if rt.authorization != "" {
 		req = req.Clone(req.Context())
-		if rt.authorization != "" {
-			req.Header.Set("Authorization", rt.authorization)
-		}
-		if rt.userAgent != "" {
-			req.Header.Set("User-Agent", rt.userAgent)
-		}
+		req.Header.Set("Authorization", rt.authorization)
 	}
 
 	resp, err := rt.base.RoundTrip(req)
