@@ -1,5 +1,15 @@
 # server
 
+## 0.18.2
+
+### Patch Changes
+
+- 0abff4c: Updated the cursor format on /rpc/deployments.logs endpoint to be based on off of the sequential ID of the deplayment logs rather than the UUID of the log entry. This ensures a strong ordering of logs in the presence of multiple logs created at the same timestamp.
+
+  This problem was pronounced when processing Gram Functions and external MCP servers that would create batches of of logs with overlapping timestamps, leading to out-of-order logs in the API response.
+
+- 0fd8d39: Adds a new Gram endpoint to update a chat title
+
 ## 0.18.1
 
 ### Patch Changes
