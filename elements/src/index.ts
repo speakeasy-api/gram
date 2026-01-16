@@ -52,8 +52,3 @@ export type {
 export { MODELS } from './lib/models'
 
 export type { Plugin } from './types/plugins'
-
-export {
-  ThreadListPrimitive,
-  ThreadListItemPrimitive,
-} from '@assistant-ui/react'
