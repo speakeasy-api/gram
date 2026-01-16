@@ -145,7 +145,13 @@ export default function Catalog() {
     >
       <Dialog.Content>
         <Dialog.Header>
-          {addingServer && <ServerHeading server={addingServer} />}
+          <Dialog.Title>
+            {addingServer ? (
+              <ServerHeading server={addingServer} />
+            ) : (
+              "Add MCP Server"
+            )}
+          </Dialog.Title>
           <Dialog.Description className="border-t pt-3">
             {createdToolsetSlug
               ? "MCP server imported successfully!"
