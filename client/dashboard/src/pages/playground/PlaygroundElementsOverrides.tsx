@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Type } from "@/components/ui/type";
 import { useGramElements } from "@gram-ai/elements";
 import { type FC } from "react";
-import { ThreadPrimitive, MessagePrimitive } from "@assistant-ui/react";
+import { ThreadPrimitive } from "@assistant-ui/react";
 
 /**
  * Custom ThreadWelcome component using Gram design system.
