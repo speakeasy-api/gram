@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { execSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 // Colors
 const c = {
@@ -20,15 +21,14 @@ const c = {
   white: '\x1b[37m',
 }
 
-const PEER_DEPS = [
-  'react',
-  'react-dom',
-  'motion',
-  'remark-gfm',
-  'zustand',
-  'vega',
-  'shiki',
-]
+// Read peer dependencies from package.json (excluding @types/* packages)
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const packageJson = JSON.parse(
+  readFileSync(resolve(__dirname, '../package.json'), 'utf-8')
+)
+const PEER_DEPS = Object.keys(packageJson.peerDependencies || {}).filter(
+  (dep) => !dep.startsWith('@types/')
+)
 
 const PACKAGE_NAME = '@gram-ai/elements'
 
@@ -110,7 +110,9 @@ ${c.dim}Package manager:${c.reset} ${c.cyan}${pm}${c.reset}
 `)
 
   // Install everything in one command
-  console.log(`${c.yellow}○${c.reset} Installing ${c.cyan}@gram-ai/elements${c.reset} and peer dependencies...`)
+  console.log(
+    `${c.yellow}○${c.reset} Installing ${c.cyan}@gram-ai/elements${c.reset} and peer dependencies...`
+  )
   const allPackages = [...PEER_DEPS, PACKAGE_NAME]
   const cmd = getInstallCommand(pm, allPackages)
   if (!run(cmd)) {

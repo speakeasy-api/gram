@@ -4,11 +4,26 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import tailwindcss from '@tailwindcss/vite'
 import dts from 'vite-plugin-dts'
+import { externalizeDeps } from 'vite-plugin-externalize-deps'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
-  plugins: [react(), dts(), tailwindcss()],
+  plugins: [
+    react(),
+    dts(),
+    tailwindcss(),
+
+    // Automatically keep peerDependencies as they are defined in the package.json in sync
+    // with the rollupOptions.external list
+    externalizeDeps({
+      // We mark deps as false because the plugins default behaviour is externalise all deps.
+      deps: false,
+      peerDeps: true,
+      optionalDeps: false,
+      devDeps: false,
+    }),
+  ],
   build: {
     sourcemap: true,
     minify: 'esbuild',
@@ -21,25 +36,13 @@ export default defineConfig({
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
-      external: [
-        'react',
-        'react-dom',
-        'react/jsx-runtime',
-        // Externalize heavy dependencies - consumers must install these
-        'motion',
-        'motion/react',
-        'motion/react-m',
-        'zustand',
-        'zustand/shallow',
-        'remark-gfm',
-        'vega',
-        'shiki',
-      ],
+      // NOTE: do not define externals here, as they are defined in the externalizeDeps plugin
       output: {
         globals: {
           react: 'React',
           'react-dom': 'ReactDOM',
         },
+
         sourcemapExcludeSources: true,
       },
     },
