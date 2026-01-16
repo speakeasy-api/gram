@@ -44,6 +44,30 @@ SingleTool.parameters = {
   },
 }
 
+export const SingleToolWithFunction: Story = () => <Chat />
+SingleToolWithFunction.storyName =
+  'Single Tool Requiring Approval with Function'
+SingleToolWithFunction.parameters = {
+  elements: {
+    config: {
+      variant: 'standalone',
+      tools: {
+        toolsRequiringApproval: ({ toolName }: { toolName: string }) =>
+          toolName.endsWith('salutation'),
+      },
+      welcome: {
+        suggestions: [
+          {
+            title: 'Call a tool requiring approval',
+            label: 'Get a salutation',
+            action: 'Get a salutation',
+          },
+        ],
+      },
+    },
+  },
+}
+
 export const MultipleGroupedTools: Story = () => <Chat />
 MultipleGroupedTools.storyName = 'Multiple Grouped Tools'
 MultipleGroupedTools.parameters = {
@@ -104,6 +128,33 @@ FrontendTool.parameters = {
           deleteFile,
         },
         toolsRequiringApproval: ['deleteFile'],
+      },
+    },
+  },
+}
+
+export const FrontendToolWithFunction: Story = () => <Chat />
+FrontendToolWithFunction.storyName =
+  'Frontend Tool Requiring Approval with Function'
+FrontendToolWithFunction.parameters = {
+  elements: {
+    config: {
+      variant: 'standalone',
+      tools: {
+        frontendTools: {
+          deleteFile,
+        },
+        toolsRequiringApproval: ({ toolName }: { toolName: string }) =>
+          toolName.startsWith('delete'),
+      },
+      welcome: {
+        suggestions: [
+          {
+            title: 'Delete a file',
+            label: 'Delete a file',
+            action: 'Delete file with ID 123',
+          },
+        ],
       },
     },
   },

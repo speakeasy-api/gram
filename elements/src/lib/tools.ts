@@ -6,6 +6,7 @@ import {
 } from '@assistant-ui/react'
 import z from 'zod'
 import { FC } from 'react'
+import type { ToolsRequiringApproval } from '@/types'
 
 /**
  * Converts from assistant-ui tool format to the AI SDK tool shape
@@ -50,7 +51,7 @@ export type FrontendTool<TArgs extends Record<string, unknown>, TResult> = FC<
  */
 let approvalConfig: {
   helpers: ApprovalHelpers
-  toolsRequiringApproval: Set<string>
+  requiresApproval: (toolName: string) => boolean
 } | null = null
 
 /**
@@ -58,11 +59,12 @@ let approvalConfig: {
  */
 export function setFrontendToolApprovalConfig(
   helpers: ApprovalHelpers,
-  toolsRequiringApproval: string[]
+  toolsRequiringApproval: ToolsRequiringApproval
 ): void {
+  const requiresApproval = createRequiresApprovalFn(toolsRequiringApproval)
   approvalConfig = {
     helpers,
-    toolsRequiringApproval: new Set(toolsRequiringApproval),
+    requiresApproval,
   }
 }
 
@@ -71,6 +73,25 @@ export function setFrontendToolApprovalConfig(
  */
 export function clearFrontendToolApprovalConfig(): void {
   approvalConfig = null
+}
+
+/**
+ * Creates a function that checks if a tool requires approval.
+ * Handles both array and function-based configurations.
+ */
+function createRequiresApprovalFn(
+  toolsRequiringApproval: ToolsRequiringApproval | undefined
+): (toolName: string) => boolean {
+  if (!toolsRequiringApproval) {
+    return () => false
+  }
+
+  if (typeof toolsRequiringApproval === 'function') {
+    return (toolName: string) => toolsRequiringApproval({ toolName })
+  }
+
+  const approvalSet = new Set(toolsRequiringApproval)
+  return (toolName: string) => approvalSet.has(toolName)
 }
 
 /**
@@ -90,7 +111,7 @@ export const defineFrontendTool = <
     ...tool,
     execute: async (args: TArgs, context: ToolExecutionContext) => {
       // Check if this tool requires approval at runtime
-      if (approvalConfig?.toolsRequiringApproval.has(name)) {
+      if (approvalConfig?.requiresApproval(name)) {
         const { helpers } = approvalConfig
         const toolCallId = context.toolCallId ?? ''
 
@@ -136,18 +157,26 @@ export interface ApprovalHelpers {
  */
 export function wrapToolsWithApproval(
   tools: ToolSet,
-  toolsRequiringApproval: string[] | undefined,
+  toolsRequiringApproval: ToolsRequiringApproval | undefined,
   approvalHelpers: ApprovalHelpers
 ): ToolSet {
-  if (!toolsRequiringApproval || toolsRequiringApproval.length === 0) {
+  if (!toolsRequiringApproval) {
     return tools
   }
 
-  const approvalSet = new Set(toolsRequiringApproval)
+  // Handle empty array case
+  if (
+    Array.isArray(toolsRequiringApproval) &&
+    toolsRequiringApproval.length === 0
+  ) {
+    return tools
+  }
+
+  const requiresApproval = createRequiresApprovalFn(toolsRequiringApproval)
 
   return Object.fromEntries(
     Object.entries(tools).map(([name, tool]) => {
-      if (!approvalSet.has(name)) {
+      if (!requiresApproval(name)) {
         return [name, tool]
       }
 
