@@ -77,7 +77,7 @@ export const ElementsDecorator: React.FC<ElementsDecoratorProps> = ({
   return (
     <div className={ROOT_SELECTOR}>
       <ElementsProvider config={finalConfig}>
-        <div className="h-screen bg-zinc-50">{children}</div>
+        <div className="bg-background h-screen">{children}</div>
       </ElementsProvider>
     </div>
   )

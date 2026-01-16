@@ -2,7 +2,6 @@
 @import 'tw-shimmer';
 @layer theme, base, components, utilities;
 @import 'tailwindcss/theme.css' layer(theme);
-@import 'tailwindcss/preflight.css' layer(base);
 
 @custom-variant dark (&:is(.dark *));
 
@@ -44,7 +43,20 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-:root {
+/* Scope ALL variables to .gram-elements instead of :root */
+.gram-elements {
+  /* Scoped preflight/base styles */
+  font-family:
+    ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    'Segoe UI Symbol', 'Noto Color Emoji';
+  font-feature-settings: normal;
+  font-variation-settings: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+  -webkit-tap-highlight-color: transparent;
+  tab-size: 4;
+
   /* Theme: Radius - set via data-radius attribute */
   --radius: 0.625rem;
   --background: oklch(1 0 0);
@@ -80,7 +92,9 @@
   --sidebar-ring: oklch(0.705 0.015 286.067);
 }
 
-.dark {
+/* Dark mode scoped to .gram-elements */
+.gram-elements.dark,
+.dark .gram-elements {
   --background: oklch(0.141 0.005 285.823);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.21 0.006 285.885);
@@ -118,22 +132,118 @@
   .gram-elements {
     @tailwind utilities;
 
-    * {
+    /* We can't use tailwind's preflight styles here because we need to scope them to .gram-elements so therefore we just include a version of them inline here */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      border-width: 0;
+      border-style: solid;
       @apply border-border outline-ring/50;
+    }
+
+    /* Reset margins and padding for common elements */
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    p,
+    blockquote,
+    pre,
+    ul,
+    ol,
+    figure {
+      margin: 0;
+      padding: 0;
+    }
+
+    /* List style reset */
+    ul,
+    ol {
+      list-style: none;
+    }
+
+    /* Image defaults */
+    img,
+    svg,
+    video,
+    canvas,
+    audio,
+    iframe,
+    embed,
+    object {
+      display: block;
+    }
+
+    img,
+    video {
+      max-width: 100%;
+      height: auto;
+    }
+
+    /* Button/input reset */
+    button,
+    input,
+    optgroup,
+    select,
+    textarea {
+      font-family: inherit;
+      font-feature-settings: inherit;
+      font-variation-settings: inherit;
+      font-size: 100%;
+      font-weight: inherit;
+      line-height: inherit;
+      letter-spacing: inherit;
+      color: inherit;
+      margin: 0;
+      padding: 0;
+    }
+
+    button,
+    select {
+      text-transform: none;
+    }
+
+    button,
+    input:where([type='button']),
+    input:where([type='reset']),
+    input:where([type='submit']) {
+      appearance: button;
+      -webkit-appearance: button;
+      background-color: transparent;
+      background-image: none;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: inherit;
+    }
+
+    /* Table reset */
+    table {
+      text-indent: 0;
+      border-color: inherit;
+      border-collapse: collapse;
     }
   }
 }
 
-/* Theme: Radius variants via data attribute */
-[data-radius='sharp'] {
+/* Theme: Radius variants via data attribute - scoped */
+.gram-elements[data-radius='sharp'],
+[data-radius='sharp'] .gram-elements {
   --radius: 0.25rem;
 }
-[data-radius='soft'] {
+.gram-elements[data-radius='soft'],
+[data-radius='soft'] .gram-elements {
   --radius: 0.625rem;
 }
-[data-radius='round'] {
+.gram-elements[data-radius='round'],
+[data-radius='round'] .gram-elements {
   --radius: 1rem;
 }
-[data-radius='pill'] {
+.gram-elements[data-radius='pill'],
+[data-radius='pill'] .gram-elements {
   --radius: 9999px;
 }

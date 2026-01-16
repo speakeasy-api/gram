@@ -87,10 +87,7 @@ const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
 
   return (
     <Dialog>
-      <DialogTrigger
-        className="aui-attachment-preview-trigger hover:bg-accent/50 cursor-pointer transition-colors"
-        asChild
-      >
+      <DialogTrigger className="aui-attachment-preview-trigger" asChild>
         {children}
       </DialogTrigger>
       <DialogContent className="aui-attachment-preview-dialog-content [&_svg]:text-background [&>button]:bg-foreground/60 [&>button]:hover:[&_svg]:text-destructive p-2 sm:max-w-3xl [&>button]:rounded-full [&>button]:p-1 [&>button]:opacity-100 [&>button]:!ring-0">

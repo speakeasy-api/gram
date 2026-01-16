@@ -74,9 +74,8 @@ const ErrorTriggerProvider: FC<{
 // Control bar component for triggering errors
 const ErrorControls: FC<{
   onTriggerError: () => void
-  onReset: () => void
   hasError: boolean
-}> = ({ onTriggerError, onReset, hasError }) => (
+}> = ({ onTriggerError, hasError }) => (
   <div className="bg-muted/50 border-border flex items-center gap-3 border-b px-4 py-2">
     <span className="text-muted-foreground text-sm font-medium">
       Error Boundary Demo:
@@ -89,16 +88,13 @@ const ErrorControls: FC<{
     >
       Trigger Error
     </Button>
-    <Button size="sm" variant="outline" onClick={onReset}>
-      Reset
-    </Button>
   </div>
 )
 
 // Modal variant story
 export const Modal: Story = () => {
   const [shouldThrow, setShouldThrow] = useState(false)
-  const [key, setKey] = useState(0)
+  const [key] = useState(0)
 
   return (
     <ErrorTriggerProvider
@@ -108,10 +104,6 @@ export const Modal: Story = () => {
       <div className="flex h-full w-full flex-col">
         <ErrorControls
           onTriggerError={() => setShouldThrow(true)}
-          onReset={() => {
-            setShouldThrow(false)
-            setKey((k) => k + 1)
-          }}
           hasError={shouldThrow}
         />
         <div className="flex h-full w-full flex-col gap-4 p-10">
@@ -141,7 +133,7 @@ Modal.parameters = {
 // Standalone variant story
 export const Standalone: Story = () => {
   const [shouldThrow, setShouldThrow] = useState(false)
-  const [key, setKey] = useState(0)
+  const [key] = useState(0)
 
   return (
     <ErrorTriggerProvider
@@ -151,10 +143,6 @@ export const Standalone: Story = () => {
       <div className="flex h-screen w-full flex-col">
         <ErrorControls
           onTriggerError={() => setShouldThrow(true)}
-          onReset={() => {
-            setShouldThrow(false)
-            setKey((k) => k + 1)
-          }}
           hasError={shouldThrow}
         />
         <div className="m-auto flex w-full max-w-3xl flex-1 flex-col">
@@ -178,7 +166,7 @@ Standalone.parameters = {
 // Sidecar variant story
 export const Sidecar: Story = () => {
   const [shouldThrow, setShouldThrow] = useState(false)
-  const [key, setKey] = useState(0)
+  const [key] = useState(0)
 
   return (
     <ErrorTriggerProvider
@@ -188,10 +176,6 @@ export const Sidecar: Story = () => {
       <div className="flex h-full w-full flex-col">
         <ErrorControls
           onTriggerError={() => setShouldThrow(true)}
-          onReset={() => {
-            setShouldThrow(false)
-            setKey((k) => k + 1)
-          }}
           hasError={shouldThrow}
         />
         <div className="mr-[400px] p-10">
