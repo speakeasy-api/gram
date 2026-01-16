@@ -189,19 +189,16 @@ jobs:
         with:
           cloud-token: ${{ secrets.ATLAS_TOKEN }}
 
-      # Generate tag using same docker/metadata-action as docker-build-server
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
-        with:
-          images: temp
-          tags: type=sha
-
       - name: Generate tag
         id: tag
         run: |
-          TAG=$(echo "${{ steps.meta.outputs.tags }}" | sed 's/.*://')
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            SHORT_SHA=$(echo "${{ github.event.pull_request.head.sha }}" | cut -c1-8)
+            echo "tag=pr-${{ github.event.pull_request.number }}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          else
+            SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+            echo "tag=sha-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Push PostgreSQL migrations
         uses: ariga/atlas-action/migrate/push@v1
