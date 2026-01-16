@@ -6,7 +6,6 @@ import {
   ChevronRightIcon,
   CopyIcon,
   PencilIcon,
-  RefreshCwIcon,
   Settings2,
   Square,
 } from 'lucide-react'
