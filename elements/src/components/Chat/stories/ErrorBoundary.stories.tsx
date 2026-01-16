@@ -94,7 +94,6 @@ const ErrorControls: FC<{
 // Modal variant story
 export const Modal: Story = () => {
   const [shouldThrow, setShouldThrow] = useState(false)
-  const [key] = useState(0)
 
   return (
     <ErrorTriggerProvider
@@ -112,7 +111,7 @@ export const Modal: Story = () => {
             Click the button in the bottom right corner to open the chat, then
             trigger an error.
           </p>
-          <Chat key={key} />
+          <Chat />
         </div>
       </div>
     </ErrorTriggerProvider>
@@ -133,7 +132,6 @@ Modal.parameters = {
 // Standalone variant story
 export const Standalone: Story = () => {
   const [shouldThrow, setShouldThrow] = useState(false)
-  const [key] = useState(0)
 
   return (
     <ErrorTriggerProvider
@@ -146,7 +144,7 @@ export const Standalone: Story = () => {
           hasError={shouldThrow}
         />
         <div className="m-auto flex w-full max-w-3xl flex-1 flex-col">
-          <Chat key={key} />
+          <Chat />
         </div>
       </div>
     </ErrorTriggerProvider>
@@ -166,7 +164,6 @@ Standalone.parameters = {
 // Sidecar variant story
 export const Sidecar: Story = () => {
   const [shouldThrow, setShouldThrow] = useState(false)
-  const [key] = useState(0)
 
   return (
     <ErrorTriggerProvider
@@ -184,7 +181,7 @@ export const Sidecar: Story = () => {
             The sidebar is always visible on the right. Trigger an error to see
             the error boundary.
           </p>
-          <Chat key={key} />
+          <Chat />
         </div>
       </div>
     </ErrorTriggerProvider>
