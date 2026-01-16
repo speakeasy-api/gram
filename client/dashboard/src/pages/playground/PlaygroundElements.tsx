@@ -1,24 +1,21 @@
-import { Chat, GramElementsProvider, type Model } from "@gram-ai/elements";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
+import { Chat, GramElementsProvider, type Model } from "@gram-ai/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { useListToolsets } from "@gram/client/react-query/index.js";
 import { useTheme } from "next-themes";
-import { createContext, useCallback, useContext } from "react";
+import { useCallback } from "react";
 import { toast } from "sonner";
 import { useEnvironment } from "../environments/Environment";
 import { useMcpUrl } from "../mcp/MCPDetails";
 import { getAuthStatus } from "./PlaygroundAuth";
-import { GramThreadWelcome } from "./PlaygroundElementsOverrides";
+import {
+  GramComposer,
+  GramThreadWelcome,
+  PlaygroundAuthWarningContext,
+} from "./PlaygroundElementsOverrides";
 import "@gram-ai/elements/elements.css";
-
-// Context for passing auth warning to the Composer component
-type AuthWarningValue = { missingCount: number; toolsetSlug: string } | null;
-export const PlaygroundAuthWarningContext =
-  createContext<AuthWarningValue>(null);
-export const usePlaygroundAuthWarning = () =>
-  useContext(PlaygroundAuthWarningContext);
 
 interface PlaygroundElementsProps {
   toolsetSlug: string | null;
@@ -84,7 +81,7 @@ export function PlaygroundElements({
       toast.error("Failed to create chat session. Please try again.");
       throw error;
     }
-  }, [createSessionMutation, session.session, project.slug]);
+  }, [createSessionMutation, session.session, session.user.id, project.id, project.slug]);
 
   // Don't render until we have a valid MCP URL
   if (!mcpUrl || !toolsetSlug) {
@@ -130,7 +127,7 @@ export function PlaygroundElements({
         },
         components: {
           ThreadWelcome: GramThreadWelcome,
-          // UserMessage: GramUserMessage,
+          Composer: GramComposer,
         },
       }}
     >
