@@ -35,7 +35,7 @@ var unsafeSessionData = []byte(`
         "organization_id": "550e8400-e29b-41d4-a716-446655440000",
         "organization_name": "Organization 123",
         "organization_slug": "organization-123",
-        "account_type": "pro"
+        "account_type": "enterprise"
       },
       {
         "organization_id": "e0395991-d5c5-4c2f-8c3b-4eae305524ed",

@@ -509,7 +509,7 @@ export interface ComponentOverrides {
   >
 }
 
-export type ToolsRequiringApproval =
+export type ToolsFilter =
   | string[]
   | (({ toolName }: { toolName: string }) => boolean)
 
@@ -626,7 +626,19 @@ export interface ToolsConfig {
    * }
    * ```
    */
-  toolsRequiringApproval?: ToolsRequiringApproval
+  toolsRequiringApproval?: ToolsFilter
+
+  /**
+   * List of MCP tool names to expose to the chat.
+   * Only tool names listed here that match a tool in the MCP will be exposed to the chat.
+   *
+   * @example
+   * ```ts
+   * tools: {
+   *   toolsToInclude: ['get_current_weather', 'get_current_time'],
+   * }
+   */
+  toolsToInclude?: ToolsFilter
 }
 
 export interface WelcomeConfig {
@@ -647,9 +659,12 @@ export interface WelcomeConfig {
 }
 
 export interface Suggestion {
+  /** Suggestion heading */
   title: string
+  /** Suggestion subheading */
   label: string
-  action: string
+  /** The prompt sent when the suggestion is clicked */
+  prompt: string
 }
 
 export interface Dimensions {
@@ -804,6 +819,7 @@ export interface HistoryConfig {
 
   /**
    * Whether to show the thread list sidebar/panel.
+   * Only applicable for widget and sidecar variants.
    * Only applies when history is enabled.
    * @default true when history.enabled is true
    */

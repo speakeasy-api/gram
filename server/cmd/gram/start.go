@@ -509,7 +509,13 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to parse site url: %w", err)
 			}
 
-			guardianPolicy := guardian.NewDefaultPolicy()
+			// In local development, allow loopback addresses for internal tool-to-tool communication
+			var guardianPolicy *guardian.Policy
+			if c.String("environment") == "local" {
+				guardianPolicy = guardian.NewPolicyWithLoopbackAllowed()
+			} else {
+				guardianPolicy = guardian.NewDefaultPolicy()
+			}
 			blockedCIDRs := c.StringSlice("disallowed-cidr-blocks")
 			if blockedCIDRs != nil {
 				guardianPolicy, err = guardian.NewUnsafePolicy(blockedCIDRs)

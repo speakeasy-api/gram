@@ -1,12 +1,12 @@
-import { JSONSchema7, ToolSet, type ToolCallOptions } from 'ai'
+import type { ToolsFilter } from '@/types'
 import {
   AssistantToolProps,
   Tool,
   makeAssistantTool,
 } from '@assistant-ui/react'
-import z from 'zod'
+import { JSONSchema7, ToolSet, type ToolCallOptions } from 'ai'
 import { FC } from 'react'
-import type { ToolsRequiringApproval } from '@/types'
+import z from 'zod'
 
 /**
  * Converts from assistant-ui tool format to the AI SDK tool shape
@@ -59,7 +59,7 @@ let approvalConfig: {
  */
 export function setFrontendToolApprovalConfig(
   helpers: ApprovalHelpers,
-  toolsRequiringApproval: ToolsRequiringApproval
+  toolsRequiringApproval: ToolsFilter
 ): void {
   const requiresApproval = createRequiresApprovalFn(toolsRequiringApproval)
   approvalConfig = {
@@ -80,7 +80,7 @@ export function clearFrontendToolApprovalConfig(): void {
  * Handles both array and function-based configurations.
  */
 function createRequiresApprovalFn(
-  toolsRequiringApproval: ToolsRequiringApproval | undefined
+  toolsRequiringApproval: ToolsFilter | undefined
 ): (toolName: string) => boolean {
   if (!toolsRequiringApproval) {
     return () => false
@@ -157,7 +157,7 @@ export interface ApprovalHelpers {
  */
 export function wrapToolsWithApproval(
   tools: ToolSet,
-  toolsRequiringApproval: ToolsRequiringApproval | undefined,
+  toolsRequiringApproval: ToolsFilter | undefined,
   approvalHelpers: ApprovalHelpers
 ): ToolSet {
   if (!toolsRequiringApproval) {

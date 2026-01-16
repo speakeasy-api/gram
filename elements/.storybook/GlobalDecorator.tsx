@@ -1,9 +1,9 @@
 import merge from 'lodash.merge'
 import React, { useMemo } from 'react'
+import { ROOT_SELECTOR } from '../src/constants/tailwind'
 import { ElementsProvider } from '../src/contexts/ElementsProvider'
 import { recommended } from '../src/plugins'
 import { ElementsConfig } from '../src/types'
-import { ROOT_SELECTOR } from '../src/constants/tailwind'
 
 interface ElementsDecoratorProps {
   children: React.ReactNode
@@ -25,7 +25,7 @@ const DEFAULT_ELEMENTS_CONFIG: ElementsConfig = {
       {
         title: 'Discover available tools',
         label: 'Find out what tools are available',
-        action: 'Call all tools available',
+        prompt: 'Call all tools available',
       },
     ],
   },
