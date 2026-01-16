@@ -44,7 +44,8 @@
     "lint": "eslint src",
     "analyze": "pnpm dlx vite-bundle-visualizer",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build",
+    "build-storybook": "storybook build --stats-json",
+    "chromatic": "chromatic --exit-zero-on-changes",
     "type-check": "tsc --noEmit",
     "docs": "typedoc",
     "docs:watch": "typedoc --watch",
@@ -102,6 +103,7 @@
     "@assistant-ui/react-ai-sdk": "^1.1.16",
     "@assistant-ui/react-markdown": "^0.11.0",
     "@datadog/browser-rum": "^6.24.1",
+    "@chromatic-com/storybook": "^5.0.0",
     "@openrouter/ai-sdk-provider": "^1.4.1",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-collapsible": "^1.1.12",
@@ -109,6 +111,7 @@
     "@radix-ui/react-popover": "^1.1.15",
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@storybook/addon-themes": "^10.1.11",
     "@tanstack/react-query": "catalog:",
     "ai": "5.0.90",
     "assistant-stream": "^0.2.46",
@@ -129,6 +132,7 @@
     "@types/lodash.merge": "^4.6.9",
     "@types/node": "^24.10.1",
     "@vitejs/plugin-react": "^5.0.3",
+    "chromatic": "^13.3.5",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
@@ -137,6 +141,8 @@
     "eslint-plugin-unused-imports": "^4.3.0",
     "lodash.merge": "^4.6.2",
     "motion": "^12.23.14",
+    "msw": "^2.12.3",
+    "msw-storybook-addon": "^2.0.6",
     "prettier": "^3.7.4",
     "prettier-plugin-tailwindcss": "^0.7.2",
     "react": "^19.2.0",
@@ -150,7 +156,13 @@
     "typescript-eslint": "^8.48.1",
     "vite": "^7.1.6",
     "vite-plugin-dts": "^4.5.4",
+    "vite-plugin-turbosnap": "^1.0.3",
     "vitest": "^4.0.13",
     "zustand": "^5.0.8"
+  },
+  "msw": {
+    "workerDirectory": [
+      ".storybook/public"
+    ]
   }
 }
