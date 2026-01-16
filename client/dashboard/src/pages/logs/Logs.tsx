@@ -1,6 +1,8 @@
 import { Page } from "@/components/page-layout";
 import { SearchBar } from "@/components/ui/search-bar";
 import { telemetrySearchToolCalls } from "@gram/client/funcs/telemetrySearchToolCalls";
+import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
+import { GramElementsProvider, Chat, ElementsConfig } from "@gram-ai/elements";
 import {
   TelemetryLogRecord,
   FeatureName,
@@ -16,6 +18,8 @@ import { XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { TraceRow } from "./TraceRow";
 import { LogDetailSheet } from "./LogDetailSheet";
+import { useSlugs } from "@/contexts/Sdk";
+import { getServerURL } from "@/lib/utils";
 
 const perPage = 25;
 
@@ -26,9 +30,46 @@ export default function LogsPage() {
   const [selectedLog, setSelectedLog] = useState<TelemetryLogRecord | null>(
     null,
   );
+  const { projectSlug } = useSlugs();
   const containerRef = useRef<HTMLDivElement>(null);
 
   const client = useGramContext();
+
+  const getSession = async (): Promise<string> => {
+    const res = await chatSessionsCreate(
+      client,
+      {
+        createRequestBody: {
+          embedOrigin: window.location.origin,
+        },
+      },
+      undefined,
+      {
+        headers: {
+          "Gram-Project": projectSlug ?? "",
+        },
+      },
+    );
+    return res.value?.clientToken ?? "";
+  };
+
+  const logsElementsConfig: ElementsConfig = {
+    projectSlug: projectSlug ?? "",
+    mcp: "https://chat.speakeasy.com/mcp/gram",
+    variant: "widget",
+    welcome: {
+      title: "Logs",
+      subtitle: "Logs are disabled for your organization.",
+    },
+    api: {
+      sessionFn: getSession,
+    },
+    environment: {
+      GRAM_GRAM_SESSION_HEADER_GRAM_SESSION: "",
+      GRAM_GRAM_SERVER_URL: getServerURL(),
+      GRAM_GRAM_PROJECT_SLUG_QUERY_PROJECT_SLUG: projectSlug ?? "",
+    },
+  };
 
   const {
     data,
@@ -301,6 +342,9 @@ export default function LogsPage() {
         open={!!selectedLog}
         onOpenChange={(open) => !open && setSelectedLog(null)}
       />
+      <GramElementsProvider config={logsElementsConfig}>
+        <Chat />
+      </GramElementsProvider>
     </Page>
   );
 }

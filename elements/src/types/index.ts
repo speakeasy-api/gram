@@ -804,6 +804,7 @@ export interface HistoryConfig {
 
   /**
    * Whether to show the thread list sidebar/panel.
+   * Only applicable for widget and sidecar variants.
    * Only applies when history is enabled.
    * @default true when history.enabled is true
    */
