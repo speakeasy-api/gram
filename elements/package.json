@@ -20,8 +20,7 @@
       "import": "./dist/plugins.js",
       "require": "./dist/plugins.cjs"
     },
-    "./elements.css": "./dist/elements.css",
-    "./elements-embedded.css": "./dist/elements-embedded.css"
+    "./elements.css": "./dist/elements.css"
   },
   "bin": {
     "elements": "./bin/cli.js"
