@@ -83,7 +83,7 @@ func BuildCreateNotificationPayload(notificationsCreateNotificationBody string, 
 	{
 		err = json.Unmarshal([]byte(notificationsCreateNotificationBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"level\": \"success\",\n      \"message\": \"yhm\",\n      \"resourceId\": \"4v0\",\n      \"resourceType\": \"i31\",\n      \"title\": \"8l5\",\n      \"type\": \"user_action\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"level\": \"success\",\n      \"message\": \"j64\",\n      \"resourceId\": \"8sj\",\n      \"resourceType\": \"023\",\n      \"title\": \"jc4\",\n      \"type\": \"user_action\"\n   }'")
 		}
 		if !(body.Type == "system" || body.Type == "user_action") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", body.Type, []any{"system", "user_action"}))
@@ -147,7 +147,7 @@ func BuildArchiveNotificationPayload(notificationsArchiveNotificationBody string
 	{
 		err = json.Unmarshal([]byte(notificationsArchiveNotificationBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"62a80834-cdd3-4e72-8124-5a6386986e29\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"4f40d9d6-1816-448a-9be0-b72163f57a83\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if err != nil {

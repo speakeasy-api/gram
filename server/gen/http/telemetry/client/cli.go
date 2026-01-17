@@ -10,8 +10,10 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	telemetry "github.com/speakeasy-api/gram/server/gen/telemetry"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildSearchLogsPayload builds the payload for the telemetry searchLogs
@@ -22,7 +24,7 @@ func BuildSearchLogsPayload(telemetrySearchLogsBody string, telemetrySearchLogsA
 	{
 		err = json.Unmarshal([]byte(telemetrySearchLogsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Distinctio nemo tempore molestiae molestiae.\",\n      \"filter\": {\n         \"deployment_id\": \"d9e612d4-272f-40db-a79a-da577420ef16\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"b828fc24-ad2d-4be8-978c-0a500fc35009\",\n         \"gram_urn\": \"Ea enim provident laudantium optio soluta aperiam.\",\n         \"gram_urns\": [\n            \"Dicta sit deleniti ut eos.\",\n            \"Odit distinctio.\",\n            \"Id ex repellat nemo.\",\n            \"Aut possimus molestias veniam.\"\n         ],\n         \"http_method\": \"HEAD\",\n         \"http_route\": \"Ab sunt qui quam.\",\n         \"http_status_code\": 742445228,\n         \"service_name\": \"Repudiandae temporibus repudiandae quae ut dolorum minima.\",\n         \"severity_text\": \"WARN\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"b5fda633503c464fe145b419cb787422\"\n      },\n      \"limit\": 399,\n      \"sort\": \"asc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Fuga at molestias consequatur perferendis saepe.\",\n      \"filter\": {\n         \"deployment_id\": \"2267ac8b-597f-407b-b26a-fcc9c8f1eba0\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"ea0241fd-7ef1-406c-b53e-fae0bfd2990a\",\n         \"gram_urn\": \"Doloremque ducimus fugiat est.\",\n         \"gram_urns\": [\n            \"Est tempore suscipit repellat nam.\",\n            \"Cupiditate at vero ut fuga veritatis et.\",\n            \"Nihil in quia deserunt fugiat autem voluptas.\"\n         ],\n         \"http_method\": \"PATCH\",\n         \"http_route\": \"Dolorem dolorem veritatis aliquam labore reiciendis sit.\",\n         \"http_status_code\": 809712968,\n         \"service_name\": \"Illum quis.\",\n         \"severity_text\": \"INFO\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"f4e1744bf221fee08f5768efbd4a2a2a\"\n      },\n      \"limit\": 788,\n      \"sort\": \"asc\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -78,7 +80,7 @@ func BuildSearchToolCallsPayload(telemetrySearchToolCallsBody string, telemetryS
 	{
 		err = json.Unmarshal([]byte(telemetrySearchToolCallsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Qui a rerum quam.\",\n      \"filter\": {\n         \"deployment_id\": \"ccc2a6f8-9aff-42ea-b298-dec3c0aaf9ab\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"368d418c-9669-4ec1-ae98-bede6be1ddf7\",\n         \"gram_urn\": \"Rerum nobis ea sapiente.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 34,\n      \"sort\": \"desc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Quidem animi.\",\n      \"filter\": {\n         \"deployment_id\": \"238d818b-964f-4698-92ce-3d06a55312b3\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"8e789231-9a04-4438-810a-17e3ffc632cd\",\n         \"gram_urn\": \"Laborum perspiciatis at quo neque.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 987,\n      \"sort\": \"desc\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -122,6 +124,70 @@ func BuildSearchToolCallsPayload(telemetrySearchToolCallsBody string, telemetryS
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCaptureEventPayload builds the payload for the telemetry captureEvent
+// endpoint from CLI flags.
+func BuildCaptureEventPayload(telemetryCaptureEventBody string, telemetryCaptureEventApikeyToken string, telemetryCaptureEventSessionToken string, telemetryCaptureEventProjectSlugInput string, telemetryCaptureEventChatSessionsToken string) (*telemetry.CaptureEventPayload, error) {
+	var err error
+	var body CaptureEventRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryCaptureEventBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"distinct_id\": \"Iusto odio excepturi.\",\n      \"event\": \"button_clicked\",\n      \"properties\": {\n         \"button_name\": \"submit\",\n         \"page\": \"checkout\",\n         \"value\": 100\n      }\n   }'")
+		}
+		if utf8.RuneCountInString(body.Event) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.event", body.Event, utf8.RuneCountInString(body.Event), 1, true))
+		}
+		if utf8.RuneCountInString(body.Event) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.event", body.Event, utf8.RuneCountInString(body.Event), 255, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryCaptureEventApikeyToken != "" {
+			apikeyToken = &telemetryCaptureEventApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryCaptureEventSessionToken != "" {
+			sessionToken = &telemetryCaptureEventSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryCaptureEventProjectSlugInput != "" {
+			projectSlugInput = &telemetryCaptureEventProjectSlugInput
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if telemetryCaptureEventChatSessionsToken != "" {
+			chatSessionsToken = &telemetryCaptureEventChatSessionsToken
+		}
+	}
+	v := &telemetry.CaptureEventPayload{
+		Event:      body.Event,
+		DistinctID: body.DistinctID,
+	}
+	if body.Properties != nil {
+		v.Properties = make(map[string]any, len(body.Properties))
+		for key, val := range body.Properties {
+			tk := key
+			tv := val
+			v.Properties[tk] = tv
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
 
 	return v, nil
 }
