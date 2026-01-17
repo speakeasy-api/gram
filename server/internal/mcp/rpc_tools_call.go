@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -27,6 +28,7 @@ import (
 	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -65,6 +67,7 @@ func handleToolsCall(
 	featuresClient *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporal temporal_client.Client,
+	metadataRepo *metadata_repo.Queries,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -158,6 +161,17 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
 	}
 
+	// Load custom User-Agent from MCP metadata if configured
+	var userAgent string
+	if metadataRepo != nil {
+		metadata, err := metadataRepo.GetMetadataForToolset(ctx, toolsetID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			logger.WarnContext(ctx, "failed to fetch MCP metadata for User-Agent", attr.SlogError(err))
+		} else if metadata.UserAgent.Valid {
+			userAgent = metadata.UserAgent.String
+		}
+	}
+
 	descriptor := plan.Descriptor
 	var toolType tm_repo.ToolType
 	switch plan.Kind {
@@ -238,7 +252,7 @@ func handleToolsCall(
 	}()
 
 	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), gateway.ToolCallEnv{
-		UserConfig: userConfig, SystemEnv: systemConfig}, plan, toolCallLogger)
+		UserConfig: userConfig, SystemEnv: systemConfig, UserAgent: userAgent}, plan, toolCallLogger)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
 	}

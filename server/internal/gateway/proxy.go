@@ -540,6 +540,11 @@ func (tp *ToolProxy) doHTTP(
 		req.Header.Set("Accept", "*/*")
 	}
 
+	// Set custom User-Agent if configured
+	if env.UserAgent != "" {
+		req.Header.Set("User-Agent", env.UserAgent)
+	}
+
 	return reverseProxyRequest(ctx, ReverseProxyOptions{
 		Logger:                    logger,
 		Tracer:                    tp.tracer,

@@ -5,6 +5,7 @@ SELECT id,
        external_documentation_url,
        logo_id,
        instructions,
+       user_agent,
        created_at,
        updated_at
 FROM mcp_metadata
@@ -18,13 +19,15 @@ INSERT INTO mcp_metadata (
     project_id,
     external_documentation_url,
     logo_id,
-    instructions
-) VALUES (@toolset_id, @project_id, @external_documentation_url, @logo_id, @instructions)
+    instructions,
+    user_agent
+) VALUES (@toolset_id, @project_id, @external_documentation_url, @logo_id, @instructions, @user_agent)
 ON CONFLICT (toolset_id)
 DO UPDATE SET project_id = EXCLUDED.project_id,
               external_documentation_url = EXCLUDED.external_documentation_url,
               logo_id = EXCLUDED.logo_id,
               instructions = EXCLUDED.instructions,
+              user_agent = EXCLUDED.user_agent,
               updated_at = clock_timestamp()
 RETURNING id,
           toolset_id,
@@ -32,5 +35,6 @@ RETURNING id,
           external_documentation_url,
           logo_id,
           instructions,
+          user_agent,
           created_at,
           updated_at;

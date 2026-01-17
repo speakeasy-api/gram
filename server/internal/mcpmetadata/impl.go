@@ -219,12 +219,18 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		instructions = conv.ToPGText(*payload.Instructions)
 	}
 
+	var userAgent pgtype.Text
+	if payload.UserAgent != nil {
+		userAgent = conv.ToPGText(*payload.UserAgent)
+	}
+
 	result, err := s.repo.UpsertMetadata(ctx, repo.UpsertMetadataParams{
 		ToolsetID:                toolset.ID,
 		ProjectID:                *authCtx.ProjectID,
 		ExternalDocumentationUrl: externalDocURL,
 		LogoID:                   logoID,
 		Instructions:             instructions,
+		UserAgent:                userAgent,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert MCP install page metadata").Log(ctx, s.logger)
@@ -246,6 +252,7 @@ func toMcpMetadata(record repo.McpMetadatum) *types.McpMetadata {
 		ExternalDocumentationURL: conv.FromPGText[string](record.ExternalDocumentationUrl),
 		LogoAssetID:              conv.FromNullableUUID(record.LogoID),
 		Instructions:             conv.FromPGText[string](record.Instructions),
+		UserAgent:                conv.FromPGText[string](record.UserAgent),
 	}
 	return metadata
 }

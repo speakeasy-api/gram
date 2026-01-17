@@ -71,7 +71,9 @@ type SetMcpMetadataPayload struct {
 	// A link to external documentation for the MCP install page
 	ExternalDocumentationURL *string
 	// Server instructions returned in the MCP initialize response
-	Instructions     *string
+	Instructions *string
+	// Custom User-Agent header for HTTP requests made by this MCP
+	UserAgent        *string
 	SessionToken     *string
 	ProjectSlugInput *string
 }

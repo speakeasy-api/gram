@@ -60,11 +60,16 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 	{
 		err = json.Unmarshal([]byte(mcpMetadataSetMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_documentation_url\": \"Saepe nihil reiciendis dolor et explicabo.\",\n      \"instructions\": \"Voluptatum perferendis dolor praesentium cumque aperiam.\",\n      \"logo_asset_id\": \"Pariatur voluptatem vel nostrum quae beatae qui.\",\n      \"toolset_slug\": \"2r8\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_documentation_url\": \"Explicabo unde voluptatum perferendis.\",\n      \"instructions\": \"Praesentium cumque aperiam error delectus nam laboriosam.\",\n      \"logo_asset_id\": \"Beatae qui excepturi saepe nihil reiciendis dolor.\",\n      \"toolset_slug\": \"ebc\",\n      \"user_agent\": \"hk4\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.ToolsetSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.toolset_slug", body.ToolsetSlug, utf8.RuneCountInString(body.ToolsetSlug), 40, false))
+		}
+		if body.UserAgent != nil {
+			if utf8.RuneCountInString(*body.UserAgent) > 500 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_agent", *body.UserAgent, utf8.RuneCountInString(*body.UserAgent), 500, false))
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -87,6 +92,7 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 		LogoAssetID:              body.LogoAssetID,
 		ExternalDocumentationURL: body.ExternalDocumentationURL,
 		Instructions:             body.Instructions,
+		UserAgent:                body.UserAgent,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

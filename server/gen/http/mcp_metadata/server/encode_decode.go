@@ -474,6 +474,7 @@ func marshalTypesMcpMetadataToMcpMetadataResponseBody(v *types.McpMetadata) *Mcp
 		LogoAssetID:              v.LogoAssetID,
 		ExternalDocumentationURL: v.ExternalDocumentationURL,
 		Instructions:             v.Instructions,
+		UserAgent:                v.UserAgent,
 		CreatedAt:                v.CreatedAt,
 		UpdatedAt:                v.UpdatedAt,
 	}

@@ -96,4 +96,6 @@ func (c *CaseInsensitiveEnv) All() map[string]string {
 type ToolCallEnv struct {
 	SystemEnv  *CaseInsensitiveEnv
 	UserConfig *CaseInsensitiveEnv
+	// UserAgent is a custom User-Agent header to send with HTTP requests
+	UserAgent string
 }

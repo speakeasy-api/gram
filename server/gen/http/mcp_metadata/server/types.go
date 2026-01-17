@@ -26,6 +26,8 @@ type SetMcpMetadataRequestBody struct {
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Custom User-Agent header for HTTP requests made by this MCP
+	UserAgent *string `form:"user_agent,omitempty" json:"user_agent,omitempty" xml:"user_agent,omitempty"`
 }
 
 // GetMcpMetadataResponseBody is the type of the "mcpMetadata" service
@@ -48,6 +50,8 @@ type SetMcpMetadataResponseBody struct {
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Custom User-Agent header for HTTP requests made by this MCP
+	UserAgent *string `form:"user_agent,omitempty" json:"user_agent,omitempty" xml:"user_agent,omitempty"`
 	// When the metadata entry was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the metadata entry was last updated
@@ -438,6 +442,8 @@ type McpMetadataResponseBody struct {
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Custom User-Agent header for HTTP requests made by this MCP
+	UserAgent *string `form:"user_agent,omitempty" json:"user_agent,omitempty" xml:"user_agent,omitempty"`
 	// When the metadata entry was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the metadata entry was last updated
@@ -463,6 +469,7 @@ func NewSetMcpMetadataResponseBody(res *types.McpMetadata) *SetMcpMetadataRespon
 		LogoAssetID:              res.LogoAssetID,
 		ExternalDocumentationURL: res.ExternalDocumentationURL,
 		Instructions:             res.Instructions,
+		UserAgent:                res.UserAgent,
 		CreatedAt:                res.CreatedAt,
 		UpdatedAt:                res.UpdatedAt,
 	}
@@ -772,6 +779,7 @@ func NewSetMcpMetadataPayload(body *SetMcpMetadataRequestBody, sessionToken *str
 		LogoAssetID:              body.LogoAssetID,
 		ExternalDocumentationURL: body.ExternalDocumentationURL,
 		Instructions:             body.Instructions,
+		UserAgent:                body.UserAgent,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -791,6 +799,11 @@ func ValidateSetMcpMetadataRequestBody(body *SetMcpMetadataRequestBody) (err err
 	if body.ToolsetSlug != nil {
 		if utf8.RuneCountInString(*body.ToolsetSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.toolset_slug", *body.ToolsetSlug, utf8.RuneCountInString(*body.ToolsetSlug), 40, false))
+		}
+	}
+	if body.UserAgent != nil {
+		if utf8.RuneCountInString(*body.UserAgent) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_agent", *body.UserAgent, utf8.RuneCountInString(*body.UserAgent), 500, false))
 		}
 	}
 	return

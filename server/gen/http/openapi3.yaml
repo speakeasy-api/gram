@@ -13646,6 +13646,10 @@ components:
                     type: string
                     description: When the metadata entry was last updated
                     format: date-time
+                user_agent:
+                    type: string
+                    description: Custom User-Agent header for HTTP requests made by this MCP
+                    maxLength: 500
             description: Metadata used to configure the MCP install page.
             required:
                 - id
@@ -14659,6 +14663,10 @@ components:
                     description: The slug of the toolset associated with this install page metadata
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
+                user_agent:
+                    type: string
+                    description: Custom User-Agent header for HTTP requests made by this MCP
+                    maxLength: 500
             required:
                 - toolset_slug
         SetProductFeatureRequestBody:

@@ -20,6 +20,8 @@ type McpMetadata struct {
 	ExternalDocumentationURL *string
 	// Server instructions returned in the MCP initialize response
 	Instructions *string
+	// Custom User-Agent header for HTTP requests made by this MCP
+	UserAgent *string
 	// When the metadata entry was created
 	CreatedAt string
 	// When the metadata entry was last updated

@@ -547,6 +547,7 @@ func (s *Service) ExecuteTool(
 	err = s.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), gateway.ToolCallEnv{
 		SystemEnv:  gateway.CIEnvFrom(systemConfig),
 		UserConfig: ciEnv,
+		UserAgent:  "",
 	}, plan, tm.NewNoopToolCallLogger())
 	if err != nil {
 		return "", fmt.Errorf("tool proxy error: %w", err)
