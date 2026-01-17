@@ -11,7 +11,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useRadius } from '@/hooks/useRadius'
 import { cn } from '@/lib/utils'
 import { useDensity } from '@/hooks/useDensity'
-import { ROOT_SELECTOR } from '@/constants/tailwind'
 
 interface ThreadListProps {
   className?: string
@@ -24,8 +23,7 @@ export const ThreadList: FC<ThreadListProps> = ({ className }) => {
       className={cn(
         'aui-root aui-thread-list-root bg-background flex flex-col items-stretch',
         d('gap-sm'),
-        className,
-        ROOT_SELECTOR
+        className
       )}
     >
       <div
