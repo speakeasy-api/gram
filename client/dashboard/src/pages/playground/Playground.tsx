@@ -28,7 +28,6 @@ import { ScrollTextIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "@/lib/toast";
-import { v7 as uuidv7 } from "uuid";
 import { useEnvironment } from "../environments/Environment";
 import { ToolsetsEmptyState } from "../toolsets/ToolsetsEmptyState";
 import { ChatProvider, useChatContext } from "./ChatContext";
@@ -82,61 +81,6 @@ function PlaygroundInner() {
   useRegisterEnvironmentTelemetry({
     environmentSlug: selectedEnvironment ?? "",
   });
-
-  const chatHistoryItems: DropdownItem[] =
-    chatsData?.chats
-      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
-      .map((chat) => ({
-        label: capitalize(dateTimeFormatters.humanize(chat.updatedAt)),
-        value: chat.id,
-      })) ?? [];
-
-  chatHistoryItems.unshift({
-    icon: <Icon name="plus" />,
-    label: "New chat",
-    value: uuidv7(),
-  });
-
-  const chatHistoryButton = (
-    <Combobox
-      items={chatHistoryItems}
-      onSelectionChange={(item) => {
-        chat.setId(item.value);
-      }}
-      selected={chat.id}
-      variant="ghost"
-      onOpenChange={(open) => {
-        if (open) {
-          refetchChats();
-        }
-      }}
-      className="w-fit"
-    >
-      <Stack direction="horizontal" gap={2} align="center">
-        <Icon name="history" className="opacity-50" />
-        <Type variant="small" className="font-medium">
-          Chat History
-        </Type>
-      </Stack>
-    </Combobox>
-  );
-
-  const shareChatButton = (
-    <Button
-      size="sm"
-      variant="ghost"
-      icon="link"
-      onClick={() => {
-        telemetry.capture("chat_event", {
-          action: "chat_shared",
-        });
-        navigator.clipboard.writeText(chat.url);
-        toast.success("Chat link copied to clipboard", { persist: true });
-      }}
-    >
-      Share chat
-    </Button>
-  );
 
   const logsButton = (
     <Button size="sm" variant="ghost" onClick={() => setShowLogs(!showLogs)}>
