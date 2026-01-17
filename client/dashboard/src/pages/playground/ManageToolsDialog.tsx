@@ -12,7 +12,7 @@ import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
 import { Tool, Toolset } from "@/lib/toolTypes";
 import { Button } from "@speakeasy-api/moonshine";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { EditToolDialog } from "./EditToolDialog";
 
 function getToolSource(
@@ -264,12 +264,12 @@ export function ManageToolsDialog({
         onSave={(updates) => {
           // TODO: Implement save functionality
           console.log("Save tool:", editingTool?.name, updates);
-          toast.success("Tool updated");
+          toast.success("Tool updated", { persist: true });
         }}
         onRemove={() => {
           if (editingTool?.toolUrn) {
             onRemoveTools([editingTool.toolUrn]);
-            toast.success("Tool removed");
+            toast.success("Tool removed", { persist: true });
           }
         }}
       />

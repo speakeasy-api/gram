@@ -8,7 +8,7 @@ import type { ExternalMCPServer } from "@gram/client/models/components";
 import { Input } from "@speakeasy-api/moonshine";
 import { SearchIcon, ServerIcon, Loader2Icon } from "lucide-react";
 import React from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 function generateSlug(name: string): string {
   // Extract the last part after "/" for reverse-DNS names like "ai.exa/exa"
@@ -130,12 +130,15 @@ export default function ImportMCPTabContent({
       });
 
       await refetchDeployment();
-      toast.success(`Imported ${server.title ?? server.registrySpecifier}`);
+      toast.success(`Imported ${server.title ?? server.registrySpecifier}`, {
+        persist: true,
+      });
       onSuccess?.();
     } catch (err) {
       console.error("Failed to import external MCP:", err);
       toast.error(
         `Failed to import ${server.title ?? server.registrySpecifier}`,
+        { persist: true },
       );
     } finally {
       setImportingServer(null);

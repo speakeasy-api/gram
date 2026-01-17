@@ -2,7 +2,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Button } from "@speakeasy-api/moonshine";
 import { LucideIcon } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { useRoutes } from "@/routes";
 
 interface FeatureRequestModalProps {
@@ -37,10 +37,10 @@ export function FeatureRequestModal({
         action: actionType,
         ...telemetryData,
       });
-      toast.success("Feature requested");
+      toast.success("Feature requested", { persist: true });
       onClose();
     } catch {
-      toast.error("Failed to request feature");
+      toast.error("Failed to request feature", { persist: true });
     }
   };
 

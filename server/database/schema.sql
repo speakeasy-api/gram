@@ -1157,3 +1157,32 @@ CREATE TABLE IF NOT EXISTS project_allowed_origins (
 CREATE UNIQUE INDEX IF NOT EXISTS project_allowed_origins_project_id_origin_key
 ON project_allowed_origins (project_id, origin)
 WHERE deleted IS FALSE;
+
+-- Notifications for capturing toast messages and system events
+CREATE TABLE IF NOT EXISTS notifications (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  type TEXT NOT NULL CHECK (type IN ('system', 'user_action')),
+  level TEXT NOT NULL CHECK (level IN ('info', 'success', 'warning', 'error')),
+  title TEXT NOT NULL CHECK (title <> '' AND CHAR_LENGTH(title) <= 200),
+  message TEXT CHECK (CHAR_LENGTH(message) <= 2000),
+
+  actor_user_id TEXT,
+  resource_type TEXT CHECK (CHAR_LENGTH(resource_type) <= 50),
+  resource_id TEXT CHECK (CHAR_LENGTH(resource_id) <= 100),
+
+  archived_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT notifications_pkey PRIMARY KEY (id),
+  CONSTRAINT notifications_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS notifications_project_id_created_at_idx
+ON notifications (project_id, created_at DESC)
+WHERE deleted IS FALSE;

@@ -6,7 +6,7 @@ import {
   useRedeployDeploymentMutation,
 } from "@gram/client/react-query/redeployDeployment.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 /**
  * A wrapper around the useRedeployDeploymentMutation hook that adds UI
@@ -38,12 +38,12 @@ export const useRedeployDeployment = (
       const href = data.deployment?.id
         ? routes.deployments.deployment.href(data.deployment.id)
         : undefined;
-      toast.success(() => <RedeploySuccessToast href={href} />);
+      toast.success(<RedeploySuccessToast href={href} />);
       options?.onSuccess?.(data, vars, onMutateResult, ctx);
     },
     onError: (err, vars, onMutateResult, ctx) => {
       console.error("Failed to redeploy:", err);
-      toast.error(`Failed to redeploy. Please try again.`);
+      toast.error(`Failed to redeploy. Please try again.`, { persist: true });
       options?.onError?.(err, vars, onMutateResult, ctx);
     },
     onSettled: (data, err, vars, onMutateResult, ctx) => {

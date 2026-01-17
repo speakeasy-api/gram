@@ -31,7 +31,7 @@ import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { MCPDetails, MCPEnableButton } from "../mcp/MCPDetails";
 import { AddToolsDialog } from "./AddToolsDialog";
 import { PromptsTabContent } from "./PromptsTab";
@@ -133,7 +133,9 @@ function AddToToolsetDialog({
         target_toolset: selectedToolsetSlug,
         tool_count: toolUrns.length,
       });
-      toast.success(`Added ${toolUrns.length} tool(s) to toolset`);
+      toast.success(`Added ${toolUrns.length} tool(s) to toolset`, {
+        persist: true,
+      });
       onOpenChange(false);
       setSelectedToolsetSlug("");
     },
@@ -455,6 +457,7 @@ export function ToolsetView({
             });
             toast.success(
               `Removed ${removedUrns.length} tool${removedUrns.length !== 1 ? "s" : ""}`,
+              { persist: true },
             );
           },
           onError: (error) => {

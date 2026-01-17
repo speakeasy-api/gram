@@ -4,7 +4,7 @@ import { useUploadOpenAPISteps } from "@/pages/onboarding/UploadOpenAPI";
 import { UploadedDocument } from "@/pages/onboarding/Wizard";
 import { Button, Dialog } from "@speakeasy-api/moonshine";
 import React from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 interface UploadOpenApiDialogContentProps {
   documentSlug: string;
@@ -30,10 +30,10 @@ export function UploadOpenApiDialogContent({
     setIsDeploying(true);
     try {
       await createDeployment(documentSlug);
-      toast.success("OpenAPI document deployed");
+      toast.success("OpenAPI document deployed", { persist: true });
       onSuccess();
     } catch (error) {
-      toast.error("Failed to deploy OpenAPI document");
+      toast.error("Failed to deploy OpenAPI document", { persist: true });
       console.error("Failed to deploy:", error);
     } finally {
       setIsDeploying(false);

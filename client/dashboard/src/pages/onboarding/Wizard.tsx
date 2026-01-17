@@ -49,7 +49,7 @@ import {
 import { AnimatePresence, motion, useMotionValue } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
 import { DeploymentLogs, useUploadOpenAPISteps } from "./UploadOpenAPI";
 
@@ -584,7 +584,9 @@ const CliSetupStep = ({
     if (tools.tools.length > 0) {
       setCurrentStep("toolset");
     } else {
-      toast.error("No tools found. Please retry the build command.");
+      toast.error("No tools found. Please retry the build command.", {
+        persist: true,
+      });
     }
   };
 
@@ -770,7 +772,9 @@ const UploadStep = ({
       deployment?.status === "failed"
     ) {
       setDeploymentToShowLogsFor(deployment?.id);
-      toast.error("Unable to create tools from your OpenAPI spec");
+      toast.error("Unable to create tools from your OpenAPI spec", {
+        persist: true,
+      });
       return;
     }
 
@@ -966,7 +970,7 @@ const McpStep = ({
       await invalidateAllListToolsets(queryClient);
       await invalidateAllLatestDeployment(queryClient);
 
-      toast.success("MCP server created successfully");
+      toast.success("MCP server created successfully", { persist: true });
       routes.home.goTo();
     } catch (error) {
       const errorMessage =
