@@ -1,5 +1,11 @@
 # server
 
+## 0.18.3
+
+### Patch Changes
+
+- a0b7e13: feat: Use Gram Elements for the Playground UI
+
 ## 0.18.2
 
 ### Patch Changes
