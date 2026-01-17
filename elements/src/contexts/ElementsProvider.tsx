@@ -47,6 +47,7 @@ import { useAuth } from '../hooks/useAuth'
 import { ElementsContext } from './contexts'
 import { ToolApprovalProvider } from './ToolApprovalContext'
 import { useGramThreadListAdapter } from '@/hooks/useGramThreadListAdapter'
+import { ROOT_SELECTOR } from '@/constants/tailwind'
 
 export interface ElementsProviderProps {
   children: ReactNode
@@ -139,6 +140,7 @@ const ElementsProviderWithApproval = ({
     auth,
     mcp: config.mcp,
     environment: config.environment ?? {},
+    gramEnvironment: config.gramEnvironment,
   })
 
   // Store approval helpers in ref so they can be used in async contexts
@@ -207,10 +209,13 @@ const ElementsProviderWithApproval = ({
           getEnabledTools(context?.tools ?? {})
         )
 
-        // Include Gram-Chat-ID header for chat persistence
+        // Include Gram-Chat-ID header for chat persistence and Gram-Environment for environment selection
         const headersWithChatId = {
           ...auth.headers,
           'Gram-Chat-ID': chatIdRef.current,
+          ...(config.gramEnvironment && {
+            'Gram-Environment': config.gramEnvironment,
+          }),
         }
 
         // Create OpenRouter model (only needed when not using custom model)
@@ -381,7 +386,7 @@ const ElementsProviderWithHistory = ({
     <AssistantRuntimeProvider runtime={runtime}>
       <HistoryProvider>
         <ElementsContext.Provider value={contextValue}>
-          {children}
+          <div className={`${ROOT_SELECTOR} h-full`}>{children}</div>
           <FrontendTools tools={frontendTools} />
         </ElementsContext.Provider>
       </HistoryProvider>
@@ -415,7 +420,7 @@ const ElementsProviderWithoutHistory = ({
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ElementsContext.Provider value={contextValue}>
-        {children}
+        <div className={`${ROOT_SELECTOR} h-full`}>{children}</div>
         <FrontendTools tools={frontendTools} />
       </ElementsContext.Provider>
     </AssistantRuntimeProvider>

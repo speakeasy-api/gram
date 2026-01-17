@@ -58,6 +58,9 @@
   "license": "ISC",
   "packageManager": "pnpm@10.18.2",
   "peerDependencies": {
+    "@assistant-ui/react": "^0.11.0",
+    "@assistant-ui/react-ai-sdk": "^1.1.16",
+    "@assistant-ui/react-markdown": "^0.11.0",
     "@types/react": ">=18 <20",
     "@types/react-dom": ">=18 <20",
     "motion": "^12.0.0",
@@ -95,13 +98,19 @@
     },
     "shiki": {
       "optional": true
+    },
+    "@assistant-ui/react": {
+      "optional": true
+    },
+    "@assistant-ui/react-ai-sdk": {
+      "optional": true
+    },
+    "@assistant-ui/react-markdown": {
+      "optional": true
     }
   },
   "dependencies": {
     "@ai-sdk/mcp": "^0.0.11",
-    "@assistant-ui/react": "^0.11.0",
-    "@assistant-ui/react-ai-sdk": "^1.1.16",
-    "@assistant-ui/react-markdown": "^0.11.0",
     "@chromatic-com/storybook": "^5.0.0",
     "@datadog/browser-rum": "^6.24.1",
     "@openrouter/ai-sdk-provider": "^1.4.1",

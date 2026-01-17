@@ -1,6 +1,5 @@
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
-import { Combobox, DropdownItem } from "@/components/ui/combobox";
 import {
   Select,
   SelectContent,
@@ -8,43 +7,37 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
 import {
   useRegisterEnvironmentTelemetry,
   useRegisterToolsetTelemetry,
-  useTelemetry,
 } from "@/contexts/Telemetry";
 import { useLatestDeployment } from "@/hooks/toolTypes";
-import { dateTimeFormatters } from "@/lib/dates";
 import { asTools, Tool } from "@/lib/toolTypes";
-import { capitalize } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
   queryKeyInstance,
   queryKeyListToolsets,
   useInstance,
-  useListChats,
   useListEnvironments,
   useListToolsets,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
-import { Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
+import { ResizablePanel } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { ScrollTextIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { v7 as uuidv7 } from "uuid";
 import { useEnvironment } from "../environments/Environment";
 import { ToolsetsEmptyState } from "../toolsets/ToolsetsEmptyState";
 import { ChatProvider, useChatContext } from "./ChatContext";
 import { ChatConfig } from "./ChatWindow";
 import { EditToolDialog } from "./EditToolDialog";
 import { ManageToolsDialog } from "./ManageToolsDialog";
-import { getAuthStatus, PlaygroundAuth } from "./PlaygroundAuth";
+import { PlaygroundAuth } from "./PlaygroundAuth";
 import { PlaygroundConfigPanel } from "./PlaygroundConfigPanel";
+import { PlaygroundElements } from "./PlaygroundElements";
 import { PlaygroundLogsPanel } from "./PlaygroundLogsPanel";
-import { PlaygroundRHS } from "./PlaygroundRHS";
 
 export default function Playground() {
   return (
@@ -56,9 +49,7 @@ export default function Playground() {
 
 function PlaygroundInner() {
   const [searchParams] = useSearchParams();
-  const { data: chatsData, refetch: refetchChats } = useListChats();
   const chat = useChatContext();
-  const telemetry = useTelemetry();
 
   const [selectedToolset, setSelectedToolset] = useState<string | null>(
     searchParams.get("toolset") ?? null,
@@ -70,9 +61,6 @@ function PlaygroundInner() {
   const [temperature, setTemperature] = useState(0.5);
   const [model, setModel] = useState("anthropic/claude-sonnet-4.5");
   const [maxTokens, setMaxTokens] = useState(4096);
-
-  // Get prompt from URL params if available
-  const initialPrompt = searchParams.get("prompt");
 
   // We use a ref so that we can hot-swap the toolset and environment without causing a re-render
   const chatConfigRef = useRef({
@@ -87,88 +75,12 @@ function PlaygroundInner() {
     isOnboarding: false,
   };
 
-  // Fetch toolsets and instance data
-  const { data: toolsetsData } = useListToolsets();
-  const toolsets = toolsetsData?.toolsets;
-  const toolset = toolsets?.find((ts) => ts.slug === selectedToolset);
-
-  const environmentData = useEnvironment(selectedEnvironment ?? undefined);
-
-  // Check auth status
-  const authStatus = useMemo(() => {
-    if (!toolset || !environmentData) {
-      return null;
-    }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return getAuthStatus(toolset as any, {
-      entries: environmentData.entries?.map((e) => ({
-        name: e.name,
-        value: e.value,
-      })),
-    });
-  }, [toolset, environmentData]);
-
   useRegisterToolsetTelemetry({
     toolsetSlug: selectedToolset ?? "",
   });
   useRegisterEnvironmentTelemetry({
     environmentSlug: selectedEnvironment ?? "",
   });
-
-  const chatHistoryItems: DropdownItem[] =
-    chatsData?.chats
-      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
-      .map((chat) => ({
-        label: capitalize(dateTimeFormatters.humanize(chat.updatedAt)),
-        value: chat.id,
-      })) ?? [];
-
-  chatHistoryItems.unshift({
-    icon: <Icon name="plus" />,
-    label: "New chat",
-    value: uuidv7(),
-  });
-
-  const chatHistoryButton = (
-    <Combobox
-      items={chatHistoryItems}
-      onSelectionChange={(item) => {
-        chat.setId(item.value);
-      }}
-      selected={chat.id}
-      variant="ghost"
-      onOpenChange={(open) => {
-        if (open) {
-          refetchChats();
-        }
-      }}
-      className="w-fit"
-    >
-      <Stack direction="horizontal" gap={2} align="center">
-        <Icon name="history" className="opacity-50" />
-        <Type variant="small" className="font-medium">
-          Chat History
-        </Type>
-      </Stack>
-    </Combobox>
-  );
-
-  const shareChatButton = (
-    <Button
-      size="sm"
-      variant="ghost"
-      icon="link"
-      onClick={() => {
-        telemetry.capture("chat_event", {
-          action: "chat_shared",
-        });
-        navigator.clipboard.writeText(chat.url);
-        toast.success("Chat link copied to clipboard");
-      }}
-    >
-      Share chat
-    </Button>
-  );
 
   const logsButton = (
     <Button size="sm" variant="ghost" onClick={() => setShowLogs(!showLogs)}>
@@ -202,33 +114,16 @@ function PlaygroundInner() {
           </ResizablePanel.Pane>
           <ResizablePanel.Pane minSize={35} order={0}>
             <div className="h-full flex flex-col">
-              {/* Action buttons below header */}
-              <div className="flex items-center justify-between px-8 py-3">
-                <div className="flex items-center gap-2">
-                  {chatHistoryButton}
-                </div>
-                <div className="flex items-center gap-2">
-                  {logsButton}
-                  {shareChatButton}
-                </div>
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <PlaygroundRHS
-                  configRef={chatConfigRef}
-                  initialPrompt={initialPrompt}
-                  temperature={temperature}
-                  model={model}
-                  maxTokens={maxTokens}
-                  authWarning={
-                    authStatus?.hasMissingAuth && toolset
-                      ? {
-                          missingCount: authStatus.missingCount,
-                          toolsetSlug: toolset.slug,
-                        }
-                      : null
-                  }
-                />
-              </div>
+              <PlaygroundElements
+                toolsetSlug={selectedToolset}
+                environmentSlug={selectedEnvironment}
+                model={model}
+                additionalActions={
+                  <div className="flex items-center justify-end w-full px-4">
+                    {logsButton}
+                  </div>
+                }
+              />
             </div>
           </ResizablePanel.Pane>
           {showLogs && (

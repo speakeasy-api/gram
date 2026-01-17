@@ -15,6 +15,7 @@ permissions:
 env:
   REGISTRY: gcr.io/linen-analyst-344721 #gcr for speakeasy-common gcr registry
   DOCKER_REPOSITORY_OWNER: ${{github.repository_owner}}
+  NODE_OPTIONS: "--max-old-space-size=5120"
 
 jobs:
   changes:

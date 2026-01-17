@@ -90,6 +90,12 @@ importers:
       '@ai-sdk/ui-utils':
         specifier: 'catalog:'
         version: 1.2.11(zod@3.25.76(patch_hash=cba2b93eddc7a07a4ed221c3b3e8156ed9b4e3a4d8d4a91e013830785273923e))
+      '@assistant-ui/react':
+        specifier: ^0.11.53
+        version: 0.11.53(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(immer@11.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(use-sync-external-store@1.6.0(react@19.2.3))
+      '@assistant-ui/react-markdown':
+        specifier: ^0.11.9
+        version: 0.11.9(@assistant-ui/react@0.11.53(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(immer@11.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(use-sync-external-store@1.6.0(react@19.2.3)))(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@datadog/browser-rum':
         specifier: ^6.24.1
         version: 6.24.1
@@ -112,7 +118,7 @@ importers:
         specifier: workspace:*
         version: link:../sdk
       '@monaco-editor/react':
-        specifier: ^4.6.0
+        specifier: ^4.7.0
         version: 4.7.0(monaco-editor@0.52.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@openrouter/ai-sdk-provider':
         specifier: ^1.2.0
@@ -234,6 +240,9 @@ importers:
       lucide-react:
         specifier: ^0.554.0
         version: 0.554.0(react@19.2.3)
+      monaco-editor:
+        specifier: ^0.52.0
+        version: 0.52.2
       motion:
         specifier: ^12.23.24
         version: 12.23.24(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -300,11 +309,14 @@ importers:
       vaul:
         specifier: ^1.1.2
         version: 1.1.2(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      vega:
+        specifier: ^6.2.0
+        version: 6.2.0
       zod:
         specifier: 3.25.76
         version: 3.25.76(patch_hash=cba2b93eddc7a07a4ed221c3b3e8156ed9b4e3a4d8d4a91e013830785273923e)
       zustand:
-        specifier: ^5.0.4
+        specifier: ^5.0.8
         version: 5.0.9(@types/react@19.2.7)(immer@11.0.0)(react@19.2.3)(use-sync-external-store@1.6.0(react@19.2.3))
     devDependencies:
       '@eslint/js':
@@ -340,9 +352,6 @@ importers:
       globals:
         specifier: ^16.5.0
         version: 16.5.0
-      monaco-editor:
-        specifier: ^0.52.0
-        version: 0.52.2
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -352,6 +361,9 @@ importers:
       vite:
         specifier: ^7.2.4
         version: 7.2.4(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)
+      vite-plugin-monaco-editor:
+        specifier: ^1.1.0
+        version: 1.1.0(monaco-editor@0.52.2)
 
   client/sdk:
     dependencies:
@@ -7071,6 +7083,11 @@ packages:
     resolution: {integrity: sha512-eQrtpT/Do7AvDn76l1yL6ZHyXJ+UWH2LaHVqhAes9go54qaAnPZuMbgxcroQ/7WY3ZyetZzYW2quQnDF0DV5qg==}
     peerDependencies:
       vite: ^2.0.0 || ^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0
+
+  vite-plugin-monaco-editor@1.1.0:
+    resolution: {integrity: sha512-IvtUqZotrRoVqwT0PBBDIZPNraya3BxN/bfcNfnxZ5rkJiGcNtO5eAOWWSgT7zullIAEqQwxMU83yL9J5k7gww==}
+    peerDependencies:
+      monaco-editor: '>=0.33.0'
 
   vite-plugin-turbosnap@1.0.3:
     resolution: {integrity: sha512-p4D8CFVhZS412SyQX125qxyzOgIFouwOcvjZWk6bQbNPR1wtaEzFT6jZxAjf1dejlGqa6fqHcuCvQea6EWUkUA==}
@@ -14757,6 +14774,10 @@ snapshots:
   vite-plugin-externalize-deps@0.10.0(vite@7.2.4(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)):
     dependencies:
       vite: 7.2.4(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)
+
+  vite-plugin-monaco-editor@1.1.0(monaco-editor@0.52.2):
+    dependencies:
+      monaco-editor: 0.52.2
 
   vite-plugin-turbosnap@1.0.3: {}
 

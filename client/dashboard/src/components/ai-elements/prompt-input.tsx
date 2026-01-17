@@ -48,7 +48,6 @@ import {
 } from "lucide-react";
 import { nanoid } from "nanoid";
 import {
-  type ChangeEvent,
   type ChangeEventHandler,
   Children,
   type ClipboardEventHandler,
@@ -838,8 +837,8 @@ export const PromptInputTextarea = ({
   const controlledProps = controller
     ? {
         value: controller.textInput.value,
-        onChange: (e: ChangeEvent<HTMLTextAreaElement>) => {
-          controller.textInput.setInput(e.currentTarget.value);
+        onChange: (e: string) => {
+          controller.textInput.setInput(e);
           onChange?.(e);
         },
       }
