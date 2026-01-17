@@ -123,6 +123,16 @@ For more documentation on passing through different kinds of environment variabl
 
 ***
 
+### gramEnvironment?
+
+> `optional` **gramEnvironment**: `string`
+
+The environment slug to use for resolving secrets.
+When specified, this is sent as the Gram-Environment header to select
+which environment's secrets to use for tool execution.
+
+***
+
 ### variant?
 
 > `optional` **variant**: `"widget"` \| `"sidecar"` \| `"standalone"`
