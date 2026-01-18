@@ -45,6 +45,7 @@ export function NavButton({
   title,
   titleNode,
   href,
+  target,
   active,
   Icon,
   onClick,
@@ -52,6 +53,7 @@ export function NavButton({
   title: string;
   titleNode?: React.ReactNode;
   href?: string;
+  target?: string;
   onClick?: () => void;
   active?: boolean;
   Icon?: React.ComponentType<{ className?: string }>;
@@ -61,6 +63,7 @@ export function NavButton({
       className="group/nav-button"
       tooltip={title}
       href={href}
+      target={target}
       isActive={active}
       onClick={onClick}
     >
