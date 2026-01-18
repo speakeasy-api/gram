@@ -754,6 +754,13 @@ export interface ComposerConfig {
    * @default true
    */
   attachments?: boolean | AttachmentsConfig
+
+  /**
+   * Configuration for @tool mentions in the composer.
+   * Set to `false` to disable, `true` for defaults, or an object for fine-grained control.
+   * @default true
+   */
+  toolMentions?: boolean | ToolMentionsConfig
 }
 
 /**
@@ -779,6 +786,14 @@ export interface AttachmentsConfig {
    * @default 104857600 (100MB)
    */
   maxSize?: number
+}
+
+export interface ToolMentionsConfig {
+  /** @default true */
+  enabled?: boolean
+  /** @default 10 */
+  maxSuggestions?: number
+  placeholder?: string
 }
 
 export interface SidecarConfig extends ExpandableConfig {
@@ -829,4 +844,5 @@ export type ElementsContextType = {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
   plugins: Plugin[]
+  mcpTools: Record<string, unknown> | undefined
 }

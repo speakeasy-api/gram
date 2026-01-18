@@ -305,8 +305,9 @@ const ElementsProviderWithApproval = ({
       isOpen: isOpen ?? false,
       setIsOpen,
       plugins,
+      mcpTools,
     }),
-    [config, model, isExpanded, isOpen, plugins]
+    [config, model, isExpanded, isOpen, plugins, mcpTools]
   )
 
   const frontendTools = config.tools?.frontendTools ?? {}

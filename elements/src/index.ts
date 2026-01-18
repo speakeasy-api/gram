@@ -43,6 +43,7 @@ export type {
   SidecarConfig,
   Suggestion,
   ThemeConfig,
+  ToolMentionsConfig,
   ToolsConfig,
   Variant,
   VARIANTS,
