@@ -1,30 +1,21 @@
 'use client'
 
-import { useRef } from 'react'
 import { useElements } from '@/hooks/useElements'
 import { AssistantModal } from '../assistant-ui/assistant-modal'
 import { AssistantSidecar } from '../assistant-ui/assistant-sidecar'
 import { ErrorBoundary } from '../assistant-ui/error-boundary'
 import { Thread } from '../assistant-ui/thread'
-import { ROOT_SELECTOR } from '@/constants/tailwind'
-import { PortalContainerProvider } from '@/contexts/portal-container'
+import { ShadowRoot } from '@/components/ShadowRoot'
 
 interface ChatProps {
   className?: string
 }
 
 function RootWrapper({ children }: { children: React.ReactNode }) {
-  const containerRef = useRef<HTMLDivElement>(null)
   return (
-    <div
-      ref={containerRef}
-      className={ROOT_SELECTOR}
-      style={{ height: 'inherit', width: 'inherit' }}
-    >
-      <PortalContainerProvider containerRef={containerRef}>
-        {children}
-      </PortalContainerProvider>
-    </div>
+    <ShadowRoot hostStyle={{ height: 'inherit', width: 'inherit' }}>
+      {children}
+    </ShadowRoot>
   )
 }
 
