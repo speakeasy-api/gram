@@ -9,6 +9,10 @@ import { externalizeDeps } from 'vite-plugin-externalize-deps'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
+  test: {
+    environment: 'jsdom',
+    globals: true,
+  },
   plugins: [
     react(),
     dts(),
