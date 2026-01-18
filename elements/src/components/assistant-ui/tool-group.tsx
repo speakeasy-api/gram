@@ -7,7 +7,7 @@ import { ToolUIGroup } from '@/components/ui/tool-ui'
 
 export const ToolGroup: FC<
   PropsWithChildren<{ startIndex: number; endIndex: number }>
-> = ({ children }) => {
+> = ({ children, startIndex, endIndex }) => {
   const parts = useAssistantState(({ message }) => message).parts
   const toolCallParts = parts.filter((part) => part.type === 'tool-call')
   const anyMessagePartsAreRunning = toolCallParts.some(
@@ -17,15 +17,14 @@ export const ToolGroup: FC<
   const { config } = useElements()
   const defaultExpanded = config.tools?.expandToolGroupsByDefault ?? false
 
+  const totalToolCalls = endIndex - startIndex + 1
   const groupTitle = useMemo(() => {
-    const toolParts = parts.filter((part) => part.type === 'tool-call')
-
-    if (toolParts.length === 0) return 'No tools called'
-    if (toolParts.length === 1)
-      return `Calling ${humanizeToolName(toolParts[0].toolName)}...`
+    if (totalToolCalls === 0) return 'No tools called'
+    if (totalToolCalls === 1)
+      return `Calling ${humanizeToolName(toolCallParts[0].toolName)}...`
     return anyMessagePartsAreRunning
-      ? `Calling ${toolParts.length} tools...`
-      : `Executed ${toolParts.length} tools`
+      ? `Calling ${totalToolCalls} tools...`
+      : `Executed ${totalToolCalls} tools`
   }, [parts, anyMessagePartsAreRunning])
 
   // If there's a custom component for the single tool, render children directly
