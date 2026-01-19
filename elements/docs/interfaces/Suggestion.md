@@ -12,14 +12,20 @@
 
 > **title**: `string`
 
+Suggestion heading
+
 ***
 
 ### label
 
 > **label**: `string`
 
+Suggestion subheading
+
 ***
 
-### action
+### prompt
 
-> **action**: `string`
+> **prompt**: `string`
+
+The prompt sent when the suggestion is clicked

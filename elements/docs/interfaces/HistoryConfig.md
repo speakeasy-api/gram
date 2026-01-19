@@ -42,6 +42,7 @@ false
 > `optional` **showThreadList**: `boolean`
 
 Whether to show the thread list sidebar/panel.
+Only applicable for widget and sidecar variants.
 Only applies when history is enabled.
 
 #### Default
