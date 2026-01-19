@@ -9,7 +9,7 @@ export { useElements } from './hooks/useElements'
 
 // Core Components
 export { Chat } from '@/components/Chat'
-export { ThreadList as ChatHistory } from '@/components/assistant-ui/thread-list'
+export { ChatHistory } from '@/components/ChatHistory'
 
 // Frontend Tools
 export { defineFrontendTool } from './lib/tools'

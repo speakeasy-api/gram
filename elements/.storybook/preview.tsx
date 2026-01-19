@@ -74,6 +74,15 @@ const preview: Preview = {
       elementsConfig.projectSlug ||= projectSlugArg
       elementsConfig.mcp ||= mcpUrlArg
 
+      // Pass the Storybook theme to the elements config so shadow DOM gets the right color scheme
+      const storybookTheme = context.globals.theme as 'light' | 'dark' | undefined
+      if (storybookTheme && !elementsConfig.theme?.colorScheme) {
+        elementsConfig.theme = {
+          ...elementsConfig.theme,
+          colorScheme: storybookTheme,
+        }
+      }
+
       return (
         <ElementsDecorator config={elementsConfig}>
           <Story />
