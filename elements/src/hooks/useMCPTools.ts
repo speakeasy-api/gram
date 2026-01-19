@@ -13,18 +13,20 @@ export function useMCPTools({
   mcp,
   environment,
   toolsToInclude,
+  gramEnvironment,
 }: {
   auth: Auth
   mcp: string | undefined
   environment: Record<string, unknown>
   toolsToInclude?: ToolsFilter
+  gramEnvironment?: string
 }): UseQueryResult<MCPToolsResult, Error> {
   const authQueryKey = Object.entries(auth.headers ?? {}).map(
     (k, v) => `${k}:${v}`
   )
 
   const queryResult = useQuery({
-    queryKey: ['mcpTools', mcp, ...authQueryKey],
+    queryKey: ['mcpTools', mcp, gramEnvironment, ...authQueryKey],
     queryFn: async () => {
       assert(!auth.isLoading, 'No auth found')
       assert(mcp, 'No MCP URL found')
@@ -37,6 +39,7 @@ export function useMCPTools({
           headers: {
             ...transformEnvironmentToHeaders(environment ?? {}),
             ...auth.headers,
+            ...(gramEnvironment && { 'Gram-Environment': gramEnvironment }),
           },
         },
       })

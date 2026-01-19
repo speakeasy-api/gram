@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.21.2
+
+### Patch Changes
+
+- 0472997: Disable retrying of messages until backend endpoint supports message branching
+
 ## 1.21.1
 
 ### Patch Changes

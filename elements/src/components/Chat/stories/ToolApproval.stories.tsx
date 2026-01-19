@@ -1,4 +1,3 @@
-import React from 'react'
 import { Chat } from '..'
 import type { Meta, StoryFn } from '@storybook/react-vite'
 import { defineFrontendTool } from '../../../lib/tools'

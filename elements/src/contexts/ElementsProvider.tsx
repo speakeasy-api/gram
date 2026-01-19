@@ -1,4 +1,5 @@
 import { FrontendTools } from '@/components/FrontendTools'
+import { ROOT_SELECTOR } from '@/constants/tailwind'
 import { useGramThreadListAdapter } from '@/hooks/useGramThreadListAdapter'
 import { useMCPTools } from '@/hooks/useMCPTools'
 import { useToolApproval } from '@/hooks/useToolApproval'
@@ -140,6 +141,7 @@ const ElementsProviderWithApproval = ({
     mcp: config.mcp,
     environment: config.environment ?? {},
     toolsToInclude: config.tools?.toolsToInclude,
+    gramEnvironment: config.gramEnvironment,
   })
 
   // Store approval helpers in ref so they can be used in async contexts
@@ -208,10 +210,13 @@ const ElementsProviderWithApproval = ({
           getEnabledTools(context?.tools ?? {})
         )
 
-        // Include Gram-Chat-ID header for chat persistence
+        // Include Gram-Chat-ID header for chat persistence and Gram-Environment for environment selection
         const headersWithChatId = {
           ...auth.headers,
           'Gram-Chat-ID': chatIdRef.current,
+          ...(config.gramEnvironment && {
+            'Gram-Environment': config.gramEnvironment,
+          }),
         }
 
         // Create OpenRouter model (only needed when not using custom model)
@@ -382,7 +387,7 @@ const ElementsProviderWithHistory = ({
     <AssistantRuntimeProvider runtime={runtime}>
       <HistoryProvider>
         <ElementsContext.Provider value={contextValue}>
-          {children}
+          <div className={`${ROOT_SELECTOR} h-full`}>{children}</div>
           <FrontendTools tools={frontendTools} />
         </ElementsContext.Provider>
       </HistoryProvider>
@@ -416,7 +421,7 @@ const ElementsProviderWithoutHistory = ({
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ElementsContext.Provider value={contextValue}>
-        {children}
+        <div className={`${ROOT_SELECTOR} h-full`}>{children}</div>
         <FrontendTools tools={frontendTools} />
       </ElementsContext.Provider>
     </AssistantRuntimeProvider>

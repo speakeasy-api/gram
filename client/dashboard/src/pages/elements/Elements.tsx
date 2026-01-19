@@ -844,7 +844,6 @@ function InstallationGuide({
         },
       );
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, existingKeys]);
 
   const mcpUrl = config.mcp || `https://app.getgram.ai/mcp/${projectSlug}`;

@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.21.1**](../README.md)
+[**@gram-ai/elements v1.21.2**](../README.md)
 
 ***
 
@@ -120,6 +120,16 @@ Custom environment variable overrides for the Elements library.
 Will be used to override the environment variables for the MCP server.
 
 For more documentation on passing through different kinds of environment variables, including bearer tokens, see the [Gram documentation](https://www.speakeasy.com/docs/gram/host-mcp/public-private-servers#pass-through-authentication).
+
+***
+
+### gramEnvironment?
+
+> `optional` **gramEnvironment**: `string`
+
+The environment slug to use for resolving secrets.
+When specified, this is sent as the Gram-Environment header to select
+which environment's secrets to use for tool execution.
 
 ***
 
