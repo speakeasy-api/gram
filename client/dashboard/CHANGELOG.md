@@ -1,5 +1,13 @@
 # dashboard
 
+## 0.26.12
+
+### Patch Changes
+
+- 5c6f78a: Embed Elements chat in logs page
+- Updated dependencies [5c6f78a]
+  - @gram-ai/elements@1.22.1
+
 ## 0.26.11
 
 ### Patch Changes

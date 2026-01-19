@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.22.1
+
+### Patch Changes
+
+- 5c6f78a: Embed Elements chat in logs page
+
 ## 1.22.0
 
 ### Minor Changes

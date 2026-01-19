@@ -1,5 +1,11 @@
 # server
 
+## 0.18.4
+
+### Patch Changes
+
+- 5c6f78a: Embed Elements chat in logs page
+
 ## 0.18.3
 
 ### Patch Changes
