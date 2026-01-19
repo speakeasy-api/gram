@@ -2,6 +2,7 @@ import { FrontendTools } from '@/components/FrontendTools'
 import { useMCPTools } from '@/hooks/useMCPTools'
 import { useToolApproval } from '@/hooks/useToolApproval'
 import { getApiUrl } from '@/lib/api'
+import { initErrorTracking, trackError } from '@/lib/errorTracking'
 import { MODELS } from '@/lib/models'
 import {
   clearFrontendToolApprovalConfig,
@@ -49,6 +50,7 @@ import {
   isLocalThreadId,
   useGramThreadListAdapter,
 } from '@/hooks/useGramThreadListAdapter'
+import { ROOT_SELECTOR } from '@/constants/tailwind'
 
 export interface ElementsProviderProps {
   children: ReactNode
@@ -128,10 +130,20 @@ const ElementsProviderWithApproval = ({
     plugins
   )
 
+  // Initialize error tracking on mount
+  useEffect(() => {
+    initErrorTracking({
+      enabled: config.errorTracking?.enabled,
+      projectSlug: config.projectSlug,
+      variant: config.variant,
+    })
+  }, [])
+
   const { data: mcpTools } = useMCPTools({
     auth,
     mcp: config.mcp,
     environment: config.environment ?? {},
+    gramEnvironment: config.gramEnvironment,
   })
 
   // Store approval helpers in ref so they can be used in async contexts
@@ -160,7 +172,7 @@ const ElementsProviderWithApproval = ({
 
   // Set up frontend tool approval config for runtime checking
   useEffect(() => {
-    if (config.tools?.toolsRequiringApproval?.length) {
+    if (config.tools?.toolsRequiringApproval) {
       setFrontendToolApprovalConfig(
         getApprovalHelpers(),
         config.tools.toolsRequiringApproval
@@ -241,10 +253,13 @@ const ElementsProviderWithApproval = ({
           getEnabledTools(context?.tools ?? {})
         )
 
-        // Include Gram-Chat-ID header for chat persistence
+        // Include Gram-Chat-ID header for chat persistence and Gram-Environment for environment selection
         const headersWithChatId = {
           ...auth.headers,
-          'Gram-Chat-ID': chatId,
+          'Gram-Chat-ID': chatIdRef.current,
+          ...(config.gramEnvironment && {
+            'Gram-Environment': config.gramEnvironment,
+          }),
         }
 
         // Create OpenRouter model (only needed when not using custom model)
@@ -293,12 +308,14 @@ const ElementsProviderWithApproval = ({
             abortSignal,
             onError: ({ error }) => {
               console.error('Stream error in onError callback:', error)
+              trackError(error, { source: 'streaming' })
             },
           })
 
           return result.toUIMessageStream()
         } catch (error) {
           console.error('Error creating stream:', error)
+          trackError(error, { source: 'stream-creation' })
           throw error
         }
       },
@@ -420,7 +437,7 @@ const ElementsProviderWithHistory = ({
     <AssistantRuntimeProvider runtime={runtime}>
       <HistoryProvider>
         <ElementsContext.Provider value={contextValue}>
-          {children}
+          <div className={`${ROOT_SELECTOR} h-full`}>{children}</div>
           <FrontendTools tools={frontendTools} />
         </ElementsContext.Provider>
       </HistoryProvider>
@@ -454,7 +471,7 @@ const ElementsProviderWithoutHistory = ({
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ElementsContext.Provider value={contextValue}>
-        {children}
+        <div className={`${ROOT_SELECTOR} h-full`}>{children}</div>
         <FrontendTools tools={frontendTools} />
       </ElementsContext.Provider>
     </AssistantRuntimeProvider>

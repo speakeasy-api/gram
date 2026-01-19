@@ -1,15 +1,11 @@
+import {
+  CodeBlock,
+  CodeBlockCopyButton,
+} from "@/components/ai-elements/code-block";
 import { Page } from "@/components/page-layout";
-import { useSlugs } from "@/contexts/Sdk";
-import { useProject, useSession } from "@/contexts/Auth";
-import { cn, getServerURL } from "@/lib/utils";
-import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate";
-import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
-import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
-import { useListToolsets } from "@gram/client/react-query/index.js";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -17,7 +13,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TextArea } from "@/components/ui/textarea";
+import { useProject, useSession } from "@/contexts/Auth";
+import { useSlugs } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { cn, getServerURL } from "@/lib/utils";
+import { useRoutes } from "@/routes";
+import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate";
+import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
+import { useListToolsets } from "@gram/client/react-query/index.js";
+import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import {
   ArrowRight,
   Check,
@@ -29,13 +36,7 @@ import {
   Server,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  CodeBlock,
-  CodeBlockCopyButton,
-} from "@/components/ai-elements/code-block";
-import { useRoutes } from "@/routes";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type ColorScheme = "light" | "dark" | "system";
 type Density = "compact" | "normal" | "spacious";
@@ -780,6 +781,18 @@ function InstallationGuide({
   >(null);
   const [generatedApiKey, setGeneratedApiKey] = useState<string | null>(null);
   const [keyCreationAttempted, setKeyCreationAttempted] = useState(false);
+  const telemetry = useTelemetry();
+
+  useEffect(() => {
+    if (!projectSlug || !selectedFramework || !selectedProduct) return;
+
+    telemetry.capture("elements_event", {
+      action: "elements_installation_guide_viewed",
+      project_slug: projectSlug,
+      framework: selectedFramework,
+      product: selectedProduct,
+    });
+  }, [projectSlug, selectedFramework, selectedProduct]);
 
   const { data: existingKeys } = useListAPIKeys(
     {},
@@ -831,7 +844,6 @@ function InstallationGuide({
         },
       );
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, existingKeys]);
 
   const mcpUrl = config.mcp || `https://app.getgram.ai/mcp/${projectSlug}`;

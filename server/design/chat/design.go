@@ -131,6 +131,7 @@ var ChatOverview = Type("ChatOverview", func() {
 	Attribute("id", String, "The ID of the chat")
 	Attribute("title", String, "The title of the chat")
 	Attribute("user_id", String, "The ID of the user who created the chat")
+	Attribute("external_user_id", String, "The ID of the external user who created the chat")
 	Attribute("num_messages", Int, "The number of messages in the chat")
 	Attribute("created_at", String, func() {
 		Description("When the chat was created.")
@@ -141,7 +142,7 @@ var ChatOverview = Type("ChatOverview", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "title", "user_id", "num_messages", "created_at", "updated_at")
+	Required("id", "title", "num_messages", "created_at", "updated_at")
 })
 
 var Chat = Type("Chat", func() {
@@ -160,6 +161,7 @@ var ChatMessage = Type("ChatMessage", func() {
 	Attribute("tool_calls", String, "The tool calls in the message as a JSON blob")
 	Attribute("finish_reason", String, "The finish reason of the message")
 	Attribute("user_id", String, "The ID of the user who created the message")
+	Attribute("external_user_id", String, "The ID of the external user who created the message")
 	Attribute("created_at", String, func() {
 		Description("When the message was created.")
 		Format(FormatDateTime)

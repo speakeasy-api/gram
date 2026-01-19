@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -216,6 +215,11 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"POLAR_METER_ID_SERVERS"},
 			Required: false,
 		}),
+		&cli.StringFlag{
+			Name:    "custom-domain-cname",
+			Usage:   "The expected CNAME target for custom domain verification (e.g., cname.getgram.ai.)",
+			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_CNAME"},
+		},
 		&cli.PathFlag{
 			Name:     "config-file",
 			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",
@@ -415,7 +419,7 @@ func newWorkerCommand() *cli.Command {
 				OpenRouterChatClient: baseChatClient,
 				OpenRouter:           openRouter,
 				K8sClient:            k8sClient,
-				ExpectedTargetCNAME:  customdomains.GetCustomDomainCNAME(c.String("environment")),
+				ExpectedTargetCNAME:  c.String("custom-domain-cname"),
 				BillingTracker:       billingTracker,
 				BillingRepository:    billingRepo,
 				RedisClient:          redisClient,

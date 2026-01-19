@@ -916,12 +916,13 @@ func EncodeCreditUsageError(encoder func(context.Context, http.ResponseWriter) g
 // *ChatOverviewResponseBody from a value of type *chat.ChatOverview.
 func marshalChatChatOverviewToChatOverviewResponseBody(v *chat.ChatOverview) *ChatOverviewResponseBody {
 	res := &ChatOverviewResponseBody{
-		ID:          v.ID,
-		Title:       v.Title,
-		UserID:      v.UserID,
-		NumMessages: v.NumMessages,
-		CreatedAt:   v.CreatedAt,
-		UpdatedAt:   v.UpdatedAt,
+		ID:             v.ID,
+		Title:          v.Title,
+		UserID:         v.UserID,
+		ExternalUserID: v.ExternalUserID,
+		NumMessages:    v.NumMessages,
+		CreatedAt:      v.CreatedAt,
+		UpdatedAt:      v.UpdatedAt,
 	}
 
 	return res
@@ -931,15 +932,16 @@ func marshalChatChatOverviewToChatOverviewResponseBody(v *chat.ChatOverview) *Ch
 // *ChatMessageResponseBody from a value of type *chat.ChatMessage.
 func marshalChatChatMessageToChatMessageResponseBody(v *chat.ChatMessage) *ChatMessageResponseBody {
 	res := &ChatMessageResponseBody{
-		ID:           v.ID,
-		Role:         v.Role,
-		Content:      v.Content,
-		Model:        v.Model,
-		ToolCallID:   v.ToolCallID,
-		ToolCalls:    v.ToolCalls,
-		FinishReason: v.FinishReason,
-		UserID:       v.UserID,
-		CreatedAt:    v.CreatedAt,
+		ID:             v.ID,
+		Role:           v.Role,
+		Content:        v.Content,
+		Model:          v.Model,
+		ToolCallID:     v.ToolCallID,
+		ToolCalls:      v.ToolCalls,
+		FinishReason:   v.FinishReason,
+		UserID:         v.UserID,
+		ExternalUserID: v.ExternalUserID,
+		CreatedAt:      v.CreatedAt,
 	}
 
 	return res

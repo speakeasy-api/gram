@@ -1,12 +1,14 @@
-[**@gram-ai/elements v1.20.2**](README.md)
+[**@gram-ai/elements v1.21.2**](README.md)
 
 ***
 
-# @gram-ai/elements v1.20.2
+# @gram-ai/elements v1.21.2
 
 ## Interfaces
 
+- [ErrorContext](interfaces/ErrorContext.md)
 - [ElementsConfig](interfaces/ElementsConfig.md)
+- [ErrorTrackingConfigOption](interfaces/ErrorTrackingConfigOption.md)
 - [ModelConfig](interfaces/ModelConfig.md)
 - [ThemeConfig](interfaces/ThemeConfig.md)
 - [ComponentOverrides](interfaces/ComponentOverrides.md)
@@ -46,6 +48,7 @@
 
 - [Chat](functions/Chat.md)
 - [GramElementsProvider](functions/GramElementsProvider.md)
+- [trackError](functions/trackError.md)
 - [defineFrontendTool](functions/defineFrontendTool.md)
 
 ## References

@@ -1,4 +1,3 @@
-import React from 'react'
 import { Chat } from '..'
 import type { Meta, StoryFn } from '@storybook/react-vite'
 
@@ -8,13 +7,6 @@ const meta: Meta<typeof Chat> = {
   parameters: {
     layout: 'fullscreen',
   },
-  decorators: [
-    (Story) => (
-      <div className="m-auto flex h-screen w-full max-w-3xl flex-col">
-        <Story />
-      </div>
-    ),
-  ],
 } satisfies Meta<typeof Chat>
 
 export default meta

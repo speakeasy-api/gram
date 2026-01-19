@@ -45,7 +45,7 @@ runs:
       shell: bash
       run: |
         if [ "${{ github.event_name }}" == "pull_request" ]; then
-          SHORT_SHA=$(echo "${{ github.event.pull_request.head.sha }}" | cut -c1-7)
+          SHORT_SHA=$(echo "${{ github.event.pull_request.head.sha }}" | cut -c1-8)
           echo "tag=pr-${{ github.event.pull_request.number }}-${SHORT_SHA}" >> $GITHUB_OUTPUT
           echo "enabled=true" >> $GITHUB_OUTPUT
         else

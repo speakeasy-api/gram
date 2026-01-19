@@ -322,6 +322,11 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_LOCAL_FEATURE_FLAGS_CSV"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:    "custom-domain-cname",
+			Usage:   "The expected CNAME target for custom domain verification (e.g., cname.getgram.ai.)",
+			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_CNAME"},
+		},
 		&cli.PathFlag{
 			Name:     "config-file",
 			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",
@@ -583,7 +588,7 @@ func newStartCommand() *cli.Command {
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient))
 			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, posthogClient, serverURL, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, oauthService, billingTracker, billingRepo, tcm, productFeatures, ragService, temporalClient), mcpMetadataService)
-			chat.Attach(mux, chat.NewService(logger, db, sessionManager, chatSessionsManager, openRouter, baseChatClient, &background.FallbackModelUsageTracker{Temporal: temporalClient}))
+			chat.Attach(mux, chat.NewService(logger, db, sessionManager, chatSessionsManager, openRouter, baseChatClient, &background.FallbackModelUsageTracker{Temporal: temporalClient}, posthogClient))
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
 					GramServerURL:      c.String("server-url"),
@@ -595,7 +600,7 @@ func newStartCommand() *cli.Command {
 			variations.Attach(mux, variations.NewService(logger, db, sessionManager))
 			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
 			usage.Attach(mux, usage.NewService(logger, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter))
-			tm.Attach(mux, tm.NewService(logger, db, sessionManager, tcm, productFeatures))
+			tm.Attach(mux, tm.NewService(logger, db, sessionManager, chatSessionsManager, tcm, productFeatures, posthogClient))
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 
 			srv := &http.Server{
@@ -632,7 +637,7 @@ func newStartCommand() *cli.Command {
 						OpenRouterChatClient: baseChatClient,
 						OpenRouter:           openRouter,
 						K8sClient:            k8sClient,
-						ExpectedTargetCNAME:  customdomains.GetCustomDomainCNAME(c.String("environment")),
+						ExpectedTargetCNAME:  c.String("custom-domain-cname"),
 						BillingTracker:       billingTracker,
 						BillingRepository:    billingRepo,
 						RedisClient:          redisClient,

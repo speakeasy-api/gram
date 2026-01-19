@@ -25,3 +25,7 @@ pnpm run docs
 # Watch mode (regenerate on changes)
 pnpm run docs:watch
 ```
+
+## Chromatic
+
+Chromatic is used to automatically test the library for visual regressions. The tests are run automatically on every pull request to the `main` branch. Before merging a pull request, you must manually approve the changes in the Chromatic dashboard by clicking on the PR check. Anyone with contributor level access to the Gram repo can approve the changes.

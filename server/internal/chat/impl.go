@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
 var _ gen.Service = (*Service)(nil)
@@ -61,6 +62,7 @@ type Service struct {
 	chatSessions         *chatsessions.Manager
 	proxyTransport       http.RoundTripper
 	fallbackUsageTracker FallbackModelUsageTracker
+	posthog              *posthog.Posthog
 }
 
 func NewService(
@@ -71,6 +73,7 @@ func NewService(
 	openRouter openrouter.Provisioner,
 	chatClient *openrouter.ChatClient,
 	fallbackUsageTracker FallbackModelUsageTracker,
+	posthog *posthog.Posthog,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
@@ -85,6 +88,7 @@ func NewService(
 		chatClient:           chatClient,
 		proxyTransport:       cleanhttp.DefaultPooledTransport(),
 		fallbackUsageTracker: fallbackUsageTracker,
+		posthog:              posthog,
 	}
 }
 
@@ -178,21 +182,47 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		}
 	}
 
-	// if the user is Admin, we list chat for a whole project
-	if userInfo != nil && userInfo.Admin {
-		chats, err := s.repo.ListChats(ctx, *authCtx.ProjectID)
+	// If we have an external user ID, always only list chats for that external user
+	if authCtx.ExternalUserID != "" {
+		chats, err := s.repo.ListChatsForExternalUser(ctx, repo.ListChatsForExternalUserParams{
+			ProjectID:      *authCtx.ProjectID,
+			ExternalUserID: conv.ToPGText(authCtx.ExternalUserID),
+		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats").Log(ctx, s.logger)
 		}
 
 		for _, chat := range chats {
 			result = append(result, &gen.ChatOverview{
-				ID:          chat.ID.String(),
-				UserID:      chat.UserID.String,
-				Title:       chat.Title.String,
-				NumMessages: int(chat.NumMessages),
-				CreatedAt:   chat.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:   chat.UpdatedAt.Time.Format(time.RFC3339),
+				ID:             chat.ID.String(),
+				UserID:         nil,
+				ExternalUserID: &chat.ExternalUserID.String,
+				Title:          chat.Title.String,
+				NumMessages:    int(chat.NumMessages),
+				CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:      chat.UpdatedAt.Time.Format(time.RFC3339),
+			})
+
+			return &gen.ListChatsResult{Chats: result}, nil
+		}
+	}
+
+	// if the user is Admin, we list chat for a whole project
+	if userInfo != nil && userInfo.Admin {
+		chats, err := s.repo.ListAllChats(ctx, *authCtx.ProjectID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats").Log(ctx, s.logger)
+		}
+
+		for _, chat := range chats {
+			result = append(result, &gen.ChatOverview{
+				ID:             chat.ID.String(),
+				UserID:         &chat.UserID.String,
+				ExternalUserID: nil,
+				Title:          chat.Title.String,
+				NumMessages:    int(chat.NumMessages),
+				CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:      chat.UpdatedAt.Time.Format(time.RFC3339),
 			})
 		}
 
@@ -214,12 +244,13 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 
 	for _, chat := range chats {
 		result = append(result, &gen.ChatOverview{
-			ID:          chat.ID.String(),
-			UserID:      chat.UserID.String,
-			Title:       chat.Title.String,
-			NumMessages: int(chat.NumMessages),
-			CreatedAt:   chat.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:   chat.UpdatedAt.Time.Format(time.RFC3339),
+			ID:             chat.ID.String(),
+			UserID:         &chat.UserID.String,
+			ExternalUserID: nil,
+			Title:          chat.Title.String,
+			NumMessages:    int(chat.NumMessages),
+			CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:      chat.UpdatedAt.Time.Format(time.RFC3339),
 		})
 	}
 
@@ -250,6 +281,10 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
 	messages, err := s.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
 		ChatID:    chat.ID,
 		ProjectID: *authCtx.ProjectID,
@@ -262,26 +297,28 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	for i, msg := range messages {
 		toolCalls := string(msg.ToolCalls)
 		resultMessages[i] = &gen.ChatMessage{
-			ID:           msg.ID.String(),
-			Role:         msg.Role,
-			Model:        msg.Model.String,
-			UserID:       &msg.UserID.String,
-			Content:      &msg.Content,
-			ToolCalls:    &toolCalls,
-			ToolCallID:   &msg.ToolCallID.String,
-			FinishReason: &msg.FinishReason.String,
-			CreatedAt:    msg.CreatedAt.Time.Format(time.RFC3339),
+			ID:             msg.ID.String(),
+			Role:           msg.Role,
+			Model:          msg.Model.String,
+			UserID:         &msg.UserID.String,
+			ExternalUserID: &msg.ExternalUserID.String,
+			Content:        &msg.Content,
+			ToolCalls:      &toolCalls,
+			ToolCallID:     &msg.ToolCallID.String,
+			FinishReason:   &msg.FinishReason.String,
+			CreatedAt:      msg.CreatedAt.Time.Format(time.RFC3339),
 		}
 	}
 
 	return &gen.Chat{
-		ID:          chat.ID.String(),
-		Title:       chat.Title.String,
-		UserID:      chat.UserID.String,
-		NumMessages: len(messages),
-		CreatedAt:   chat.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:   chat.UpdatedAt.Time.Format(time.RFC3339),
-		Messages:    resultMessages,
+		ID:             chat.ID.String(),
+		Title:          chat.Title.String,
+		UserID:         &chat.UserID.String,
+		ExternalUserID: &chat.ExternalUserID.String,
+		NumMessages:    len(messages),
+		CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:      chat.UpdatedAt.Time.Format(time.RFC3339),
+		Messages:       resultMessages,
 	}, nil
 }
 
@@ -294,6 +331,19 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	orgID := authCtx.ActiveOrganizationID
 	userID := authCtx.UserID
+
+	eventProperties := map[string]any{
+		"action":            "chat_request_received",
+		"organization_slug": authCtx.OrganizationSlug,
+		"project_slug":      *authCtx.ProjectSlug,
+		"success":           false,
+	}
+
+	defer func() {
+		if err := s.posthog.CaptureEvent(ctx, "elements_event", authCtx.ActiveOrganizationID, eventProperties); err != nil {
+			s.logger.ErrorContext(ctx, "failed to capture elements event", attr.SlogError(err))
+		}
+	}()
 
 	slogArgs := []any{
 		attr.SlogProjectID(authCtx.ProjectID.String()),
@@ -331,10 +381,13 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	chatIDHeader := r.Header.Get("Gram-Chat-ID")
 
+	eventProperties["model"] = chatRequest.Model
+	eventProperties["chat_id"] = chatIDHeader
+
 	respCaptor := w
 
 	if chatIDHeader != "" {
-		chatID, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, chatIDHeader, chatRequest)
+		chatID, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatIDHeader, chatRequest)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to start or resume chat").Log(ctx, s.logger)
 		}
@@ -464,6 +517,8 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	proxy.ServeHTTP(respCaptor, r)
 
+	eventProperties["success"] = true
+
 	return nil
 }
 
@@ -559,7 +614,7 @@ func (s *Service) generateChatTitle(ctx context.Context, orgID, firstMessage str
 	return title
 }
 
-func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID uuid.UUID, userID string, chatIDHeader string, request openrouter.OpenAIChatRequest) (uuid.UUID, error) {
+func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID uuid.UUID, userID string, externalUserID string, chatIDHeader string, request openrouter.OpenAIChatRequest) (uuid.UUID, error) {
 	chatID, err := uuid.Parse(chatIDHeader)
 	if err != nil {
 		return uuid.Nil, oops.E(oops.CodeInvalid, err, "invalid chat ID in header")
@@ -571,6 +626,7 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 		ProjectID:      projectID,
 		OrganizationID: orgID,
 		UserID:         conv.ToPGText(userID),
+		ExternalUserID: conv.ToPGText(externalUserID),
 		Title:          conv.ToPGText("New Chat"),
 	})
 	if err != nil {
@@ -601,6 +657,7 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 				Model:            conv.ToPGText(request.Model),
 				Content:          msg.Content,
 				UserID:           conv.ToPGText(userID),
+				ExternalUserID:   conv.ToPGText(externalUserID),
 				ToolCallID:       conv.ToPGText(msg.ToolCallID),
 				ToolCalls:        nil,
 				FinishReason:     conv.ToPGTextEmpty(""),
@@ -722,6 +779,7 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 			TotalTokens:      int64(r.usage.TotalTokens),
 			FinishReason:     conv.PtrToPGText(r.finishReason),
 			UserID:           conv.ToPGTextEmpty(""), // These are agent messages, not user messages
+			ExternalUserID:   conv.ToPGTextEmpty(""), // These are agent messages, not user messages
 		}})
 		if err != nil {
 			r.logger.ErrorContext(r.ctx, "failed to store chat message", attr.SlogError(err))

@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.20.2**](../README.md)
+[**@gram-ai/elements v1.21.2**](../README.md)
 
 ***
 
@@ -120,6 +120,16 @@ Custom environment variable overrides for the Elements library.
 Will be used to override the environment variables for the MCP server.
 
 For more documentation on passing through different kinds of environment variables, including bearer tokens, see the [Gram documentation](https://www.speakeasy.com/docs/gram/host-mcp/public-private-servers#pass-through-authentication).
+
+***
+
+### gramEnvironment?
+
+> `optional` **gramEnvironment**: `string`
+
+The environment slug to use for resolving secrets.
+When specified, this is sent as the Gram-Environment header to select
+which environment's secrets to use for tool execution.
 
 ***
 
@@ -359,6 +369,25 @@ Use this to override the default API URL, or add explicit auth configuration
 const config: ElementsConfig = {
   api: {
     url: 'https://api.getgram.ai',
+  },
+}
+```
+
+***
+
+### errorTracking?
+
+> `optional` **errorTracking**: [`ErrorTrackingConfigOption`](ErrorTrackingConfigOption.md)
+
+Error tracking configuration.
+By default, errors are reported to help improve the Elements library.
+
+#### Example
+
+```ts
+const config: ElementsConfig = {
+  errorTracking: {
+    enabled: false, // Opt out of error reporting
   },
 }
 ```

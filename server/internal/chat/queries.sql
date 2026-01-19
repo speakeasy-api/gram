@@ -4,6 +4,7 @@ INSERT INTO chats (
   , project_id
   , organization_id
   , user_id
+  , external_user_id
   , title
   , created_at
   , updated_at
@@ -13,6 +14,7 @@ VALUES (
     @project_id,
     @organization_id,
     @user_id,
+    @external_user_id,
     @title,
     NOW(),
     NOW()
@@ -32,15 +34,16 @@ INSERT INTO chat_messages (
   , message_id
   , tool_call_id
   , user_id
+  , external_user_id
   , finish_reason
   , tool_calls
   , prompt_tokens
   , completion_tokens
   , total_tokens
 )
-VALUES (@chat_id, @role, @project_id::uuid, @content, @model, @message_id, @tool_call_id, @user_id, @finish_reason, @tool_calls, @prompt_tokens, @completion_tokens, @total_tokens);
+VALUES (@chat_id, @role, @project_id::uuid, @content, @model, @message_id, @tool_call_id, @user_id, @external_user_id, @finish_reason, @tool_calls, @prompt_tokens, @completion_tokens, @total_tokens);
 
--- name: ListChats :many
+-- name: ListAllChats :many
 SELECT 
     c.*,
     (
@@ -57,6 +60,25 @@ SELECT
     )::integer as total_tokens
 FROM chats c 
 WHERE c.project_id = @project_id;
+
+-- name: ListChatsForExternalUser :many
+SELECT 
+    c.*,
+    (
+        COALESCE(
+            (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
+            0
+        )
+    )::integer as num_messages 
+    , (
+        COALESCE(
+            (SELECT SUM(total_tokens) FROM chat_messages WHERE chat_id = c.id),
+            0
+        )
+    )::integer as total_tokens
+FROM chats c 
+WHERE c.project_id = @project_id AND c.external_user_id = @external_user_id;
+
 
 -- name: ListChatsForUser :many
 SELECT 
