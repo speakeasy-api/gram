@@ -1,45 +1,29 @@
-import { Button } from "@/components/ui/button";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useThreadId } from "@gram-ai/elements";
-import { Link } from "lucide-react";
+import { ShareButton, useThreadId } from "@gram-ai/elements";
 import { toast } from "sonner";
 
 /**
- * Button component that copies the current chat URL to clipboard for sharing.
- * Uses the Elements thread ID for proper chat sharing integration.
- * Captures telemetry event when chat is shared.
+ * Playground-specific share button that wraps the Elements ShareButton
+ * with telemetry tracking and toast notifications.
  */
 export function ShareChatButton() {
-  const { threadId } = useThreadId();
   const telemetry = useTelemetry();
-
-  const handleShare = () => {
-    if (!threadId) {
-      toast.error("No chat to share yet. Send a message first.");
-      return;
-    }
-
-    telemetry.capture("chat_event", {
-      action: "chat_shared",
-      thread_id: threadId,
-    });
-
-    // Build share URL with threadId parameter
-    const url = new URL(window.location.href);
-    url.searchParams.set("threadId", threadId);
-    navigator.clipboard.writeText(url.toString());
-    toast.success("Chat link copied to clipboard");
-  };
+  const { threadId } = useThreadId();
 
   return (
-    <Button
-      size="sm"
-      variant="ghost"
-      onClick={handleShare}
-      disabled={!threadId}
-    >
-      <Link className="size-4 mr-2" />
-      Share chat
-    </Button>
+    <ShareButton
+      onShare={(result) => {
+        if ("url" in result) {
+          // Track successful share
+          telemetry.capture("chat_event", {
+            action: "chat_shared",
+            thread_id: threadId,
+          });
+          toast.success("Chat link copied to clipboard");
+        } else {
+          toast.error(result.error.message);
+        }
+      }}
+    />
   );
 }

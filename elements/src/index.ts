@@ -11,6 +11,8 @@ export { useThreadId } from './hooks/useThreadId'
 // Core Components
 export { Chat } from '@/components/Chat'
 export { ChatHistory } from '@/components/ChatHistory'
+export { ShareButton } from '@/components/ShareButton'
+export type { ShareButtonProps } from '@/components/ShareButton'
 
 // Frontend Tools
 export { defineFrontendTool } from './lib/tools'
