@@ -20,6 +20,7 @@
 - [ModalConfig](interfaces/ModalConfig.md)
 - [ComposerConfig](interfaces/ComposerConfig.md)
 - [AttachmentsConfig](interfaces/AttachmentsConfig.md)
+- [ToolMentionsConfig](interfaces/ToolMentionsConfig.md)
 - [SidecarConfig](interfaces/SidecarConfig.md)
 - [HistoryConfig](interfaces/HistoryConfig.md)
 - [Plugin](interfaces/Plugin.md)

@@ -36,3 +36,22 @@ Or provide an object for fine-grained control.
 ```ts
 true
 ```
+
+***
+
+### toolMentions?
+
+> `optional` **toolMentions**: `boolean` \| [`ToolMentionsConfig`](ToolMentionsConfig.md)
+
+Configuration for
+
+#### Tool
+
+mentions in the composer.
+Set to `false` to disable, `true` for defaults, or an object for fine-grained control.
+
+#### Default
+
+```ts
+true
+```
