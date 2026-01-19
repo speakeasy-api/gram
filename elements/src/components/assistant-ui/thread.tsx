@@ -292,14 +292,12 @@ const ComposerToolMentions: FC<{
     if (!isActive) return
 
     const findTextarea = () => {
-      // Look for the composer input textarea
       const textarea = document.querySelector(
         '.aui-composer-input'
       ) as HTMLTextAreaElement | null
       if (textarea && textareaRef.current !== textarea) {
         textareaRef.current = textarea
 
-        // Track cursor position changes
         const handleSelectionChange = () => updateCursorPosition()
         textarea.addEventListener('click', handleSelectionChange)
         textarea.addEventListener('keyup', handleSelectionChange)
@@ -313,7 +311,6 @@ const ComposerToolMentions: FC<{
       }
     }
 
-    // Try immediately and observe for changes
     const cleanup = findTextarea()
 
     const observer = new MutationObserver(() => {
@@ -375,6 +372,8 @@ const Composer: FC = () => {
     (typeof composerConfig.toolMentions === 'object' &&
       composerConfig.toolMentions.enabled !== false)
 
+  const composerRootRef = useRef<HTMLFormElement>(null)
+
   if (components.Composer) {
     return <components.Composer />
   }
@@ -390,6 +389,7 @@ const Composer: FC = () => {
     >
       <ThreadScrollToBottom />
       <ComposerPrimitive.Root
+        ref={composerRootRef}
         className={cn(
           'aui-composer-root group/input-group border-input bg-background has-[textarea:focus-visible]:border-ring has-[textarea:focus-visible]:ring-ring/5 dark:bg-background relative flex w-full flex-col border px-1 pt-2 shadow-xs transition-[color,box-shadow] outline-none has-[textarea:focus-visible]:ring-1',
           r('xl')

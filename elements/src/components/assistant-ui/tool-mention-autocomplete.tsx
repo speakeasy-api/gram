@@ -73,17 +73,6 @@ export const ToolMentionAutocomplete: FC<ToolMentionAutocompleteProps> = ({
 
       onValueChange(result.text, result.cursorPosition)
       setIsVisible(false)
-
-      setTimeout(() => {
-        const textarea = textareaRef.current
-        if (textarea) {
-          textarea.focus()
-          textarea.setSelectionRange(
-            result.cursorPosition,
-            result.cursorPosition
-          )
-        }
-      }, 0)
     },
     [mentionContext, value, cursorPosition, onValueChange, textareaRef]
   )
@@ -131,6 +120,20 @@ export const ToolMentionAutocomplete: FC<ToolMentionAutocompleteProps> = ({
     }
   }, [isVisible, filteredTools, selectedIndex, selectTool, textareaRef])
 
+  // Scroll selected item into view
+  useEffect(() => {
+    if (!isVisible) return
+    const container = containerRef.current
+    if (!container) return
+
+    const selectedItem = container.querySelector(
+      `[data-index="${selectedIndex}"]`
+    ) as HTMLElement
+    if (selectedItem) {
+      selectedItem.scrollIntoView({ block: 'nearest' })
+    }
+  }, [selectedIndex, isVisible])
+
   useEffect(() => {
     if (!isVisible) return
 
@@ -149,6 +152,52 @@ export const ToolMentionAutocomplete: FC<ToolMentionAutocompleteProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [isVisible, textareaRef])
 
+  // When autocomplete is visible, modify composer styles and position autocomplete to match composer width
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    const composer = textarea.closest('.aui-composer-root') as HTMLElement
+    if (!composer) return
+
+    const updateStyles = () => {
+      const autocomplete = containerRef.current
+      if (!autocomplete) return
+
+      if (isVisible) {
+        // Modify composer to connect with autocomplete
+        composer.style.borderTopColor = 'var(--ring)'
+        composer.style.borderTopLeftRadius = '0'
+        composer.style.borderTopRightRadius = '0'
+
+        // Position autocomplete to match composer width
+        const composerRect = composer.getBoundingClientRect()
+        const autocompleteParent = autocomplete.offsetParent as HTMLElement
+        if (autocompleteParent) {
+          const parentRect = autocompleteParent.getBoundingClientRect()
+          autocomplete.style.left = `${composerRect.left - parentRect.left}px`
+          autocomplete.style.right = 'auto'
+          autocomplete.style.width = `${composerRect.width}px`
+        }
+      }
+    }
+
+    if (isVisible) {
+      // Use requestAnimationFrame to ensure DOM is updated
+      requestAnimationFrame(updateStyles)
+    } else {
+      composer.style.borderTopColor = ''
+      composer.style.borderTopLeftRadius = ''
+      composer.style.borderTopRightRadius = ''
+    }
+
+    return () => {
+      composer.style.borderTopColor = ''
+      composer.style.borderTopLeftRadius = ''
+      composer.style.borderTopRightRadius = ''
+    }
+  }, [isVisible, textareaRef])
+
   if (!isVisible || filteredTools.length === 0) {
     return null
   }
@@ -161,22 +210,20 @@ export const ToolMentionAutocomplete: FC<ToolMentionAutocompleteProps> = ({
       exit={{ opacity: 0, y: 8 }}
       transition={{ duration: 0.15, ease: EASE_OUT_QUINT }}
       className={cn(
-        'aui-tool-mention-autocomplete',
-        'bg-popover text-popover-foreground absolute right-0 bottom-full left-0 z-50 mb-2 max-h-[200px] overflow-auto border shadow-md',
-        r('lg'),
+        'aui-tool-mention-autocomplete border-ring bg-background absolute bottom-full z-50 max-h-[220px] overflow-clip overflow-y-auto overscroll-contain rounded-br-none! rounded-bl-none! border border-b-0 shadow-xs',
+        r('xl'),
         className
       )}
     >
-      <div className="flex flex-col gap-1 p-1">
+      <div className="flex flex-col gap-1">
         {filteredTools.map((tool, index) => (
           <button
             key={tool.id}
             type="button"
+            data-index={index}
             className={cn(
-              'aui-tool-mention-item flex w-full items-start gap-2 text-left transition-colors',
-              r('md'),
-              d('px-sm'),
-              d('py-xs'),
+              'aui-tool-mention-item flex w-full items-center gap-2 text-left transition-colors',
+              d('p-sm'),
               'hover:bg-accent hover:text-accent-foreground',
               index === selectedIndex && 'bg-accent text-accent-foreground'
             )}
