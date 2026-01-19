@@ -27,7 +27,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ScrollTextIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { useEnvironment } from "../environments/Environment";
 import { ToolsetsEmptyState } from "../toolsets/ToolsetsEmptyState";
 import { ChatProvider, useChatContext } from "./ChatContext";
@@ -276,10 +276,11 @@ export function ToolsetPanel({
           }
           toast.success(
             `Added ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""}`,
+            { persist: true },
           );
         },
         onError: () => {
-          toast.error("Failed to add tools");
+          toast.error("Failed to add tools", { persist: true });
         },
       },
     );
@@ -317,10 +318,11 @@ export function ToolsetPanel({
           }
           toast.success(
             `Removed ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""}`,
+            { persist: true },
           );
         },
         onError: () => {
-          toast.error("Failed to remove tools");
+          toast.error("Failed to remove tools", { persist: true });
         },
       },
     );
@@ -459,7 +461,7 @@ export function ToolsetPanel({
         functionIdToName={functionIdToName}
         onSave={() => {
           // TODO: Implement tool variation updates
-          toast.success("Tool updated");
+          toast.success("Tool updated", { persist: true });
           setEditingTool(null);
         }}
         onRemove={() => {

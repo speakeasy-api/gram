@@ -1,4 +1,5 @@
 # McpRegistries
+(*mcpRegistries*)
 
 ## Overview
 

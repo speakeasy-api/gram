@@ -3,7 +3,8 @@ import { Input } from "./input";
 import { AnyField, AnyFieldProps } from "./any-field";
 
 export interface InputFieldProps
-  extends AnyFieldProps, React.ComponentProps<"input"> {}
+  extends AnyFieldProps,
+    React.ComponentProps<"input"> {}
 
 export function InputField({
   id,

@@ -33,7 +33,7 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { useMemo, useState, useEffect } from "react";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { SourceToolsetsCard } from "@/components/sources/SourceToolsetsCard";
 import { ViewSourceDialogContent } from "@/components/sources/ViewSourceDialogContent";
 import ExternalMCPDetails from "./external-mcp/ExternalMCPDetails";
@@ -94,11 +94,13 @@ export default function SourceDetails() {
 
   const setSourceEnvironmentMutation = useSetSourceEnvironmentLinkMutation({
     onSuccess: () => {
-      toast.success("Environment attached successfully");
+      toast.success("Environment attached successfully", { persist: true });
       setInitialEnvironmentId(activeEnvironmentId);
     },
     onError: (error) => {
-      toast.error("Failed to attach environment. Please try again.");
+      toast.error("Failed to attach environment. Please try again.", {
+        persist: true,
+      });
       console.error("Failed to attach environment:", error);
     },
     onSettled: () => {
@@ -109,11 +111,13 @@ export default function SourceDetails() {
   const deleteSourceEnvironmentMutation =
     useDeleteSourceEnvironmentLinkMutation({
       onSuccess: () => {
-        toast.success("Environment detached successfully");
+        toast.success("Environment detached successfully", { persist: true });
         setInitialEnvironmentId(undefined);
       },
       onError: (error) => {
-        toast.error("Failed to detach environment. Please try again.");
+        toast.error("Failed to detach environment. Please try again.", {
+          persist: true,
+        });
         console.error("Failed to detach environment:", error);
       },
       onSettled: () => {

@@ -6090,6 +6090,407 @@ paths:
             x-speakeasy-name-override: listCatalog
             x-speakeasy-react-hook:
                 name: ListMCPCatalog
+    /rpc/notifications.archive:
+        post:
+            description: Archive a notification
+            operationId: archiveNotification
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ArchiveNotificationRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Notification'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: archiveNotification notifications
+            tags:
+                - notifications
+            x-speakeasy-name-override: archive
+            x-speakeasy-react-hook:
+                name: ArchiveNotification
+    /rpc/notifications.create:
+        post:
+            description: Create a notification for the current project
+            operationId: createNotification
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateNotificationForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Notification'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: createNotification notifications
+            tags:
+                - notifications
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: CreateNotification
+    /rpc/notifications.list:
+        get:
+            description: List notifications for the current project
+            operationId: listNotifications
+            parameters:
+                - allowEmptyValue: true
+                  description: Filter by archived status. If not provided, returns non-archived notifications.
+                  in: query
+                  name: archived
+                  schema:
+                    default: false
+                    description: Filter by archived status. If not provided, returns non-archived notifications.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Maximum number of notifications to return
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Maximum number of notifications to return
+                    format: int32
+                    maximum: 100
+                    type: integer
+                - allowEmptyValue: true
+                  description: Cursor for pagination (notification ID)
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor for pagination (notification ID)
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListNotificationsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listNotifications notifications
+            tags:
+                - notifications
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: ListNotifications
+    /rpc/notifications.unreadCount:
+        get:
+            description: Get the count of notifications created since a given timestamp
+            operationId: getUnreadCount
+            parameters:
+                - allowEmptyValue: true
+                  description: ISO timestamp to count notifications from
+                  in: query
+                  name: since
+                  schema:
+                    description: ISO timestamp to count notifications from
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UnreadCountResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getUnreadCount notifications
+            tags:
+                - notifications
+            x-speakeasy-name-override: unreadCount
+            x-speakeasy-react-hook:
+                name: NotificationsUnreadCount
     /rpc/packages.create:
         post:
             description: Create a new package for a project.
@@ -11115,6 +11516,15 @@ components:
                 - status
                 - created_at
                 - updated_at
+        ArchiveNotificationRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The notification ID
+                    format: uuid
+            required:
+                - id
         Asset:
             type: object
             properties:
@@ -11568,6 +11978,44 @@ components:
             required:
                 - name
                 - scopes
+        CreateNotificationForm:
+            type: object
+            properties:
+                level:
+                    type: string
+                    description: The severity level of the notification
+                    enum:
+                        - info
+                        - success
+                        - warning
+                        - error
+                message:
+                    type: string
+                    description: The notification message
+                    maxLength: 2000
+                resourceId:
+                    type: string
+                    description: The ID of the resource this notification relates to
+                    maxLength: 100
+                resourceType:
+                    type: string
+                    description: The type of resource this notification relates to
+                    maxLength: 50
+                title:
+                    type: string
+                    description: The notification title
+                    maxLength: 200
+                type:
+                    type: string
+                    description: The type of notification
+                    enum:
+                        - system
+                        - user_action
+            description: Form for creating a new notification
+            required:
+                - type
+                - level
+                - title
         CreatePackageForm:
             type: object
             properties:
@@ -13356,6 +13804,20 @@ components:
                         $ref: '#/components/schemas/Key'
             required:
                 - keys
+        ListNotificationsResult:
+            type: object
+            properties:
+                nextCursor:
+                    type: string
+                    description: Cursor for the next page of results
+                notifications:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Notification'
+                    description: The list of notifications
+            description: Result type for listing notifications
+            required:
+                - notifications
         ListPackagesResult:
             type: object
             properties:
@@ -13659,6 +14121,62 @@ components:
                     type: string
             required:
                 - location
+        Notification:
+            type: object
+            properties:
+                actorUserId:
+                    type: string
+                    description: The user ID of the actor who triggered the notification
+                archivedAt:
+                    type: string
+                    description: When the notification was archived
+                    format: date-time
+                createdAt:
+                    type: string
+                    description: When the notification was created
+                    format: date-time
+                id:
+                    type: string
+                    description: The notification ID
+                    format: uuid
+                level:
+                    type: string
+                    description: The severity level of the notification
+                    enum:
+                        - info
+                        - success
+                        - warning
+                        - error
+                message:
+                    type: string
+                    description: The notification message
+                projectId:
+                    type: string
+                    description: The project ID
+                    format: uuid
+                resourceId:
+                    type: string
+                    description: The ID of the resource this notification relates to
+                resourceType:
+                    type: string
+                    description: The type of resource this notification relates to
+                title:
+                    type: string
+                    description: The notification title
+                type:
+                    type: string
+                    description: The type of notification
+                    enum:
+                        - system
+                        - user_action
+            description: A notification in the system
+            required:
+                - id
+                - projectId
+                - type
+                - level
+                - title
+                - createdAt
         OAuthEnablementMetadata:
             type: object
             properties:
@@ -15278,6 +15796,16 @@ components:
                 - id
                 - toolset_id
                 - environment_id
+        UnreadCountResult:
+            type: object
+            properties:
+                count:
+                    type: integer
+                    description: The number of unread notifications
+                    format: int32
+            description: Result type for unread notification count
+            required:
+                - count
         UpdateEnvironmentForm:
             type: object
             properties:
@@ -15830,6 +16358,8 @@ tags:
       description: Managing system api keys.
     - name: mcpMetadata
       description: Manages metadata for the MCP install page shown to users.
+    - name: notifications
+      description: Managing project notifications.
     - name: packages
       description: Manages packages in Gram.
     - name: features

@@ -44,7 +44,7 @@ import { Button, Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { v7 as uuidv7 } from "uuid";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import { ChatProvider, useChatContext } from "../playground/ChatContext";
@@ -461,7 +461,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
             routes.customTools.toolBuilder.goTo(name);
           }
 
-          toast.success("Tool saved successfully");
+          toast.success("Tool saved successfully", { persist: true });
         } catch (error) {
           handleAPIError(error, "Failed to save tool");
         }
