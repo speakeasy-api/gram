@@ -359,8 +359,18 @@ func newWorkerCommand() *cli.Command {
 				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{Temporal: temporalClient}, productFeatures, billingTracker)
 			}
 
-			guardianPolicy := guardian.NewDefaultPolicy()
+			// In local development, allow loopback addresses for internal tool-to-tool communication
+			var guardianPolicy *guardian.Policy
+			if c.String("environment") == "local" {
+				guardianPolicy, err = guardian.NewUnsafePolicy([]string{}) // Allow all traffic for local development
+				if err != nil {
+					return fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
+				}
+			} else {
+				guardianPolicy = guardian.NewDefaultPolicy()
+			}
 			if s := c.StringSlice("disallowed-cidr-blocks"); s != nil {
+				var err error
 				guardianPolicy, err = guardian.NewUnsafePolicy(s)
 				if err != nil {
 					return fmt.Errorf("failed to create unsafe http guardian policy: %w", err)

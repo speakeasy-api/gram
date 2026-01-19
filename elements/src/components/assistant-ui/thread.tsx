@@ -240,7 +240,7 @@ const ThreadSuggestions: FC = () => {
             !isStandalone && 'nth-[n+3]:hidden @md:nth-[n+3]:block'
           )}
         >
-          <ThreadPrimitive.Suggestion prompt={suggestion.action} send asChild>
+          <ThreadPrimitive.Suggestion prompt={suggestion.prompt} send asChild>
             <Button
               variant="ghost"
               className={cn(
@@ -250,7 +250,7 @@ const ThreadSuggestions: FC = () => {
                   ? `flex-row items-center ${d('gap-sm')} ${d('px-md')} ${d('py-sm')} ${r('full')}`
                   : `w-full flex-1 flex-col flex-wrap items-start justify-start ${d('gap-sm')} ${d('px-lg')} ${d('py-md')} ${r('xl')}`
               )}
-              aria-label={suggestion.action}
+              aria-label={suggestion.prompt}
             >
               <span className="aui-thread-welcome-suggestion-text-1 text-foreground text-sm font-medium">
                 {suggestion.title}

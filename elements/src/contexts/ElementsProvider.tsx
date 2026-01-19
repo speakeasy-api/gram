@@ -1,4 +1,9 @@
 import { FrontendTools } from '@/components/FrontendTools'
+import { ROOT_SELECTOR } from '@/constants/tailwind'
+import {
+  isLocalThreadId,
+  useGramThreadListAdapter,
+} from '@/hooks/useGramThreadListAdapter'
 import { useMCPTools } from '@/hooks/useMCPTools'
 import { useToolApproval } from '@/hooks/useToolApproval'
 import { getApiUrl } from '@/lib/api'
@@ -46,11 +51,6 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { ElementsContext } from './contexts'
 import { ToolApprovalProvider } from './ToolApprovalContext'
-import {
-  isLocalThreadId,
-  useGramThreadListAdapter,
-} from '@/hooks/useGramThreadListAdapter'
-import { ROOT_SELECTOR } from '@/constants/tailwind'
 
 export interface ElementsProviderProps {
   children: ReactNode
@@ -143,6 +143,7 @@ const ElementsProviderWithApproval = ({
     auth,
     mcp: config.mcp,
     environment: config.environment ?? {},
+    toolsToInclude: config.tools?.toolsToInclude,
     gramEnvironment: config.gramEnvironment,
   })
 

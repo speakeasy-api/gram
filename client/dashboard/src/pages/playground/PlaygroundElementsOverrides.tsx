@@ -41,7 +41,7 @@ export const GramThreadWelcome: FC = () => {
           {suggestions.map((suggestion, index) => (
             <ThreadPrimitive.Suggestion
               key={index}
-              prompt={suggestion.action}
+              prompt={suggestion.prompt}
               send
               asChild
             >
