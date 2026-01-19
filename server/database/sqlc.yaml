@@ -62,6 +62,16 @@ overrides:
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types
           type: TransportType
+      - column: chats.successful_tool_calls
+        go_type:
+          import: github.com/speakeasy-api/gram/server/internal/urn
+          type: Tool
+          slice: true
+      - column: chats.failed_tool_calls
+        go_type:
+          import: github.com/speakeasy-api/gram/server/internal/urn
+          type: Tool
+          slice: true
 
 sql:
   - schema: schema.sql

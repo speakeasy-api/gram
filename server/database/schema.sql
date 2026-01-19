@@ -747,6 +747,12 @@ CREATE TABLE IF NOT EXISTS chats (
   user_id TEXT,
   external_user_id TEXT,
   title TEXT,
+  
+  resolution TEXT,
+  resolution_notes TEXT,
+  successful_tool_calls TEXT[],
+  failed_tool_calls TEXT[],
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
