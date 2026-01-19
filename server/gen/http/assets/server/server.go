@@ -21,17 +21,19 @@ import (
 
 // Server lists the assets service endpoint HTTP handlers.
 type Server struct {
-	Mounts                []*MountPoint
-	ServeImage            http.Handler
-	UploadImage           http.Handler
-	UploadFunctions       http.Handler
-	UploadOpenAPIv3       http.Handler
-	FetchOpenAPIv3FromURL http.Handler
-	ServeOpenAPIv3        http.Handler
-	ServeFunction         http.Handler
-	ListAssets            http.Handler
-	UploadChatAttachment  http.Handler
-	ServeChatAttachment   http.Handler
+	Mounts                        []*MountPoint
+	ServeImage                    http.Handler
+	UploadImage                   http.Handler
+	UploadFunctions               http.Handler
+	UploadOpenAPIv3               http.Handler
+	FetchOpenAPIv3FromURL         http.Handler
+	ServeOpenAPIv3                http.Handler
+	ServeFunction                 http.Handler
+	ListAssets                    http.Handler
+	UploadChatAttachment          http.Handler
+	ServeChatAttachment           http.Handler
+	CreateSignedChatAttachmentURL http.Handler
+	ServeChatAttachmentSigned     http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -71,17 +73,21 @@ func New(
 			{"ListAssets", "GET", "/rpc/assets.list"},
 			{"UploadChatAttachment", "POST", "/rpc/assets.uploadChatAttachment"},
 			{"ServeChatAttachment", "GET", "/rpc/assets.serveChatAttachment"},
+			{"CreateSignedChatAttachmentURL", "POST", "/rpc/assets.createSignedChatAttachmentURL"},
+			{"ServeChatAttachmentSigned", "GET", "/rpc/assets.serveChatAttachmentSigned"},
 		},
-		ServeImage:            NewServeImageHandler(e.ServeImage, mux, decoder, encoder, errhandler, formatter),
-		UploadImage:           NewUploadImageHandler(e.UploadImage, mux, decoder, encoder, errhandler, formatter),
-		UploadFunctions:       NewUploadFunctionsHandler(e.UploadFunctions, mux, decoder, encoder, errhandler, formatter),
-		UploadOpenAPIv3:       NewUploadOpenAPIv3Handler(e.UploadOpenAPIv3, mux, decoder, encoder, errhandler, formatter),
-		FetchOpenAPIv3FromURL: NewFetchOpenAPIv3FromURLHandler(e.FetchOpenAPIv3FromURL, mux, decoder, encoder, errhandler, formatter),
-		ServeOpenAPIv3:        NewServeOpenAPIv3Handler(e.ServeOpenAPIv3, mux, decoder, encoder, errhandler, formatter),
-		ServeFunction:         NewServeFunctionHandler(e.ServeFunction, mux, decoder, encoder, errhandler, formatter),
-		ListAssets:            NewListAssetsHandler(e.ListAssets, mux, decoder, encoder, errhandler, formatter),
-		UploadChatAttachment:  NewUploadChatAttachmentHandler(e.UploadChatAttachment, mux, decoder, encoder, errhandler, formatter),
-		ServeChatAttachment:   NewServeChatAttachmentHandler(e.ServeChatAttachment, mux, decoder, encoder, errhandler, formatter),
+		ServeImage:                    NewServeImageHandler(e.ServeImage, mux, decoder, encoder, errhandler, formatter),
+		UploadImage:                   NewUploadImageHandler(e.UploadImage, mux, decoder, encoder, errhandler, formatter),
+		UploadFunctions:               NewUploadFunctionsHandler(e.UploadFunctions, mux, decoder, encoder, errhandler, formatter),
+		UploadOpenAPIv3:               NewUploadOpenAPIv3Handler(e.UploadOpenAPIv3, mux, decoder, encoder, errhandler, formatter),
+		FetchOpenAPIv3FromURL:         NewFetchOpenAPIv3FromURLHandler(e.FetchOpenAPIv3FromURL, mux, decoder, encoder, errhandler, formatter),
+		ServeOpenAPIv3:                NewServeOpenAPIv3Handler(e.ServeOpenAPIv3, mux, decoder, encoder, errhandler, formatter),
+		ServeFunction:                 NewServeFunctionHandler(e.ServeFunction, mux, decoder, encoder, errhandler, formatter),
+		ListAssets:                    NewListAssetsHandler(e.ListAssets, mux, decoder, encoder, errhandler, formatter),
+		UploadChatAttachment:          NewUploadChatAttachmentHandler(e.UploadChatAttachment, mux, decoder, encoder, errhandler, formatter),
+		ServeChatAttachment:           NewServeChatAttachmentHandler(e.ServeChatAttachment, mux, decoder, encoder, errhandler, formatter),
+		CreateSignedChatAttachmentURL: NewCreateSignedChatAttachmentURLHandler(e.CreateSignedChatAttachmentURL, mux, decoder, encoder, errhandler, formatter),
+		ServeChatAttachmentSigned:     NewServeChatAttachmentSignedHandler(e.ServeChatAttachmentSigned, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -100,6 +106,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListAssets = m(s.ListAssets)
 	s.UploadChatAttachment = m(s.UploadChatAttachment)
 	s.ServeChatAttachment = m(s.ServeChatAttachment)
+	s.CreateSignedChatAttachmentURL = m(s.CreateSignedChatAttachmentURL)
+	s.ServeChatAttachmentSigned = m(s.ServeChatAttachmentSigned)
 }
 
 // MethodNames returns the methods served.
@@ -117,6 +125,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListAssetsHandler(mux, h.ListAssets)
 	MountUploadChatAttachmentHandler(mux, h.UploadChatAttachment)
 	MountServeChatAttachmentHandler(mux, h.ServeChatAttachment)
+	MountCreateSignedChatAttachmentURLHandler(mux, h.CreateSignedChatAttachmentURL)
+	MountServeChatAttachmentSignedHandler(mux, h.ServeChatAttachmentSigned)
 }
 
 // Mount configures the mux to serve the assets endpoints.
@@ -756,6 +766,149 @@ func NewServeChatAttachmentHandler(
 			return
 		}
 		o := res.(*assets.ServeChatAttachmentResponseData)
+		defer o.Body.Close()
+		if wt, ok := o.Body.(io.WriterTo); ok {
+			if err := encodeResponse(ctx, w, o.Result); err != nil {
+				if errhandler != nil {
+					errhandler(ctx, w, err)
+				}
+				return
+			}
+			n, err := wt.WriteTo(w)
+			if err != nil {
+				if n == 0 {
+					if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+						errhandler(ctx, w, err)
+					}
+				} else {
+					http.NewResponseController(w).Flush()
+					panic(http.ErrAbortHandler) // too late to write an error
+				}
+			}
+			return
+		}
+		// handle immediate read error like a returned error
+		buf := bufio.NewReader(o.Body)
+		if _, err := buf.Peek(1); err != nil && err != io.EOF {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, o.Result); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if _, err := io.Copy(w, buf); err != nil {
+			http.NewResponseController(w).Flush()
+			panic(http.ErrAbortHandler) // too late to write an error
+		}
+	})
+}
+
+// MountCreateSignedChatAttachmentURLHandler configures the mux to serve the
+// "assets" service "createSignedChatAttachmentURL" endpoint.
+func MountCreateSignedChatAttachmentURLHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/assets.createSignedChatAttachmentURL", otelhttp.WithRouteTag("/rpc/assets.createSignedChatAttachmentURL", f).ServeHTTP)
+}
+
+// NewCreateSignedChatAttachmentURLHandler creates a HTTP handler which loads
+// the HTTP request and calls the "assets" service
+// "createSignedChatAttachmentURL" endpoint.
+func NewCreateSignedChatAttachmentURLHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateSignedChatAttachmentURLRequest(mux, decoder)
+		encodeResponse = EncodeCreateSignedChatAttachmentURLResponse(encoder)
+		encodeError    = EncodeCreateSignedChatAttachmentURLError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createSignedChatAttachmentURL")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "assets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountServeChatAttachmentSignedHandler configures the mux to serve the
+// "assets" service "serveChatAttachmentSigned" endpoint.
+func MountServeChatAttachmentSignedHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/assets.serveChatAttachmentSigned", otelhttp.WithRouteTag("/rpc/assets.serveChatAttachmentSigned", f).ServeHTTP)
+}
+
+// NewServeChatAttachmentSignedHandler creates a HTTP handler which loads the
+// HTTP request and calls the "assets" service "serveChatAttachmentSigned"
+// endpoint.
+func NewServeChatAttachmentSignedHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeServeChatAttachmentSignedRequest(mux, decoder)
+		encodeResponse = EncodeServeChatAttachmentSignedResponse(encoder)
+		encodeError    = EncodeServeChatAttachmentSignedError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "serveChatAttachmentSigned")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "assets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		o := res.(*assets.ServeChatAttachmentSignedResponseData)
 		defer o.Body.Close()
 		if wt, ok := o.Body.(io.WriterTo); ok {
 			if err := encodeResponse(ctx, w, o.Result); err != nil {

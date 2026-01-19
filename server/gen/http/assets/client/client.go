@@ -58,6 +58,14 @@ type Client struct {
 	// serveChatAttachment endpoint.
 	ServeChatAttachmentDoer goahttp.Doer
 
+	// CreateSignedChatAttachmentURL Doer is the HTTP client used to make requests
+	// to the createSignedChatAttachmentURL endpoint.
+	CreateSignedChatAttachmentURLDoer goahttp.Doer
+
+	// ServeChatAttachmentSigned Doer is the HTTP client used to make requests to
+	// the serveChatAttachmentSigned endpoint.
+	ServeChatAttachmentSignedDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -78,21 +86,23 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ServeImageDoer:            doer,
-		UploadImageDoer:           doer,
-		UploadFunctionsDoer:       doer,
-		UploadOpenAPIv3Doer:       doer,
-		FetchOpenAPIv3FromURLDoer: doer,
-		ServeOpenAPIv3Doer:        doer,
-		ServeFunctionDoer:         doer,
-		ListAssetsDoer:            doer,
-		UploadChatAttachmentDoer:  doer,
-		ServeChatAttachmentDoer:   doer,
-		RestoreResponseBody:       restoreBody,
-		scheme:                    scheme,
-		host:                      host,
-		decoder:                   dec,
-		encoder:                   enc,
+		ServeImageDoer:                    doer,
+		UploadImageDoer:                   doer,
+		UploadFunctionsDoer:               doer,
+		UploadOpenAPIv3Doer:               doer,
+		FetchOpenAPIv3FromURLDoer:         doer,
+		ServeOpenAPIv3Doer:                doer,
+		ServeFunctionDoer:                 doer,
+		ListAssetsDoer:                    doer,
+		UploadChatAttachmentDoer:          doer,
+		ServeChatAttachmentDoer:           doer,
+		CreateSignedChatAttachmentURLDoer: doer,
+		ServeChatAttachmentSignedDoer:     doer,
+		RestoreResponseBody:               restoreBody,
+		scheme:                            scheme,
+		host:                              host,
+		decoder:                           dec,
+		encoder:                           enc,
 	}
 }
 
@@ -353,5 +363,58 @@ func (c *Client) ServeChatAttachment() goa.Endpoint {
 			return nil, err
 		}
 		return &assets.ServeChatAttachmentResponseData{Result: res.(*assets.ServeChatAttachmentResult), Body: resp.Body}, nil
+	}
+}
+
+// CreateSignedChatAttachmentURL returns an endpoint that makes HTTP requests
+// to the assets service createSignedChatAttachmentURL server.
+func (c *Client) CreateSignedChatAttachmentURL() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateSignedChatAttachmentURLRequest(c.encoder)
+		decodeResponse = DecodeCreateSignedChatAttachmentURLResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateSignedChatAttachmentURLRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateSignedChatAttachmentURLDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assets", "createSignedChatAttachmentURL", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ServeChatAttachmentSigned returns an endpoint that makes HTTP requests to
+// the assets service serveChatAttachmentSigned server.
+func (c *Client) ServeChatAttachmentSigned() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeServeChatAttachmentSignedRequest(c.encoder)
+		decodeResponse = DecodeServeChatAttachmentSignedResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildServeChatAttachmentSignedRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ServeChatAttachmentSignedDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assets", "serveChatAttachmentSigned", err)
+		}
+		res, err := decodeResponse(resp)
+		if err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+		return &assets.ServeChatAttachmentSignedResponseData{Result: res.(*assets.ServeChatAttachmentSignedResult), Body: resp.Body}, nil
 	}
 }

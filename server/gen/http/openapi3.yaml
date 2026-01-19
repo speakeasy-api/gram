@@ -380,6 +380,119 @@ paths:
             tags:
                 - agents
             x-speakeasy-name-override: create
+    /rpc/assets.createSignedChatAttachmentURL:
+        post:
+            description: Create a time-limited signed URL to access a chat attachment without authentication.
+            operationId: createSignedChatAttachmentURL
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: Chat Sessions token header
+                  in: header
+                  name: Gram-Chat-Session
+                  schema:
+                    description: Chat Sessions token header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateSignedChatAttachmentURLForm2'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreateSignedChatAttachmentURLResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - chat_sessions_token_header_Gram-Chat-Session: []
+                  project_slug_header_Gram-Project: []
+            summary: createSignedChatAttachmentURL assets
+            tags:
+                - assets
+            x-speakeasy-name-override: createSignedChatAttachmentURL
+            x-speakeasy-react-hook:
+                name: CreateSignedChatAttachmentURL
     /rpc/assets.fetchOpenAPIv3FromURL:
         post:
             description: Fetch an OpenAPI v3 document from a URL and upload it to Gram.
@@ -707,6 +820,101 @@ paths:
             x-speakeasy-name-override: serveChatAttachment
             x-speakeasy-react-hook:
                 name: serveChatAttachment
+    /rpc/assets.serveChatAttachmentSigned:
+        get:
+            description: Serve a chat attachment using a signed URL token.
+            operationId: serveChatAttachmentSigned
+            parameters:
+                - allowEmptyValue: true
+                  description: The signed JWT token
+                  in: query
+                  name: token
+                  required: true
+                  schema:
+                    description: The signed JWT token
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                format: binary
+                                type: string
+                    description: OK response.
+                    headers:
+                        Access-Control-Allow-Origin:
+                            schema:
+                                type: string
+                        Content-Length:
+                            schema:
+                                format: int64
+                                type: integer
+                        Content-Type:
+                            schema:
+                                type: string
+                        Last-Modified:
+                            schema:
+                                type: string
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            summary: serveChatAttachmentSigned assets
+            tags:
+                - assets
+            x-speakeasy-name-override: serveChatAttachmentSigned
+            x-speakeasy-react-hook:
+                name: serveChatAttachmentSigned
     /rpc/assets.serveFunction:
         get:
             description: Serve a Gram Functions asset from Gram.
@@ -11745,6 +11953,59 @@ components:
                 - client_token
                 - expires_after
                 - status
+        CreateSignedChatAttachmentURLForm:
+            type: object
+            properties:
+                apikey_token:
+                    type: string
+                chat_sessions_token:
+                    type: string
+                id:
+                    type: string
+                    description: The ID of the chat attachment
+                project_id:
+                    type: string
+                    description: The project ID that the attachment belongs to
+                project_slug_input:
+                    type: string
+                session_token:
+                    type: string
+                ttl_seconds:
+                    type: integer
+                    description: 'Time-to-live in seconds (default: 600, max: 3600)'
+                    format: int64
+            required:
+                - id
+                - project_id
+        CreateSignedChatAttachmentURLForm2:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the chat attachment
+                project_id:
+                    type: string
+                    description: The project ID that the attachment belongs to
+                ttl_seconds:
+                    type: integer
+                    description: 'Time-to-live in seconds (default: 600, max: 3600)'
+                    format: int64
+            required:
+                - id
+                - project_id
+        CreateSignedChatAttachmentURLResult:
+            type: object
+            properties:
+                expires_at:
+                    type: string
+                    description: When the signed URL expires
+                    format: date-time
+                url:
+                    type: string
+                    description: The signed URL to access the chat attachment
+            required:
+                - url
+                - expires_at
         CreateToolsetForm:
             type: object
             properties:
@@ -14521,6 +14782,30 @@ components:
         ServeChatAttachmentResult:
             type: object
             properties:
+                content_length:
+                    type: integer
+                    format: int64
+                content_type:
+                    type: string
+                last_modified:
+                    type: string
+            required:
+                - content_type
+                - content_length
+                - last_modified
+        ServeChatAttachmentSignedForm:
+            type: object
+            properties:
+                token:
+                    type: string
+                    description: The signed JWT token
+            required:
+                - token
+        ServeChatAttachmentSignedResult:
+            type: object
+            properties:
+                access_control_allow_origin:
+                    type: string
                 content_length:
                     type: integer
                     format: int64

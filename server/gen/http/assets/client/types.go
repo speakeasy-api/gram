@@ -19,6 +19,17 @@ type FetchOpenAPIv3FromURLRequestBody struct {
 	URL string `form:"url" json:"url" xml:"url"`
 }
 
+// CreateSignedChatAttachmentURLRequestBody is the type of the "assets" service
+// "createSignedChatAttachmentURL" endpoint HTTP request body.
+type CreateSignedChatAttachmentURLRequestBody struct {
+	// The ID of the chat attachment
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID that the attachment belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Time-to-live in seconds (default: 600, max: 3600)
+	TTLSeconds *int `form:"ttl_seconds,omitempty" json:"ttl_seconds,omitempty" xml:"ttl_seconds,omitempty"`
+}
+
 // UploadImageResponseBody is the type of the "assets" service "uploadImage"
 // endpoint HTTP response body.
 type UploadImageResponseBody struct {
@@ -61,6 +72,15 @@ type UploadChatAttachmentResponseBody struct {
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
 	// The URL to serve the chat attachment
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+}
+
+// CreateSignedChatAttachmentURLResponseBody is the type of the "assets"
+// service "createSignedChatAttachmentURL" endpoint HTTP response body.
+type CreateSignedChatAttachmentURLResponseBody struct {
+	// The signed URL to access the chat attachment
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// When the signed URL expires
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 
 // ServeImageUnauthorizedResponseBody is the type of the "assets" service
@@ -1894,6 +1914,386 @@ type ServeChatAttachmentGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CreateSignedChatAttachmentURLUnauthorizedResponseBody is the type of the
+// "assets" service "createSignedChatAttachmentURL" endpoint HTTP response body
+// for the "unauthorized" error.
+type CreateSignedChatAttachmentURLUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignedChatAttachmentURLForbiddenResponseBody is the type of the
+// "assets" service "createSignedChatAttachmentURL" endpoint HTTP response body
+// for the "forbidden" error.
+type CreateSignedChatAttachmentURLForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignedChatAttachmentURLBadRequestResponseBody is the type of the
+// "assets" service "createSignedChatAttachmentURL" endpoint HTTP response body
+// for the "bad_request" error.
+type CreateSignedChatAttachmentURLBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignedChatAttachmentURLNotFoundResponseBody is the type of the
+// "assets" service "createSignedChatAttachmentURL" endpoint HTTP response body
+// for the "not_found" error.
+type CreateSignedChatAttachmentURLNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignedChatAttachmentURLConflictResponseBody is the type of the
+// "assets" service "createSignedChatAttachmentURL" endpoint HTTP response body
+// for the "conflict" error.
+type CreateSignedChatAttachmentURLConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignedChatAttachmentURLUnsupportedMediaResponseBody is the type of the
+// "assets" service "createSignedChatAttachmentURL" endpoint HTTP response body
+// for the "unsupported_media" error.
+type CreateSignedChatAttachmentURLUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignedChatAttachmentURLInvalidResponseBody is the type of the "assets"
+// service "createSignedChatAttachmentURL" endpoint HTTP response body for the
+// "invalid" error.
+type CreateSignedChatAttachmentURLInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignedChatAttachmentURLInvariantViolationResponseBody is the type of
+// the "assets" service "createSignedChatAttachmentURL" endpoint HTTP response
+// body for the "invariant_violation" error.
+type CreateSignedChatAttachmentURLInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignedChatAttachmentURLUnexpectedResponseBody is the type of the
+// "assets" service "createSignedChatAttachmentURL" endpoint HTTP response body
+// for the "unexpected" error.
+type CreateSignedChatAttachmentURLUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignedChatAttachmentURLGatewayErrorResponseBody is the type of the
+// "assets" service "createSignedChatAttachmentURL" endpoint HTTP response body
+// for the "gateway_error" error.
+type CreateSignedChatAttachmentURLGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeChatAttachmentSignedUnauthorizedResponseBody is the type of the
+// "assets" service "serveChatAttachmentSigned" endpoint HTTP response body for
+// the "unauthorized" error.
+type ServeChatAttachmentSignedUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeChatAttachmentSignedForbiddenResponseBody is the type of the "assets"
+// service "serveChatAttachmentSigned" endpoint HTTP response body for the
+// "forbidden" error.
+type ServeChatAttachmentSignedForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeChatAttachmentSignedBadRequestResponseBody is the type of the "assets"
+// service "serveChatAttachmentSigned" endpoint HTTP response body for the
+// "bad_request" error.
+type ServeChatAttachmentSignedBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeChatAttachmentSignedNotFoundResponseBody is the type of the "assets"
+// service "serveChatAttachmentSigned" endpoint HTTP response body for the
+// "not_found" error.
+type ServeChatAttachmentSignedNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeChatAttachmentSignedConflictResponseBody is the type of the "assets"
+// service "serveChatAttachmentSigned" endpoint HTTP response body for the
+// "conflict" error.
+type ServeChatAttachmentSignedConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeChatAttachmentSignedUnsupportedMediaResponseBody is the type of the
+// "assets" service "serveChatAttachmentSigned" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ServeChatAttachmentSignedUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeChatAttachmentSignedInvalidResponseBody is the type of the "assets"
+// service "serveChatAttachmentSigned" endpoint HTTP response body for the
+// "invalid" error.
+type ServeChatAttachmentSignedInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeChatAttachmentSignedInvariantViolationResponseBody is the type of the
+// "assets" service "serveChatAttachmentSigned" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ServeChatAttachmentSignedInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeChatAttachmentSignedUnexpectedResponseBody is the type of the "assets"
+// service "serveChatAttachmentSigned" endpoint HTTP response body for the
+// "unexpected" error.
+type ServeChatAttachmentSignedUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeChatAttachmentSignedGatewayErrorResponseBody is the type of the
+// "assets" service "serveChatAttachmentSigned" endpoint HTTP response body for
+// the "gateway_error" error.
+type ServeChatAttachmentSignedGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AssetResponseBody is used to define fields on response body types.
 type AssetResponseBody struct {
 	// The ID of the asset
@@ -1916,6 +2316,18 @@ type AssetResponseBody struct {
 func NewFetchOpenAPIv3FromURLRequestBody(p *assets.FetchOpenAPIv3FromURLForm) *FetchOpenAPIv3FromURLRequestBody {
 	body := &FetchOpenAPIv3FromURLRequestBody{
 		URL: p.URL,
+	}
+	return body
+}
+
+// NewCreateSignedChatAttachmentURLRequestBody builds the HTTP request body
+// from the payload of the "createSignedChatAttachmentURL" endpoint of the
+// "assets" service.
+func NewCreateSignedChatAttachmentURLRequestBody(p *assets.CreateSignedChatAttachmentURLForm) *CreateSignedChatAttachmentURLRequestBody {
+	body := &CreateSignedChatAttachmentURLRequestBody{
+		ID:         p.ID,
+		ProjectID:  p.ProjectID,
+		TTLSeconds: p.TTLSeconds,
 	}
 	return body
 }
@@ -3528,6 +3940,329 @@ func NewServeChatAttachmentGatewayError(body *ServeChatAttachmentGatewayErrorRes
 	return v
 }
 
+// NewCreateSignedChatAttachmentURLResultOK builds a "assets" service
+// "createSignedChatAttachmentURL" endpoint result from a HTTP "OK" response.
+func NewCreateSignedChatAttachmentURLResultOK(body *CreateSignedChatAttachmentURLResponseBody) *assets.CreateSignedChatAttachmentURLResult {
+	v := &assets.CreateSignedChatAttachmentURLResult{
+		URL:       *body.URL,
+		ExpiresAt: *body.ExpiresAt,
+	}
+
+	return v
+}
+
+// NewCreateSignedChatAttachmentURLUnauthorized builds a assets service
+// createSignedChatAttachmentURL endpoint unauthorized error.
+func NewCreateSignedChatAttachmentURLUnauthorized(body *CreateSignedChatAttachmentURLUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignedChatAttachmentURLForbidden builds a assets service
+// createSignedChatAttachmentURL endpoint forbidden error.
+func NewCreateSignedChatAttachmentURLForbidden(body *CreateSignedChatAttachmentURLForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignedChatAttachmentURLBadRequest builds a assets service
+// createSignedChatAttachmentURL endpoint bad_request error.
+func NewCreateSignedChatAttachmentURLBadRequest(body *CreateSignedChatAttachmentURLBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignedChatAttachmentURLNotFound builds a assets service
+// createSignedChatAttachmentURL endpoint not_found error.
+func NewCreateSignedChatAttachmentURLNotFound(body *CreateSignedChatAttachmentURLNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignedChatAttachmentURLConflict builds a assets service
+// createSignedChatAttachmentURL endpoint conflict error.
+func NewCreateSignedChatAttachmentURLConflict(body *CreateSignedChatAttachmentURLConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignedChatAttachmentURLUnsupportedMedia builds a assets service
+// createSignedChatAttachmentURL endpoint unsupported_media error.
+func NewCreateSignedChatAttachmentURLUnsupportedMedia(body *CreateSignedChatAttachmentURLUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignedChatAttachmentURLInvalid builds a assets service
+// createSignedChatAttachmentURL endpoint invalid error.
+func NewCreateSignedChatAttachmentURLInvalid(body *CreateSignedChatAttachmentURLInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignedChatAttachmentURLInvariantViolation builds a assets service
+// createSignedChatAttachmentURL endpoint invariant_violation error.
+func NewCreateSignedChatAttachmentURLInvariantViolation(body *CreateSignedChatAttachmentURLInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignedChatAttachmentURLUnexpected builds a assets service
+// createSignedChatAttachmentURL endpoint unexpected error.
+func NewCreateSignedChatAttachmentURLUnexpected(body *CreateSignedChatAttachmentURLUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignedChatAttachmentURLGatewayError builds a assets service
+// createSignedChatAttachmentURL endpoint gateway_error error.
+func NewCreateSignedChatAttachmentURLGatewayError(body *CreateSignedChatAttachmentURLGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeChatAttachmentSignedResultOK builds a "assets" service
+// "serveChatAttachmentSigned" endpoint result from a HTTP "OK" response.
+func NewServeChatAttachmentSignedResultOK(contentType string, contentLength int64, lastModified string, accessControlAllowOrigin *string) *assets.ServeChatAttachmentSignedResult {
+	v := &assets.ServeChatAttachmentSignedResult{}
+	v.ContentType = contentType
+	v.ContentLength = contentLength
+	v.LastModified = lastModified
+	v.AccessControlAllowOrigin = accessControlAllowOrigin
+
+	return v
+}
+
+// NewServeChatAttachmentSignedUnauthorized builds a assets service
+// serveChatAttachmentSigned endpoint unauthorized error.
+func NewServeChatAttachmentSignedUnauthorized(body *ServeChatAttachmentSignedUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeChatAttachmentSignedForbidden builds a assets service
+// serveChatAttachmentSigned endpoint forbidden error.
+func NewServeChatAttachmentSignedForbidden(body *ServeChatAttachmentSignedForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeChatAttachmentSignedBadRequest builds a assets service
+// serveChatAttachmentSigned endpoint bad_request error.
+func NewServeChatAttachmentSignedBadRequest(body *ServeChatAttachmentSignedBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeChatAttachmentSignedNotFound builds a assets service
+// serveChatAttachmentSigned endpoint not_found error.
+func NewServeChatAttachmentSignedNotFound(body *ServeChatAttachmentSignedNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeChatAttachmentSignedConflict builds a assets service
+// serveChatAttachmentSigned endpoint conflict error.
+func NewServeChatAttachmentSignedConflict(body *ServeChatAttachmentSignedConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeChatAttachmentSignedUnsupportedMedia builds a assets service
+// serveChatAttachmentSigned endpoint unsupported_media error.
+func NewServeChatAttachmentSignedUnsupportedMedia(body *ServeChatAttachmentSignedUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeChatAttachmentSignedInvalid builds a assets service
+// serveChatAttachmentSigned endpoint invalid error.
+func NewServeChatAttachmentSignedInvalid(body *ServeChatAttachmentSignedInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeChatAttachmentSignedInvariantViolation builds a assets service
+// serveChatAttachmentSigned endpoint invariant_violation error.
+func NewServeChatAttachmentSignedInvariantViolation(body *ServeChatAttachmentSignedInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeChatAttachmentSignedUnexpected builds a assets service
+// serveChatAttachmentSigned endpoint unexpected error.
+func NewServeChatAttachmentSignedUnexpected(body *ServeChatAttachmentSignedUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeChatAttachmentSignedGatewayError builds a assets service
+// serveChatAttachmentSigned endpoint gateway_error error.
+func NewServeChatAttachmentSignedGatewayError(body *ServeChatAttachmentSignedGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateUploadImageResponseBody runs the validations defined on
 // UploadImageResponseBody
 func ValidateUploadImageResponseBody(body *UploadImageResponseBody) (err error) {
@@ -3613,6 +4348,21 @@ func ValidateUploadChatAttachmentResponseBody(body *UploadChatAttachmentResponse
 		if err2 := ValidateAssetResponseBody(body.Asset); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	return
+}
+
+// ValidateCreateSignedChatAttachmentURLResponseBody runs the validations
+// defined on CreateSignedChatAttachmentURLResponseBody
+func ValidateCreateSignedChatAttachmentURLResponseBody(body *CreateSignedChatAttachmentURLResponseBody) (err error) {
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	}
+	if body.ExpiresAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expires_at", "body"))
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -5997,6 +6747,493 @@ func ValidateServeChatAttachmentUnexpectedResponseBody(body *ServeChatAttachment
 // ValidateServeChatAttachmentGatewayErrorResponseBody runs the validations
 // defined on serveChatAttachment_gateway_error_response_body
 func ValidateServeChatAttachmentGatewayErrorResponseBody(body *ServeChatAttachmentGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignedChatAttachmentURLUnauthorizedResponseBody runs the
+// validations defined on
+// createSignedChatAttachmentURL_unauthorized_response_body
+func ValidateCreateSignedChatAttachmentURLUnauthorizedResponseBody(body *CreateSignedChatAttachmentURLUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignedChatAttachmentURLForbiddenResponseBody runs the
+// validations defined on createSignedChatAttachmentURL_forbidden_response_body
+func ValidateCreateSignedChatAttachmentURLForbiddenResponseBody(body *CreateSignedChatAttachmentURLForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignedChatAttachmentURLBadRequestResponseBody runs the
+// validations defined on
+// createSignedChatAttachmentURL_bad_request_response_body
+func ValidateCreateSignedChatAttachmentURLBadRequestResponseBody(body *CreateSignedChatAttachmentURLBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignedChatAttachmentURLNotFoundResponseBody runs the
+// validations defined on createSignedChatAttachmentURL_not_found_response_body
+func ValidateCreateSignedChatAttachmentURLNotFoundResponseBody(body *CreateSignedChatAttachmentURLNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignedChatAttachmentURLConflictResponseBody runs the
+// validations defined on createSignedChatAttachmentURL_conflict_response_body
+func ValidateCreateSignedChatAttachmentURLConflictResponseBody(body *CreateSignedChatAttachmentURLConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignedChatAttachmentURLUnsupportedMediaResponseBody runs the
+// validations defined on
+// createSignedChatAttachmentURL_unsupported_media_response_body
+func ValidateCreateSignedChatAttachmentURLUnsupportedMediaResponseBody(body *CreateSignedChatAttachmentURLUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignedChatAttachmentURLInvalidResponseBody runs the
+// validations defined on createSignedChatAttachmentURL_invalid_response_body
+func ValidateCreateSignedChatAttachmentURLInvalidResponseBody(body *CreateSignedChatAttachmentURLInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignedChatAttachmentURLInvariantViolationResponseBody runs the
+// validations defined on
+// createSignedChatAttachmentURL_invariant_violation_response_body
+func ValidateCreateSignedChatAttachmentURLInvariantViolationResponseBody(body *CreateSignedChatAttachmentURLInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignedChatAttachmentURLUnexpectedResponseBody runs the
+// validations defined on createSignedChatAttachmentURL_unexpected_response_body
+func ValidateCreateSignedChatAttachmentURLUnexpectedResponseBody(body *CreateSignedChatAttachmentURLUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignedChatAttachmentURLGatewayErrorResponseBody runs the
+// validations defined on
+// createSignedChatAttachmentURL_gateway_error_response_body
+func ValidateCreateSignedChatAttachmentURLGatewayErrorResponseBody(body *CreateSignedChatAttachmentURLGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeChatAttachmentSignedUnauthorizedResponseBody runs the
+// validations defined on serveChatAttachmentSigned_unauthorized_response_body
+func ValidateServeChatAttachmentSignedUnauthorizedResponseBody(body *ServeChatAttachmentSignedUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeChatAttachmentSignedForbiddenResponseBody runs the validations
+// defined on serveChatAttachmentSigned_forbidden_response_body
+func ValidateServeChatAttachmentSignedForbiddenResponseBody(body *ServeChatAttachmentSignedForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeChatAttachmentSignedBadRequestResponseBody runs the validations
+// defined on serveChatAttachmentSigned_bad_request_response_body
+func ValidateServeChatAttachmentSignedBadRequestResponseBody(body *ServeChatAttachmentSignedBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeChatAttachmentSignedNotFoundResponseBody runs the validations
+// defined on serveChatAttachmentSigned_not_found_response_body
+func ValidateServeChatAttachmentSignedNotFoundResponseBody(body *ServeChatAttachmentSignedNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeChatAttachmentSignedConflictResponseBody runs the validations
+// defined on serveChatAttachmentSigned_conflict_response_body
+func ValidateServeChatAttachmentSignedConflictResponseBody(body *ServeChatAttachmentSignedConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeChatAttachmentSignedUnsupportedMediaResponseBody runs the
+// validations defined on
+// serveChatAttachmentSigned_unsupported_media_response_body
+func ValidateServeChatAttachmentSignedUnsupportedMediaResponseBody(body *ServeChatAttachmentSignedUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeChatAttachmentSignedInvalidResponseBody runs the validations
+// defined on serveChatAttachmentSigned_invalid_response_body
+func ValidateServeChatAttachmentSignedInvalidResponseBody(body *ServeChatAttachmentSignedInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeChatAttachmentSignedInvariantViolationResponseBody runs the
+// validations defined on
+// serveChatAttachmentSigned_invariant_violation_response_body
+func ValidateServeChatAttachmentSignedInvariantViolationResponseBody(body *ServeChatAttachmentSignedInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeChatAttachmentSignedUnexpectedResponseBody runs the validations
+// defined on serveChatAttachmentSigned_unexpected_response_body
+func ValidateServeChatAttachmentSignedUnexpectedResponseBody(body *ServeChatAttachmentSignedUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeChatAttachmentSignedGatewayErrorResponseBody runs the
+// validations defined on serveChatAttachmentSigned_gateway_error_response_body
+func ValidateServeChatAttachmentSignedGatewayErrorResponseBody(body *ServeChatAttachmentSignedGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

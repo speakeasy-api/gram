@@ -53,6 +53,15 @@ type Service interface {
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	ServeChatAttachment(context.Context, *ServeChatAttachmentForm) (res *ServeChatAttachmentResult, body io.ReadCloser, err error)
+	// Create a time-limited signed URL to access a chat attachment without
+	// authentication.
+	CreateSignedChatAttachmentURL(context.Context, *CreateSignedChatAttachmentURLForm) (res *CreateSignedChatAttachmentURLResult, err error)
+	// Serve a chat attachment using a signed URL token.
+
+	// If body implements [io.WriterTo], that implementation will be used instead.
+	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
+	// implementations.
+	ServeChatAttachmentSigned(context.Context, *ServeChatAttachmentSignedForm) (res *ServeChatAttachmentSignedResult, body io.ReadCloser, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -77,7 +86,7 @@ const ServiceName = "assets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"serveImage", "uploadImage", "uploadFunctions", "uploadOpenAPIv3", "fetchOpenAPIv3FromURL", "serveOpenAPIv3", "serveFunction", "listAssets", "uploadChatAttachment", "serveChatAttachment"}
+var MethodNames = [12]string{"serveImage", "uploadImage", "uploadFunctions", "uploadOpenAPIv3", "fetchOpenAPIv3FromURL", "serveOpenAPIv3", "serveFunction", "listAssets", "uploadChatAttachment", "serveChatAttachment", "createSignedChatAttachmentURL", "serveChatAttachmentSigned"}
 
 type Asset struct {
 	// The ID of the asset
@@ -93,6 +102,30 @@ type Asset struct {
 	CreatedAt string
 	// The last update date of the asset.
 	UpdatedAt string
+}
+
+// CreateSignedChatAttachmentURLForm is the payload type of the assets service
+// createSignedChatAttachmentURL method.
+type CreateSignedChatAttachmentURLForm struct {
+	ApikeyToken       *string
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
+	// The ID of the chat attachment
+	ID string
+	// The project ID that the attachment belongs to
+	ProjectID string
+	// Time-to-live in seconds (default: 600, max: 3600)
+	TTLSeconds *int
+}
+
+// CreateSignedChatAttachmentURLResult is the result type of the assets service
+// createSignedChatAttachmentURL method.
+type CreateSignedChatAttachmentURLResult struct {
+	// The signed URL to access the chat attachment
+	URL string
+	// When the signed URL expires
+	ExpiresAt string
 }
 
 // FetchOpenAPIv3FromURLForm is the payload type of the assets service
@@ -137,6 +170,22 @@ type ServeChatAttachmentResult struct {
 	ContentType   string
 	ContentLength int64
 	LastModified  string
+}
+
+// ServeChatAttachmentSignedForm is the payload type of the assets service
+// serveChatAttachmentSigned method.
+type ServeChatAttachmentSignedForm struct {
+	// The signed JWT token
+	Token string
+}
+
+// ServeChatAttachmentSignedResult is the result type of the assets service
+// serveChatAttachmentSigned method.
+type ServeChatAttachmentSignedResult struct {
+	ContentType              string
+	ContentLength            int64
+	LastModified             string
+	AccessControlAllowOrigin *string
 }
 
 // ServeFunctionForm is the payload type of the assets service serveFunction

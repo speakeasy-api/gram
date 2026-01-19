@@ -108,7 +108,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 
 	toolsSvc := tools.NewService(logger, conn, sessionManager)
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient)
-	assetsSvc := assets.NewService(logger, conn, sessionManager, chatSessionsManager, assetStorage)
+	assetsSvc := assets.NewService(logger, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret")
 	packagesSvc := packages.NewService(logger, conn, sessionManager)
 	toolsetsSvc := toolsets.NewService(logger, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient))
 	templatesSvc := templates.NewService(logger, conn, sessionManager, toolsetsSvc)

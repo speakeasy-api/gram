@@ -2600,6 +2600,504 @@ func DecodeServeChatAttachmentResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// BuildCreateSignedChatAttachmentURLRequest instantiates a HTTP request object
+// with method and path set to call the "assets" service
+// "createSignedChatAttachmentURL" endpoint
+func (c *Client) BuildCreateSignedChatAttachmentURLRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateSignedChatAttachmentURLAssetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("assets", "createSignedChatAttachmentURL", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateSignedChatAttachmentURLRequest returns an encoder for requests
+// sent to the assets createSignedChatAttachmentURL server.
+func EncodeCreateSignedChatAttachmentURLRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*assets.CreateSignedChatAttachmentURLForm)
+		if !ok {
+			return goahttp.ErrInvalidType("assets", "createSignedChatAttachmentURL", "*assets.CreateSignedChatAttachmentURLForm", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ChatSessionsToken != nil {
+			head := *p.ChatSessionsToken
+			req.Header.Set("Gram-Chat-Session", head)
+		}
+		body := NewCreateSignedChatAttachmentURLRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("assets", "createSignedChatAttachmentURL", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateSignedChatAttachmentURLResponse returns a decoder for responses
+// returned by the assets createSignedChatAttachmentURL endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeCreateSignedChatAttachmentURLResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateSignedChatAttachmentURLResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateSignedChatAttachmentURLResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "createSignedChatAttachmentURL", err)
+			}
+			err = ValidateCreateSignedChatAttachmentURLResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "createSignedChatAttachmentURL", err)
+			}
+			res := NewCreateSignedChatAttachmentURLResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateSignedChatAttachmentURLUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "createSignedChatAttachmentURL", err)
+			}
+			err = ValidateCreateSignedChatAttachmentURLUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "createSignedChatAttachmentURL", err)
+			}
+			return nil, NewCreateSignedChatAttachmentURLUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateSignedChatAttachmentURLForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "createSignedChatAttachmentURL", err)
+			}
+			err = ValidateCreateSignedChatAttachmentURLForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "createSignedChatAttachmentURL", err)
+			}
+			return nil, NewCreateSignedChatAttachmentURLForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateSignedChatAttachmentURLBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "createSignedChatAttachmentURL", err)
+			}
+			err = ValidateCreateSignedChatAttachmentURLBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "createSignedChatAttachmentURL", err)
+			}
+			return nil, NewCreateSignedChatAttachmentURLBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateSignedChatAttachmentURLNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "createSignedChatAttachmentURL", err)
+			}
+			err = ValidateCreateSignedChatAttachmentURLNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "createSignedChatAttachmentURL", err)
+			}
+			return nil, NewCreateSignedChatAttachmentURLNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateSignedChatAttachmentURLConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "createSignedChatAttachmentURL", err)
+			}
+			err = ValidateCreateSignedChatAttachmentURLConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "createSignedChatAttachmentURL", err)
+			}
+			return nil, NewCreateSignedChatAttachmentURLConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateSignedChatAttachmentURLUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "createSignedChatAttachmentURL", err)
+			}
+			err = ValidateCreateSignedChatAttachmentURLUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "createSignedChatAttachmentURL", err)
+			}
+			return nil, NewCreateSignedChatAttachmentURLUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateSignedChatAttachmentURLInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "createSignedChatAttachmentURL", err)
+			}
+			err = ValidateCreateSignedChatAttachmentURLInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "createSignedChatAttachmentURL", err)
+			}
+			return nil, NewCreateSignedChatAttachmentURLInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateSignedChatAttachmentURLInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "createSignedChatAttachmentURL", err)
+				}
+				err = ValidateCreateSignedChatAttachmentURLInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "createSignedChatAttachmentURL", err)
+				}
+				return nil, NewCreateSignedChatAttachmentURLInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateSignedChatAttachmentURLUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "createSignedChatAttachmentURL", err)
+				}
+				err = ValidateCreateSignedChatAttachmentURLUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "createSignedChatAttachmentURL", err)
+				}
+				return nil, NewCreateSignedChatAttachmentURLUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "createSignedChatAttachmentURL", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateSignedChatAttachmentURLGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "createSignedChatAttachmentURL", err)
+			}
+			err = ValidateCreateSignedChatAttachmentURLGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "createSignedChatAttachmentURL", err)
+			}
+			return nil, NewCreateSignedChatAttachmentURLGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("assets", "createSignedChatAttachmentURL", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildServeChatAttachmentSignedRequest instantiates a HTTP request object
+// with method and path set to call the "assets" service
+// "serveChatAttachmentSigned" endpoint
+func (c *Client) BuildServeChatAttachmentSignedRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ServeChatAttachmentSignedAssetsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("assets", "serveChatAttachmentSigned", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeServeChatAttachmentSignedRequest returns an encoder for requests sent
+// to the assets serveChatAttachmentSigned server.
+func EncodeServeChatAttachmentSignedRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*assets.ServeChatAttachmentSignedForm)
+		if !ok {
+			return goahttp.ErrInvalidType("assets", "serveChatAttachmentSigned", "*assets.ServeChatAttachmentSignedForm", v)
+		}
+		values := req.URL.Query()
+		values.Add("token", p.Token)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeServeChatAttachmentSignedResponse returns a decoder for responses
+// returned by the assets serveChatAttachmentSigned endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeServeChatAttachmentSignedResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeServeChatAttachmentSignedResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				contentType              string
+				contentLength            int64
+				lastModified             string
+				accessControlAllowOrigin *string
+				err                      error
+			)
+			contentTypeRaw := resp.Header.Get("Content-Type")
+			if contentTypeRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("content_type", "header"))
+			}
+			contentType = contentTypeRaw
+			{
+				contentLengthRaw := resp.Header.Get("Content-Length")
+				if contentLengthRaw == "" {
+					return nil, goahttp.ErrValidationError("assets", "serveChatAttachmentSigned", goa.MissingFieldError("content_length", "header"))
+				}
+				v, err2 := strconv.ParseInt(contentLengthRaw, 10, 64)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("content_length", contentLengthRaw, "integer"))
+				}
+				contentLength = v
+			}
+			lastModifiedRaw := resp.Header.Get("Last-Modified")
+			if lastModifiedRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("last_modified", "header"))
+			}
+			lastModified = lastModifiedRaw
+			accessControlAllowOriginRaw := resp.Header.Get("Access-Control-Allow-Origin")
+			if accessControlAllowOriginRaw != "" {
+				accessControlAllowOrigin = &accessControlAllowOriginRaw
+			}
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveChatAttachmentSigned", err)
+			}
+			res := NewServeChatAttachmentSignedResultOK(contentType, contentLength, lastModified, accessControlAllowOrigin)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ServeChatAttachmentSignedUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveChatAttachmentSigned", err)
+			}
+			err = ValidateServeChatAttachmentSignedUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveChatAttachmentSigned", err)
+			}
+			return nil, NewServeChatAttachmentSignedUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ServeChatAttachmentSignedForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveChatAttachmentSigned", err)
+			}
+			err = ValidateServeChatAttachmentSignedForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveChatAttachmentSigned", err)
+			}
+			return nil, NewServeChatAttachmentSignedForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ServeChatAttachmentSignedBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveChatAttachmentSigned", err)
+			}
+			err = ValidateServeChatAttachmentSignedBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveChatAttachmentSigned", err)
+			}
+			return nil, NewServeChatAttachmentSignedBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ServeChatAttachmentSignedNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveChatAttachmentSigned", err)
+			}
+			err = ValidateServeChatAttachmentSignedNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveChatAttachmentSigned", err)
+			}
+			return nil, NewServeChatAttachmentSignedNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ServeChatAttachmentSignedConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveChatAttachmentSigned", err)
+			}
+			err = ValidateServeChatAttachmentSignedConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveChatAttachmentSigned", err)
+			}
+			return nil, NewServeChatAttachmentSignedConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ServeChatAttachmentSignedUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveChatAttachmentSigned", err)
+			}
+			err = ValidateServeChatAttachmentSignedUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveChatAttachmentSigned", err)
+			}
+			return nil, NewServeChatAttachmentSignedUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ServeChatAttachmentSignedInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveChatAttachmentSigned", err)
+			}
+			err = ValidateServeChatAttachmentSignedInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveChatAttachmentSigned", err)
+			}
+			return nil, NewServeChatAttachmentSignedInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ServeChatAttachmentSignedInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "serveChatAttachmentSigned", err)
+				}
+				err = ValidateServeChatAttachmentSignedInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "serveChatAttachmentSigned", err)
+				}
+				return nil, NewServeChatAttachmentSignedInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ServeChatAttachmentSignedUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "serveChatAttachmentSigned", err)
+				}
+				err = ValidateServeChatAttachmentSignedUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "serveChatAttachmentSigned", err)
+				}
+				return nil, NewServeChatAttachmentSignedUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "serveChatAttachmentSigned", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ServeChatAttachmentSignedGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveChatAttachmentSigned", err)
+			}
+			err = ValidateServeChatAttachmentSignedGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveChatAttachmentSigned", err)
+			}
+			return nil, NewServeChatAttachmentSignedGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("assets", "serveChatAttachmentSigned", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAssetResponseBodyToAssetsAsset builds a value of type *assets.Asset
 // from a value of type *AssetResponseBody.
 func unmarshalAssetResponseBodyToAssetsAsset(v *AssetResponseBody) *assets.Asset {

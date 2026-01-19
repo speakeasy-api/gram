@@ -17,16 +17,18 @@ import (
 
 // Endpoints wraps the "assets" service endpoints.
 type Endpoints struct {
-	ServeImage            goa.Endpoint
-	UploadImage           goa.Endpoint
-	UploadFunctions       goa.Endpoint
-	UploadOpenAPIv3       goa.Endpoint
-	FetchOpenAPIv3FromURL goa.Endpoint
-	ServeOpenAPIv3        goa.Endpoint
-	ServeFunction         goa.Endpoint
-	ListAssets            goa.Endpoint
-	UploadChatAttachment  goa.Endpoint
-	ServeChatAttachment   goa.Endpoint
+	ServeImage                    goa.Endpoint
+	UploadImage                   goa.Endpoint
+	UploadFunctions               goa.Endpoint
+	UploadOpenAPIv3               goa.Endpoint
+	FetchOpenAPIv3FromURL         goa.Endpoint
+	ServeOpenAPIv3                goa.Endpoint
+	ServeFunction                 goa.Endpoint
+	ListAssets                    goa.Endpoint
+	UploadChatAttachment          goa.Endpoint
+	ServeChatAttachment           goa.Endpoint
+	CreateSignedChatAttachmentURL goa.Endpoint
+	ServeChatAttachmentSigned     goa.Endpoint
 }
 
 // ServeImageResponseData holds both the result and the HTTP response body
@@ -101,21 +103,32 @@ type ServeChatAttachmentResponseData struct {
 	Body io.ReadCloser
 }
 
+// ServeChatAttachmentSignedResponseData holds both the result and the HTTP
+// response body reader of the "serveChatAttachmentSigned" method.
+type ServeChatAttachmentSignedResponseData struct {
+	// Result is the method result.
+	Result *ServeChatAttachmentSignedResult
+	// Body streams the HTTP response body.
+	Body io.ReadCloser
+}
+
 // NewEndpoints wraps the methods of the "assets" service with endpoints.
 func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ServeImage:            NewServeImageEndpoint(s),
-		UploadImage:           NewUploadImageEndpoint(s, a.APIKeyAuth),
-		UploadFunctions:       NewUploadFunctionsEndpoint(s, a.APIKeyAuth),
-		UploadOpenAPIv3:       NewUploadOpenAPIv3Endpoint(s, a.APIKeyAuth),
-		FetchOpenAPIv3FromURL: NewFetchOpenAPIv3FromURLEndpoint(s, a.APIKeyAuth),
-		ServeOpenAPIv3:        NewServeOpenAPIv3Endpoint(s, a.APIKeyAuth),
-		ServeFunction:         NewServeFunctionEndpoint(s, a.APIKeyAuth),
-		ListAssets:            NewListAssetsEndpoint(s, a.APIKeyAuth),
-		UploadChatAttachment:  NewUploadChatAttachmentEndpoint(s, a.APIKeyAuth, a.JWTAuth),
-		ServeChatAttachment:   NewServeChatAttachmentEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		ServeImage:                    NewServeImageEndpoint(s),
+		UploadImage:                   NewUploadImageEndpoint(s, a.APIKeyAuth),
+		UploadFunctions:               NewUploadFunctionsEndpoint(s, a.APIKeyAuth),
+		UploadOpenAPIv3:               NewUploadOpenAPIv3Endpoint(s, a.APIKeyAuth),
+		FetchOpenAPIv3FromURL:         NewFetchOpenAPIv3FromURLEndpoint(s, a.APIKeyAuth),
+		ServeOpenAPIv3:                NewServeOpenAPIv3Endpoint(s, a.APIKeyAuth),
+		ServeFunction:                 NewServeFunctionEndpoint(s, a.APIKeyAuth),
+		ListAssets:                    NewListAssetsEndpoint(s, a.APIKeyAuth),
+		UploadChatAttachment:          NewUploadChatAttachmentEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		ServeChatAttachment:           NewServeChatAttachmentEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		CreateSignedChatAttachmentURL: NewCreateSignedChatAttachmentURLEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		ServeChatAttachmentSigned:     NewServeChatAttachmentSignedEndpoint(s),
 	}
 }
 
@@ -131,6 +144,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListAssets = m(e.ListAssets)
 	e.UploadChatAttachment = m(e.UploadChatAttachment)
 	e.ServeChatAttachment = m(e.ServeChatAttachment)
+	e.CreateSignedChatAttachmentURL = m(e.CreateSignedChatAttachmentURL)
+	e.ServeChatAttachmentSigned = m(e.ServeChatAttachmentSigned)
 }
 
 // NewServeImageEndpoint returns an endpoint function that calls the method
@@ -650,5 +665,101 @@ func NewServeChatAttachmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 			return nil, err
 		}
 		return &ServeChatAttachmentResponseData{Result: res, Body: body}, nil
+	}
+}
+
+// NewCreateSignedChatAttachmentURLEndpoint returns an endpoint function that
+// calls the method "createSignedChatAttachmentURL" of service "assets".
+func NewCreateSignedChatAttachmentURLEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJWTFn security.AuthJWTFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateSignedChatAttachmentURLForm)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			sc := security.JWTScheme{
+				Name:           "chat_sessions_token",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var token string
+			if p.ChatSessionsToken != nil {
+				token = *p.ChatSessionsToken
+			}
+			ctx, err = authJWTFn(ctx, token, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateSignedChatAttachmentURL(ctx, p)
+	}
+}
+
+// NewServeChatAttachmentSignedEndpoint returns an endpoint function that calls
+// the method "serveChatAttachmentSigned" of service "assets".
+func NewServeChatAttachmentSignedEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ServeChatAttachmentSignedForm)
+		res, body, err := s.ServeChatAttachmentSigned(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		return &ServeChatAttachmentSignedResponseData{Result: res, Body: body}, nil
 	}
 }

@@ -39,6 +39,8 @@ func NewAssetsClient(options *AssetsClientOptions) *AssetsClient {
 		h.ListAssets(),
 		h.UploadChatAttachment(),
 		h.ServeChatAttachment(),
+		h.CreateSignedChatAttachmentURL(),
+		h.ServeChatAttachmentSigned(),
 	)
 
 	return &AssetsClient{client: client}

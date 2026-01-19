@@ -165,7 +165,7 @@ func BuildFetchOpenAPIv3FromURLPayload(assetsFetchOpenAPIv3FromURLBody string, a
 	{
 		err = json.Unmarshal([]byte(assetsFetchOpenAPIv3FromURLBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"url\": \"Est voluptatem.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"url\": \"Dolorem id aliquam non sit veniam ut.\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -374,6 +374,67 @@ func BuildServeChatAttachmentPayload(assetsServeChatAttachmentID string, assetsS
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ChatSessionsToken = chatSessionsToken
+
+	return v, nil
+}
+
+// BuildCreateSignedChatAttachmentURLPayload builds the payload for the assets
+// createSignedChatAttachmentURL endpoint from CLI flags.
+func BuildCreateSignedChatAttachmentURLPayload(assetsCreateSignedChatAttachmentURLBody string, assetsCreateSignedChatAttachmentURLApikeyToken string, assetsCreateSignedChatAttachmentURLProjectSlugInput string, assetsCreateSignedChatAttachmentURLSessionToken string, assetsCreateSignedChatAttachmentURLChatSessionsToken string) (*assets.CreateSignedChatAttachmentURLForm, error) {
+	var err error
+	var body CreateSignedChatAttachmentURLRequestBody
+	{
+		err = json.Unmarshal([]byte(assetsCreateSignedChatAttachmentURLBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"Ullam nam aliquam exercitationem quia ut rerum.\",\n      \"project_id\": \"Nisi quo suscipit animi aut.\",\n      \"ttl_seconds\": 2557452158378006386\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if assetsCreateSignedChatAttachmentURLApikeyToken != "" {
+			apikeyToken = &assetsCreateSignedChatAttachmentURLApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assetsCreateSignedChatAttachmentURLProjectSlugInput != "" {
+			projectSlugInput = &assetsCreateSignedChatAttachmentURLProjectSlugInput
+		}
+	}
+	var sessionToken *string
+	{
+		if assetsCreateSignedChatAttachmentURLSessionToken != "" {
+			sessionToken = &assetsCreateSignedChatAttachmentURLSessionToken
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if assetsCreateSignedChatAttachmentURLChatSessionsToken != "" {
+			chatSessionsToken = &assetsCreateSignedChatAttachmentURLChatSessionsToken
+		}
+	}
+	v := &assets.CreateSignedChatAttachmentURLForm{
+		ID:         body.ID,
+		ProjectID:  body.ProjectID,
+		TTLSeconds: body.TTLSeconds,
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+	v.SessionToken = sessionToken
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v, nil
+}
+
+// BuildServeChatAttachmentSignedPayload builds the payload for the assets
+// serveChatAttachmentSigned endpoint from CLI flags.
+func BuildServeChatAttachmentSignedPayload(assetsServeChatAttachmentSignedToken string) (*assets.ServeChatAttachmentSignedForm, error) {
+	var token string
+	{
+		token = assetsServeChatAttachmentSignedToken
+	}
+	v := &assets.ServeChatAttachmentSignedForm{}
+	v.Token = token
 
 	return v, nil
 }

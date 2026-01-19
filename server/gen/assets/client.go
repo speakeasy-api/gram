@@ -16,31 +16,35 @@ import (
 
 // Client is the "assets" service client.
 type Client struct {
-	ServeImageEndpoint            goa.Endpoint
-	UploadImageEndpoint           goa.Endpoint
-	UploadFunctionsEndpoint       goa.Endpoint
-	UploadOpenAPIv3Endpoint       goa.Endpoint
-	FetchOpenAPIv3FromURLEndpoint goa.Endpoint
-	ServeOpenAPIv3Endpoint        goa.Endpoint
-	ServeFunctionEndpoint         goa.Endpoint
-	ListAssetsEndpoint            goa.Endpoint
-	UploadChatAttachmentEndpoint  goa.Endpoint
-	ServeChatAttachmentEndpoint   goa.Endpoint
+	ServeImageEndpoint                    goa.Endpoint
+	UploadImageEndpoint                   goa.Endpoint
+	UploadFunctionsEndpoint               goa.Endpoint
+	UploadOpenAPIv3Endpoint               goa.Endpoint
+	FetchOpenAPIv3FromURLEndpoint         goa.Endpoint
+	ServeOpenAPIv3Endpoint                goa.Endpoint
+	ServeFunctionEndpoint                 goa.Endpoint
+	ListAssetsEndpoint                    goa.Endpoint
+	UploadChatAttachmentEndpoint          goa.Endpoint
+	ServeChatAttachmentEndpoint           goa.Endpoint
+	CreateSignedChatAttachmentURLEndpoint goa.Endpoint
+	ServeChatAttachmentSignedEndpoint     goa.Endpoint
 }
 
 // NewClient initializes a "assets" service client given the endpoints.
-func NewClient(serveImage, uploadImage, uploadFunctions, uploadOpenAPIv3, fetchOpenAPIv3FromURL, serveOpenAPIv3, serveFunction, listAssets, uploadChatAttachment, serveChatAttachment goa.Endpoint) *Client {
+func NewClient(serveImage, uploadImage, uploadFunctions, uploadOpenAPIv3, fetchOpenAPIv3FromURL, serveOpenAPIv3, serveFunction, listAssets, uploadChatAttachment, serveChatAttachment, createSignedChatAttachmentURL, serveChatAttachmentSigned goa.Endpoint) *Client {
 	return &Client{
-		ServeImageEndpoint:            serveImage,
-		UploadImageEndpoint:           uploadImage,
-		UploadFunctionsEndpoint:       uploadFunctions,
-		UploadOpenAPIv3Endpoint:       uploadOpenAPIv3,
-		FetchOpenAPIv3FromURLEndpoint: fetchOpenAPIv3FromURL,
-		ServeOpenAPIv3Endpoint:        serveOpenAPIv3,
-		ServeFunctionEndpoint:         serveFunction,
-		ListAssetsEndpoint:            listAssets,
-		UploadChatAttachmentEndpoint:  uploadChatAttachment,
-		ServeChatAttachmentEndpoint:   serveChatAttachment,
+		ServeImageEndpoint:                    serveImage,
+		UploadImageEndpoint:                   uploadImage,
+		UploadFunctionsEndpoint:               uploadFunctions,
+		UploadOpenAPIv3Endpoint:               uploadOpenAPIv3,
+		FetchOpenAPIv3FromURLEndpoint:         fetchOpenAPIv3FromURL,
+		ServeOpenAPIv3Endpoint:                serveOpenAPIv3,
+		ServeFunctionEndpoint:                 serveFunction,
+		ListAssetsEndpoint:                    listAssets,
+		UploadChatAttachmentEndpoint:          uploadChatAttachment,
+		ServeChatAttachmentEndpoint:           serveChatAttachment,
+		CreateSignedChatAttachmentURLEndpoint: createSignedChatAttachmentURL,
+		ServeChatAttachmentSignedEndpoint:     serveChatAttachmentSigned,
 	}
 }
 
@@ -268,5 +272,52 @@ func (c *Client) ServeChatAttachment(ctx context.Context, p *ServeChatAttachment
 		return
 	}
 	o := ires.(*ServeChatAttachmentResponseData)
+	return o.Result, o.Body, nil
+}
+
+// CreateSignedChatAttachmentURL calls the "createSignedChatAttachmentURL"
+// endpoint of the "assets" service.
+// CreateSignedChatAttachmentURL may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateSignedChatAttachmentURL(ctx context.Context, p *CreateSignedChatAttachmentURLForm) (res *CreateSignedChatAttachmentURLResult, err error) {
+	var ires any
+	ires, err = c.CreateSignedChatAttachmentURLEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*CreateSignedChatAttachmentURLResult), nil
+}
+
+// ServeChatAttachmentSigned calls the "serveChatAttachmentSigned" endpoint of
+// the "assets" service.
+// ServeChatAttachmentSigned may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ServeChatAttachmentSigned(ctx context.Context, p *ServeChatAttachmentSignedForm) (res *ServeChatAttachmentSignedResult, resp io.ReadCloser, err error) {
+	var ires any
+	ires, err = c.ServeChatAttachmentSignedEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	o := ires.(*ServeChatAttachmentSignedResponseData)
 	return o.Result, o.Body, nil
 }
