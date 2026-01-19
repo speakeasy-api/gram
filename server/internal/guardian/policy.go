@@ -54,7 +54,6 @@ var defaultBlockedCIDRBlocks = []*net.IPNet{
 
 type Policy struct {
 	blockedCIDRBlocks []*net.IPNet
-	allowLoopback     bool
 }
 
 // NewDefaultPolicy creates a new Policy that blocks common private and reserved
@@ -62,17 +61,6 @@ type Policy struct {
 func NewDefaultPolicy() *Policy {
 	return &Policy{
 		blockedCIDRBlocks: defaultBlockedCIDRBlocks,
-		allowLoopback:     false,
-	}
-}
-
-// NewPolicyWithLoopbackAllowed creates a new Policy that blocks common private and
-// reserved IP ranges, but allows loopback addresses (127.0.0.0/8 and ::1/128).
-// This should only be used in local development environments for internal tool-to-tool communication.
-func NewPolicyWithLoopbackAllowed() *Policy {
-	return &Policy{
-		blockedCIDRBlocks: defaultBlockedCIDRBlocks,
-		allowLoopback:     true,
 	}
 }
 
@@ -90,10 +78,7 @@ func NewUnsafePolicy(disallowedCIDRBlocks []string) (*Policy, error) {
 		disallowedBlocks = append(disallowedBlocks, block)
 	}
 
-	return &Policy{
-		blockedCIDRBlocks: disallowedBlocks,
-		allowLoopback:     false,
-	}, nil
+	return &Policy{blockedCIDRBlocks: disallowedBlocks}, nil
 }
 
 func (p *Policy) PooledClient() *http.Client {
@@ -124,11 +109,6 @@ func (p *Policy) Dialer() *net.Dialer {
 			ip := net.ParseIP(host)
 			if ip == nil {
 				return fmt.Errorf("%s: %w: bad ip", address, ErrBadHost)
-			}
-
-			// Allow loopback addresses in development environments
-			if p.allowLoopback && ip.IsLoopback() {
-				return nil
 			}
 
 			for _, block := range p.blockedCIDRBlocks {

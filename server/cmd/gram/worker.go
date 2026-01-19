@@ -362,7 +362,10 @@ func newWorkerCommand() *cli.Command {
 			// In local development, allow loopback addresses for internal tool-to-tool communication
 			var guardianPolicy *guardian.Policy
 			if c.String("environment") == "local" {
-				guardianPolicy = guardian.NewPolicyWithLoopbackAllowed()
+				guardianPolicy, err = guardian.NewUnsafePolicy([]string{}) // Allow all traffic for local development
+				if err != nil {
+					return fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
+				}
 			} else {
 				guardianPolicy = guardian.NewDefaultPolicy()
 			}
