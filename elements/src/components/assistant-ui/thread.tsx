@@ -23,6 +23,7 @@ import {
 import { LazyMotion, MotionConfig, domAnimation } from 'motion/react'
 import * as m from 'motion/react-m'
 import { useEffect, useRef, useState, type FC } from 'react'
+import { AnimatePresence } from 'motion/react'
 
 import {
   ComposerAddAttachment,
@@ -32,8 +33,11 @@ import {
 import { MarkdownText } from '@/components/assistant-ui/markdown-text'
 import { Reasoning, ReasoningGroup } from '@/components/assistant-ui/reasoning'
 import { ToolFallback } from '@/components/assistant-ui/tool-fallback'
+import { ToolMentionAutocomplete } from '@/components/assistant-ui/tool-mention-autocomplete'
+import { MentionedToolsBadges } from '@/components/assistant-ui/mentioned-tools-badges'
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
 import { Button } from '@/components/ui/button'
+import { useToolMentions } from '@/hooks/useToolMentions'
 
 import { useDensity } from '@/hooks/useDensity'
 import { useElements } from '@/hooks/useElements'
@@ -262,8 +266,97 @@ const ThreadSuggestions: FC = () => {
   )
 }
 
+/**
+ * Component that handles tool mentions (@tool) in the composer.
+ * Shows autocomplete dropdown and badges for mentioned tools.
+ */
+const ComposerToolMentions: FC<{
+  tools: Record<string, unknown> | undefined
+}> = ({ tools }) => {
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const {
+    mentionableTools,
+    mentionedToolIds,
+    value,
+    cursorPosition,
+    textareaRef,
+    updateCursorPosition,
+    handleAutocompleteChange,
+    removeMention,
+    isActive,
+  } = useToolMentions({ tools })
+
+  // Find and attach to the textarea within the composer
+  useEffect(() => {
+    if (!isActive) return
+
+    const findTextarea = () => {
+      const textarea = document.querySelector(
+        '.aui-composer-input'
+      ) as HTMLTextAreaElement | null
+      if (textarea && textareaRef.current !== textarea) {
+        textareaRef.current = textarea
+
+        const handleSelectionChange = () => updateCursorPosition()
+        textarea.addEventListener('click', handleSelectionChange)
+        textarea.addEventListener('keyup', handleSelectionChange)
+        textarea.addEventListener('input', handleSelectionChange)
+
+        return () => {
+          textarea.removeEventListener('click', handleSelectionChange)
+          textarea.removeEventListener('keyup', handleSelectionChange)
+          textarea.removeEventListener('input', handleSelectionChange)
+        }
+      }
+    }
+
+    const cleanup = findTextarea()
+
+    const observer = new MutationObserver(() => {
+      findTextarea()
+    })
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    })
+
+    return () => {
+      cleanup?.()
+      observer.disconnect()
+    }
+  }, [isActive, textareaRef, updateCursorPosition])
+
+  if (!isActive) {
+    return null
+  }
+
+  return (
+    <div ref={containerRef} className="aui-composer-tool-mentions relative">
+      {/* Badges showing mentioned tools */}
+      <MentionedToolsBadges
+        mentionedToolIds={mentionedToolIds}
+        tools={mentionableTools}
+        onRemove={removeMention}
+      />
+
+      {/* Autocomplete dropdown */}
+      <AnimatePresence>
+        <ToolMentionAutocomplete
+          tools={mentionableTools}
+          value={value}
+          cursorPosition={cursorPosition}
+          onValueChange={handleAutocompleteChange}
+          textareaRef={textareaRef}
+        />
+      </AnimatePresence>
+    </div>
+  )
+}
+
 const Composer: FC = () => {
-  const { config } = useElements()
+  const { config, mcpTools } = useElements()
   const r = useRadius()
   const d = useDensity()
   const composerConfig = config.composer ?? {
@@ -271,6 +364,15 @@ const Composer: FC = () => {
     attachments: true,
   }
   const components = config.components ?? {}
+
+  // Determine if tool mentions are enabled (default: true)
+  const toolMentionsEnabled =
+    composerConfig.toolMentions === undefined ||
+    composerConfig.toolMentions === true ||
+    (typeof composerConfig.toolMentions === 'object' &&
+      composerConfig.toolMentions.enabled !== false)
+
+  const composerRootRef = useRef<HTMLFormElement>(null)
 
   if (components.Composer) {
     return <components.Composer />
@@ -287,12 +389,15 @@ const Composer: FC = () => {
     >
       <ThreadScrollToBottom />
       <ComposerPrimitive.Root
+        ref={composerRootRef}
         className={cn(
           'aui-composer-root group/input-group border-input bg-background has-[textarea:focus-visible]:border-ring has-[textarea:focus-visible]:ring-ring/5 dark:bg-background relative flex w-full flex-col border px-1 pt-2 shadow-xs transition-[color,box-shadow] outline-none has-[textarea:focus-visible]:ring-1',
           r('xl')
         )}
       >
         {composerConfig.attachments && <ComposerAttachments />}
+
+        {toolMentionsEnabled && <ComposerToolMentions tools={mcpTools} />}
 
         <ComposerPrimitive.Input
           placeholder={composerConfig.placeholder}
