@@ -9,7 +9,7 @@ tool (
 )
 
 require (
-	cloud.google.com/go/storage v1.58.0
+	cloud.google.com/go/storage v1.59.1
 	github.com/BurntSushi/toml v1.6.0
 	github.com/ClickHouse/clickhouse-go/v2 v2.42.0
 	github.com/KimMachineGun/automemlimit v0.7.5
@@ -24,7 +24,7 @@ require (
 	github.com/charmbracelet/log v0.4.2
 	github.com/ettle/strcase v0.2.0
 	github.com/exaring/otelpgx v0.9.4
-	github.com/go-chi/chi/v5 v5.2.3
+	github.com/go-chi/chi/v5 v5.2.4
 	github.com/go-logr/logr v1.4.3
 	github.com/go-redis/cache/v9 v9.0.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
@@ -47,10 +47,10 @@ require (
 	github.com/samber/slog-multi v1.6.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/sourcegraph/conc v0.3.0
-	github.com/speakeasy-api/openapi v1.13.1
+	github.com/speakeasy-api/openapi v1.15.0
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20250711233419-a173a6c0125c
 	github.com/stretchr/testify v1.11.1
-	github.com/superfly/fly-go v0.1.71
+	github.com/superfly/fly-go v0.2.1
 	github.com/testcontainers/testcontainers-go v0.40.0
 	github.com/testcontainers/testcontainers-go/modules/clickhouse v0.40.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.40.0
@@ -70,11 +70,11 @@ require (
 	go.temporal.io/sdk/contrib/opentelemetry v0.6.0
 	go.yaml.in/yaml/v4 v4.0.0-rc.3
 	goa.design/clue v1.2.3
-	goa.design/goa/v3 v3.23.4
-	goa.design/plugins/v3 v3.23.4
+	goa.design/goa/v3 v3.24.1
+	goa.design/plugins/v3 v3.24.1
 	golang.org/x/sync v0.19.0
-	golang.org/x/sys v0.39.0
-	golang.org/x/term v0.38.0
+	golang.org/x/sys v0.40.0
+	golang.org/x/term v0.39.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
@@ -276,19 +276,19 @@ require (
 	go.uber.org/zap v1.27.1 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.46.0 // indirect
+	golang.org/x/crypto v0.47.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
-	golang.org/x/mod v0.31.0 // indirect
-	golang.org/x/net v0.48.0 // indirect
+	golang.org/x/mod v0.32.0 // indirect
+	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/oauth2 v0.33.0 // indirect
-	golang.org/x/text v0.32.0 // indirect
+	golang.org/x/text v0.33.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
-	golang.org/x/tools v0.40.0 // indirect
+	golang.org/x/tools v0.41.0 // indirect
 	google.golang.org/api v0.256.0 // indirect
 	google.golang.org/genproto v0.0.0-20250922171735-9219d122eba9 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251213004720-97cd9d5aeac2 // indirect
-	google.golang.org/grpc v1.77.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260114163908-3f89685c29c3 // indirect
+	google.golang.org/grpc v1.78.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
