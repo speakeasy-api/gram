@@ -1,5 +1,14 @@
 # dashboard
 
+## 0.26.10
+
+### Patch Changes
+
+- a0b7e13: feat: Use Gram Elements for the Playground UI
+- Updated dependencies [a0b7e13]
+- Updated dependencies [43500b3]
+  - @gram-ai/elements@1.21.3
+
 ## 0.26.9
 
 ### Patch Changes
