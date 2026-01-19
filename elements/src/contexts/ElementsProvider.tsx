@@ -256,7 +256,7 @@ const ElementsProviderWithApproval = ({
         // Include Gram-Chat-ID header for chat persistence and Gram-Environment for environment selection
         const headersWithChatId = {
           ...auth.headers,
-          'Gram-Chat-ID': chatIdRef.current,
+          'Gram-Chat-ID': chatId,
           ...(config.gramEnvironment && {
             'Gram-Environment': config.gramEnvironment,
           }),
