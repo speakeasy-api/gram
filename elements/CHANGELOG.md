@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.22.0
+
+### Minor Changes
+
+- adac3f8: Adds tool mentions / tagging to elements
+
 ## 1.21.3
 
 ### Patch Changes
