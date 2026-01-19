@@ -18,6 +18,7 @@ import { useListToolsets } from "@gram/client/react-query/index.js";
 import { HistoryIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback, useState } from "react";
+import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useEnvironment } from "../environments/Environment";
 import { useMcpUrl } from "../mcp/MCPDetails";
@@ -48,6 +49,10 @@ export function PlaygroundElements({
   const createSessionMutation = useChatSessionsCreateMutation();
   const { resolvedTheme } = useTheme();
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [searchParams] = useSearchParams();
+
+  // Get threadId from URL for shared chat links
+  const initialThreadId = searchParams.get("threadId") ?? undefined;
 
   // Get toolset data to construct MCP URL
   const { data: toolsetsData } = useListToolsets();
@@ -122,6 +127,7 @@ export function PlaygroundElements({
         history: {
           enabled: true,
           showThreadList: true,
+          initialThreadId,
         },
         mcp: mcpUrl,
         gramEnvironment: environmentSlug ?? undefined,
