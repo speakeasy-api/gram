@@ -1,5 +1,5 @@
-import { Chat } from '..'
 import type { Meta, StoryFn } from '@storybook/react-vite'
+import { Chat } from '..'
 
 const meta: Meta<typeof Chat> = {
   title: 'Chat/Welcome',
@@ -25,7 +25,7 @@ CustomMessage.parameters = {
           {
             title: 'Write a SQL query',
             label: 'to find top customers',
-            action: 'Write a SQL query to find top customers',
+            prompt: 'Write a SQL query to find top customers',
           },
         ],
       },

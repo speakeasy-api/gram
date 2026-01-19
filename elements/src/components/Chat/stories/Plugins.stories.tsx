@@ -1,6 +1,5 @@
-import React from 'react'
-import { Chat } from '..'
 import type { Meta, StoryFn } from '@storybook/react-vite'
+import { Chat } from '..'
 
 const meta: Meta<typeof Chat> = {
   title: 'Chat/Plugins',
@@ -32,7 +31,7 @@ ChartPlugin.parameters = {
           {
             title: 'Create a chart',
             label: 'Visualize your data',
-            action: `Create a bar chart for the following country + GDP data:
+            prompt: `Create a bar chart for the following country + GDP data:
             ${countryData}
             `,
           },

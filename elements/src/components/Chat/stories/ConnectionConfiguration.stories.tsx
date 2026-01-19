@@ -85,12 +85,12 @@ LanguageModel.parameters = {
           {
             title: 'Generate a chart',
             label: 'Generate a chart',
-            action: 'Generate a chart of these values: 1, 2, 3, 4, 5',
+            prompt: 'Generate a chart of these values: 1, 2, 3, 4, 5',
           },
           {
             title: 'Call all tools',
             label: 'Call all tools',
-            action: 'Call all tools',
+            prompt: 'Call all tools',
           },
         ],
       },

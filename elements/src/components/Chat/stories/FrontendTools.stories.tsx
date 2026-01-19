@@ -1,9 +1,9 @@
-import React from 'react'
-import { Chat } from '..'
-import type { Meta, StoryFn } from '@storybook/react-vite'
 import { ToolCallMessagePartProps } from '@assistant-ui/react'
-import { defineFrontendTool, FrontendTool } from '../../../lib/tools'
+import type { Meta, StoryFn } from '@storybook/react-vite'
+import React from 'react'
 import z from 'zod'
+import { Chat } from '..'
+import { defineFrontendTool, FrontendTool } from '../../../lib/tools'
 
 const meta: Meta<typeof Chat> = {
   title: 'Chat/Frontend Tools',
@@ -123,7 +123,7 @@ FetchUrl.parameters = {
           {
             title: 'Fetch a URL',
             label: 'Fetch a URL',
-            action: 'Fetch https://httpbin.org/html',
+            prompt: 'Fetch https://httpbin.org/html',
           },
         ],
       },

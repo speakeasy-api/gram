@@ -1,7 +1,7 @@
-import { Chat } from '..'
 import type { Meta, StoryFn } from '@storybook/react-vite'
-import { defineFrontendTool } from '../../../lib/tools'
 import z from 'zod'
+import { Chat } from '..'
+import { defineFrontendTool } from '../../../lib/tools'
 
 const meta: Meta<typeof Chat> = {
   title: 'Chat/Tool Approval',
@@ -25,7 +25,7 @@ SingleTool.parameters = {
           {
             title: 'Call a tool requiring approval',
             label: 'Get a salutation',
-            action: 'Get a salutation',
+            prompt: 'Get a salutation',
           },
         ],
       },
@@ -52,7 +52,7 @@ SingleToolWithFunction.parameters = {
           {
             title: 'Call a tool requiring approval',
             label: 'Get a salutation',
-            action: 'Get a salutation',
+            prompt: 'Get a salutation',
           },
         ],
       },
@@ -71,7 +71,7 @@ MultipleGroupedTools.parameters = {
           {
             title: 'Call both tools requiring approval',
             label: 'Call both tools requiring approval',
-            action:
+            prompt:
               'Call both kitchen_sink_get_salutation and kitchen_sink_get_get_card_details',
           },
         ],
@@ -111,7 +111,7 @@ FrontendTool.parameters = {
           {
             title: 'Delete a file',
             label: 'Delete a file',
-            action: 'Delete file with ID 123',
+            prompt: 'Delete file with ID 123',
           },
         ],
       },
@@ -144,7 +144,7 @@ FrontendToolWithFunction.parameters = {
           {
             title: 'Delete a file',
             label: 'Delete a file',
-            action: 'Delete file with ID 123',
+            prompt: 'Delete file with ID 123',
           },
         ],
       },

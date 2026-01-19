@@ -1,7 +1,7 @@
+import { ToolCallMessagePartProps } from '@assistant-ui/react'
+import type { Meta, StoryFn } from '@storybook/react-vite'
 import React from 'react'
 import { Chat } from '..'
-import type { Meta, StoryFn } from '@storybook/react-vite'
-import { ToolCallMessagePartProps } from '@assistant-ui/react'
 
 const meta: Meta<typeof Chat> = {
   title: 'Chat/Tools',
@@ -154,7 +154,7 @@ CustomToolComponent.parameters = {
           {
             title: 'Get card details',
             label: 'for your card',
-            action: 'Get card details for your card number 4532 •••• •••• 1234',
+            prompt: 'Get card details for your card number 4532 •••• •••• 1234',
           },
         ],
       },
