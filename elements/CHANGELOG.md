@@ -1,5 +1,12 @@
 # @gram-ai/elements
 
+## 1.21.3
+
+### Patch Changes
+
+- a0b7e13: feat: Add `gramEnvironment` config option to specify which environment's secrets to use for tool execution. When set, sends the `Gram-Environment` header to both MCP and completion requests.
+- 43500b3: Add Shadow DOM style isolation for exported Elements components.
+
 ## 1.21.2
 
 ### Patch Changes
