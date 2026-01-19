@@ -41,12 +41,12 @@
 
 ## Variables
 
-- [ChatHistory](variables/ChatHistory.md)
 - [MODELS](variables/MODELS.md)
 
 ## Functions
 
 - [Chat](functions/Chat.md)
+- [ChatHistory](functions/ChatHistory.md)
 - [GramElementsProvider](functions/GramElementsProvider.md)
 - [trackError](functions/trackError.md)
 - [defineFrontendTool](functions/defineFrontendTool.md)
