@@ -1,11 +1,23 @@
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
-import { Chat, GramElementsProvider, type Model } from "@gram-ai/elements";
+import {
+  Chat,
+  ChatHistory,
+  GramElementsProvider,
+  type Model,
+} from "@gram-ai/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { useListToolsets } from "@gram/client/react-query/index.js";
+import { HistoryIcon } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { useEnvironment } from "../environments/Environment";
 import { useMcpUrl } from "../mcp/MCPDetails";
@@ -35,6 +47,7 @@ export function PlaygroundElements({
   const project = useProject();
   const createSessionMutation = useChatSessionsCreateMutation();
   const { resolvedTheme } = useTheme();
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Get toolset data to construct MCP URL
   const { data: toolsetsData } = useListToolsets();
@@ -145,8 +158,22 @@ export function PlaygroundElements({
         }
       >
         <div className="h-full flex flex-col min-h-0">
-          <div className="flex items-center justify-end gap-2 py-3 shrink-0 border-b-border border-b">
-            {additionalActions}
+          <div className="flex items-center justify-between gap-2 py-3 shrink-0 border-b-border border-b px-4">
+            <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+              <PopoverTrigger asChild>
+                <Button size="sm" variant="ghost">
+                  <HistoryIcon className="size-4 mr-2" />
+                  Chat History
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                className="w-72 p-0 max-h-96 overflow-hidden"
+              >
+                <ChatHistory className="h-full max-h-96 overflow-y-auto" />
+              </PopoverContent>
+            </Popover>
+            <div className="flex items-center gap-2">{additionalActions}</div>
           </div>
           <div className="h-full overflow-hidden">
             <Chat />
