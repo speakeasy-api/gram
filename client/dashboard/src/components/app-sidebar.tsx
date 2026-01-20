@@ -20,7 +20,6 @@ import {
   AlertTriangleIcon,
   ChartNoAxesCombinedIcon,
   MinusIcon,
-  Sparkles,
   TestTube2Icon,
 } from "lucide-react";
 import * as React from "react";
@@ -41,20 +40,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const isCatalogEnabled = telemetry.isFeatureEnabled("gram-external-mcp");
 
   const topNavGroups = {
-    create: [routes.toolsets, routes.customTools, routes.prompts] as AppRoute[],
-    connect: [
-      routes.playground,
-      routes.elements,
-      routes.mcp,
-      routes.environments,
-    ],
+    connect: [routes.sources] as AppRoute[],
+    build: [routes.elements, routes.mcp],
+    observe: [routes.logs],
   };
 
   if (isCatalogEnabled) {
-    topNavGroups.create.push(routes.catalog);
+    topNavGroups.connect.push(routes.catalog);
   }
 
-  const bottomNav = [routes.deployments, routes.billing, routes.settings];
+  topNavGroups.connect.push(routes.playground);
+
+  const bottomNav = [routes.settings, routes.docs];
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -74,52 +71,24 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroup key={label}>
             <SidebarGroupLabel>{label}</SidebarGroupLabel>
             <SidebarGroupContent>
-              <NavMenu items={items} />
+              <NavMenu items={items}>
+                {label === "observe" && (
+                  <SidebarMenuItem>
+                    <NavButton
+                      title="Metrics"
+                      Icon={ChartNoAxesCombinedIcon}
+                      onClick={() => setMetricsModalOpen(true)}
+                    />
+                  </SidebarMenuItem>
+                )}
+              </NavMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
-        <SidebarGroup>
-          <SidebarGroupLabel>Evaluate</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <NavButton
-                  title="Logs"
-                  Icon={routes.logs.Icon}
-                  href={routes.logs.href()}
-                  active={routes.logs.active}
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <NavButton
-                  title="Metrics"
-                  Icon={ChartNoAxesCombinedIcon}
-                  onClick={() => setMetricsModalOpen(true)}
-                />
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
         <SidebarGroup className="mt-auto">
+          <SidebarGroupLabel>settings</SidebarGroupLabel>
           <SidebarGroupContent>
-            <NavMenu items={bottomNav}>
-              <SidebarMenuItem>
-                <NavButton
-                  title="What's new"
-                  Icon={Sparkles}
-                  href="https://www.getgram.ai/changelog"
-                  target="_blank"
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <NavButton
-                  title="Docs"
-                  Icon={routes.docs.Icon}
-                  href={routes.docs.href()}
-                  active={routes.docs.active}
-                />
-              </SidebarMenuItem>
-            </NavMenu>
+            <NavMenu items={bottomNav} />
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
