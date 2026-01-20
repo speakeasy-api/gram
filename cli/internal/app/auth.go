@@ -24,7 +24,6 @@ type AuthOptions struct {
 	ProfilePath  string
 	ProfileName  string
 	ProjectSlug  string
-	Logger       *slog.Logger
 }
 
 type AuthResult struct {
@@ -32,9 +31,7 @@ type AuthResult struct {
 }
 
 func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
-	if opts.Logger == nil {
-		opts.Logger = slog.Default()
-	}
+	logger := logging.PullLogger(ctx)
 
 	if opts.ProfilePath == "" {
 		var err error
@@ -69,9 +66,9 @@ func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
 	prof, _ := profile.LoadByName(opts.ProfilePath, profileName)
 
 	if canRefreshProfile(prof) {
-		err := refreshProfile(ctx, opts.Logger, prof, profileName, apiURL.String(), keysClient, opts.ProfilePath)
+		err := refreshProfile(ctx, logger, prof, profileName, apiURL.String(), keysClient, opts.ProfilePath)
 		if err == nil {
-			opts.Logger.InfoContext(ctx, fmt.Sprintf(
+			logger.InfoContext(ctx, fmt.Sprintf(
 				"Authentication successful for org '%s' (project: '%s')",
 				prof.Org.Name,
 				prof.DefaultProjectSlug,
@@ -88,7 +85,7 @@ func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
 	projectSlug := opts.ProjectSlug
 	if err := authenticateNewProfile(
 		ctx,
-		opts.Logger,
+		logger,
 		profileName,
 		apiURL.String(),
 		dashboardURL,
@@ -105,7 +102,7 @@ func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
 
 	if projectSlug != "" && projectSlug != savedProf.DefaultProjectSlug {
 		if err := profile.UpdateProjectSlug(opts.ProfilePath, projectSlug); err != nil {
-			opts.Logger.WarnContext(ctx, "failed to update project slug", slog.String("error", err.Error()))
+			logger.WarnContext(ctx, "failed to update project slug", slog.String("error", err.Error()))
 		}
 		savedProf, _ = profile.LoadByName(opts.ProfilePath, profileName)
 	}
@@ -357,7 +354,6 @@ func doAuth(c *cli.Context) error {
 		DashboardURL: dashboardURL,
 		ProfilePath:  profilePath,
 		ProfileName:  c.String("profile"),
-		Logger:       logger,
 	})
 	if err != nil {
 		return err

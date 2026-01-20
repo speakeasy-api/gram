@@ -31,7 +31,6 @@ type PushOptions struct {
 	APIURL         string
 	ProfilePath    string
 	ProfileName    string
-	Logger         *slog.Logger
 }
 
 type PushResult struct {
@@ -41,6 +40,8 @@ type PushResult struct {
 }
 
 func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
+	logger := logging.PullLogger(ctx)
+
 	if opts.Method == "" {
 		opts.Method = "merge"
 	}
@@ -50,9 +51,6 @@ func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to get profile path: %w", err)
 		}
-	}
-	if opts.Logger == nil {
-		opts.Logger = slog.Default()
 	}
 
 	if opts.Method != "replace" && opts.Method != "merge" {
@@ -118,7 +116,7 @@ func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
 	}
 	defer func() {
 		if err := configFile.Close(); err != nil {
-			opts.Logger.WarnContext(ctx, "failed to close config file", slog.String("error", err.Error()))
+			logger.WarnContext(ctx, "failed to close config file", slog.String("error", err.Error()))
 		}
 	}()
 
@@ -134,14 +132,14 @@ func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
 		ProjectSlug: projectSlug,
 	}
 
-	opts.Logger.InfoContext(
+	logger.InfoContext(
 		ctx,
 		"Deploying to project",
 		slog.String("project", projectSlug),
 		slog.String("config", opts.ConfigFile),
 	)
 
-	result := workflow.New(ctx, opts.Logger, workflowParams).
+	result := workflow.New(ctx, logger, workflowParams).
 		UploadAssets(ctx, config.Sources)
 
 	deployTicker := time.NewTicker(time.Second)
@@ -161,7 +159,7 @@ func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
 				message := processingMessage(elapsed)
 
 				if message != "" {
-					opts.Logger.InfoContext(ctx, message)
+					logger.InfoContext(ctx, message)
 				}
 			}
 		}
@@ -271,7 +269,6 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				NonBlocking:    c.Bool("skip-poll"),
 				APIKey:         c.String("api-key"),
 				APIURL:         c.String("api-url"),
-				Logger:         logger,
 			})
 
 			if err != nil {
