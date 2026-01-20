@@ -285,13 +285,21 @@ func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *h
 		return nil
 	}
 
-	// Handle static case - return metadata directly
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	body, err := json.Marshal(result.Static)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to marshal OAuth server metadata").Log(ctx, s.logger)
+	var body []byte
+	switch result.Kind {
+	case wellknown.OAuthServerMetadataResultKindRaw:
+		body = result.Raw
+	case wellknown.OAuthServerMetadataResultKindStatic:
+		var marshalErr error
+		body, marshalErr = json.Marshal(result.Static)
+		if marshalErr != nil {
+			return oops.E(oops.CodeUnexpected, marshalErr, "failed to marshal OAuth server metadata").Log(ctx, s.logger)
+		}
+	default:
+		return oops.E(oops.CodeUnexpected, nil, "unexpected OAuth server metadata result kind").Log(ctx, s.logger)
 	}
 
 	_, writeErr := w.Write(body)

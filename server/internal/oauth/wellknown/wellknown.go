@@ -54,12 +54,14 @@ type OAuthServerMetadataResultKind string
 
 const (
 	OAuthServerMetadataResultKindStatic OAuthServerMetadataResultKind = "static"
+	OAuthServerMetadataResultKindRaw    OAuthServerMetadataResultKind = "raw"
 	OAuthServerMetadataResultKindProxy  OAuthServerMetadataResultKind = "proxy"
 )
 
 type OAuthServerMetadataResult struct {
 	Kind     OAuthServerMetadataResultKind
 	Static   *OAuthServerMetadata
+	Raw      json.RawMessage
 	ProxyURL string
 }
 
@@ -89,6 +91,7 @@ func ResolveOAuthServerMetadataFromToolset(
 				GrantTypesSupported:           []string{"authorization_code"},
 				CodeChallengeMethodsSupported: []string{"plain", "S256"},
 			},
+			Raw:      nil,
 			ProxyURL: "",
 		}, nil
 	}
@@ -102,14 +105,10 @@ func ResolveOAuthServerMetadataFromToolset(
 			return nil, fmt.Errorf("get external oauth server metadata: %w", err)
 		}
 
-		var metadata OAuthServerMetadata
-		if err := json.Unmarshal(externalOAuthServer.Metadata, &metadata); err != nil {
-			return nil, fmt.Errorf("unmarshal oauth server metadata: %w", err)
-		}
-
 		return &OAuthServerMetadataResult{
-			Kind:     OAuthServerMetadataResultKindStatic,
-			Static:   &metadata,
+			Kind:     OAuthServerMetadataResultKindRaw,
+			Static:   nil,
+			Raw:      externalOAuthServer.Metadata,
 			ProxyURL: "",
 		}, nil
 	}
@@ -133,6 +132,7 @@ func ResolveOAuthServerMetadataFromToolset(
 				GrantTypesSupported:           []string{"authorization_code", "refresh_token"},
 				CodeChallengeMethodsSupported: []string{"S256"},
 			},
+			Raw:      nil,
 			ProxyURL: "",
 		}, nil
 	}
