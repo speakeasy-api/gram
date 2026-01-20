@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.26.13
+
+### Patch Changes
+
+- ff3ff3e: Restore chat history in the playground using Gram Elements
+
 ## 0.26.12
 
 ### Patch Changes
