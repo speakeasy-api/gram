@@ -8,17 +8,17 @@
 
 ## Properties
 
-### title
+### title?
 
-> **title**: `string`
+> `optional` **title**: `string`
 
 The welcome message to display when the thread is empty.
 
 ***
 
-### subtitle
+### subtitle?
 
-> **subtitle**: `string`
+> `optional` **subtitle**: `string`
 
 The subtitle to display when the thread is empty.
 

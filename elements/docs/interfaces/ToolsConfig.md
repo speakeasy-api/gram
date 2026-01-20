@@ -63,7 +63,7 @@ const config: ElementsConfig = {
 
 ### frontendTools?
 
-> `optional` **frontendTools**: `Record`\<`string`, `AssistantTool`\>
+> `optional` **frontendTools**: `FrontendTools`
 
 The frontend tools to use for the Elements library.
 

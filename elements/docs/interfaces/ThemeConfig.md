@@ -25,7 +25,7 @@ const config: ElementsConfig = {
 
 ### colorScheme?
 
-> `optional` **colorScheme**: `"system"` \| `"light"` \| `"dark"`
+> `optional` **colorScheme**: `"light"` \| `"dark"` \| `"system"`
 
 The color scheme to use for the UI.
 
