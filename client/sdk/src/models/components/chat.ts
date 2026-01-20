@@ -16,6 +16,10 @@ export type Chat = {
    */
   createdAt: Date;
   /**
+   * The ID of the external user who created the chat
+   */
+  externalUserId?: string | undefined;
+  /**
    * The ID of the chat
    */
   id: string;
@@ -38,7 +42,7 @@ export type Chat = {
   /**
    * The ID of the user who created the chat
    */
-  userId: string;
+  userId?: string | undefined;
 };
 
 /** @internal */
@@ -47,6 +51,7 @@ export const Chat$inboundSchema: z.ZodType<Chat, z.ZodTypeDef, unknown> = z
     created_at: z.string().datetime({ offset: true }).transform(v =>
       new Date(v)
     ),
+    external_user_id: z.string().optional(),
     id: z.string(),
     messages: z.array(ChatMessage$inboundSchema),
     num_messages: z.number().int(),
@@ -54,10 +59,11 @@ export const Chat$inboundSchema: z.ZodType<Chat, z.ZodTypeDef, unknown> = z
     updated_at: z.string().datetime({ offset: true }).transform(v =>
       new Date(v)
     ),
-    user_id: z.string(),
+    user_id: z.string().optional(),
   }).transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
+      "external_user_id": "externalUserId",
       "num_messages": "numMessages",
       "updated_at": "updatedAt",
       "user_id": "userId",

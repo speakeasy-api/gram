@@ -131,9 +131,11 @@ run();
 
 ### [Assets](docs/sdks/assets/README.md)
 
+* [createSignedChatAttachmentURL](docs/sdks/assets/README.md#createsignedchatattachmenturl) - createSignedChatAttachmentURL assets
 * [fetchOpenAPIv3FromURL](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 * [listAssets](docs/sdks/assets/README.md#listassets) - listAssets assets
 * [serveChatAttachment](docs/sdks/assets/README.md#servechatattachment) - serveChatAttachment assets
+* [serveChatAttachmentSigned](docs/sdks/assets/README.md#servechatattachmentsigned) - serveChatAttachmentSigned assets
 * [serveFunction](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 * [serveImage](docs/sdks/assets/README.md#serveimage) - serveImage assets
 * [serveOpenAPIv3](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
@@ -259,6 +261,7 @@ run();
 
 ### [Telemetry](docs/sdks/telemetry/README.md)
 
+* [captureEvent](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 * [searchLogs](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 * [searchToolCalls](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
 
@@ -323,9 +326,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`agentsCreate`](docs/sdks/agents/README.md#create) - createResponse agents
 - [`agentsDelete`](docs/sdks/agents/README.md#delete) - deleteResponse agents
 - [`agentsGet`](docs/sdks/agents/README.md#get) - getResponse agents
+- [`assetsCreateSignedChatAttachmentURL`](docs/sdks/assets/README.md#createsignedchatattachmenturl) - createSignedChatAttachmentURL assets
 - [`assetsFetchOpenAPIv3FromURL`](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 - [`assetsListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
 - [`assetsServeChatAttachment`](docs/sdks/assets/README.md#servechatattachment) - serveChatAttachment assets
+- [`assetsServeChatAttachmentSigned`](docs/sdks/assets/README.md#servechatattachmentsigned) - serveChatAttachmentSigned assets
 - [`assetsServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 - [`assetsServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`assetsServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
@@ -397,6 +402,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`slackSlackCallback`](docs/sdks/slack/README.md#slackcallback) - callback slack
 - [`slackSlackLogin`](docs/sdks/slack/README.md#slacklogin) - login slack
 - [`slackUpdateSlackConnection`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
+- [`telemetryCaptureEvent`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`telemetrySearchLogs`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`telemetrySearchToolCalls`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
 - [`templatesCreate`](docs/sdks/templates/README.md#create) - createTemplate templates
@@ -468,6 +474,7 @@ To learn about this feature and how to get started, check
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreateProjectMutation`](docs/sdks/projects/README.md#create) - createProject projects
+- [`useCreateSignedChatAttachmentURLMutation`](docs/sdks/assets/README.md#createsignedchatattachmenturl) - createSignedChatAttachmentURL assets
 - [`useCreateTemplateMutation`](docs/sdks/templates/README.md#create) - createTemplate templates
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
@@ -526,6 +533,7 @@ To learn about this feature and how to get started, check
 - [`useSearchLogsMutation`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`useSearchToolCallsMutation`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
 - [`useServeChatAttachment`](docs/sdks/assets/README.md#servechatattachment) - serveChatAttachment assets
+- [`useServeChatAttachmentSigned`](docs/sdks/assets/README.md#servechatattachmentsigned) - serveChatAttachmentSigned assets
 - [`useServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
@@ -534,6 +542,7 @@ To learn about this feature and how to get started, check
 - [`useSetSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`useSetToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
+- [`useTelemetryCaptureEventMutation`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates
 - [`useTemplates`](docs/sdks/templates/README.md#list) - listTemplates templates
 - [`useToolExecutionLogs`](docs/sdks/logs/README.md#listtoolexecutionlogs) - listToolExecutionLogs logs
