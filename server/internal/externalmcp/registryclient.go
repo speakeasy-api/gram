@@ -86,8 +86,16 @@ type serverJSON struct {
 }
 
 type serverRemote struct {
-	URL  string `json:"url"`
-	Type string `json:"type"`
+	URL   string       `json:"url"`
+	Type  string       `json:"type"`
+	Tools []serverTool `json:"tools"`
+}
+
+type serverTool struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	InputSchema json.RawMessage `json:"inputSchema"`
+	Annotations map[string]any  `json:"annotations"`
 }
 
 // ListServers fetches servers from the given registry.
