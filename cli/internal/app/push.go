@@ -20,42 +20,27 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-// PushOptions configures the Push operation
 type PushOptions struct {
-	// ConfigFile is the path to the deployment config file (required)
-	ConfigFile string
-	// ProjectSlug overrides profile default
-	ProjectSlug string
-	// OrgSlug overrides profile default
-	OrgSlug string
-	// IdempotencyKey for versioned deployments (optional)
+	ConfigFile     string
+	ProjectSlug    string
+	OrgSlug        string
 	IdempotencyKey string
-	// Method: "replace" (default) or "merge"
-	Method string
-	// NonBlocking returns immediately without polling
-	NonBlocking bool
-	// APIKey overrides profile's API key
-	APIKey string
-	// APIURL overrides profile's API URL
-	APIURL string
-	// ProfilePath overrides default (~/.gram/profile.json)
-	ProfilePath string
-	// ProfileName for multi-profile support
-	ProfileName string
-	// Logger for progress output (optional)
-	Logger *slog.Logger
+	Method         string
+	NonBlocking    bool
+	APIKey         string
+	APIURL         string
+	ProfilePath    string
+	ProfileName    string
+	Logger         *slog.Logger
 }
 
-// PushResult contains the deployment result
 type PushResult struct {
 	DeploymentID string
 	Status       string
 	LogsURL      string
 }
 
-// DoPush deploys assets to Gram
 func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
-	// Set defaults
 	if opts.Method == "" {
 		opts.Method = "merge"
 	}
@@ -70,17 +55,14 @@ func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
 		opts.Logger = slog.Default()
 	}
 
-	// Validate method
 	if opts.Method != "replace" && opts.Method != "merge" {
 		return nil, fmt.Errorf("invalid method: %s (allowed values: replace, merge)", opts.Method)
 	}
 
-	// Validate config file
 	if opts.ConfigFile == "" {
 		return nil, fmt.Errorf("config file is required")
 	}
 
-	// Load profile - use current profile if no name specified
 	var prof *profile.Profile
 	if opts.ProfileName != "" {
 		prof, _ = profile.LoadByName(opts.ProfilePath, opts.ProfileName)
@@ -88,7 +70,6 @@ func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
 		prof, _ = profile.Load(opts.ProfilePath)
 	}
 
-	// Resolve API key
 	apiKey := secret.Secret(opts.APIKey)
 	if apiKey == "" && prof != nil {
 		apiKey = secret.Secret(prof.Secret)
@@ -97,7 +78,6 @@ func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
 		return nil, fmt.Errorf("API key required: provide via APIKey option or authenticate first")
 	}
 
-	// Resolve API URL
 	apiURLStr := opts.APIURL
 	if apiURLStr == "" && prof != nil {
 		apiURLStr = prof.APIUrl
@@ -111,7 +91,6 @@ func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
 		return nil, fmt.Errorf("invalid API URL: %w", err)
 	}
 
-	// Resolve org slug
 	orgSlug := opts.OrgSlug
 	if orgSlug == "" && prof != nil && prof.Org != nil {
 		orgSlug = prof.Org.Slug
@@ -120,7 +99,6 @@ func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
 		return nil, fmt.Errorf("organization required: provide via OrgSlug option or authenticate first")
 	}
 
-	// Resolve project slug
 	projectSlug := opts.ProjectSlug
 	if projectSlug == "" && prof != nil {
 		projectSlug = prof.DefaultProjectSlug
@@ -129,7 +107,6 @@ func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
 		return nil, fmt.Errorf("project required: provide via ProjectSlug option or authenticate first")
 	}
 
-	// Open and parse config file
 	configFilename, err := filepath.Abs(opts.ConfigFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve deployment file path: %w", err)
@@ -167,7 +144,6 @@ func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
 	result := workflow.New(ctx, opts.Logger, workflowParams).
 		UploadAssets(ctx, config.Sources)
 
-	// Start ticker to show deployment progress
 	deployTicker := time.NewTicker(time.Second)
 	done := make(chan struct{})
 	startTime := time.Now()
@@ -197,7 +173,6 @@ func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
 		result = result.EvolveDeployment(ctx)
 	}
 
-	// Stop the ticker
 	deployTicker.Stop()
 	done <- struct{}{}
 	<-done

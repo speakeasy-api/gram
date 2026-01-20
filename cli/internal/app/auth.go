@@ -18,31 +18,20 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/keys"
 )
 
-// AuthOptions configures the Auth operation
 type AuthOptions struct {
-	// APIURL is the Gram API endpoint (default: https://app.getgram.ai)
-	APIURL string
-	// DashboardURL for browser authentication (default: derived from APIURL)
+	APIURL       string
 	DashboardURL string
-	// ProfilePath overrides default (~/.gram/profile.json)
-	ProfilePath string
-	// ProfileName for multi-profile support (default: derived from APIURL)
-	ProfileName string
-	// ProjectSlug sets default project after auth
-	ProjectSlug string
-	// Logger for output (optional, defaults to slog.Default)
-	Logger *slog.Logger
+	ProfilePath  string
+	ProfileName  string
+	ProjectSlug  string
+	Logger       *slog.Logger
 }
 
-// AuthResult contains the authentication result
 type AuthResult struct {
 	Profile *profile.Profile
 }
 
-// DoAuth runs the browser OAuth flow via Speakeasy OIDC
-// Returns the authenticated profile
 func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
-	// Set defaults
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
 	}
@@ -55,7 +44,6 @@ func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
 		}
 	}
 
-	// Resolve API URL
 	apiURLStr := opts.APIURL
 	if apiURLStr == "" {
 		apiURLStr = workflow.DefaultBaseURL
@@ -66,13 +54,11 @@ func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
 		return nil, fmt.Errorf("invalid API URL: %w", err)
 	}
 
-	// Get dashboard URL for browser authentication
 	dashboardURL := opts.DashboardURL
 	if dashboardURL == "" {
 		dashboardURL = apiURL.String()
 	}
 
-	// Determine profile name
 	profileName := opts.ProfileName
 	if profileName == "" {
 		profileName = profileNameFromURL(apiURL.String())
@@ -80,7 +66,6 @@ func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
 
 	keysClient := api.NewKeysClientFromURL(apiURL)
 
-	// Try to load existing profile for refresh
 	prof, _ := profile.LoadByName(opts.ProfilePath, profileName)
 
 	if canRefreshProfile(prof) {
@@ -92,17 +77,14 @@ func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
 				prof.DefaultProjectSlug,
 			))
 
-			// Reload and return the profile
 			savedProf, err := profile.LoadByName(opts.ProfilePath, profileName)
 			if err != nil {
 				return nil, err
 			}
 			return &AuthResult{Profile: savedProf}, nil
 		}
-		// If refresh failed, fall through to authenticate new profile
 	}
 
-	// Authenticate new profile
 	projectSlug := opts.ProjectSlug
 	if err := authenticateNewProfile(
 		ctx,
@@ -116,13 +98,11 @@ func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
 		return nil, err
 	}
 
-	// Load and return the saved profile
 	savedProf, err := profile.LoadByName(opts.ProfilePath, profileName)
 	if err != nil {
 		return nil, err
 	}
 
-	// Update project slug if specified
 	if projectSlug != "" && projectSlug != savedProf.DefaultProjectSlug {
 		if err := profile.UpdateProjectSlug(opts.ProfilePath, projectSlug); err != nil {
 			opts.Logger.WarnContext(ctx, "failed to update project slug", slog.String("error", err.Error()))

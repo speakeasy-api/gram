@@ -22,19 +22,13 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-// WhoamiOptions configures the Whoami operation
 type WhoamiOptions struct {
-	// ProfilePath overrides default (~/.gram/profile.json)
 	ProfilePath string
-	// ProfileName for multi-profile support (default: "default")
 	ProfileName string
-	// APIKey overrides profile's API key
-	APIKey string
-	// APIURL overrides profile's API URL
-	APIURL string
+	APIKey      string
+	APIURL      string
 }
 
-// WhoamiResult contains the authenticated profile information
 type WhoamiResult struct {
 	Profile            *profile.Profile
 	Organization       keys.ValidateKeyOrganization
@@ -43,9 +37,7 @@ type WhoamiResult struct {
 	Projects           []*keys.ValidateKeyProject
 }
 
-// DoWhoami returns the current authenticated profile information
 func DoWhoami(ctx context.Context, opts WhoamiOptions) (*WhoamiResult, error) {
-	// Set defaults
 	if opts.ProfilePath == "" {
 		var err error
 		opts.ProfilePath, err = profile.DefaultProfilePath()
@@ -54,7 +46,6 @@ func DoWhoami(ctx context.Context, opts WhoamiOptions) (*WhoamiResult, error) {
 		}
 	}
 
-	// Load profile - use current profile if no name specified
 	var prof *profile.Profile
 	var err error
 	if opts.ProfileName != "" {
@@ -69,7 +60,6 @@ func DoWhoami(ctx context.Context, opts WhoamiOptions) (*WhoamiResult, error) {
 		return nil, fmt.Errorf("not authenticated: no profile found")
 	}
 
-	// Resolve API key
 	apiKey := secret.Secret(opts.APIKey)
 	if apiKey == "" {
 		apiKey = secret.Secret(prof.Secret)
@@ -78,7 +68,6 @@ func DoWhoami(ctx context.Context, opts WhoamiOptions) (*WhoamiResult, error) {
 		return nil, fmt.Errorf("no API key found in options or profile")
 	}
 
-	// Resolve API URL
 	apiURLStr := opts.APIURL
 	if apiURLStr == "" {
 		apiURLStr = prof.APIUrl
@@ -92,7 +81,6 @@ func DoWhoami(ctx context.Context, opts WhoamiOptions) (*WhoamiResult, error) {
 		return nil, fmt.Errorf("invalid API URL: %w", err)
 	}
 
-	// Verify key with server
 	client := api.NewKeysClient(&api.KeysClientOptions{
 		Host:   apiURL.Host,
 		Scheme: apiURL.Scheme,
@@ -103,7 +91,6 @@ func DoWhoami(ctx context.Context, opts WhoamiOptions) (*WhoamiResult, error) {
 		return nil, fmt.Errorf("failed to verify API key: %w", err)
 	}
 
-	// Resolve project slug
 	projectSlug := prof.DefaultProjectSlug
 
 	return &WhoamiResult{
