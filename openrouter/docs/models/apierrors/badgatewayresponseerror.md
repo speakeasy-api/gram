@@ -1,0 +1,12 @@
+# BadGatewayResponseError
+
+Bad Gateway - Provider/upstream API failure
+
+
+## Fields
+
+| Field                                                                                            | Type                                                                                             | Required                                                                                         | Description                                                                                      | Example                                                                                          |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `Error`                                                                                          | [components.BadGatewayResponseErrorData](../../models/components/badgatewayresponseerrordata.md) | :heavy_check_mark:                                                                               | Error data for BadGatewayResponse                                                                | {<br/>"code": 502,<br/>"message": "Provider returned error"<br/>}                                |
+| `UserID`                                                                                         | **string*                                                                                        | :heavy_minus_sign:                                                                               | N/A                                                                                              |                                                                                                  |
+| `HTTPMeta`                                                                                       | [components.HTTPMetadata](../../models/components/httpmetadata.md)                               | :heavy_check_mark:                                                                               | N/A                                                                                              |                                                                                                  |

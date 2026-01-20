@@ -1,0 +1,13 @@
+# OpenResponsesReasoningConfig
+
+Configuration for reasoning mode in the response
+
+
+## Fields
+
+| Field                                                                                                   | Type                                                                                                    | Required                                                                                                | Description                                                                                             |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `Effort`                                                                                                | [*components.OpenAIResponsesReasoningEffort](../../models/components/openairesponsesreasoningeffort.md) | :heavy_minus_sign:                                                                                      | N/A                                                                                                     |
+| `Summary`                                                                                               | [*components.ReasoningSummaryVerbosity](../../models/components/reasoningsummaryverbosity.md)           | :heavy_minus_sign:                                                                                      | N/A                                                                                                     |
+| `MaxTokens`                                                                                             | **float64*                                                                                              | :heavy_minus_sign:                                                                                      | N/A                                                                                                     |
+| `Enabled`                                                                                               | **bool*                                                                                                 | :heavy_minus_sign:                                                                                      | N/A                                                                                                     |

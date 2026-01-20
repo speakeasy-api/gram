@@ -1,0 +1,9 @@
+# ListKeyAssignmentsResponse
+
+
+## Fields
+
+| Field                                                                                                   | Type                                                                                                    | Required                                                                                                | Description                                                                                             |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `HTTPMeta`                                                                                              | [components.HTTPMetadata](../../models/components/httpmetadata.md)                                      | :heavy_check_mark:                                                                                      | N/A                                                                                                     |
+| `Object`                                                                                                | [*operations.ListKeyAssignmentsResponseBody](../../models/operations/listkeyassignmentsresponsebody.md) | :heavy_minus_sign:                                                                                      | List of key assignments                                                                                 |
