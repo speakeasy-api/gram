@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -36,8 +37,11 @@ type ToolMetricsProvider interface {
 	LogHTTPRequest(context.Context, repo.ToolHTTPRequest) error
 	// Insert telemetry log
 	InsertTelemetryLog(ctx context.Context, params repo.InsertTelemetryLogParams) error
-	// ShouldLog returns true if the tool call should be logged
-	ShouldLog(context.Context, string) (bool, error)
+}
+
+// PosthogClient defines the interface for capturing events in PostHog.
+type PosthogClient interface {
+	CaptureEvent(ctx context.Context, eventName string, distinctID string, eventProperties map[string]interface{}) error
 }
 
 // ToolCallLogger represents a logging strategy for tool HTTP requests.
@@ -72,6 +76,7 @@ var _ ToolCallLogger = (*toolCallLogger)(nil)
 func NewToolCallLogger(
 	ctx context.Context,
 	provider ToolMetricsProvider,
+	featuresClient *productfeatures.Client,
 	organizationID string,
 	info ToolInfo,
 	toolName string,
@@ -82,7 +87,7 @@ func NewToolCallLogger(
 		return noop, nil
 	}
 
-	shouldLog, err := provider.ShouldLog(ctx, organizationID)
+	shouldLog, err := featuresClient.IsFeatureEnabled(ctx, organizationID, productfeatures.FeatureLogs)
 	if err != nil {
 		return noop, fmt.Errorf("failed to determine if organization is allowed to request log: %w", err)
 	}
@@ -112,7 +117,6 @@ func (l *toolCallLogger) Emit(ctx context.Context, logger *slog.Logger) {
 		return
 	}
 	EmitHTTPRequestLog(ctx, logger, l.provider, l.toolName, *l.entry)
-
 
 	params := toolReqToTelemetryLog(*l.entry)
 	createTelemetryLog(ctx, logger, l.provider, params)

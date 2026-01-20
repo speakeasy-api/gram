@@ -6,9 +6,11 @@ import (
 	"errors"
 	"log/slog"
 	"net/url"
+	"runtime"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/sourcegraph/conc/pool"
 	"go.temporal.io/sdk/temporal"
 
 	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
@@ -128,33 +130,40 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 		return oops.E(oops.CodeInvalid, nil, "one or more functions failed preflight checks").Log(ctx, d.logger)
 	}
 
+	workers := pool.New().WithErrors().WithMaxGoroutines(runtime.GOMAXPROCS(0))
 	for _, task := range tasks {
-		version := d.resolveRunnerVersion(ctx, logger, task.projectID, task.deploymentID, task.functionID)
-		_, err := d.deployer.Deploy(ctx, functions.RunnerDeployRequest{
-			Version:      version,
-			ProjectID:    task.projectID,
-			DeploymentID: task.deploymentID,
-			FunctionID:   task.functionID,
-			AccessID:     task.accessID,
-			Runtime:      task.runtime,
-			Assets: []functions.RunnerAsset{{
-				AssetID:       task.assetID,
-				AssetURL:      task.assetURL,
-				GuestPath:     "/data/code.zip",
-				Mode:          0444,
-				SHA256Sum:     task.assetSHA256,
-				ContentLength: task.assetSize,
-				ContentType:   task.assetContentType,
-			}},
-			BearerSecret: task.bearerSecret,
+		workers.Go(func() error {
+			version := d.resolveRunnerVersion(ctx, logger, task.projectID, task.deploymentID, task.functionID)
+			_, err := d.deployer.Deploy(ctx, functions.RunnerDeployRequest{
+				Version:      version,
+				ProjectID:    task.projectID,
+				DeploymentID: task.deploymentID,
+				FunctionID:   task.functionID,
+				AccessID:     task.accessID,
+				Runtime:      task.runtime,
+				Assets: []functions.RunnerAsset{{
+					AssetID:       task.assetID,
+					AssetURL:      task.assetURL,
+					GuestPath:     "/data/code.zip",
+					Mode:          0444,
+					SHA256Sum:     task.assetSHA256,
+					ContentLength: task.assetSize,
+					ContentType:   task.assetContentType,
+				}},
+				BearerSecret: task.bearerSecret,
+			})
+			var serr *oops.ShareableError
+			switch {
+			case errors.As(err, &serr):
+				return serr
+			case err != nil:
+				return oops.E(oops.CodeUnexpected, err, "error deploying function runner").Log(ctx, d.logger)
+			}
+			return nil
 		})
-		var serr *oops.ShareableError
-		switch {
-		case errors.As(err, &serr):
-			return serr
-		case err != nil:
-			return oops.E(oops.CodeUnexpected, err, "error deploying function runner").Log(ctx, d.logger)
-		}
+	}
+	if err := workers.Wait(); err != nil {
+		return err
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

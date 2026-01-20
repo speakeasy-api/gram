@@ -21,6 +21,7 @@ linters:
     - exhaustive
     - exhaustruct
     - exptostd
+    - forbidigo
     - forcetypeassert
     - gochecksumtype
     - gocritic
@@ -56,11 +57,20 @@ linters:
       - path: internal/billing/stub\.go
         linters:
           - musttag
+      - path: _test\.go|internal/testenv/|cmd/
+        linters:
+          - forbidigo
       - path: _test\.go
         linters:
           - exhaustruct
           - gosec
   settings:
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^os\.Getenv$
+          pkg: ^os$
+          msg: "Direct environment variable access is forbidden because it makes testing harder. Access to environment variables is only allowed in the cmd/."
     sloglint:
       no-mixed-args: true
       attr-only: true

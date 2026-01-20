@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sourcegraph/conc/pool"
 	"go.opentelemetry.io/otel/codes"
@@ -34,7 +33,6 @@ import (
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	resourcesRepo "github.com/speakeasy-api/gram/server/internal/resources/repo"
 	toolsRepo "github.com/speakeasy-api/gram/server/internal/tools/repo"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type ProcessDeployment struct {
@@ -63,6 +61,7 @@ func NewProcessDeployment(
 	features feature.Provider,
 	assetStorage assets.BlobStore,
 	billingRepo billing.Repository,
+	registryClient *externalmcp.RegistryClient,
 ) *ProcessDeployment {
 	return &ProcessDeployment{
 		logger:         logger,
@@ -79,7 +78,7 @@ func NewProcessDeployment(
 		projects:       projectsRepo.New(db),
 		billingRepo:    billingRepo,
 		externalmcp:    externalmcpRepo.New(db),
-		registryClient: externalmcp.NewRegistryClient(logger),
+		registryClient: registryClient,
 	}
 }
 
@@ -104,7 +103,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		return err
 	}
 
-	if err := p.doExternalMCPs(ctx, workers, projectID, deploymentID); err != nil {
+	if err := p.doExternalMCPs(ctx, workers, projectID, deploymentID, orgData.Slug, orgData.ProjectSlug); err != nil {
 		return err
 	}
 
@@ -399,6 +398,8 @@ func (p *ProcessDeployment) doExternalMCPs(
 	pool *pool.ErrorPool,
 	projectID uuid.UUID,
 	deploymentID uuid.UUID,
+	orgSlug string,
+	projectSlug string,
 ) error {
 	externalMCPs, err := p.repo.ListDeploymentExternalMCPs(ctx, deploymentID)
 	if err != nil {
@@ -406,121 +407,22 @@ func (p *ProcessDeployment) doExternalMCPs(
 	}
 
 	for _, mcp := range externalMCPs {
-		logger := p.logger.With(
-			attr.SlogDeploymentID(deploymentID.String()),
-			attr.SlogProjectID(projectID.String()),
-			attr.SlogExternalMCPID(mcp.ID.String()),
-			attr.SlogExternalMCPSlug(mcp.Slug),
-		)
-
 		pool.Go(func() error {
-			logger.InfoContext(ctx, "processing external mcp",
-				attr.SlogExternalMCPName(mcp.Name),
-				attr.SlogMCPRegistryID(mcp.RegistryID.String()),
-			)
+			processor := externalmcp.NewToolExtractor(p.logger, p.db, p.registryClient)
 
-			// Get registry details to make API call
-			registry, err := p.externalmcp.GetMCPRegistryByID(ctx, mcp.RegistryID)
-			if err != nil {
-				return oops.E(oops.CodeUnexpected, err, "error getting registry for external mcp").Log(ctx, logger)
-			}
-
-			serverDetails, err := p.registryClient.GetServerDetails(ctx, externalmcp.Registry{
-				ID:  registry.ID,
-				URL: registry.Url,
-			}, mcp.RegistryServerSpecifier)
-			if err != nil {
-				return oops.E(oops.CodeUnexpected, err, "error fetching server details from registry").Log(ctx, logger)
-			}
-
-			logger.InfoContext(ctx, "fetched server details from registry",
-				attr.SlogURL(serverDetails.RemoteURL),
-			)
-
-			// Attempt to connect to detect OAuth requirements
-			var requiresOAuth bool
-			var oauthDiscovery *externalmcp.OAuthDiscoveryResult
-			mcpClient, err := externalmcp.NewClient(ctx, logger, serverDetails.RemoteURL, nil)
-			if authErr, ok := externalmcp.IsAuthRequiredError(err); ok {
-				requiresOAuth = true
-				logger.InfoContext(ctx, "external MCP server requires OAuth",
-					attr.SlogURL(serverDetails.RemoteURL),
-				)
-
-				// Discover OAuth metadata
-				oauthDiscovery, err = externalmcp.DiscoverOAuthMetadata(ctx, logger, authErr.WWWAuthenticate, serverDetails.RemoteURL)
-				if err != nil {
-					return oops.E(oops.CodeUnexpected, err, "error discovering OAuth metadata").Log(ctx, logger)
-				}
-
-				logger.InfoContext(ctx, "discovered OAuth metadata",
-					attr.SlogOAuthVersion(oauthDiscovery.Version),
-					attr.SlogOAuthAuthorizationEndpoint(oauthDiscovery.AuthorizationEndpoint),
-					attr.SlogOAuthTokenEndpoint(oauthDiscovery.TokenEndpoint),
-					attr.SlogOAuthRegistrationEndpoint(oauthDiscovery.RegistrationEndpoint),
-				)
-
-				// Fail deployment if legacy OAuth 2.0 is detected
-				if oauthDiscovery.Version == externalmcp.OAuthVersion20 {
-					return oops.E(oops.CodeUnexpected, nil,
-						"external MCP server uses legacy OAuth 2.0 which requires static client registration; "+
-							"dynamic client registration is not supported").Log(ctx, logger)
-				}
-			} else if err != nil {
-				return oops.E(oops.CodeUnexpected, err, "external mcp server unavailable").Log(ctx, logger)
-			} else {
-				defer o11y.LogDefer(ctx, logger, mcpClient.Close)
-			}
-
-			// Create a proxy tool URN for this external MCP
-			// Format: tools:externalmcp:<slug>:proxy
-			toolURN := urn.Tool{
-				Kind:   urn.ToolKindExternalMCP,
-				Source: mcp.Slug,
-				Name:   "proxy",
-			}
-
-			// Build OAuth metadata params
-			oauthVersion := externalmcp.OAuthVersionNone
-			var oauthAuthEndpoint, oauthTokenEndpoint, oauthRegEndpoint pgtype.Text
-			var oauthScopes []string
-			if oauthDiscovery != nil {
-				oauthVersion = oauthDiscovery.Version
-				if oauthDiscovery.AuthorizationEndpoint != "" {
-					oauthAuthEndpoint = pgtype.Text{String: oauthDiscovery.AuthorizationEndpoint, Valid: true}
-				}
-				if oauthDiscovery.TokenEndpoint != "" {
-					oauthTokenEndpoint = pgtype.Text{String: oauthDiscovery.TokenEndpoint, Valid: true}
-				}
-				if oauthDiscovery.RegistrationEndpoint != "" {
-					oauthRegEndpoint = pgtype.Text{String: oauthDiscovery.RegistrationEndpoint, Valid: true}
-				}
-				oauthScopes = oauthDiscovery.ScopesSupported
-			}
-
-			// Create the proxy tool definition with the remote URL and OAuth info
-			_, err = p.externalmcp.CreateExternalMCPToolDefinition(ctx, externalmcpRepo.CreateExternalMCPToolDefinitionParams{
-				ExternalMcpAttachmentID:    mcp.ID,
-				ToolUrn:                    toolURN.String(),
-				RemoteUrl:                  serverDetails.RemoteURL,
-				RequiresOauth:              requiresOAuth,
-				OauthVersion:               oauthVersion,
-				OauthAuthorizationEndpoint: oauthAuthEndpoint,
-				OauthTokenEndpoint:         oauthTokenEndpoint,
-				OauthRegistrationEndpoint:  oauthRegEndpoint,
-				OauthScopesSupported:       oauthScopes,
+			return processor.Do(ctx, externalmcp.ToolExtractorTask{
+				OrgSlug:      orgSlug,
+				ProjectSlug:  projectSlug,
+				ProjectID:    projectID,
+				DeploymentID: deploymentID,
+				MCP: externalmcp.ToolExtractorTaskMCPServer{
+					AttachmentID:            mcp.ID,
+					RegistryID:              mcp.RegistryID,
+					Name:                    mcp.Name,
+					Slug:                    mcp.Slug,
+					RegistryServerSpecifier: mcp.RegistryServerSpecifier,
+				},
 			})
-			if err != nil {
-				return oops.E(oops.CodeUnexpected, err, "error creating external mcp tool definition").Log(ctx, logger)
-			}
-
-			logger.InfoContext(ctx, "created external mcp proxy tool",
-				attr.SlogToolURN(toolURN.String()),
-				attr.SlogOAuthRequired(requiresOAuth),
-				attr.SlogOAuthVersion(oauthVersion),
-			)
-
-			return nil
 		})
 	}
 

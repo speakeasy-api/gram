@@ -4,12 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"log/slog"
-	"os"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -54,6 +54,7 @@ type Service struct {
 	assetStorage   assets.BlobStore
 	temporal       client.Client
 	posthog        *posthog.Posthog
+	siteURL        *url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -66,6 +67,8 @@ func NewService(
 	sessions *sessions.Manager,
 	assetStorage assets.BlobStore,
 	posthog *posthog.Posthog,
+	siteURL *url.URL,
+	mcpRegistryClient *externalmcp.RegistryClient,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("deployments"))
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/deployments")
@@ -76,13 +79,14 @@ func NewService(
 		db:             db,
 		repo:           repo.New(db),
 		externalmcp:    externalmcpRepo.New(db),
-		registryClient: externalmcp.NewRegistryClient(logger),
 		auth:           auth.New(logger, db, sessions),
 		assets:         assetsRepo.New(db),
 		packages:       packagesRepo.New(db),
 		assetStorage:   assetStorage,
 		temporal:       temporal,
 		posthog:        posthog,
+		siteURL:        siteURL,
+		registryClient: mcpRegistryClient,
 	}
 }
 
@@ -154,20 +158,19 @@ func (s *Service) GetDeploymentLogs(ctx context.Context, form *gen.GetDeployment
 		return nil, oops.E(oops.CodeBadRequest, err, "bad deployment id").Log(ctx, s.logger)
 	}
 
-	var cursor uuid.NullUUID
-	if form.Cursor != nil {
-		c, err := uuid.Parse(*form.Cursor)
+	var cursorSeq pgtype.Int8
+	if form.Cursor != nil && *form.Cursor != "" {
+		seq, _, err := decodeCursor(*form.Cursor)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
 		}
-
-		cursor = uuid.NullUUID{UUID: c, Valid: true}
+		cursorSeq = pgtype.Int8{Int64: seq, Valid: true}
 	}
 
 	rows, err := s.repo.GetDeploymentLogs(ctx, repo.GetDeploymentLogsParams{
 		DeploymentID: id,
 		ProjectID:    *authCtx.ProjectID,
-		Cursor:       cursor,
+		CursorSeq:    cursorSeq,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting deployment logs").Log(ctx, s.logger)
@@ -196,8 +199,8 @@ func (s *Service) GetDeploymentLogs(ctx context.Context, form *gen.GetDeployment
 
 	var nextCursor *string
 	limit := 50
-	if len(items) >= limit+1 {
-		nextCursor = conv.Ptr(items[limit].ID)
+	if len(rows) >= limit+1 {
+		nextCursor = conv.Ptr(encodeCursor(rows[limit].Seq, rows[limit].ID))
 		items = items[:limit]
 	}
 
@@ -977,7 +980,7 @@ func (s *Service) captureDeploymentProcessedEvent(
 		"functions_asset_count":           len(dep.FunctionsAssets),
 		"openapiv3_asset_count":           len(dep.Openapiv3Assets),
 		"first_deployment_with_functions": firstDeploymentWithFunctions,
-		"logs_url":                        fmt.Sprintf("%s/%s/%s/deployments/%s", os.Getenv("GRAM_SITE_URL"), organizationSlug, projectSlug, dep.ID),
+		"logs_url":                        s.siteURL.JoinPath(organizationSlug, projectSlug, "deployments", dep.ID).String(),
 	}
 
 	if previousDeployment != nil {

@@ -23,12 +23,14 @@ jobs:
     outputs:
       published: ${{ steps.changesets.outputs.published }}
       publishedPackages: ${{ steps.changesets.outputs.publishedPackages }}
+    env:
+      GRAM_GIT_SHA: "${{ github.sha }}"
     steps:
       - name: Checkout Repo
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
 
       - name: Setup Mise
-        uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3.5.1
+        uses: jdx/mise-action@c53b9236f0b3370f31520f8b142f141256d839c6 # v3.6.0
         with:
           install: true
           cache: true
@@ -38,7 +40,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -57,14 +59,26 @@ jobs:
           app-id: ${{ vars.GRAM_BOT_APP_ID }}
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
 
+      # Configure git to commit as the GitHub App so commits trigger workflows.
+      # Commits from github-actions[bot] don't trigger workflows by design.
+      - name: Configure git for GitHub App
+        run: |
+          git config user.name "gram-bot[bot]"
+          git config user.email "gram-bot[bot]@users.noreply.github.com"
+
       - name: Create Release Pull Request or Publish to npm
         id: changesets
         uses: changesets/action@e0145edc7d9d8679003495b11f87bd8ef63c0cba # v1.5.3
         with:
           title: "chore: version packages"
-          publish: pnpm changeset publish
+          publish: mise exec --env viteprod -- pnpm changeset publish
+          setupGitUser: false
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+          # Datadog RUM credentials for @gram-ai/elements error tracking
+          VITE_DATADOG_APPLICATION_ID: ${{ secrets.VITE_DATADOG_APPLICATION_ID }}
+          VITE_DATADOG_CLIENT_TOKEN: ${{ secrets.VITE_DATADOG_CLIENT_TOKEN }}
+          VITE_DATADOG_SITE: ${{ secrets.VITE_DATADOG_SITE }}
 
       - name: Prune PNPM store
         run: pnpm store prune
@@ -87,7 +101,7 @@ jobs:
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+      - uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version-file: "go.mod"
           # Reference: https://github.com/actions/setup-go/issues/495

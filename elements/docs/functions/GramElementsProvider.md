@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.16.5**](../README.md)
+[**@gram-ai/elements v1.22.1**](../README.md)
 
 ***
 
@@ -12,7 +12,7 @@
 
 ### props
 
-[`ElementsProviderProps`](../interfaces/ElementsProviderProps.md)
+`ElementsProviderProps`
 
 ## Returns
 

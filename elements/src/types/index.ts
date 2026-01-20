@@ -1,12 +1,13 @@
 import { MODELS } from '@/lib/models'
+import type { FrontendTool } from '@/lib/tools'
 import {
-  AssistantTool,
   ImageMessagePartComponent,
   ReasoningGroupComponent,
   ReasoningMessagePartComponent,
   TextMessagePartComponent,
   ToolCallMessagePartComponent,
 } from '@assistant-ui/react'
+import { LanguageModel } from 'ai'
 import {
   ComponentType,
   Dispatch,
@@ -20,33 +21,7 @@ import type { Plugin } from './plugins'
  * Function to retrieve the session token from the backend endpoint.
  * Override this if you have mounted your session endpoint at a different path.
  */
-export type GetSessionFn = () => Promise<string>
-
-export interface ElementsProviderProps {
-  /**
-   * The children to render.
-   */
-  children: ReactNode
-
-  /**
-   * Configuration object for the Elements library.
-   */
-  config: ElementsConfig
-
-  /**
-   * Function to retrieve the session token from the backend endpoint.
-   *
-   * @example
-   * const config: ElementsConfig = {
-   *   getSession: async () => {
-   *     return fetch('/chat/session').then(res => res.json()).then(data => data.client_token)
-   *   },
-   * }
-   *
-   * @default Use this default if you are using the Elements server handlers, and have mounted the session handler at /chat/session.
-   */
-  getSession?: GetSessionFn
-}
+export type GetSessionFn = (init: { projectSlug: string }) => Promise<string>
 
 type ServerUrl = string
 
@@ -126,7 +101,7 @@ export interface ElementsConfig {
    *   mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
    * }
    */
-  mcp: ServerUrl
+  mcp?: ServerUrl
 
   /**
    * Custom environment variable overrides for the Elements library.
@@ -135,6 +110,13 @@ export interface ElementsConfig {
    * For more documentation on passing through different kinds of environment variables, including bearer tokens, see the [Gram documentation](https://www.speakeasy.com/docs/gram/host-mcp/public-private-servers#pass-through-authentication).
    */
   environment?: Record<string, unknown>
+
+  /**
+   * The environment slug to use for resolving secrets.
+   * When specified, this is sent as the Gram-Environment header to select
+   * which environment's secrets to use for tool execution.
+   */
+  gramEnvironment?: string
 
   /**
    * The layout variant for the chat interface.
@@ -204,8 +186,30 @@ export interface ElementsConfig {
   composer?: ComposerConfig
 
   /**
+   * Optional property to override the LLM provider. If you override the model,
+   * then logs & usage metrics will not be tracked directly via Gram.
+   *
+   * Please ensure that you are using an AI SDK v2 compatible model (e.g a
+   * Vercel AI sdk provider in the v2 semver range), as this is the only variant
+   * compatible with AI SDK V5
+   *
+   * Example with Google Gemini:
+   * ```ts
+   * import { google } from '@ai-sdk/google';
+   *
+   * const googleGemini = google('gemini-3-pro-preview');
+   *
+   * const config: ElementsConfig = {
+   *   {other options}
+   *   languageModel: googleGemini,
+   * }
+   * ```
+   */
+  languageModel?: LanguageModel
+
+  /**
    * The configuration for the modal window.
-   * Does not apply if variant is 'standalone'.
+   * Only applicable if variant is 'widget'.
    *
    * @example
    * const config: ElementsConfig = {
@@ -263,7 +267,125 @@ export interface ElementsConfig {
    * }
    */
   tools?: ToolsConfig
+
+  /**
+   * Configuration for chat history and thread persistence.
+   * When enabled, conversations are saved and the thread list is shown.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   history: {
+   *     enabled: true,
+   *     showThreadList: true,
+   *   },
+   * }
+   */
+  history?: HistoryConfig
+
+  /**
+   * The API configuration to use for the Elements library.
+   *
+   * Use this to override the default API URL, or add explicit auth configuration
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   api: {
+   *     url: 'https://api.getgram.ai',
+   *   },
+   * }
+   */
+  api?: ApiConfig
+
+  /**
+   * Error tracking configuration.
+   * By default, errors are reported to help improve the Elements library.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   errorTracking: {
+   *     enabled: false, // Opt out of error reporting
+   *   },
+   * }
+   */
+  errorTracking?: ErrorTrackingConfigOption
 }
+
+/**
+ * Configuration for error tracking.
+ */
+export interface ErrorTrackingConfigOption {
+  /**
+   * Set to false to disable error reporting.
+   * @default true
+   */
+  enabled?: boolean
+}
+
+/**
+ * Base API configuration with the server URL.
+ */
+export type BaseApiConfig = {
+  /**
+   * The Gram API URL to use for the Elements library.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   api: {
+   *     url: 'https://api.getgram.ai',
+   *   },
+   * }
+   */
+  url?: string
+}
+
+export type SessionAuthConfig = {
+  /**
+   * The function to use to retrieve the session token from the backend endpoint.
+   * By default, this will attempt to fetch the session token from `/chat/session`.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   api: {
+   *     sessionFn: async () => {
+   *       return fetch('/chat/session').then(res => res.json()).then(data => data.client_token)
+   *     },
+   *   },
+   * }
+   */
+  sessionFn: GetSessionFn
+}
+
+/**
+ * The static session auth config is used to authenticate the Elements library using a static session token only.
+ *
+ * @example
+ * const config: ElementsConfig = {
+ *   api: {
+ *     sessionToken: 'your-session-token',
+ *   },
+ * }
+ */
+export type StaticSessionAuthConfig = {
+  /**
+   * A static session token to use if you haven't yet configured a session endpoint.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   api: {
+   *     sessionToken: 'your-session-token',
+   *   },
+   * }
+   */
+  sessionToken: string
+}
+
+/**
+ * API configuration - can be just the URL, or URL with session auth, or URL with API key auth.
+ */
+export type ApiConfig =
+  | BaseApiConfig
+  | (BaseApiConfig & SessionAuthConfig)
+  | (BaseApiConfig & StaticSessionAuthConfig)
 
 /**
  * The LLM model to use for the Elements library.
@@ -394,6 +516,13 @@ export interface ComponentOverrides {
   >
 }
 
+export type ToolsFilter =
+  | string[]
+  | (({ toolName }: { toolName: string }) => boolean)
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type FrontendTools = Record<string, FrontendTool<any, any>>
+
 /**
  * ToolsConfig is used to configure tool support in the Elements library.
  * At the moment, you can override the default React components used by
@@ -483,19 +612,55 @@ export interface ToolsConfig {
    * }
    * ```
    */
-  frontendTools?: Record<string, AssistantTool>
+  frontendTools?: FrontendTools
+
+  /**
+   * List of tool names that require confirmation from the end user before
+   * being executed. A function can also be provided to dynamically determine if a tool requires approval.
+   * The user can choose to approve once or approve for the
+   * entire session via the UI.
+   *
+   * @example Using an array of tool names
+   * ```ts
+   * tools: {
+   *   toolsRequiringApproval: ['delete_file', 'send_email'],
+   * }
+   * ```
+   *
+   * @example Using a function to dynamically determine if a tool requires approval
+   * ```ts
+   * tools: {
+   *   toolsRequiringApproval: (toolName) => {
+   *     return toolName.startsWith('protected_')
+   *   },
+   * }
+   * ```
+   */
+  toolsRequiringApproval?: ToolsFilter
+
+  /**
+   * List of MCP tool names to expose to the chat.
+   * Only tool names listed here that match a tool in the MCP will be exposed to the chat.
+   *
+   * @example
+   * ```ts
+   * tools: {
+   *   toolsToInclude: ['get_current_weather', 'get_current_time'],
+   * }
+   */
+  toolsToInclude?: ToolsFilter
 }
 
 export interface WelcomeConfig {
   /**
    * The welcome message to display when the thread is empty.
    */
-  title: string
+  title?: string
 
   /**
    * The subtitle to display when the thread is empty.
    */
-  subtitle: string
+  subtitle?: string
 
   /**
    * The suggestions to display when the thread is empty.
@@ -504,9 +669,12 @@ export interface WelcomeConfig {
 }
 
 export interface Suggestion {
+  /** Suggestion heading */
   title: string
+  /** Suggestion subheading */
   label: string
-  action: string
+  /** The prompt sent when the suggestion is clicked */
+  prompt: string
 }
 
 export interface Dimensions {
@@ -522,8 +690,6 @@ export interface Dimension {
   height: number | string
   maxHeight?: number | string
 }
-
-export type ExpandedDimension = Omit<Dimension, 'maxHeight'>
 
 interface ExpandableConfig {
   /**
@@ -606,6 +772,13 @@ export interface ComposerConfig {
    * @default true
    */
   attachments?: boolean | AttachmentsConfig
+
+  /**
+   * Configuration for @tool mentions in the composer.
+   * Set to `false` to disable, `true` for defaults, or an object for fine-grained control.
+   * @default true
+   */
+  toolMentions?: boolean | ToolMentionsConfig
 }
 
 /**
@@ -633,12 +806,68 @@ export interface AttachmentsConfig {
   maxSize?: number
 }
 
+export interface ToolMentionsConfig {
+  /** @default true */
+  enabled?: boolean
+  /** @default 10 */
+  maxSuggestions?: number
+  placeholder?: string
+}
+
 export interface SidecarConfig extends ExpandableConfig {
   /**
    * The title displayed in the sidecar header.
    * @default 'Chat'
    */
   title?: string
+}
+
+/**
+ * Configuration for chat history persistence.
+ * When enabled, threads are persisted and can be restored from the thread list.
+ *
+ * @example
+ * const config: ElementsConfig = {
+ *   history: {
+ *     enabled: true,
+ *     showThreadList: true,
+ *   },
+ * }
+ */
+export interface HistoryConfig {
+  /**
+   * Whether to enable chat history persistence.
+   * When true, threads will be saved and can be loaded from the thread list.
+   * @default false
+   */
+  enabled: boolean
+
+  /**
+   * Whether to show the thread list sidebar/panel.
+   * Only applicable for widget and sidecar variants.
+   * Only applies when history is enabled.
+   * @default true when history.enabled is true
+   */
+  showThreadList?: boolean
+
+  /**
+   * Initial thread ID to load when the component mounts.
+   * When provided, Elements will automatically load and switch to this thread.
+   * Useful for implementing chat sharing via URL parameters.
+   *
+   * @example
+   * // Read threadId from URL and pass to config
+   * const searchParams = new URLSearchParams(window.location.search)
+   * const threadId = searchParams.get('threadId')
+   *
+   * <GramElementsProvider config={{
+   *   history: {
+   *     enabled: true,
+   *     initialThreadId: threadId ?? undefined,
+   *   },
+   * }}>
+   */
+  initialThreadId?: string
 }
 
 /**
@@ -653,10 +882,5 @@ export type ElementsContextType = {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
   plugins: Plugin[]
-
-  /**
-   * Indicates if the process of discovering MCP tools is still ongoing.
-   * TODO: failure state
-   */
-  isLoadingMCPTools: boolean
+  mcpTools: Record<string, unknown> | undefined
 }

@@ -46,9 +46,10 @@ detect_tls() {
 }
 
 show_urls() {
-  printf "\t%s: %s\n\t%s: %s\n" \
+  printf "\t%s: %s\n\t%s: %s\n\t%s: %s\n" \
     GRAM_SERVER_URL "$GRAM_SERVER_URL" \
-    GRAM_SITE_URL "$GRAM_SITE_URL" >&2;
+    GRAM_SITE_URL "$GRAM_SITE_URL" \
+    VITE_GRAM_ELEMENTS_STORYBOOK_URL "$VITE_GRAM_ELEMENTS_STORYBOOK_URL" >&2;
 }
 
 turn_off_tls() {
@@ -83,6 +84,7 @@ trust_local_ca() {
       echo "Quick recommendation: for fast local development, switch to HTTP to avoid browser certificate warnings:" >&2
       echo "  mise set --file mise.local.toml GRAM_SERVER_URL=http://localhost:8080" >&2
       echo "  mise set --file mise.local.toml GRAM_SITE_URL=http://localhost:5173" >&2
+      echo "  mise set --file mise.local.toml VITE_GRAM_ELEMENTS_STORYBOOK_URL=http://localhost:6006" >&2
       echo "Then re-run ./zero and use http://localhost:5173 in your browser." >&2
       echo "" >&2
     fi
@@ -113,6 +115,13 @@ gen_keypair() {
   echo "Generating cert and key for $hostname..."
   mkcert \
     -cert-file "$CERT_PATH" -key-file "$KEY_PATH" "$hostname"
+
+  root_ca="$(mkcert -CAROOT)/rootCA.pem"
+  if [ ! -f "$root_ca" ]; then
+    echo "WARN: root CA not found at $root_ca" >&2
+  else
+    mise set --file mise.local.toml NODE_EXTRA_CA_CERTS="$root_ca"
+  fi
 
   echo "  cert => $CERT_PATH"
   echo "  key  => $KEY_PATH"

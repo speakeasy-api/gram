@@ -30,6 +30,7 @@ Gram API Description: Gram is the tools platform for AI agents
   * [Available Resources and Operations](#available-resources-and-operations)
   * [Standalone functions](#standalone-functions)
   * [React hooks with TanStack Query](#react-hooks-with-tanstack-query)
+  * [File uploads](#file-uploads)
   * [Retries](#retries)
   * [Error Handling](#error-handling)
   * [Server Selection](#server-selection)
@@ -130,11 +131,15 @@ run();
 
 ### [Assets](docs/sdks/assets/README.md)
 
+* [createSignedChatAttachmentURL](docs/sdks/assets/README.md#createsignedchatattachmenturl) - createSignedChatAttachmentURL assets
 * [fetchOpenAPIv3FromURL](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 * [listAssets](docs/sdks/assets/README.md#listassets) - listAssets assets
+* [serveChatAttachment](docs/sdks/assets/README.md#servechatattachment) - serveChatAttachment assets
+* [serveChatAttachmentSigned](docs/sdks/assets/README.md#servechatattachmentsigned) - serveChatAttachmentSigned assets
 * [serveFunction](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 * [serveImage](docs/sdks/assets/README.md#serveimage) - serveImage assets
 * [serveOpenAPIv3](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
+* [uploadChatAttachment](docs/sdks/assets/README.md#uploadchatattachment) - uploadChatAttachment assets
 * [uploadFunctions](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 * [uploadImage](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 * [uploadOpenAPIv3](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
@@ -151,6 +156,7 @@ run();
 ### [Chat](docs/sdks/chat/README.md)
 
 * [creditUsage](docs/sdks/chat/README.md#creditusage) - creditUsage chat
+* [generateTitle](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 * [list](docs/sdks/chat/README.md#list) - listChats chat
 * [load](docs/sdks/chat/README.md#load) - loadChat chat
 
@@ -235,6 +241,7 @@ run();
 
 * [create](docs/sdks/projects/README.md#create) - createProject projects
 * [deleteById](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
+* [read](docs/sdks/projects/README.md#read) - getProject projects
 * [list](docs/sdks/projects/README.md#list) - listProjects projects
 * [listAllowedOrigins](docs/sdks/projects/README.md#listallowedorigins) - listAllowedOrigins projects
 * [setLogo](docs/sdks/projects/README.md#setlogo) - setLogo projects
@@ -254,6 +261,7 @@ run();
 
 ### [Telemetry](docs/sdks/telemetry/README.md)
 
+* [captureEvent](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 * [searchLogs](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 * [searchToolCalls](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
 
@@ -318,11 +326,15 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`agentsCreate`](docs/sdks/agents/README.md#create) - createResponse agents
 - [`agentsDelete`](docs/sdks/agents/README.md#delete) - deleteResponse agents
 - [`agentsGet`](docs/sdks/agents/README.md#get) - getResponse agents
+- [`assetsCreateSignedChatAttachmentURL`](docs/sdks/assets/README.md#createsignedchatattachmenturl) - createSignedChatAttachmentURL assets
 - [`assetsFetchOpenAPIv3FromURL`](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 - [`assetsListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
+- [`assetsServeChatAttachment`](docs/sdks/assets/README.md#servechatattachment) - serveChatAttachment assets
+- [`assetsServeChatAttachmentSigned`](docs/sdks/assets/README.md#servechatattachmentsigned) - serveChatAttachmentSigned assets
 - [`assetsServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 - [`assetsServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`assetsServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
+- [`assetsUploadChatAttachment`](docs/sdks/assets/README.md#uploadchatattachment) - uploadChatAttachment assets
 - [`assetsUploadFunctions`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 - [`assetsUploadImage`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`assetsUploadOpenAPIv3`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
@@ -333,6 +345,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`authRegister`](docs/sdks/auth/README.md#register) - register auth
 - [`authSwitchScopes`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`chatCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
+- [`chatGenerateTitle`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 - [`chatList`](docs/sdks/chat/README.md#list) - listChats chat
 - [`chatLoad`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`chatSessionsCreate`](docs/sdks/chatsessions/README.md#create) - create chatSessions
@@ -380,6 +393,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`projectsDeleteById`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
 - [`projectsList`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`projectsListAllowedOrigins`](docs/sdks/projects/README.md#listallowedorigins) - listAllowedOrigins projects
+- [`projectsRead`](docs/sdks/projects/README.md#read) - getProject projects
 - [`projectsSetLogo`](docs/sdks/projects/README.md#setlogo) - setLogo projects
 - [`projectsUpsertAllowedOrigin`](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
@@ -388,6 +402,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`slackSlackCallback`](docs/sdks/slack/README.md#slackcallback) - callback slack
 - [`slackSlackLogin`](docs/sdks/slack/README.md#slacklogin) - login slack
 - [`slackUpdateSlackConnection`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
+- [`telemetryCaptureEvent`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`telemetrySearchLogs`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`telemetrySearchToolCalls`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
 - [`templatesCreate`](docs/sdks/templates/README.md#create) - createTemplate templates
@@ -447,6 +462,7 @@ To learn about this feature and how to get started, check
 - [`useAgentsCreateMutation`](docs/sdks/agents/README.md#create) - createResponse agents
 - [`useAgentsDeleteMutation`](docs/sdks/agents/README.md#delete) - deleteResponse agents
 - [`useAgentsGet`](docs/sdks/agents/README.md#get) - getResponse agents
+- [`useChatGenerateTitleMutation`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 - [`useChatSessionsCreateMutation`](docs/sdks/chatsessions/README.md#create) - create chatSessions
 - [`useChatSessionsRevokeMutation`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
@@ -458,6 +474,7 @@ To learn about this feature and how to get started, check
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreateProjectMutation`](docs/sdks/projects/README.md#create) - createProject projects
+- [`useCreateSignedChatAttachmentURLMutation`](docs/sdks/assets/README.md#createsignedchatattachmenturl) - createSignedChatAttachmentURL assets
 - [`useCreateTemplateMutation`](docs/sdks/templates/README.md#create) - createTemplate templates
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
@@ -504,6 +521,7 @@ To learn about this feature and how to get started, check
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
 - [`useMcpMetadataSetMutation`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
+- [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
@@ -514,6 +532,8 @@ To learn about this feature and how to get started, check
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useSearchLogsMutation`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`useSearchToolCallsMutation`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
+- [`useServeChatAttachment`](docs/sdks/assets/README.md#servechatattachment) - serveChatAttachment assets
+- [`useServeChatAttachmentSigned`](docs/sdks/assets/README.md#servechatattachmentsigned) - serveChatAttachmentSigned assets
 - [`useServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
@@ -522,6 +542,7 @@ To learn about this feature and how to get started, check
 - [`useSetSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`useSetToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
+- [`useTelemetryCaptureEventMutation`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates
 - [`useTemplates`](docs/sdks/templates/README.md#list) - listTemplates templates
 - [`useToolExecutionLogs`](docs/sdks/logs/README.md#listtoolexecutionlogs) - listToolExecutionLogs logs
@@ -531,6 +552,7 @@ To learn about this feature and how to get started, check
 - [`useUpdateSlackConnectionMutation`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
+- [`useUploadChatAttachmentMutation`](docs/sdks/assets/README.md#uploadchatattachment) - uploadChatAttachment assets
 - [`useUploadFunctionsMutation`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 - [`useUploadImageMutation`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
@@ -540,6 +562,40 @@ To learn about this feature and how to get started, check
 
 </details>
 <!-- End React hooks with TanStack Query [react-query] -->
+
+<!-- Start File uploads [file-upload] -->
+## File uploads
+
+Certain SDK methods accept files as part of a multi-part request. It is possible and typically recommended to upload files as a stream rather than reading the entire contents into memory. This avoids excessive memory consumption and potentially crashing with out-of-memory errors when working with very large files. The following example demonstrates how to attach a file stream to a request.
+
+> [!TIP]
+>
+> Depending on your JavaScript runtime, there are convenient utilities that return a handle to a file without reading the entire contents into memory:
+>
+> - **Node.js v20+:** Since v20, Node.js comes with a native `openAsBlob` function in [`node:fs`](https://nodejs.org/docs/latest-v20.x/api/fs.html#fsopenasblobpath-options).
+> - **Bun:** The native [`Bun.file`](https://bun.sh/docs/api/file-io#reading-files-bun-file) function produces a file handle that can be used for streaming file uploads.
+> - **Browsers:** All supported browsers return an instance to a [`File`](https://developer.mozilla.org/en-US/docs/Web/API/File) when reading the value from an `<input type="file">` element.
+> - **Node.js v18:** A file stream can be created using the `fileFrom` helper from [`fetch-blob/from.js`](https://www.npmjs.com/package/fetch-blob).
+
+```typescript
+import { Gram } from "@gram/client";
+import { openAsBlob } from "node:fs";
+
+const gram = new Gram();
+
+async function run() {
+  const result = await gram.assets.uploadFunctions({
+    contentLength: 858625,
+    requestBody: await openAsBlob("example.file"),
+  });
+
+  console.log(result);
+}
+
+run();
+
+```
+<!-- End File uploads [file-upload] -->
 
 <!-- Start Retries [retries] -->
 ## Retries

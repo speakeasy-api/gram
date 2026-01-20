@@ -1,22 +1,29 @@
 import { Page } from "@/components/page-layout";
 import { SearchBar } from "@/components/ui/search-bar";
+import { useSession } from "@/contexts/Auth";
+import { useSlugs } from "@/contexts/Sdk";
+import { getServerURL } from "@/lib/utils";
+import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
+import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
+import { telemetrySearchToolCalls } from "@gram/client/funcs/telemetrySearchToolCalls";
 import {
-  ToolCallSummary,
-  TelemetryLogRecord,
   FeatureName,
+  TelemetryLogRecord,
 } from "@gram/client/models/components";
 import {
-  useSearchToolCallsMutation,
   useFeaturesSetMutation,
-  useListToolLogs,
-  invalidateAllListToolLogs,
+  useGramContext,
+  useListToolsets,
 } from "@gram/client/react-query";
+import { unwrapAsync } from "@gram/client/types/fp";
 import { Button, Icon } from "@speakeasy-api/moonshine";
-import { useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { XIcon } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { TraceRow } from "./TraceRow";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LogDetailSheet } from "./LogDetailSheet";
+import { TraceRow } from "./TraceRow";
+
+const perPage = 25;
 
 export default function LogsPage() {
   const [searchQuery, setSearchQuery] = useState<string | null>(null);
@@ -25,40 +32,65 @@ export default function LogsPage() {
   const [selectedLog, setSelectedLog] = useState<TelemetryLogRecord | null>(
     null,
   );
-
-  // Pagination state
-  const [allTraces, setAllTraces] = useState<ToolCallSummary[]>([]);
-  const [currentCursor, setCurrentCursor] = useState<string | undefined>(
-    undefined,
-  );
-  const [isFetchingMore, setIsFetchingMore] = useState(false);
-  const lastProcessedCursorRef = useRef<string | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
-  const perPage = 25;
 
-  const { mutate, data, isPending, error } = useSearchToolCallsMutation();
+  const client = useGramContext();
 
-  // Check if logs are enabled using the logs list endpoint
-  const queryClient = useQueryClient();
-  const { data: logsData, refetch: refetchLogs } = useListToolLogs(
-    { perPage: 1 },
-    undefined,
-    { staleTime: 0, refetchOnWindowFocus: false },
-  );
-  const logsEnabled = logsData?.enabled ?? true;
+  const gramMcpConfig = useGramMcpConfig();
+
+  const logsElementsConfig: ElementsConfig = {
+    ...gramMcpConfig,
+    variant: "sidecar",
+    welcome: {
+      title: "Logs Chat",
+      subtitle: "Ask me about your logs! Powered by Elements + Gram MCP",
+      suggestions: [
+        {
+          title: "Failing Tool Calls",
+          label: "Summarize failing tool calls",
+          prompt: "Summarize failing tool calls",
+        },
+      ],
+    },
+  };
+
+  const {
+    data,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetching,
+    isFetchingNextPage,
+    refetch,
+  } = useInfiniteQuery({
+    queryKey: ["tool-calls", searchQuery],
+    queryFn: ({ pageParam }) =>
+      unwrapAsync(
+        telemetrySearchToolCalls(client, {
+          searchToolCallsPayload: {
+            filter: searchQuery ? { gramUrn: searchQuery } : undefined,
+            cursor: pageParam,
+            limit: perPage,
+            sort: "desc",
+          },
+        }),
+      ),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+  });
+
+  // Flatten all pages into a single array of traces
+  const allTraces = data?.pages.flatMap((page) => page.toolCalls) ?? [];
+  const logsEnabled = data?.pages[0]?.enabled ?? true;
 
   const [logsMutationError, setLogsMutationError] = useState<string | null>(
     null,
   );
   const { mutateAsync: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
-      onSuccess: async () => {
+      onSuccess: () => {
         setLogsMutationError(null);
-        await invalidateAllListToolLogs(queryClient);
-        setCurrentCursor(undefined);
-        lastProcessedCursorRef.current = undefined;
-        setAllTraces([]);
-        await refetchLogs();
+        refetch();
       },
       onError: (err) => {
         const message =
@@ -93,62 +125,6 @@ export default function LogsPage() {
     return () => clearTimeout(timeoutId);
   }, [searchInput]);
 
-  // Reset pagination when search query changes
-  useEffect(() => {
-    setCurrentCursor(undefined);
-    lastProcessedCursorRef.current = undefined;
-    setAllTraces([]);
-  }, [searchQuery]);
-
-  // Fetch traces with server-side gramUrn filter
-  const fetchTraces = useCallback(() => {
-    mutate({
-      request: {
-        searchToolCallsPayload: {
-          filter: searchQuery ? { gramUrn: searchQuery } : undefined,
-          cursor: currentCursor,
-          limit: perPage,
-          sort: "desc",
-        },
-      },
-    });
-  }, [mutate, searchQuery, currentCursor]);
-
-  // Fetch when query or cursor changes
-  useEffect(() => {
-    fetchTraces();
-  }, [fetchTraces]);
-
-  // Update accumulated traces when new data arrives
-  useEffect(() => {
-    if (data?.toolCalls && !isPending) {
-      if (
-        currentCursor !== undefined &&
-        lastProcessedCursorRef.current === currentCursor
-      ) {
-        return;
-      }
-
-      if (currentCursor === undefined) {
-        setAllTraces(data.toolCalls);
-      } else {
-        setAllTraces((prev) => {
-          const existingIds = new Set(prev.map((t) => t.traceId));
-          const newTraces = data.toolCalls.filter(
-            (t) => !existingIds.has(t.traceId),
-          );
-          return [...prev, ...newTraces];
-        });
-      }
-
-      lastProcessedCursorRef.current = currentCursor;
-      setIsFetchingMore(false);
-    }
-  }, [data, isPending, currentCursor]);
-
-  const nextCursor = data?.nextCursor;
-  const hasNextPage = !!nextCursor;
-
   // Handle scroll for infinite loading
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const container = e.currentTarget;
@@ -157,12 +133,11 @@ export default function LogsPage() {
     const clientHeight = container.clientHeight;
     const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
 
-    if (isFetchingMore || isPending) return;
-    if (!hasNextPage || !nextCursor) return;
+    if (isFetchingNextPage || isFetching) return;
+    if (!hasNextPage) return;
 
     if (distanceFromBottom < 200) {
-      setIsFetchingMore(true);
-      setCurrentCursor(nextCursor);
+      fetchNextPage();
     }
   };
 
@@ -173,6 +148,8 @@ export default function LogsPage() {
   const handleLogClick = (log: TelemetryLogRecord) => {
     setSelectedLog(log);
   };
+
+  const isLoading = isFetching && allTraces.length === 0;
 
   return (
     <Page>
@@ -197,7 +174,7 @@ export default function LogsPage() {
               {/* Trace list container */}
               <div className="border border-border rounded-lg overflow-hidden w-full flex flex-col relative bg-surface-default">
                 {/* Loading indicator */}
-                {isPending && allTraces.length > 0 && (
+                {isFetching && allTraces.length > 0 && (
                   <div className="absolute top-0 left-0 right-0 h-1 bg-primary-default/20 z-20">
                     <div className="h-full bg-primary-default animate-pulse" />
                   </div>
@@ -230,7 +207,7 @@ export default function LogsPage() {
                           : "An unexpected error occurred"}
                       </span>
                     </div>
-                  ) : isPending && allTraces.length === 0 ? (
+                  ) : isLoading ? (
                     <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
                       <Icon
                         name="loader-circle"
@@ -285,7 +262,7 @@ export default function LogsPage() {
                         />
                       ))}
 
-                      {isFetchingMore && (
+                      {isFetchingNextPage && (
                         <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground border-t border-border">
                           <Icon
                             name="loader-circle"
@@ -348,6 +325,90 @@ export default function LogsPage() {
         open={!!selectedLog}
         onOpenChange={(open) => !open && setSelectedLog(null)}
       />
+      <GramElementsProvider config={logsElementsConfig}>
+        <Chat />
+      </GramElementsProvider>
     </Page>
   );
 }
+
+const useGramMcpConfig = () => {
+  const { projectSlug } = useSlugs();
+  const client = useGramContext();
+  const isLocal = process.env.NODE_ENV === "development";
+  const { session } = useSession();
+
+  // For local development, look up the gram-seed toolset in the kitchen-sink project
+  const { data: toolsets } = useListToolsets(
+    {
+      gramProject: "kitchen-sink",
+    },
+    undefined,
+    {
+      enabled: isLocal,
+      headers: {
+        "gram-project": "kitchen-sink",
+      },
+    },
+  );
+
+  const getSession = async (): Promise<string> => {
+    const res = await chatSessionsCreate(
+      client,
+      {
+        createRequestBody: {
+          embedOrigin: window.location.origin,
+        },
+      },
+      undefined,
+      {
+        headers: {
+          "Gram-Project": projectSlug ?? "",
+        },
+      },
+    );
+    return res.value?.clientToken ?? "";
+  };
+
+  const gramToolset = useMemo(() => {
+    return toolsets?.toolsets.find((toolset) => toolset.slug === "gram-seed");
+  }, [toolsets]);
+
+  const baseConfig: ElementsConfig = {
+    projectSlug: "kitchen-sink",
+    tools: {
+      toolsToInclude: ({ toolName }) => toolName.includes("logs"),
+    },
+    api: {
+      sessionFn: getSession,
+    },
+    environment: {
+      GRAM_SERVER_URL: getServerURL(),
+      GRAM_SESSION_HEADER_GRAM_SESSION: session,
+      GRAM_APIKEY_HEADER_GRAM_KEY: "", // This must be set or else the tool call will fail
+      GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT: projectSlug,
+    },
+  };
+
+  if (isLocal) {
+    if (toolsets && !gramToolset) {
+      throw new Error("No gram-seed toolset found--have you run mise seed?");
+    }
+
+    return {
+      ...baseConfig,
+      ...(gramToolset && {
+        mcp: `${getServerURL()}/mcp/${gramToolset?.mcpSlug}`,
+      }),
+    };
+  }
+
+  const mcpUrl = getServerURL().includes("app.getgram.ai")
+    ? "https://app.getgram.ai/mcp/speakeasy-team-gram"
+    : "https://dev.getgram.ai/mcp/speakeasy-team-gram";
+
+  return {
+    ...baseConfig,
+    mcp: mcpUrl,
+  };
+};

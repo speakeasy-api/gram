@@ -32,7 +32,7 @@ import {
 } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router";
-import { useMcpUrl } from "../mcp/MCPDetails";
+import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { MCPEmptyState } from "../mcp/MCPEmptyState";
 import { START_PATH_PARAM, START_STEP_PARAM } from "../onboarding/Wizard";
 import { useCloneToolset } from "../toolsets/Toolset";

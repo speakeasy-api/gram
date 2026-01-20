@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
@@ -63,6 +64,7 @@ type Service struct {
 	toolProxy         *gateway.ToolProxy
 	tracking          billing.Tracker
 	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
+	featuresClient    *productfeatures.Client
 	tcm               tm.ToolMetricsProvider
 	customDomainsRepo *customdomainsRepo.Queries
 	serverURL         *url.URL
@@ -85,6 +87,7 @@ func NewService(
 	funcCaller functions.ToolCaller,
 	tracking billing.Tracker,
 	tcm tm.ToolMetricsProvider,
+	featClient *productfeatures.Client,
 	serverURL *url.URL,
 ) *Service {
 	envRepo := environments_repo.New(db)
@@ -113,6 +116,7 @@ func NewService(
 		),
 		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		tcm:               tcm,
+		featuresClient:    featClient,
 		customDomainsRepo: customdomainsRepo.New(db),
 		serverURL:         serverURL,
 	}
@@ -297,7 +301,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		return fmt.Errorf("execute external mcp tool from instance: %s", toolURN.String())
 	}
 
-	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, s.tcm, descriptor.OrganizationID, tm.ToolInfo{
+	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, s.tcm, s.featuresClient, descriptor.OrganizationID, tm.ToolInfo{
 		ID:             descriptor.ID,
 		Urn:            descriptor.URN.String(),
 		Name:           descriptor.Name,

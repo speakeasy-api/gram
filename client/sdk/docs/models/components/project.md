@@ -6,12 +6,12 @@
 import { Project } from "@gram/client/models/components";
 
 let value: Project = {
-  createdAt: new Date("2025-06-12T00:25:18.992Z"),
+  createdAt: new Date("2026-06-12T00:25:18.992Z"),
   id: "<id>",
   name: "<value>",
   organizationId: "<id>",
   slug: "<value>",
-  updatedAt: new Date("2024-04-05T14:08:44.366Z"),
+  updatedAt: new Date("2025-04-05T14:08:44.366Z"),
 };
 ```
 

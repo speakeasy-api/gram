@@ -1,0 +1,57 @@
+name: Sync Elements Docs → Marketing Site
+on:
+  push:
+    branches:
+      - main
+    paths:
+     - "elements/docs/**"
+  workflow_run:
+    workflows: ["Generate Elements TypeDoc Documentation"]
+    types:
+      - completed
+  workflow_dispatch: # Manual trigger for testing
+permissions:
+  contents: read
+concurrency:
+  group: elements-to-marketing-sync-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  MARKETING_REPO: speakeasy-api/gram-marketing-site
+  BRANCH: main
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # Run on push/dispatch, or when workflow_run succeeds
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout Gram repo (source)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Checkout Marketing repo (destination)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: ${{ env.MARKETING_REPO }}
+          ref: ${{ env.BRANCH }}
+          token: ${{ secrets.SERVICE_BOT_TOKEN }}
+          path: marketing-repo
+          fetch-depth: 0
+      - name: Sync and transform docs
+        run: |
+          chmod +x .github/scripts/sync-elements-docs.sh
+          .github/scripts/sync-elements-docs.sh \
+            "elements/docs" \
+            "marketing-repo/src/content/docs/gram-elements" \
+            "/docs/gram-elements"
+      - name: Commit and push to Marketing
+        run: |
+          cd marketing-repo
+          git config user.name "Beezy the bot"
+          git config user.email "beezy-bot@users.noreply.github.com"
+          if git diff --quiet && git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git add -A
+          git commit -m "Sync marketing docs from Elements 🧩 (source ${{ github.sha }})"
+          git push origin ${{ env.BRANCH }}

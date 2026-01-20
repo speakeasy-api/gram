@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.16.5**](../README.md)
+[**@gram-ai/elements v1.22.1**](../README.md)
 
 ***
 
@@ -6,7 +6,7 @@
 
 # Type Alias: Model
 
-> **Model** = *typeof* `MODELS`\[`number`\]
+> **Model** = *typeof* [`MODELS`](../variables/MODELS.md)\[`number`\]
 
 The LLM model to use for the Elements library.
 

@@ -4,12 +4,28 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import tailwindcss from '@tailwindcss/vite'
 import dts from 'vite-plugin-dts'
+import { externalizeDeps } from 'vite-plugin-externalize-deps'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
-  plugins: [react(), dts(), tailwindcss()],
+  plugins: [
+    react(),
+    dts(),
+    tailwindcss(),
+
+    // Automatically keep peerDependencies as they are defined in the package.json in sync
+    // with the rollupOptions.external list
+    externalizeDeps({
+      // We mark deps as false because the plugins default behaviour is externalise all deps.
+      deps: false,
+      peerDeps: true,
+      optionalDeps: false,
+      devDeps: false,
+    }),
+  ],
   build: {
+    sourcemap: true,
     minify: 'esbuild',
     lib: {
       entry: {
@@ -20,29 +36,14 @@ export default defineConfig({
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
-      external: [
-        'react',
-        'react-dom',
-        'react/jsx-runtime',
-        // Externalize heavy dependencies - consumers must install these
-        '@assistant-ui/react',
-        '@assistant-ui/react-markdown',
-        'motion',
-        'motion/react',
-        'motion/react-m',
-        'zustand',
-        'zustand/shallow',
-        'remark-gfm',
-        'vega',
-        'shiki',
-        // Server dependencies (optional)
-        'openai',
-      ],
+      // NOTE: do not define externals here, as they are defined in the externalizeDeps plugin
       output: {
         globals: {
           react: 'React',
           'react-dom': 'ReactDOM',
         },
+
+        sourcemapExcludeSources: true,
       },
     },
   },
@@ -50,5 +51,9 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, 'src'),
     },
+  },
+  define: {
+    __GRAM_API_URL__: JSON.stringify(process.env['GRAM_API_URL'] || ''),
+    __GRAM_GIT_SHA__: JSON.stringify(process.env['GRAM_GIT_SHA'] || ''),
   },
 })

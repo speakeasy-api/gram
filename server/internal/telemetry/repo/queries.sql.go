@@ -192,10 +192,6 @@ func buildListHTTPRequestsQuery(opts ListToolLogsOptions) (string, []any) {
 	return query, args
 }
 
-func (q *Queries) ShouldLog(ctx context.Context, orgId string) (bool, error) {
-	return q.ShouldFlag(ctx, orgId)
-}
-
 const insertHttpRaw = `insert into http_requests_raw
 	(id, ts, organization_id, project_id, deployment_id, tool_id, tool_urn, tool_type, trace_id, span_id, http_method,
 	 http_server_url, http_route, status_code, duration_ms, user_agent, request_headers, request_body_bytes, response_headers, response_body_bytes)
@@ -203,16 +199,6 @@ const insertHttpRaw = `insert into http_requests_raw
 
 // Log inserts a tool HTTP request log entry.
 func (q *Queries) LogHTTPRequest(ctx context.Context, log ToolHTTPRequest) (err error) {
-	allow, err := q.ShouldFlag(ctx, log.OrganizationID)
-	if err != nil {
-		q.logger.ErrorContext(ctx, "failed to fetch feature flag", attr.SlogError(err))
-		return nil
-	}
-
-	if !allow {
-		return nil
-	}
-
 	ctx, span := q.tracer.Start(ctx, "clickhouse.log_http_request",
 		trace.WithAttributes(
 			attr.ToolID(log.ToolID),
@@ -493,7 +479,7 @@ FROM telemetry_logs
 WHERE gram_project_id = ?
     AND time_unix_nano >= ?
     AND time_unix_nano <= ?
-    AND (? = '' OR gram_urn = ?)
+    AND (length(?) = 0 OR has(?, gram_urn))
     AND (? = '' OR trace_id = ?)
     AND (? = '' OR gram_deployment_id = toUUIDOrNull(?))
     AND (? = '' OR gram_function_id = toUUIDOrNull(?))
@@ -524,7 +510,7 @@ type ListTelemetryLogsParams struct {
 	GramProjectID          string
 	TimeStart              int64
 	TimeEnd                int64
-	GramURN                string
+	GramURNs               []string // Supports multiple URNs
 	TraceID                string
 	GramDeploymentID       string
 	GramFunctionID         string
@@ -541,10 +527,10 @@ type ListTelemetryLogsParams struct {
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsParams) ([]TelemetryLog, error) {
 	rows, err := q.conn.Query(ctx, listTelemetryLogs,
-		arg.GramProjectID,        // 1: gram_project_id
-		arg.TimeStart,            // 2: time_unix_nano >=
-		arg.TimeEnd,              // 3: time_unix_nano <=
-		arg.GramURN, arg.GramURN, // 4,5: gram_urn filter
+		arg.GramProjectID,          // 1: gram_project_id
+		arg.TimeStart,              // 2: time_unix_nano >=
+		arg.TimeEnd,                // 3: time_unix_nano <=
+		arg.GramURNs, arg.GramURNs, // 4,5: gram_urns filter (array)
 		arg.TraceID, arg.TraceID, // 6,7: trace_id filter
 		arg.GramDeploymentID, arg.GramDeploymentID, // 8,9: gram_deployment_id filter
 		arg.GramFunctionID, arg.GramFunctionID, // 10,11: gram_function_id filter
@@ -623,7 +609,7 @@ type ListTracesParams struct {
 	TimeEnd          int64
 	GramDeploymentID string
 	GramFunctionID   string
-	GramURN          string
+	GramURN          string // Single URN filter (supports LIKE pattern matching)
 	SortOrder        string
 	Cursor           string // trace_id to paginate from
 	Limit            int
@@ -637,7 +623,7 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 		arg.TimeEnd,                                // 3: time_unix_nano <=
 		arg.GramDeploymentID, arg.GramDeploymentID, // 4,5: deployment_id filter
 		arg.GramFunctionID, arg.GramFunctionID, // 6,7: function_id filter
-		arg.GramURN, arg.GramURN, // 8,9: gram_urn filter (position-based substring search) 
+		arg.GramURN, arg.GramURN, // 8,9: gram_urn filter (position-based substring search)
 		arg.Cursor,    // 10: cursor empty string check
 		arg.SortOrder, // 11: ASC or DESC for comparison
 		arg.Cursor,    // 12: ASC cursor subquery

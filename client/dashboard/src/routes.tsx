@@ -3,8 +3,11 @@ import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
+import Billing from "./pages/billing/Billing";
+import Catalog, { CatalogRoot } from "./pages/catalog/Catalog";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
+import Elements from "./pages/elements/Elements";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
   EnvironmentsRoot,
@@ -13,6 +16,7 @@ import Home from "./pages/home/Home";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
+import Logs from "./pages/logs/Logs";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPHostedPage } from "./pages/mcp/MCPHostedPage";
 import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
@@ -24,6 +28,8 @@ import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
 import Settings from "./pages/settings/Settings";
+import SourceDetails from "./pages/sources/SourceDetails";
+import { SourcesRoot } from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
   ToolBuilderNew,
@@ -31,11 +37,6 @@ import {
 } from "./pages/toolBuilder/ToolBuilder";
 import ToolsetPage, { ToolsetRoot } from "./pages/toolsets/Toolset";
 import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
-import Billing from "./pages/billing/Billing";
-import Logs from "./pages/logs/Logs";
-import { SourcesRoot, SourcesPage } from "./pages/sources/Sources";
-import SourceDetails from "./pages/sources/SourceDetails";
-import Catalog, { CatalogRoot } from "./pages/catalog/Catalog";
 
 type AppRouteBasic = {
   title: string;
@@ -125,6 +126,12 @@ const ROUTE_STRUCTURE = {
     icon: "message-circle",
     component: Playground,
   },
+  elements: {
+    title: "Chat Elements",
+    url: "elements",
+    icon: "atom",
+    component: Elements,
+  },
   integrations: {
     title: "Integrations",
     url: "integrations",
@@ -189,7 +196,7 @@ const ROUTE_STRUCTURE = {
     url: "sources",
     icon: "file-code",
     component: SourcesRoot,
-    indexComponent: SourcesPage,
+    indexComponent: Toolsets,
     subPages: {
       source: {
         title: "Source Details",

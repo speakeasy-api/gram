@@ -1118,6 +1118,7 @@ WITH latest_status as (
 SELECT
   coalesce((select status from latest_status), 'unknown')::text as status,
   log.id,
+  log.seq,
   log.event,
   log.message,
   log.attachment_id,
@@ -1126,28 +1127,29 @@ SELECT
 FROM deployment_logs log
 WHERE
   log.deployment_id = $1 AND log.project_id = $2
-  AND log.id >= CASE 
-    WHEN $3::uuid IS NOT NULL THEN $3::uuid
+  AND log.seq >= CASE
+    WHEN $3::int8 IS NOT NULL THEN $3::int8
     ELSE (
-      SELECT dl.id
+      SELECT dl.seq
       FROM deployment_logs dl
       WHERE dl.deployment_id = $1 AND dl.project_id = $2
-      ORDER BY dl.id ASC LIMIT 1
+      ORDER BY dl.seq ASC LIMIT 1
     )
   END
-ORDER BY log.id ASC
+ORDER BY log.seq ASC
 LIMIT 51
 `
 
 type GetDeploymentLogsParams struct {
 	DeploymentID uuid.UUID
 	ProjectID    uuid.UUID
-	Cursor       uuid.NullUUID
+	CursorSeq    pgtype.Int8
 }
 
 type GetDeploymentLogsRow struct {
 	Status         string
 	ID             uuid.UUID
+	Seq            int64
 	Event          string
 	Message        string
 	AttachmentID   uuid.NullUUID
@@ -1156,7 +1158,7 @@ type GetDeploymentLogsRow struct {
 }
 
 func (q *Queries) GetDeploymentLogs(ctx context.Context, arg GetDeploymentLogsParams) ([]GetDeploymentLogsRow, error) {
-	rows, err := q.db.Query(ctx, getDeploymentLogs, arg.DeploymentID, arg.ProjectID, arg.Cursor)
+	rows, err := q.db.Query(ctx, getDeploymentLogs, arg.DeploymentID, arg.ProjectID, arg.CursorSeq)
 	if err != nil {
 		return nil, err
 	}
@@ -1167,6 +1169,7 @@ func (q *Queries) GetDeploymentLogs(ctx context.Context, arg GetDeploymentLogsPa
 		if err := rows.Scan(
 			&i.Status,
 			&i.ID,
+			&i.Seq,
 			&i.Event,
 			&i.Message,
 			&i.AttachmentID,

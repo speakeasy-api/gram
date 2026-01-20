@@ -1,5 +1,6 @@
 import merge from 'lodash.merge'
 import React, { useMemo } from 'react'
+import { ROOT_SELECTOR } from '../src/constants/tailwind'
 import { ElementsProvider } from '../src/contexts/ElementsProvider'
 import { recommended } from '../src/plugins'
 import { ElementsConfig } from '../src/types'
@@ -10,9 +11,12 @@ interface ElementsDecoratorProps {
   config?: Partial<ElementsConfig>
 }
 
+// Injected via Vite' `define` config
+declare const __GRAM_API_URL__: string | undefined
+
 const DEFAULT_ELEMENTS_CONFIG: ElementsConfig = {
-  projectSlug: 'adamtest',
-  mcp: 'https://chat.speakeasy.com/mcp/speakeasy-team-my_api',
+  projectSlug: '',
+  mcp: '',
   variant: 'widget',
   welcome: {
     title: 'Hello there!',
@@ -21,7 +25,7 @@ const DEFAULT_ELEMENTS_CONFIG: ElementsConfig = {
       {
         title: 'Discover available tools',
         label: 'Find out what tools are available',
-        action: 'Call all tools available',
+        prompt: 'Call all tools available',
       },
     ],
   },
@@ -39,6 +43,9 @@ const DEFAULT_ELEMENTS_CONFIG: ElementsConfig = {
     expandToolGroupsByDefault: true,
   },
   plugins: recommended,
+  api: {
+    url: __GRAM_API_URL__ || 'https://api.getgram.ai',
+  },
 }
 
 /**
@@ -58,9 +65,20 @@ export const ElementsDecorator: React.FC<ElementsDecoratorProps> = ({
     [config]
   )
 
+  if (!finalConfig.projectSlug || !finalConfig.mcp) {
+    return (
+      <div className="bg-red-300 p-4 text-red-900">
+        Please provide both projectSlug and mcp in the controls panel to view
+        this story.
+      </div>
+    )
+  }
+
   return (
-    <ElementsProvider config={finalConfig}>
-      <div className="h-screen bg-zinc-50">{children}</div>
-    </ElementsProvider>
+    <div className={ROOT_SELECTOR}>
+      <ElementsProvider config={finalConfig}>
+        <div className="bg-background h-screen">{children}</div>
+      </ElementsProvider>
+    </div>
   )
 }

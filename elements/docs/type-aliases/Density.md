@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.16.5**](../README.md)
+[**@gram-ai/elements v1.22.1**](../README.md)
 
 ***
 
@@ -6,4 +6,4 @@
 
 # Type Alias: Density
 
-> **Density** = *typeof* `DENSITIES`\[`number`\]
+> **Density** = *typeof* [`DENSITIES`](DENSITIES.md)\[`number`\]

@@ -11,7 +11,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// SearchLogs tests
+func TestSearchLogs_LogsDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	ctx = switchOrganizationInCtx(t, ctx)
+
+	now := time.Now().UTC()
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	result, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		Filter: &gen.SearchLogsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 50,
+		Sort:  "desc",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Empty(t, result.Logs, "should return no logs when feature is disabled")
+	require.False(t, result.Enabled, "Enabled should be false when logs feature is disabled")
+}
 
 func TestSearchLogs_Empty(t *testing.T) {
 	t.Parallel()
@@ -41,6 +65,7 @@ func TestSearchLogs_SortDescending(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
+
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.New().String()
@@ -77,6 +102,7 @@ func TestSearchLogs_Pagination(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
+
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.New().String()
@@ -141,6 +167,7 @@ func TestSearchLogs_FilterByTraceID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
+
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.New().String()
@@ -181,6 +208,7 @@ func TestSearchLogs_AttributesAreJSON(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
+
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.New().String()
@@ -200,6 +228,7 @@ func TestSearchLogs_AttributesAreJSON(t *testing.T) {
 		Sort:  "desc",
 	})
 
+	require.True(t, result.Enabled)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Len(t, result.Logs, 1)
@@ -220,6 +249,7 @@ func TestSearchLogs_Filters(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
+
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
 
@@ -486,6 +516,61 @@ func TestSearchLogs_Filters(t *testing.T) {
 			},
 			expectedCount: 3,
 		},
+		{
+			name: "filter by gram_urns with single URN returns matching logs",
+			filter: &gen.SearchLogsFilter{
+				From:     &from,
+				To:       &to,
+				GramUrns: []string{"urn:gram:http:api:get-users"},
+			},
+			expectedCount: 2,
+		},
+		{
+			name: "filter by gram_urns with multiple URNs returns all matching logs",
+			filter: &gen.SearchLogsFilter{
+				From:     &from,
+				To:       &to,
+				GramUrns: []string{"urn:gram:http:api:get-users", "urn:gram:http:api:create-order"},
+			},
+			expectedCount: 4,
+		},
+		{
+			name: "filter by gram_urns across different services",
+			filter: &gen.SearchLogsFilter{
+				From:     &from,
+				To:       &to,
+				GramUrns: []string{"urn:gram:http:api:get-users", "urn:gram:function:utils:hash-password"},
+			},
+			expectedCount: 4,
+		},
+		{
+			name: "filter by gram_urns with empty array returns all logs",
+			filter: &gen.SearchLogsFilter{
+				From:     &from,
+				To:       &to,
+				GramUrns: []string{},
+			},
+			expectedCount: 10,
+		},
+		{
+			name: "filter by gram_urns with non-matching URN returns empty",
+			filter: &gen.SearchLogsFilter{
+				From:     &from,
+				To:       &to,
+				GramUrns: []string{"urn:gram:nonexistent:tool"},
+			},
+			expectedCount: 0,
+		},
+		{
+			name: "gram_urns takes precedence over gram_urn when both provided",
+			filter: &gen.SearchLogsFilter{
+				From:     &from,
+				To:       &to,
+				GramUrn:  stringPtr("urn:gram:http:api:get-users"),
+				GramUrns: []string{"urn:gram:http:api:create-order"},
+			},
+			expectedCount: 2, // Only create-order logs, not get-users
+		},
 	}
 
 	for _, tt := range tests {
@@ -517,6 +602,31 @@ func TestSearchLogs_Filters(t *testing.T) {
 
 // SearchToolCalls tests
 
+func TestSearchToolCalls_LogsDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	ctx = switchOrganizationInCtx(t, ctx)
+
+	now := time.Now().UTC()
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	result, err := ti.service.SearchToolCalls(ctx, &gen.SearchToolCallsPayload{
+		Filter: &gen.SearchToolCallsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 50,
+		Sort:  "desc",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Empty(t, result.ToolCalls, "should return no tool calls when feature is disabled")
+	require.False(t, result.Enabled, "Enabled should be false when logs feature is disabled")
+}
+
 func TestSearchToolCalls_Empty(t *testing.T) {
 	t.Parallel()
 
@@ -545,6 +655,7 @@ func TestSearchToolCalls_AggregatesByTraceID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
+
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.New().String()
@@ -607,6 +718,7 @@ func TestSearchToolCalls_FilterByGramURN(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
+
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.New().String()

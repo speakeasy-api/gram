@@ -24,11 +24,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -60,6 +62,7 @@ func handleToolsCall(
 	billingRepository billing.Repository,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	tcm tm.ToolMetricsProvider,
+	featuresClient *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporal temporal_client.Client,
 ) (json.RawMessage, error) {
@@ -168,7 +171,7 @@ func handleToolsCall(
 		toolType = tm_repo.ToolTypeExternalMCP
 	}
 
-	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, tcm, descriptor.OrganizationID, tm.ToolInfo{
+	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, tcm, featuresClient, descriptor.OrganizationID, tm.ToolInfo{
 		ID:             descriptor.ID,
 		Urn:            descriptor.URN.String(),
 		Name:           descriptor.Name,
@@ -571,11 +574,12 @@ func handleExternalMCPToolCall(
 	if proxy.RequiresOauth && oauthToken != "" {
 		opts = &externalmcp.ClientOptions{
 			Authorization: "Bearer " + oauthToken,
+			TransportType: externalmcptypes.TransportType(proxy.TransportType),
 		}
 	}
 
 	// Create client and call tool
-	client, err := externalmcp.NewClient(ctx, logger, proxy.RemoteURL, opts)
+	client, err := externalmcp.NewClient(ctx, logger, proxy.RemoteURL, externalmcptypes.TransportType(proxy.TransportType), opts)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").Log(ctx, logger)
 	}

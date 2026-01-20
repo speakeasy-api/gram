@@ -1,6 +1,7 @@
 pg_version = "17.0"
 assume_in_transaction = true
 excluded_rules = [
+  "require-timeout-settings",
   "ban-concurrent-index-creation-in-transaction", # This is checked in .mise-tasks/lint/migrations.sh
   "prefer-robust-stmts",
   "ban-drop-not-null",

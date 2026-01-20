@@ -11,7 +11,13 @@ import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { Badge, Button, Input, Stack } from "@speakeasy-api/moonshine";
 import { useMutation } from "@tanstack/react-query";
-import { CheckCircle, Loader2, Search, SearchXIcon } from "lucide-react";
+import {
+  CheckCircle,
+  Loader2,
+  Search,
+  SearchXIcon,
+  Server as ServerIcon,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet } from "react-router";
 
@@ -139,7 +145,13 @@ export default function Catalog() {
     >
       <Dialog.Content>
         <Dialog.Header>
-          {addingServer && <ServerHeading server={addingServer} />}
+          <Dialog.Title>
+            {addingServer ? (
+              <ServerHeading server={addingServer} />
+            ) : (
+              "Add MCP Server"
+            )}
+          </Dialog.Title>
           <Dialog.Description className="border-t pt-3">
             {createdToolsetSlug
               ? "MCP server imported successfully!"
@@ -328,7 +340,15 @@ function ServerHeading({ server }: { server: Server }) {
     <Stack direction="horizontal" justify="space-between">
       <Stack direction="horizontal" gap={3}>
         <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-          <Type variant="subheading">{displayName[0]}</Type>
+          {server.iconUrl ? (
+            <img
+              src={server.iconUrl}
+              alt={displayName}
+              className="w-8 h-8 rounded"
+            />
+          ) : (
+            <ServerIcon className="w-6 h-6 text-muted-foreground" />
+          )}
         </div>
         <Stack gap={1}>
           <Stack direction="horizontal" gap={2} align="center">

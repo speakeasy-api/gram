@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.16.5**](../README.md)
+[**@gram-ai/elements v1.22.1**](../README.md)
 
 ***
 
@@ -12,14 +12,20 @@
 
 > **title**: `string`
 
+Suggestion heading
+
 ***
 
 ### label
 
 > **label**: `string`
 
+Suggestion subheading
+
 ***
 
-### action
+### prompt
 
-> **action**: `string`
+> **prompt**: `string`
+
+The prompt sent when the suggestion is clicked

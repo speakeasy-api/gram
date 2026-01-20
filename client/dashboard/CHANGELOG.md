@@ -1,5 +1,137 @@
 # dashboard
 
+## 0.26.13
+
+### Patch Changes
+
+- ff3ff3e: Restore chat history in the playground using Gram Elements
+
+## 0.26.12
+
+### Patch Changes
+
+- 5c6f78a: Embed Elements chat in logs page
+- Updated dependencies [5c6f78a]
+  - @gram-ai/elements@1.22.1
+
+## 0.26.11
+
+### Patch Changes
+
+- Updated dependencies [adac3f8]
+  - @gram-ai/elements@1.22.0
+
+## 0.26.10
+
+### Patch Changes
+
+- a0b7e13: feat: Use Gram Elements for the Playground UI
+- Updated dependencies [a0b7e13]
+- Updated dependencies [43500b3]
+  - @gram-ai/elements@1.21.3
+
+## 0.26.9
+
+### Patch Changes
+
+- Updated dependencies [0472997]
+  - @gram-ai/elements@1.21.2
+
+## 0.26.8
+
+### Patch Changes
+
+- Updated dependencies [ed50d35]
+  - @gram-ai/elements@1.21.1
+
+## 0.26.7
+
+### Patch Changes
+
+- 848e623: Fixed a couple of issues in the dashboard that were causing production errors: 1. Setup the monaco editor environment to properly load web workers for different languages 2. Add missing `Dialog.Title` elements in dialog headers to ensure accessibility compliance.
+- Updated dependencies [03f7cbe]
+- Updated dependencies [5d14e1a]
+- Updated dependencies [0fd8d39]
+- Updated dependencies [8b20bcf]
+- Updated dependencies [3be7ac7]
+  - @gram-ai/elements@1.21.0
+  - @gram/client@0.25.12
+
+## 0.26.6
+
+### Patch Changes
+
+- Updated dependencies [adc02ce]
+  - @gram-ai/elements@1.20.2
+
+## 0.26.5
+
+### Patch Changes
+
+- Updated dependencies [7506a42]
+- Updated dependencies [b3ac308]
+  - @gram-ai/elements@1.20.1
+
+## 0.26.4
+
+### Patch Changes
+
+- 45dd841: Updated the dashboard and vite config so that monaco editor and various three.js dependencies are not included in the main app bundle. This was causing extreme bloat of that bundle which ultimately slows down loading times of the web app.
+- bd81e47: Adds MCP server selection into elements configurator
+- Updated dependencies [950419c]
+- Updated dependencies [45eb983]
+  - @gram-ai/elements@1.20.0
+
+## 0.26.3
+
+### Patch Changes
+
+- 12e825c: Add hide/show toggle for environment variable inputs
+
+## 0.26.2
+
+### Patch Changes
+
+- 81be736: Updates dashboard to only use telemetry API
+- Updated dependencies [f2fa135]
+  - @gram-ai/elements@1.19.1
+
+## 0.26.1
+
+### Patch Changes
+
+- Updated dependencies [856576b]
+- Updated dependencies [a1231be]
+- Updated dependencies [748c52e]
+  - @gram-ai/elements@1.19.0
+
+## 0.26.0
+
+### Minor Changes
+
+- eefebf6: Add updated elements onboarding
+
+### Patch Changes
+
+- Updated dependencies [f744f2b]
+  - @gram-ai/elements@1.18.8
+
+## 0.25.2
+
+### Patch Changes
+
+- f0dad26: Adds support for UNSAFE_apiKey in Elements. This will be used during onboarding to allow users to quickly trial elements without needing to set up the sessions endpoint in their backend
+
+## 0.25.1
+
+### Patch Changes
+
+- 8ad0455: Ensure delete source dialog closes after completion
+- 0583dc0: Improves logs side panel to make it wider and more human-readable
+- Updated dependencies [d972d1b]
+- Updated dependencies [3a82c2e]
+  - @gram/client@0.25.8
+
 ## 0.25.0
 
 ### Minor Changes

@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -42,11 +43,12 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *assets.Service
-	conn           *pgxpool.Pool
-	storage        assets.BlobStore
-	repo           *repo.Queries
-	sessionManager *sessions.Manager
+	service             *assets.Service
+	conn                *pgxpool.Pool
+	storage             assets.BlobStore
+	repo                *repo.Queries
+	sessionManager      *sessions.Manager
+	chatSessionsManager *chatsessions.Manager
 }
 
 func newTestAssetsService(t *testing.T) (context.Context, *testInstance) {
@@ -68,18 +70,21 @@ func newTestAssetsService(t *testing.T) (context.Context, *testInstance) {
 	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "", billingClient)
 	require.NoError(t, err)
 
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+
 	storage := assetstest.NewTestBlobStore(t)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := assets.NewService(logger, conn, sessionManager, storage)
+	svc := assets.NewService(logger, conn, sessionManager, chatSessionsManager, storage, "test-jwt-secret")
 	repository := repo.New(conn)
 
 	return ctx, &testInstance{
-		service:        svc,
-		conn:           conn,
-		storage:        storage,
-		repo:           repository,
-		sessionManager: sessionManager,
+		service:             svc,
+		conn:                conn,
+		storage:             storage,
+		repo:                repository,
+		sessionManager:      sessionManager,
+		chatSessionsManager: chatSessionsManager,
 	}
 }

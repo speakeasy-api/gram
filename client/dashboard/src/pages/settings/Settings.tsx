@@ -12,7 +12,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
-import { assert, cn } from "@/lib/utils";
+import { assert, cn, getCustomDomainCNAME } from "@/lib/utils";
 import { Key } from "@gram/client/models/components";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import {
@@ -25,7 +25,7 @@ import { Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, CheckCircle2, Copy, Globe, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useCustomDomain } from "../mcp/MCPDetails";
+import { useCustomDomain } from "@/hooks/useToolsetUrl";
 import { SettingsProjectsTable } from "./SettingsProjectsTable";
 
 export default function Settings() {
@@ -42,7 +42,7 @@ export default function Settings() {
   const [isCustomDomainModalOpen, setIsCustomDomainModalOpen] = useState(false);
   const [domainInput, setDomainInput] = useState("");
   const [domainError, setDomainError] = useState("");
-  const CNAME_VALUE = "cname.getgram.ai.";
+  const CNAME_VALUE = getCustomDomainCNAME();
 
   // Dynamic values based on domain input
   const subdomain = domainInput.trim() || "sub.yourdomain.com";

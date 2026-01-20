@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
@@ -50,6 +51,7 @@ type WorkerOptions struct {
 	FunctionsVersion     functions.RunnerVersion
 	RagService           *rag.ToolsetVectorStore
 	AgentsService        *agents.Service
+	MCPRegistryClient    *externalmcp.RegistryClient
 }
 
 func ForDeploymentProcessing(
@@ -58,6 +60,7 @@ func ForDeploymentProcessing(
 	assetStorage assets.BlobStore,
 	enc *encryption.Client,
 	deployer functions.Deployer,
+	mcpRegistryClient *externalmcp.RegistryClient,
 ) *WorkerOptions {
 	return &WorkerOptions{
 		DB:                   db,
@@ -66,6 +69,7 @@ func ForDeploymentProcessing(
 		AssetStorage:         assetStorage,
 		FunctionsDeployer:    deployer,
 		FunctionsVersion:     "local", // Test deployers don't use baked versions
+		MCPRegistryClient:    mcpRegistryClient,
 		SlackClient:          nil,
 		ChatClient:           nil,
 		OpenRouterChatClient: nil,
@@ -107,6 +111,7 @@ func NewTemporalWorker(
 		FunctionsVersion:     "",
 		RagService:           nil,
 		AgentsService:        nil,
+		MCPRegistryClient:    nil,
 	}
 
 	for _, o := range options {
@@ -129,6 +134,7 @@ func NewTemporalWorker(
 			FunctionsVersion:     conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
 			RagService:           conv.Default(o.RagService, opts.RagService),
 			AgentsService:        conv.Default(o.AgentsService, opts.AgentsService),
+			MCPRegistryClient:    conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
 		}
 	}
 
@@ -151,6 +157,7 @@ func NewTemporalWorker(
 		opts.SlackClient,
 		opts.ChatClient,
 		opts.OpenRouter,
+		opts.OpenRouterChatClient,
 		opts.K8sClient,
 		opts.ExpectedTargetCNAME,
 		opts.BillingTracker,
@@ -160,6 +167,7 @@ func NewTemporalWorker(
 		opts.FunctionsVersion,
 		opts.RagService,
 		opts.AgentsService,
+		opts.MCPRegistryClient,
 		client,
 	)
 
@@ -182,6 +190,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
 	temporalWorker.RegisterActivity(activities.FallbackModelUsageTracking)
+	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
 	// Agent runner related activities
 	temporalWorker.RegisterActivity(activities.PreprocessAgentsInput)
 	temporalWorker.RegisterActivity(activities.ExecuteToolCall)
@@ -198,6 +207,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(FallbackModelUsageTrackingWorkflow)
+	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	// Agent runner related workflows
 	temporalWorker.RegisterWorkflow(AgentsResponseWorkflow)
 	temporalWorker.RegisterWorkflow(SubAgentWorkflow)

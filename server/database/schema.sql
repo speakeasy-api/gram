@@ -745,7 +745,12 @@ CREATE TABLE IF NOT EXISTS chats (
   project_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
   user_id TEXT,
+  external_user_id TEXT,
   title TEXT,
+  
+  resolution TEXT,
+  resolution_notes TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -765,13 +770,18 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   content TEXT NOT NULL,
   model TEXT,
   message_id TEXT,
-  tool_call_id TEXT,
   user_id TEXT,
+  external_user_id TEXT,
   finish_reason TEXT,
   tool_calls JSONB,
   prompt_tokens BIGINT NOT NULL DEFAULT 0,
   completion_tokens BIGINT NOT NULL DEFAULT 0,
   total_tokens BIGINT NOT NULL DEFAULT 0,
+
+  tool_call_id TEXT,
+  tool_urn TEXT,
+  tool_outcome TEXT,
+  tool_outcome_notes TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
@@ -1110,6 +1120,7 @@ CREATE TABLE IF NOT EXISTS external_mcp_tool_definitions (
   external_mcp_attachment_id uuid NOT NULL,
   tool_urn TEXT NOT NULL CHECK (tool_urn <> ''),
   remote_url TEXT NOT NULL CHECK (remote_url <> ''),
+  transport_type TEXT NOT NULL,
   requires_oauth BOOLEAN NOT NULL DEFAULT FALSE,
 
   -- OAuth metadata

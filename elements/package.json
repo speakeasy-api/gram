@@ -2,7 +2,7 @@
   "name": "@gram-ai/elements",
   "description": "Gram Elements is a library of UI primitives for building chat-like experiences for MCP Servers.",
   "type": "module",
-  "version": "1.16.5",
+  "version": "1.22.1",
   "main": "dist/index.js",
   "exports": {
     ".": {
@@ -22,8 +22,13 @@
     },
     "./elements.css": "./dist/elements.css"
   },
+  "bin": {
+    "elements": "./bin/cli.js"
+  },
   "files": [
-    "dist"
+    "dist",
+    "src",
+    "bin"
   ],
   "repository": {
     "type": "git",
@@ -34,14 +39,19 @@
   },
   "scripts": {
     "build": "vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "eslint src",
     "analyze": "pnpm dlx vite-bundle-visualizer",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build",
+    "build-storybook": "storybook build --stats-json",
+    "chromatic": "chromatic --exit-zero-on-changes",
     "type-check": "tsc --noEmit",
     "docs": "typedoc",
     "docs:watch": "typedoc --watch",
-    "prepack": "pnpm build"
+    "prepack": "pnpm build",
+    "knip": "pnpm dlx knip",
+    "knip:fix": "pnpm dlx knip --fix"
   },
   "keywords": [],
   "author": "Adam Bull <adam@speakeasy.com>",
@@ -49,6 +59,7 @@
   "packageManager": "pnpm@10.18.2",
   "peerDependencies": {
     "@assistant-ui/react": "^0.11.0",
+    "@assistant-ui/react-ai-sdk": "^1.1.16",
     "@assistant-ui/react-markdown": "^0.11.0",
     "@types/react": ">=18 <20",
     "@types/react-dom": ">=18 <20",
@@ -61,12 +72,6 @@
     "zustand": "^5.0.0"
   },
   "peerDependenciesMeta": {
-    "@assistant-ui/react": {
-      "optional": true
-    },
-    "@assistant-ui/react-markdown": {
-      "optional": true
-    },
     "@types/react": {
       "optional": true
     },
@@ -93,11 +98,21 @@
     },
     "shiki": {
       "optional": true
+    },
+    "@assistant-ui/react": {
+      "optional": true
+    },
+    "@assistant-ui/react-ai-sdk": {
+      "optional": true
+    },
+    "@assistant-ui/react-markdown": {
+      "optional": true
     }
   },
   "dependencies": {
     "@ai-sdk/mcp": "^0.0.11",
-    "@ai-sdk/react": "catalog:",
+    "@chromatic-com/storybook": "^5.0.0",
+    "@datadog/browser-rum": "^6.24.1",
     "@openrouter/ai-sdk-provider": "^1.4.1",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-collapsible": "^1.1.12",
@@ -105,43 +120,43 @@
     "@radix-ui/react-popover": "^1.1.15",
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@storybook/addon-themes": "^10.1.11",
     "@tanstack/react-query": "catalog:",
     "ai": "5.0.90",
-    "assistant-stream": "^0.2.42",
+    "assistant-stream": "^0.2.46",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.544.0",
     "tailwind-merge": "^3.3.1",
     "tw-shimmer": "^0.4.0",
+    "vite-plugin-externalize-deps": "^0.10.0",
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.0-beta.5",
-    "@assistant-ui/react": "^0.11.53",
-    "@assistant-ui/react-ai-sdk": "^1.1.16",
-    "@assistant-ui/react-markdown": "^0.11.4",
+    "@ai-sdk/google": "^2",
     "@eslint/compat": "^2.0.0",
     "@eslint/js": "^9.39.1",
-    "@modelcontextprotocol/sdk": "^1.24.3",
     "@storybook/addon-docs": "^10.0.8",
     "@storybook/react-vite": "^10.0.8",
     "@tailwindcss/vite": "^4.1.13",
     "@types/lodash.merge": "^4.6.9",
     "@types/node": "^24.10.1",
     "@vitejs/plugin-react": "^5.0.3",
-    "chromatic": "^13.3.3",
+    "chromatic": "^13.3.5",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-js": "github:eslint/js",
     "eslint-plugin-prettier": "^5.5.4",
     "eslint-plugin-react-refresh": "^0.4.24",
     "eslint-plugin-storybook": "^10.1.4",
     "eslint-plugin-unused-imports": "^4.3.0",
     "lodash.merge": "^4.6.2",
     "motion": "^12.23.14",
-    "openai": "^6.9.1",
+    "msw": "^2.12.3",
+    "msw-storybook-addon": "^2.0.6",
     "prettier": "^3.7.4",
     "prettier-plugin-tailwindcss": "^0.7.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
     "remark-gfm": "^4.0.1",
     "storybook": "^10.0.8",
     "tailwindcss": "^4.1.13",
@@ -151,6 +166,13 @@
     "typescript-eslint": "^8.48.1",
     "vite": "^7.1.6",
     "vite-plugin-dts": "^4.5.4",
+    "vite-plugin-turbosnap": "^1.0.3",
+    "vitest": "^4.0.13",
     "zustand": "^5.0.8"
+  },
+  "msw": {
+    "workerDirectory": [
+      ".storybook/public"
+    ]
   }
 }

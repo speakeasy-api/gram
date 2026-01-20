@@ -10,11 +10,11 @@ let value: ListAssetsResult = {
     {
       contentLength: 346222,
       contentType: "<value>",
-      createdAt: new Date("2023-07-27T01:38:28.246Z"),
+      createdAt: new Date("2024-07-26T01:38:28.246Z"),
       id: "<id>",
-      kind: "functions",
+      kind: "chat_attachment",
       sha256: "<value>",
-      updatedAt: new Date("2023-02-10T06:07:24.864Z"),
+      updatedAt: new Date("2024-02-10T06:07:24.864Z"),
     },
   ],
 };

@@ -1,5 +1,98 @@
 # server
 
+## 0.18.4
+
+### Patch Changes
+
+- 5c6f78a: Embed Elements chat in logs page
+
+## 0.18.3
+
+### Patch Changes
+
+- a0b7e13: feat: Use Gram Elements for the Playground UI
+
+## 0.18.2
+
+### Patch Changes
+
+- 0abff4c: Updated the cursor format on /rpc/deployments.logs endpoint to be based on off of the sequential ID of the deplayment logs rather than the UUID of the log entry. This ensures a strong ordering of logs in the presence of multiple logs created at the same timestamp.
+
+  This problem was pronounced when processing Gram Functions and external MCP servers that would create batches of of logs with overlapping timestamps, leading to out-of-order logs in the API response.
+
+- 0fd8d39: Adds a new Gram endpoint to update a chat title
+
+## 0.18.1
+
+### Patch Changes
+
+- 764b650: Refactored the processing of external MCP servers as part of deployments so that customer-facing logs are emitted. Previously, errors that occurred when processing an external MCP server were only visible internally.
+
+## 0.18.0
+
+### Minor Changes
+
+- dc1b2b8: Updated the assets service to allow chat session to upload and read attachments via the `/rpc/assets.uploadChatAttachment` and `/rpc/assets.serveChatAttachment` endpoints.
+
+### Patch Changes
+
+- 98783c3: fix: return 401 for ext oauth servers even if gram-chat-session is present
+
+## 0.17.4
+
+### Patch Changes
+
+- 6cd7978: This change adds an `Accept: */*` header to requests from the tool proxy. This resolves issues with some APIs (eg. https://api.intercom.io) which rely on the Accept header's presence to return content
+
+## 0.17.3
+
+### Patch Changes
+
+- 54a32f4: Updated the function deployment temporal activity so it spawns multiple goroutines to deploy functions in parallel. This should in theory speed up deployments with several functions.
+
+## 0.17.2
+
+### Patch Changes
+
+- ecafb6f: Fixes an issue where we weren't properly pulling the chat session header, which caused private MCP servers to fail when connected to via elements.
+
+## 0.17.1
+
+### Patch Changes
+
+- f0dad26: Adds support for UNSAFE_apiKey in Elements. This will be used during onboarding to allow users to quickly trial elements without needing to set up the sessions endpoint in their backend
+
+## 0.17.0
+
+### Minor Changes
+
+- bef31df: Added two new API endpoints for uploading and serving chat attachments.
+
+  The `/rpc/assets.serveChatAttachment` endpoint can be accessed with an API key or session cookie. `Gram-Project` is not used on that endpoint to make it easy for session-based clients to embed attachments in chat such as with `<img>` tags for images e.g. `<img src="/rpc/assets.serveChatAttachment?id=...&project_id=..." />`.
+
+## 0.16.0
+
+### Minor Changes
+
+- 5bc733e: Added a new API endpoint `/rpc/projects.get` to Gram server that allows clients to retrieve project details given a project slug. The project must exist within the organization referenced by the provided `gram-session` cookie or `Gram-Key` header.
+
+### Patch Changes
+
+- 122209b: Updated auth logic allowing API keys that have producer scope to access chat session APIs. In other, producer scope becomes a superset of chat and consumer scopes.
+- 417c0c6: feat: Support external MCP servers that only have an SSE remote available.
+
+  Previously, Gram could only support external MCP servers that used the
+  Streamable HTTP transport. Now, servers that still use the deprecated SSE
+  type will be transparently adapted to Streamable HTTP. MCP clients will
+  still use Streamable HTTP to interact with the external MCP server via Gram:
+
+  ```
+  CLIENT <-(Streamable HTTP)-> GRAM <-(SSE)-> EXTERNAL MCP SERVER
+  ```
+
+- d972d1b: Adds ability to filter telemetry logs by multiple Gram URNs
+- 3a82c2e: Adds enabled field to telemetry API response indicating whether logging is enabled or not
+
 ## 0.15.1
 
 ### Patch Changes

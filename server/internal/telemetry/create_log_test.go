@@ -1,53 +1,43 @@
 package telemetry_test
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
 func TestToolCallLogger_EmitCreatesHTTPAndTelemetryLogs(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	logger := testenv.NewLogger(t)
-
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	tracerProvider := testenv.NewTracerProvider(t)
-
-	chClient := repo.New(logger, tracerProvider, chConn, func(context.Context, string) (bool, error) {
-		return true, nil
-	})
+	ctx, ti := newTestLogsService(t)
+	authCtx, exists := contextvalues.GetAuthContext(ctx)
+	require.True(t, exists)
 
 	// Create test data
 	projectID := uuid.New().String()
 	deploymentID := uuid.New().String()
 	toolID := uuid.New().String()
-	organizationID := uuid.New().String()
 	toolURN := "tools:http:test-source:test-tool"
 	toolName := "test-tool"
 
-	
 	// Create a tool call logger
 	toolCallLogger, err := telemetry.NewToolCallLogger(
 		ctx,
-		chClient,
-		organizationID,
+		ti.chClient,
+		ti.featClient,
+		authCtx.ActiveOrganizationID,
 		telemetry.ToolInfo{
 			ID:             toolID,
 			Urn:            toolURN,
 			Name:           toolName,
 			ProjectID:      projectID,
 			DeploymentID:   deploymentID,
-			OrganizationID: organizationID,
+			OrganizationID: authCtx.ActiveOrganizationID,
 		},
 		toolName,
 		repo.ToolTypeHTTP,
@@ -70,17 +60,17 @@ func TestToolCallLogger_EmitCreatesHTTPAndTelemetryLogs(t *testing.T) {
 	now := time.Now().UTC()
 
 	// Emit the logs (writes to both http_requests_raw and telemetry_logs)
-	toolCallLogger.Emit(ctx, logger)
+	toolCallLogger.Emit(ctx, ti.logger)
 
 	// Wait for async writes to complete (ClickHouse eventual consistency)
 	var logs []repo.TelemetryLog
 	require.Eventually(t, func() bool {
 		var err error
-		logs, err = chClient.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
+		logs, err = ti.chClient.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
 			GramProjectID: projectID,
 			TimeStart:     now.Add(-1 * time.Minute).UnixNano(),
 			TimeEnd:       now.Add(1 * time.Minute).UnixNano(),
-			GramURN:       toolURN,
+			GramURNs:      []string{toolURN},
 			SortOrder:     "desc",
 			Cursor:        "",
 			Limit:         10,
@@ -114,38 +104,30 @@ func TestToolCallLogger_EmitCreatesHTTPAndTelemetryLogs(t *testing.T) {
 func TestToolCallLogger_404ErrorLogsWithWarnSeverity(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	logger := testenv.NewLogger(t)
-
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	tracerProvider := testenv.NewTracerProvider(t)
-
-	chClient := repo.New(logger, tracerProvider, chConn, func(context.Context, string) (bool, error) {
-		return true, nil
-	})
+	ctx, ti := newTestLogsService(t)
+	authCtx, exists := contextvalues.GetAuthContext(ctx)
+	require.True(t, exists)
 
 	// Create test data
 	toolID := uuid.New().String()
 	projectID := uuid.New().String()
 	deploymentID := uuid.New().String()
-	organizationID := uuid.New().String()
 	toolURN := "tools:http:test:warn-severity"
 	toolName := "test-tool"
 
 	// Create a tool call logger
 	toolCallLogger, err := telemetry.NewToolCallLogger(
 		ctx,
-		chClient,
-		organizationID,
+		ti.chClient,
+		ti.featClient,
+		authCtx.ActiveOrganizationID,
 		telemetry.ToolInfo{
 			ID:             toolID,
 			Urn:            toolURN,
 			Name:           toolName,
 			ProjectID:      projectID,
 			DeploymentID:   deploymentID,
-			OrganizationID: organizationID,
+			OrganizationID: authCtx.ActiveOrganizationID,
 		},
 		toolName,
 		repo.ToolTypeHTTP,
@@ -166,17 +148,17 @@ func TestToolCallLogger_404ErrorLogsWithWarnSeverity(t *testing.T) {
 	now := time.Now().UTC()
 
 	// Emit the logs
-	toolCallLogger.Emit(ctx, logger)
+	toolCallLogger.Emit(ctx, ti.logger)
 
 	// Wait for async write (ClickHouse eventual consistency)
 	var logs []repo.TelemetryLog
 	require.Eventually(t, func() bool {
 		var err error
-		logs, err = chClient.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
+		logs, err = ti.chClient.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
 			GramProjectID: projectID,
 			TimeStart:     now.Add(-1 * time.Minute).UnixNano(),
 			TimeEnd:       now.Add(1 * time.Minute).UnixNano(),
-			GramURN:       toolURN,
+			GramURNs:      []string{toolURN},
 			SortOrder:     "desc",
 			Cursor:        "",
 			Limit:         10,
@@ -195,8 +177,75 @@ func TestToolCallLogger_404ErrorLogsWithWarnSeverity(t *testing.T) {
 
 	// Verify headers are included in attributes
 	require.Contains(t, log.Attributes, "headers")
-	require.Contains(t, log.Attributes, "Authorization") // Request header key
-	require.Contains(t, log.Attributes, "Bearer") // Redacted request header value
-	require.Contains(t, log.Attributes, "Content-Type") // Response header key
+	require.Contains(t, log.Attributes, "Authorization")      // Request header key
+	require.Contains(t, log.Attributes, "Bearer")             // Redacted request header value
+	require.Contains(t, log.Attributes, "Content-Type")       // Response header key
 	require.Contains(t, log.Attributes, "application\\/json") // Response header value (JSON escapes slashes)
+}
+
+func TestToolCallLogger_LogsDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	// Switch to an organization that doesn't have logs enabled
+	ctx = switchOrganizationInCtx(t, ctx)
+
+	authCtx, exists := contextvalues.GetAuthContext(ctx)
+	require.True(t, exists)
+
+	// Create test data
+	projectID := uuid.New().String()
+	deploymentID := uuid.New().String()
+	toolID := uuid.New().String()
+	toolURN := "tools:http:test-source:disabled-test"
+	toolName := "test-tool"
+
+	// Create a tool call logger for an org without logs enabled
+	toolCallLogger, err := telemetry.NewToolCallLogger(
+		ctx,
+		ti.chClient,
+		ti.featClient,
+		authCtx.ActiveOrganizationID,
+		telemetry.ToolInfo{
+			ID:             toolID,
+			Urn:            toolURN,
+			Name:           toolName,
+			ProjectID:      projectID,
+			DeploymentID:   deploymentID,
+			OrganizationID: authCtx.ActiveOrganizationID,
+		},
+		toolName,
+		repo.ToolTypeHTTP,
+	)
+	require.NoError(t, err)
+
+	// Verify that the logger is disabled
+	require.False(t, toolCallLogger.Enabled(), "ToolCallLogger should be disabled when logs feature is not enabled")
+
+	// Record some data and emit - this should be a no-op
+	toolCallLogger.RecordHTTPMethod("POST")
+	toolCallLogger.RecordHTTPRoute("/api/test")
+	toolCallLogger.RecordStatusCode(200)
+
+	now := time.Now().UTC()
+
+	// Emit should not write anything when disabled
+	toolCallLogger.Emit(ctx, ti.logger)
+
+	// Wait a moment for any potential writes
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify no logs were written
+	logs, err := ti.chClient.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
+		GramProjectID: projectID,
+		TimeStart:     now.Add(-1 * time.Minute).UnixNano(),
+		TimeEnd:       now.Add(1 * time.Minute).UnixNano(),
+		GramURNs:      []string{toolURN},
+		SortOrder:     "desc",
+		Cursor:        "",
+		Limit:         10,
+	})
+	require.NoError(t, err)
+	require.Empty(t, logs, "no logs should be written when feature is disabled")
 }

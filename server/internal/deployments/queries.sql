@@ -55,6 +55,7 @@ WITH latest_status as (
 SELECT
   coalesce((select status from latest_status), 'unknown')::text as status,
   log.id,
+  log.seq,
   log.event,
   log.message,
   log.attachment_id,
@@ -63,16 +64,16 @@ SELECT
 FROM deployment_logs log
 WHERE
   log.deployment_id = @deployment_id AND log.project_id = @project_id
-  AND log.id >= CASE 
-    WHEN sqlc.narg(cursor)::uuid IS NOT NULL THEN sqlc.narg(cursor)::uuid
+  AND log.seq >= CASE
+    WHEN sqlc.narg(cursor_seq)::int8 IS NOT NULL THEN sqlc.narg(cursor_seq)::int8
     ELSE (
-      SELECT dl.id
+      SELECT dl.seq
       FROM deployment_logs dl
       WHERE dl.deployment_id = @deployment_id AND dl.project_id = @project_id
-      ORDER BY dl.id ASC LIMIT 1
+      ORDER BY dl.seq ASC LIMIT 1
     )
   END
-ORDER BY log.id ASC
+ORDER BY log.seq ASC
 LIMIT 51;
 
 -- name: GetDeploymentWithAssets :many

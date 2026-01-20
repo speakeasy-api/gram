@@ -102,14 +102,14 @@ export const CodeBlock = ({
 
   return (
     <CodeBlockContext.Provider value={{ code }}>
-      <div
-        className={cn(
-          "group relative w-full overflow-hidden rounded-md border bg-background text-foreground",
-          className,
-        )}
-        {...props}
-      >
-        <div className="relative">
+      <div className="group relative">
+        <div
+          className={cn(
+            "w-full rounded-md border bg-background text-foreground overflow-hidden",
+            className,
+          )}
+          {...props}
+        >
           <div
             className="overflow-x-auto dark:hidden [&>pre]:m-0 [&>pre]:bg-background! [&>pre]:p-4 [&>pre]:text-foreground! [&>pre]:text-sm [&_code]:font-mono [&_code]:text-sm"
             // biome-ignore lint/security/noDangerouslySetInnerHtml: "this is needed."
@@ -120,12 +120,12 @@ export const CodeBlock = ({
             // biome-ignore lint/security/noDangerouslySetInnerHtml: "this is needed."
             dangerouslySetInnerHTML={{ __html: darkHtml }}
           />
-          {children && (
-            <div className="absolute top-2 right-2 flex items-center gap-2">
-              {children}
-            </div>
-          )}
         </div>
+        {children && (
+          <div className="absolute top-2 right-2 flex items-center gap-2 z-10">
+            {children}
+          </div>
+        )}
       </div>
     </CodeBlockContext.Provider>
   );

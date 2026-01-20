@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -216,6 +215,11 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"POLAR_METER_ID_SERVERS"},
 			Required: false,
 		}),
+		&cli.StringFlag{
+			Name:    "custom-domain-cname",
+			Usage:   "The expected CNAME target for custom domain verification (e.g., cname.getgram.ai.)",
+			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_CNAME"},
+		},
 		&cli.PathFlag{
 			Name:     "config-file",
 			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",
@@ -225,8 +229,8 @@ func newWorkerCommand() *cli.Command {
 	}
 
 	flags = append(flags, clickHouseFlags...)
-
 	flags = append(flags, functionsFlags...)
+	flags = append(flags, pulseMCPFlags...)
 
 	return &cli.Command{
 		Name:  "worker",
@@ -355,8 +359,18 @@ func newWorkerCommand() *cli.Command {
 				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{Temporal: temporalClient}, productFeatures, billingTracker)
 			}
 
-			guardianPolicy := guardian.NewDefaultPolicy()
+			// In local development, allow loopback addresses for internal tool-to-tool communication
+			var guardianPolicy *guardian.Policy
+			if c.String("environment") == "local" {
+				guardianPolicy, err = guardian.NewUnsafePolicy([]string{}) // Allow all traffic for local development
+				if err != nil {
+					return fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
+				}
+			} else {
+				guardianPolicy = guardian.NewDefaultPolicy()
+			}
 			if s := c.StringSlice("disallowed-cidr-blocks"); s != nil {
+				var err error
 				guardianPolicy, err = guardian.NewUnsafePolicy(s)
 				if err != nil {
 					return fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
@@ -382,6 +396,13 @@ func newWorkerCommand() *cli.Command {
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, baseChatClient)
 			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator)
+			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
+				pulseTenantID: c.String("pulse-registry-tenant"),
+				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create mcp registry client: %w", err)
+			}
 
 			// Create agents service for the worker
 			agentsService := agents.NewService(
@@ -408,7 +429,7 @@ func newWorkerCommand() *cli.Command {
 				OpenRouterChatClient: baseChatClient,
 				OpenRouter:           openRouter,
 				K8sClient:            k8sClient,
-				ExpectedTargetCNAME:  customdomains.GetCustomDomainCNAME(c.String("environment")),
+				ExpectedTargetCNAME:  c.String("custom-domain-cname"),
 				BillingTracker:       billingTracker,
 				BillingRepository:    billingRepo,
 				RedisClient:          redisClient,
@@ -417,6 +438,7 @@ func newWorkerCommand() *cli.Command {
 				FunctionsVersion:     runnerVersion,
 				RagService:           ragService,
 				AgentsService:        agentsService,
+				MCPRegistryClient:    mcpRegistryClient,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

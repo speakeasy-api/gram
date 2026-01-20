@@ -5,11 +5,10 @@ import { cn } from "@/lib/utils";
 import { useLayoutEffect, useRef, useState } from "react";
 import { TextArea } from "./textarea";
 
-interface InputProps
-  extends Omit<
-    React.ComponentProps<"input">,
-    "handleChange" | "onChange" | "value"
-  > {
+interface InputProps extends Omit<
+  React.ComponentProps<"input">,
+  "handleChange" | "onChange" | "value"
+> {
   value?: string;
   onEnter?: () => void;
   validate?: (value: string) => boolean | string;

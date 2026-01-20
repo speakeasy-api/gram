@@ -10,12 +10,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric/noop"
 
+	keys_gen "github.com/speakeasy-api/gram/server/gen/keys"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -24,7 +26,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/keys"
-	keys_gen "github.com/speakeasy-api/gram/server/gen/keys"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -105,12 +106,12 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	chatClient := openrouter.NewChatClient(logger, devProvisioner)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
 
+	featClient := productfeatures.NewClient(logger, conn, redisClient)
+
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	toolMetrics := tm_repo.New(logger, tracerProvider, chConn, func(context.Context, string) (bool, error) {
-		return true, nil
-	})
+	toolMetrics := tm_repo.New(logger, tracerProvider, chConn)
 
 	var temporalClient temporal_client.Client
 	temporalClient, devserver := infra.NewTemporalClient(t)
@@ -122,7 +123,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, toolMetrics, vectorToolStore, temporalClient)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, toolMetrics, featClient, vectorToolStore, temporalClient)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -185,13 +186,12 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
 	chatClient := openrouter.NewChatClient(logger, devProvisioner)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
+	featClient := productfeatures.NewClient(logger, conn, redisClient)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	toolMetrics := tm_repo.New(logger, tracerProvider, chConn, func(context.Context, string) (bool, error) {
-		return true, nil
-	})
+	toolMetrics := tm_repo.New(logger, tracerProvider, chConn)
 
 	var temporalClient temporal_client.Client
 	temporalClient, devserver := infra.NewTemporalClient(t)
@@ -203,7 +203,7 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthSvc, billingStub, billingStub, toolMetrics, vectorToolStore, temporalClient)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthSvc, billingStub, billingStub, toolMetrics, featClient, vectorToolStore, temporalClient)
 
 	return ctx, &testInstance{
 		service:        svc,

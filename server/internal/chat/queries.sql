@@ -4,6 +4,7 @@ INSERT INTO chats (
   , project_id
   , organization_id
   , user_id
+  , external_user_id
   , title
   , created_at
   , updated_at
@@ -13,13 +14,14 @@ VALUES (
     @project_id,
     @organization_id,
     @user_id,
+    @external_user_id,
     @title,
     NOW(),
     NOW()
 )
-ON CONFLICT (id) DO UPDATE SET 
-    title = @title,
-    updated_at = NOW()
+-- Use no-op update (id = EXCLUDED.id) to ensure RETURNING always returns a row,
+-- whether the chat was newly inserted or already existed.
+ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
 RETURNING id;
 
 -- name: CreateChatMessage :copyfrom
@@ -32,15 +34,16 @@ INSERT INTO chat_messages (
   , message_id
   , tool_call_id
   , user_id
+  , external_user_id
   , finish_reason
   , tool_calls
   , prompt_tokens
   , completion_tokens
   , total_tokens
 )
-VALUES (@chat_id, @role, @project_id::uuid, @content, @model, @message_id, @tool_call_id, @user_id, @finish_reason, @tool_calls, @prompt_tokens, @completion_tokens, @total_tokens);
+VALUES (@chat_id, @role, @project_id::uuid, @content, @model, @message_id, @tool_call_id, @user_id, @external_user_id, @finish_reason, @tool_calls, @prompt_tokens, @completion_tokens, @total_tokens);
 
--- name: ListChats :many
+-- name: ListAllChats :many
 SELECT 
     c.*,
     (
@@ -57,6 +60,25 @@ SELECT
     )::integer as total_tokens
 FROM chats c 
 WHERE c.project_id = @project_id;
+
+-- name: ListChatsForExternalUser :many
+SELECT 
+    c.*,
+    (
+        COALESCE(
+            (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
+            0
+        )
+    )::integer as num_messages 
+    , (
+        COALESCE(
+            (SELECT SUM(total_tokens) FROM chat_messages WHERE chat_id = c.id),
+            0
+        )
+    )::integer as total_tokens
+FROM chats c 
+WHERE c.project_id = @project_id AND c.external_user_id = @external_user_id;
+
 
 -- name: ListChatsForUser :many
 SELECT 
@@ -84,3 +106,15 @@ SELECT * FROM chat_messages WHERE chat_id = @chat_id AND (project_id IS NULL OR 
 
 -- name: CountChatMessages :one
 SELECT COUNT(*) FROM chat_messages WHERE chat_id = @chat_id;
+
+-- name: UpdateChatTitle :exec
+UPDATE chats SET title = @title, updated_at = NOW() WHERE id = @id;
+
+-- name: GetFirstUserChatMessage :one
+SELECT content FROM chat_messages
+WHERE chat_id = @chat_id
+  AND role = 'user'
+  AND content IS NOT NULL
+  AND content != ''
+ORDER BY created_at ASC
+LIMIT 1;

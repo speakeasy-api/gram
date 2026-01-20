@@ -24,13 +24,14 @@ generation:
   schemas:
     allOfMergeStrategy: shallowMerge
   requestBodyFieldName: ""
-  persistentEdits: {}
+  persistentEdits:
+    enabled: "true"
   tests:
     generateTests: true
     generateNewTests: false
     skipResponseBodyAssertions: false
 typescript:
-  version: 0.24.3
+  version: 0.25.12
   acceptHeaderEnum: true
   additionalDependencies:
     dependencies: {}
@@ -56,6 +57,7 @@ typescript:
   enumFormat: union
   envVarPrefix: GRAM
   exportZodModelNamespace: false
+  flatAdditionalProperties: false
   flattenGlobalSecurity: true
   flatteningOrder: parameters-first
   formStringArrayEncodeMode: encoded-string
@@ -82,6 +84,7 @@ typescript:
   outputModelSuffix: output
   packageName: '@gram/client'
   preApplyUnionDiscriminators: true
+  preserveModelFieldNames: false
   responseFormat: flat
   sseFlatResponse: false
   templateVersion: v2

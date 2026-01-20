@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.16.5**](../README.md)
+[**@gram-ai/elements v1.22.1**](../README.md)
 
 ***
 
@@ -93,9 +93,9 @@ const config: ElementsConfig = {
 
 ***
 
-### mcp
+### mcp?
 
-> **mcp**: `string`
+> `optional` **mcp**: `string`
 
 The Gram Server URL to use for the Elements library.
 Can be retrieved from https://app.getgram.ai/{team}/{project}/mcp/{mcp_slug}
@@ -120,6 +120,16 @@ Custom environment variable overrides for the Elements library.
 Will be used to override the environment variables for the MCP server.
 
 For more documentation on passing through different kinds of environment variables, including bearer tokens, see the [Gram documentation](https://www.speakeasy.com/docs/gram/host-mcp/public-private-servers#pass-through-authentication).
+
+***
+
+### gramEnvironment?
+
+> `optional` **gramEnvironment**: `string`
+
+The environment slug to use for resolving secrets.
+When specified, this is sent as the Gram-Environment header to select
+which environment's secrets to use for tool execution.
 
 ***
 
@@ -221,12 +231,37 @@ const config: ElementsConfig = {
 
 ***
 
+### languageModel?
+
+> `optional` **languageModel**: `LanguageModel`
+
+Optional property to override the LLM provider. If you override the model,
+then logs & usage metrics will not be tracked directly via Gram.
+
+Please ensure that you are using an AI SDK v2 compatible model (e.g a
+Vercel AI sdk provider in the v2 semver range), as this is the only variant
+compatible with AI SDK V5
+
+Example with Google Gemini:
+```ts
+import { google } from '@ai-sdk/google';
+
+const googleGemini = google('gemini-3-pro-preview');
+
+const config: ElementsConfig = {
+  {other options}
+  languageModel: googleGemini,
+}
+```
+
+***
+
 ### modal?
 
 > `optional` **modal**: [`ModalConfig`](ModalConfig.md)
 
 The configuration for the modal window.
-Does not apply if variant is 'standalone'.
+Only applicable if variant is 'widget'.
 
 #### Example
 
@@ -294,6 +329,65 @@ const config: ElementsConfig = {
     components: {
       fetchUrl: FetchToolComponent,
     },
+  },
+}
+```
+
+***
+
+### history?
+
+> `optional` **history**: [`HistoryConfig`](HistoryConfig.md)
+
+Configuration for chat history and thread persistence.
+When enabled, conversations are saved and the thread list is shown.
+
+#### Example
+
+```ts
+const config: ElementsConfig = {
+  history: {
+    enabled: true,
+    showThreadList: true,
+  },
+}
+```
+
+***
+
+### api?
+
+> `optional` **api**: `ApiConfig`
+
+The API configuration to use for the Elements library.
+
+Use this to override the default API URL, or add explicit auth configuration
+
+#### Example
+
+```ts
+const config: ElementsConfig = {
+  api: {
+    url: 'https://api.getgram.ai',
+  },
+}
+```
+
+***
+
+### errorTracking?
+
+> `optional` **errorTracking**: [`ErrorTrackingConfigOption`](ErrorTrackingConfigOption.md)
+
+Error tracking configuration.
+By default, errors are reported to help improve the Elements library.
+
+#### Example
+
+```ts
+const config: ElementsConfig = {
+  errorTracking: {
+    enabled: false, // Opt out of error reporting
   },
 }
 ```

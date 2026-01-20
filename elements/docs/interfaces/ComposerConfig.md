@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.16.5**](../README.md)
+[**@gram-ai/elements v1.22.1**](../README.md)
 
 ***
 
@@ -30,6 +30,25 @@ Configuration for file attachments in the composer.
 Set to `false` to disable attachments entirely.
 Set to `true` for default attachment behavior.
 Or provide an object for fine-grained control.
+
+#### Default
+
+```ts
+true
+```
+
+***
+
+### toolMentions?
+
+> `optional` **toolMentions**: `boolean` \| [`ToolMentionsConfig`](ToolMentionsConfig.md)
+
+Configuration for
+
+#### Tool
+
+mentions in the composer.
+Set to `false` to disable, `true` for defaults, or an object for fine-grained control.
 
 #### Default
 

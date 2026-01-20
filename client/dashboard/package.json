@@ -1,7 +1,7 @@
 {
   "name": "dashboard",
   "private": true,
-  "version": "0.25.0",
+  "version": "0.26.13",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,12 +16,16 @@
     "@ai-sdk/openai": "catalog:",
     "@ai-sdk/react": "catalog:",
     "@ai-sdk/ui-utils": "catalog:",
+    "@assistant-ui/react": "^0.11.53",
+    "@assistant-ui/react-markdown": "^0.11.9",
     "@datadog/browser-rum": "^6.24.1",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/modifiers": "^9.0.0",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@gram-ai/elements": "workspace:*",
     "@gram/client": "workspace:*",
+    "@monaco-editor/react": "^4.7.0",
     "@openrouter/ai-sdk-provider": "^1.2.0",
     "@polar-sh/checkout": "^0.1.14",
     "@radix-ui/react-accordion": "^1.2.12",
@@ -58,11 +62,11 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
-    "fflate": "^0.8.2",
     "embla-carousel-react": "^8.6.0",
+    "fflate": "^0.8.2",
     "hast": "^1.0.0",
     "lucide-react": "^0.554.0",
-    "@monaco-editor/react": "^4.6.0",
+    "monaco-editor": "^0.52.0",
     "motion": "^12.23.24",
     "motion-plus": "^1.5.1",
     "nanoid": "^5.1.6",
@@ -73,7 +77,7 @@
     "react-dom": "^19.2.0",
     "react-error-boundary": "^6.0.0",
     "react-merge-refs": "^3.0.2",
-    "react-router": "^7.9.6",
+    "react-router": "^7.12.0",
     "shiki": "^3.15.0",
     "sonner": "^2.0.7",
     "streamdown": "^1.3.0",
@@ -85,14 +89,14 @@
     "use-stick-to-bottom": "^1.1.1",
     "uuid": "^13.0.0",
     "vaul": "^1.1.2",
+    "vega": "^6.2.0",
     "zod": "3.25.76",
-    "zustand": "^5.0.4"
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@types/hast": "^3.0.4",
     "@types/node": "^24.10.1",
-    "monaco-editor": "^0.52.0",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@types/three": "^0.181.0",
@@ -101,9 +105,9 @@
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
-    "vite-plugin-monaco-editor": "^1.1.0",
     "typescript": "catalog:",
     "typescript-eslint": "^8.47.0",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "vite-plugin-monaco-editor": "^1.1.0"
   }
 }

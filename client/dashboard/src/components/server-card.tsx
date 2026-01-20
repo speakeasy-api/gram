@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { UpdatedAt } from "@/components/updated-at";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn } from "@/lib/utils";
-import { useMcpUrl } from "@/pages/mcp/MCPDetails";
+import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { useRoutes } from "@/routes";
 import { ToolEntryType, ToolsetEntry } from "@gram/client/models/components";
 import {

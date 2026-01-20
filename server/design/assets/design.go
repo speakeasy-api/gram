@@ -213,6 +213,119 @@ var _ = Service("assets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListAssets"}`)
 	})
 
+	Method("uploadChatAttachment", func() {
+		Description("Upload a chat attachment to Gram.")
+
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ChatSessionsToken, security.ProjectSlug)
+
+		Payload(UploadChatAttachmentForm)
+
+		Result(UploadChatAttachmentResult)
+
+		HTTP(func() {
+			POST("/rpc/assets.uploadChatAttachment")
+			Header("content_type:Content-Type")
+			Header("content_length:Content-Length")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			security.SessionHeader()
+			security.ChatSessionsTokenHeader()
+			SkipRequestBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "uploadChatAttachment")
+		Meta("openapi:extension:x-speakeasy-name-override", "uploadChatAttachment")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UploadChatAttachment"}`)
+	})
+
+	Method("serveChatAttachment", func() {
+		Description("Serve a chat attachment from Gram.")
+
+		Payload(ServeChatAttachmentForm)
+		Result(ServeChatAttachmentResult)
+
+		Security(security.ByKey)
+		Security(security.Session)
+		Security(security.ChatSessionsToken)
+
+		HTTP(func() {
+			GET("/rpc/assets.serveChatAttachment")
+			Param("id")
+			Param("project_id")
+
+			Response(StatusOK, func() {
+				Header("content_type:Content-Type")
+				Header("content_length:Content-Length")
+				Header("last_modified:Last-Modified")
+			})
+
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ChatSessionsTokenHeader()
+			SkipResponseBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "serveChatAttachment")
+		Meta("openapi:extension:x-speakeasy-name-override", "serveChatAttachment")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "serveChatAttachment"}`)
+	})
+
+	Method("createSignedChatAttachmentURL", func() {
+		Description("Create a time-limited signed URL to access a chat attachment without authentication.")
+
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ChatSessionsToken, security.ProjectSlug)
+
+		Payload(CreateSignedChatAttachmentURLForm)
+		Result(CreateSignedChatAttachmentURLResult)
+
+		HTTP(func() {
+			POST("/rpc/assets.createSignedChatAttachmentURL")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			security.SessionHeader()
+			security.ChatSessionsTokenHeader()
+		})
+
+		Meta("openapi:operationId", "createSignedChatAttachmentURL")
+		Meta("openapi:extension:x-speakeasy-name-override", "createSignedChatAttachmentURL")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateSignedChatAttachmentURL"}`)
+	})
+
+	Method("serveChatAttachmentSigned", func() {
+		Description("Serve a chat attachment using a signed URL token.")
+
+		NoSecurity()
+
+		Payload(ServeChatAttachmentSignedForm)
+		Result(ServeChatAttachmentSignedResult)
+
+		HTTP(func() {
+			GET("/rpc/assets.serveChatAttachmentSigned")
+			Param("token")
+
+			Response(StatusOK, func() {
+				Header("content_type:Content-Type")
+				Header("content_length:Content-Length")
+				Header("last_modified:Last-Modified")
+				Header("access_control_allow_origin:Access-Control-Allow-Origin")
+			})
+
+			SkipResponseBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "serveChatAttachmentSigned")
+		Meta("openapi:extension:x-speakeasy-name-override", "serveChatAttachmentSigned")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "serveChatAttachmentSigned"}`)
+	})
+
 })
 
 var ListAssetsResult = Type("ListAssetsResult", func() {
@@ -333,7 +446,7 @@ var Asset = Type("Asset", func() {
 
 	Attribute("id", String, "The ID of the asset")
 	Attribute("kind", String, func() {
-		Enum("openapiv3", "image", "functions", "unknown")
+		Enum("openapiv3", "image", "functions", "chat_attachment", "unknown")
 	})
 	Attribute("sha256", String, "The SHA256 hash of the asset")
 	Attribute("content_type", String, "The content type of the asset")
@@ -346,4 +459,77 @@ var Asset = Type("Asset", func() {
 		Description("The last update date of the asset.")
 		Format(FormatDateTime)
 	})
+})
+
+var UploadChatAttachmentForm = Type("UploadChatAttachmentForm", func() {
+	Required("content_type", "content_length")
+	security.ByKeyPayload()
+	security.SessionPayload()
+	security.ProjectPayload()
+	security.ChatSessionsTokenPayload()
+
+	Attribute("content_type", String)
+	Attribute("content_length", Int64)
+})
+
+var UploadChatAttachmentResult = Type("UploadChatAttachmentResult", func() {
+	Required("asset", "url")
+
+	Attribute("asset", Asset, "The asset entry that was created in Gram")
+	Attribute("url", String, "The URL to serve the chat attachment")
+})
+
+var ServeChatAttachmentForm = Type("ServeChatAttachmentForm", func() {
+	Required("id", "project_id")
+	security.ByKeyPayload()
+	security.SessionPayload()
+	security.ChatSessionsTokenPayload()
+
+	Attribute("id", String, "The ID of the attachment to serve")
+	Attribute("project_id", String, "The project ID that the attachment belongs to")
+})
+
+var ServeChatAttachmentResult = Type("ServeChatAttachmentResult", func() {
+	Required("content_type", "content_length", "last_modified")
+
+	Attribute("content_type", String)
+	Attribute("content_length", Int64)
+	Attribute("last_modified", String)
+})
+
+var CreateSignedChatAttachmentURLForm = Type("CreateSignedChatAttachmentURLForm", func() {
+	Required("id", "project_id")
+	security.ByKeyPayload()
+	security.SessionPayload()
+	security.ProjectPayload()
+	security.ChatSessionsTokenPayload()
+
+	Attribute("id", String, "The ID of the chat attachment")
+	Attribute("project_id", String, "The project ID that the attachment belongs to")
+	Attribute("ttl_seconds", Int, "Time-to-live in seconds (default: 600, max: 3600)")
+})
+
+var CreateSignedChatAttachmentURLResult = Type("CreateSignedChatAttachmentURLResult", func() {
+	Required("url", "expires_at")
+
+	Attribute("url", String, "The signed URL to access the chat attachment")
+	Attribute("expires_at", String, func() {
+		Description("When the signed URL expires")
+		Format(FormatDateTime)
+	})
+})
+
+var ServeChatAttachmentSignedForm = Type("ServeChatAttachmentSignedForm", func() {
+	Required("token")
+
+	Attribute("token", String, "The signed JWT token")
+})
+
+var ServeChatAttachmentSignedResult = Type("ServeChatAttachmentSignedResult", func() {
+	Required("content_type", "content_length", "last_modified")
+
+	Attribute("content_type", String)
+	Attribute("content_length", Int64)
+	Attribute("last_modified", String)
+	Attribute("access_control_allow_origin", String)
 })

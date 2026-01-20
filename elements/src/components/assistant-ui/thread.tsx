@@ -6,7 +6,6 @@ import {
   ChevronRightIcon,
   CopyIcon,
   PencilIcon,
-  RefreshCwIcon,
   Settings2,
   Square,
 } from 'lucide-react'
@@ -21,42 +20,66 @@ import {
   ThreadPrimitive,
 } from '@assistant-ui/react'
 
-import { useState, useEffect, useRef, type FC } from 'react'
 import { LazyMotion, MotionConfig, domAnimation } from 'motion/react'
 import * as m from 'motion/react-m'
+import { useEffect, useRef, useState, type FC } from 'react'
+import { AnimatePresence } from 'motion/react'
 
-import { Button } from '@/components/ui/button'
-import { MarkdownText } from '@/components/assistant-ui/markdown-text'
-import { ToolFallback } from '@/components/assistant-ui/tool-fallback'
-import { Reasoning, ReasoningGroup } from '@/components/assistant-ui/reasoning'
-import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
 import {
   ComposerAddAttachment,
   ComposerAttachments,
   UserMessageAttachments,
 } from '@/components/assistant-ui/attachment'
+import { MarkdownText } from '@/components/assistant-ui/markdown-text'
+import { Reasoning, ReasoningGroup } from '@/components/assistant-ui/reasoning'
+import { ToolFallback } from '@/components/assistant-ui/tool-fallback'
+import { ToolMentionAutocomplete } from '@/components/assistant-ui/tool-mention-autocomplete'
+import { MentionedToolsBadges } from '@/components/assistant-ui/mentioned-tools-badges'
+import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
+import { Button } from '@/components/ui/button'
+import { useToolMentions } from '@/hooks/useToolMentions'
 
-import { cn } from '@/lib/utils'
+import { useDensity } from '@/hooks/useDensity'
 import { useElements } from '@/hooks/useElements'
 import { useRadius } from '@/hooks/useRadius'
-import { useDensity } from '@/hooks/useDensity'
 import { useThemeProps } from '@/hooks/useThemeProps'
+import { EASE_OUT_QUINT } from '@/lib/easing'
+import { MODELS } from '@/lib/models'
+import { cn } from '@/lib/utils'
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '../ui/tooltip'
-import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
-import { MODELS } from '@/lib/models'
-import { EASE_OUT_QUINT } from '@/lib/easing'
 import { ToolGroup } from './tool-group'
 
-export const Thread: FC = () => {
+const StaticSessionWarning = () => (
+  <div className="m-2 rounded-md border border-amber-500 bg-amber-100 px-4 py-3 text-sm text-amber-800 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-200">
+    <strong>Warning:</strong> You are using a static session token in the
+    client. It will expire shortly. Please{' '}
+    <a
+      href="https://github.com/speakeasy-api/gram/tree/main/elements#setting-up-your-backend"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-amber-700 underline hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200"
+    >
+      set up a session endpoint to avoid this warning.
+    </a>
+  </div>
+)
+
+interface ThreadProps {
+  className?: string
+}
+
+export const Thread: FC<ThreadProps> = ({ className }) => {
   const themeProps = useThemeProps()
   const d = useDensity()
   const { config } = useElements()
   const components = config.components ?? {}
+  const showStaticSessionWarning = config.api && 'sessionToken' in config.api
 
   return (
     <LazyMotion features={domAnimation}>
@@ -64,7 +87,8 @@ export const Thread: FC = () => {
         <ThreadPrimitive.Root
           className={cn(
             'aui-root aui-thread-root bg-background @container flex h-full flex-col',
-            themeProps.className
+            themeProps.className,
+            className
           )}
         >
           <ThreadPrimitive.Viewport
@@ -80,6 +104,8 @@ export const Thread: FC = () => {
                 <ThreadWelcome />
               )}
             </ThreadPrimitive.If>
+
+            {showStaticSessionWarning && <StaticSessionWarning />}
 
             <ThreadPrimitive.Messages
               components={{
@@ -151,7 +177,7 @@ const ThreadWelcome: FC = () => {
             exit={{ opacity: 0, y: 10 }}
             transition={{ duration: 0.25, ease: EASE_OUT_QUINT }}
             className={cn(
-              'aui-thread-welcome-message-motion-1 font-semibold',
+              'aui-thread-welcome-message-motion-1 text-foreground font-semibold',
               d('text-title')
             )}
           >
@@ -177,7 +203,7 @@ const ThreadWelcome: FC = () => {
 }
 
 const ThreadSuggestions: FC = () => {
-  const { config, isLoadingMCPTools } = useElements()
+  const { config } = useElements()
   const r = useRadius()
   const d = useDensity()
   const suggestions = config.welcome?.suggestions ?? []
@@ -195,7 +221,7 @@ const ThreadSuggestions: FC = () => {
           ? 'flex flex-wrap items-center justify-center'
           : suggestions.length === 1
             ? 'flex'
-            : 'grid @md:grid-cols-2'
+            : 'grid max-w-fit @md:grid-cols-2'
       )}
     >
       {suggestions.map((suggestion, index) => (
@@ -214,12 +240,7 @@ const ThreadSuggestions: FC = () => {
             !isStandalone && 'nth-[n+3]:hidden @md:nth-[n+3]:block'
           )}
         >
-          <ThreadPrimitive.Suggestion
-            disabled={isLoadingMCPTools}
-            prompt={suggestion.action}
-            send
-            asChild
-          >
+          <ThreadPrimitive.Suggestion prompt={suggestion.prompt} send asChild>
             <Button
               variant="ghost"
               className={cn(
@@ -229,9 +250,9 @@ const ThreadSuggestions: FC = () => {
                   ? `flex-row items-center ${d('gap-sm')} ${d('px-md')} ${d('py-sm')} ${r('full')}`
                   : `w-full flex-1 flex-col flex-wrap items-start justify-start ${d('gap-sm')} ${d('px-lg')} ${d('py-md')} ${r('xl')}`
               )}
-              aria-label={suggestion.action}
+              aria-label={suggestion.prompt}
             >
-              <span className="aui-thread-welcome-suggestion-text-1 text-sm font-medium">
+              <span className="aui-thread-welcome-suggestion-text-1 text-foreground text-sm font-medium">
                 {suggestion.title}
               </span>
               <span className="aui-thread-welcome-suggestion-text-2 text-muted-foreground text-sm">
@@ -245,8 +266,97 @@ const ThreadSuggestions: FC = () => {
   )
 }
 
+/**
+ * Component that handles tool mentions (@tool) in the composer.
+ * Shows autocomplete dropdown and badges for mentioned tools.
+ */
+const ComposerToolMentions: FC<{
+  tools: Record<string, unknown> | undefined
+}> = ({ tools }) => {
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const {
+    mentionableTools,
+    mentionedToolIds,
+    value,
+    cursorPosition,
+    textareaRef,
+    updateCursorPosition,
+    handleAutocompleteChange,
+    removeMention,
+    isActive,
+  } = useToolMentions({ tools })
+
+  // Find and attach to the textarea within the composer
+  useEffect(() => {
+    if (!isActive) return
+
+    const findTextarea = () => {
+      const textarea = document.querySelector(
+        '.aui-composer-input'
+      ) as HTMLTextAreaElement | null
+      if (textarea && textareaRef.current !== textarea) {
+        textareaRef.current = textarea
+
+        const handleSelectionChange = () => updateCursorPosition()
+        textarea.addEventListener('click', handleSelectionChange)
+        textarea.addEventListener('keyup', handleSelectionChange)
+        textarea.addEventListener('input', handleSelectionChange)
+
+        return () => {
+          textarea.removeEventListener('click', handleSelectionChange)
+          textarea.removeEventListener('keyup', handleSelectionChange)
+          textarea.removeEventListener('input', handleSelectionChange)
+        }
+      }
+    }
+
+    const cleanup = findTextarea()
+
+    const observer = new MutationObserver(() => {
+      findTextarea()
+    })
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    })
+
+    return () => {
+      cleanup?.()
+      observer.disconnect()
+    }
+  }, [isActive, textareaRef, updateCursorPosition])
+
+  if (!isActive) {
+    return null
+  }
+
+  return (
+    <div ref={containerRef} className="aui-composer-tool-mentions relative">
+      {/* Badges showing mentioned tools */}
+      <MentionedToolsBadges
+        mentionedToolIds={mentionedToolIds}
+        tools={mentionableTools}
+        onRemove={removeMention}
+      />
+
+      {/* Autocomplete dropdown */}
+      <AnimatePresence>
+        <ToolMentionAutocomplete
+          tools={mentionableTools}
+          value={value}
+          cursorPosition={cursorPosition}
+          onValueChange={handleAutocompleteChange}
+          textareaRef={textareaRef}
+        />
+      </AnimatePresence>
+    </div>
+  )
+}
+
 const Composer: FC = () => {
-  const { config } = useElements()
+  const { config, mcpTools } = useElements()
   const r = useRadius()
   const d = useDensity()
   const composerConfig = config.composer ?? {
@@ -254,7 +364,15 @@ const Composer: FC = () => {
     attachments: true,
   }
   const components = config.components ?? {}
-  const { isLoadingMCPTools } = useElements()
+
+  // Determine if tool mentions are enabled (default: true)
+  const toolMentionsEnabled =
+    composerConfig.toolMentions === undefined ||
+    composerConfig.toolMentions === true ||
+    (typeof composerConfig.toolMentions === 'object' &&
+      composerConfig.toolMentions.enabled !== false)
+
+  const composerRootRef = useRef<HTMLFormElement>(null)
 
   if (components.Composer) {
     return <components.Composer />
@@ -271,12 +389,15 @@ const Composer: FC = () => {
     >
       <ThreadScrollToBottom />
       <ComposerPrimitive.Root
+        ref={composerRootRef}
         className={cn(
           'aui-composer-root group/input-group border-input bg-background has-[textarea:focus-visible]:border-ring has-[textarea:focus-visible]:ring-ring/5 dark:bg-background relative flex w-full flex-col border px-1 pt-2 shadow-xs transition-[color,box-shadow] outline-none has-[textarea:focus-visible]:ring-1',
           r('xl')
         )}
       >
         {composerConfig.attachments && <ComposerAttachments />}
+
+        {toolMentionsEnabled && <ComposerToolMentions tools={mcpTools} />}
 
         <ComposerPrimitive.Input
           placeholder={composerConfig.placeholder}
@@ -287,7 +408,6 @@ const Composer: FC = () => {
           )}
           rows={1}
           autoFocus
-          disabled={isLoadingMCPTools}
           aria-label="Message input"
         />
         <ComposerAction />
@@ -399,7 +519,9 @@ const ComposerAction: FC = () => {
           <div className="aui-composer-add-attachment-placeholder" />
         )}
 
-        {config.model?.showModelPicker && <ComposerModelPicker />}
+        {config.model?.showModelPicker && !config.languageModel && (
+          <ComposerModelPicker />
+        )}
       </div>
 
       <ThreadPrimitive.If running={false}>
@@ -476,7 +598,7 @@ const AssistantMessage: FC = () => {
         </div>
 
         <div className="aui-assistant-message-footer mt-2 ml-2 flex">
-          <BranchPicker />
+          {/* <BranchPicker /> */}
           <AssistantActionBar />
         </div>
       </div>
@@ -506,11 +628,11 @@ const AssistantActionBar: FC = () => {
           </MessagePrimitive.If>
         </TooltipIconButton>
       </ActionBarPrimitive.Copy>
-      <ActionBarPrimitive.Reload asChild>
+      {/* <ActionBarPrimitive.Reload asChild>
         <TooltipIconButton tooltip="Refresh">
           <RefreshCwIcon />
         </TooltipIconButton>
-      </ActionBarPrimitive.Reload>
+      </ActionBarPrimitive.Reload> */}
     </ActionBarPrimitive.Root>
   )
 }

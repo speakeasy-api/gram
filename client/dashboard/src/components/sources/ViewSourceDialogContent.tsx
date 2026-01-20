@@ -1,11 +1,11 @@
 import { Button, Dialog } from "@speakeasy-api/moonshine";
 import { Type } from "@/components/ui/type";
-import { MonacoEditor } from "@/components/monaco-editor";
 import { SkeletonCode } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
+import MonacoEditorLazy from "../monaco-editor.lazy";
 
 interface ViewSourceDialogContentProps {
   source: {
@@ -145,7 +145,7 @@ export function ViewSourceDialogContent({
             </Button>
           </div>
         ) : sourceContent ? (
-          <MonacoEditor
+          <MonacoEditorLazy
             value={sourceContent.content}
             language={sourceContent.language}
             height="calc(90vh - 120px)"

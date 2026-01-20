@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.16.5**](../README.md)
+[**@gram-ai/elements v1.22.1**](../README.md)
 
 ***
 
@@ -6,4 +6,4 @@
 
 # Type Alias: ColorScheme
 
-> **ColorScheme** = *typeof* `COLOR_SCHEMES`\[`number`\]
+> **ColorScheme** = *typeof* [`COLOR_SCHEMES`](COLOR_SCHEMES.md)\[`number`\]

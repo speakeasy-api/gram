@@ -94,12 +94,18 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 	}
 
 	// Set auth context from JWT claims
+	externalUserID := ""
+	if claims.ExternalUserID != nil {
+		externalUserID = *claims.ExternalUserID
+	}
+
 	authCtx := &contextvalues.AuthContext{
 		ActiveOrganizationID: claims.OrgID,
 		ProjectID:            &projectID,
 		OrganizationSlug:     claims.OrganizationSlug,
 		ProjectSlug:          &claims.ProjectSlug,
 		UserID:               "",
+		ExternalUserID:       externalUserID,
 		Email:                nil,
 		AccountType:          "",
 		APIKeyScopes:         nil,

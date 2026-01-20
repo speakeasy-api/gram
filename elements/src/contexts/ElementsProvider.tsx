@@ -1,14 +1,37 @@
 import { FrontendTools } from '@/components/FrontendTools'
+import { ROOT_SELECTOR } from '@/constants/tailwind'
+import {
+  isLocalThreadId,
+  useGramThreadListAdapter,
+} from '@/hooks/useGramThreadListAdapter'
+import { useMCPTools } from '@/hooks/useMCPTools'
+import { useToolApproval } from '@/hooks/useToolApproval'
+import { getApiUrl } from '@/lib/api'
+import { initErrorTracking, trackError } from '@/lib/errorTracking'
 import { MODELS } from '@/lib/models'
+import {
+  clearFrontendToolApprovalConfig,
+  getEnabledTools,
+  setFrontendToolApprovalConfig,
+  toAISDKTools,
+  wrapToolsWithApproval,
+  type ApprovalHelpers,
+  type FrontendTool,
+} from '@/lib/tools'
 import { recommended } from '@/plugins'
-import { ElementsProviderProps, Model } from '@/types'
+import { ElementsConfig, Model } from '@/types'
 import { Plugin } from '@/types/plugins'
-import { AssistantRuntimeProvider } from '@assistant-ui/react'
+import {
+  AssistantRuntimeProvider,
+  AssistantTool,
+  unstable_useRemoteThreadListRuntime as useRemoteThreadListRuntime,
+} from '@assistant-ui/react'
 import {
   frontendTools as convertFrontendToolsToAISDKTools,
   useChatRuntime,
 } from '@assistant-ui/react-ai-sdk'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   convertToModelMessages,
   smoothStream,
@@ -18,14 +41,22 @@ import {
   type ChatTransport,
   type UIMessage,
 } from 'ai'
-import { useMemo, useState } from 'react'
-import { ElementsContext } from './elementsContextType'
-import { getEnabledTools, toAISDKTools } from '@/lib/tools'
-import { useSession } from '@/hooks/useSession'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useMCPTools } from '@/hooks/useMCPTools'
+import {
+  ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import { useAuth } from '../hooks/useAuth'
+import { ElementsContext } from './contexts'
+import { ToolApprovalProvider } from './ToolApprovalContext'
 
-const GRAM_API_URL = 'https://app.getgram.ai'
+export interface ElementsProviderProps {
+  children: ReactNode
+  config: ElementsConfig
+}
 
 const BASE_SYSTEM_PROMPT = `You are a helpful assistant that can answer questions and help with tasks.`
 
@@ -43,18 +74,47 @@ function mergeInternalSystemPromptWith(
   ${plugins.map((plugin) => `- ${plugin.language}: ${plugin.prompt}`).join('\n')}`
 }
 
-async function defaultGetSession(): Promise<string> {
-  const response = await fetch('/chat/session', { method: 'POST' })
-  const data = await response.json()
-  return data.client_token
+/**
+ * Cleans messages before sending to the model to work around an AI SDK bug.
+ * Strips callProviderMetadata from all parts (AI SDK bug #9731)
+ */
+function cleanMessagesForModel(messages: UIMessage[]): UIMessage[] {
+  return messages.map((message) => {
+    const partsArray = message.parts
+    if (!Array.isArray(partsArray)) {
+      return message
+    }
+
+    // Process each part: strip providerOptions/providerMetadata and filter reasoning
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cleanedParts = partsArray.map((part: any) => {
+      // Strip providerOptions and providerMetadata from all remaining parts
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { callProviderMetadata: _, ...cleanPart } = part
+      return cleanPart
+    })
+
+    return {
+      ...message,
+      parts: cleanedParts,
+    }
+  })
 }
 
-const ElementsProviderInner = ({
+/**
+ * Main provider component that sets up auth, tools, and transport.
+ * Delegates to either WithHistory or WithoutHistory based on config.
+ */
+const ElementsProviderWithApproval = ({
   children,
   config,
-  getSession = defaultGetSession,
 }: ElementsProviderProps) => {
-  const session = useSession({ getSession, projectSlug: config.projectSlug })
+  const apiUrl = getApiUrl(config)
+  const auth = useAuth({
+    auth: config.api,
+    projectSlug: config.projectSlug,
+  })
+  const toolApproval = useToolApproval()
 
   const [model, setModel] = useState<Model>(
     config.model?.defaultModel ?? MODELS[0]
@@ -64,7 +124,6 @@ const ElementsProviderInner = ({
   )
   const [isOpen, setIsOpen] = useState(config.modal?.defaultOpen)
 
-  // If there are any user provided plugins, use them, otherwise use the recommended plugins
   const plugins = config.plugins ?? recommended
 
   const systemPrompt = mergeInternalSystemPromptWith(
@@ -72,100 +131,382 @@ const ElementsProviderInner = ({
     plugins
   )
 
-  const { data: mcpTools, isLoading: mcpToolsLoading } = useMCPTools({
-    getSession,
-    projectSlug: config.projectSlug,
+  // Initialize error tracking on mount
+  useEffect(() => {
+    initErrorTracking({
+      enabled: config.errorTracking?.enabled,
+      projectSlug: config.projectSlug,
+      variant: config.variant,
+    })
+  }, [])
+
+  const { data: mcpTools } = useMCPTools({
+    auth,
     mcp: config.mcp,
     environment: config.environment ?? {},
+    toolsToInclude: config.tools?.toolsToInclude,
+    gramEnvironment: config.gramEnvironment,
   })
 
-  // Show loading if we don't have tools yet or they're actively loading
-  const isLoadingMCPTools = !mcpTools || mcpToolsLoading
+  // Store approval helpers in ref so they can be used in async contexts
+  const approvalHelpersRef = useRef<ApprovalHelpers>({
+    requestApproval: toolApproval.requestApproval,
+    isToolApproved: toolApproval.isToolApproved,
+    whitelistTool: toolApproval.whitelistTool,
+  })
 
-  // Create custom transport
-  const transport = useMemo<ChatTransport<UIMessage> | undefined>(
+  approvalHelpersRef.current = {
+    requestApproval: toolApproval.requestApproval,
+    isToolApproved: toolApproval.isToolApproved,
+    whitelistTool: toolApproval.whitelistTool,
+  }
+
+  const getApprovalHelpers = useCallback((): ApprovalHelpers => {
+    return {
+      requestApproval: (...args) =>
+        approvalHelpersRef.current.requestApproval(...args),
+      isToolApproved: (...args) =>
+        approvalHelpersRef.current.isToolApproved(...args),
+      whitelistTool: (...args) =>
+        approvalHelpersRef.current.whitelistTool(...args),
+    }
+  }, [])
+
+  // Set up frontend tool approval config for runtime checking
+  useEffect(() => {
+    if (config.tools?.toolsRequiringApproval) {
+      setFrontendToolApprovalConfig(
+        getApprovalHelpers(),
+        config.tools.toolsRequiringApproval
+      )
+    }
+    return () => {
+      clearFrontendToolApprovalConfig()
+    }
+  }, [config.tools?.toolsRequiringApproval, getApprovalHelpers])
+
+  // Ref to access runtime from within transport's sendMessages.
+  // This solves a circular dependency: transport needs runtime.thread.getModelContext(),
+  // but runtime is created using transport. The ref gets populated after runtime creation.
+  const runtimeRef = useRef<ReturnType<typeof useChatRuntime> | null>(null)
+
+  // Generate a stable chat ID for server-side persistence (when history is disabled)
+  // When history is enabled, the thread adapter manages chat IDs instead
+  const chatIdRef = useRef<string | null>(null)
+
+  // Map to share local thread IDs to UUIDs between adapter and transport (for history mode)
+  const localIdToUuidMapRef = useRef(new Map<string, string>())
+
+  // Create chat transport configuration
+  const transport = useMemo<ChatTransport<UIMessage>>(
     () => ({
       sendMessages: async ({ messages, abortSignal }) => {
-        if (!session) {
-          throw new Error('No session found')
+        const usingCustomModel = !!config.languageModel
+
+        if (auth.isLoading) {
+          throw new Error('Session is loading')
         }
 
-        if (mcpToolsLoading || !mcpTools) {
-          throw new Error('MCP tools are still being discovered')
+        // Get chat ID - try runtime's thread remoteId first (history mode),
+        // fall back to generated ID (non-history mode)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const runtimeAny = runtimeRef.current as any
+
+        // Try multiple paths to get thread info
+        const threadListItemState = runtimeAny?.threadListItem?.getState?.()
+        const threadsState = runtimeAny?.threads?.getState?.()
+
+        // Get the thread ID - try different sources
+        const threadRemoteId = threadListItemState?.remoteId as
+          | string
+          | undefined
+        const localThreadId = (threadListItemState?.id ??
+          threadsState?.mainThreadId ??
+          threadsState?.threadIds?.[0]) as string | undefined
+
+        let chatId = threadRemoteId
+
+        if (isLocalThreadId(chatId) || (!chatId && localThreadId)) {
+          const lookupKey = chatId ?? localThreadId
+          if (lookupKey) {
+            // For local thread IDs, check if we already have a UUID mapping
+            const existingUuid = localIdToUuidMapRef.current.get(lookupKey)
+            if (existingUuid) {
+              chatId = existingUuid
+            } else {
+              // Generate a new UUID and store the mapping
+              const newUuid = crypto.randomUUID()
+              localIdToUuidMapRef.current.set(lookupKey, newUuid)
+              chatId = newUuid
+            }
+          }
         }
 
-        const context = runtime.thread.getModelContext()
+        if (!chatId) {
+          // Non-history mode fallback - use stable chatIdRef
+          if (!chatIdRef.current) {
+            chatIdRef.current = crypto.randomUUID()
+          }
+          chatId = chatIdRef.current
+        }
+
+        const context = runtimeRef.current?.thread.getModelContext()
         const frontendTools = toAISDKTools(
           getEnabledTools(context?.tools ?? {})
         )
 
-        // Create OpenRouter model
-        const openRouterModel = createOpenRouter({
-          baseURL: GRAM_API_URL,
-          apiKey: 'unused, but must be set',
-          headers: {
-            'Gram-Project': config.projectSlug,
-            'Gram-Chat-Session': session,
-          },
-        })
+        // Include Gram-Chat-ID header for chat persistence and Gram-Environment for environment selection
+        const headersWithChatId = {
+          ...auth.headers,
+          'Gram-Chat-ID': chatId,
+          ...(config.gramEnvironment && {
+            'Gram-Environment': config.gramEnvironment,
+          }),
+        }
+
+        // Create OpenRouter model (only needed when not using custom model)
+        const openRouterModel = usingCustomModel
+          ? null
+          : createOpenRouter({
+              baseURL: apiUrl,
+              apiKey: 'unused, but must be set',
+              headers: headersWithChatId,
+            })
+
+        if (config.languageModel) {
+          console.log('Using custom language model', config.languageModel)
+        }
+
+        // Combine tools - MCP tools only available when not using custom model
+        const combinedTools: ToolSet = {
+          ...mcpTools,
+          ...convertFrontendToolsToAISDKTools(frontendTools),
+        } as ToolSet
+
+        // Wrap tools that require approval
+        const tools = wrapToolsWithApproval(
+          combinedTools,
+          config.tools?.toolsRequiringApproval,
+          getApprovalHelpers()
+        )
 
         // Stream the response
-        const result = streamText({
-          system: systemPrompt,
-          model: openRouterModel.chat(model),
-          messages: convertToModelMessages(messages),
-          tools: {
-            ...mcpTools,
-            ...convertFrontendToolsToAISDKTools(frontendTools),
-          } as ToolSet,
-          stopWhen: stepCountIs(10),
-          experimental_transform: smoothStream({ delayInMs: 15 }),
-          abortSignal,
-        })
+        const modelToUse = config.languageModel
+          ? config.languageModel
+          : openRouterModel!.chat(model)
 
-        return result.toUIMessageStream()
+        try {
+          // This works around AI SDK bug where these fields cause validation failures
+          const cleanedMessages = cleanMessagesForModel(messages)
+          const modelMessages = convertToModelMessages(cleanedMessages)
+
+          const result = streamText({
+            system: systemPrompt,
+            model: modelToUse,
+            messages: modelMessages,
+            tools,
+            stopWhen: stepCountIs(10),
+            experimental_transform: smoothStream({ delayInMs: 15 }),
+            abortSignal,
+            onError: ({ error }) => {
+              console.error('Stream error in onError callback:', error)
+              trackError(error, { source: 'streaming' })
+            },
+          })
+
+          return result.toUIMessageStream()
+        } catch (error) {
+          console.error('Error creating stream:', error)
+          trackError(error, { source: 'stream-creation' })
+          throw error
+        }
       },
       reconnectToStream: async () => {
-        // Not implemented for client-side streaming
         throw new Error('Stream reconnection not supported')
       },
     }),
-    [config, model, systemPrompt, session, mcpTools, mcpToolsLoading]
+    [
+      config.languageModel,
+      config.tools?.toolsRequiringApproval,
+      model,
+      systemPrompt,
+      mcpTools,
+      getApprovalHelpers,
+      apiUrl,
+      auth.headers,
+      auth.isLoading,
+    ]
   )
 
-  const runtime = useChatRuntime({
-    transport,
+  const historyEnabled = config.history?.enabled ?? false
+
+  // Shared context value for ElementsContext
+  const contextValue = useMemo(
+    () => ({
+      config,
+      setModel,
+      model,
+      isExpanded,
+      setIsExpanded,
+      isOpen: isOpen ?? false,
+      setIsOpen,
+      plugins,
+      mcpTools,
+    }),
+    [config, model, isExpanded, isOpen, plugins, mcpTools]
+  )
+
+  const frontendTools = config.tools?.frontendTools ?? {}
+
+  // Render the appropriate runtime provider based on history config.
+  // We use separate components to avoid conditional hook calls.
+  if (historyEnabled && !auth.isLoading) {
+    return (
+      <ElementsProviderWithHistory
+        transport={transport}
+        apiUrl={apiUrl}
+        headers={auth.headers}
+        contextValue={contextValue}
+        runtimeRef={runtimeRef}
+        frontendTools={frontendTools}
+        localIdToUuidMap={localIdToUuidMapRef.current}
+      >
+        {children}
+      </ElementsProviderWithHistory>
+    )
+  }
+
+  return (
+    <ElementsProviderWithoutHistory
+      transport={transport}
+      contextValue={contextValue}
+      runtimeRef={runtimeRef}
+      frontendTools={frontendTools}
+    >
+      {children}
+    </ElementsProviderWithoutHistory>
+  )
+}
+
+// Separate component for history-enabled mode to avoid conditional hook calls
+interface ElementsProviderWithHistoryProps {
+  children: ReactNode
+  transport: ChatTransport<UIMessage>
+  apiUrl: string
+  headers: Record<string, string>
+  contextValue: React.ContextType<typeof ElementsContext>
+  runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  frontendTools: Record<string, AssistantTool | FrontendTool<any, any>>
+  localIdToUuidMap: Map<string, string>
+}
+
+const ElementsProviderWithHistory = ({
+  children,
+  transport,
+  apiUrl,
+  headers,
+  contextValue,
+  runtimeRef,
+  frontendTools,
+  localIdToUuidMap,
+}: ElementsProviderWithHistoryProps) => {
+  const threadListAdapter = useGramThreadListAdapter({
+    apiUrl,
+    headers,
+    localIdToUuidMap,
   })
+  const initialThreadId = contextValue?.config.history?.initialThreadId
+
+  // Hook factory for creating the base chat runtime
+  const useChatRuntimeHook = useCallback(() => {
+    return useChatRuntime({ transport })
+  }, [transport])
+
+  const runtime = useRemoteThreadListRuntime({
+    adapter: threadListAdapter,
+    runtimeHook: useChatRuntimeHook,
+  })
+
+  // Populate runtimeRef so transport can access thread context
+  useEffect(() => {
+    runtimeRef.current = runtime as ReturnType<typeof useChatRuntime>
+  }, [runtime, runtimeRef])
+
+  // Switch to initial thread if provided (for shared chat URLs)
+  const initialThreadSwitched = useRef(false)
+  useEffect(() => {
+    if (initialThreadId && !initialThreadSwitched.current) {
+      initialThreadSwitched.current = true
+      // Use setTimeout to ensure runtime is fully initialized
+      const timeoutId = setTimeout(() => {
+        runtime.threads.switchToThread(initialThreadId).catch((error) => {
+          console.error('Failed to switch to initial thread:', error)
+        })
+      }, 100)
+      return () => clearTimeout(timeoutId)
+    }
+  }, [initialThreadId, runtime])
+
+  // Get the Provider from our adapter to wrap the content
+  const HistoryProvider =
+    threadListAdapter.unstable_Provider ??
+    (({ children }: { children: React.ReactNode }) => <>{children}</>)
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <ElementsContext.Provider
-        value={{
-          config,
-          setModel,
-          model,
-          isExpanded,
-          setIsExpanded,
-          isOpen: isOpen ?? false,
-          setIsOpen,
-          plugins,
-          isLoadingMCPTools,
-        }}
-      >
-        {children}
+      <HistoryProvider>
+        <ElementsContext.Provider value={contextValue}>
+          <div className={`${ROOT_SELECTOR} h-full`}>{children}</div>
+          <FrontendTools tools={frontendTools} />
+        </ElementsContext.Provider>
+      </HistoryProvider>
+    </AssistantRuntimeProvider>
+  )
+}
 
-        {/* Doesn't render anything, but is used to register frontend tools */}
-        <FrontendTools tools={config.tools?.frontendTools ?? {}} />
+// Separate component for non-history mode to avoid conditional hook calls
+interface ElementsProviderWithoutHistoryProps {
+  children: ReactNode
+  transport: ChatTransport<UIMessage>
+  contextValue: React.ContextType<typeof ElementsContext>
+  runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  frontendTools: Record<string, AssistantTool | FrontendTool<any, any>>
+}
+
+const ElementsProviderWithoutHistory = ({
+  children,
+  transport,
+  contextValue,
+  runtimeRef,
+  frontendTools,
+}: ElementsProviderWithoutHistoryProps) => {
+  const runtime = useChatRuntime({ transport })
+
+  // Populate runtimeRef so transport can access thread context
+  useEffect(() => {
+    runtimeRef.current = runtime
+  }, [runtime, runtimeRef])
+
+  return (
+    <AssistantRuntimeProvider runtime={runtime}>
+      <ElementsContext.Provider value={contextValue}>
+        <div className={`${ROOT_SELECTOR} h-full`}>{children}</div>
+        <FrontendTools tools={frontendTools} />
       </ElementsContext.Provider>
     </AssistantRuntimeProvider>
   )
 }
 
+const queryClient = new QueryClient()
+
 export const ElementsProvider = (props: ElementsProviderProps) => {
-  const queryClient = new QueryClient()
   return (
     <QueryClientProvider client={queryClient}>
-      <ElementsProviderInner {...props} />
+      <ToolApprovalProvider>
+        <ElementsProviderWithApproval {...props} />
+      </ToolApprovalProvider>
     </QueryClientProvider>
   )
 }

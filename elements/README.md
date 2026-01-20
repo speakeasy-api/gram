@@ -6,10 +6,21 @@ Elements is a library built for the agentic age. We provide customizable and ele
 
 ### Frontend Setup
 
-First ensure that you have installed the required peer dependencies:
+The easiest way to install Elements and all its peer dependencies:
 
 ```bash
-pnpm add react react-dom @assistant-ui/react @assistant-ui/react-markdown motion remark-gfm zustand vega shiki
+npx @gram-ai/elements install
+```
+
+This will automatically detect your package manager and install everything you need.
+
+<details>
+<summary>Manual installation</summary>
+
+If you prefer to install manually, first install the peer dependencies:
+
+```bash
+pnpm add react react-dom motion remark-gfm zustand vega shiki
 ```
 
 Then install Elements:
@@ -18,9 +29,11 @@ Then install Elements:
 pnpm add @gram-ai/elements
 ```
 
+</details>
+
 ### Backend Setup
 
-If you're only using the server handlers (`@gram-ai/elements/server`), you can install without React:
+If you're only using the server handlers (`@gram-ai/elements/server`), you can install without needing to install any of the React peer dependencies:
 
 ```bash
 pnpm add @gram-ai/elements
@@ -63,11 +76,10 @@ This will enable your backend chat endpoint to talk to our servers securely.
 
 ## Setting up your frontend
 
-`@gram-ai/elements` requires that you wrap your React tree with our context provider and reference our CSS:
+`@gram-ai/elements` requires that you wrap your React tree with our context provider:
 
 ```jsx
 import { GramElementsProvider, Chat, type ElementsConfig } from '@gram-ai/elements'
-import '@gram-ai/elements/elements.css'
 
 // Please fill out projectSlug and mcp
 const config: ElementsConfig = {
@@ -101,7 +113,6 @@ By default, Elements expects the session endpoint on your backend to be located 
 
 ```jsx
 import { GramElementsProvider, Chat, type ElementsConfig, type GetSessionFn } from '@gram-ai/elements'
-import '@gram-ai/elements/elements.css'
 
 const config: ElementsConfig = {
   projectSlug: 'xxx',
@@ -134,7 +145,6 @@ For complete configuration options and TypeScript type definitions, see the [API
 
 ```typescript
 import { GramElementsProvider, Chat, type ElementsConfig } from '@gram-ai/elements'
-import '@gram-ai/elements/elements.css'
 
 const config: ElementsConfig = {
   projectSlug: 'your-project',
@@ -176,7 +186,6 @@ Gram Elements includes a set of recommended plugins that you can use out of the 
 ```typescript
 import { GramElementsProvider, Chat, type ElementsConfig } from '@gram-ai/elements'
 import { recommended } from '@gram-ai/elements/plugins'
-import '@gram-ai/elements/elements.css'
 
 const config: ElementsConfig = {
   projectSlug: 'my-project',
@@ -223,7 +232,6 @@ You can create your own custom plugins to add specialized rendering capabilities
 import { GramElementsProvider, Chat, type ElementsConfig } from '@gram-ai/elements'
 import { chart } from '@gram-ai/elements/plugins'
 import { myCustomPlugin } from './plugins/myCustomPlugin'
-import '@gram-ai/elements/elements.css'
 
 const config: ElementsConfig = {
   projectSlug: 'my-project',

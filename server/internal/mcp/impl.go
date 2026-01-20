@@ -20,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"go.opentelemetry.io/otel/metric"
@@ -78,6 +79,7 @@ type Service struct {
 	billingTracker      billing.Tracker
 	billingRepository   billing.Repository
 	toolsetCache        cache.TypedCacheObject[mv.ToolsetBaseContents]
+	features            *productfeatures.Client
 	tcm                 tm.ToolMetricsProvider
 	vectorToolStore     *rag.ToolsetVectorStore
 	temporal            temporal_client.Client
@@ -128,6 +130,7 @@ func NewService(
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
 	tcm tm.ToolMetricsProvider,
+	features *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporal temporal_client.Client,
 ) *Service {
@@ -166,6 +169,7 @@ func NewService(
 		billingRepository:   billingRepository,
 		toolsetCache:        cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		tcm:                 tcm,
+		features:            features,
 		vectorToolStore:     vectorToolStore,
 		temporal:            temporal,
 		sessions:            sessions,
@@ -202,7 +206,7 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 	body, err := json.Marshal(rpcError{
 		ID:      msgID{format: 0, String: "", Number: 0},
 		Code:    methodNotAllowed,
-		Message: methodNotAllowed.UserMessage(),
+		Message: "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication.",
 		Data:    nil,
 	})
 	if err != nil {
@@ -281,13 +285,21 @@ func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *h
 		return nil
 	}
 
-	// Handle static case - return metadata directly
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	body, err := json.Marshal(result.Static)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to marshal OAuth server metadata").Log(ctx, s.logger)
+	var body []byte
+	switch result.Kind {
+	case wellknown.OAuthServerMetadataResultKindRaw:
+		body = result.Raw
+	case wellknown.OAuthServerMetadataResultKindStatic:
+		var marshalErr error
+		body, marshalErr = json.Marshal(result.Static)
+		if marshalErr != nil {
+			return oops.E(oops.CodeUnexpected, marshalErr, "failed to marshal OAuth server metadata").Log(ctx, s.logger)
+		}
+	default:
+		return oops.E(oops.CodeUnexpected, nil, "unexpected OAuth server metadata result kind").Log(ctx, s.logger)
 	}
 
 	_, writeErr := w.Write(body)
@@ -375,9 +387,14 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	}
 	hasExternalMCPOAuth := externalmcp.ResolveOAuthConfig(fullToolset) != nil
 
-	token := r.Header.Get("Authorization")
-	token = strings.TrimPrefix(token, "Bearer ")
-	token = strings.TrimPrefix(token, "bearer ")
+	// Extract tokens from headers separately:
+	// - authToken: from Authorization header (for OAuth flows)
+	// - sessionToken: from Gram-Chat-Session header (for chat session fallback on non-OAuth endpoints)
+	authToken := r.Header.Get("Authorization")
+	authToken = strings.TrimPrefix(authToken, "Bearer ")
+	authToken = strings.TrimPrefix(authToken, "bearer ")
+	sessionToken := r.Header.Get(constants.ChatSessionsTokenHeader)
+
 	var tokenInputs []oauthTokenInputs
 
 	var oAuthProxyProvider *oauth_repo.OauthProxyProvider
@@ -402,8 +419,8 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 	switch {
 	case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
-		// External OAuth server flow
-		if token == "" {
+		// External OAuth server flow - only accept Authorization header
+		if authToken == "" {
 			s.logger.WarnContext(ctx, "No authorization token provided")
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
 			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
@@ -411,25 +428,26 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 		tokenInputs = append(tokenInputs, oauthTokenInputs{
 			securityKeys: []string{},
-			Token:        token,
+			Token:        authToken,
 		})
 	case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
-		// Custom OAuth provider flow
-		token, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
+		// Custom OAuth provider flow - only accept Authorization header
+		oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
 		if err != nil {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
 			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
 		}
 		s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()))
 
-		for _, externalSecret := range token.ExternalSecrets {
+		for _, externalSecret := range oauthToken.ExternalSecrets {
 			tokenInputs = append(tokenInputs, oauthTokenInputs{
 				securityKeys: externalSecret.SecurityKeys,
 				Token:        externalSecret.Token,
 			})
 		}
 	case toolset.McpIsPublic && hasExternalMCPOAuth:
-		if token == "" {
+		// External MCP OAuth flow - only accept Authorization header
+		if authToken == "" {
 			w.Header().Set(
 				"WWW-Authenticate",
 				fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
@@ -439,10 +457,15 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		// Token provided - pass it through as OAuth token for external MCP
 		tokenInputs = append(tokenInputs, oauthTokenInputs{
 			securityKeys: []string{},
-			Token:        token,
+			Token:        authToken,
 		})
 	case !toolset.McpIsPublic:
+		// Private MCP - always allow sessionToken fallback since private servers require user authentication
 		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
+		token := authToken
+		if token == "" {
+			token = sessionToken
+		}
 
 		ctx, err = s.authenticateToken(ctx, token, toolset.ID, isOAuthCapable)
 		if err == nil {
@@ -458,6 +481,11 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 		return oops.E(oops.CodeUnauthorized, nil, "expired or invalid access token")
 	default:
+		// Public MCP without OAuth - allow sessionToken fallback
+		token := authToken
+		if token == "" {
+			token = sessionToken
+		}
 		if token != "" {
 			ctx, err = s.authenticateToken(ctx, token, toolset.ID, false)
 			if err != nil {
@@ -763,7 +791,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.tcm, s.vectorToolStore, s.temporal)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.tcm, s.features, s.vectorToolStore, s.temporal)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "prompts/get":
@@ -771,7 +799,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "resources/list":
 		return handleResourcesList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "resources/read":
-		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.tcm)
+		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.tcm, s.features)
 	default:
 		return nil, &rpcError{
 			ID:      req.ID,

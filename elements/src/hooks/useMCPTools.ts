@@ -1,33 +1,36 @@
-import { GetSessionFn } from '@/types'
+import { assert } from '@/lib/utils'
+import { ToolsFilter } from '@/types'
 import { experimental_createMCPClient as createMCPClient } from '@ai-sdk/mcp'
 import { useQuery, type UseQueryResult } from '@tanstack/react-query'
-import { useSession } from './useSession'
-import { assert } from '@/lib/utils'
+import { Auth } from './useAuth'
 
 type MCPToolsResult = Awaited<
   ReturnType<Awaited<ReturnType<typeof createMCPClient>>['tools']>
 >
 
 export function useMCPTools({
-  getSession,
-  projectSlug,
+  auth,
   mcp,
   environment,
+  toolsToInclude,
+  gramEnvironment,
 }: {
-  getSession: GetSessionFn
-  projectSlug: string
-  mcp: string
+  auth: Auth
+  mcp: string | undefined
   environment: Record<string, unknown>
+  toolsToInclude?: ToolsFilter
+  gramEnvironment?: string
 }): UseQueryResult<MCPToolsResult, Error> {
-  const session = useSession({
-    getSession,
-    projectSlug,
-  })
+  const authQueryKey = Object.entries(auth.headers ?? {}).map(
+    (k, v) => `${k}:${v}`
+  )
 
   const queryResult = useQuery({
-    queryKey: ['mcpTools', projectSlug, mcp, session],
+    queryKey: ['mcpTools', mcp, gramEnvironment, ...authQueryKey],
     queryFn: async () => {
-      assert(session, 'No session found')
+      assert(!auth.isLoading, 'No auth found')
+      assert(mcp, 'No MCP URL found')
+
       const mcpClient = await createMCPClient({
         name: 'gram-elements-mcp-client',
         transport: {
@@ -35,21 +38,33 @@ export function useMCPTools({
           url: mcp,
           headers: {
             ...transformEnvironmentToHeaders(environment ?? {}),
-            'Gram-Chat-Session': session,
+            ...auth.headers,
+            ...(gramEnvironment && { 'Gram-Environment': gramEnvironment }),
           },
         },
       })
 
       const mcpTools = await mcpClient.tools()
-      return mcpTools
+      if (!toolsToInclude) {
+        return mcpTools
+      }
+
+      return Object.fromEntries(
+        Object.entries(mcpTools).filter(([name]) =>
+          typeof toolsToInclude === 'function'
+            ? toolsToInclude({ toolName: name })
+            : toolsToInclude.includes(name)
+        )
+      )
     },
-    enabled: !!session,
+    enabled: !auth.isLoading && !!mcp,
     staleTime: Infinity,
     gcTime: Infinity,
   })
 
   return queryResult
 }
+
 const HEADER_PREFIX = 'MCP-'
 
 function transformEnvironmentToHeaders(environment: Record<string, unknown>) {

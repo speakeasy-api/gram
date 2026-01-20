@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.16.5**](../README.md)
+[**@gram-ai/elements v1.22.1**](../README.md)
 
 ***
 
@@ -63,7 +63,7 @@ const config: ElementsConfig = {
 
 ### frontendTools?
 
-> `optional` **frontendTools**: `Record`\<`string`, `AssistantTool`\>
+> `optional` **frontendTools**: `FrontendTools`
 
 The frontend tools to use for the Elements library.
 
@@ -112,3 +112,46 @@ const config: ElementsConfig = {
   },
 }
 ```
+
+***
+
+### toolsRequiringApproval?
+
+> `optional` **toolsRequiringApproval**: `ToolsFilter`
+
+List of tool names that require confirmation from the end user before
+being executed. A function can also be provided to dynamically determine if a tool requires approval.
+The user can choose to approve once or approve for the
+entire session via the UI.
+
+#### Examples
+
+```ts
+tools: {
+  toolsRequiringApproval: ['delete_file', 'send_email'],
+}
+```
+
+```ts
+tools: {
+  toolsRequiringApproval: (toolName) => {
+    return toolName.startsWith('protected_')
+  },
+}
+```
+
+***
+
+### toolsToInclude?
+
+> `optional` **toolsToInclude**: `ToolsFilter`
+
+List of MCP tool names to expose to the chat.
+Only tool names listed here that match a tool in the MCP will be exposed to the chat.
+
+#### Example
+
+```ts
+tools: {
+  toolsToInclude: ['get_current_weather', 'get_current_time'],
+}

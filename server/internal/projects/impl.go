@@ -2,6 +2,7 @@ package projects
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -70,6 +71,37 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload) (*gen.GetProjectResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	slug := string(payload.Slug)
+	proj, err := s.repo.GetProjectBySlug(ctx, repo.GetProjectBySlugParams{
+		Slug:           slug,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting project by slug").Log(ctx, s.logger, attr.SlogProjectSlug(slug), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+	}
+
+	return &gen.GetProjectResult{
+		Project: &gen.Project{
+			ID:             proj.ID.String(),
+			Name:           proj.Name,
+			Slug:           types.Slug(proj.Slug),
+			OrganizationID: proj.OrganizationID,
+			LogoAssetID:    conv.FromNullableUUID(proj.LogoAssetID),
+			CreatedAt:      proj.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:      proj.UpdatedAt.Time.Format(time.RFC3339),
+		},
+	}, nil
 }
 
 func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectPayload) (*gen.CreateProjectResult, error) {

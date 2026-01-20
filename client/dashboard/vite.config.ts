@@ -24,10 +24,19 @@ export default defineConfig({
     target: "es2022",
     sourcemap: true,
     rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, "index.html"),
+      },
       output: {
         manualChunks: {
           "lucide-react": ["lucide-react"],
           moonshine: ["@speakeasy-api/moonshine"],
+          three: [
+            "@react-three/drei",
+            "@react-three/fiber",
+            "@react-three/postprocessing",
+            "three",
+          ],
           externals: [
             "posthog-js",
             "react",
@@ -60,7 +69,18 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Ensure single instances of React and related packages across all dependencies
       react: path.resolve(__dirname, "node_modules/react"),
+      "react-dom": path.resolve(__dirname, "node_modules/react-dom"),
+      // Deduplicate @assistant-ui packages to ensure context is shared
+      "@assistant-ui/react": path.resolve(
+        __dirname,
+        "node_modules/@assistant-ui/react",
+      ),
+      "@assistant-ui/react-markdown": path.resolve(
+        __dirname,
+        "node_modules/@assistant-ui/react-markdown",
+      ),
     },
   },
 });
