@@ -6,10 +6,13 @@ export { ElementsProvider as GramElementsProvider } from './contexts/ElementsPro
 export { ElementsProvider } from './contexts/ElementsProvider'
 export { useElements as useGramElements } from './hooks/useElements'
 export { useElements } from './hooks/useElements'
+export { useThreadId } from './hooks/useThreadId'
 
 // Core Components
 export { Chat } from '@/components/Chat'
 export { ChatHistory } from '@/components/ChatHistory'
+export { ShareButton } from '@/components/ShareButton'
+export type { ShareButtonProps } from '@/components/ShareButton'
 
 // Frontend Tools
 export { defineFrontendTool } from './lib/tools'

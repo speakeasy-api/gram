@@ -38,6 +38,7 @@ import { PlaygroundAuth } from "./PlaygroundAuth";
 import { PlaygroundConfigPanel } from "./PlaygroundConfigPanel";
 import { PlaygroundElements } from "./PlaygroundElements";
 import { PlaygroundLogsPanel } from "./PlaygroundLogsPanel";
+import { ShareChatButton } from "./ShareChatButton";
 
 export default function Playground() {
   return (
@@ -120,6 +121,7 @@ function PlaygroundInner() {
                 model={model}
                 additionalActions={
                   <div className="flex items-center justify-end w-full px-4">
+                    <ShareChatButton />
                     {logsButton}
                   </div>
                 }

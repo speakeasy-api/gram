@@ -414,6 +414,7 @@ const ElementsProviderWithHistory = ({
     headers,
     localIdToUuidMap,
   })
+  const initialThreadId = contextValue?.config.history?.initialThreadId
 
   // Hook factory for creating the base chat runtime
   const useChatRuntimeHook = useCallback(() => {
@@ -429,6 +430,21 @@ const ElementsProviderWithHistory = ({
   useEffect(() => {
     runtimeRef.current = runtime as ReturnType<typeof useChatRuntime>
   }, [runtime, runtimeRef])
+
+  // Switch to initial thread if provided (for shared chat URLs)
+  const initialThreadSwitched = useRef(false)
+  useEffect(() => {
+    if (initialThreadId && !initialThreadSwitched.current) {
+      initialThreadSwitched.current = true
+      // Use setTimeout to ensure runtime is fully initialized
+      const timeoutId = setTimeout(() => {
+        runtime.threads.switchToThread(initialThreadId).catch((error) => {
+          console.error('Failed to switch to initial thread:', error)
+        })
+      }, 100)
+      return () => clearTimeout(timeoutId)
+    }
+  }, [initialThreadId, runtime])
 
   // Get the Provider from our adapter to wrap the content
   const HistoryProvider =

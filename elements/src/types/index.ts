@@ -846,6 +846,25 @@ export interface HistoryConfig {
    * @default true when history.enabled is true
    */
   showThreadList?: boolean
+
+  /**
+   * Initial thread ID to load when the component mounts.
+   * When provided, Elements will automatically load and switch to this thread.
+   * Useful for implementing chat sharing via URL parameters.
+   *
+   * @example
+   * // Read threadId from URL and pass to config
+   * const searchParams = new URLSearchParams(window.location.search)
+   * const threadId = searchParams.get('threadId')
+   *
+   * <GramElementsProvider config={{
+   *   history: {
+   *     enabled: true,
+   *     initialThreadId: threadId ?? undefined,
+   *   },
+   * }}>
+   */
+  initialThreadId?: string
 }
 
 /**
