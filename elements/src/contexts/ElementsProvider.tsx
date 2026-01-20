@@ -16,6 +16,7 @@ import {
   toAISDKTools,
   wrapToolsWithApproval,
   type ApprovalHelpers,
+  type FrontendTool,
 } from '@/lib/tools'
 import { recommended } from '@/plugins'
 import { ElementsConfig, Model } from '@/types'
@@ -395,7 +396,8 @@ interface ElementsProviderWithHistoryProps {
   headers: Record<string, string>
   contextValue: React.ContextType<typeof ElementsContext>
   runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>
-  frontendTools: Record<string, AssistantTool>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  frontendTools: Record<string, AssistantTool | FrontendTool<any, any>>
   localIdToUuidMap: Map<string, string>
 }
 
@@ -453,7 +455,8 @@ interface ElementsProviderWithoutHistoryProps {
   transport: ChatTransport<UIMessage>
   contextValue: React.ContextType<typeof ElementsContext>
   runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>
-  frontendTools: Record<string, AssistantTool>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  frontendTools: Record<string, AssistantTool | FrontendTool<any, any>>
 }
 
 const ElementsProviderWithoutHistory = ({

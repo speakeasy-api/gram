@@ -3,7 +3,7 @@ import type { Meta, StoryFn } from '@storybook/react-vite'
 import React from 'react'
 import z from 'zod'
 import { Chat } from '..'
-import { defineFrontendTool, FrontendTool } from '../../../lib/tools'
+import { defineFrontendTool } from '../../../lib/tools'
 
 const meta: Meta<typeof Chat> = {
   title: 'Chat/Frontend Tools',
@@ -36,7 +36,7 @@ const FetchTool = defineFrontendTool<{ url: string }, string>(
   'fetchUrl'
 )
 
-const frontendTools: Record<string, FrontendTool<{ url: string }, string>> = {
+const frontendTools = {
   fetchUrl: FetchTool,
 }
 
