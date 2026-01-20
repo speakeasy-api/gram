@@ -2334,10 +2334,10 @@ paths:
             x-speakeasy-name-override: creditUsage
             x-speakeasy-react-hook:
                 name: GetCreditUsage
-    /rpc/chat.generateTitle:
+    /rpc/chat.getTitle:
         post:
-            description: Generate a title for a chat based on its messages
-            operationId: generateTitle
+            description: Get the title for a chat
+            operationId: getTitle
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -2371,7 +2371,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/GenerateTitleResponseBody'
+                                $ref: '#/components/schemas/GetTitleResponseBody'
                     description: OK response.
                 "400":
                     content:
@@ -2431,10 +2431,10 @@ paths:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
                 - chat_sessions_token_header_Gram-Chat-Session: []
-            summary: generateTitle chat
+            summary: getTitle chat
             tags:
                 - chat
-            x-speakeasy-name-override: generateTitle
+            x-speakeasy-name-override: getTitle
     /rpc/chat.list:
         get:
             description: List all chats for a project
@@ -12855,14 +12855,6 @@ components:
                 - tool_urn
                 - created_at
                 - updated_at
-        GenerateTitleResponseBody:
-            type: object
-            properties:
-                title:
-                    type: string
-                    description: The generated title
-            required:
-                - title
         GetActiveDeploymentResult:
             type: object
             properties:
@@ -13145,6 +13137,14 @@ components:
                 - default_toolset_slug
                 - created_at
                 - updated_at
+        GetTitleResponseBody:
+            type: object
+            properties:
+                title:
+                    type: string
+                    description: The chat title
+            required:
+                - title
         HTTPToolDefinition:
             type: object
             properties:

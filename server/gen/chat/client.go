@@ -15,19 +15,19 @@ import (
 
 // Client is the "chat" service client.
 type Client struct {
-	ListChatsEndpoint     goa.Endpoint
-	LoadChatEndpoint      goa.Endpoint
-	GenerateTitleEndpoint goa.Endpoint
-	CreditUsageEndpoint   goa.Endpoint
+	ListChatsEndpoint   goa.Endpoint
+	LoadChatEndpoint    goa.Endpoint
+	GetTitleEndpoint    goa.Endpoint
+	CreditUsageEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "chat" service client given the endpoints.
-func NewClient(listChats, loadChat, generateTitle, creditUsage goa.Endpoint) *Client {
+func NewClient(listChats, loadChat, getTitle, creditUsage goa.Endpoint) *Client {
 	return &Client{
-		ListChatsEndpoint:     listChats,
-		LoadChatEndpoint:      loadChat,
-		GenerateTitleEndpoint: generateTitle,
-		CreditUsageEndpoint:   creditUsage,
+		ListChatsEndpoint:   listChats,
+		LoadChatEndpoint:    loadChat,
+		GetTitleEndpoint:    getTitle,
+		CreditUsageEndpoint: creditUsage,
 	}
 }
 
@@ -75,8 +75,8 @@ func (c *Client) LoadChat(ctx context.Context, p *LoadChatPayload) (res *Chat, e
 	return ires.(*Chat), nil
 }
 
-// GenerateTitle calls the "generateTitle" endpoint of the "chat" service.
-// GenerateTitle may return the following errors:
+// GetTitle calls the "getTitle" endpoint of the "chat" service.
+// GetTitle may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -88,13 +88,13 @@ func (c *Client) LoadChat(ctx context.Context, p *LoadChatPayload) (res *Chat, e
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) GenerateTitle(ctx context.Context, p *GenerateTitlePayload) (res *GenerateTitleResult, err error) {
+func (c *Client) GetTitle(ctx context.Context, p *GetTitlePayload) (res *GetTitleResult, err error) {
 	var ires any
-	ires, err = c.GenerateTitleEndpoint(ctx, p)
+	ires, err = c.GetTitleEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*GenerateTitleResult), nil
+	return ires.(*GetTitleResult), nil
 }
 
 // CreditUsage calls the "creditUsage" endpoint of the "chat" service.

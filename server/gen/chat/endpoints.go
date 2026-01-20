@@ -16,10 +16,10 @@ import (
 
 // Endpoints wraps the "chat" service endpoints.
 type Endpoints struct {
-	ListChats     goa.Endpoint
-	LoadChat      goa.Endpoint
-	GenerateTitle goa.Endpoint
-	CreditUsage   goa.Endpoint
+	ListChats   goa.Endpoint
+	LoadChat    goa.Endpoint
+	GetTitle    goa.Endpoint
+	CreditUsage goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "chat" service with endpoints.
@@ -27,10 +27,10 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListChats:     NewListChatsEndpoint(s, a.APIKeyAuth, a.JWTAuth),
-		LoadChat:      NewLoadChatEndpoint(s, a.APIKeyAuth, a.JWTAuth),
-		GenerateTitle: NewGenerateTitleEndpoint(s, a.APIKeyAuth, a.JWTAuth),
-		CreditUsage:   NewCreditUsageEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		ListChats:   NewListChatsEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		LoadChat:    NewLoadChatEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		GetTitle:    NewGetTitleEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		CreditUsage: NewCreditUsageEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 	}
 }
 
@@ -38,7 +38,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListChats = m(e.ListChats)
 	e.LoadChat = m(e.LoadChat)
-	e.GenerateTitle = m(e.GenerateTitle)
+	e.GetTitle = m(e.GetTitle)
 	e.CreditUsage = m(e.CreditUsage)
 }
 
@@ -136,11 +136,11 @@ func NewLoadChatEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJW
 	}
 }
 
-// NewGenerateTitleEndpoint returns an endpoint function that calls the method
-// "generateTitle" of service "chat".
-func NewGenerateTitleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJWTFn security.AuthJWTFunc) goa.Endpoint {
+// NewGetTitleEndpoint returns an endpoint function that calls the method
+// "getTitle" of service "chat".
+func NewGetTitleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJWTFn security.AuthJWTFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*GenerateTitlePayload)
+		p := req.(*GetTitlePayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -179,7 +179,7 @@ func NewGenerateTitleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, a
 		if err != nil {
 			return nil, err
 		}
-		return s.GenerateTitle(ctx, p)
+		return s.GetTitle(ctx, p)
 	}
 }
 

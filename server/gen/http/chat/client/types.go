@@ -12,9 +12,9 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// GenerateTitleRequestBody is the type of the "chat" service "generateTitle"
-// endpoint HTTP request body.
-type GenerateTitleRequestBody struct {
+// GetTitleRequestBody is the type of the "chat" service "getTitle" endpoint
+// HTTP request body.
+type GetTitleRequestBody struct {
 	// The ID of the chat
 	ID string `form:"id" json:"id" xml:"id"`
 }
@@ -47,10 +47,10 @@ type LoadChatResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// GenerateTitleResponseBody is the type of the "chat" service "generateTitle"
-// endpoint HTTP response body.
-type GenerateTitleResponseBody struct {
-	// The generated title
+// GetTitleResponseBody is the type of the "chat" service "getTitle" endpoint
+// HTTP response body.
+type GetTitleResponseBody struct {
+	// The chat title
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 }
 
@@ -423,9 +423,9 @@ type LoadChatGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GenerateTitleUnauthorizedResponseBody is the type of the "chat" service
-// "generateTitle" endpoint HTTP response body for the "unauthorized" error.
-type GenerateTitleUnauthorizedResponseBody struct {
+// GetTitleUnauthorizedResponseBody is the type of the "chat" service
+// "getTitle" endpoint HTTP response body for the "unauthorized" error.
+type GetTitleUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -441,9 +441,9 @@ type GenerateTitleUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GenerateTitleForbiddenResponseBody is the type of the "chat" service
-// "generateTitle" endpoint HTTP response body for the "forbidden" error.
-type GenerateTitleForbiddenResponseBody struct {
+// GetTitleForbiddenResponseBody is the type of the "chat" service "getTitle"
+// endpoint HTTP response body for the "forbidden" error.
+type GetTitleForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -459,9 +459,9 @@ type GenerateTitleForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GenerateTitleBadRequestResponseBody is the type of the "chat" service
-// "generateTitle" endpoint HTTP response body for the "bad_request" error.
-type GenerateTitleBadRequestResponseBody struct {
+// GetTitleBadRequestResponseBody is the type of the "chat" service "getTitle"
+// endpoint HTTP response body for the "bad_request" error.
+type GetTitleBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -477,9 +477,9 @@ type GenerateTitleBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GenerateTitleNotFoundResponseBody is the type of the "chat" service
-// "generateTitle" endpoint HTTP response body for the "not_found" error.
-type GenerateTitleNotFoundResponseBody struct {
+// GetTitleNotFoundResponseBody is the type of the "chat" service "getTitle"
+// endpoint HTTP response body for the "not_found" error.
+type GetTitleNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -495,9 +495,9 @@ type GenerateTitleNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GenerateTitleConflictResponseBody is the type of the "chat" service
-// "generateTitle" endpoint HTTP response body for the "conflict" error.
-type GenerateTitleConflictResponseBody struct {
+// GetTitleConflictResponseBody is the type of the "chat" service "getTitle"
+// endpoint HTTP response body for the "conflict" error.
+type GetTitleConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -513,10 +513,9 @@ type GenerateTitleConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GenerateTitleUnsupportedMediaResponseBody is the type of the "chat" service
-// "generateTitle" endpoint HTTP response body for the "unsupported_media"
-// error.
-type GenerateTitleUnsupportedMediaResponseBody struct {
+// GetTitleUnsupportedMediaResponseBody is the type of the "chat" service
+// "getTitle" endpoint HTTP response body for the "unsupported_media" error.
+type GetTitleUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -532,9 +531,9 @@ type GenerateTitleUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GenerateTitleInvalidResponseBody is the type of the "chat" service
-// "generateTitle" endpoint HTTP response body for the "invalid" error.
-type GenerateTitleInvalidResponseBody struct {
+// GetTitleInvalidResponseBody is the type of the "chat" service "getTitle"
+// endpoint HTTP response body for the "invalid" error.
+type GetTitleInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -550,10 +549,9 @@ type GenerateTitleInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GenerateTitleInvariantViolationResponseBody is the type of the "chat"
-// service "generateTitle" endpoint HTTP response body for the
-// "invariant_violation" error.
-type GenerateTitleInvariantViolationResponseBody struct {
+// GetTitleInvariantViolationResponseBody is the type of the "chat" service
+// "getTitle" endpoint HTTP response body for the "invariant_violation" error.
+type GetTitleInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -569,9 +567,9 @@ type GenerateTitleInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GenerateTitleUnexpectedResponseBody is the type of the "chat" service
-// "generateTitle" endpoint HTTP response body for the "unexpected" error.
-type GenerateTitleUnexpectedResponseBody struct {
+// GetTitleUnexpectedResponseBody is the type of the "chat" service "getTitle"
+// endpoint HTTP response body for the "unexpected" error.
+type GetTitleUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -587,9 +585,9 @@ type GenerateTitleUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GenerateTitleGatewayErrorResponseBody is the type of the "chat" service
-// "generateTitle" endpoint HTTP response body for the "gateway_error" error.
-type GenerateTitleGatewayErrorResponseBody struct {
+// GetTitleGatewayErrorResponseBody is the type of the "chat" service
+// "getTitle" endpoint HTTP response body for the "gateway_error" error.
+type GetTitleGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -828,10 +826,10 @@ type ChatMessageResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 }
 
-// NewGenerateTitleRequestBody builds the HTTP request body from the payload of
-// the "generateTitle" endpoint of the "chat" service.
-func NewGenerateTitleRequestBody(p *chat.GenerateTitlePayload) *GenerateTitleRequestBody {
-	body := &GenerateTitleRequestBody{
+// NewGetTitleRequestBody builds the HTTP request body from the payload of the
+// "getTitle" endpoint of the "chat" service.
+func NewGetTitleRequestBody(p *chat.GetTitlePayload) *GetTitleRequestBody {
+	body := &GetTitleRequestBody{
 		ID: p.ID,
 	}
 	return body
@@ -1171,109 +1169,19 @@ func NewLoadChatGatewayError(body *LoadChatGatewayErrorResponseBody) *goa.Servic
 	return v
 }
 
-// NewGenerateTitleResultOK builds a "chat" service "generateTitle" endpoint
-// result from a HTTP "OK" response.
-func NewGenerateTitleResultOK(body *GenerateTitleResponseBody) *chat.GenerateTitleResult {
-	v := &chat.GenerateTitleResult{
+// NewGetTitleResultOK builds a "chat" service "getTitle" endpoint result from
+// a HTTP "OK" response.
+func NewGetTitleResultOK(body *GetTitleResponseBody) *chat.GetTitleResult {
+	v := &chat.GetTitleResult{
 		Title: *body.Title,
 	}
 
 	return v
 }
 
-// NewGenerateTitleUnauthorized builds a chat service generateTitle endpoint
-// unauthorized error.
-func NewGenerateTitleUnauthorized(body *GenerateTitleUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGenerateTitleForbidden builds a chat service generateTitle endpoint
-// forbidden error.
-func NewGenerateTitleForbidden(body *GenerateTitleForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGenerateTitleBadRequest builds a chat service generateTitle endpoint
-// bad_request error.
-func NewGenerateTitleBadRequest(body *GenerateTitleBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGenerateTitleNotFound builds a chat service generateTitle endpoint
-// not_found error.
-func NewGenerateTitleNotFound(body *GenerateTitleNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGenerateTitleConflict builds a chat service generateTitle endpoint
-// conflict error.
-func NewGenerateTitleConflict(body *GenerateTitleConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGenerateTitleUnsupportedMedia builds a chat service generateTitle
-// endpoint unsupported_media error.
-func NewGenerateTitleUnsupportedMedia(body *GenerateTitleUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGenerateTitleInvalid builds a chat service generateTitle endpoint invalid
+// NewGetTitleUnauthorized builds a chat service getTitle endpoint unauthorized
 // error.
-func NewGenerateTitleInvalid(body *GenerateTitleInvalidResponseBody) *goa.ServiceError {
+func NewGetTitleUnauthorized(body *GetTitleUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1286,9 +1194,8 @@ func NewGenerateTitleInvalid(body *GenerateTitleInvalidResponseBody) *goa.Servic
 	return v
 }
 
-// NewGenerateTitleInvariantViolation builds a chat service generateTitle
-// endpoint invariant_violation error.
-func NewGenerateTitleInvariantViolation(body *GenerateTitleInvariantViolationResponseBody) *goa.ServiceError {
+// NewGetTitleForbidden builds a chat service getTitle endpoint forbidden error.
+func NewGetTitleForbidden(body *GetTitleForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1301,9 +1208,9 @@ func NewGenerateTitleInvariantViolation(body *GenerateTitleInvariantViolationRes
 	return v
 }
 
-// NewGenerateTitleUnexpected builds a chat service generateTitle endpoint
-// unexpected error.
-func NewGenerateTitleUnexpected(body *GenerateTitleUnexpectedResponseBody) *goa.ServiceError {
+// NewGetTitleBadRequest builds a chat service getTitle endpoint bad_request
+// error.
+func NewGetTitleBadRequest(body *GetTitleBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1316,9 +1223,96 @@ func NewGenerateTitleUnexpected(body *GenerateTitleUnexpectedResponseBody) *goa.
 	return v
 }
 
-// NewGenerateTitleGatewayError builds a chat service generateTitle endpoint
+// NewGetTitleNotFound builds a chat service getTitle endpoint not_found error.
+func NewGetTitleNotFound(body *GetTitleNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTitleConflict builds a chat service getTitle endpoint conflict error.
+func NewGetTitleConflict(body *GetTitleConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTitleUnsupportedMedia builds a chat service getTitle endpoint
+// unsupported_media error.
+func NewGetTitleUnsupportedMedia(body *GetTitleUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTitleInvalid builds a chat service getTitle endpoint invalid error.
+func NewGetTitleInvalid(body *GetTitleInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTitleInvariantViolation builds a chat service getTitle endpoint
+// invariant_violation error.
+func NewGetTitleInvariantViolation(body *GetTitleInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTitleUnexpected builds a chat service getTitle endpoint unexpected
+// error.
+func NewGetTitleUnexpected(body *GetTitleUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTitleGatewayError builds a chat service getTitle endpoint
 // gateway_error error.
-func NewGenerateTitleGatewayError(body *GenerateTitleGatewayErrorResponseBody) *goa.ServiceError {
+func NewGetTitleGatewayError(body *GetTitleGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1545,9 +1539,9 @@ func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 	return
 }
 
-// ValidateGenerateTitleResponseBody runs the validations defined on
-// GenerateTitleResponseBody
-func ValidateGenerateTitleResponseBody(body *GenerateTitleResponseBody) (err error) {
+// ValidateGetTitleResponseBody runs the validations defined on
+// GetTitleResponseBody
+func ValidateGetTitleResponseBody(body *GetTitleResponseBody) (err error) {
 	if body.Title == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
 	}
@@ -2046,9 +2040,9 @@ func ValidateLoadChatGatewayErrorResponseBody(body *LoadChatGatewayErrorResponse
 	return
 }
 
-// ValidateGenerateTitleUnauthorizedResponseBody runs the validations defined
-// on generateTitle_unauthorized_response_body
-func ValidateGenerateTitleUnauthorizedResponseBody(body *GenerateTitleUnauthorizedResponseBody) (err error) {
+// ValidateGetTitleUnauthorizedResponseBody runs the validations defined on
+// getTitle_unauthorized_response_body
+func ValidateGetTitleUnauthorizedResponseBody(body *GetTitleUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2070,9 +2064,9 @@ func ValidateGenerateTitleUnauthorizedResponseBody(body *GenerateTitleUnauthoriz
 	return
 }
 
-// ValidateGenerateTitleForbiddenResponseBody runs the validations defined on
-// generateTitle_forbidden_response_body
-func ValidateGenerateTitleForbiddenResponseBody(body *GenerateTitleForbiddenResponseBody) (err error) {
+// ValidateGetTitleForbiddenResponseBody runs the validations defined on
+// getTitle_forbidden_response_body
+func ValidateGetTitleForbiddenResponseBody(body *GetTitleForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2094,9 +2088,9 @@ func ValidateGenerateTitleForbiddenResponseBody(body *GenerateTitleForbiddenResp
 	return
 }
 
-// ValidateGenerateTitleBadRequestResponseBody runs the validations defined on
-// generateTitle_bad_request_response_body
-func ValidateGenerateTitleBadRequestResponseBody(body *GenerateTitleBadRequestResponseBody) (err error) {
+// ValidateGetTitleBadRequestResponseBody runs the validations defined on
+// getTitle_bad_request_response_body
+func ValidateGetTitleBadRequestResponseBody(body *GetTitleBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2118,9 +2112,9 @@ func ValidateGenerateTitleBadRequestResponseBody(body *GenerateTitleBadRequestRe
 	return
 }
 
-// ValidateGenerateTitleNotFoundResponseBody runs the validations defined on
-// generateTitle_not_found_response_body
-func ValidateGenerateTitleNotFoundResponseBody(body *GenerateTitleNotFoundResponseBody) (err error) {
+// ValidateGetTitleNotFoundResponseBody runs the validations defined on
+// getTitle_not_found_response_body
+func ValidateGetTitleNotFoundResponseBody(body *GetTitleNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2142,9 +2136,9 @@ func ValidateGenerateTitleNotFoundResponseBody(body *GenerateTitleNotFoundRespon
 	return
 }
 
-// ValidateGenerateTitleConflictResponseBody runs the validations defined on
-// generateTitle_conflict_response_body
-func ValidateGenerateTitleConflictResponseBody(body *GenerateTitleConflictResponseBody) (err error) {
+// ValidateGetTitleConflictResponseBody runs the validations defined on
+// getTitle_conflict_response_body
+func ValidateGetTitleConflictResponseBody(body *GetTitleConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2166,9 +2160,9 @@ func ValidateGenerateTitleConflictResponseBody(body *GenerateTitleConflictRespon
 	return
 }
 
-// ValidateGenerateTitleUnsupportedMediaResponseBody runs the validations
-// defined on generateTitle_unsupported_media_response_body
-func ValidateGenerateTitleUnsupportedMediaResponseBody(body *GenerateTitleUnsupportedMediaResponseBody) (err error) {
+// ValidateGetTitleUnsupportedMediaResponseBody runs the validations defined on
+// getTitle_unsupported_media_response_body
+func ValidateGetTitleUnsupportedMediaResponseBody(body *GetTitleUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2190,9 +2184,9 @@ func ValidateGenerateTitleUnsupportedMediaResponseBody(body *GenerateTitleUnsupp
 	return
 }
 
-// ValidateGenerateTitleInvalidResponseBody runs the validations defined on
-// generateTitle_invalid_response_body
-func ValidateGenerateTitleInvalidResponseBody(body *GenerateTitleInvalidResponseBody) (err error) {
+// ValidateGetTitleInvalidResponseBody runs the validations defined on
+// getTitle_invalid_response_body
+func ValidateGetTitleInvalidResponseBody(body *GetTitleInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2214,9 +2208,9 @@ func ValidateGenerateTitleInvalidResponseBody(body *GenerateTitleInvalidResponse
 	return
 }
 
-// ValidateGenerateTitleInvariantViolationResponseBody runs the validations
-// defined on generateTitle_invariant_violation_response_body
-func ValidateGenerateTitleInvariantViolationResponseBody(body *GenerateTitleInvariantViolationResponseBody) (err error) {
+// ValidateGetTitleInvariantViolationResponseBody runs the validations defined
+// on getTitle_invariant_violation_response_body
+func ValidateGetTitleInvariantViolationResponseBody(body *GetTitleInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2238,9 +2232,9 @@ func ValidateGenerateTitleInvariantViolationResponseBody(body *GenerateTitleInva
 	return
 }
 
-// ValidateGenerateTitleUnexpectedResponseBody runs the validations defined on
-// generateTitle_unexpected_response_body
-func ValidateGenerateTitleUnexpectedResponseBody(body *GenerateTitleUnexpectedResponseBody) (err error) {
+// ValidateGetTitleUnexpectedResponseBody runs the validations defined on
+// getTitle_unexpected_response_body
+func ValidateGetTitleUnexpectedResponseBody(body *GetTitleUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2262,9 +2256,9 @@ func ValidateGenerateTitleUnexpectedResponseBody(body *GenerateTitleUnexpectedRe
 	return
 }
 
-// ValidateGenerateTitleGatewayErrorResponseBody runs the validations defined
-// on generateTitle_gateway_error_response_body
-func ValidateGenerateTitleGatewayErrorResponseBody(body *GenerateTitleGatewayErrorResponseBody) (err error) {
+// ValidateGetTitleGatewayErrorResponseBody runs the validations defined on
+// getTitle_gateway_error_response_body
+func ValidateGetTitleGatewayErrorResponseBody(body *GetTitleGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
