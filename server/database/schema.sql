@@ -1120,6 +1120,7 @@ CREATE TABLE IF NOT EXISTS external_mcp_tool_definitions (
   external_mcp_attachment_id uuid NOT NULL,
   tool_urn TEXT NOT NULL CHECK (tool_urn <> ''),
   remote_url TEXT NOT NULL CHECK (remote_url <> ''),
+  type TEXT NOT NULL DEFAULT 'proxy',
   transport_type TEXT NOT NULL,
   requires_oauth BOOLEAN NOT NULL DEFAULT FALSE,
 

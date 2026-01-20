@@ -209,6 +209,7 @@ type ExternalMcpToolDefinition struct {
 	ExternalMcpAttachmentID    uuid.UUID
 	ToolUrn                    string
 	RemoteUrl                  string
+	Type                       string
 	TransportType              types.TransportType
 	RequiresOauth              bool
 	OauthVersion               string
