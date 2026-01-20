@@ -25,7 +25,7 @@ import { Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, CheckCircle2, Copy, Globe, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useCustomDomain } from "../mcp/MCPDetails";
+import { useCustomDomain } from "@/hooks/useToolsetUrl";
 import { SettingsProjectsTable } from "./SettingsProjectsTable";
 
 export default function Settings() {

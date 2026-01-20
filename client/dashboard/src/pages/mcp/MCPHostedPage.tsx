@@ -6,7 +6,7 @@ import { useToolset } from "@gram/client/react-query";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
-import { useMcpUrl } from "./MCPDetails";
+import { useMcpUrl } from "@/hooks/useToolsetUrl";
 
 export function MCPHostedPage() {
   const { toolsetSlug } = useParams();

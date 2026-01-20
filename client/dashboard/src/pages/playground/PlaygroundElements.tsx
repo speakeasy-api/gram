@@ -21,7 +21,7 @@ import { useCallback, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useEnvironment } from "../environments/Environment";
-import { useMcpUrl } from "../mcp/MCPDetails";
+import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
 import { getAuthStatus } from "./PlaygroundAuth";
 import {
   GramComposer,
@@ -58,8 +58,8 @@ export function PlaygroundElements({
   const { data: toolsetsData } = useListToolsets();
   const toolset = toolsetsData?.toolsets?.find((ts) => ts.slug === toolsetSlug);
 
-  // Get MCP URL from toolset
-  const { url: mcpUrl } = useMcpUrl(toolset);
+  // Get MCP URL from toolset (always uses Gram domain, not custom domains)
+  const mcpUrl = useInternalMcpUrl(toolset);
 
   // Get environment data for auth status check
   const environmentData = useEnvironment(environmentSlug ?? undefined);
