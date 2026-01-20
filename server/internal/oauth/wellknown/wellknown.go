@@ -54,12 +54,14 @@ type OAuthServerMetadataResultKind string
 
 const (
 	OAuthServerMetadataResultKindStatic OAuthServerMetadataResultKind = "static"
+	OAuthServerMetadataResultKindRaw    OAuthServerMetadataResultKind = "raw"
 	OAuthServerMetadataResultKindProxy  OAuthServerMetadataResultKind = "proxy"
 )
 
 type OAuthServerMetadataResult struct {
 	Kind     OAuthServerMetadataResultKind
 	Static   *OAuthServerMetadata
+	Raw      json.RawMessage
 	ProxyURL string
 }
 
@@ -102,15 +104,9 @@ func ResolveOAuthServerMetadataFromToolset(
 			return nil, fmt.Errorf("get external oauth server metadata: %w", err)
 		}
 
-		var metadata OAuthServerMetadata
-		if err := json.Unmarshal(externalOAuthServer.Metadata, &metadata); err != nil {
-			return nil, fmt.Errorf("unmarshal oauth server metadata: %w", err)
-		}
-
 		return &OAuthServerMetadataResult{
-			Kind:     OAuthServerMetadataResultKindStatic,
-			Static:   &metadata,
-			ProxyURL: "",
+			Kind: OAuthServerMetadataResultKindRaw,
+			Raw:  externalOAuthServer.Metadata,
 		}, nil
 	}
 
