@@ -1,6 +1,6 @@
 import { MODELS } from '@/lib/models'
+import type { FrontendTool } from '@/lib/tools'
 import {
-  AssistantTool,
   ImageMessagePartComponent,
   ReasoningGroupComponent,
   ReasoningMessagePartComponent,
@@ -520,6 +520,9 @@ export type ToolsFilter =
   | string[]
   | (({ toolName }: { toolName: string }) => boolean)
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type FrontendTools = Record<string, FrontendTool<any, any>>
+
 /**
  * ToolsConfig is used to configure tool support in the Elements library.
  * At the moment, you can override the default React components used by
@@ -609,7 +612,7 @@ export interface ToolsConfig {
    * }
    * ```
    */
-  frontendTools?: Record<string, AssistantTool>
+  frontendTools?: FrontendTools
 
   /**
    * List of tool names that require confirmation from the end user before
@@ -652,12 +655,12 @@ export interface WelcomeConfig {
   /**
    * The welcome message to display when the thread is empty.
    */
-  title: string
+  title?: string
 
   /**
    * The subtitle to display when the thread is empty.
    */
-  subtitle: string
+  subtitle?: string
 
   /**
    * The suggestions to display when the thread is empty.
