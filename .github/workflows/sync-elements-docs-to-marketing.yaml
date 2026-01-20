@@ -1,4 +1,4 @@
-name: Sync Elements Docs → Marketing Site (PR)
+name: Sync Elements Docs → Marketing Site
 on:
   push:
     branches:
@@ -12,9 +12,8 @@ on:
   workflow_dispatch: # Manual trigger for testing
 permissions:
   contents: read
-  pull-requests: write
 concurrency:
-  group: elements-to-marketing-pr-sync-${{ github.ref }}
+  group: elements-to-marketing-sync-${{ github.ref }}
   cancel-in-progress: true
 env:
   MARKETING_REPO: speakeasy-api/gram-marketing-site
@@ -37,7 +36,6 @@ jobs:
           token: ${{ secrets.SERVICE_BOT_TOKEN }}
           path: marketing-repo
           fetch-depth: 0
-          persist-credentials: false
       - name: Sync and transform docs
         run: |
           chmod +x .github/scripts/sync-elements-docs.sh
@@ -45,45 +43,15 @@ jobs:
             "elements/docs" \
             "marketing-repo/src/content/docs/gram-elements" \
             "/docs/gram-elements"
-      - name: Build PR body with grouped changes
+      - name: Commit and push to Marketing
         run: |
-          set -euo pipefail
           cd marketing-repo
-          echo "### Sync from Elements" > ../PR_BODY.md
-          echo "" >> ../PR_BODY.md
-          echo "**Source commit:** \`${GITHUB_SHA}\`" >> ../PR_BODY.md
-          echo "" >> ../PR_BODY.md
-          echo "**Grouped file changes:**" >> ../PR_BODY.md
-          if git diff --name-status | grep -q .; then
-            git diff --name-status | awk '
-              {
-                split($2, parts, "/");
-                key = parts[1];
-                if (length(parts) >= 2) key = key "/" parts[2];
-                if (current != key) {
-                  if (current != "") print "" >> "../PR_BODY.md";
-                  print "#### `" key "/`" >> "../PR_BODY.md";
-                  current = key;
-                }
-                print $0 >> "../PR_BODY.md";
-              }
-            '
-          else
-            echo "_No file changes detected after sync._" >> ../PR_BODY.md
+          git config user.name "Beezy the bot"
+          git config user.email "beezy-bot@users.noreply.github.com"
+          if git diff --quiet && git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
           fi
-      - name: Create pull request in Marketing
-        uses: peter-evans/create-pull-request@98357b18bf14b5342f975ff684046ec3b2a07725  # v8.0.0
-        with:
-          token: ${{ secrets.SERVICE_BOT_TOKEN }}
-          path: marketing-repo
-          commit-message: "Sync marketing docs from Elements 🧩 (source ${{ github.sha }})"
-          branch: chore/elements-to-marketing-sync-${{ github.sha }}
-          title: "chore: sync docs from Elements"
-          body-path: PR_BODY.md
-          committer: "Beezy the bot <beezy-bot@users.noreply.github.com>"
-          author: "Beezy the bot <beezy-bot@users.noreply.github.com>"
-          labels: |
-            automation
-            docs
-            sync
-          signoff: false
+          git add -A
+          git commit -m "Sync marketing docs from Elements 🧩 (source ${{ github.sha }})"
+          git push origin ${{ env.BRANCH }}
