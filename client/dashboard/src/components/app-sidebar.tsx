@@ -25,7 +25,6 @@ import {
 } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
-import { ChangelogModal } from "./changelog-modal";
 import { FeatureRequestModal } from "./FeatureRequestModal";
 import { GramLogo } from "./gram-logo";
 import { ProjectMenu } from "./project-menu";
@@ -38,7 +37,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const [metricsModalOpen, setMetricsModalOpen] = React.useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
-  const [changelogModalOpen, setChangelogModalOpen] = useState(false);
 
   const isCatalogEnabled = telemetry.isFeatureEnabled("gram-external-mcp");
 
@@ -109,7 +107,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <NavButton
                   title="What's new"
                   Icon={Sparkles}
-                  onClick={() => setChangelogModalOpen(true)}
+                  href="https://www.getgram.ai/changelog"
+                  target="_blank"
                 />
               </SidebarMenuItem>
               <SidebarMenuItem>
@@ -144,10 +143,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         actionType="logs_page_access"
         icon={TestTube2Icon}
         accountUpgrade={true}
-      />
-      <ChangelogModal
-        open={changelogModalOpen}
-        onOpenChange={setChangelogModalOpen}
       />
     </Sidebar>
   );
