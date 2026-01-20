@@ -298,11 +298,13 @@ export function useGramThreadListAdapter(
           })
         }
 
-        // Title generation happens async server-side after first completion.
-        // Wait for the OpenRouter API call to complete, then fetch the title.
-        await new Promise((r) => setTimeout(r, 2000))
+        // Title generation happens async server-side via Temporal after first completion.
+        // This delay allows the OpenRouter LLM call to complete before we fetch the title.
+        const TITLE_GENERATION_DELAY_MS = 2000
+        await new Promise((r) => setTimeout(r, TITLE_GENERATION_DELAY_MS))
 
         try {
+          // TODO: rename generateTitle endpoint to getTitle
           const response = await fetch(
             `${optionsRef.current.apiUrl}/rpc/chat.generateTitle`,
             {
