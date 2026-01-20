@@ -768,15 +768,15 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 		}
 		r.messageWritten = true
 
-		// Trigger async title generation for first message
+		// Use WithoutCancel to ensure the workflow is scheduled even if the HTTP request is cancelled.
 		if r.isFirstMessage && r.chatTitleGenerator != nil {
-			go func() {
-				_ = r.chatTitleGenerator.ScheduleChatTitleGeneration(
-					context.WithoutCancel(r.ctx),
-					r.chatID.String(),
-					r.orgID,
-				)
-			}()
+			if err := r.chatTitleGenerator.ScheduleChatTitleGeneration(
+				context.WithoutCancel(r.ctx),
+				r.chatID.String(),
+				r.orgID,
+			); err != nil {
+				r.logger.WarnContext(r.ctx, "failed to schedule chat title generation", attr.SlogError(err))
+			}
 		}
 	}
 
