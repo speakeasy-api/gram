@@ -1,8 +1,10 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/signal"
 	"slices"
@@ -14,10 +16,104 @@ import (
 	"github.com/speakeasy-api/gram/cli/internal/api"
 	"github.com/speakeasy-api/gram/cli/internal/flags"
 	"github.com/speakeasy-api/gram/cli/internal/profile"
+	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/cli/internal/workflow"
 	"github.com/speakeasy-api/gram/server/gen/keys"
 	"github.com/urfave/cli/v2"
 )
+
+// WhoamiOptions configures the Whoami operation
+type WhoamiOptions struct {
+	// ProfilePath overrides default (~/.gram/profile.json)
+	ProfilePath string
+	// ProfileName for multi-profile support (default: "default")
+	ProfileName string
+	// APIKey overrides profile's API key
+	APIKey string
+	// APIURL overrides profile's API URL
+	APIURL string
+}
+
+// WhoamiResult contains the authenticated profile information
+type WhoamiResult struct {
+	Profile            *profile.Profile
+	Organization       keys.ValidateKeyOrganization
+	Scopes             []string
+	CurrentProjectSlug string
+	Projects           []*keys.ValidateKeyProject
+}
+
+// DoWhoami returns the current authenticated profile information
+func DoWhoami(ctx context.Context, opts WhoamiOptions) (*WhoamiResult, error) {
+	// Set defaults
+	if opts.ProfilePath == "" {
+		var err error
+		opts.ProfilePath, err = profile.DefaultProfilePath()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get profile path: %w", err)
+		}
+	}
+
+	// Load profile - use current profile if no name specified
+	var prof *profile.Profile
+	var err error
+	if opts.ProfileName != "" {
+		prof, err = profile.LoadByName(opts.ProfilePath, opts.ProfileName)
+	} else {
+		prof, err = profile.Load(opts.ProfilePath)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("not authenticated: %w", err)
+	}
+	if prof == nil {
+		return nil, fmt.Errorf("not authenticated: no profile found")
+	}
+
+	// Resolve API key
+	apiKey := secret.Secret(opts.APIKey)
+	if apiKey == "" {
+		apiKey = secret.Secret(prof.Secret)
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("no API key found in options or profile")
+	}
+
+	// Resolve API URL
+	apiURLStr := opts.APIURL
+	if apiURLStr == "" {
+		apiURLStr = prof.APIUrl
+	}
+	if apiURLStr == "" {
+		apiURLStr = workflow.DefaultBaseURL
+	}
+
+	apiURL, err := url.Parse(apiURLStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid API URL: %w", err)
+	}
+
+	// Verify key with server
+	client := api.NewKeysClient(&api.KeysClientOptions{
+		Host:   apiURL.Host,
+		Scheme: apiURL.Scheme,
+	})
+
+	result, err := client.Verify(ctx, apiKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify API key: %w", err)
+	}
+
+	// Resolve project slug
+	projectSlug := prof.DefaultProjectSlug
+
+	return &WhoamiResult{
+		Profile:            prof,
+		Organization:       *result.Organization,
+		Scopes:             result.Scopes,
+		CurrentProjectSlug: projectSlug,
+		Projects:           result.Projects,
+	}, nil
+}
 
 func newWhoAmICommand() *cli.Command {
 	return &cli.Command{
@@ -40,28 +136,19 @@ If no profile is configured, the command will indicate that no profile is set up
 			)
 			defer cancel()
 
-			prof := profile.FromContext(ctx)
-
-			workflowParams, err := workflow.ResolveParams(c, prof)
-			if err != nil {
-				return fmt.Errorf("no profile configured, please set up a profile in $home/.gram/profile.json")
-			}
-
-			client := api.NewKeysClient(&api.KeysClientOptions{
-				Host:   workflowParams.APIURL.Host,
-				Scheme: workflowParams.APIURL.Scheme,
+			result, err := DoWhoami(ctx, WhoamiOptions{
+				APIKey: c.String("api-key"),
+				APIURL: c.String("api-url"),
 			})
-
-			result, err := client.Verify(ctx, workflowParams.APIKey)
 			if err != nil {
-				return fmt.Errorf("failed to verify API key: %w", err)
+				return fmt.Errorf("no profile configured, please set up a profile in $home/.gram/profile.json: %w", err)
 			}
 
 			if c.Bool("json") {
 				out, err := json.MarshalIndent(ProfileInfo{
-					Organization:       *result.Organization,
+					Organization:       result.Organization,
 					Scopes:             result.Scopes,
-					CurrentProjectSlug: workflowParams.ProjectSlug,
+					CurrentProjectSlug: result.CurrentProjectSlug,
 					Projects:           result.Projects,
 				}, "", "  ")
 				if err != nil {
@@ -72,9 +159,9 @@ If no profile is configured, the command will indicate that no profile is set up
 			}
 
 			printProfile(ProfileInfo{
-				Organization:       *result.Organization,
+				Organization:       result.Organization,
 				Scopes:             result.Scopes,
-				CurrentProjectSlug: workflowParams.ProjectSlug,
+				CurrentProjectSlug: result.CurrentProjectSlug,
 				Projects:           result.Projects,
 			})
 
