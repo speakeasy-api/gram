@@ -87,7 +87,8 @@ type ChatMessage struct {
 	TotalTokens      int64
 	ToolCallID       pgtype.Text
 	ToolUrn          urn.Tool
-	ToolSucceeded    pgtype.Bool
+	ToolOutcome      pgtype.Text
+	ToolOutcomeNotes pgtype.Text
 	CreatedAt        pgtype.Timestamptz
 }
 

@@ -780,7 +780,8 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
   tool_call_id TEXT,
   tool_urn TEXT,
-  tool_succeeded BOOLEAN,
+  tool_outcome TEXT,
+  tool_outcome_notes TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 

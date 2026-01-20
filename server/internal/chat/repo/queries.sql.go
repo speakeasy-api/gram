@@ -153,7 +153,7 @@ func (q *Queries) ListAllChats(ctx context.Context, projectID uuid.UUID) ([]List
 }
 
 const listChatMessages = `-- name: ListChatMessages :many
-SELECT id, chat_id, project_id, role, content, model, message_id, user_id, external_user_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, tool_call_id, tool_urn, tool_succeeded, created_at FROM chat_messages WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid)
+SELECT id, chat_id, project_id, role, content, model, message_id, user_id, external_user_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, created_at FROM chat_messages WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid)
 `
 
 type ListChatMessagesParams struct {
@@ -187,7 +187,8 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 			&i.TotalTokens,
 			&i.ToolCallID,
 			&i.ToolUrn,
-			&i.ToolSucceeded,
+			&i.ToolOutcome,
+			&i.ToolOutcomeNotes,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
