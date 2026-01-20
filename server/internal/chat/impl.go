@@ -548,7 +548,7 @@ func (s *Service) CreditUsage(ctx context.Context, payload *gen.CreditUsagePaylo
 	}, nil
 }
 
-func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitlePayload) (*gen.GenerateTitleResult, error) {
+func (s *Service) GetTitle(ctx context.Context, payload *gen.GetTitlePayload) (*gen.GetTitleResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -578,7 +578,7 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 	if chat.Title.Valid && chat.Title.String != "" {
 		title = chat.Title.String
 	}
-	return &gen.GenerateTitleResult{Title: title}, nil
+	return &gen.GetTitleResult{Title: title}, nil
 }
 
 // startOrResumeChatResult contains the result of starting or resuming a chat.
