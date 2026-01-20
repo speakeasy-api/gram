@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/cli/internal/deploy"
 	"github.com/speakeasy-api/gram/cli/internal/flags"
 	"github.com/speakeasy-api/gram/cli/internal/mcp"
-	"github.com/speakeasy-api/gram/cli/internal/o11y"
 	"github.com/speakeasy-api/gram/cli/internal/profile"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/cli/internal/workflow"
@@ -289,17 +288,18 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			}
 
 			slogID := slog.String("deployment_id", result.DeploymentID)
+			logsURL := result.LogsURL
 
 			switch result.Status {
 			case "completed":
-				logger.InfoContext(ctx, "Deployment succeeded", slogID, slog.String("logs_url", deploymentLogsURL))
-				fmt.Printf("\nView deployment: %s\n", deploymentLogsURL)
-				openDeploymentURL(logger, ctx, deploymentLogsURL)
+				logger.InfoContext(ctx, "Deployment succeeded", slogID, slog.String("logs_url", logsURL))
+				fmt.Printf("\nView deployment: %s\n", logsURL)
+				openDeploymentURL(logger, ctx, logsURL)
 				return nil
 			case "failed":
-				logger.ErrorContext(ctx, "Deployment failed", slogID, slog.String("logs_url", deploymentLogsURL))
-				fmt.Printf("\nView deployment logs: %s\n", deploymentLogsURL)
-				openDeploymentURL(logger, ctx, deploymentLogsURL)
+				logger.ErrorContext(ctx, "Deployment failed", slogID, slog.String("logs_url", logsURL))
+				fmt.Printf("\nView deployment logs: %s\n", logsURL)
+				openDeploymentURL(logger, ctx, logsURL)
 				return fmt.Errorf("deployment failed")
 			default:
 				logger.InfoContext(
@@ -308,7 +308,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 					slogID,
 					slog.String("status", result.Status),
 				)
-				fmt.Printf("\nView deployment: %s\n", deploymentLogsURL)
+				fmt.Printf("\nView deployment: %s\n", logsURL)
 			}
 
 			return nil
