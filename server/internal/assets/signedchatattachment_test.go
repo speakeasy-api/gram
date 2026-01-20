@@ -299,7 +299,7 @@ func TestService_ServeChatAttachmentSigned_TamperedToken(t *testing.T) {
 	projectID := *authCtx.ProjectID
 
 	// Generate a valid token but sign it with a different secret
-	token, _, err := assetsinternal.GenerateSignedAssetToken("wrong-secret", uuid.New(), projectID, 600)
+	token, _, err := assetsinternal.GenerateSignedAssetToken("wrong-secret", uuid.New(), projectID, 600*time.Second)
 	require.NoError(t, err)
 
 	_, _, err = ti.service.ServeChatAttachmentSigned(t.Context(), &assets.ServeChatAttachmentSignedForm{
@@ -322,7 +322,7 @@ func TestService_ServeChatAttachmentSigned_AssetNotFound(t *testing.T) {
 	projectID := *authCtx.ProjectID
 
 	// Generate a valid token for a non-existent asset
-	token, _, err := assetsinternal.GenerateSignedAssetToken("test-jwt-secret", uuid.New(), projectID, 600)
+	token, _, err := assetsinternal.GenerateSignedAssetToken("test-jwt-secret", uuid.New(), projectID, 600*time.Second)
 	require.NoError(t, err)
 
 	_, _, err = ti.service.ServeChatAttachmentSigned(t.Context(), &assets.ServeChatAttachmentSignedForm{
