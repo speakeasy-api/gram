@@ -13,7 +13,8 @@ import {
   useToolset,
   useUpdateEnvironmentMutation,
 } from "@gram/client/react-query/index.js";
-import { AlertCircle, Eye, EyeOff, Plus, Trash2, X } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useEnvironments } from "./Environments";
@@ -158,6 +159,80 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
   );
 }
 
+interface DisplayNameDialogProps {
+  open: boolean;
+  entryName: string;
+  currentDisplayName: string;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (entryName: string, displayName: string) => void;
+}
+
+function DisplayNameDialog({
+  open,
+  entryName,
+  currentDisplayName,
+  onOpenChange,
+  onSubmit,
+}: DisplayNameDialogProps) {
+  const [displayName, setDisplayName] = useState(currentDisplayName);
+
+  useEffect(() => {
+    if (open) {
+      setDisplayName(currentDisplayName);
+    }
+  }, [open, currentDisplayName]);
+
+  const handleClose = () => {
+    onOpenChange(false);
+  };
+
+  const handleSubmit = () => {
+    onSubmit(entryName, displayName.trim());
+    handleClose();
+  };
+
+  const handleClear = () => {
+    onSubmit(entryName, "");
+    handleClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <Dialog.Content>
+        <Dialog.Header>
+          <Dialog.Title>Edit Display Name</Dialog.Title>
+          <Dialog.Description>
+            Set a custom display name for <strong>{entryName}</strong>. This
+            friendly name will be shown instead of the variable name.
+          </Dialog.Description>
+        </Dialog.Header>
+        <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Type>Display Name</Type>
+            <Input
+              value={displayName}
+              onChange={setDisplayName}
+              placeholder={entryName}
+              autoFocus
+            />
+          </div>
+        </div>
+        <Dialog.Footer>
+          {currentDisplayName && (
+            <Button variant="tertiary" onClick={handleClear}>
+              Clear
+            </Button>
+          )}
+          <Button variant="tertiary" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit}>Save</Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
+  );
+}
+
 export function useEnvironment(slug?: string) {
   let { environmentSlug } = useParams();
   if (slug) environmentSlug = slug;
@@ -195,6 +270,17 @@ export default function EnvironmentPage() {
     varName: string;
   }>({ open: false, varName: "" });
   const [visibleFields, setVisibleFields] = useState<Set<string>>(new Set());
+  const [displayNameEdits, setDisplayNameEdits] = useState<
+    Record<string, string>
+  >({});
+  const [displayNamesToRemove, setDisplayNamesToRemove] = useState<Set<string>>(
+    new Set(),
+  );
+  const [displayNameDialog, setDisplayNameDialog] = useState<{
+    open: boolean;
+    entryName: string;
+    currentDisplayName: string;
+  }>({ open: false, entryName: "", currentDisplayName: "" });
 
   useRegisterEnvironmentTelemetry({
     environmentSlug: environment?.slug ?? "",
@@ -221,6 +307,8 @@ export default function EnvironmentPage() {
       setEnvValues({});
       setEditedFields(new Set());
       setDeletedFields(new Set());
+      setDisplayNameEdits({});
+      setDisplayNamesToRemove(new Set());
     },
     onError: (error) => {
       console.error(
@@ -243,6 +331,8 @@ export default function EnvironmentPage() {
     setSaveError(null);
     setFocusedField(null);
     setVisibleFields(new Set());
+    setDisplayNameEdits({});
+    setDisplayNamesToRemove(new Set());
   }, [environment?.slug]);
 
   const { data: selectedToolset } = useToolset(
@@ -346,6 +436,8 @@ export default function EnvironmentPage() {
     setIsAddingNew(false);
     setNewEntryName("");
     setNewEntryValue("");
+    setDisplayNameEdits({});
+    setDisplayNamesToRemove(new Set());
   }, []);
 
   const handleRemoveVariable = useCallback((varName: string) => {
@@ -358,6 +450,44 @@ export default function EnvironmentPage() {
       setHasChanges(true);
       if (saveError) setSaveError(null);
       setDeleteConfirmDialog({ open: false, varName: "" });
+    },
+    [saveError],
+  );
+
+  const handleEditDisplayName = useCallback((entryName: string) => {
+    // Check for pending edit first, then existing display name
+    const currentDisplayName =
+      displayNameEdits[entryName] ??
+      environment?.entryDisplayNames?.[entryName] ??
+      "";
+    setDisplayNameDialog({
+      open: true,
+      entryName,
+      currentDisplayName,
+    });
+  }, [displayNameEdits, environment?.entryDisplayNames]);
+
+  const handleDisplayNameSubmit = useCallback(
+    (entryName: string, displayName: string) => {
+      if (displayName === "") {
+        // Remove display name
+        setDisplayNamesToRemove((prev) => new Set(prev).add(entryName));
+        setDisplayNameEdits((prev) => {
+          const next = { ...prev };
+          delete next[entryName];
+          return next;
+        });
+      } else {
+        // Set display name
+        setDisplayNameEdits((prev) => ({ ...prev, [entryName]: displayName }));
+        setDisplayNamesToRemove((prev) => {
+          const next = new Set(prev);
+          next.delete(entryName);
+          return next;
+        });
+      }
+      setHasChanges(true);
+      if (saveError) setSaveError(null);
     },
     [saveError],
   );
@@ -379,12 +509,22 @@ export default function EnvironmentPage() {
 
     const entriesToRemove: string[] = Array.from(deletedFields);
 
+    // Build display name updates
+    const entryDisplayNamesToUpdate =
+      Object.keys(displayNameEdits).length > 0 ? displayNameEdits : undefined;
+    const entryDisplayNamesToRemove =
+      displayNamesToRemove.size > 0
+        ? Array.from(displayNamesToRemove)
+        : undefined;
+
     updateEnvironment({
       request: {
         slug: environmentSlug,
         updateEnvironmentRequestBody: {
           entriesToUpdate,
           entriesToRemove,
+          entryDisplayNamesToUpdate,
+          entryDisplayNamesToRemove,
         },
       },
     });
@@ -395,6 +535,8 @@ export default function EnvironmentPage() {
     setNewEntryValue("");
     setNewEntryVisible(false);
     setDeletedFields(new Set());
+    setDisplayNameEdits({});
+    setDisplayNamesToRemove(new Set());
   }, [
     environment,
     envValues,
@@ -402,6 +544,8 @@ export default function EnvironmentPage() {
     newEntryName,
     newEntryValue,
     deletedFields,
+    displayNameEdits,
+    displayNamesToRemove,
     updateEnvironment,
   ]);
 
@@ -445,8 +589,12 @@ export default function EnvironmentPage() {
       })),
   ].filter((entry) => !deletedFields.has(entry.name));
 
+  const hasDisplayNameChanges =
+    Object.keys(displayNameEdits).length > 0 || displayNamesToRemove.size > 0;
   const hasChangesOrNewEntry =
-    hasChanges || (isAddingNew && validateEntryName(newEntryName));
+    hasChanges ||
+    hasDisplayNameChanges ||
+    (isAddingNew && validateEntryName(newEntryName));
 
   return (
     <Page>
@@ -511,19 +659,52 @@ export default function EnvironmentPage() {
                     displayValue = originalEntry.value;
                   }
 
+                  // Get custom display name - check pending edits first, then saved value
+                  const isDisplayNameRemoved = displayNamesToRemove.has(
+                    entry.name,
+                  );
+                  const pendingDisplayName = displayNameEdits[entry.name];
+                  const savedDisplayName =
+                    environment.entryDisplayNames?.[entry.name];
+                  const effectiveDisplayName = isDisplayNameRemoved
+                    ? undefined
+                    : pendingDisplayName ?? savedDisplayName;
+                  const hasDisplayName =
+                    effectiveDisplayName && effectiveDisplayName !== entry.name;
+
                   return (
                     <div
                       key={entry.name}
                       className="grid grid-cols-2 gap-4 items-center mb-2"
                     >
-                      <label className="text-sm font-medium text-foreground">
-                        {entry.name}
-                        {isNew && (
-                          <span className="ml-2 text-xs text-blue-600 font-normal">
-                            (new)
-                          </span>
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm font-medium text-foreground">
+                          {hasDisplayName ? effectiveDisplayName : entry.name}
+                        </label>
+                        {hasDisplayName && (
+                          <Badge variant="secondary" className="text-xs">
+                            RENAMED
+                          </Badge>
                         )}
-                      </label>
+                        {isNew && (
+                          <Badge
+                            variant="secondary"
+                            className="text-xs bg-blue-100 text-blue-700"
+                          >
+                            NEW
+                          </Badge>
+                        )}
+                        <Button
+                          variant="tertiary"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={() => handleEditDisplayName(entry.name)}
+                          disabled={isSaving}
+                          aria-label={`Edit display name for ${entry.name}`}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                      </div>
                       <div className="flex items-center gap-2 w-full">
                         <div className="flex-1">
                           <Input
@@ -726,6 +907,21 @@ export default function EnvironmentPage() {
                 </Dialog.Footer>
               </Dialog.Content>
             </Dialog>
+
+            <DisplayNameDialog
+              open={displayNameDialog.open}
+              entryName={displayNameDialog.entryName}
+              currentDisplayName={displayNameDialog.currentDisplayName}
+              onOpenChange={(open) =>
+                !open &&
+                setDisplayNameDialog({
+                  open: false,
+                  entryName: "",
+                  currentDisplayName: "",
+                })
+              }
+              onSubmit={handleDisplayNameSubmit}
+            />
           </Page.Section.Body>
         </Page.Section>
       </Page.Body>

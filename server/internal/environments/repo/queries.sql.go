@@ -25,7 +25,7 @@ INSERT INTO environments (
     $3,
     $4,
     $5
-) RETURNING id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted_at, deleted
+) RETURNING id, organization_id, project_id, name, slug, description, entry_display_names, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateEnvironmentParams struct {
@@ -52,6 +52,7 @@ func (q *Queries) CreateEnvironment(ctx context.Context, arg CreateEnvironmentPa
 		&i.Name,
 		&i.Slug,
 		&i.Description,
+		&i.EntryDisplayNames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -182,7 +183,7 @@ func (q *Queries) DeleteToolsetEnvironment(ctx context.Context, arg DeleteToolse
 }
 
 const getEnvironmentByID = `-- name: GetEnvironmentByID :one
-SELECT id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, entry_display_names, created_at, updated_at, deleted_at, deleted
 FROM environments e
 WHERE e.id = $1 AND e.project_id = $2 AND e.deleted IS FALSE
 `
@@ -202,6 +203,7 @@ func (q *Queries) GetEnvironmentByID(ctx context.Context, arg GetEnvironmentByID
 		&i.Name,
 		&i.Slug,
 		&i.Description,
+		&i.EntryDisplayNames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -211,7 +213,7 @@ func (q *Queries) GetEnvironmentByID(ctx context.Context, arg GetEnvironmentByID
 }
 
 const getEnvironmentBySlug = `-- name: GetEnvironmentBySlug :one
-SELECT id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, entry_display_names, created_at, updated_at, deleted_at, deleted
 FROM environments e
 WHERE e.slug = $1 AND e.project_id = $2 AND e.deleted IS FALSE
 `
@@ -232,6 +234,7 @@ func (q *Queries) GetEnvironmentBySlug(ctx context.Context, arg GetEnvironmentBy
 		&i.Name,
 		&i.Slug,
 		&i.Description,
+		&i.EntryDisplayNames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -241,7 +244,7 @@ func (q *Queries) GetEnvironmentBySlug(ctx context.Context, arg GetEnvironmentBy
 }
 
 const getEnvironmentForSource = `-- name: GetEnvironmentForSource :one
-SELECT e.id, e.organization_id, e.project_id, e.name, e.slug, e.description, e.created_at, e.updated_at, e.deleted_at, e.deleted
+SELECT e.id, e.organization_id, e.project_id, e.name, e.slug, e.description, e.entry_display_names, e.created_at, e.updated_at, e.deleted_at, e.deleted
 FROM environments e
 INNER JOIN source_environments se ON se.environment_id = e.id
 WHERE se.source_kind = $1
@@ -266,6 +269,7 @@ func (q *Queries) GetEnvironmentForSource(ctx context.Context, arg GetEnvironmen
 		&i.Name,
 		&i.Slug,
 		&i.Description,
+		&i.EntryDisplayNames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -275,7 +279,7 @@ func (q *Queries) GetEnvironmentForSource(ctx context.Context, arg GetEnvironmen
 }
 
 const getEnvironmentForToolset = `-- name: GetEnvironmentForToolset :one
-SELECT e.id, e.organization_id, e.project_id, e.name, e.slug, e.description, e.created_at, e.updated_at, e.deleted_at, e.deleted
+SELECT e.id, e.organization_id, e.project_id, e.name, e.slug, e.description, e.entry_display_names, e.created_at, e.updated_at, e.deleted_at, e.deleted
 FROM environments e
 INNER JOIN toolset_environments te ON te.environment_id = e.id
 WHERE te.toolset_id = $1
@@ -298,6 +302,7 @@ func (q *Queries) GetEnvironmentForToolset(ctx context.Context, arg GetEnvironme
 		&i.Name,
 		&i.Slug,
 		&i.Description,
+		&i.EntryDisplayNames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -348,7 +353,7 @@ func (q *Queries) ListEnvironmentEntries(ctx context.Context, arg ListEnvironmen
 }
 
 const listEnvironments = `-- name: ListEnvironments :many
-SELECT id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, entry_display_names, created_at, updated_at, deleted_at, deleted
 FROM environments e
 WHERE e.project_id = $1 AND e.deleted IS FALSE
 ORDER BY e.created_at DESC
@@ -370,6 +375,7 @@ func (q *Queries) ListEnvironments(ctx context.Context, projectID uuid.UUID) ([]
 			&i.Name,
 			&i.Slug,
 			&i.Description,
+			&i.EntryDisplayNames,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -383,6 +389,40 @@ func (q *Queries) ListEnvironments(ctx context.Context, projectID uuid.UUID) ([]
 		return nil, err
 	}
 	return items, nil
+}
+
+const removeEntryDisplayNames = `-- name: RemoveEntryDisplayNames :one
+UPDATE environments
+SET entry_display_names = entry_display_names - $1::TEXT[],
+    updated_at = clock_timestamp()
+WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, slug, description, entry_display_names, created_at, updated_at, deleted_at, deleted
+`
+
+type RemoveEntryDisplayNamesParams struct {
+	EntryNames    []string
+	EnvironmentID uuid.UUID
+	ProjectID     uuid.UUID
+}
+
+// Removes the specified keys from the entry_display_names JSONB map.
+func (q *Queries) RemoveEntryDisplayNames(ctx context.Context, arg RemoveEntryDisplayNamesParams) (Environment, error) {
+	row := q.db.QueryRow(ctx, removeEntryDisplayNames, arg.EntryNames, arg.EnvironmentID, arg.ProjectID)
+	var i Environment
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.EntryDisplayNames,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const setSourceEnvironment = `-- name: SetSourceEnvironment :one
@@ -468,6 +508,40 @@ func (q *Queries) SetToolsetEnvironment(ctx context.Context, arg SetToolsetEnvir
 	return i, err
 }
 
+const updateEntryDisplayNames = `-- name: UpdateEntryDisplayNames :one
+UPDATE environments
+SET entry_display_names = COALESCE(entry_display_names || $1::JSONB, entry_display_names),
+    updated_at = clock_timestamp()
+WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, slug, description, entry_display_names, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateEntryDisplayNamesParams struct {
+	EntryDisplayNames []byte
+	EnvironmentID     uuid.UUID
+	ProjectID         uuid.UUID
+}
+
+// Merges the provided display names into the existing JSONB map.
+func (q *Queries) UpdateEntryDisplayNames(ctx context.Context, arg UpdateEntryDisplayNamesParams) (Environment, error) {
+	row := q.db.QueryRow(ctx, updateEntryDisplayNames, arg.EntryDisplayNames, arg.EnvironmentID, arg.ProjectID)
+	var i Environment
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.EntryDisplayNames,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const updateEnvironment = `-- name: UpdateEnvironment :one
 UPDATE environments
 SET
@@ -475,7 +549,7 @@ SET
     description = COALESCE($2, description),
     updated_at = now()
 WHERE slug = $3 AND project_id = $4 AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, entry_display_names, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateEnvironmentParams struct {
@@ -500,6 +574,7 @@ func (q *Queries) UpdateEnvironment(ctx context.Context, arg UpdateEnvironmentPa
 		&i.Name,
 		&i.Slug,
 		&i.Description,
+		&i.EntryDisplayNames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

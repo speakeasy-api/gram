@@ -39,6 +39,10 @@ type UpdateEnvironmentRequestBody struct {
 	EntriesToUpdate []*EnvironmentEntryInputRequestBody `form:"entries_to_update" json:"entries_to_update" xml:"entries_to_update"`
 	// List of environment entry names to remove
 	EntriesToRemove []string `form:"entries_to_remove" json:"entries_to_remove" xml:"entries_to_remove"`
+	// Map of entry names to display names to set or update
+	EntryDisplayNamesToUpdate map[string]string `form:"entry_display_names_to_update,omitempty" json:"entry_display_names_to_update,omitempty" xml:"entry_display_names_to_update,omitempty"`
+	// Entry names to remove display names from
+	EntryDisplayNamesToRemove []string `form:"entry_display_names_to_remove,omitempty" json:"entry_display_names_to_remove,omitempty" xml:"entry_display_names_to_remove,omitempty"`
 }
 
 // SetSourceEnvironmentLinkRequestBody is the type of the "environments"
@@ -78,6 +82,8 @@ type CreateEnvironmentResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of environment entries
 	Entries []*EnvironmentEntryResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
+	// Map of entry names to custom display names
+	EntryDisplayNames map[string]string `form:"entry_display_names,omitempty" json:"entry_display_names,omitempty" xml:"entry_display_names,omitempty"`
 	// The creation date of the environment
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the environment was last updated
@@ -107,6 +113,8 @@ type UpdateEnvironmentResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of environment entries
 	Entries []*EnvironmentEntryResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
+	// Map of entry names to custom display names
+	EntryDisplayNames map[string]string `form:"entry_display_names,omitempty" json:"entry_display_names,omitempty" xml:"entry_display_names,omitempty"`
 	// The creation date of the environment
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the environment was last updated
@@ -143,6 +151,8 @@ type GetSourceEnvironmentResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of environment entries
 	Entries []*EnvironmentEntryResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
+	// Map of entry names to custom display names
+	EntryDisplayNames map[string]string `form:"entry_display_names,omitempty" json:"entry_display_names,omitempty" xml:"entry_display_names,omitempty"`
 	// The creation date of the environment
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the environment was last updated
@@ -177,6 +187,8 @@ type GetToolsetEnvironmentResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of environment entries
 	Entries []*EnvironmentEntryResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
+	// Map of entry names to custom display names
+	EntryDisplayNames map[string]string `form:"entry_display_names,omitempty" json:"entry_display_names,omitempty" xml:"entry_display_names,omitempty"`
 	// The creation date of the environment
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the environment was last updated
@@ -2120,6 +2132,8 @@ type EnvironmentResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of environment entries
 	Entries []*EnvironmentEntryResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
+	// Map of entry names to custom display names
+	EntryDisplayNames map[string]string `form:"entry_display_names,omitempty" json:"entry_display_names,omitempty" xml:"entry_display_names,omitempty"`
 	// The creation date of the environment
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the environment was last updated
@@ -2176,6 +2190,20 @@ func NewUpdateEnvironmentRequestBody(p *environments.UpdateEnvironmentPayload) *
 	} else {
 		body.EntriesToRemove = []string{}
 	}
+	if p.EntryDisplayNamesToUpdate != nil {
+		body.EntryDisplayNamesToUpdate = make(map[string]string, len(p.EntryDisplayNamesToUpdate))
+		for key, val := range p.EntryDisplayNamesToUpdate {
+			tk := key
+			tv := val
+			body.EntryDisplayNamesToUpdate[tk] = tv
+		}
+	}
+	if p.EntryDisplayNamesToRemove != nil {
+		body.EntryDisplayNamesToRemove = make([]string, len(p.EntryDisplayNamesToRemove))
+		for i, val := range p.EntryDisplayNamesToRemove {
+			body.EntryDisplayNamesToRemove[i] = val
+		}
+	}
 	return body
 }
 
@@ -2222,6 +2250,14 @@ func NewCreateEnvironmentEnvironmentOK(body *CreateEnvironmentResponseBody) *typ
 			continue
 		}
 		v.Entries[i] = unmarshalEnvironmentEntryResponseBodyToTypesEnvironmentEntry(val)
+	}
+	if body.EntryDisplayNames != nil {
+		v.EntryDisplayNames = make(map[string]string, len(body.EntryDisplayNames))
+		for key, val := range body.EntryDisplayNames {
+			tk := key
+			tv := val
+			v.EntryDisplayNames[tk] = tv
+		}
 	}
 
 	return v
@@ -2563,6 +2599,14 @@ func NewUpdateEnvironmentEnvironmentOK(body *UpdateEnvironmentResponseBody) *typ
 			continue
 		}
 		v.Entries[i] = unmarshalEnvironmentEntryResponseBodyToTypesEnvironmentEntry(val)
+	}
+	if body.EntryDisplayNames != nil {
+		v.EntryDisplayNames = make(map[string]string, len(body.EntryDisplayNames))
+		for key, val := range body.EntryDisplayNames {
+			tk := key
+			tv := val
+			v.EntryDisplayNames[tk] = tv
+		}
 	}
 
 	return v
@@ -3202,6 +3246,14 @@ func NewGetSourceEnvironmentEnvironmentOK(body *GetSourceEnvironmentResponseBody
 		}
 		v.Entries[i] = unmarshalEnvironmentEntryResponseBodyToTypesEnvironmentEntry(val)
 	}
+	if body.EntryDisplayNames != nil {
+		v.EntryDisplayNames = make(map[string]string, len(body.EntryDisplayNames))
+		for key, val := range body.EntryDisplayNames {
+			tk := key
+			tv := val
+			v.EntryDisplayNames[tk] = tv
+		}
+	}
 
 	return v
 }
@@ -3689,6 +3741,14 @@ func NewGetToolsetEnvironmentEnvironmentOK(body *GetToolsetEnvironmentResponseBo
 			continue
 		}
 		v.Entries[i] = unmarshalEnvironmentEntryResponseBodyToTypesEnvironmentEntry(val)
+	}
+	if body.EntryDisplayNames != nil {
+		v.EntryDisplayNames = make(map[string]string, len(body.EntryDisplayNames))
+		for key, val := range body.EntryDisplayNames {
+			tk := key
+			tv := val
+			v.EntryDisplayNames[tk] = tv
+		}
 	}
 
 	return v

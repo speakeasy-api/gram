@@ -171,16 +171,17 @@ type DeploymentsPackage struct {
 }
 
 type Environment struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
-	Name           string
-	Slug           string
-	Description    pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID                uuid.UUID
+	OrganizationID    string
+	ProjectID         uuid.UUID
+	Name              string
+	Slug              string
+	Description       pgtype.Text
+	EntryDisplayNames []byte
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
 }
 
 type EnvironmentEntry struct {

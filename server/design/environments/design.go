@@ -294,6 +294,8 @@ var UpdateEnvironmentForm = Type("UpdateEnvironmentForm", func() {
 	Attribute("name", String, "The name of the environment")
 	Attribute("entries_to_update", ArrayOf(EnvironmentEntryInput), "List of environment entries to update or create")
 	Attribute("entries_to_remove", ArrayOf(String), "List of environment entry names to remove")
+	Attribute("entry_display_names_to_update", MapOf(String, String), "Map of entry names to display names to set or update")
+	Attribute("entry_display_names_to_remove", ArrayOf(String), "Entry names to remove display names from")
 
 	Required("slug", "entries_to_update", "entries_to_remove")
 })

@@ -12472,6 +12472,11 @@ components:
                     items:
                         $ref: '#/components/schemas/EnvironmentEntry'
                     description: List of environment entries
+                entry_display_names:
+                    type: object
+                    description: Map of entry names to custom display names
+                    additionalProperties:
+                        type: string
                 id:
                     type: string
                     description: The ID of the environment
@@ -15695,6 +15700,16 @@ components:
                     items:
                         $ref: '#/components/schemas/EnvironmentEntryInput'
                     description: List of environment entries to update or create
+                entry_display_names_to_remove:
+                    type: array
+                    items:
+                        type: string
+                    description: Entry names to remove display names from
+                entry_display_names_to_update:
+                    type: object
+                    description: Map of entry names to display names to set or update
+                    additionalProperties:
+                        type: string
                 name:
                     type: string
                     description: The name of the environment
@@ -15724,6 +15739,16 @@ components:
                     items:
                         $ref: '#/components/schemas/EnvironmentEntryInput'
                     description: List of environment entries to update or create
+                entry_display_names_to_remove:
+                    type: array
+                    items:
+                        type: string
+                    description: Entry names to remove display names from
+                entry_display_names_to_update:
+                    type: object
+                    description: Map of entry names to display names to set or update
+                    additionalProperties:
+                        type: string
                 name:
                     type: string
                     description: The name of the environment

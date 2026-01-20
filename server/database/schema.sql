@@ -457,6 +457,7 @@ CREATE TABLE IF NOT EXISTS environments (
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
   description TEXT CHECK (description <> '' AND CHAR_LENGTH(description) <= 250),
+  entry_display_names JSONB NOT NULL DEFAULT '{}',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

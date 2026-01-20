@@ -2423,6 +2423,14 @@ func unmarshalEnvironmentResponseBodyToTypesEnvironment(v *EnvironmentResponseBo
 		}
 		res.Entries[i] = unmarshalEnvironmentEntryResponseBodyToTypesEnvironmentEntry(val)
 	}
+	if v.EntryDisplayNames != nil {
+		res.EntryDisplayNames = make(map[string]string, len(v.EntryDisplayNames))
+		for key, val := range v.EntryDisplayNames {
+			tk := key
+			tv := val
+			res.EntryDisplayNames[tk] = tv
+		}
+	}
 
 	return res
 }

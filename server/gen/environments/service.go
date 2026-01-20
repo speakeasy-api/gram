@@ -212,6 +212,10 @@ type UpdateEnvironmentPayload struct {
 	EntriesToUpdate []*EnvironmentEntryInput
 	// List of environment entry names to remove
 	EntriesToRemove []string
+	// Map of entry names to display names to set or update
+	EntryDisplayNamesToUpdate map[string]string
+	// Entry names to remove display names from
+	EntryDisplayNamesToRemove []string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

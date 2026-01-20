@@ -151,3 +151,19 @@ RETURNING *;
 -- name: DeleteToolsetEnvironment :exec
 DELETE FROM toolset_environments
 WHERE toolset_id = @toolset_id AND project_id = @project_id;
+
+-- name: UpdateEntryDisplayNames :one
+-- Merges the provided display names into the existing JSONB map.
+UPDATE environments
+SET entry_display_names = COALESCE(entry_display_names || @entry_display_names::JSONB, entry_display_names),
+    updated_at = clock_timestamp()
+WHERE id = @environment_id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;
+
+-- name: RemoveEntryDisplayNames :one
+-- Removes the specified keys from the entry_display_names JSONB map.
+UPDATE environments
+SET entry_display_names = entry_display_names - @entry_names::TEXT[],
+    updated_at = clock_timestamp()
+WHERE id = @environment_id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;
