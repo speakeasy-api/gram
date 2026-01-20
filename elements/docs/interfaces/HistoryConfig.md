@@ -50,3 +50,28 @@ Only applies when history is enabled.
 ```ts
 true when history.enabled is true
 ```
+
+***
+
+### initialThreadId?
+
+> `optional` **initialThreadId**: `string`
+
+Initial thread ID to load when the component mounts.
+When provided, Elements will automatically load and switch to this thread.
+Useful for implementing chat sharing via URL parameters.
+
+#### Example
+
+```ts
+// Read threadId from URL and pass to config
+const searchParams = new URLSearchParams(window.location.search)
+const threadId = searchParams.get('threadId')
+
+<GramElementsProvider config={{
+  history: {
+    enabled: true,
+    initialThreadId: threadId ?? undefined,
+  },
+}}>
+```

@@ -6,6 +6,7 @@
 
 ## Interfaces
 
+- [ShareButtonProps](interfaces/ShareButtonProps.md)
 - [ErrorContext](interfaces/ErrorContext.md)
 - [ElementsConfig](interfaces/ElementsConfig.md)
 - [ErrorTrackingConfigOption](interfaces/ErrorTrackingConfigOption.md)
@@ -48,7 +49,9 @@
 
 - [Chat](functions/Chat.md)
 - [ChatHistory](functions/ChatHistory.md)
+- [ShareButton](functions/ShareButton.md)
 - [GramElementsProvider](functions/GramElementsProvider.md)
+- [useThreadId](functions/useThreadId.md)
 - [trackError](functions/trackError.md)
 - [defineFrontendTool](functions/defineFrontendTool.md)
 
