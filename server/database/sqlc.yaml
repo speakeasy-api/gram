@@ -62,6 +62,10 @@ overrides:
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types
           type: TransportType
+      - column: chat_messages.tool_urn
+        go_type:
+          import: github.com/speakeasy-api/gram/server/internal/urn
+          type: Tool
 
 sql:
   - schema: schema.sql
