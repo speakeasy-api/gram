@@ -114,7 +114,7 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 
 	svc := toolsets.NewService(logger, conn, sessionManager, nil)
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient)
-	assetsSvc := assets.NewService(logger, conn, sessionManager, chatSessionsManager, assetStorage)
+	assetsSvc := assets.NewService(logger, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret")
 	packagesSvc := packages.NewService(logger, conn, sessionManager)
 
 	return ctx, &testInstance{

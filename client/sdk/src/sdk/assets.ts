@@ -3,9 +3,11 @@
  * @generated-id: c272881eadb9
  */
 
+import { assetsCreateSignedChatAttachmentURL } from "../funcs/assetsCreateSignedChatAttachmentURL.js";
 import { assetsFetchOpenAPIv3FromURL } from "../funcs/assetsFetchOpenAPIv3FromURL.js";
 import { assetsListAssets } from "../funcs/assetsListAssets.js";
 import { assetsServeChatAttachment } from "../funcs/assetsServeChatAttachment.js";
+import { assetsServeChatAttachmentSigned } from "../funcs/assetsServeChatAttachmentSigned.js";
 import { assetsServeFunction } from "../funcs/assetsServeFunction.js";
 import { assetsServeImage } from "../funcs/assetsServeImage.js";
 import { assetsServeOpenAPIv3 } from "../funcs/assetsServeOpenAPIv3.js";
@@ -19,6 +21,25 @@ import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Assets extends ClientSDK {
+  /**
+   * createSignedChatAttachmentURL assets
+   *
+   * @remarks
+   * Create a time-limited signed URL to access a chat attachment without authentication.
+   */
+  async createSignedChatAttachmentURL(
+    request: operations.CreateSignedChatAttachmentURLRequest,
+    security?: operations.CreateSignedChatAttachmentURLSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.CreateSignedChatAttachmentURLResult> {
+    return unwrapAsync(assetsCreateSignedChatAttachmentURL(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
   /**
    * fetchOpenAPIv3FromURL assets
    *
@@ -72,6 +93,23 @@ export class Assets extends ClientSDK {
       this,
       request,
       security,
+      options,
+    ));
+  }
+
+  /**
+   * serveChatAttachmentSigned assets
+   *
+   * @remarks
+   * Serve a chat attachment using a signed URL token.
+   */
+  async serveChatAttachmentSigned(
+    request: operations.ServeChatAttachmentSignedRequest,
+    options?: RequestOptions,
+  ): Promise<operations.ServeChatAttachmentSignedResponse> {
+    return unwrapAsync(assetsServeChatAttachmentSigned(
+      this,
+      request,
       options,
     ));
   }

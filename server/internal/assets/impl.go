@@ -51,11 +51,12 @@ const (
 )
 
 type Service struct {
-	tracer  trace.Tracer
-	logger  *slog.Logger
-	db      *pgxpool.Pool
-	auth    *auth.Auth
-	storage BlobStore
+	tracer    trace.Tracer
+	logger    *slog.Logger
+	db        *pgxpool.Pool
+	auth      *auth.Auth
+	storage   BlobStore
+	jwtSecret string
 
 	chatSessions *chatsessions.Manager
 	projects     *projectsRepo.Queries
@@ -65,7 +66,7 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, chatSessions *chatsessions.Manager, storage BlobStore) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, chatSessions *chatsessions.Manager, storage BlobStore, jwtSecret string) *Service {
 	logger = logger.With(attr.SlogComponent("assets"))
 
 	return &Service{
@@ -74,6 +75,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		db:           db,
 		auth:         auth.New(logger, db, sessions),
 		storage:      storage,
+		jwtSecret:    jwtSecret,
 		chatSessions: chatSessions,
 		projects:     projectsRepo.New(db),
 		repo:         repo.New(db),
@@ -1107,5 +1109,145 @@ func (s *Service) ServeChatAttachment(ctx context.Context, payload *gen.ServeCha
 		ContentType:   row.ContentType,
 		ContentLength: row.ContentLength,
 		LastModified:  row.UpdatedAt.Time.Format(time.RFC1123),
+	}, body, nil
+}
+
+const (
+	defaultSignedURLTTL time.Duration = 10 * time.Minute
+	maxSignedURLTTL     time.Duration = 1 * time.Hour
+)
+
+func (s *Service) CreateSignedChatAttachmentURL(ctx context.Context, payload *gen.CreateSignedChatAttachmentURLForm) (*gen.CreateSignedChatAttachmentURLResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	assetID, err := uuid.Parse(payload.ID)
+	switch {
+	case err != nil:
+		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("parse asset id: %w", err), "invalid asset id")
+	case assetID == uuid.Nil:
+		return nil, oops.E(oops.CodeBadRequest, nil, "asset id cannot be empty")
+	}
+
+	projectID, err := uuid.Parse(payload.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").Log(ctx, s.logger)
+	}
+	if projectID == uuid.Nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "project id cannot be empty")
+	}
+
+	if err := s.auth.CheckProjectAccess(ctx, s.logger, projectID); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(
+		attr.SlogAssetID(assetID.String()),
+		attr.SlogProjectID(projectID.String()),
+	)
+
+	// Verify asset exists and belongs to project
+	_, err = s.repo.GetChatAttachmentAssetURL(ctx, repo.GetChatAttachmentAssetURLParams{
+		ID:        assetID,
+		ProjectID: projectID,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get chat attachment asset url: %w", err), "error loading asset").Log(ctx, logger)
+	}
+
+	// Determine TTL
+	ttl := defaultSignedURLTTL
+	if payload.TTLSeconds != nil && *payload.TTLSeconds > 0 {
+		sec := time.Duration(*payload.TTLSeconds) * time.Second
+		ttl = min(sec, maxSignedURLTTL)
+	}
+
+	// Generate signed token
+	token, expiresAt, err := GenerateSignedAssetToken(s.jwtSecret, assetID, projectID, ttl)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("generate signed token: %w", err), "error creating signed url").Log(ctx, logger)
+	}
+
+	// Build URL
+	signedURL := url.URL{
+		Path:     srv.ServeChatAttachmentSignedAssetsPath(),
+		RawQuery: url.Values{"token": {token}}.Encode(),
+	}
+
+	return &gen.CreateSignedChatAttachmentURLResult{
+		URL:       signedURL.String(),
+		ExpiresAt: expiresAt.Format(time.RFC3339),
+	}, nil
+}
+
+func (s *Service) ServeChatAttachmentSigned(ctx context.Context, payload *gen.ServeChatAttachmentSignedForm) (*gen.ServeChatAttachmentSignedResult, io.ReadCloser, error) {
+	// Validate and parse the signed token
+	claims, err := ValidateSignedAssetToken(s.jwtSecret, payload.Token)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnauthorized, err, "invalid or expired token")
+	}
+
+	assetID, err := uuid.Parse(claims.AssetID)
+	switch {
+	case err != nil:
+		return nil, nil, oops.E(oops.CodeBadRequest, fmt.Errorf("parse asset id from token: %w", err), "invalid token")
+	case assetID == uuid.Nil:
+		return nil, nil, oops.E(oops.CodeBadRequest, nil, "invalid token")
+	}
+
+	projectID, err := uuid.Parse(claims.ProjectID)
+	switch {
+	case err != nil:
+		return nil, nil, oops.E(oops.CodeBadRequest, fmt.Errorf("parse project id from token: %w", err), "invalid token")
+	case projectID == uuid.Nil:
+		return nil, nil, oops.E(oops.CodeBadRequest, nil, "invalid token")
+	}
+
+	logger := s.logger.With(
+		attr.SlogAssetID(assetID.String()),
+		attr.SlogProjectID(projectID.String()),
+	)
+
+	// Fetch asset metadata
+	row, err := s.repo.GetChatAttachmentAssetURL(ctx, repo.GetChatAttachmentAssetURLParams{
+		ID:        assetID,
+		ProjectID: projectID,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get chat attachment asset url: %w", err), "error loading asset").Log(ctx, logger)
+	}
+
+	assetURL, err := url.Parse(row.Url)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse asset url: %w", err), "error loading asset").Log(ctx, logger)
+	}
+
+	exists, err := s.storage.Exists(ctx, assetURL)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("check if asset exists: %w", err), "error loading asset").Log(ctx, logger)
+	}
+
+	if !exists {
+		return nil, nil, oops.C(oops.CodeNotFound)
+	}
+
+	body, err := s.storage.Read(ctx, assetURL)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read asset: %w", err), "error fetching asset").Log(ctx, logger)
+	}
+
+	return &gen.ServeChatAttachmentSignedResult{
+		ContentType:              row.ContentType,
+		ContentLength:            row.ContentLength,
+		LastModified:             row.UpdatedAt.Time.Format(time.RFC1123),
+		AccessControlAllowOrigin: conv.Ptr("*"),
 	}, body, nil
 }
