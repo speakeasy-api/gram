@@ -41,7 +41,7 @@ func ExecuteGenerateChatTitleWorkflow(ctx context.Context, temporalClient client
 		ID:                    id,
 		TaskQueue:             string(TaskQueueMain),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
-		WorkflowRunTimeout:    5 * time.Minute,
+		WorkflowRunTimeout:    1 * time.Minute,
 	}, GenerateChatTitleWorkflow, params)
 }
 
