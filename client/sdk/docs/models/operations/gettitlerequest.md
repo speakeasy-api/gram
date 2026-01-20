@@ -1,11 +1,11 @@
-# GenerateTitleRequest
+# GetTitleRequest
 
 ## Example Usage
 
 ```typescript
-import { GenerateTitleRequest } from "@gram/client/models/operations";
+import { GetTitleRequest } from "@gram/client/models/operations";
 
-let value: GenerateTitleRequest = {
+let value: GetTitleRequest = {
   serveImageForm: {
     id: "<id>",
   },

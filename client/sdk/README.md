@@ -156,7 +156,7 @@ run();
 ### [Chat](docs/sdks/chat/README.md)
 
 * [creditUsage](docs/sdks/chat/README.md#creditusage) - creditUsage chat
-* [generateTitle](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
+* [getTitle](docs/sdks/chat/README.md#gettitle) - getTitle chat
 * [list](docs/sdks/chat/README.md#list) - listChats chat
 * [load](docs/sdks/chat/README.md#load) - loadChat chat
 
@@ -345,7 +345,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`authRegister`](docs/sdks/auth/README.md#register) - register auth
 - [`authSwitchScopes`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`chatCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
-- [`chatGenerateTitle`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
+- [`chatGetTitle`](docs/sdks/chat/README.md#gettitle) - getTitle chat
 - [`chatList`](docs/sdks/chat/README.md#list) - listChats chat
 - [`chatLoad`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`chatSessionsCreate`](docs/sdks/chatsessions/README.md#create) - create chatSessions
@@ -462,7 +462,7 @@ To learn about this feature and how to get started, check
 - [`useAgentsCreateMutation`](docs/sdks/agents/README.md#create) - createResponse agents
 - [`useAgentsDeleteMutation`](docs/sdks/agents/README.md#delete) - deleteResponse agents
 - [`useAgentsGet`](docs/sdks/agents/README.md#get) - getResponse agents
-- [`useChatGenerateTitleMutation`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
+- [`useChatGetTitleMutation`](docs/sdks/chat/README.md#gettitle) - getTitle chat
 - [`useChatSessionsCreateMutation`](docs/sdks/chatsessions/README.md#create) - create chatSessions
 - [`useChatSessionsRevokeMutation`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
