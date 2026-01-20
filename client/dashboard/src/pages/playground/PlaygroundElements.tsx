@@ -28,7 +28,6 @@ import {
   GramThreadWelcome,
   PlaygroundAuthWarningContext,
 } from "./PlaygroundElementsOverrides";
-import "@gram-ai/elements/elements.css";
 
 interface PlaygroundElementsProps {
   toolsetSlug: string | null;

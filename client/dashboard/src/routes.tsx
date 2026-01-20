@@ -22,7 +22,9 @@ import { MCPHostedPage } from "./pages/mcp/MCPHostedPage";
 import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
-import Playground from "./pages/playground/Playground";
+import { lazy } from "react";
+
+const Playground = lazy(() => import("./pages/playground/Playground"));
 import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";

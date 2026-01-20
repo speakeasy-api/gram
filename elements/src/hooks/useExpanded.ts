@@ -10,9 +10,16 @@ interface UseExpandedAPI {
 
 export const useExpanded = (): UseExpandedAPI => {
   const { config, isExpanded, setIsExpanded } = useElements()
-  const defaultExpanded = config.modal?.defaultExpanded ?? false
+
+  // Use sidecar config for sidecar variant, modal config for widget variant
+  const expandableConfig =
+    config.variant === 'sidecar' ? config.sidecar : config.modal
+
+  const expandable = expandableConfig?.expandable ?? false
+  const defaultExpanded = expandableConfig?.defaultExpanded ?? false
+
   return {
-    expandable: config.modal?.expandable ?? false,
+    expandable,
     isExpanded,
     setIsExpanded,
     defaultExpanded,

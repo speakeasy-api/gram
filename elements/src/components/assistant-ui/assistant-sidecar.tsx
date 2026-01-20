@@ -24,7 +24,7 @@ export const AssistantSidecar: FC<AssistantSidecarProps> = ({ className }) => {
   const themeProps = useThemeProps()
   const sidecarConfig = config.sidecar ?? {}
   const { title, dimensions } = sidecarConfig
-  const { isExpanded, setIsExpanded } = useExpanded()
+  const { expandable, isExpanded, setIsExpanded } = useExpanded()
   const thread = useAssistantState(({ thread }) => thread)
   const isGenerating = thread.messages.some(
     (message) => message.status?.type === 'running'
@@ -42,19 +42,16 @@ export const AssistantSidecar: FC<AssistantSidecarProps> = ({ className }) => {
           width: isExpanded
             ? (dimensions?.expanded?.width ?? '800px')
             : (dimensions?.default?.width ?? '400px'),
-          height: isExpanded
-            ? (dimensions?.expanded?.height ?? '100%')
-            : (dimensions?.default?.height ?? '100vh'),
         }}
         transition={{ duration: 0.3, ease: EASE_OUT_QUINT }}
         className={cn(
-          'aui-root aui-sidecar bg-popover text-popover-foreground fixed top-0 right-0 border-l',
+          'aui-root aui-sidecar bg-popover text-popover-foreground fixed top-0 right-0 bottom-0 flex flex-col border-l',
           themeProps.className,
           className
         )}
       >
         {/* Header */}
-        <div className="aui-sidecar-header flex h-14 items-center justify-between border-b px-4">
+        <div className="aui-sidecar-header flex h-14 shrink-0 items-center justify-between border-b px-4">
           <span
             className={cn(
               'text-md flex items-center gap-2 font-medium',
@@ -70,24 +67,26 @@ export const AssistantSidecar: FC<AssistantSidecarProps> = ({ className }) => {
               />
             )}
           </span>
-          <div className="aui-sidecar-header-actions flex items-center gap-1">
-            <TooltipIconButton
-              tooltip={isExpanded ? 'Collapse' : 'Pop out'}
-              variant="ghost"
-              className="aui-sidecar-popout size-8"
-              onClick={() => setIsExpanded((v) => !v)}
-            >
-              {!isExpanded ? (
-                <PanelRightOpen className="size-4.5" />
-              ) : (
-                <PanelRightClose className="size-4.5" />
-              )}
-            </TooltipIconButton>
-          </div>
+          {expandable && (
+            <div className="aui-sidecar-header-actions flex items-center gap-1">
+              <TooltipIconButton
+                tooltip={isExpanded ? 'Collapse' : 'Pop out'}
+                variant="ghost"
+                className="aui-sidecar-popout size-8"
+                onClick={() => setIsExpanded((v) => !v)}
+              >
+                {!isExpanded ? (
+                  <PanelRightOpen className="size-4.5" />
+                ) : (
+                  <PanelRightClose className="size-4.5" />
+                )}
+              </TooltipIconButton>
+            </div>
+          )}
         </div>
 
         {/* Main content area */}
-        <div className="aui-sidecar-body flex h-[calc(100%-3.5rem)] overflow-hidden">
+        <div className="aui-sidecar-body flex min-h-0 flex-1 overflow-hidden">
           {/* Thread list sidebar (when history enabled) */}
           {showThreadList && (
             <div className="aui-sidecar-thread-list w-56 shrink-0 overflow-y-auto border-r">

@@ -6,7 +6,7 @@ import {
   TooltipProvider,
 } from "@speakeasy-api/moonshine";
 import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import {
   BrowserRouter,
   Route,
@@ -221,10 +221,23 @@ const routesWithSubroutes = (routes: AppRoute[]) => {
       <Route
         key={item.title}
         path={item.url}
-        element={item.component ? <item.component /> : null}
+        element={
+          item.component ? (
+            <Suspense fallback={<div className="h-full w-full" />}>
+              <item.component />
+            </Suspense>
+          ) : null
+        }
       >
         {item.indexComponent && (
-          <Route index element={<item.indexComponent />} />
+          <Route
+            index
+            element={
+              <Suspense fallback={<div className="h-full w-full" />}>
+                <item.indexComponent />
+              </Suspense>
+            }
+          />
         )}
         {/* Check for any children routes stored on this item */}
         {routesWithSubroutes(
