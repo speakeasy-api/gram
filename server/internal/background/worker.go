@@ -157,6 +157,7 @@ func NewTemporalWorker(
 		opts.SlackClient,
 		opts.ChatClient,
 		opts.OpenRouter,
+		opts.OpenRouterChatClient,
 		opts.K8sClient,
 		opts.ExpectedTargetCNAME,
 		opts.BillingTracker,
@@ -189,6 +190,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
 	temporalWorker.RegisterActivity(activities.FallbackModelUsageTracking)
+	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
 	// Agent runner related activities
 	temporalWorker.RegisterActivity(activities.PreprocessAgentsInput)
 	temporalWorker.RegisterActivity(activities.ExecuteToolCall)
@@ -205,6 +207,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(FallbackModelUsageTrackingWorkflow)
+	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	// Agent runner related workflows
 	temporalWorker.RegisterWorkflow(AgentsResponseWorkflow)
 	temporalWorker.RegisterWorkflow(SubAgentWorkflow)

@@ -33,6 +33,7 @@ type Activities struct {
 	fallbackModelUsageTracking    *activities.FallbackModelUsageTracking
 	firePlatformUsageMetrics      *activities.FirePlatformUsageMetrics
 	freeTierReportingUsageMetrics *activities.FreeTierReportingUsageMetrics
+	generateChatTitle             *activities.GenerateChatTitle
 	getAllOrganizations           *activities.GetAllOrganizations
 	getSlackProjectContext        *activities.GetSlackProjectContext
 	postSlackMessage              *activities.PostSlackMessage
@@ -65,6 +66,7 @@ func NewActivities(
 	slackClient *slack_client.SlackClient,
 	chatClient *chat.ChatClient,
 	openrouterProvisioner openrouter.Provisioner,
+	openrouterChatClient *openrouter.ChatClient,
 	k8sClient *k8s.KubernetesClients,
 	expectedTargetCNAME string,
 	billingTracker billing.Tracker,
@@ -83,6 +85,7 @@ func NewActivities(
 		fallbackModelUsageTracking:    activities.NewFallbackModelUsageTracking(logger, openrouterProvisioner),
 		firePlatformUsageMetrics:      activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		freeTierReportingUsageMetrics: activities.NewFreeTierReportingMetrics(logger, db, billingRepo, posthogClient),
+		generateChatTitle:             activities.NewGenerateChatTitle(logger, db, openrouterChatClient),
 		getAllOrganizations:           activities.NewGetAllOrganizations(logger, db),
 		getSlackProjectContext:        activities.NewSlackProjectContextActivity(logger, db, slackClient),
 		postSlackMessage:              activities.NewPostSlackMessageActivity(logger, slackClient),
@@ -199,4 +202,8 @@ func (a *Activities) FallbackModelUsageTracking(ctx context.Context, input activ
 
 func (a *Activities) RecordAgentExecution(ctx context.Context, input activities.RecordAgentExecutionInput) error {
 	return a.recordAgentExecution.Do(ctx, input)
+}
+
+func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.GenerateChatTitleArgs) error {
+	return a.generateChatTitle.Do(ctx, input)
 }

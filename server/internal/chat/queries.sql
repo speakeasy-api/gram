@@ -19,9 +19,7 @@ VALUES (
     NOW(),
     NOW()
 )
-ON CONFLICT (id) DO UPDATE SET 
-    title = @title,
-    updated_at = NOW()
+ON CONFLICT (id) DO NOTHING
 RETURNING id;
 
 -- name: CreateChatMessage :copyfrom

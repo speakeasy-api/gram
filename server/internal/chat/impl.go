@@ -51,6 +51,11 @@ type FallbackModelUsageTracker interface {
 	ScheduleFallbackModelUsageTracking(ctx context.Context, generationID, orgID, projectID string, source billing.ModelUsageSource, chatID string) error
 }
 
+// ChatTitleGenerator schedules async chat title generation.
+type ChatTitleGenerator interface {
+	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID string) error
+}
+
 type Service struct {
 	auth                 *auth.Auth
 	repo                 *repo.Queries
@@ -62,6 +67,7 @@ type Service struct {
 	chatSessions         *chatsessions.Manager
 	proxyTransport       http.RoundTripper
 	fallbackUsageTracker FallbackModelUsageTracker
+	chatTitleGenerator   ChatTitleGenerator
 	posthog              *posthog.Posthog
 }
 
@@ -73,6 +79,7 @@ func NewService(
 	openRouter openrouter.Provisioner,
 	chatClient *openrouter.ChatClient,
 	fallbackUsageTracker FallbackModelUsageTracker,
+	chatTitleGenerator ChatTitleGenerator,
 	posthog *posthog.Posthog,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
@@ -88,6 +95,7 @@ func NewService(
 		chatClient:           chatClient,
 		proxyTransport:       cleanhttp.DefaultPooledTransport(),
 		fallbackUsageTracker: fallbackUsageTracker,
+		chatTitleGenerator:   chatTitleGenerator,
 		posthog:              posthog,
 	}
 }
@@ -387,7 +395,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	respCaptor := w
 
 	if chatIDHeader != "" {
-		chatID, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatIDHeader, chatRequest)
+		chatResult, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatIDHeader, chatRequest)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to start or resume chat").Log(ctx, s.logger)
 		}
@@ -402,7 +410,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			ctx:                  ctx,
 			isStreaming:          isStreaming,
 			orgID:                orgID,
-			chatID:               chatID,
+			chatID:               chatResult.ChatID,
 			projectID:            *authCtx.ProjectID,
 			repo:                 s.repo,
 			messageContent:       &strings.Builder{},
@@ -419,7 +427,9 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 				CompletionTokens: 0,
 				TotalTokens:      0,
 			},
-			usageSet: false,
+			usageSet:           false,
+			isFirstMessage:     chatResult.IsFirstMessage,
+			chatTitleGenerator: s.chatTitleGenerator,
 		}
 	}
 
@@ -549,7 +559,7 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 		return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID")
 	}
 
-	// Load the chat to verify access and get messages
+	// Load the chat to verify access
 	chat, err := s.repo.GetChat(ctx, chatID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
@@ -562,62 +572,25 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// Get the first user message for title generation
-	firstUserMessage, err := s.repo.GetFirstUserChatMessage(ctx, chatID)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return &gen.GenerateTitleResult{Title: "New Chat"}, nil
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get first user message").Log(ctx, s.logger)
+	// Return current title from DB. Title generation happens asynchronously via
+	// Temporal after first completion; title will be available on next list()/fetch().
+	title := "New Chat"
+	if chat.Title.Valid && chat.Title.String != "" {
+		title = chat.Title.String
 	}
-
-	// Generate the title
-	title := s.generateChatTitle(ctx, authCtx.ActiveOrganizationID, firstUserMessage)
-
-	// Update the chat title in the database
-	err = s.repo.UpdateChatTitle(ctx, repo.UpdateChatTitleParams{
-		ID:    chatID,
-		Title: conv.ToPGText(title),
-	})
-	if err != nil {
-		s.logger.WarnContext(ctx, "failed to update chat title", attr.SlogError(err))
-		// Still return the generated title even if the update fails
-	}
-
 	return &gen.GenerateTitleResult{Title: title}, nil
 }
 
-func (s *Service) generateChatTitle(ctx context.Context, orgID, firstMessage string) string {
-	if s.chatClient == nil {
-		return "New Chat"
-	}
-
-	// Use a detached context with timeout so title generation doesn't block the main request
-	// or get cancelled if the client disconnects
-	titleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-	defer cancel()
-
-	msg, err := s.chatClient.GetCompletion(titleCtx, orgID,
-		"Generate a concise title (3-6 words) for this conversation. Return only the title text, no quotes or explanation.",
-		firstMessage,
-		nil,
-	)
-	if err != nil {
-		s.logger.WarnContext(ctx, "failed to generate chat title", attr.SlogError(err))
-		return "New Chat"
-	}
-
-	title := strings.TrimSpace(msg.Content)
-	if title == "" {
-		return "New Chat"
-	}
-	return title
+// startOrResumeChatResult contains the result of starting or resuming a chat.
+type startOrResumeChatResult struct {
+	ChatID         uuid.UUID
+	IsFirstMessage bool // True if this is the first assistant response for this chat
 }
 
-func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID uuid.UUID, userID string, externalUserID string, chatIDHeader string, request openrouter.OpenAIChatRequest) (uuid.UUID, error) {
+func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID uuid.UUID, userID string, externalUserID string, chatIDHeader string, request openrouter.OpenAIChatRequest) (*startOrResumeChatResult, error) {
 	chatID, err := uuid.Parse(chatIDHeader)
 	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeInvalid, err, "invalid chat ID in header")
+		return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID in header")
 	}
 
 	// Create chat with placeholder title - title generation happens via the generateTitle RPC
@@ -631,19 +604,19 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to create chat", attr.SlogError(err))
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "failed to create chat")
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create chat")
 	}
 
 	// Get the number of already-stored messages so we can insert any new ones
 	chatCount, err := s.repo.CountChatMessages(ctx, chatID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to get chat history", attr.SlogError(err))
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "failed to get chat history")
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get chat history")
 	}
 
 	// This shouldn't happen, and also it doesn't really matter if it does, but we error anyway so we can fix it
 	if int(chatCount) > len(request.Messages) {
-		return uuid.Nil, oops.E(oops.CodeInvalid, nil, "chat history mismatch")
+		return nil, oops.E(oops.CodeInvalid, nil, "chat history mismatch")
 	}
 
 	// If the stored chat history is shorter than the request, insert the missing messages
@@ -673,7 +646,13 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 		}
 	}
 
-	return chatID, nil
+	// This is the first message if there are no existing messages in the chat
+	isFirstMessage := chatCount == 0
+
+	return &startOrResumeChatResult{
+		ChatID:         chatID,
+		IsFirstMessage: isFirstMessage,
+	}, nil
 }
 
 // responseCaptor captures and logs response data
@@ -698,6 +677,9 @@ type responseCaptor struct {
 	toolCallID           string
 	accumulatedToolCalls map[int]openrouter.ToolCall // Map of index to accumulated tool call data
 	usage                openrouter.Usage
+	// Title generation
+	isFirstMessage     bool
+	chatTitleGenerator ChatTitleGenerator
 }
 
 func (r *responseCaptor) WriteHeader(statusCode int) {
@@ -785,6 +767,17 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 			r.logger.ErrorContext(r.ctx, "failed to store chat message", attr.SlogError(err))
 		}
 		r.messageWritten = true
+
+		// Use WithoutCancel to ensure the workflow is scheduled even if the HTTP request is cancelled.
+		if r.isFirstMessage && r.chatTitleGenerator != nil {
+			if err := r.chatTitleGenerator.ScheduleChatTitleGeneration(
+				context.WithoutCancel(r.ctx),
+				r.chatID.String(),
+				r.orgID,
+			); err != nil {
+				r.logger.WarnContext(r.ctx, "failed to schedule chat title generation", attr.SlogError(err))
+			}
+		}
 	}
 
 	n, err := r.ResponseWriter.Write(b)

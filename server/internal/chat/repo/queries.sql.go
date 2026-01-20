@@ -388,9 +388,7 @@ VALUES (
     NOW(),
     NOW()
 )
-ON CONFLICT (id) DO UPDATE SET 
-    title = $6,
-    updated_at = NOW()
+ON CONFLICT (id) DO NOTHING
 RETURNING id
 `
 

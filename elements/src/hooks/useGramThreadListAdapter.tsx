@@ -298,8 +298,13 @@ export function useGramThreadListAdapter(
           })
         }
 
-        // Call the server to generate and persist the title
+        // Title generation happens async server-side via Temporal after first completion.
+        // This delay allows the OpenRouter LLM call to complete before we fetch the title.
+        const TITLE_GENERATION_DELAY_MS = 2000
+        await new Promise((r) => setTimeout(r, TITLE_GENERATION_DELAY_MS))
+
         try {
+          // TODO: rename generateTitle endpoint to getTitle
           const response = await fetch(
             `${optionsRef.current.apiUrl}/rpc/chat.generateTitle`,
             {
@@ -314,24 +319,20 @@ export function useGramThreadListAdapter(
 
           if (response.ok) {
             const result = (await response.json()) as { title: string }
-            const title = result.title || 'New Chat'
+            const title = result.title
 
-            // Return a stream that emits the title as text
-            return createAssistantStream((controller) => {
-              controller.appendText(title)
-              controller.close()
-            })
-          }
-
-          // 404 is expected for new chats that haven't been persisted yet
-          if (response.status !== 404) {
-            console.error('Error generating title:', response.status)
+            if (title) {
+              return createAssistantStream((controller) => {
+                controller.appendText(title)
+                controller.close()
+              })
+            }
           }
         } catch (error) {
-          console.error('Error generating title:', error)
+          console.error('Error fetching title:', error)
         }
 
-        // Fallback: return empty stream
+        // If title fetch failed or got placeholder, return empty stream (keeps existing title)
         return createAssistantStream((controller) => {
           controller.close()
         })
