@@ -22,6 +22,10 @@ export type McpMetadata = {
    */
   externalDocumentationUrl?: string | undefined;
   /**
+   * Maps security scheme keys to user-friendly display names
+   */
+  headerDisplayNames?: { [k: string]: string } | undefined;
+  /**
    * The ID of the metadata record
    */
   id: string;
@@ -51,6 +55,7 @@ export const McpMetadata$inboundSchema: z.ZodType<
 > = z.object({
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   external_documentation_url: z.string().optional(),
+  header_display_names: z.record(z.string()).optional(),
   id: z.string(),
   instructions: z.string().optional(),
   logo_asset_id: z.string().optional(),
@@ -60,6 +65,7 @@ export const McpMetadata$inboundSchema: z.ZodType<
   return remap$(v, {
     "created_at": "createdAt",
     "external_documentation_url": "externalDocumentationUrl",
+    "header_display_names": "headerDisplayNames",
     "logo_asset_id": "logoAssetId",
     "toolset_id": "toolsetId",
     "updated_at": "updatedAt",

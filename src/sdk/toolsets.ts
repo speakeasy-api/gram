@@ -13,6 +13,7 @@ import { toolsetsGetBySlug } from "../funcs/toolsetsGetBySlug.js";
 import { toolsetsList } from "../funcs/toolsetsList.js";
 import { toolsetsRemoveOAuthServer } from "../funcs/toolsetsRemoveOAuthServer.js";
 import { toolsetsUpdateBySlug } from "../funcs/toolsetsUpdateBySlug.js";
+import { toolsetsUpdateSecurityVariableDisplayName } from "../funcs/toolsetsUpdateSecurityVariableDisplayName.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -202,6 +203,25 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Toolset> {
     return unwrapAsync(toolsetsUpdateBySlug(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateSecurityVariableDisplayName toolsets
+   *
+   * @remarks
+   * Update the display name of a security variable for user-friendly presentation
+   */
+  async updateSecurityVariableDisplayName(
+    request: operations.UpdateSecurityVariableDisplayNameRequest,
+    security?: operations.UpdateSecurityVariableDisplayNameSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.SecurityVariable> {
+    return unwrapAsync(toolsetsUpdateSecurityVariableDisplayName(
       this,
       request,
       security,

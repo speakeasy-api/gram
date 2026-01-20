@@ -158,6 +158,7 @@ export * from "./updatepackageform.js";
 export * from "./updatepackageresult.js";
 export * from "./updateprompttemplateform.js";
 export * from "./updateprompttemplateresult.js";
+export * from "./updatesecurityvariabledisplaynamerequestbody.js";
 export * from "./updateslackconnectionrequestbody.js";
 export * from "./updatetoolsetrequestbody.js";
 export * from "./uploadchatattachmentresult.js";
