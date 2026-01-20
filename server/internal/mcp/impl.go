@@ -545,11 +545,14 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	sessionID := parseMcpSessionID(r.Header)
 	w.Header().Set("Mcp-Session-Id", sessionID)
 
+	// Load header display names for remapping
+	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ID)
+
 	mcpInputs := &mcpInputs{
 		projectID:        toolset.ProjectID,
 		toolset:          toolset.Slug,
 		environment:      selectedEnvironment,
-		mcpEnvVariables:  parseMcpEnvVariables(r),
+		mcpEnvVariables:  parseMcpEnvVariables(r, headerDisplayNames),
 		authenticated:    authenticated,
 		oauthTokenInputs: tokenInputs,
 		sessionID:        sessionID,
@@ -593,6 +596,26 @@ func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*
 	}
 
 	return &toolset, customDomainCtx, nil
+}
+
+// loadHeaderDisplayNames loads the header display names mapping from MCP metadata.
+// Returns an empty map if no metadata exists or on error (non-critical operation).
+func (s *Service) loadHeaderDisplayNames(ctx context.Context, toolsetID uuid.UUID) map[string]string {
+	result := make(map[string]string)
+
+	displayNamesJSON, err := s.mcpMetadataRepo.GetHeaderDisplayNames(ctx, toolsetID)
+	if err != nil {
+		// Not found or error - return empty map, this is non-critical
+		return result
+	}
+
+	if len(displayNamesJSON) > 0 {
+		if parseErr := json.Unmarshal(displayNamesJSON, &result); parseErr != nil {
+			s.logger.WarnContext(ctx, "failed to parse header display names", attr.SlogError(parseErr))
+		}
+	}
+
+	return result
 }
 
 func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) error {
@@ -672,11 +695,14 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
 	}
 
+	// Load header display names for remapping
+	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ID)
+
 	mcpInputs := &mcpInputs{
 		projectID:        *authCtx.ProjectID,
 		toolset:          toolsetSlug,
 		environment:      environmentSlug,
-		mcpEnvVariables:  parseMcpEnvVariables(r),
+		mcpEnvVariables:  parseMcpEnvVariables(r, headerDisplayNames),
 		authenticated:    true,
 		oauthTokenInputs: []oauthTokenInputs{},
 		sessionID:        sessionID,
@@ -749,15 +775,39 @@ func (s *Service) handleBatch(ctx context.Context, payload *mcpInputs, batch bat
 
 // parseMcpEnvVariables: Map potential user provided mcp variables into inputs
 // Only inputs that match up with a security or server env var in the proxy will be used in the proxy
-func parseMcpEnvVariables(r *http.Request) map[string]string {
+// headerDisplayNames maps actual header names (e.g., "X-RapidAPI-Key") to display names (e.g., "API Key")
+// When a display name is used in the MCP header, it's mapped back to the actual header's env var
+func parseMcpEnvVariables(r *http.Request, headerDisplayNames map[string]string) map[string]string {
 	ignoredHeaders := []string{
 		"mcp-session-id",
 	}
+
+	// Build reverse mapping: normalized_display_name -> normalized_actual_name
+	// This allows users to send MCP-API-KEY and have it mapped to X_RAPIDAPI_KEY
+	displayNameToActual := make(map[string]string)
+	for actualName, displayName := range headerDisplayNames {
+		if displayName != "" {
+			// Normalize: lowercase and replace dashes with underscores
+			normalizedDisplayName := strings.ToLower(strings.ReplaceAll(displayName, "-", "_"))
+			normalizedDisplayName = strings.ReplaceAll(normalizedDisplayName, " ", "_")
+			normalizedActual := strings.ToLower(strings.ReplaceAll(actualName, "-", "_"))
+			displayNameToActual[normalizedDisplayName] = normalizedActual
+		}
+	}
+
 	envVars := map[string]string{}
 	for k := range r.Header {
 		keySanitized := strings.ToLower(k)
 		if strings.HasPrefix(keySanitized, "mcp-") && !slices.Contains(ignoredHeaders, keySanitized) {
-			envVars[strings.ReplaceAll(strings.TrimPrefix(keySanitized, "mcp-"), "-", "_")] = r.Header.Get(k)
+			// Extract the key without MCP- prefix and normalize
+			normalizedKey := strings.ReplaceAll(strings.TrimPrefix(keySanitized, "mcp-"), "-", "_")
+
+			// Check if this is a display name and map to actual header name
+			if actualKey, ok := displayNameToActual[normalizedKey]; ok {
+				normalizedKey = actualKey
+			}
+
+			envVars[normalizedKey] = r.Header.Get(k)
 		}
 
 	}

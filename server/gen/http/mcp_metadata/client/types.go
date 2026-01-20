@@ -46,6 +46,8 @@ type SetMcpMetadataResponseBody struct {
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Maps security scheme keys to user-friendly display names
+	HeaderDisplayNames map[string]string `form:"header_display_names,omitempty" json:"header_display_names,omitempty" xml:"header_display_names,omitempty"`
 	// When the metadata entry was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the metadata entry was last updated
@@ -436,6 +438,8 @@ type McpMetadataResponseBody struct {
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Maps security scheme keys to user-friendly display names
+	HeaderDisplayNames map[string]string `form:"header_display_names,omitempty" json:"header_display_names,omitempty" xml:"header_display_names,omitempty"`
 	// When the metadata entry was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the metadata entry was last updated
@@ -626,6 +630,14 @@ func NewSetMcpMetadataMcpMetadataOK(body *SetMcpMetadataResponseBody) *types.Mcp
 		Instructions:             body.Instructions,
 		CreatedAt:                *body.CreatedAt,
 		UpdatedAt:                *body.UpdatedAt,
+	}
+	if body.HeaderDisplayNames != nil {
+		v.HeaderDisplayNames = make(map[string]string, len(body.HeaderDisplayNames))
+		for key, val := range body.HeaderDisplayNames {
+			tk := key
+			tv := val
+			v.HeaderDisplayNames[tk] = tv
+		}
 	}
 
 	return v

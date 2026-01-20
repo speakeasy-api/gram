@@ -22,6 +22,7 @@ var McpMetadata = Type("McpMetadata", func() {
 		Format(FormatURI)
 	})
 	Attribute("instructions", String, "Server instructions returned in the MCP initialize response")
+	Attribute("header_display_names", MapOf(String, String), "Maps security scheme keys to user-friendly display names")
 	Attribute("created_at", String, "When the metadata entry was created", func() {
 		Format(FormatDateTime)
 	})

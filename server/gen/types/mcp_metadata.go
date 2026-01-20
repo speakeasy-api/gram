@@ -20,6 +20,8 @@ type McpMetadata struct {
 	ExternalDocumentationURL *string
 	// Server instructions returned in the MCP initialize response
 	Instructions *string
+	// Maps security scheme keys to user-friendly display names
+	HeaderDisplayNames map[string]string
 	// When the metadata entry was created
 	CreatedAt string
 	// When the metadata entry was last updated

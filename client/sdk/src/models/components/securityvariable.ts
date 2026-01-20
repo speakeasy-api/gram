@@ -16,15 +16,23 @@ export type SecurityVariable = {
    */
   bearerFormat?: string | undefined;
   /**
+   * User-friendly display name for the security variable (defaults to name if not set)
+   */
+  displayName?: string | undefined;
+  /**
    * The environment variables
    */
   envVariables: Array<string>;
+  /**
+   * The unique identifier of the security variable
+   */
+  id: string;
   /**
    * Where the security token is placed
    */
   inPlacement: string;
   /**
-   * The name of the security scheme
+   * The name of the security scheme (actual header/parameter name)
    */
   name: string;
   /**
@@ -52,7 +60,9 @@ export const SecurityVariable$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   bearer_format: z.string().optional(),
+  display_name: z.string().optional(),
   env_variables: z.array(z.string()),
+  id: z.string(),
   in_placement: z.string(),
   name: z.string(),
   oauth_flows: b64$.zodInbound.optional(),
@@ -62,6 +72,7 @@ export const SecurityVariable$inboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     "bearer_format": "bearerFormat",
+    "display_name": "displayName",
     "env_variables": "envVariables",
     "in_placement": "inPlacement",
     "oauth_flows": "oauthFlows",

@@ -479,10 +479,15 @@ type ExternalMCPToolDefinitionResponseBody struct {
 
 // SecurityVariableResponseBody is used to define fields on response body types.
 type SecurityVariableResponseBody struct {
+	// The unique identifier of the security variable
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The type of security
 	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
-	// The name of the security scheme
+	// The name of the security scheme (actual header/parameter name)
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// User-friendly display name for the security variable (defaults to name if
+	// not set)
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// Where the security token is placed
 	InPlacement *string `form:"in_placement,omitempty" json:"in_placement,omitempty" xml:"in_placement,omitempty"`
 	// The security scheme
@@ -1388,6 +1393,9 @@ func ValidateExternalMCPToolDefinitionResponseBody(body *ExternalMCPToolDefiniti
 // ValidateSecurityVariableResponseBody runs the validations defined on
 // SecurityVariableResponseBody
 func ValidateSecurityVariableResponseBody(body *SecurityVariableResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
