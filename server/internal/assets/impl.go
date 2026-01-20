@@ -1113,8 +1113,8 @@ func (s *Service) ServeChatAttachment(ctx context.Context, payload *gen.ServeCha
 }
 
 const (
-	defaultSignedURLTTLSeconds time.Duration = 600  // 10 minutes
-	maxSignedURLTTLSeconds     time.Duration = 3600 // 1 hour
+	defaultSignedURLTTL time.Duration = 10 * time.Minute
+	maxSignedURLTTL     time.Duration = 1 * time.Hour
 )
 
 func (s *Service) CreateSignedChatAttachmentURL(ctx context.Context, payload *gen.CreateSignedChatAttachmentURLForm) (*gen.CreateSignedChatAttachmentURLResult, error) {
@@ -1161,13 +1161,14 @@ func (s *Service) CreateSignedChatAttachmentURL(ctx context.Context, payload *ge
 	}
 
 	// Determine TTL
-	ttlSeconds := defaultSignedURLTTLSeconds
+	ttl := defaultSignedURLTTL
 	if payload.TTLSeconds != nil && *payload.TTLSeconds > 0 {
-		ttlSeconds = min(time.Duration(*payload.TTLSeconds), maxSignedURLTTLSeconds)
+		sec := time.Duration(*payload.TTLSeconds) * time.Second
+		ttl = min(sec, maxSignedURLTTL)
 	}
 
 	// Generate signed token
-	token, expiresAt, err := GenerateSignedAssetToken(s.jwtSecret, assetID, projectID, ttlSeconds)
+	token, expiresAt, err := GenerateSignedAssetToken(s.jwtSecret, assetID, projectID, ttl)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("generate signed token: %w", err), "error creating signed url").Log(ctx, logger)
 	}

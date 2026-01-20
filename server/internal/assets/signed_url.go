@@ -16,9 +16,9 @@ type SignedAssetClaims struct {
 }
 
 // GenerateSignedAssetToken creates a new JWT token for accessing an asset.
-func GenerateSignedAssetToken(jwtSecret string, assetID, projectID uuid.UUID, ttlSeconds time.Duration) (string, time.Time, error) {
+func GenerateSignedAssetToken(jwtSecret string, assetID, projectID uuid.UUID, ttl time.Duration) (string, time.Time, error) {
 	now := time.Now()
-	expiry := now.Add(ttlSeconds * time.Second).Truncate(time.Second)
+	expiry := now.Add(ttl).Truncate(time.Second)
 	jti := uuid.New().String()
 
 	claims := SignedAssetClaims{
@@ -29,6 +29,7 @@ func GenerateSignedAssetToken(jwtSecret string, assetID, projectID uuid.UUID, tt
 			Issuer:    "",
 			Subject:   "",
 			Audience:  nil,
+			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expiry),
 			NotBefore: nil,
 		},
