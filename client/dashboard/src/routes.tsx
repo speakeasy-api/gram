@@ -5,6 +5,7 @@ import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
 import Billing from "./pages/billing/Billing";
 import Catalog, { CatalogRoot } from "./pages/catalog/Catalog";
+import CatalogDetail, { CatalogDetailRoot } from "./pages/catalog/CatalogDetail";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import Elements from "./pages/elements/Elements";
@@ -211,6 +212,14 @@ const ROUTE_STRUCTURE = {
     icon: "store",
     component: CatalogRoot,
     indexComponent: Catalog,
+    subPages: {
+      detail: {
+        title: "Server Details",
+        url: ":serverSpecifier",
+        component: CatalogDetailRoot,
+        indexComponent: CatalogDetail,
+      },
+    },
   },
   mcp: {
     title: "MCP",

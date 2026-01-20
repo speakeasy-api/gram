@@ -17,6 +17,20 @@ interface ServerMeta {
     publishedAt?: string;
     updatedAt?: string;
     isLatest?: boolean;
+    "remotes[0]"?: {
+      tools?: Array<{
+        name: string;
+        description?: string;
+        annotations?: {
+          title?: string;
+          readOnlyHint?: boolean;
+          destructiveHint?: boolean;
+        };
+      }>;
+      auth?: {
+        type?: string;
+      };
+    };
   };
 }
 

@@ -11,7 +11,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useSession } from "@/contexts/Auth";
+import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { AppRoute, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
@@ -19,6 +19,7 @@ import { cn, Stack } from "@speakeasy-api/moonshine";
 import {
   AlertTriangleIcon,
   ChartNoAxesCombinedIcon,
+  ChevronsUpDown,
   MinusIcon,
   TestTube2Icon,
 } from "lucide-react";
@@ -26,8 +27,9 @@ import * as React from "react";
 import { useState } from "react";
 import { FeatureRequestModal } from "./FeatureRequestModal";
 import { GramLogo } from "./gram-logo";
-import { ProjectMenu } from "./project-menu";
+import { ProjectAvatar, ProjectMenu, ProjectSelector } from "./project-menu";
 import { Button } from "./ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Type } from "./ui/type";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -67,6 +69,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <ProjectSwitcher />
+              </SidebarMenuItem>
+            </SidebarMenu>
+            <NavMenu items={[routes.home]} />
+          </SidebarGroupContent>
+        </SidebarGroup>
         {Object.entries(topNavGroups).map(([label, items]) => (
           <SidebarGroup key={label}>
             <SidebarGroupLabel>{label}</SidebarGroupLabel>
@@ -166,6 +178,36 @@ const FreeTierExceededNotification = () => {
 
   return null;
 };
+
+function ProjectSwitcher() {
+  const organization = useOrganization();
+  const project = useProject();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <SidebarMenuButton className="h-10">
+          <Stack direction="horizontal" gap={2} align="center" className="flex-1 min-w-0">
+            <ProjectAvatar project={project} className="h-6 w-6 rounded-md shrink-0" />
+            <Stack align="start" className="min-w-0 flex-1">
+              <Type className="truncate text-sm font-medium">
+                {project?.slug ?? "Select Project"}
+              </Type>
+            </Stack>
+          </Stack>
+          <ChevronsUpDown className="w-4 h-4 text-muted-foreground shrink-0" />
+        </SidebarMenuButton>
+      </PopoverTrigger>
+      <PopoverContent className="w-[200px] p-2" align="start">
+        <Type variant="small" muted className="px-2 mb-2">
+          {organization?.name}
+        </Type>
+        <ProjectSelector />
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 const PersistentNotification = ({
   variant = "default",
