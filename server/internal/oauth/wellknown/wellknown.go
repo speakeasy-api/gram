@@ -91,6 +91,7 @@ func ResolveOAuthServerMetadataFromToolset(
 				GrantTypesSupported:           []string{"authorization_code"},
 				CodeChallengeMethodsSupported: []string{"plain", "S256"},
 			},
+			Raw:      nil,
 			ProxyURL: "",
 		}, nil
 	}
@@ -105,8 +106,10 @@ func ResolveOAuthServerMetadataFromToolset(
 		}
 
 		return &OAuthServerMetadataResult{
-			Kind: OAuthServerMetadataResultKindRaw,
-			Raw:  externalOAuthServer.Metadata,
+			Kind:     OAuthServerMetadataResultKindRaw,
+			Static:   nil,
+			Raw:      externalOAuthServer.Metadata,
+			ProxyURL: "",
 		}, nil
 	}
 
@@ -129,6 +132,7 @@ func ResolveOAuthServerMetadataFromToolset(
 				GrantTypesSupported:           []string{"authorization_code", "refresh_token"},
 				CodeChallengeMethodsSupported: []string{"S256"},
 			},
+			Raw:      nil,
 			ProxyURL: "",
 		}, nil
 	}
