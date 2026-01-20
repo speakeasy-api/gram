@@ -401,6 +401,8 @@ type UpsertChatParams struct {
 	Title          pgtype.Text
 }
 
+// Use no-op update (id = EXCLUDED.id) to ensure RETURNING always returns a row,
+// whether the chat was newly inserted or already existed.
 func (q *Queries) UpsertChat(ctx context.Context, arg UpsertChatParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, upsertChat,
 		arg.ID,
