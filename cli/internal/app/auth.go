@@ -76,7 +76,7 @@ func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
 
 			savedProf, err := profile.LoadByName(opts.ProfilePath, profileName)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to load profile: %w", err)
 			}
 			return &AuthResult{Profile: savedProf}, nil
 		}
@@ -97,7 +97,7 @@ func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
 
 	savedProf, err := profile.LoadByName(opts.ProfilePath, profileName)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to load profile: %w", err)
 	}
 
 	if projectSlug != "" && projectSlug != savedProf.DefaultProjectSlug {
@@ -347,6 +347,7 @@ func doAuth(c *cli.Context) error {
 		DashboardURL: dashboardURL,
 		ProfilePath:  profilePath,
 		ProfileName:  c.String("profile"),
+		ProjectSlug:  "",
 	})
 	if err != nil {
 		return err

@@ -271,6 +271,8 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				NonBlocking:    c.Bool("skip-poll"),
 				APIKey:         c.String("api-key"),
 				APIURL:         c.String("api-url"),
+				ProfilePath:    "",
+				ProfileName:    "",
 			})
 
 			if err != nil {

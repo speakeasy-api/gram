@@ -124,8 +124,10 @@ If no profile is configured, the command will indicate that no profile is set up
 			defer cancel()
 
 			result, err := DoWhoami(ctx, WhoamiOptions{
-				APIKey: c.String("api-key"),
-				APIURL: c.String("api-url"),
+				ProfilePath: "",
+				ProfileName: "",
+				APIKey:      c.String("api-key"),
+				APIURL:      c.String("api-url"),
 			})
 			if err != nil {
 				return fmt.Errorf("no profile configured, please set up a profile in $home/.gram/profile.json: %w", err)
