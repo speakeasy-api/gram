@@ -6,9 +6,9 @@ import { useSession } from "@/contexts/Auth";
 import { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { Badge, Spinner, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle, ExternalLink, LogOut } from "lucide-react";
+import { CheckCircle, ExternalLink, Loader2, LogOut } from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
 
@@ -193,7 +193,7 @@ function OAuthConnection({ toolset }: { toolset: Toolset }) {
             External OAuth
           </Type>
           {statusLoading ? (
-            <Spinner size="sm" />
+            <Loader2 className="size-4 animate-spin text-muted-foreground" />
           ) : isConnected ? (
             <Badge variant="success" size="sm">
               <CheckCircle className="size-3 mr-1" />
