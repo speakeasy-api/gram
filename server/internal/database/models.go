@@ -209,9 +209,12 @@ type ExternalMcpToolDefinition struct {
 	ExternalMcpAttachmentID    uuid.UUID
 	ToolUrn                    string
 	RemoteUrl                  string
-	Type                       string
 	TransportType              types.TransportType
 	RequiresOauth              bool
+	Type                       string
+	Name                       pgtype.Text
+	Description                pgtype.Text
+	Schema                     []byte
 	OauthVersion               string
 	OauthAuthorizationEndpoint pgtype.Text
 	OauthTokenEndpoint         pgtype.Text
