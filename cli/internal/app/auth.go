@@ -349,7 +349,7 @@ func doAuth(c *cli.Context) error {
 		ProjectSlug:  c.String("project"),
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to authenticate: %w", err)
 	}
 
 	logger.InfoContext(ctx, fmt.Sprintf(
