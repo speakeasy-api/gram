@@ -14,6 +14,7 @@ type Key = attribute.Key
 const (
 	ErrorMessageKey                   = semconv.ErrorMessageKey
 	ExceptionStacktraceKey            = semconv.ExceptionStacktraceKey
+	ExternalUserIDKey                 = attribute.Key("external_user.id")
 	ContainerIDKey                    = semconv.ContainerIDKey
 	ContainerNetworkIDKey             = attribute.Key("container.network.id")
 	FilePathKey                       = semconv.FilePathKey
@@ -49,6 +50,8 @@ const (
 
 	SpanIDKey              = attribute.Key("span.id")
 	TraceIDKey             = attribute.Key("trace.id")
+	LogSeverityKey         = attribute.Key("log.severity")
+	LogBodyKey             = attribute.Key("log.body")
 	DataDogGitCommitSHAKey = attribute.Key("git.commit.sha")
 	DataDogGitRepoURLKey   = attribute.Key("git.repository_url")
 	DataDogTraceIDKey      = attribute.Key("dd.trace_id")
@@ -178,6 +181,38 @@ const (
 
 	RetryAttemptKey = attribute.Key("retry.attempt")
 	RetryWaitKey    = attribute.Key("retry.wait")
+
+	// GenAI semantic convention keys (OTel GenAI semconv - experimental)
+	// See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
+	GenAIOperationNameKey         = semconv.GenAIOperationNameKey
+	GenAIProviderNameKey          = semconv.GenAIProviderNameKey
+	GenAIRequestModelKey          = semconv.GenAIRequestModelKey
+	GenAIResponseModelKey         = semconv.GenAIResponseModelKey
+	GenAIResponseIDKey            = semconv.GenAIResponseIDKey
+	GenAIResponseFinishReasonsKey = semconv.GenAIResponseFinishReasonsKey
+	GenAIConversationIDKey        = semconv.GenAIConversationIDKey
+	GenAIUsageInputTokensKey      = semconv.GenAIUsageInputTokensKey
+	GenAIUsageOutputTokensKey     = semconv.GenAIUsageOutputTokensKey
+
+	// Additional GenAI semconv keys for request parameters
+	GenAIRequestTemperatureKey = semconv.GenAIRequestTemperatureKey
+	GenAIRequestMaxTokensKey   = semconv.GenAIRequestMaxTokensKey
+	GenAIRequestTopPKey        = semconv.GenAIRequestTopPKey
+
+	// GenAI semconv keys for tool calling
+	GenAIToolCallIDKey      = semconv.GenAIToolCallIDKey
+	GenAIToolNameKey        = semconv.GenAIToolNameKey
+	GenAIToolTypeKey        = semconv.GenAIToolTypeKey
+	GenAIToolDescriptionKey = semconv.GenAIToolDescriptionKey
+
+	// GenAI semconv keys for messages (opt-in due to PII concerns)
+	GenAIInputMessagesKey      = semconv.GenAIInputMessagesKey
+	GenAIOutputMessagesKey     = semconv.GenAIOutputMessagesKey
+	GenAISystemInstructionsKey = semconv.GenAISystemInstructionsKey
+
+	// Custom GenAI keys not in official semconv (yet)
+	GenAIToolCallsKey        = attribute.Key("gen_ai.tool.calls")         // Array of tool calls
+	GenAIUsageTotalTokensKey = attribute.Key("gen_ai.usage.total_tokens") // Total tokens (input + output)
 )
 
 const (
@@ -286,6 +321,9 @@ func SlogURLOriginal(v string) slog.Attr      { return slog.String(string(URLOri
 
 func UserID(v string) attribute.KeyValue { return UserIDKey.String(v) }
 func SlogUserID(v string) slog.Attr      { return slog.String(string(UserIDKey), v) }
+
+func ExternalUserID(v string) attribute.KeyValue { return ExternalUserIDKey.String(v) }
+func SlogExternalUserID(v string) slog.Attr      { return slog.String(string(ExternalUserIDKey), v) }
 
 func Actual(v any) attribute.KeyValue { return ActualKey.String(fmt.Sprintf("%v", v)) }
 func SlogActual(v any) slog.Attr      { return slog.Any(string(ActualKey), v) }
@@ -767,3 +805,9 @@ func SlogRetryAttempt(v int) slog.Attr      { return slog.Int(string(RetryAttemp
 
 func RetryWait(v time.Duration) attribute.KeyValue { return RetryWaitKey.String(v.String()) }
 func SlogRetryWait(v time.Duration) slog.Attr      { return slog.Duration(string(RetryWaitKey), v) }
+
+func GenAIRequestModel(v string) attribute.KeyValue { return GenAIRequestModelKey.String(v) }
+func SlogGenAIModel(v string) slog.Attr             { return slog.String(string(GenAIRequestModelKey), v) }
+
+func SlogGenAIInputTokens(v int) slog.Attr  { return slog.Int(string(GenAIUsageInputTokensKey), v) }
+func SlogGenAIOutputTokens(v int) slog.Attr { return slog.Int(string(GenAIUsageOutputTokensKey), v) }
