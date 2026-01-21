@@ -29,6 +29,10 @@ export default tseslint.config(
       globals: {
         console: true,
       },
+      parserOptions: {
+        tsconfigRootDir: __dirname,
+        project: true,
+      },
     },
   },
   {
