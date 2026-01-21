@@ -201,13 +201,6 @@ func profileNameFromURL(apiURL string) string {
 	return strings.ReplaceAll(parsed.Host, ".", "-")
 }
 
-func determineProfileName(prof *profile.Profile, apiURL string) string {
-	if prof != nil {
-		return prof.Name
-	}
-	return profileNameFromURL(apiURL)
-}
-
 func getProfilePath(c *cli.Context) (string, error) {
 	if p := c.String("profile-path"); p != "" {
 		return p, nil
