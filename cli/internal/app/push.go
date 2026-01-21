@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -14,12 +15,175 @@ import (
 	"github.com/speakeasy-api/gram/cli/internal/deploy"
 	"github.com/speakeasy-api/gram/cli/internal/flags"
 	"github.com/speakeasy-api/gram/cli/internal/mcp"
-	"github.com/speakeasy-api/gram/cli/internal/o11y"
 	"github.com/speakeasy-api/gram/cli/internal/profile"
+	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/cli/internal/workflow"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/term"
 )
+
+type PushOptions struct {
+	Profile        *profile.Profile
+	ConfigFile     string
+	ProjectSlug    string
+	OrgSlug        string
+	IdempotencyKey string
+	Method         string
+	NonBlocking    bool
+	APIKey         string
+	APIURL         string
+}
+
+type PushResult struct {
+	DeploymentID string
+	Status       string
+	LogsURL      string
+}
+
+func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
+	logger := logging.PullLogger(ctx)
+	prof := opts.Profile
+
+	if opts.Method == "" {
+		opts.Method = "merge"
+	}
+	if opts.Method != "replace" && opts.Method != "merge" {
+		return nil, fmt.Errorf("invalid method: %s (allowed values: replace, merge)", opts.Method)
+	}
+	if opts.ConfigFile == "" {
+		return nil, fmt.Errorf("config file is required")
+	}
+
+	apiKey := secret.Secret(opts.APIKey)
+	if apiKey == "" && prof != nil {
+		apiKey = secret.Secret(prof.Secret)
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("API key required: provide via APIKey option or authenticate first")
+	}
+
+	apiURLStr := opts.APIURL
+	if apiURLStr == "" && prof != nil {
+		apiURLStr = prof.APIUrl
+	}
+	if apiURLStr == "" {
+		apiURLStr = workflow.DefaultBaseURL
+	}
+
+	apiURL, err := url.Parse(apiURLStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid API URL: %w", err)
+	}
+
+	orgSlug := opts.OrgSlug
+	if orgSlug == "" && prof != nil && prof.Org != nil {
+		orgSlug = prof.Org.Slug
+	}
+	if orgSlug == "" {
+		return nil, fmt.Errorf("organization required: provide via OrgSlug option or authenticate first")
+	}
+
+	projectSlug := opts.ProjectSlug
+	if projectSlug == "" && prof != nil {
+		projectSlug = prof.DefaultProjectSlug
+	}
+	if projectSlug == "" {
+		return nil, fmt.Errorf("project required: provide via ProjectSlug option or authenticate first")
+	}
+
+	configFilename, err := filepath.Abs(opts.ConfigFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve deployment file path: %w", err)
+	}
+
+	configFile, err := os.Open(filepath.Clean(configFilename))
+	if err != nil {
+		return nil, fmt.Errorf("failed to open deployment file: %w", err)
+	}
+	defer func() {
+		if err := configFile.Close(); err != nil {
+			logger.WarnContext(ctx, "failed to close config file", slog.String("error", err.Error()))
+		}
+	}()
+
+	config, err := deploy.NewConfig(configFile, configFilename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse deployment config: %w", err)
+	}
+
+	workflowParams := workflow.Params{
+		APIKey:      apiKey,
+		APIURL:      apiURL,
+		OrgSlug:     orgSlug,
+		ProjectSlug: projectSlug,
+	}
+
+	logger.InfoContext(
+		ctx,
+		"Deploying to project",
+		slog.String("project", projectSlug),
+		slog.String("config", opts.ConfigFile),
+	)
+
+	result := workflow.New(ctx, logger, workflowParams).
+		UploadAssets(ctx, config.Sources)
+
+	deployTicker := time.NewTicker(time.Second)
+	done := make(chan struct{})
+	startTime := time.Now()
+
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-done:
+				return
+			case <-deployTicker.C:
+				elapsed := time.Since(startTime).Truncate(time.Second)
+				message := processingMessage(elapsed)
+
+				if message != "" {
+					logger.InfoContext(ctx, message)
+				}
+			}
+		}
+	}()
+
+	if opts.Method == "replace" {
+		result = result.CreateDeployment(ctx, opts.IdempotencyKey)
+	} else {
+		result = result.EvolveDeployment(ctx)
+	}
+
+	deployTicker.Stop()
+	done <- struct{}{}
+	<-done
+
+	if !opts.NonBlocking {
+		result.Poll(ctx)
+	}
+
+	if result.Failed() {
+		if result.Deployment != nil {
+			return &PushResult{
+				DeploymentID: result.Deployment.ID,
+				Status:       result.Deployment.Status,
+				LogsURL:      fmt.Sprintf("%s://%s/%s/%s/deployments/%s", apiURL.Scheme, apiURL.Host, orgSlug, projectSlug, result.Deployment.ID),
+			}, fmt.Errorf("deployment failed: %w", result.Err)
+		}
+		return nil, fmt.Errorf("failed to push deploy: %w", result.Err)
+	}
+
+	logsURL := fmt.Sprintf("%s://%s/%s/%s/deployments/%s", apiURL.Scheme, apiURL.Host, orgSlug, projectSlug, result.Deployment.ID)
+
+	return &PushResult{
+		DeploymentID: result.Deployment.ID,
+		Status:       result.Deployment.Status,
+		LogsURL:      logsURL,
+	}, nil
+}
 
 func newPushCommand() *cli.Command {
 	return &cli.Command{
@@ -81,123 +245,55 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			defer cancel()
 
 			logger := logging.PullLogger(ctx)
-			prof := profile.FromContext(ctx)
 
-			workflowParams, err := workflow.ResolveParams(c, prof)
-			if err != nil {
-				return fmt.Errorf("failed to resolve workflow params: %w", err)
-			}
-
-			configFilename, err := filepath.Abs(c.String("config"))
-			if err != nil {
-				return fmt.Errorf("failed to resolve deployment file path: %w", err)
-			}
-
-			configFile, err := os.Open(filepath.Clean(configFilename))
-			if err != nil {
-				return fmt.Errorf("failed to open deployment file: %w", err)
-			}
-			defer o11y.LogDefer(ctx, logger, func() error {
-				return configFile.Close()
+			result, err := DoPush(ctx, PushOptions{
+				Profile:        profile.FromContext(ctx),
+				ConfigFile:     c.String("config"),
+				ProjectSlug:    c.String("project"),
+				OrgSlug:        c.String("org"),
+				IdempotencyKey: c.String("idempotency-key"),
+				Method:         c.String("method"),
+				NonBlocking:    c.Bool("skip-poll"),
+				APIKey:         c.String("api-key"),
+				APIURL:         c.String("api-url"),
 			})
 
-			config, err := deploy.NewConfig(configFile, configFilename)
 			if err != nil {
-				return fmt.Errorf("failed to parseread deployment config: %w", err)
-			}
-
-			logger.InfoContext(
-				ctx,
-				"Deploying to project",
-				slog.String("project", workflowParams.ProjectSlug),
-				slog.String("config", c.String("config")),
-			)
-
-			result := workflow.New(ctx, logger, workflowParams).
-				UploadAssets(ctx, config.Sources)
-
-			// Start ticker to show deployment progress
-			deployTicker := time.NewTicker(time.Second)
-			done := make(chan struct{})
-			startTime := time.Now()
-
-			go func() {
-				defer close(done)
-				for {
-					select {
-					case <-ctx.Done():
-						return
-					case <-done:
-						return
-					case <-deployTicker.C:
-						elapsed := time.Since(startTime).Truncate(time.Second)
-						message := processingMessage(elapsed)
-
-						if message != "" {
-							logger.InfoContext(ctx, message)
-						}
-					}
-				}
-			}()
-
-			if c.String("method") == "replace" {
-				result = result.CreateDeployment(ctx, c.String("idempotency-key"))
-			} else {
-				result = result.EvolveDeployment(ctx)
-			}
-
-			// Stop the ticker
-			deployTicker.Stop()
-			done <- struct{}{}
-			<-done
-
-			if !c.Bool("skip-poll") {
-				result.Poll(ctx)
-			}
-
-			if result.Failed() {
-				if result.Deployment != nil {
-					statusCommand := fmt.Sprintf(
-						"gram status --id %s",
-						result.Deployment.ID,
-					)
-
-					result.Logger.WarnContext(
+				if result != nil && result.DeploymentID != "" {
+					statusCommand := fmt.Sprintf("gram status --id %s", result.DeploymentID)
+					logger.WarnContext(
 						ctx,
-						"Poll failed.",
+						"Deployment issue",
 						slog.String("command", statusCommand),
-						slog.String("error", result.Err.Error()),
+						slog.String("error", err.Error()),
 					)
 					return nil
 				}
-
-				return fmt.Errorf("failed to push deploy: %w", result.Err)
+				return err
 			}
 
-			slogID := slog.String("deployment_id", result.Deployment.ID)
-			status := result.Deployment.Status
+			slogID := slog.String("deployment_id", result.DeploymentID)
+			logsURL := result.LogsURL
 
-			deploymentLogsURL := fmt.Sprintf("%s://%s/%s/%s/deployments/%s", workflowParams.APIURL.Scheme, workflowParams.APIURL.Host, workflowParams.OrgSlug, workflowParams.ProjectSlug, result.Deployment.ID)
-
-			switch status {
+			switch result.Status {
 			case "completed":
-				logger.InfoContext(ctx, "Deployment succeeded", slogID, slog.String("logs_url", deploymentLogsURL))
-				fmt.Printf("\nView deployment: %s\n", deploymentLogsURL)
-				openDeploymentURL(logger, ctx, deploymentLogsURL)
+				logger.InfoContext(ctx, "Deployment succeeded", slogID, slog.String("logs_url", logsURL))
+				fmt.Printf("\nView deployment: %s\n", logsURL)
+				openDeploymentURL(logger, ctx, logsURL)
 				return nil
 			case "failed":
-				logger.ErrorContext(ctx, "Deployment failed", slogID, slog.String("logs_url", deploymentLogsURL))
-				fmt.Printf("\nView deployment logs: %s\n", deploymentLogsURL)
-				openDeploymentURL(logger, ctx, deploymentLogsURL)
+				logger.ErrorContext(ctx, "Deployment failed", slogID, slog.String("logs_url", logsURL))
+				fmt.Printf("\nView deployment logs: %s\n", logsURL)
+				openDeploymentURL(logger, ctx, logsURL)
 				return fmt.Errorf("deployment failed")
 			default:
 				logger.InfoContext(
 					ctx,
 					"Deployment is still in progress",
 					slogID,
-					slog.String("status", status),
+					slog.String("status", result.Status),
 				)
-				fmt.Printf("\nView deployment: %s\n", deploymentLogsURL)
+				fmt.Printf("\nView deployment: %s\n", logsURL)
 			}
 
 			return nil
