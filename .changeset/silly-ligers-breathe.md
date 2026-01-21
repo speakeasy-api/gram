@@ -2,4 +2,4 @@
 "cli": patch
 ---
 
-Refactor cli commands as exported go libraries
+Refactor cli commands as exported go libraries.
