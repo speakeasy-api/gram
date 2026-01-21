@@ -406,18 +406,52 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 		attr.SlogUserID(state.UserID),
 		attr.SlogOAuthIssuer(state.OAuthServerIssuer))
 
-	// Redirect back to original redirect_uri with success
-	redirectURL, err := url.Parse(state.RedirectURI)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "invalid redirect URI").Log(ctx, s.logger)
+	// Return a success page that auto-closes the popup
+	// The parent window polls for popup close and refetches status
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	successHTML := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head>
+    <title>Authorization Successful</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%);
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+        }
+        .checkmark {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+        h1 { margin: 0 0 0.5rem; font-size: 1.5rem; }
+        p { margin: 0; opacity: 0.9; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="checkmark">✓</div>
+        <h1>Connected to %s</h1>
+        <p>This window will close automatically...</p>
+    </div>
+    <script>
+        setTimeout(function() { window.close(); }, 1500);
+    </script>
+</body>
+</html>`, state.ProviderName)
+
+	if _, err := w.Write([]byte(successHTML)); err != nil {
+		s.logger.ErrorContext(ctx, "failed to write success page", attr.SlogError(err))
 	}
-
-	params := redirectURL.Query()
-	params.Set("oauth_success", "true")
-	params.Set("provider", state.ProviderName)
-	redirectURL.RawQuery = params.Encode()
-
-	http.Redirect(w, r, redirectURL.String(), http.StatusFound)
 	return nil
 }
 
