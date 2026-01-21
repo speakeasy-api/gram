@@ -1,5 +1,12 @@
 # cli
 
+## 0.15.3
+
+### Patch Changes
+
+- 8cf2f54: export stage CLI as go library
+- e715308: Refactor cli commands as exported go libraries.
+
 ## 0.15.2
 
 ### Patch Changes
