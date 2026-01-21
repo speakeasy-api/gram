@@ -3233,7 +3233,7 @@ func functionsGetSignedAssetURLUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "functions get-signed-asset-url --body '{\n      \"asset_id\": \"Aliquam qui sit tempora.\"\n   }' --function-token \"Velit ea velit quia ea error explicabo.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "functions get-signed-asset-url --body '{\n      \"asset_id\": \"Aspernatur maiores ullam ab facere.\"\n   }' --function-token \"Libero animi.\"")
 }
 
 // instancesUsage displays the usage of the instances command and its
@@ -3270,7 +3270,7 @@ func instancesGetInstanceUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "instances get-instance --toolset-slug \"z15\" --session-token \"Tempore similique.\" --project-slug-input \"Et occaecati dignissimos.\" --apikey-token \"Voluptatum non sed nemo odit similique nesciunt.\" --chat-sessions-token \"Ut ut dicta ea in rerum qui.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "instances get-instance --toolset-slug \"fdx\" --session-token \"Distinctio ut.\" --project-slug-input \"Dicta ea in rerum.\" --apikey-token \"Ipsa tempora esse sapiente nihil assumenda distinctio.\" --chat-sessions-token \"Minus omnis debitis rerum est est ullam.\"")
 }
 
 // integrationsUsage displays the usage of the integrations command and its

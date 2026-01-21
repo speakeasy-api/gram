@@ -151,6 +151,16 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			iconURL = &s.Server.Icons[0].Src
 		}
 
+		tools := make([]*types.ExternalMCPTool, 0, len(s.Server.Remotes[0].Tools))
+		for _, tool := range s.Server.Remotes[0].Tools {
+			tools = append(tools, &types.ExternalMCPTool{
+				Name:        tool.Name,
+				Description: tool.Description,
+				InputSchema: tool.InputSchema,
+				Annotations: tool.Annotations,
+			})
+		}
+
 		server := &types.ExternalMCPServer{
 			RegistrySpecifier: s.Server.Name,
 			Version:           s.Server.Version,
@@ -159,6 +169,7 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			Title:             s.Server.Title,
 			IconURL:           iconURL,
 			Meta:              s.Meta,
+			Tools:             tools,
 		}
 
 		servers = append(servers, server)
@@ -187,6 +198,7 @@ type ServerDetails struct {
 	Version       string
 	RemoteURL     string
 	TransportType externalmcptypes.TransportType
+	Tools         []serverTool
 }
 
 // getServerResponse wraps a single server from the registry.
@@ -243,14 +255,17 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 	// Find the remote URL, preferring streamable-http over sse
 	var remoteURL string
 	var transportType externalmcptypes.TransportType
+	var tools []serverTool
 	for _, remote := range serverResp.Server.Remotes {
 		if remote.Type == "streamable-http" {
 			remoteURL = remote.URL
 			transportType = externalmcptypes.TransportTypeStreamableHTTP
+			tools = remote.Tools
 			break
 		} else if remote.Type == "sse" {
 			remoteURL = remote.URL
 			transportType = externalmcptypes.TransportTypeSSE
+			tools = remote.Tools
 		}
 	}
 
@@ -264,5 +279,6 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		Version:       serverResp.Server.Version,
 		RemoteURL:     remoteURL,
 		TransportType: transportType,
+		Tools:         tools,
 	}, nil
 }

@@ -73,6 +73,16 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 		Format(FormatURI)
 	})
 	Attribute("meta", Any, "Opaque metadata from the registry")
+	Attribute("tools", ArrayOf(ExternalMCPTool), "Tools available on the server")
 
 	Required("registry_specifier", "version", "description", "registry_id")
+})
+
+var ExternalMCPTool = Type("ExternalMCPTool", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("name", String, "Name of the tool")
+	Attribute("description", String, "Description of the tool")
+	Attribute("input_schema", Any, "Input schema for the tool")
+	Attribute("annotations", Any, "Annotations for the tool")
 })

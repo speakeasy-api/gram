@@ -128,12 +128,6 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 		defer o11y.LogDefer(ctx, logger, mcpClient.Close)
 	}
 
-	toolURN := urn.Tool{
-		Kind:   urn.ToolKindExternalMCP,
-		Source: task.MCP.Slug,
-		Name:   "proxy",
-	}
-
 	// Build OAuth metadata params
 	oauthVersion := OAuthVersionNone
 	var oauthAuthEndpoint, oauthTokenEndpoint, oauthRegEndpoint pgtype.Text
@@ -152,28 +146,67 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 		oauthScopes = oauthDiscovery.ScopesSupported
 	}
 
-	// Create the proxy tool definition with the remote URL and OAuth info
-	_, err = te.repo.CreateExternalMCPToolDefinition(ctx, repo.CreateExternalMCPToolDefinitionParams{
-		ExternalMcpAttachmentID:    task.MCP.AttachmentID,
-		ToolUrn:                    toolURN.String(),
-		RemoteUrl:                  serverDetails.RemoteURL,
-		TransportType:              serverDetails.TransportType,
-		RequiresOauth:              requiresOAuth,
-		OauthVersion:               oauthVersion,
-		OauthAuthorizationEndpoint: oauthAuthEndpoint,
-		OauthTokenEndpoint:         oauthTokenEndpoint,
-		OauthRegistrationEndpoint:  oauthRegEndpoint,
-		OauthScopesSupported:       oauthScopes,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "[%s] error creating external mcp tool definition", task.MCP.Name).Log(ctx, logger)
-	}
+	// Create tool definitions based on what's available
+	if len(serverDetails.Tools) > 0 {
+		// Create individual tool definitions for each tool from the registry
+		for _, tool := range serverDetails.Tools {
+			toolURN := urn.Tool{
+				Kind:   urn.ToolKindExternalMCP,
+				Source: task.MCP.Slug,
+				Name:   tool.Name,
+			}
 
-	logger.InfoContext(ctx, fmt.Sprintf("[%s] created external mcp proxy tool", task.MCP.Name),
-		attr.SlogToolURN(toolURN.String()),
-		attr.SlogOAuthRequired(requiresOAuth),
-		attr.SlogOAuthVersion(oauthVersion),
-	)
+			_, err = te.repo.CreateExternalMCPToolDefinition(ctx, repo.CreateExternalMCPToolDefinitionParams{
+				ExternalMcpAttachmentID:    task.MCP.AttachmentID,
+				ToolUrn:                    toolURN.String(),
+				RemoteUrl:                  serverDetails.RemoteURL,
+				TransportType:              serverDetails.TransportType,
+				RequiresOauth:              requiresOAuth,
+				OauthVersion:               oauthVersion,
+				OauthAuthorizationEndpoint: oauthAuthEndpoint,
+				OauthTokenEndpoint:         oauthTokenEndpoint,
+				OauthRegistrationEndpoint:  oauthRegEndpoint,
+				OauthScopesSupported:       oauthScopes,
+			})
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "[%s] error creating external mcp tool definition for %s", task.MCP.Name, tool.Name).Log(ctx, logger)
+			}
+		}
+
+		logger.InfoContext(ctx, fmt.Sprintf("[%s] created %d external mcp tool definitions", task.MCP.Name, len(serverDetails.Tools)),
+			attr.SlogOAuthRequired(requiresOAuth),
+			attr.SlogOAuthVersion(oauthVersion),
+		)
+	} else {
+		// Fallback to proxy tool when no tools are defined in the registry
+		toolURN := urn.Tool{
+			Kind:   urn.ToolKindExternalMCP,
+			Source: task.MCP.Slug,
+			Name:   "proxy",
+		}
+
+		_, err = te.repo.CreateExternalMCPToolDefinition(ctx, repo.CreateExternalMCPToolDefinitionParams{
+			ExternalMcpAttachmentID:    task.MCP.AttachmentID,
+			ToolUrn:                    toolURN.String(),
+			RemoteUrl:                  serverDetails.RemoteURL,
+			TransportType:              serverDetails.TransportType,
+			RequiresOauth:              requiresOAuth,
+			OauthVersion:               oauthVersion,
+			OauthAuthorizationEndpoint: oauthAuthEndpoint,
+			OauthTokenEndpoint:         oauthTokenEndpoint,
+			OauthRegistrationEndpoint:  oauthRegEndpoint,
+			OauthScopesSupported:       oauthScopes,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "[%s] error creating external mcp tool definition", task.MCP.Name).Log(ctx, logger)
+		}
+
+		logger.InfoContext(ctx, fmt.Sprintf("[%s] created external mcp proxy tool", task.MCP.Name),
+			attr.SlogToolURN(toolURN.String()),
+			attr.SlogOAuthRequired(requiresOAuth),
+			attr.SlogOAuthVersion(oauthVersion),
+		)
+	}
 
 	return nil
 }

@@ -132,6 +132,16 @@ func unfoldExternalMCPTools(ctx context.Context, logger *slog.Logger, tools []*t
 
 		proxy := tool.ExternalMcpToolDefinition
 
+		if proxy.Name != "proxy" {
+			result = append(result, &toolListEntry{
+				Name:        proxy.Name,
+				Description: proxy.Description,
+				InputSchema: proxy.Schema,
+				Meta:        proxy.Annotations,
+			})
+			continue
+		}
+
 		var opts *externalmcp.ClientOptions
 		if proxy.RequiresOauth && oauthToken != "" {
 			opts = &externalmcp.ClientOptions{

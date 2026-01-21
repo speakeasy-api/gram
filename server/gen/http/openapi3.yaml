@@ -12545,6 +12545,11 @@ components:
                 title:
                     type: string
                     description: Display name for the server
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExternalMCPTool'
+                    description: Tools available on the server
                 version:
                     type: string
                     description: Semantic version of the server
@@ -12555,6 +12560,19 @@ components:
                 - version
                 - description
                 - registry_id
+        ExternalMCPTool:
+            type: object
+            properties:
+                annotations:
+                    description: Annotations for the tool
+                description:
+                    type: string
+                    description: Description of the tool
+                input_schema:
+                    description: Input schema for the tool
+                name:
+                    type: string
+                    description: Name of the tool
         ExternalMCPToolDefinition:
             type: object
             properties:
