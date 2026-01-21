@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.22.3
+
+### Patch Changes
+
+- d733319: Add chat-id header to mcp discovery
+
 ## 1.22.2
 
 ### Patch Changes
