@@ -35,6 +35,139 @@ var (
 
 var supportedRuntimes = map[string]struct{}{"nodejs:22": {}}
 
+type StageFunctionOptions struct {
+	ConfigFile string
+	Slug       string
+	Name       string
+	Location   string
+	Runtime    string
+}
+
+type StageOpenAPIOptions struct {
+	ConfigFile string
+	Slug       string
+	Name       string
+	Location   string
+}
+
+func DoStageFunction(opts StageFunctionOptions) error {
+	if opts.ConfigFile == "" {
+		opts.ConfigFile = "gram.deploy.json"
+	}
+	if opts.Runtime == "" {
+		opts.Runtime = "nodejs:22"
+	}
+	if opts.Slug == "" {
+		return fmt.Errorf("slug is required")
+	}
+	if !constants.SlugPatternRE.MatchString(opts.Slug) {
+		return fmt.Errorf("invalid slug: %s: %s", opts.Slug, constants.SlugMessage)
+	}
+	if opts.Location == "" {
+		return fmt.Errorf("location is required")
+	}
+	if _, ok := supportedRuntimes[opts.Runtime]; !ok {
+		return fmt.Errorf("unsupported runtime: %s", opts.Runtime)
+	}
+
+	name := opts.Name
+	if name == "" {
+		name = opts.Slug
+	}
+
+	if err := ensureConfigFileExists(opts.ConfigFile); err != nil {
+		return err
+	}
+
+	if err := appendSourcesToConfig(opts.ConfigFile, []deploy.Source{
+		{
+			Type:     deploy.SourceTypeFunction,
+			Slug:     opts.Slug,
+			Name:     name,
+			Location: opts.Location,
+			Runtime:  opts.Runtime,
+		},
+	}); err != nil {
+		return fmt.Errorf("failed to append source to config: %w", err)
+	}
+
+	return nil
+}
+
+func DoStageOpenAPI(opts StageOpenAPIOptions) error {
+	if opts.ConfigFile == "" {
+		opts.ConfigFile = "gram.deploy.json"
+	}
+	if opts.Slug == "" {
+		return fmt.Errorf("slug is required")
+	}
+	if !constants.SlugPatternRE.MatchString(opts.Slug) {
+		return fmt.Errorf("invalid slug: %s: %s", opts.Slug, constants.SlugMessage)
+	}
+	if opts.Location == "" {
+		return fmt.Errorf("location is required")
+	}
+
+	name := opts.Name
+	if name == "" {
+		name = opts.Slug
+	}
+
+	if err := ensureConfigFileExists(opts.ConfigFile); err != nil {
+		return err
+	}
+
+	if err := appendSourcesToConfig(opts.ConfigFile, []deploy.Source{
+		{
+			Type:     deploy.SourceTypeOpenAPIV3,
+			Slug:     opts.Slug,
+			Name:     name,
+			Location: opts.Location,
+			Runtime:  "",
+		},
+	}); err != nil {
+		return fmt.Errorf("failed to append source to config: %w", err)
+	}
+
+	return nil
+}
+
+func ensureConfigFileExists(configPath string) error {
+	_, err := os.Stat(configPath)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		// we'll create the file below
+	case err != nil:
+		return fmt.Errorf("%s: stat: %w", configPath, err)
+	default:
+		return validateExistingStageFile(configPath)
+	}
+
+	// #nosec G304 - the config path is user-specified and is treated as
+	// JSON to be decoded into a struct with defined shape.
+	file, err := os.OpenFile(configPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return nil
+		}
+		return fmt.Errorf("failed to create config file: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return file.Close() })
+
+	enc := json.NewEncoder(file)
+	enc.SetIndent("", "  ")
+	err = enc.Encode(deploy.Config{
+		SchemaVersion: "1.0.0",
+		Type:          deploy.ConfigTypeDeployment,
+		Sources:       []deploy.Source{},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to write initial config: %w", err)
+	}
+
+	return nil
+}
+
 func newStageCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "stage",
@@ -57,40 +190,9 @@ YAML/JSON documents.
 		},
 		Before: func(cCtx *cli.Context) error {
 			configPath := cCtx.Path("config")
-			_, err := os.Stat(configPath)
-			switch {
-			case errors.Is(err, os.ErrNotExist):
-				// we'll create the file below
-			case err != nil:
-				return fmt.Errorf("%s: stat: %w", configPath, err)
-			default:
-				if err := validateExistingStageFile(configPath); err != nil {
-					return fmt.Errorf("invalid config file %s: %w", configPath, err)
-				}
-				return nil
+			if err := ensureConfigFileExists(configPath); err != nil {
+				return fmt.Errorf("invalid config file %s: %w", configPath, err)
 			}
-
-			// #nosec G304 - the config path is user-specified and is treated as
-			// JSON to be decoded into a struct with defined shape.
-			file, err := os.OpenFile(configPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
-			if err != nil {
-				if errors.Is(err, os.ErrExist) {
-					return nil
-				}
-				return fmt.Errorf("failed to create config file: %w", err)
-			}
-
-			enc := json.NewEncoder(file)
-			enc.SetIndent("", "  ")
-			err = enc.Encode(deploy.Config{
-				SchemaVersion: "1.0.0",
-				Type:          deploy.ConfigTypeDeployment,
-				Sources:       []deploy.Source{},
-			})
-			if err != nil {
-				return fmt.Errorf("failed to write initial config: %w", err)
-			}
-
 			return nil
 		},
 	}
@@ -121,27 +223,13 @@ func newStageFunctionCommand() *cli.Command {
 			},
 		},
 		Action: func(cCtx *cli.Context) error {
-			slug := cCtx.String("slug")
-			location := cCtx.String("location")
-			runtime := cCtx.String("runtime")
-			name := cCtx.String("name")
-			if name == "" {
-				name = slug
-			}
-
-			if err := appendSourcesToConfig(cCtx.Path("config"), []deploy.Source{
-				{
-					Type:     deploy.SourceTypeFunction,
-					Slug:     slug,
-					Name:     name,
-					Location: location,
-					Runtime:  runtime,
-				},
-			}); err != nil {
-				return fmt.Errorf("failed to append source to config: %w", err)
-			}
-
-			return nil
+			return DoStageFunction(StageFunctionOptions{
+				ConfigFile: cCtx.Path("config"),
+				Slug:       cCtx.String("slug"),
+				Name:       cCtx.String("name"),
+				Location:   cCtx.String("location"),
+				Runtime:    cCtx.String("runtime"),
+			})
 		},
 	}
 }
@@ -160,26 +248,12 @@ func newStageOpenAPICommand() *cli.Command {
 			},
 		},
 		Action: func(cCtx *cli.Context) error {
-			slug := cCtx.String("slug")
-			location := cCtx.String("location")
-			name := cCtx.String("name")
-			if name == "" {
-				name = slug
-			}
-
-			if err := appendSourcesToConfig(cCtx.Path("config"), []deploy.Source{
-				{
-					Type:     deploy.SourceTypeOpenAPIV3,
-					Slug:     slug,
-					Name:     name,
-					Location: location,
-					Runtime:  "",
-				},
-			}); err != nil {
-				return fmt.Errorf("failed to append source to config: %w", err)
-			}
-
-			return nil
+			return DoStageOpenAPI(StageOpenAPIOptions{
+				ConfigFile: cCtx.Path("config"),
+				Slug:       cCtx.String("slug"),
+				Name:       cCtx.String("name"),
+				Location:   cCtx.String("location"),
+			})
 		},
 	}
 }
