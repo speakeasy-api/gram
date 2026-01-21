@@ -116,7 +116,7 @@ export default function Home() {
         {/* Featured Servers Section */}
         <div className="mt-10">
           <Stack direction="horizontal" justify="space-between" align="center" className="mb-4">
-            <h2 className="text-lg font-semibold">Featured Servers</h2>
+            <h2 className="text-lg font-semibold">Featured Third-Party Servers</h2>
             <routes.catalog.Link>
               <span className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1">
                 Browse all <ArrowRight className="w-4 h-4" />
