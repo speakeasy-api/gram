@@ -9,6 +9,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ExternalOauthClientRegistration struct {
+	ID                    uuid.UUID
+	OrganizationID        string
+	OauthServerIssuer     string
+	ClientID              string
+	ClientSecretEncrypted pgtype.Text
+	ClientIDIssuedAt      pgtype.Timestamptz
+	ClientSecretExpiresAt pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+}
+
 type ExternalOauthServerMetadatum struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID

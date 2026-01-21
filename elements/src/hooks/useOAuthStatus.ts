@@ -104,7 +104,7 @@ export const useOAuthStatus = ({
       })
 
       const response = await fetch(
-        `${apiUrl}/oauth/external/status?${params.toString()}`,
+        `${apiUrl}/oauth-external/status?${params.toString()}`,
         {
           method: 'GET',
           headers: {
@@ -143,7 +143,7 @@ export const useOAuthStatus = ({
       params.set('redirect_uri', window.location.href)
     }
 
-    const authUrl = `${apiUrl}/oauth/external/authorize?${params.toString()}`
+    const authUrl = `${apiUrl}/oauth-external/authorize?${params.toString()}`
 
     // Call the callback if provided, otherwise redirect
     if (oauthConfig.onAuthRequired) {
@@ -163,7 +163,7 @@ export const useOAuthStatus = ({
     })
 
     const response = await fetch(
-      `${apiUrl}/oauth/external/disconnect?${params.toString()}`,
+      `${apiUrl}/oauth-external/disconnect?${params.toString()}`,
       {
         method: 'DELETE',
         headers: sessionHeaders,

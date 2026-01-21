@@ -20,6 +20,7 @@ import {
   useInstance,
   useListEnvironments,
   useListToolsets,
+  useToolset,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
 import { ResizablePanel } from "@speakeasy-api/moonshine";
@@ -183,6 +184,13 @@ export function ToolsetPanel({
   const selectedEnvironment = configRef.current.environmentSlug;
 
   const toolset = toolsets?.find((toolset) => toolset.slug === selectedToolset);
+
+  // Fetch full toolset data (includes OAuth info from external MCP tools)
+  const { data: fullToolsetData } = useToolset(
+    { slug: selectedToolset ?? "" },
+    undefined,
+    { enabled: !!selectedToolset },
+  );
 
   const environmentData = useEnvironment(selectedEnvironment ?? undefined);
 
@@ -394,10 +402,14 @@ export function ToolsetPanel({
           </Select>
         }
         authSettings={
-          toolset && environmentData ? (
+          fullToolsetData && environmentData ? (
             <PlaygroundAuth
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              toolset={toolset as any}
+              toolset={{
+                ...fullToolsetData,
+                // Map SDK's `tools` to `rawTools` for compatibility with Toolset type
+                rawTools: fullToolsetData.tools ?? [],
+                tools: asTools(fullToolsetData.tools ?? []),
+              }}
               environment={{
                 slug: environmentData.slug,
                 entries: environmentData.entries?.map((e) => ({

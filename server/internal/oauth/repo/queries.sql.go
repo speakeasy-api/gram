@@ -48,6 +48,24 @@ func (q *Queries) CreateExternalOAuthServerMetadata(ctx context.Context, arg Cre
 	return i, err
 }
 
+const deleteExternalOAuthClientRegistration = `-- name: DeleteExternalOAuthClientRegistration :exec
+UPDATE external_oauth_client_registrations SET
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND oauth_server_issuer = $2
+`
+
+type DeleteExternalOAuthClientRegistrationParams struct {
+	OrganizationID    string
+	OauthServerIssuer string
+}
+
+func (q *Queries) DeleteExternalOAuthClientRegistration(ctx context.Context, arg DeleteExternalOAuthClientRegistrationParams) error {
+	_, err := q.db.Exec(ctx, deleteExternalOAuthClientRegistration, arg.OrganizationID, arg.OauthServerIssuer)
+	return err
+}
+
 const deleteExternalOAuthServerMetadata = `-- name: DeleteExternalOAuthServerMetadata :exec
 UPDATE external_oauth_server_metadata SET
     deleted_at = clock_timestamp(),
@@ -129,6 +147,37 @@ type DeleteUserOAuthTokenByIssuerParams struct {
 func (q *Queries) DeleteUserOAuthTokenByIssuer(ctx context.Context, arg DeleteUserOAuthTokenByIssuerParams) error {
 	_, err := q.db.Exec(ctx, deleteUserOAuthTokenByIssuer, arg.UserID, arg.OrganizationID, arg.OauthServerIssuer)
 	return err
+}
+
+const getExternalOAuthClientRegistration = `-- name: GetExternalOAuthClientRegistration :one
+SELECT id, organization_id, oauth_server_issuer, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, created_at, updated_at, deleted_at, deleted FROM external_oauth_client_registrations
+WHERE organization_id = $1
+  AND oauth_server_issuer = $2
+  AND deleted IS FALSE
+`
+
+type GetExternalOAuthClientRegistrationParams struct {
+	OrganizationID    string
+	OauthServerIssuer string
+}
+
+func (q *Queries) GetExternalOAuthClientRegistration(ctx context.Context, arg GetExternalOAuthClientRegistrationParams) (ExternalOauthClientRegistration, error) {
+	row := q.db.QueryRow(ctx, getExternalOAuthClientRegistration, arg.OrganizationID, arg.OauthServerIssuer)
+	var i ExternalOauthClientRegistration
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.OauthServerIssuer,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const getExternalOAuthServerMetadata = `-- name: GetExternalOAuthServerMetadata :one
@@ -343,6 +392,69 @@ func (q *Queries) ListUserOAuthTokens(ctx context.Context, arg ListUserOAuthToke
 		return nil, err
 	}
 	return items, nil
+}
+
+const upsertExternalOAuthClientRegistration = `-- name: UpsertExternalOAuthClientRegistration :one
+
+INSERT INTO external_oauth_client_registrations (
+    organization_id,
+    oauth_server_issuer,
+    client_id,
+    client_secret_encrypted,
+    client_id_issued_at,
+    client_secret_expires_at
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+) ON CONFLICT (organization_id, oauth_server_issuer) WHERE deleted IS FALSE DO UPDATE SET
+    client_id = EXCLUDED.client_id,
+    client_secret_encrypted = EXCLUDED.client_secret_encrypted,
+    client_id_issued_at = EXCLUDED.client_id_issued_at,
+    client_secret_expires_at = EXCLUDED.client_secret_expires_at,
+    updated_at = clock_timestamp()
+RETURNING id, organization_id, oauth_server_issuer, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertExternalOAuthClientRegistrationParams struct {
+	OrganizationID        string
+	OauthServerIssuer     string
+	ClientID              string
+	ClientSecretEncrypted pgtype.Text
+	ClientIDIssuedAt      pgtype.Timestamptz
+	ClientSecretExpiresAt pgtype.Timestamptz
+}
+
+// External OAuth Client Registrations Queries
+// Stores client credentials from Dynamic Client Registration (DCR)
+// These are organization-level credentials, not user-level
+func (q *Queries) UpsertExternalOAuthClientRegistration(ctx context.Context, arg UpsertExternalOAuthClientRegistrationParams) (ExternalOauthClientRegistration, error) {
+	row := q.db.QueryRow(ctx, upsertExternalOAuthClientRegistration,
+		arg.OrganizationID,
+		arg.OauthServerIssuer,
+		arg.ClientID,
+		arg.ClientSecretEncrypted,
+		arg.ClientIDIssuedAt,
+		arg.ClientSecretExpiresAt,
+	)
+	var i ExternalOauthClientRegistration
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.OauthServerIssuer,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const upsertOAuthProxyProvider = `-- name: UpsertOAuthProxyProvider :one

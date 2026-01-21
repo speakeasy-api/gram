@@ -100,7 +100,7 @@ export const useOAuthToken = ({
       })
 
       const response = await fetch(
-        `${apiUrl}/oauth/external/token?${params.toString()}`,
+        `${apiUrl}/oauth-external/token?${params.toString()}`,
         {
           method: 'GET',
           headers: {

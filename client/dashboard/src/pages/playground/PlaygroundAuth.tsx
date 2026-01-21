@@ -86,6 +86,7 @@ function ExternalMcpOAuthConnection({
 }) {
   const queryClient = useQueryClient();
   const apiUrl = getServerURL();
+  const session = useSession();
 
   // Use the authorization endpoint as the issuer for querying status
   const issuer = mcpOAuthConfig.oauthAuthorizationEndpoint
@@ -104,9 +105,12 @@ function ExternalMcpOAuthConnection({
       });
 
       const response = await fetch(
-        `${apiUrl}/oauth/external/status?${params.toString()}`,
+        `${apiUrl}/oauth-external/status?${params.toString()}`,
         {
           credentials: "include",
+          headers: {
+            "Gram-Session": session.session,
+          },
         },
       );
 
@@ -139,10 +143,13 @@ function ExternalMcpOAuthConnection({
       });
 
       const response = await fetch(
-        `${apiUrl}/oauth/external/disconnect?${params.toString()}`,
+        `${apiUrl}/oauth-external/disconnect?${params.toString()}`,
         {
           method: "DELETE",
           credentials: "include",
+          headers: {
+            "Gram-Session": session.session,
+          },
         },
       );
 
@@ -169,9 +176,11 @@ function ExternalMcpOAuthConnection({
       toolset_id: toolset.id,
       external_mcp_slug: mcpOAuthConfig.slug,
       redirect_uri: window.location.href.split("?")[0],
+      // Pass session token for popup windows that don't share cookies
+      session: session.session,
     });
 
-    const authUrl = `${apiUrl}/oauth/external/mcp/authorize?${params.toString()}`;
+    const authUrl = `${apiUrl}/oauth-external/authorize?${params.toString()}`;
 
     // Open in popup
     const popup = window.open(
@@ -280,7 +289,7 @@ function OAuthConnection({ toolset }: { toolset: Toolset }) {
       });
 
       const response = await fetch(
-        `${apiUrl}/oauth/external/status?${params.toString()}`,
+        `${apiUrl}/oauth-external/status?${params.toString()}`,
         {
           headers: {
             "Gram-Session": session.session,
@@ -317,7 +326,7 @@ function OAuthConnection({ toolset }: { toolset: Toolset }) {
       });
 
       const response = await fetch(
-        `${apiUrl}/oauth/external/disconnect?${params.toString()}`,
+        `${apiUrl}/oauth-external/disconnect?${params.toString()}`,
         {
           method: "DELETE",
           headers: {
@@ -351,7 +360,7 @@ function OAuthConnection({ toolset }: { toolset: Toolset }) {
       redirect_uri: window.location.href.split("?")[0],
     });
 
-    const authUrl = `${apiUrl}/oauth/external/authorize?${params.toString()}`;
+    const authUrl = `${apiUrl}/oauth-external/authorize?${params.toString()}`;
 
     // Open in popup
     const popup = window.open(

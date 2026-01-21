@@ -170,3 +170,43 @@ UPDATE user_oauth_tokens SET
 WHERE user_id = @user_id
   AND organization_id = @organization_id
   AND oauth_server_issuer = @oauth_server_issuer;
+
+-- External OAuth Client Registrations Queries
+-- Stores client credentials from Dynamic Client Registration (DCR)
+-- These are organization-level credentials, not user-level
+
+-- name: UpsertExternalOAuthClientRegistration :one
+INSERT INTO external_oauth_client_registrations (
+    organization_id,
+    oauth_server_issuer,
+    client_id,
+    client_secret_encrypted,
+    client_id_issued_at,
+    client_secret_expires_at
+) VALUES (
+    @organization_id,
+    @oauth_server_issuer,
+    @client_id,
+    @client_secret_encrypted,
+    @client_id_issued_at,
+    @client_secret_expires_at
+) ON CONFLICT (organization_id, oauth_server_issuer) WHERE deleted IS FALSE DO UPDATE SET
+    client_id = EXCLUDED.client_id,
+    client_secret_encrypted = EXCLUDED.client_secret_encrypted,
+    client_id_issued_at = EXCLUDED.client_id_issued_at,
+    client_secret_expires_at = EXCLUDED.client_secret_expires_at,
+    updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: GetExternalOAuthClientRegistration :one
+SELECT * FROM external_oauth_client_registrations
+WHERE organization_id = @organization_id
+  AND oauth_server_issuer = @oauth_server_issuer
+  AND deleted IS FALSE;
+
+-- name: DeleteExternalOAuthClientRegistration :exec
+UPDATE external_oauth_client_registrations SET
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND oauth_server_issuer = @oauth_server_issuer;

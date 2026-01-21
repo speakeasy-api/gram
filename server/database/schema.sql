@@ -1211,3 +1211,34 @@ WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS user_oauth_tokens_user_org_idx
 ON user_oauth_tokens (user_id, organization_id)
 WHERE deleted IS FALSE;
+
+-- Organization-level OAuth client registrations from Dynamic Client Registration (DCR)
+-- When Gram acts as an OAuth client to external MCP servers using MCP OAuth 2.1,
+-- it needs to register itself via DCR and store the resulting client credentials.
+-- These credentials are shared by all users in the organization.
+CREATE TABLE IF NOT EXISTS external_oauth_client_registrations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+
+  -- OAuth server issuer URL (from AS metadata or derived from auth endpoint origin)
+  oauth_server_issuer TEXT NOT NULL CHECK (oauth_server_issuer <> ''),
+
+  -- Client credentials from DCR response
+  client_id TEXT NOT NULL CHECK (client_id <> ''),
+  client_secret_encrypted TEXT,  -- May be null for public clients (PKCE-only)
+  client_id_issued_at timestamptz,
+  client_secret_expires_at timestamptz,  -- When the secret expires (null = never)
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT external_oauth_client_registrations_pkey PRIMARY KEY (id),
+  CONSTRAINT external_oauth_client_registrations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
+);
+
+-- Unique constraint: one client registration per org per OAuth issuer
+CREATE UNIQUE INDEX IF NOT EXISTS external_oauth_client_registrations_org_issuer_key
+ON external_oauth_client_registrations (organization_id, oauth_server_issuer)
+WHERE deleted IS FALSE;
