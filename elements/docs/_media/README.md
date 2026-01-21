@@ -76,11 +76,10 @@ This will enable your backend chat endpoint to talk to our servers securely.
 
 ## Setting up your frontend
 
-`@gram-ai/elements` requires that you wrap your React tree with our context provider and reference our CSS:
+`@gram-ai/elements` requires that you wrap your React tree with our context provider:
 
 ```jsx
 import { GramElementsProvider, Chat, type ElementsConfig } from '@gram-ai/elements'
-import '@gram-ai/elements/elements.css'
 
 // Please fill out projectSlug and mcp
 const config: ElementsConfig = {
@@ -114,7 +113,6 @@ By default, Elements expects the session endpoint on your backend to be located 
 
 ```jsx
 import { GramElementsProvider, Chat, type ElementsConfig, type GetSessionFn } from '@gram-ai/elements'
-import '@gram-ai/elements/elements.css'
 
 const config: ElementsConfig = {
   projectSlug: 'xxx',
@@ -147,7 +145,6 @@ For complete configuration options and TypeScript type definitions, see the [API
 
 ```typescript
 import { GramElementsProvider, Chat, type ElementsConfig } from '@gram-ai/elements'
-import '@gram-ai/elements/elements.css'
 
 const config: ElementsConfig = {
   projectSlug: 'your-project',
@@ -189,7 +186,6 @@ Gram Elements includes a set of recommended plugins that you can use out of the 
 ```typescript
 import { GramElementsProvider, Chat, type ElementsConfig } from '@gram-ai/elements'
 import { recommended } from '@gram-ai/elements/plugins'
-import '@gram-ai/elements/elements.css'
 
 const config: ElementsConfig = {
   projectSlug: 'my-project',
@@ -236,7 +232,6 @@ You can create your own custom plugins to add specialized rendering capabilities
 import { GramElementsProvider, Chat, type ElementsConfig } from '@gram-ai/elements'
 import { chart } from '@gram-ai/elements/plugins'
 import { myCustomPlugin } from './plugins/myCustomPlugin'
-import '@gram-ai/elements/elements.css'
 
 const config: ElementsConfig = {
   projectSlug: 'my-project',

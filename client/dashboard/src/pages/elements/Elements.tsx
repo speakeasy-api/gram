@@ -26,6 +26,11 @@ import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useListToolsets } from "@gram/client/react-query/index.js";
 import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import {
+  Chat,
+  GramElementsProvider,
+  type ElementsConfig,
+} from "@gram-ai/elements";
+import {
   ArrowRight,
   Check,
   ChevronDown,
@@ -36,7 +41,7 @@ import {
   Server,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type ColorScheme = "light" | "dark" | "system";
 type Density = "compact" | "normal" | "spacious";
@@ -178,11 +183,8 @@ export default function ChatElements() {
   const { projectSlug } = useSlugs();
   const session = useSession();
   const project = useProject();
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [iframeReady, setIframeReady] = useState(false);
-  const [iframeKey, setIframeKey] = useState(0);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
-  const sessionCreatedRef = useRef(false);
+  const [previewKey, setPreviewKey] = useState(0);
   const [rightPanelTab, setRightPanelTab] = useState<"preview" | "install">(
     "preview",
   );
@@ -235,24 +237,8 @@ export default function ChatElements() {
 
   const createSessionMutation = useChatSessionsCreateMutation();
 
-  // Listen for iframe ready signal
+  // Create session on mount and when preview is refreshed
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-      if (event.data?.type === "ELEMENTS_READY") {
-        setIframeReady(true);
-      }
-    };
-
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, []);
-
-  // Create session ONCE when iframe is ready
-  useEffect(() => {
-    if (!iframeReady || sessionCreatedRef.current) return;
-    sessionCreatedRef.current = true;
-
     const createSession = async () => {
       try {
         const result = await createSessionMutation.mutateAsync({
@@ -275,14 +261,13 @@ export default function ChatElements() {
     };
 
     createSession();
-  }, [iframeReady, createSessionMutation, project.slug, session.session]);
+  }, [previewKey, project.slug, session.session]);
 
-  // Build config object (memoized)
-  const elementsConfig = useMemo(
+  // Build config object (memoized) - excludes api since sessionToken changes independently
+  const baseElementsConfig = useMemo(
     () => ({
       mcp: config.mcp,
       projectSlug: project.slug,
-      apiUrl: getServerURL(),
       systemPrompt: config.systemPrompt || undefined,
       variant: config.variant,
       theme: {
@@ -301,6 +286,7 @@ export default function ChatElements() {
         showModelPicker: config.showModelPicker,
       },
       sidecar: {
+        title: "Chat",
         expandable: false,
       },
       modal: {
@@ -315,35 +301,11 @@ export default function ChatElements() {
     [config, project.slug],
   );
 
-  // Send config to iframe whenever it changes (after session is ready)
-  useEffect(() => {
-    if (!iframeReady || !sessionToken || !iframeRef.current?.contentWindow)
-      return;
-
-    const iframe = iframeRef.current.contentWindow;
-    iframe.postMessage(
-      { type: "ELEMENTS_CONFIG", config: elementsConfig },
-      window.location.origin,
-    );
-  }, [iframeReady, sessionToken, elementsConfig]);
-
-  // Send session token to iframe when available
-  useEffect(() => {
-    if (!iframeReady || !sessionToken || !iframeRef.current?.contentWindow)
-      return;
-
-    const iframe = iframeRef.current.contentWindow;
-    iframe.postMessage(
-      { type: "ELEMENTS_SESSION", sessionToken },
-      window.location.origin,
-    );
-  }, [iframeReady, sessionToken]);
+  const apiUrl = getServerURL();
 
   const refreshPreview = () => {
-    setIframeReady(false);
     setSessionToken(null);
-    sessionCreatedRef.current = false;
-    setIframeKey((k) => k + 1);
+    setPreviewKey((k) => k + 1);
   };
 
   return (
@@ -738,12 +700,11 @@ export default function ChatElements() {
                         <RefreshCw className="h-4 w-4 mr-1" />
                         Reset Preview
                       </Button>
-                      <iframe
-                        key={iframeKey}
-                        ref={iframeRef}
-                        src="/embed.html"
-                        className="h-full w-full border-0"
-                        title="Gram Elements Chat"
+                      <ElementsPreview
+                        key={previewKey}
+                        config={baseElementsConfig}
+                        apiUrl={apiUrl}
+                        sessionToken={sessionToken}
                       />
                     </div>
                   </div>
@@ -764,6 +725,99 @@ export default function ChatElements() {
         </Page.Section>
       </Page.Body>
     </Page>
+  );
+}
+
+function ElementsPreview({
+  config,
+  apiUrl,
+  sessionToken,
+}: {
+  config: Omit<ElementsConfig, "api">;
+  apiUrl: string;
+  sessionToken: string | null;
+}) {
+  const gradientStyle = {
+    background:
+      "linear-gradient(135deg, #89CFF0 0%, #5DADE2 25%, #3498DB 50%, #85C1E9 75%, #AED6F1 100%)",
+  };
+
+  const loadingContent = (
+    <div
+      style={{
+        height: "100%",
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: "system-ui",
+        color: "rgba(255, 255, 255, 0.9)",
+        ...gradientStyle,
+      }}
+    >
+      Loading...
+    </div>
+  );
+
+  if (!sessionToken) {
+    return loadingContent;
+  }
+
+  const elementsConfig: ElementsConfig = {
+    ...config,
+    api: {
+      url: apiUrl,
+      sessionFn: async () => sessionToken,
+    },
+  };
+
+  const isStandalone = config.variant === "standalone" || !config.variant;
+
+  if (isStandalone) {
+    return (
+      <div
+        style={{
+          height: "100%",
+          width: "100%",
+          padding: "40px",
+          boxSizing: "border-box",
+          ...gradientStyle,
+        }}
+      >
+        <div
+          style={{
+            height: "100%",
+            width: "100%",
+            borderRadius: "24px",
+            overflow: "hidden",
+            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.15)",
+          }}
+        >
+          <GramElementsProvider config={elementsConfig}>
+            <Chat />
+          </GramElementsProvider>
+        </div>
+      </div>
+    );
+  }
+
+  // Widget or Sidecar - full gradient background
+  // Use transform to create a containing block for fixed-positioned children (widget modal)
+  return (
+    <div
+      style={{
+        height: "100%",
+        width: "100%",
+        position: "relative",
+        transform: "translate(0)",
+        overflow: "hidden",
+        ...gradientStyle,
+      }}
+    >
+      <GramElementsProvider config={elementsConfig}>
+        <Chat />
+      </GramElementsProvider>
+    </div>
   );
 }
 
@@ -1008,7 +1062,6 @@ app.listen(3001, () => {
     configLines.push(`  api: {\n    sessionFn: getSession,\n  },`);
 
     return `${useClientDirective}import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
-import "@gram-ai/elements/elements.css";
 
 // Custom session function for non-standard session endpoint
 const getSession = async () => {

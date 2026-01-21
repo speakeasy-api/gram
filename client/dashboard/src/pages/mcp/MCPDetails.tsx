@@ -16,7 +16,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useProject, useSession } from "@/contexts/Auth";
+import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools, useToolset } from "@/hooks/toolTypes";
@@ -30,10 +30,10 @@ import {
   invalidateAllToolset,
   useAddExternalOAuthServerMutation,
   useAddOAuthProxyServerMutation,
-  useGetDomain,
   useRemoveOAuthServerMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
+import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { Badge, Button, Grid, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe, Trash2 } from "lucide-react";
@@ -196,68 +196,6 @@ export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
       />
     </>
   );
-}
-
-export function useCustomDomain() {
-  const {
-    data: domain,
-    isLoading,
-    refetch,
-  } = useGetDomain(undefined, undefined, {
-    refetchOnWindowFocus: false,
-    retry: false,
-    throwOnError: false,
-  });
-
-  return { domain: domain, refetch: refetch, isLoading };
-}
-
-export function useMcpUrl(
-  toolset:
-    | Pick<
-        ToolsetEntry,
-        | "slug"
-        | "customDomainId"
-        | "mcpSlug"
-        | "defaultEnvironmentSlug"
-        | "mcpIsPublic"
-      >
-    | undefined,
-): {
-  url: string | undefined;
-  customServerURL: string | undefined;
-  installPageUrl: string;
-} {
-  const { domain } = useCustomDomain();
-  const project = useProject();
-
-  if (!toolset)
-    return { url: undefined, customServerURL: undefined, installPageUrl: "" };
-
-  // Determine which server URL to use
-  let customServerURL: string | undefined;
-  if (domain && toolset.customDomainId && domain.id == toolset.customDomainId) {
-    customServerURL = `https://${domain.domain}`;
-  }
-
-  const urlSuffix = toolset.mcpSlug
-    ? toolset.mcpSlug
-    : `${project.slug}/${toolset.slug}/${toolset.defaultEnvironmentSlug}`;
-  const mcpUrl = `${
-    toolset.mcpSlug && customServerURL ? customServerURL : getServerURL()
-  }/mcp/${urlSuffix}`;
-
-  // Always use our URL for install page when server is private, even for
-  // custom domains to ensure cookie is present
-  const installPageUrl = toolset.mcpIsPublic
-    ? `${mcpUrl}/install`
-    : `${getServerURL()}/mcp/${urlSuffix}/install`;
-
-  return {
-    url: mcpUrl,
-    customServerURL,
-    installPageUrl,
-  };
 }
 
 export function MCPDetails({ toolset }: { toolset: Toolset }) {
