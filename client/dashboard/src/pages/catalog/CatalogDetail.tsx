@@ -319,7 +319,7 @@ export default function CatalogDetail() {
                     <Button.Text>Adding...</Button.Text>
                   </>
                 ) : (
-                  <Button.Text>Add to Project</Button.Text>
+                  <Button.Text>Add</Button.Text>
                 )}
               </Button>
             </Dialog.Footer>
@@ -381,14 +381,14 @@ export default function CatalogDetail() {
                       ) : (
                         <>
                           <Minus className="w-4 h-4" />
-                          <Button.Text>Remove from Project</Button.Text>
+                          <Button.Text>Remove</Button.Text>
                         </>
                       )}
                     </Button>
                   ) : (
                     <Button size="md" onClick={() => setShowAddDialog(true)}>
                       <Plus className="w-4 h-4" />
-                      <Button.Text>Add to Project</Button.Text>
+                      <Button.Text>Add</Button.Text>
                     </Button>
                   )}
                 </div>

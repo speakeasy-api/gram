@@ -92,7 +92,7 @@ function PageSectionComponent({ children }: { children: PageSectionChild[] }) {
           direction="horizontal"
           justify="space-between"
           align="center"
-          className="mb-4"
+          className="mb-6"
         >
           <Stack gap={2}>
             {slots.title}

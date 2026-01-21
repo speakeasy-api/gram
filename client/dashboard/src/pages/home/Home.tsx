@@ -50,7 +50,7 @@ export default function Home() {
     ).filter((s): s is Server => s !== undefined);
   }, [data]);
 
-  const firstName = user.displayName?.split(" ")[0] || user.email?.split("@")[0];
+  const firstName = user.displayName?.split(" ")[0];
 
   return (
     <Page>
@@ -58,7 +58,7 @@ export default function Home() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <h1 className="text-2xl font-semibold mb-6">Welcome, {firstName}</h1>
+        <h1 className="text-2xl font-semibold mb-6">Welcome{firstName ? `, ${firstName}` : ""}</h1>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="relative flex flex-col gap-3 rounded-lg border bg-background p-4 pb-5 overflow-hidden">
             <div className="absolute bottom-0 inset-x-0 h-[3px] bg-gradient-primary" />
@@ -104,11 +104,11 @@ export default function Home() {
               </div>
             </div>
             <div className="mt-auto flex justify-end">
-              <routes.uploadOpenAPI.Link className="no-underline">
+              <routes.sources.addOpenAPI.Link className="no-underline">
                 <Button size="sm">
                   <Button.Text>Upload OpenAPI</Button.Text>
                 </Button>
-              </routes.uploadOpenAPI.Link>
+              </routes.sources.addOpenAPI.Link>
             </div>
           </div>
         </div>
@@ -210,7 +210,7 @@ function FeaturedServerCard({
               </Button>
             ) : (
               <Button variant="secondary" size="sm">
-                <Button.Text>Add to Project</Button.Text>
+                <Button.Text>Add</Button.Text>
               </Button>
             )}
           </Stack>

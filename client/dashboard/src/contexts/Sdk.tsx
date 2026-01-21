@@ -16,29 +16,39 @@ export const useSdkClient = () => {
   return client;
 };
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      throwOnError: true,
-      retry: (failureCount, error: Error) => {
-        // Don't retry on 4xx errors
-        if (error && typeof error === "object" && "status" in error) {
-          const status = (error as unknown as { status: number }).status;
-          if (status >= 400 && status < 500) {
-            return false;
+// Preserve QueryClient across HMR to prevent cache loss
+const createQueryClient = () =>
+  new QueryClient({
+    defaultOptions: {
+      queries: {
+        throwOnError: true,
+        retry: (failureCount, error: Error) => {
+          // Don't retry on 4xx errors
+          if (error && typeof error === "object" && "status" in error) {
+            const status = (error as unknown as { status: number }).status;
+            if (status >= 400 && status < 500) {
+              return false;
+            }
           }
-        }
-        // Default retry logic for other errors
-        return failureCount < 3;
+          // Default retry logic for other errors
+          return failureCount < 3;
+        },
+      },
+      mutations: {
+        onError: (error: Error) => {
+          handleError(error, { title: "Request failed" });
+        },
       },
     },
-    mutations: {
-      onError: (error: Error) => {
-        handleError(error, { title: "Request failed" });
-      },
-    },
-  },
-});
+  });
+
+// In development, preserve queryClient across HMR
+const queryClient: QueryClient =
+  (import.meta.hot?.data?.queryClient as QueryClient) ?? createQueryClient();
+
+if (import.meta.hot) {
+  import.meta.hot.data.queryClient = queryClient;
+}
 
 export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
   const { projectSlug } = useSlugs();

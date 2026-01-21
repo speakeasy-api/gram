@@ -1,5 +1,5 @@
 import { useOrganization, useProject } from "@/contexts/Auth";
-import { useSdkClient } from "@/contexts/Sdk";
+import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { CheckIcon, ChevronsUpDown, PlusIcon } from "lucide-react";
 import { useState } from "react";
@@ -22,6 +22,7 @@ export function TopHeader() {
   const routes = useRoutes();
   const organization = useOrganization();
   const project = useProject();
+  const { projectSlug } = useSlugs();
   const [open, setOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
@@ -66,7 +67,7 @@ export function TopHeader() {
               <Button variant="ghost" className="h-8 !px-2 gap-2 relative -left-1">
                 <ProjectAvatar project={project} className="h-5 w-5 rounded shrink-0" />
                 <span className="text-base font-medium">
-                  {project?.slug ?? "Select"}
+                  {project?.slug || projectSlug || "Select"}
                 </span>
                 <ChevronsUpDown className="w-4 h-4 text-muted-foreground shrink-0" />
               </Button>

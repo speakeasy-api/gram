@@ -17,10 +17,12 @@ import React from "react";
 
 interface AddSourceDialogContentProps {
   onCompletion?: () => void;
+  initialTab?: "openapi" | "functions";
 }
 
 export default function AddSourceDialogContent({
   onCompletion,
+  initialTab = "openapi",
 }: AddSourceDialogContentProps) {
   const telemetry = useTelemetry();
   const isFunctionsEnabled =
@@ -29,7 +31,7 @@ export default function AddSourceDialogContent({
     telemetry.isFeatureEnabled("gram-external-mcp") ?? false;
   const [activeTab, setActiveTab] = React.useState<
     "openapi" | "functions" | "import-mcp"
-  >("openapi");
+  >(initialTab);
 
   return (
     <UploadAssetStepper.Provider step={1}>

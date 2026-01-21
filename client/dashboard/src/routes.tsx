@@ -21,6 +21,7 @@ import Logs from "./pages/logs/Logs";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPHostedPage } from "./pages/mcp/MCPHostedPage";
 import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
+import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
 import Playground from "./pages/playground/Playground";
@@ -204,6 +205,22 @@ const ROUTE_STRUCTURE = {
         url: ":sourceKind/:sourceSlug",
         component: SourceDetails,
       },
+      addOpenAPI: {
+        title: "Add OpenAPI",
+        url: "add-openapi",
+        component: UploadOpenAPI,
+      },
+      addFunction: {
+        title: "Add Function",
+        url: "add-function",
+        component: FunctionsOnboarding,
+      },
+      addFromCatalog: {
+        title: "Add from Catalog",
+        url: "add-from-catalog",
+        component: CatalogRoot,
+        indexComponent: Catalog,
+      },
     },
   },
   catalog: {
@@ -268,12 +285,6 @@ const ROUTE_STRUCTURE = {
     url: "sdks",
     icon: "code",
     component: SDK,
-  },
-  uploadOpenAPI: {
-    title: "Upload OpenAPI",
-    url: "upload",
-    icon: "upload",
-    component: UploadOpenAPI,
   },
   deployments: {
     title: "Deployments",
