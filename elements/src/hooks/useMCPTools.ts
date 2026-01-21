@@ -14,12 +14,14 @@ export function useMCPTools({
   environment,
   toolsToInclude,
   gramEnvironment,
+  chatId,
 }: {
   auth: Auth
   mcp: string | undefined
   environment: Record<string, unknown>
   toolsToInclude?: ToolsFilter
   gramEnvironment?: string
+  chatId?: string
 }): UseQueryResult<MCPToolsResult, Error> {
   const authQueryKey = Object.entries(auth.headers ?? {}).map(
     (k, v) => `${k}:${v}`
@@ -40,6 +42,7 @@ export function useMCPTools({
             ...transformEnvironmentToHeaders(environment ?? {}),
             ...auth.headers,
             ...(gramEnvironment && { 'Gram-Environment': gramEnvironment }),
+            ...(chatId && { 'gram-chat-id': chatId }),
           },
         },
       })
