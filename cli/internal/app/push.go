@@ -23,6 +23,7 @@ import (
 )
 
 type PushOptions struct {
+	Profile        *profile.Profile
 	ConfigFile     string
 	ProjectSlug    string
 	OrgSlug        string
@@ -31,8 +32,6 @@ type PushOptions struct {
 	NonBlocking    bool
 	APIKey         string
 	APIURL         string
-	ProfilePath    string
-	ProfileName    string
 }
 
 type PushResult struct {
@@ -43,31 +42,16 @@ type PushResult struct {
 
 func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
 	logger := logging.PullLogger(ctx)
+	prof := opts.Profile
 
 	if opts.Method == "" {
 		opts.Method = "merge"
 	}
-	if opts.ProfilePath == "" {
-		var err error
-		opts.ProfilePath, err = profile.DefaultProfilePath()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get profile path: %w", err)
-		}
-	}
-
 	if opts.Method != "replace" && opts.Method != "merge" {
 		return nil, fmt.Errorf("invalid method: %s (allowed values: replace, merge)", opts.Method)
 	}
-
 	if opts.ConfigFile == "" {
 		return nil, fmt.Errorf("config file is required")
-	}
-
-	var prof *profile.Profile
-	if opts.ProfileName != "" {
-		prof, _ = profile.LoadByName(opts.ProfilePath, opts.ProfileName)
-	} else {
-		prof, _ = profile.Load(opts.ProfilePath)
 	}
 
 	apiKey := secret.Secret(opts.APIKey)
@@ -263,6 +247,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			logger := logging.PullLogger(ctx)
 
 			result, err := DoPush(ctx, PushOptions{
+				Profile:        profile.FromContext(ctx),
 				ConfigFile:     c.String("config"),
 				ProjectSlug:    c.String("project"),
 				OrgSlug:        c.String("org"),
@@ -271,8 +256,6 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				NonBlocking:    c.Bool("skip-poll"),
 				APIKey:         c.String("api-key"),
 				APIURL:         c.String("api-url"),
-				ProfilePath:    "",
-				ProfileName:    "",
 			})
 
 			if err != nil {

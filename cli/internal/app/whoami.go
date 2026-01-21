@@ -23,10 +23,9 @@ import (
 )
 
 type WhoamiOptions struct {
-	ProfilePath string
-	ProfileName string
-	APIKey      string
-	APIURL      string
+	Profile *profile.Profile
+	APIKey  string
+	APIURL  string
 }
 
 type WhoamiResult struct {
@@ -38,26 +37,9 @@ type WhoamiResult struct {
 }
 
 func DoWhoami(ctx context.Context, opts WhoamiOptions) (*WhoamiResult, error) {
-	if opts.ProfilePath == "" {
-		var err error
-		opts.ProfilePath, err = profile.DefaultProfilePath()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get profile path: %w", err)
-		}
-	}
-
-	var prof *profile.Profile
-	var err error
-	if opts.ProfileName != "" {
-		prof, err = profile.LoadByName(opts.ProfilePath, opts.ProfileName)
-	} else {
-		prof, err = profile.Load(opts.ProfilePath)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("not authenticated: %w", err)
-	}
+	prof := opts.Profile
 	if prof == nil {
-		return nil, fmt.Errorf("not authenticated: no profile found")
+		return nil, fmt.Errorf("not authenticated: no profile provided")
 	}
 
 	apiKey := secret.Secret(opts.APIKey)
@@ -124,10 +106,9 @@ If no profile is configured, the command will indicate that no profile is set up
 			defer cancel()
 
 			result, err := DoWhoami(ctx, WhoamiOptions{
-				ProfilePath: "",
-				ProfileName: "",
-				APIKey:      c.String("api-key"),
-				APIURL:      c.String("api-url"),
+				Profile: profile.FromContext(ctx),
+				APIKey:  c.String("api-key"),
+				APIURL:  c.String("api-url"),
 			})
 			if err != nil {
 				return fmt.Errorf("no profile configured, please set up a profile in $home/.gram/profile.json: %w", err)

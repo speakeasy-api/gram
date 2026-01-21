@@ -19,10 +19,10 @@ import (
 )
 
 type AuthOptions struct {
+	Profile      *profile.Profile
+	ProfilePath  string
 	APIURL       string
 	DashboardURL string
-	ProfilePath  string
-	ProfileName  string
 	ProjectSlug  string
 }
 
@@ -56,14 +56,13 @@ func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
 		dashboardURL = apiURL.String()
 	}
 
-	profileName := opts.ProfileName
-	if profileName == "" {
-		profileName = profileNameFromURL(apiURL.String())
-	}
-
+	profileName := profileNameFromURL(apiURL.String())
 	keysClient := api.NewKeysClientFromURL(apiURL)
 
-	prof, _ := profile.LoadByName(opts.ProfilePath, profileName)
+	prof := opts.Profile
+	if prof == nil {
+		prof, _ = profile.LoadByName(opts.ProfilePath, profileName)
+	}
 
 	if canRefreshProfile(prof) {
 		err := refreshProfile(ctx, logger, prof, profileName, apiURL.String(), keysClient, opts.ProfilePath)
@@ -343,11 +342,10 @@ func doAuth(c *cli.Context) error {
 	}
 
 	result, err := DoAuth(ctx, AuthOptions{
+		Profile:      profile.FromContext(ctx),
+		ProfilePath:  profilePath,
 		APIURL:       c.String("api-url"),
 		DashboardURL: dashboardURL,
-		ProfilePath:  profilePath,
-		ProfileName:  c.String("profile"),
-		ProjectSlug:  "",
 	})
 	if err != nil {
 		return err
