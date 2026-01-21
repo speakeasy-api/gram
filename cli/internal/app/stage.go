@@ -35,34 +35,21 @@ var (
 
 var supportedRuntimes = map[string]struct{}{"nodejs:22": {}}
 
-// StageFunctionOptions contains the options for staging a function.
 type StageFunctionOptions struct {
-	// ConfigFile is the path to the deployment config file (default: gram.deploy.json)
 	ConfigFile string
-	// Slug is the unique identifier for the function (required)
-	Slug string
-	// Name is the human-readable name for the function (defaults to Slug if empty)
-	Name string
-	// Location is the path or URL to the function zip file (required)
-	Location string
-	// Runtime is the runtime environment (default: nodejs:22)
-	Runtime string
+	Slug       string
+	Name       string
+	Location   string
+	Runtime    string
 }
 
-// StageOpenAPIOptions contains the options for staging an OpenAPI document.
 type StageOpenAPIOptions struct {
-	// ConfigFile is the path to the deployment config file (default: gram.deploy.json)
 	ConfigFile string
-	// Slug is the unique identifier for the OpenAPI source (required)
-	Slug string
-	// Name is the human-readable name for the source (defaults to Slug if empty)
-	Name string
-	// Location is the path or URL to the OpenAPI document (required)
-	Location string
+	Slug       string
+	Name       string
+	Location   string
 }
 
-// DoStageFunction stages a Gram Functions zip file for deployment.
-// It creates the config file if it doesn't exist and appends the function source.
 func DoStageFunction(opts StageFunctionOptions) error {
 	if opts.ConfigFile == "" {
 		opts.ConfigFile = "gram.deploy.json"
@@ -107,8 +94,6 @@ func DoStageFunction(opts StageFunctionOptions) error {
 	return nil
 }
 
-// DoStageOpenAPI stages an OpenAPI document for deployment.
-// It creates the config file if it doesn't exist and appends the OpenAPI source.
 func DoStageOpenAPI(opts StageOpenAPIOptions) error {
 	if opts.ConfigFile == "" {
 		opts.ConfigFile = "gram.deploy.json"
@@ -138,6 +123,7 @@ func DoStageOpenAPI(opts StageOpenAPIOptions) error {
 			Slug:     opts.Slug,
 			Name:     name,
 			Location: opts.Location,
+			Runtime:  "",
 		},
 	}); err != nil {
 		return fmt.Errorf("failed to append source to config: %w", err)
@@ -146,7 +132,6 @@ func DoStageOpenAPI(opts StageOpenAPIOptions) error {
 	return nil
 }
 
-// ensureConfigFileExists creates the config file with initial structure if it doesn't exist.
 func ensureConfigFileExists(configPath string) error {
 	_, err := os.Stat(configPath)
 	switch {
@@ -238,7 +223,6 @@ func newStageFunctionCommand() *cli.Command {
 			},
 		},
 		Action: func(cCtx *cli.Context) error {
-			// Note: config file is already ensured to exist by the parent command's Before hook
 			return DoStageFunction(StageFunctionOptions{
 				ConfigFile: cCtx.Path("config"),
 				Slug:       cCtx.String("slug"),
@@ -264,7 +248,6 @@ func newStageOpenAPICommand() *cli.Command {
 			},
 		},
 		Action: func(cCtx *cli.Context) error {
-			// Note: config file is already ensured to exist by the parent command's Before hook
 			return DoStageOpenAPI(StageOpenAPIOptions{
 				ConfigFile: cCtx.Path("config"),
 				Slug:       cCtx.String("slug"),
