@@ -687,3 +687,20 @@ type User struct {
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 }
+
+type UserOauthToken struct {
+	ID                    uuid.UUID
+	UserID                string
+	OrganizationID        string
+	OauthServerIssuer     string
+	AccessTokenEncrypted  string
+	RefreshTokenEncrypted pgtype.Text
+	TokenType             string
+	ExpiresAt             pgtype.Timestamptz
+	Scope                 pgtype.Text
+	ProviderName          pgtype.Text
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+}

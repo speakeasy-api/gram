@@ -5,8 +5,10 @@ import {
   useGramThreadListAdapter,
 } from '@/hooks/useGramThreadListAdapter'
 import { useMCPTools } from '@/hooks/useMCPTools'
+import { useOAuthStatus } from '@/hooks/useOAuthStatus'
 import { useToolApproval } from '@/hooks/useToolApproval'
 import { getApiUrl } from '@/lib/api'
+import { getOAuthConfig } from '@/lib/auth'
 import { initErrorTracking, trackError } from '@/lib/errorTracking'
 import { MODELS } from '@/lib/models'
 import {
@@ -19,7 +21,7 @@ import {
   type FrontendTool,
 } from '@/lib/tools'
 import { recommended } from '@/plugins'
-import { ElementsConfig, Model } from '@/types'
+import { ElementsConfig, Model, OAuthContextState } from '@/types'
 import { Plugin } from '@/types/plugins'
 import {
   AssistantRuntimeProvider,
@@ -147,6 +149,50 @@ const ElementsProviderWithApproval = ({
     toolsToInclude: config.tools?.toolsToInclude,
     gramEnvironment: config.gramEnvironment,
   })
+
+  // OAuth status checking (only if OAuth is configured)
+  const oauthConfig = getOAuthConfig(config.api)
+  const oauthStatus = useOAuthStatus({
+    apiUrl,
+    auth: config.api,
+    sessionHeaders: auth.headers ?? {},
+  })
+
+  // Handle OAuth callback parameters from URL (after redirect back)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const params = new URLSearchParams(window.location.search)
+    const oauthSuccess = params.get('oauth_success')
+    const oauthError = params.get('oauth_error')
+    const oauthProvider = params.get('oauth_provider')
+
+    if (oauthSuccess === 'true' && oauthProvider) {
+      // Refresh OAuth status after successful authentication
+      oauthStatus.refresh().catch(console.error)
+
+      // Call success callback if provided
+      if (oauthConfig?.onAuthSuccess) {
+        oauthConfig.onAuthSuccess(oauthProvider)
+      }
+
+      // Clean up URL parameters
+      const url = new URL(window.location.href)
+      url.searchParams.delete('oauth_success')
+      url.searchParams.delete('oauth_provider')
+      window.history.replaceState({}, '', url.toString())
+    } else if (oauthError) {
+      // Call error callback if provided
+      if (oauthConfig?.onAuthError) {
+        oauthConfig.onAuthError(oauthError)
+      }
+
+      // Clean up URL parameters
+      const url = new URL(window.location.href)
+      url.searchParams.delete('oauth_error')
+      window.history.replaceState({}, '', url.toString())
+    }
+  }, [oauthConfig])
 
   // Store approval helpers in ref so they can be used in async contexts
   const approvalHelpersRef = useRef<ApprovalHelpers>({
@@ -340,6 +386,30 @@ const ElementsProviderWithApproval = ({
 
   const historyEnabled = config.history?.enabled ?? false
 
+  // Create OAuth context state from hook result
+  const oauthContextState: OAuthContextState = useMemo(
+    () => ({
+      status: oauthStatus.status,
+      isLoading: oauthStatus.isLoading,
+      error: oauthStatus.error,
+      providerName: oauthStatus.providerName,
+      expiresAt: oauthStatus.expiresAt,
+      startAuthorization: oauthStatus.startAuthorization,
+      disconnect: oauthStatus.disconnect,
+      refresh: oauthStatus.refresh,
+    }),
+    [
+      oauthStatus.status,
+      oauthStatus.isLoading,
+      oauthStatus.error,
+      oauthStatus.providerName,
+      oauthStatus.expiresAt,
+      oauthStatus.startAuthorization,
+      oauthStatus.disconnect,
+      oauthStatus.refresh,
+    ]
+  )
+
   // Shared context value for ElementsContext
   const contextValue = useMemo(
     () => ({
@@ -352,8 +422,9 @@ const ElementsProviderWithApproval = ({
       setIsOpen,
       plugins,
       mcpTools,
+      oauth: oauthContextState,
     }),
-    [config, model, isExpanded, isOpen, plugins, mcpTools]
+    [config, model, isExpanded, isOpen, plugins, mcpTools, oauthContextState]
   )
 
   const frontendTools = config.tools?.frontendTools ?? {}

@@ -380,12 +380,100 @@ export type StaticSessionAuthConfig = {
 }
 
 /**
- * API configuration - can be just the URL, or URL with session auth, or URL with API key auth.
+ * Configuration for external OAuth flows when connecting to MCP servers
+ * that require OAuth authentication (e.g., Google, Atlassian).
+ *
+ * When configured, Elements will automatically handle OAuth flows:
+ * - Check if the user has a valid token
+ * - Redirect to the OAuth provider if needed
+ * - Store tokens securely on the Gram server
+ *
+ * @example
+ * const config: ElementsConfig = {
+ *   api: {
+ *     oauth: {
+ *       issuer: 'https://accounts.google.com',
+ *       toolsetId: 'your-toolset-id',
+ *       onAuthRequired: (authUrl) => {
+ *         window.location.href = authUrl;
+ *       },
+ *     },
+ *   },
+ * }
+ */
+export interface ExternalOAuthConfig {
+  /**
+   * The OAuth server issuer URL (e.g., 'https://accounts.google.com').
+   * This identifies which external OAuth provider to authenticate with.
+   */
+  issuer: string
+
+  /**
+   * The toolset ID that requires OAuth authentication.
+   * Used to determine the OAuth configuration and validate access.
+   */
+  toolsetId: string
+
+  /**
+   * Callback invoked when OAuth authentication is required.
+   * Receives the authorization URL that the user should be redirected to.
+   *
+   * @param authUrl - The full authorization URL including all OAuth parameters
+   * @example
+   * onAuthRequired: (authUrl) => {
+   *   // Option 1: Full page redirect
+   *   window.location.href = authUrl;
+   *
+   *   // Option 2: Open in popup
+   *   window.open(authUrl, '_blank', 'width=600,height=700');
+   * }
+   */
+  onAuthRequired?: (authUrl: string) => void
+
+  /**
+   * Callback invoked when OAuth authentication succeeds.
+   * Use this to update UI state or trigger other actions.
+   *
+   * @param provider - The OAuth provider name (e.g., 'google')
+   */
+  onAuthSuccess?: (provider: string) => void
+
+  /**
+   * Callback invoked when OAuth authentication fails.
+   *
+   * @param error - The error message describing what went wrong
+   */
+  onAuthError?: (error: string) => void
+
+  /**
+   * The redirect URI to return to after OAuth completes.
+   * If not provided, defaults to the current page URL.
+   */
+  redirectUri?: string
+}
+
+/**
+ * OAuth-enabled API configuration for external MCP server authentication.
+ */
+export type OAuthApiConfig = {
+  /**
+   * Configuration for external OAuth flows.
+   * Enable this when connecting to MCP servers that require OAuth authentication.
+   */
+  oauth: ExternalOAuthConfig
+}
+
+/**
+ * API configuration - can be just the URL, or URL with session auth,
+ * URL with static token, or URL with OAuth.
  */
 export type ApiConfig =
   | BaseApiConfig
   | (BaseApiConfig & SessionAuthConfig)
   | (BaseApiConfig & StaticSessionAuthConfig)
+  | (BaseApiConfig & OAuthApiConfig)
+  | (BaseApiConfig & SessionAuthConfig & OAuthApiConfig)
+  | (BaseApiConfig & StaticSessionAuthConfig & OAuthApiConfig)
 
 /**
  * The LLM model to use for the Elements library.
@@ -871,6 +959,29 @@ export interface HistoryConfig {
 }
 
 /**
+ * OAuth authentication status exposed through Elements context.
+ * @internal
+ */
+export type OAuthContextState = {
+  /** Current OAuth status */
+  status: 'authenticated' | 'needs_auth' | 'disconnected' | 'loading' | 'disabled'
+  /** Whether OAuth status is loading */
+  isLoading: boolean
+  /** Error message if status check failed */
+  error: string | null
+  /** OAuth provider name if authenticated */
+  providerName: string | null
+  /** Token expiration time */
+  expiresAt: Date | null
+  /** Start the OAuth authorization flow */
+  startAuthorization: () => void
+  /** Disconnect OAuth */
+  disconnect: () => Promise<void>
+  /** Refresh the OAuth status */
+  refresh: () => Promise<void>
+}
+
+/**
  * @internal
  */
 export type ElementsContextType = {
@@ -883,4 +994,6 @@ export type ElementsContextType = {
   setIsOpen: (isOpen: boolean) => void
   plugins: Plugin[]
   mcpTools: Record<string, unknown> | undefined
+  /** OAuth authentication state (if OAuth is configured) */
+  oauth: OAuthContextState
 }

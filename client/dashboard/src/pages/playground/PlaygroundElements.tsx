@@ -11,13 +11,14 @@ import {
   Chat,
   ChatHistory,
   GramElementsProvider,
+  type ExternalOAuthConfig,
   type Model,
 } from "@gram-ai/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { useListToolsets } from "@gram/client/react-query/index.js";
 import { HistoryIcon } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useEnvironment } from "../environments/Environment";
@@ -74,6 +75,45 @@ export function PlaygroundElements({
         })
       : null;
 
+  // Create OAuth config if toolset has external OAuth server configured
+  const oauthConfig: ExternalOAuthConfig | undefined = useMemo(() => {
+    if (!toolset?.externalOauthServer?.metadata) {
+      return undefined;
+    }
+
+    const metadata = toolset.externalOauthServer.metadata as {
+      issuer?: string;
+    };
+
+    if (!metadata.issuer) {
+      return undefined;
+    }
+
+    return {
+      issuer: metadata.issuer,
+      toolsetId: toolset.id,
+      onAuthRequired: (authUrl: string) => {
+        // Open OAuth authorization in a popup window
+        const popup = window.open(
+          authUrl,
+          "oauth_popup",
+          "width=600,height=700,scrollbars=yes"
+        );
+        if (!popup) {
+          // Fallback to redirect if popup blocked
+          window.location.href = authUrl;
+        }
+      },
+      onAuthSuccess: (provider: string) => {
+        toast.success(`Successfully connected to ${provider}`);
+      },
+      onAuthError: (error: string) => {
+        toast.error(`OAuth authentication failed: ${error}`);
+      },
+      redirectUri: window.location.href.split("?")[0], // Current page without query params
+    };
+  }, [toolset?.externalOauthServer?.metadata, toolset?.id]);
+
   // Create getSession function using SDK mutation with session auth
   const getSession = useCallback(async () => {
     try {
@@ -122,6 +162,7 @@ export function PlaygroundElements({
         api: {
           url: getServerURL(),
           sessionFn: getSession,
+          ...(oauthConfig && { oauth: oauthConfig }),
         },
         history: {
           enabled: true,

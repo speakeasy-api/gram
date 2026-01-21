@@ -104,3 +104,69 @@ WHERE project_id = @project_id AND id = @id;
 SELECT * FROM oauth_proxy_providers
 WHERE oauth_proxy_server_id = @oauth_proxy_server_id AND project_id = @project_id AND deleted IS FALSE
 ORDER BY created_at ASC;
+
+-- User OAuth Tokens Queries
+-- Stores tokens obtained from external OAuth providers for users authenticating to external MCP servers
+
+-- name: UpsertUserOAuthToken :one
+INSERT INTO user_oauth_tokens (
+    user_id,
+    organization_id,
+    oauth_server_issuer,
+    access_token_encrypted,
+    refresh_token_encrypted,
+    token_type,
+    expires_at,
+    scope,
+    provider_name
+) VALUES (
+    @user_id,
+    @organization_id,
+    @oauth_server_issuer,
+    @access_token_encrypted,
+    @refresh_token_encrypted,
+    @token_type,
+    @expires_at,
+    @scope,
+    @provider_name
+) ON CONFLICT (user_id, organization_id, oauth_server_issuer) WHERE deleted IS FALSE DO UPDATE SET
+    access_token_encrypted = EXCLUDED.access_token_encrypted,
+    refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
+    token_type = EXCLUDED.token_type,
+    expires_at = EXCLUDED.expires_at,
+    scope = EXCLUDED.scope,
+    provider_name = EXCLUDED.provider_name,
+    updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: GetUserOAuthToken :one
+SELECT * FROM user_oauth_tokens
+WHERE user_id = @user_id
+  AND organization_id = @organization_id
+  AND oauth_server_issuer = @oauth_server_issuer
+  AND deleted IS FALSE;
+
+-- name: GetUserOAuthTokenByID :one
+SELECT * FROM user_oauth_tokens
+WHERE id = @id AND deleted IS FALSE;
+
+-- name: ListUserOAuthTokens :many
+SELECT * FROM user_oauth_tokens
+WHERE user_id = @user_id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+ORDER BY created_at DESC;
+
+-- name: DeleteUserOAuthToken :exec
+UPDATE user_oauth_tokens SET
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: DeleteUserOAuthTokenByIssuer :exec
+UPDATE user_oauth_tokens SET
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE user_id = @user_id
+  AND organization_id = @organization_id
+  AND oauth_server_issuer = @oauth_server_issuer;

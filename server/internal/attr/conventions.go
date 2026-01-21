@@ -121,6 +121,7 @@ const (
 	OAuthCodeKey                   = attribute.Key("gram.oauth.code")
 	OAuthExternalCodeKey           = attribute.Key("gram.oauth.external_code")
 	OAuthGrantKey                  = attribute.Key("gram.oauth.grant")
+	OAuthIssuerKey                 = attribute.Key("gram.oauth.issuer")
 	OAuthProviderKey               = attribute.Key("gram.oauth.provider")
 	OAuthRedirectURIFullKey        = attribute.Key("gram.oauth.redirect_uri.full")
 	OAuthRegistrationEndpointKey   = attribute.Key("gram.oauth.registration_endpoint")
@@ -516,6 +517,9 @@ func SlogOAuthExternalCode(v string) slog.Attr      { return slog.String(string(
 
 func OAuthGrant(v string) attribute.KeyValue { return OAuthGrantKey.String(v) }
 func SlogOAuthGrant(v string) slog.Attr      { return slog.String(string(OAuthGrantKey), v) }
+
+func OAuthIssuer(v string) attribute.KeyValue { return OAuthIssuerKey.String(v) }
+func SlogOAuthIssuer(v string) slog.Attr      { return slog.String(string(OAuthIssuerKey), v) }
 
 func OAuthProvider(v string) attribute.KeyValue { return OAuthProviderKey.String(v) }
 func SlogOAuthProvider(v string) slog.Attr      { return slog.String(string(OAuthProviderKey), v) }
