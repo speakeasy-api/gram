@@ -42,7 +42,7 @@ export function useMCPTools({
             ...transformEnvironmentToHeaders(environment ?? {}),
             ...auth.headers,
             ...(gramEnvironment && { 'Gram-Environment': gramEnvironment }),
-            ...(chatId && { 'gram-chat-id': chatId }),
+            ...(chatId && { 'Gram-Chat-ID': chatId }),
           },
         },
       })
