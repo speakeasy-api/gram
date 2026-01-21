@@ -346,6 +346,7 @@ func doAuth(c *cli.Context) error {
 		ProfilePath:  profilePath,
 		APIURL:       c.String("api-url"),
 		DashboardURL: dashboardURL,
+		ProjectSlug:  c.String("project"),
 	})
 	if err != nil {
 		return err
