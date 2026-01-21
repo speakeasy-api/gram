@@ -1123,6 +1123,13 @@ CREATE TABLE IF NOT EXISTS external_mcp_tool_definitions (
   transport_type TEXT NOT NULL,
   requires_oauth BOOLEAN NOT NULL DEFAULT FALSE,
 
+  type TEXT NOT NULL DEFAULT 'proxy',
+
+  -- Set when type is not 'proxy'
+  name TEXT,
+  description TEXT,
+  schema JSONB,
+
   -- OAuth metadata
   -- '2.1' = MCP OAuth with RFC 8414 discovery + dynamic registration
   -- '2.0' = legacy OAuth 2.0 (no AS discovery, requires static client config)
