@@ -11,6 +11,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -31,6 +42,17 @@ export {
   type TemplateQueryData,
 };
 
+export type TemplateQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * getTemplate templates
  *
@@ -40,8 +62,8 @@ export {
 export function useTemplate(
   request?: operations.GetTemplateRequest | undefined,
   security?: operations.GetTemplateSecurity | undefined,
-  options?: QueryHookOptions<TemplateQueryData>,
-): UseQueryResult<TemplateQueryData, Error> {
+  options?: QueryHookOptions<TemplateQueryData, TemplateQueryError>,
+): UseQueryResult<TemplateQueryData, TemplateQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildTemplateQuery(
@@ -63,8 +85,8 @@ export function useTemplate(
 export function useTemplateSuspense(
   request?: operations.GetTemplateRequest | undefined,
   security?: operations.GetTemplateSecurity | undefined,
-  options?: SuspenseQueryHookOptions<TemplateQueryData>,
-): UseSuspenseQueryResult<TemplateQueryData, Error> {
+  options?: SuspenseQueryHookOptions<TemplateQueryData, TemplateQueryError>,
+): UseSuspenseQueryResult<TemplateQueryData, TemplateQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildTemplateQuery(

@@ -498,12 +498,11 @@ func marshalTypesExternalMCPToolDefinitionToExternalMCPToolDefinitionResponseBod
 		return nil
 	}
 	res := &ExternalMCPToolDefinitionResponseBody{
-		ID:                         v.ID,
-		ToolUrn:                    v.ToolUrn,
+		Type:                       v.Type,
 		DeploymentExternalMcpID:    v.DeploymentExternalMcpID,
 		DeploymentID:               v.DeploymentID,
 		RegistryID:                 v.RegistryID,
-		Name:                       v.Name,
+		RegistryServerName:         v.RegistryServerName,
 		Slug:                       v.Slug,
 		RemoteURL:                  v.RemoteURL,
 		TransportType:              v.TransportType,
@@ -514,12 +513,29 @@ func marshalTypesExternalMCPToolDefinitionToExternalMCPToolDefinitionResponseBod
 		OauthRegistrationEndpoint:  v.OauthRegistrationEndpoint,
 		CreatedAt:                  v.CreatedAt,
 		UpdatedAt:                  v.UpdatedAt,
+		ID:                         v.ID,
+		ToolUrn:                    v.ToolUrn,
+		ProjectID:                  v.ProjectID,
+		Name:                       v.Name,
+		CanonicalName:              v.CanonicalName,
+		Description:                v.Description,
+		SchemaVersion:              v.SchemaVersion,
+		Schema:                     v.Schema,
+		Confirm:                    v.Confirm,
+		ConfirmPrompt:              v.ConfirmPrompt,
+		Summarizer:                 v.Summarizer,
 	}
 	if v.OauthScopesSupported != nil {
 		res.OauthScopesSupported = make([]string, len(v.OauthScopesSupported))
 		for i, val := range v.OauthScopesSupported {
 			res.OauthScopesSupported[i] = val
 		}
+	}
+	if v.Canonical != nil {
+		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
+	}
+	if v.Variation != nil {
+		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
 	}
 
 	return res

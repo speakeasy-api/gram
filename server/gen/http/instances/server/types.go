@@ -441,18 +441,16 @@ type PromptTemplateResponseBody struct {
 // ExternalMCPToolDefinitionResponseBody is used to define fields on response
 // body types.
 type ExternalMCPToolDefinitionResponseBody struct {
-	// The ID of the tool definition
-	ID string `form:"id" json:"id" xml:"id"`
-	// The URN of this tool (tools:externalmcp:<slug>:proxy)
-	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
+	// Whether or not the tool is a proxy tool
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
 	// The ID of the deployments_external_mcps record
 	DeploymentExternalMcpID string `form:"deployment_external_mcp_id" json:"deployment_external_mcp_id" xml:"deployment_external_mcp_id"`
 	// The ID of the deployment
 	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
 	// The ID of the MCP registry
 	RegistryID string `form:"registry_id" json:"registry_id" xml:"registry_id"`
-	// The reverse-DNS name of the external MCP server (e.g., ai.exa/exa)
-	Name string `form:"name" json:"name" xml:"name"`
+	// The name of the external MCP server (e.g., exa)
+	RegistryServerName string `form:"registry_server_name" json:"registry_server_name" xml:"registry_server_name"`
 	// The slug used for tool prefixing (e.g., github)
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// The URL to connect to the MCP server
@@ -471,10 +469,37 @@ type ExternalMCPToolDefinitionResponseBody struct {
 	OauthRegistrationEndpoint *string `form:"oauth_registration_endpoint,omitempty" json:"oauth_registration_endpoint,omitempty" xml:"oauth_registration_endpoint,omitempty"`
 	// The OAuth scopes supported by the server
 	OauthScopesSupported []string `form:"oauth_scopes_supported,omitempty" json:"oauth_scopes_supported,omitempty" xml:"oauth_scopes_supported,omitempty"`
-	// When the tool definition was created.
+	// The creation date of the tool.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// When the tool definition was last updated.
+	// The last update date of the tool.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The ID of the tool
+	ID string `form:"id" json:"id" xml:"id"`
+	// The URN of this tool
+	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
+	// The ID of the project
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The name of the tool
+	Name string `form:"name" json:"name" xml:"name"`
+	// The canonical name of the tool. Will be the same as the name if there is no
+	// variation.
+	CanonicalName string `form:"canonical_name" json:"canonical_name" xml:"canonical_name"`
+	// Description of the tool
+	Description string `form:"description" json:"description" xml:"description"`
+	// Version of the schema
+	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
+	// JSON schema for the request
+	Schema string `form:"schema" json:"schema" xml:"schema"`
+	// Confirmation mode for the tool
+	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
+	// Prompt for the confirmation
+	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
+	// Summarizer for the tool
+	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// The original details of a tool, excluding any variations
+	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
+	// The variation details of a tool. Only includes explicitly varied fields.
+	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
 }
 
 // SecurityVariableResponseBody is used to define fields on response body types.

@@ -11,6 +11,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -31,6 +42,17 @@ export {
   queryKeyListAllowedOrigins,
 };
 
+export type ListAllowedOriginsQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * listAllowedOrigins projects
  *
@@ -40,8 +62,11 @@ export {
 export function useListAllowedOrigins(
   request?: operations.ListAllowedOriginsRequest | undefined,
   security?: operations.ListAllowedOriginsSecurity | undefined,
-  options?: QueryHookOptions<ListAllowedOriginsQueryData>,
-): UseQueryResult<ListAllowedOriginsQueryData, Error> {
+  options?: QueryHookOptions<
+    ListAllowedOriginsQueryData,
+    ListAllowedOriginsQueryError
+  >,
+): UseQueryResult<ListAllowedOriginsQueryData, ListAllowedOriginsQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildListAllowedOriginsQuery(
@@ -63,8 +88,14 @@ export function useListAllowedOrigins(
 export function useListAllowedOriginsSuspense(
   request?: operations.ListAllowedOriginsRequest | undefined,
   security?: operations.ListAllowedOriginsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ListAllowedOriginsQueryData>,
-): UseSuspenseQueryResult<ListAllowedOriginsQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    ListAllowedOriginsQueryData,
+    ListAllowedOriginsQueryError
+  >,
+): UseSuspenseQueryResult<
+  ListAllowedOriginsQueryData,
+  ListAllowedOriginsQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildListAllowedOriginsQuery(

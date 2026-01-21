@@ -11,6 +11,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -31,6 +42,17 @@ export {
   type ServeOpenAPIv3QueryData,
 };
 
+export type ServeOpenAPIv3QueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * serveOpenAPIv3 assets
  *
@@ -40,8 +62,8 @@ export {
 export function useServeOpenAPIv3(
   request: operations.ServeOpenAPIv3Request,
   security?: operations.ServeOpenAPIv3Security | undefined,
-  options?: QueryHookOptions<ServeOpenAPIv3QueryData>,
-): UseQueryResult<ServeOpenAPIv3QueryData, Error> {
+  options?: QueryHookOptions<ServeOpenAPIv3QueryData, ServeOpenAPIv3QueryError>,
+): UseQueryResult<ServeOpenAPIv3QueryData, ServeOpenAPIv3QueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildServeOpenAPIv3Query(
@@ -63,8 +85,11 @@ export function useServeOpenAPIv3(
 export function useServeOpenAPIv3Suspense(
   request: operations.ServeOpenAPIv3Request,
   security?: operations.ServeOpenAPIv3Security | undefined,
-  options?: SuspenseQueryHookOptions<ServeOpenAPIv3QueryData>,
-): UseSuspenseQueryResult<ServeOpenAPIv3QueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    ServeOpenAPIv3QueryData,
+    ServeOpenAPIv3QueryError
+  >,
+): UseSuspenseQueryResult<ServeOpenAPIv3QueryData, ServeOpenAPIv3QueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildServeOpenAPIv3Query(

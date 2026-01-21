@@ -11,6 +11,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -31,6 +42,17 @@ export {
   type ServeChatAttachmentSignedQueryData,
 };
 
+export type ServeChatAttachmentSignedQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * serveChatAttachmentSigned assets
  *
@@ -39,8 +61,14 @@ export {
  */
 export function useServeChatAttachmentSigned(
   request: operations.ServeChatAttachmentSignedRequest,
-  options?: QueryHookOptions<ServeChatAttachmentSignedQueryData>,
-): UseQueryResult<ServeChatAttachmentSignedQueryData, Error> {
+  options?: QueryHookOptions<
+    ServeChatAttachmentSignedQueryData,
+    ServeChatAttachmentSignedQueryError
+  >,
+): UseQueryResult<
+  ServeChatAttachmentSignedQueryData,
+  ServeChatAttachmentSignedQueryError
+> {
   const client = useGramContext();
   return useQuery({
     ...buildServeChatAttachmentSignedQuery(
@@ -60,8 +88,14 @@ export function useServeChatAttachmentSigned(
  */
 export function useServeChatAttachmentSignedSuspense(
   request: operations.ServeChatAttachmentSignedRequest,
-  options?: SuspenseQueryHookOptions<ServeChatAttachmentSignedQueryData>,
-): UseSuspenseQueryResult<ServeChatAttachmentSignedQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    ServeChatAttachmentSignedQueryData,
+    ServeChatAttachmentSignedQueryError
+  >,
+): UseSuspenseQueryResult<
+  ServeChatAttachmentSignedQueryData,
+  ServeChatAttachmentSignedQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildServeChatAttachmentSignedQuery(

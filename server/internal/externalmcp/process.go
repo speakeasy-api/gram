@@ -11,8 +11,10 @@ import (
 	slogmulti "github.com/samber/slog-multi"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/events"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -135,13 +137,13 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 	if oauthDiscovery != nil {
 		oauthVersion = oauthDiscovery.Version
 		if oauthDiscovery.AuthorizationEndpoint != "" {
-			oauthAuthEndpoint = pgtype.Text{String: oauthDiscovery.AuthorizationEndpoint, Valid: true}
+			oauthAuthEndpoint = conv.ToPGText(oauthDiscovery.AuthorizationEndpoint)
 		}
 		if oauthDiscovery.TokenEndpoint != "" {
-			oauthTokenEndpoint = pgtype.Text{String: oauthDiscovery.TokenEndpoint, Valid: true}
+			oauthTokenEndpoint = conv.ToPGText(oauthDiscovery.TokenEndpoint)
 		}
 		if oauthDiscovery.RegistrationEndpoint != "" {
-			oauthRegEndpoint = pgtype.Text{String: oauthDiscovery.RegistrationEndpoint, Valid: true}
+			oauthRegEndpoint = conv.ToPGText(oauthDiscovery.RegistrationEndpoint)
 		}
 		oauthScopes = oauthDiscovery.ScopesSupported
 	}
@@ -157,6 +159,10 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 			}
 
 			_, err = te.repo.CreateExternalMCPToolDefinition(ctx, repo.CreateExternalMCPToolDefinitionParams{
+				Type:                       string(types.ExternalMCPToolTypeDirect),
+				Name:                       conv.ToPGText(tool.Name),
+				Description:                conv.ToPGText(tool.Description),
+				Schema:                     tool.InputSchema,
 				ExternalMcpAttachmentID:    task.MCP.AttachmentID,
 				ToolUrn:                    toolURN.String(),
 				RemoteUrl:                  serverDetails.RemoteURL,
@@ -186,6 +192,7 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 		}
 
 		_, err = te.repo.CreateExternalMCPToolDefinition(ctx, repo.CreateExternalMCPToolDefinitionParams{
+			Type:                       string(types.ExternalMCPToolTypeProxy),
 			ExternalMcpAttachmentID:    task.MCP.AttachmentID,
 			ToolUrn:                    toolURN.String(),
 			RemoteUrl:                  serverDetails.RemoteURL,
@@ -196,6 +203,9 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 			OauthTokenEndpoint:         oauthTokenEndpoint,
 			OauthRegistrationEndpoint:  oauthRegEndpoint,
 			OauthScopesSupported:       oauthScopes,
+			Name:                       conv.PtrToPGTextEmpty(nil),
+			Description:                conv.PtrToPGTextEmpty(nil),
+			Schema:                     nil,
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "[%s] error creating external mcp tool definition", task.MCP.Name).Log(ctx, logger)

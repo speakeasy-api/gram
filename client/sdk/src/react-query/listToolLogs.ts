@@ -11,6 +11,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -31,6 +42,17 @@ export {
   queryKeyListToolLogs,
 };
 
+export type ListToolLogsQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * listLogs logs
  *
@@ -40,8 +62,8 @@ export {
 export function useListToolLogs(
   request?: operations.ListToolLogsRequest | undefined,
   security?: operations.ListToolLogsSecurity | undefined,
-  options?: QueryHookOptions<ListToolLogsQueryData>,
-): UseQueryResult<ListToolLogsQueryData, Error> {
+  options?: QueryHookOptions<ListToolLogsQueryData, ListToolLogsQueryError>,
+): UseQueryResult<ListToolLogsQueryData, ListToolLogsQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildListToolLogsQuery(
@@ -63,8 +85,11 @@ export function useListToolLogs(
 export function useListToolLogsSuspense(
   request?: operations.ListToolLogsRequest | undefined,
   security?: operations.ListToolLogsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ListToolLogsQueryData>,
-): UseSuspenseQueryResult<ListToolLogsQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    ListToolLogsQueryData,
+    ListToolLogsQueryError
+  >,
+): UseSuspenseQueryResult<ListToolLogsQueryData, ListToolLogsQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildListToolLogsQuery(

@@ -11,6 +11,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -31,6 +42,17 @@ export {
   queryKeyLoadChat,
 };
 
+export type LoadChatQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * loadChat chat
  *
@@ -40,8 +62,8 @@ export {
 export function useLoadChat(
   request: operations.LoadChatRequest,
   security?: operations.LoadChatSecurity | undefined,
-  options?: QueryHookOptions<LoadChatQueryData>,
-): UseQueryResult<LoadChatQueryData, Error> {
+  options?: QueryHookOptions<LoadChatQueryData, LoadChatQueryError>,
+): UseQueryResult<LoadChatQueryData, LoadChatQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildLoadChatQuery(
@@ -63,8 +85,8 @@ export function useLoadChat(
 export function useLoadChatSuspense(
   request: operations.LoadChatRequest,
   security?: operations.LoadChatSecurity | undefined,
-  options?: SuspenseQueryHookOptions<LoadChatQueryData>,
-): UseSuspenseQueryResult<LoadChatQueryData, Error> {
+  options?: SuspenseQueryHookOptions<LoadChatQueryData, LoadChatQueryError>,
+): UseSuspenseQueryResult<LoadChatQueryData, LoadChatQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildLoadChatQuery(

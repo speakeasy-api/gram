@@ -45,7 +45,7 @@ func GetToolURN(tool types.Tool) (*urn.Tool, error) {
 }
 
 func IsProxyTool(tool *types.Tool) bool {
-	return tool != nil && tool.ExternalMcpToolDefinition != nil
+	return tool != nil && tool.ExternalMcpToolDefinition != nil && tool.ExternalMcpToolDefinition.Name == "proxy"
 }
 
 func ToBaseTool(tool *types.Tool) (types.BaseToolAttributes, error) {
@@ -123,7 +123,26 @@ func ToBaseTool(tool *types.Tool) (types.BaseToolAttributes, error) {
 	}
 
 	if tool.ExternalMcpToolDefinition != nil {
-		return types.BaseToolAttributes{}, errors.New("proxy tool cannot be converted to base attributes")
+		if len(tool.ExternalMcpToolDefinition.Schema) > 0 {
+			schema = tool.ExternalMcpToolDefinition.Schema
+		}
+		return types.BaseToolAttributes{
+			ID:            tool.ExternalMcpToolDefinition.ID,
+			ToolUrn:       tool.ExternalMcpToolDefinition.ToolUrn,
+			ProjectID:     tool.ExternalMcpToolDefinition.ProjectID,
+			Name:          tool.ExternalMcpToolDefinition.Name,
+			CanonicalName: tool.ExternalMcpToolDefinition.CanonicalName,
+			Description:   tool.ExternalMcpToolDefinition.Description,
+			SchemaVersion: tool.ExternalMcpToolDefinition.SchemaVersion,
+			Schema:        schema,
+			CreatedAt:     tool.ExternalMcpToolDefinition.CreatedAt,
+			UpdatedAt:     tool.ExternalMcpToolDefinition.UpdatedAt,
+			Confirm:       nil,
+			ConfirmPrompt: nil,
+			Summarizer:    nil,
+			Canonical:     nil,
+			Variation:     nil,
+		}, nil
 	}
 
 	return types.BaseToolAttributes{}, urn.ErrInvalid

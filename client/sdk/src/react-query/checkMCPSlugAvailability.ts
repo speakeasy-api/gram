@@ -11,6 +11,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -31,6 +42,17 @@ export {
   queryKeyCheckMCPSlugAvailability,
 };
 
+export type CheckMCPSlugAvailabilityQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * checkMCPSlugAvailability toolsets
  *
@@ -40,8 +62,14 @@ export {
 export function useCheckMCPSlugAvailability(
   request: operations.CheckMCPSlugAvailabilityRequest,
   security?: operations.CheckMCPSlugAvailabilitySecurity | undefined,
-  options?: QueryHookOptions<CheckMCPSlugAvailabilityQueryData>,
-): UseQueryResult<CheckMCPSlugAvailabilityQueryData, Error> {
+  options?: QueryHookOptions<
+    CheckMCPSlugAvailabilityQueryData,
+    CheckMCPSlugAvailabilityQueryError
+  >,
+): UseQueryResult<
+  CheckMCPSlugAvailabilityQueryData,
+  CheckMCPSlugAvailabilityQueryError
+> {
   const client = useGramContext();
   return useQuery({
     ...buildCheckMCPSlugAvailabilityQuery(
@@ -63,8 +91,14 @@ export function useCheckMCPSlugAvailability(
 export function useCheckMCPSlugAvailabilitySuspense(
   request: operations.CheckMCPSlugAvailabilityRequest,
   security?: operations.CheckMCPSlugAvailabilitySecurity | undefined,
-  options?: SuspenseQueryHookOptions<CheckMCPSlugAvailabilityQueryData>,
-): UseSuspenseQueryResult<CheckMCPSlugAvailabilityQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    CheckMCPSlugAvailabilityQueryData,
+    CheckMCPSlugAvailabilityQueryError
+  >,
+): UseSuspenseQueryResult<
+  CheckMCPSlugAvailabilityQueryData,
+  CheckMCPSlugAvailabilityQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildCheckMCPSlugAvailabilityQuery(

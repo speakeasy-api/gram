@@ -104,12 +104,14 @@ var ExternalMCPToolDefinition = Type("ExternalMCPToolDefinition", func() {
 
 	Description("A proxy tool that references an external MCP server")
 
-	Attribute("id", String, "The ID of the tool definition")
-	Attribute("tool_urn", String, "The URN of this tool (tools:externalmcp:<slug>:proxy)")
+	Extend(BaseToolAttributes)
+
+	Attribute("type", String, "Whether or not the tool is a proxy tool")
+
 	Attribute("deployment_external_mcp_id", String, "The ID of the deployments_external_mcps record")
 	Attribute("deployment_id", String, "The ID of the deployment")
 	Attribute("registry_id", String, "The ID of the MCP registry")
-	Attribute("name", String, "The reverse-DNS name of the external MCP server (e.g., ai.exa/exa)")
+	Attribute("registry_server_name", String, "The name of the external MCP server (e.g., exa)")
 	Attribute("slug", String, "The slug used for tool prefixing (e.g., github)")
 	Attribute("remote_url", String, "The URL to connect to the MCP server")
 	Attribute("transport_type", String, func() {
@@ -134,7 +136,7 @@ var ExternalMCPToolDefinition = Type("ExternalMCPToolDefinition", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "tool_urn", "deployment_external_mcp_id", "deployment_id", "registry_id", "name", "slug", "remote_url", "transport_type", "requires_oauth", "oauth_version", "created_at", "updated_at")
+	Required("deployment_external_mcp_id", "deployment_id", "registry_server_name", "registry_id", "slug", "remote_url", "transport_type", "requires_oauth", "oauth_version", "created_at", "updated_at")
 })
 
 // Tool is a discriminated union of HTTP tools and prompt templates.

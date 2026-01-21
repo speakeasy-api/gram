@@ -18,6 +18,11 @@ sources:
         output: .speakeasy/openapi-public.yaml
         registry:
             location: registry.speakeasyapi.dev/gram/gram/gram-public-api-description
+    PulseMCP:
+        inputs:
+            - location: overlays/pulse-openapi.yaml
+        registry:
+            location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/pulse-mcp
 targets:
     gram-internal:
         target: typescript
@@ -29,3 +34,7 @@ targets:
             labelOverride:
                 fixedValue: Typescript (SDK)
             blocking: false
+    pulse-mcp:
+        target: go
+        source: PulseMCP
+        output: server/internal/thirdparty/pulsemcp

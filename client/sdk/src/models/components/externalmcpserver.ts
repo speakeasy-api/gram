@@ -8,6 +8,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  ExternalMCPTool,
+  ExternalMCPTool$inboundSchema,
+} from "./externalmcptool.js";
 
 /**
  * An MCP server from an external registry
@@ -38,6 +42,10 @@ export type ExternalMCPServer = {
    */
   title?: string | undefined;
   /**
+   * Tools available on the server
+   */
+  tools?: Array<ExternalMCPTool> | undefined;
+  /**
    * Semantic version of the server
    */
   version: string;
@@ -55,6 +63,7 @@ export const ExternalMCPServer$inboundSchema: z.ZodType<
   registry_id: z.string(),
   registry_specifier: z.string(),
   title: z.string().optional(),
+  tools: z.array(ExternalMCPTool$inboundSchema).optional(),
   version: z.string(),
 }).transform((v) => {
   return remap$(v, {

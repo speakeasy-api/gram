@@ -1,4 +1,4 @@
-speakeasyVersion: 1.685.0
+speakeasyVersion: 1.691.0
 sources:
     Gram-Internal:
         sourceNamespace: gram-api-description
@@ -7,12 +7,24 @@ sources:
         tags:
             - latest
             - 0.0.1
+    PulseMCP:
+        sourceNamespace: pulse-mcp
+        sourceRevisionDigest: sha256:249680c558fdec710e63a4a302b792be78dd8c02bc913aaa70166c7262535fe4
+        sourceBlobDigest: sha256:e98a012161d503b8c7d801386ee921c51070ff9a07e1807e2cdbfe70d2304261
+        tags:
+            - latest
+            - 0.1.0
 targets:
     gram-internal:
         source: Gram-Internal
         sourceNamespace: gram-api-description
         sourceRevisionDigest: sha256:de310e96d624429be4abe7e153a288848ffee7484a4b98c6567f7c5639f81522
         sourceBlobDigest: sha256:878dd34d1b672cd174addb59370bf631936f127467b47bc7eda0e92242043ae4
+    pulse-mcp:
+        source: PulseMCP
+        sourceNamespace: pulse-mcp
+        sourceRevisionDigest: sha256:249680c558fdec710e63a4a302b792be78dd8c02bc913aaa70166c7262535fe4
+        sourceBlobDigest: sha256:e98a012161d503b8c7d801386ee921c51070ff9a07e1807e2cdbfe70d2304261
 workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: pinned
@@ -34,6 +46,11 @@ workflow:
             output: .speakeasy/openapi-public.yaml
             registry:
                 location: registry.speakeasyapi.dev/gram/gram/gram-public-api-description
+        PulseMCP:
+            inputs:
+                - location: overlays/pulse-openapi.yaml
+            registry:
+                location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/pulse-mcp
     targets:
         gram-internal:
             target: typescript
@@ -45,3 +62,7 @@ workflow:
                 labelOverride:
                     fixedValue: Typescript (SDK)
                 blocking: false
+        pulse-mcp:
+            target: go
+            source: PulseMCP
+            output: server/internal/thirdparty/pulsemcp

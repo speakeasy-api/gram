@@ -42,7 +42,7 @@ func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 				Name:        "test-server",
 				Description: "Test server description",
 				Version:     "1.0.0",
-				Remotes: []serverRemote{
+				Remotes: []serverRemoteMeta{
 					{URL: "https://example.com/streamable", Type: "streamable-http"},
 				},
 			},
@@ -87,7 +87,7 @@ func TestGetServerDetails_OnlySSE(t *testing.T) {
 				Name:        "test-server",
 				Description: "Test server description",
 				Version:     "1.0.0",
-				Remotes: []serverRemote{
+				Remotes: []serverRemoteMeta{
 					{URL: "https://example.com/sse", Type: "sse"},
 				},
 			},
@@ -132,7 +132,7 @@ func TestGetServerDetails_PrefersStreamableHTTPOverSSE(t *testing.T) {
 				Name:        "test-server",
 				Description: "Test server description",
 				Version:     "1.0.0",
-				Remotes: []serverRemote{
+				Remotes: []serverRemoteMeta{
 					{URL: "https://example.com/sse", Type: "sse"},
 					{URL: "https://example.com/streamable", Type: "streamable-http"},
 				},

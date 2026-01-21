@@ -9,18 +9,16 @@ package types
 
 // A proxy tool that references an external MCP server
 type ExternalMCPToolDefinition struct {
-	// The ID of the tool definition
-	ID string
-	// The URN of this tool (tools:externalmcp:<slug>:proxy)
-	ToolUrn string
+	// Whether or not the tool is a proxy tool
+	Type *string
 	// The ID of the deployments_external_mcps record
 	DeploymentExternalMcpID string
 	// The ID of the deployment
 	DeploymentID string
 	// The ID of the MCP registry
 	RegistryID string
-	// The reverse-DNS name of the external MCP server (e.g., ai.exa/exa)
-	Name string
+	// The name of the external MCP server (e.g., exa)
+	RegistryServerName string
 	// The slug used for tool prefixing (e.g., github)
 	Slug string
 	// The URL to connect to the MCP server
@@ -39,8 +37,35 @@ type ExternalMCPToolDefinition struct {
 	OauthRegistrationEndpoint *string
 	// The OAuth scopes supported by the server
 	OauthScopesSupported []string
-	// When the tool definition was created.
+	// The creation date of the tool.
 	CreatedAt string
-	// When the tool definition was last updated.
+	// The last update date of the tool.
 	UpdatedAt string
+	// The ID of the tool
+	ID string
+	// The URN of this tool
+	ToolUrn string
+	// The ID of the project
+	ProjectID string
+	// The name of the tool
+	Name string
+	// The canonical name of the tool. Will be the same as the name if there is no
+	// variation.
+	CanonicalName string
+	// Description of the tool
+	Description string
+	// Version of the schema
+	SchemaVersion *string
+	// JSON schema for the request
+	Schema string
+	// Confirmation mode for the tool
+	Confirm *string
+	// Prompt for the confirmation
+	ConfirmPrompt *string
+	// Summarizer for the tool
+	Summarizer *string
+	// The original details of a tool, excluding any variations
+	Canonical *CanonicalToolAttributes
+	// The variation details of a tool. Only includes explicitly varied fields.
+	Variation *ToolVariation
 }

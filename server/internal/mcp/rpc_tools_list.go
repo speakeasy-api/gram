@@ -126,18 +126,19 @@ func unfoldExternalMCPTools(ctx context.Context, logger *slog.Logger, tools []*t
 	var result []*toolListEntry
 
 	for _, tool := range tools {
-		if !conv.IsProxyTool(tool) {
+		if tool.ExternalMcpToolDefinition == nil {
 			continue
 		}
 
 		proxy := tool.ExternalMcpToolDefinition
 
-		if proxy.Name != "proxy" {
+		// For non-proxy tools, we already have the tool info
+		if !conv.IsProxyTool(tool) {
 			result = append(result, &toolListEntry{
 				Name:        proxy.Name,
 				Description: proxy.Description,
-				InputSchema: proxy.Schema,
-				Meta:        proxy.Annotations,
+				InputSchema: json.RawMessage(proxy.Schema),
+				Meta:        nil,
 			})
 			continue
 		}
