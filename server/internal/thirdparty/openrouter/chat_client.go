@@ -12,6 +12,7 @@ import (
 
 	"github.com/hashicorp/go-cleanhttp"
 
+	or "github.com/speakeasy-api/gram/openrouter/models/components"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 )
@@ -112,33 +113,27 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 	return results, nil
 }
 
-func (c *ChatClient) GetCompletion(ctx context.Context, orgID string, systemPrompt, prompt string, tools []Tool) (*OpenAIChatMessage, error) {
-	var messages []OpenAIChatMessage
+func (c *ChatClient) GetCompletion(ctx context.Context, orgID string, systemPrompt, prompt string, tools []Tool) (*or.Message, error) {
+	var messages []or.Message
 
 	// Optional system prompt
 	if systemPrompt != "" {
-		messages = append(messages, OpenAIChatMessage{
-			Role:       "system",
-			Content:    systemPrompt,
-			ToolCalls:  nil,
-			ToolCallID: "",
-			Name:       "",
-		})
+		messages = append(messages, or.CreateMessageSystem(or.SystemMessage{
+			Content: or.CreateSystemMessageContentStr(systemPrompt),
+			Name:    nil,
+		}))
 	}
 
 	// User message
-	messages = append(messages, OpenAIChatMessage{
-		Role:       "user",
-		Content:    prompt,
-		ToolCalls:  nil,
-		ToolCallID: "",
-		Name:       "",
-	})
+	messages = append(messages, or.CreateMessageUser(or.UserMessage{
+		Content: or.CreateUserMessageContentStr(prompt),
+		Name:    nil,
+	}))
 
 	return c.GetCompletionFromMessages(ctx, orgID, "", messages, tools, nil, "")
 }
 
-func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string, projectID string, messages []OpenAIChatMessage, tools []Tool, temperature *float64, model string) (*OpenAIChatMessage, error) {
+func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string, projectID string, messages []or.Message, tools []Tool, temperature *float64, model string) (*or.Message, error) {
 	openrouterKey, err := c.openRouter.ProvisionAPIKey(ctx, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("provisioning OpenRouter key: %w", err)
