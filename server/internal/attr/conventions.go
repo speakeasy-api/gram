@@ -129,6 +129,9 @@ const (
 	OAuthScopeKey                  = attribute.Key("gram.oauth.scope")
 	OAuthTokenEndpointKey          = attribute.Key("gram.oauth.token_endpoint")
 	OAuthVersionKey                = attribute.Key("gram.oauth.version")
+	OAuthStatusKey                 = attribute.Key("gram.oauth.status")
+	OAuthConnectedKey              = attribute.Key("gram.oauth.connected")
+	OAuthExpiredKey                = attribute.Key("gram.oauth.expired")
 	OpenAPIMethodKey               = attribute.Key("gram.openapi.method")
 	OpenAPIOperationIDKey          = attribute.Key("gram.openapi.operation_id")
 	OpenAPIPathKey                 = attribute.Key("gram.openapi.path")
@@ -549,6 +552,15 @@ func SlogOAuthTokenEndpoint(v string) slog.Attr {
 
 func OAuthVersion(v string) attribute.KeyValue { return OAuthVersionKey.String(v) }
 func SlogOAuthVersion(v string) slog.Attr      { return slog.String(string(OAuthVersionKey), v) }
+
+func OAuthStatus(v string) attribute.KeyValue { return OAuthStatusKey.String(v) }
+func SlogOAuthStatus(v string) slog.Attr      { return slog.String(string(OAuthStatusKey), v) }
+
+func OAuthConnected(v bool) attribute.KeyValue { return OAuthConnectedKey.Bool(v) }
+func SlogOAuthConnected(v bool) slog.Attr      { return slog.Bool(string(OAuthConnectedKey), v) }
+
+func OAuthExpired(v bool) attribute.KeyValue { return OAuthExpiredKey.Bool(v) }
+func SlogOAuthExpired(v bool) slog.Attr      { return slog.Bool(string(OAuthExpiredKey), v) }
 
 func OpenAPIMethod(v string) attribute.KeyValue { return OpenAPIMethodKey.String(v) }
 func SlogOpenAPIMethod(v string) slog.Attr      { return slog.String(string(OpenAPIMethodKey), v) }

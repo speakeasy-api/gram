@@ -471,11 +471,20 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 	}
 
 	// Check if user has a token for this OAuth server (issuer)
+	s.logger.InfoContext(ctx, "checking OAuth token status",
+		attr.SlogUserID(authCtx.UserID),
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogOAuthIssuer(issuer))
+
 	token, err := s.oauthRepo.GetUserOAuthToken(ctx, repo.GetUserOAuthTokenParams{
 		UserID:            authCtx.UserID,
 		OrganizationID:    authCtx.ActiveOrganizationID,
 		OauthServerIssuer: issuer,
 	})
+
+	if err != nil {
+		s.logger.InfoContext(ctx, "no OAuth token found", attr.SlogError(err))
+	}
 
 	connected := err == nil
 	var expired bool
@@ -501,6 +510,11 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 			response["provider_name"] = token.ProviderName.String
 		}
 	}
+
+	s.logger.InfoContext(ctx, "OAuth status check completed",
+		attr.SlogOAuthStatus(status),
+		attr.SlogOAuthConnected(connected),
+		attr.SlogOAuthExpired(expired))
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
