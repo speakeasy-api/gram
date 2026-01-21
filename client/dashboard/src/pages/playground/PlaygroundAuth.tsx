@@ -94,7 +94,7 @@ function ExternalMcpOAuthConnection({
     : undefined;
 
   // Query OAuth status
-  const { data: oauthStatus, isLoading: statusLoading } = useQuery({
+  const { data: oauthStatus, isLoading: statusLoading, refetch: refetchStatus } = useQuery({
     queryKey: ["mcpOauthStatus", toolset.id, mcpOAuthConfig.slug],
     queryFn: async () => {
       if (!issuer) return { status: "needs_auth" as const };
@@ -199,9 +199,10 @@ function ExternalMcpOAuthConnection({
     const pollTimer = setInterval(() => {
       if (popup.closed) {
         clearInterval(pollTimer);
-        queryClient.invalidateQueries({
-          queryKey: ["mcpOauthStatus", toolset.id, mcpOAuthConfig.slug],
-        });
+        // Small delay to ensure server has processed the callback
+        setTimeout(() => {
+          refetchStatus();
+        }, 300);
       }
     }, 500);
   };
