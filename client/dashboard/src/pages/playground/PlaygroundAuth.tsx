@@ -6,11 +6,30 @@ import { useSession } from "@/contexts/Auth";
 import { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
+import { ExternalMCPToolDefinition } from "@gram/client/models/components";
 import { Badge, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, ExternalLink, Loader2, LogOut } from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
+
+/**
+ * Extract OAuth configuration from external MCP tools in the toolset.
+ * Returns the first external MCP tool that requires OAuth, or undefined.
+ */
+function getExternalMcpOAuthConfig(
+  toolset: Toolset,
+): ExternalMCPToolDefinition | undefined {
+  for (const tool of toolset.rawTools ?? []) {
+    if (
+      tool.externalMcpToolDefinition?.requiresOauth &&
+      tool.externalMcpToolDefinition.oauthVersion !== "none"
+    ) {
+      return tool.externalMcpToolDefinition;
+    }
+  }
+  return undefined;
+}
 
 interface PlaygroundAuthProps {
   toolset: Toolset;
@@ -55,7 +74,188 @@ export function getAuthStatus(
 }
 
 /**
- * OAuth connection status component for external OAuth servers
+ * OAuth connection status component for external MCP tools discovered via MCP protocol.
+ * This handles OAuth 2.1 with Dynamic Client Registration (DCR).
+ */
+function ExternalMcpOAuthConnection({
+  toolset,
+  mcpOAuthConfig,
+}: {
+  toolset: Toolset;
+  mcpOAuthConfig: ExternalMCPToolDefinition;
+}) {
+  const queryClient = useQueryClient();
+  const apiUrl = getServerURL();
+
+  // Use the authorization endpoint as the issuer for querying status
+  const issuer = mcpOAuthConfig.oauthAuthorizationEndpoint
+    ? new URL(mcpOAuthConfig.oauthAuthorizationEndpoint).origin
+    : undefined;
+
+  // Query OAuth status
+  const { data: oauthStatus, isLoading: statusLoading } = useQuery({
+    queryKey: ["mcpOauthStatus", toolset.id, mcpOAuthConfig.slug],
+    queryFn: async () => {
+      if (!issuer) return { status: "needs_auth" as const };
+
+      const params = new URLSearchParams({
+        toolset_id: toolset.id,
+        issuer: issuer,
+      });
+
+      const response = await fetch(
+        `${apiUrl}/oauth/external/status?${params.toString()}`,
+        {
+          credentials: "include",
+        },
+      );
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          return { status: "needs_auth" as const };
+        }
+        throw new Error("Failed to get OAuth status");
+      }
+
+      return response.json() as Promise<{
+        status: "authenticated" | "needs_auth" | "disconnected";
+        provider_name?: string;
+        expires_at?: string;
+      }>;
+    },
+    enabled: !!issuer,
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: true,
+  });
+
+  // Disconnect mutation
+  const disconnectMutation = useMutation({
+    mutationFn: async () => {
+      if (!issuer) throw new Error("No issuer configured");
+
+      const params = new URLSearchParams({
+        toolset_id: toolset.id,
+        issuer: issuer,
+      });
+
+      const response = await fetch(
+        `${apiUrl}/oauth/external/disconnect?${params.toString()}`,
+        {
+          method: "DELETE",
+          credentials: "include",
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to disconnect");
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["mcpOauthStatus", toolset.id, mcpOAuthConfig.slug],
+      });
+      toast.success(`Disconnected from ${mcpOAuthConfig.name || mcpOAuthConfig.slug}`);
+    },
+    onError: () => {
+      toast.error("Failed to disconnect");
+    },
+  });
+
+  // Handle connect click - initiates OAuth flow
+  const handleConnect = () => {
+    if (!mcpOAuthConfig.oauthAuthorizationEndpoint) return;
+
+    const params = new URLSearchParams({
+      toolset_id: toolset.id,
+      external_mcp_slug: mcpOAuthConfig.slug,
+      redirect_uri: window.location.href.split("?")[0],
+    });
+
+    const authUrl = `${apiUrl}/oauth/external/mcp/authorize?${params.toString()}`;
+
+    // Open in popup
+    const popup = window.open(
+      authUrl,
+      "oauth_popup",
+      "width=600,height=700,scrollbars=yes",
+    );
+
+    if (!popup) {
+      // Fallback to redirect
+      window.location.href = authUrl;
+      return;
+    }
+
+    // Poll for popup close and refresh status
+    const pollTimer = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(pollTimer);
+        queryClient.invalidateQueries({
+          queryKey: ["mcpOauthStatus", toolset.id, mcpOAuthConfig.slug],
+        });
+      }
+    }, 500);
+  };
+
+  const isConnected = oauthStatus?.status === "authenticated";
+  const providerName = mcpOAuthConfig.name || mcpOAuthConfig.slug;
+  const oauthVersionLabel =
+    mcpOAuthConfig.oauthVersion === "2.1" ? "MCP OAuth 2.1" : "OAuth 2.0";
+
+  return (
+    <div className="border rounded-md p-3 bg-muted/30">
+      <Stack gap={2}>
+        <Stack direction="horizontal" align="center" className="justify-between">
+          <Type variant="small" className="font-medium">
+            {oauthVersionLabel}
+          </Type>
+          {statusLoading ? (
+            <Loader2 className="size-4 animate-spin text-muted-foreground" />
+          ) : isConnected ? (
+            <Badge variant="success" size="sm">
+              <CheckCircle className="size-3 mr-1" />
+              Connected
+            </Badge>
+          ) : (
+            <Badge variant="warning" size="sm">
+              Not Connected
+            </Badge>
+          )}
+        </Stack>
+
+        <Type variant="small" className="text-muted-foreground">
+          {providerName}
+        </Type>
+
+        {isConnected ? (
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full"
+            onClick={() => disconnectMutation.mutate()}
+            disabled={disconnectMutation.isPending}
+          >
+            <LogOut className="size-3 mr-2" />
+            Disconnect
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            variant="default"
+            className="w-full"
+            onClick={handleConnect}
+          >
+            <ExternalLink className="size-3 mr-2" />
+            Connect
+          </Button>
+        )}
+      </Stack>
+    </div>
+  );
+}
+
+/**
+ * OAuth connection status component for external OAuth servers (legacy path)
  */
 function OAuthConnection({ toolset }: { toolset: Toolset }) {
   const session = useSession();
@@ -240,8 +440,15 @@ function OAuthConnection({ toolset }: { toolset: Toolset }) {
 export function PlaygroundAuth({ toolset, environment }: PlaygroundAuthProps) {
   const routes = useRoutes();
 
-  // Check if toolset has external OAuth configured
+  // Check if toolset has external OAuth configured (legacy path)
   const hasExternalOAuth = !!toolset.externalOauthServer?.metadata;
+
+  // Check if toolset has external MCP tools that require OAuth (MCP protocol discovery)
+  const mcpOAuthConfig = useMemo(
+    () => getExternalMcpOAuthConfig(toolset),
+    [toolset],
+  );
+  const hasExternalMcpOAuth = !!mcpOAuthConfig;
 
   const relevantEnvVars = useMemo(() => {
     const securityVars =
@@ -264,8 +471,8 @@ export function PlaygroundAuth({ toolset, environment }: PlaygroundAuthProps) {
     toolset.functionEnvironmentVariables,
   ]);
 
-  // Show "no auth required" only if there are no env vars AND no external OAuth
-  if (relevantEnvVars.length === 0 && !hasExternalOAuth) {
+  // Show "no auth required" only if there are no env vars AND no OAuth of any kind
+  if (relevantEnvVars.length === 0 && !hasExternalOAuth && !hasExternalMcpOAuth) {
     return (
       <div className="text-center py-4">
         <Type variant="small" className="text-muted-foreground">
@@ -277,8 +484,18 @@ export function PlaygroundAuth({ toolset, environment }: PlaygroundAuthProps) {
 
   return (
     <div className="space-y-3">
-      {/* External OAuth Connection UI */}
-      {hasExternalOAuth && <OAuthConnection toolset={toolset} />}
+      {/* External MCP OAuth Connection UI (discovered via MCP protocol) */}
+      {hasExternalMcpOAuth && mcpOAuthConfig && (
+        <ExternalMcpOAuthConnection
+          toolset={toolset}
+          mcpOAuthConfig={mcpOAuthConfig}
+        />
+      )}
+
+      {/* External OAuth Connection UI (legacy path) */}
+      {hasExternalOAuth && !hasExternalMcpOAuth && (
+        <OAuthConnection toolset={toolset} />
+      )}
 
       {/* Environment Variables */}
       {relevantEnvVars.map((varName) => {
