@@ -7,7 +7,6 @@ import { MoreActions } from "@/components/ui/more-actions";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
-import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
@@ -44,15 +43,12 @@ export type NamedAsset =
 const sourceTypeConfig = {
   openapi: {
     label: "OpenAPI",
-    badgeColor: "bg-blue-500/10 text-blue-700 dark:text-blue-300",
   },
   function: {
     label: "Function",
-    badgeColor: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
   },
   externalmcp: {
     label: "Catalog",
-    badgeColor: "bg-violet-500/10 text-violet-700 dark:text-violet-300",
   },
 };
 
@@ -186,7 +182,7 @@ export function SourceCard({
           <Type
             variant="subheading"
             as="div"
-            className="truncate flex-1 group-hover:text-primary transition-colors"
+            className="truncate flex-1 text-md group-hover:text-primary transition-colors"
             title={displayName}
           >
             {displayName}
@@ -201,9 +197,7 @@ export function SourceCard({
 
         {/* Footer row with type badge and metadata */}
         <div className="flex items-center justify-between gap-2 mt-auto pt-2">
-          <Type small as="span" className={cn("px-2 py-0.5 rounded-full", config.badgeColor)}>
-            {config.label}
-          </Type>
+          <Badge variant="secondary">{config.label}</Badge>
           <div className="flex items-center gap-2">
             {hasEnvironment && (
               <SimpleTooltip

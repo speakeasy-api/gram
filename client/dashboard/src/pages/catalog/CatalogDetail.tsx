@@ -28,6 +28,16 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
 
+// Map of server specifiers to their website URLs
+const SERVER_WEBSITE_MAP: Record<string, string> = {
+  "com.figma.mcp/mcp": "figma.com",
+  "com.stripe/mcp": "stripe.com",
+  "app.linear/linear": "linear.app",
+  "io.github.getsentry/sentry-mcp": "sentry.io",
+  "io.github.aws/mcp-proxy-for-aws": "aws.amazon.com",
+  "io.github.grafana/mcp-grafana": "grafana.com",
+};
+
 export function CatalogDetailRoot() {
   return <Outlet />;
 }
@@ -96,6 +106,8 @@ export default function CatalogDetail() {
         slug: toolset.slug,
         updateToolsetRequestBody: {
           toolUrns: [toolUrn],
+          mcpEnabled: true,
+          mcpIsPublic: true,
         },
       });
 
@@ -217,113 +229,65 @@ export default function CatalogDetail() {
 
   const addDialog = (
     <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-      <Dialog.Content>
+      <Dialog.Content className="gap-2">
         <Dialog.Header>
           <Dialog.Title>Add to Project</Dialog.Title>
-          <Dialog.Description className="border-t pt-3">
+          <Dialog.Description className="">
             {createdToolsetSlug
-              ? "MCP server added successfully!"
+              ? ""
               : "Add this MCP server to your project. This will create a new toolset."}
           </Dialog.Description>
         </Dialog.Header>
         {createdToolsetSlug ? (
-          <div className="py-4">
-            <Stack direction="horizontal" gap={2} align="center" className="mb-6">
-              <CheckCircle className="w-5 h-5 text-green-500" />
-              <Type className="font-medium">Server added successfully</Type>
-            </Stack>
-            <div className="grid grid-cols-1 gap-3">
-              <routes.elements.Link className="no-underline">
-                <div className="group flex items-center gap-4 p-4 rounded-lg border bg-card hover:border-primary/50 hover:bg-accent/50 transition-all cursor-pointer">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                    <MessageCircle className="w-5 h-5 text-primary" />
+          <div className="pb-2">
+            <Type small muted className="mb-3">
+              <span className="font-medium text-foreground">{server.title || displayName}</span> has been added to your project. It will be available to deploy as an MCP server.
+            </Type>
+            <Type className="text-sm font-medium mb-2">Next steps</Type>
+            <div className="flex flex-col gap-2">
+              <routes.sources.Link className="no-underline hover:no-underline">
+                <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline">
+                  <div className="w-8 h-8 rounded-md bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center shrink-0">
+                    <Plus className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <Type className="font-medium group-hover:text-primary transition-colors">Deploy as Chat</Type>
-                    <Type small muted>Embed an AI chat on your website</Type>
+                  <div className="flex-1">
+                    <Type className="text-sm font-medium no-underline">Add more sources</Type>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                  <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </routes.sources.Link>
+              <routes.elements.Link className="no-underline hover:no-underline">
+                <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline">
+                  <div className="w-8 h-8 rounded-md bg-violet-500/10 dark:bg-violet-500/20 flex items-center justify-center shrink-0">
+                    <MessageCircle className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                  </div>
+                  <div className="flex-1">
+                    <Type className="text-sm font-medium no-underline">Deploy as chat</Type>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
               </routes.elements.Link>
-              <routes.mcp.details.Link params={[createdToolsetSlug]} className="no-underline">
-                <div className="group flex items-center gap-4 p-4 rounded-lg border bg-card hover:border-primary/50 hover:bg-accent/50 transition-all cursor-pointer">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                    <Plug className="w-5 h-5 text-primary" />
+              <routes.mcp.details.hosted_page.Link params={[createdToolsetSlug]} className="no-underline hover:no-underline">
+                <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline">
+                  <div className="w-8 h-8 rounded-md bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center shrink-0">
+                    <Plug className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <Type className="font-medium group-hover:text-primary transition-colors">Connect via Claude, Cursor, etc</Type>
-                    <Type small muted>Get install instructions for MCP clients</Type>
+                  <div className="flex-1">
+                    <Type className="text-sm font-medium no-underline">Connect via Claude, Cursor</Type>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                  <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
-              </routes.mcp.details.Link>
-              <routes.toolsets.toolset.Link params={[createdToolsetSlug]} className="no-underline">
-                <div className="group flex items-center gap-4 p-4 rounded-lg border bg-card hover:border-primary/50 hover:bg-accent/50 transition-all cursor-pointer">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                    <ServerIcon className="w-5 h-5 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <Type className="font-medium group-hover:text-primary transition-colors">View Toolset</Type>
-                    <Type small muted>Configure tools and settings</Type>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                </div>
-              </routes.toolsets.toolset.Link>
+              </routes.mcp.details.hosted_page.Link>
             </div>
           </div>
         ) : (
-          <>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (server) {
-                  addServerMutation.mutate({
-                    server,
-                    toolsetName: desiredToolsetName,
-                  });
-                }
-              }}
-              className="flex flex-col gap-2 mt-2 mb-4"
-            >
-              <Label>Toolset Name</Label>
-              <Input
-                placeholder="Toolset name"
-                value={desiredToolsetName}
-                onChange={(e) => setDesiredToolsetName(e.target.value)}
-                disabled={addServerMutation.isPending}
-                required
-              />
-            </form>
-            <Dialog.Footer>
-              <Button
-                variant="secondary"
-                onClick={() => setShowAddDialog(false)}
-                disabled={addServerMutation.isPending}
-              >
-                Cancel
-              </Button>
-              <Button
-                disabled={desiredToolsetName.length === 0 || addServerMutation.isPending}
-                onClick={() => {
-                  if (server) {
-                    addServerMutation.mutate({
-                      server,
-                      toolsetName: desiredToolsetName,
-                    });
-                  }
-                }}
-              >
-                {addServerMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    <Button.Text>Adding...</Button.Text>
-                  </>
-                ) : (
-                  <Button.Text>Add</Button.Text>
-                )}
-              </Button>
-            </Dialog.Footer>
-          </>
+          <AddServerForm
+            server={server}
+            desiredToolsetName={desiredToolsetName}
+            setDesiredToolsetName={setDesiredToolsetName}
+            addServerMutation={addServerMutation}
+            onCancel={() => setShowAddDialog(false)}
+          />
         )}
       </Dialog.Content>
     </Dialog>
@@ -362,9 +326,20 @@ export default function CatalogDetail() {
                   {isOfficial && <Badge>Official</Badge>}
                   {versionMeta?.isLatest && <Badge variant="secondary">Latest</Badge>}
                 </Stack>
-                <Type muted className="font-mono text-sm">
-                  {server.registrySpecifier}
-                </Type>
+                {SERVER_WEBSITE_MAP[server.registrySpecifier] ? (
+                  <a
+                    href={`https://${SERVER_WEBSITE_MAP[server.registrySpecifier]}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-sky-500 hover:text-sky-600 hover:underline"
+                  >
+                    {SERVER_WEBSITE_MAP[server.registrySpecifier]}
+                  </a>
+                ) : (
+                  <Type muted className="font-mono text-sm">
+                    {server.registrySpecifier}
+                  </Type>
+                )}
                 <div className="mt-4">
                   {existingExternalMcp ? (
                     <Button
@@ -548,6 +523,70 @@ export default function CatalogDetail() {
         {addDialog}
       </Page.Body>
     </Page>
+  );
+}
+
+function AddServerForm({
+  server,
+  desiredToolsetName,
+  setDesiredToolsetName,
+  addServerMutation,
+  onCancel,
+}: {
+  server: Server;
+  desiredToolsetName: string;
+  setDesiredToolsetName: (name: string) => void;
+  addServerMutation: ReturnType<typeof useMutation<string, Error, { server: Server; toolsetName: string }>>;
+  onCancel: () => void;
+}) {
+  const handleSubmit = () => {
+    addServerMutation.mutate({
+      server,
+      toolsetName: desiredToolsetName || server.title || server.registrySpecifier,
+    });
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !addServerMutation.isPending) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
+  return (
+    <div onKeyDown={handleKeyDown}>
+      <div className="flex flex-col gap-2 py-2">
+        <Label>Source name</Label>
+        <Input
+          placeholder={server.title || server.registrySpecifier}
+          value={desiredToolsetName}
+          onChange={(e) => setDesiredToolsetName(e.target.value)}
+          disabled={addServerMutation.isPending}
+        />
+      </div>
+      <Dialog.Footer>
+        <Button
+          variant="secondary"
+          onClick={onCancel}
+          disabled={addServerMutation.isPending}
+        >
+          Cancel
+        </Button>
+        <Button
+          disabled={addServerMutation.isPending}
+          onClick={handleSubmit}
+        >
+          {addServerMutation.isPending ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              <Button.Text>Adding...</Button.Text>
+            </>
+          ) : (
+            <Button.Text>Add</Button.Text>
+          )}
+        </Button>
+      </Dialog.Footer>
+    </div>
   );
 }
 

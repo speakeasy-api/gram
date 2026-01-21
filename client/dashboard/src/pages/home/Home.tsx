@@ -4,13 +4,15 @@ import { Type } from "@/components/ui/type";
 import { useUser } from "@/contexts/Auth";
 import { useInfiniteListMCPCatalog, Server } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
-import { useLatestDeployment } from "@gram/client/react-query";
+import { useLatestDeployment, useListToolsets } from "@gram/client/react-query";
 import { DeploymentExternalMCP } from "@gram/client/models/components";
 import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
 import {
   ArrowRight,
   BlocksIcon,
   CheckCircle,
+  Database,
+  Globe,
   MessageCircleIcon,
   ServerIcon,
 } from "lucide-react";
@@ -40,7 +42,9 @@ export default function Home() {
   const user = useUser();
   const { data, isLoading } = useInfiniteListMCPCatalog();
   const { data: deploymentResult } = useLatestDeployment();
+  const { data: toolsetsResult } = useListToolsets();
   const externalMcps = deploymentResult?.deployment?.externalMcps ?? [];
+  const deployment = deploymentResult?.deployment;
 
   const featuredServers = useMemo(() => {
     if (!data?.pages) return [];
@@ -52,6 +56,30 @@ export default function Home() {
 
   const firstName = user.displayName?.split(" ")[0];
 
+  // Setup completion state
+  const hasSource = useMemo(() => {
+    if (!deployment) return false;
+    return (
+      deployment.openapiv3Assets.length > 0 ||
+      (deployment.functionsAssets?.length ?? 0) > 0 ||
+      (deployment.externalMcps?.length ?? 0) > 0
+    );
+  }, [deployment]);
+
+  const hasMcpPublic = useMemo(() => {
+    if (!toolsetsResult?.toolsets) return false;
+    return toolsetsResult.toolsets.some((t) => t.mcpIsPublic);
+  }, [toolsetsResult]);
+
+  // Check localStorage for chat/claude setup completion
+  // Only count as complete if prior steps are also complete
+  const hasDeployedChatFlag = typeof window !== "undefined" &&
+    localStorage.getItem(onboardingStepStorageKeys.configure) === "true";
+  const hasDeployedChat = hasSource && hasMcpPublic && hasDeployedChatFlag;
+
+  const completedSteps = [hasSource, hasMcpPublic, hasDeployedChat].filter(Boolean).length;
+  const isSetupComplete = completedSteps === 3;
+
   return (
     <Page>
       <Page.Header>
@@ -59,6 +87,54 @@ export default function Home() {
       </Page.Header>
       <Page.Body>
         <h1 className="text-2xl font-semibold mb-6">Welcome{firstName ? `, ${firstName}` : ""}</h1>
+
+        {/* Setup Progress Widget */}
+        {!isSetupComplete && (
+          <div className="mb-8">
+            <div className="flex flex-col md:flex-row items-stretch">
+              {/* Step 1: Add a source */}
+              <SetupStep
+                number={1}
+                title="Add a source"
+                description="Connect an API, function, or third-party server"
+                completed={hasSource}
+                enabled={true}
+                href={routes.sources.href()}
+                icon={<Database className="h-[18px] w-[18px]" strokeWidth={1.5} />}
+                position="first"
+                cta="Add source"
+              />
+
+              {/* Step 2: Make MCP public */}
+              <SetupStep
+                number={2}
+                title="Make MCP public"
+                description="Enable public access to your MCP server"
+                completed={hasMcpPublic}
+                enabled={hasSource}
+                href={routes.toolsets.href()}
+                icon={<Globe className="h-[18px] w-[18px]" strokeWidth={1.5} />}
+                position="middle"
+                cta="Configure"
+              />
+
+              {/* Step 3: Deploy chat or connect via Claude */}
+              <SetupStep
+                number={3}
+                title="Deploy chat or connect"
+                description="Embed chat on your site or connect via Claude"
+                completed={hasDeployedChat}
+                enabled={hasSource && hasMcpPublic}
+                href={routes.elements.href()}
+                icon={<MessageCircleIcon className="h-[18px] w-[18px]" strokeWidth={1.5} />}
+                position="last"
+                cta="Deploy"
+              />
+            </div>
+          </div>
+        )}
+
+        <h2 className="text-lg font-semibold mb-4">Quick actions</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="relative flex flex-col gap-3 rounded-lg border bg-background p-4 pb-5 overflow-hidden">
             <div className="absolute bottom-0 inset-x-0 h-[3px] bg-gradient-primary" />
@@ -216,6 +292,96 @@ function FeaturedServerCard({
           </Stack>
         </div>
       </div>
+    </Link>
+  );
+}
+
+function SetupStep({
+  number,
+  title,
+  description,
+  completed,
+  enabled,
+  href,
+  icon,
+  position,
+  cta,
+}: {
+  number: number;
+  title: string;
+  description: string;
+  completed: boolean;
+  enabled: boolean;
+  href: string;
+  icon: React.ReactNode;
+  position: "first" | "middle" | "last";
+  cta: string;
+}) {
+  const isActive = enabled && !completed;
+  const bgColor = completed
+    ? "bg-emerald-500/10"
+    : isActive
+      ? "bg-primary/10"
+      : enabled
+        ? "bg-background"
+        : "bg-muted/30";
+
+  const content = (
+    <div
+      className={`group relative flex flex-row items-start gap-3 py-5 pr-8 transition-all h-full flex-1 ${bgColor} ${
+        isActive ? "hover:bg-primary/15" : ""
+      } ${!enabled ? "opacity-60" : ""}`}
+      style={{
+        clipPath:
+          position === "first"
+            ? "polygon(0 0, calc(100% - 40px) 0, 100% 50%, calc(100% - 40px) 100%, 0 100%)"
+            : position === "middle"
+              ? "polygon(0 0, calc(100% - 40px) 0, 100% 50%, calc(100% - 40px) 100%, 0 100%, 40px 50%)"
+              : "polygon(0 0, 100% 0, 100% 100%, 0 100%, 40px 50%)",
+        marginLeft: position !== "first" ? "-20px" : "0",
+        paddingLeft: position === "first" ? "16px" : "52px",
+      }}
+    >
+      <div className={`flex items-center justify-center w-7 h-7 rounded-full shrink-0 border ${
+        isActive ? "bg-white dark:bg-white border-primary" : "bg-background"
+      }`}>
+        {completed ? (
+          <CheckCircle className="h-4 w-4 text-emerald-500" strokeWidth={2} />
+        ) : (
+          <span className={`text-sm font-medium ${isActive ? "text-primary" : "text-muted-foreground"}`}>{number}</span>
+        )}
+      </div>
+      <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <h3 className="font-medium text-sm truncate">{title}</h3>
+          {completed && (
+            <Type small className="text-emerald-600 shrink-0">Done</Type>
+          )}
+        </div>
+        <Type small muted className="truncate">
+          {description}
+        </Type>
+        {!completed && (
+          <Button
+            size="sm"
+            disabled={!enabled}
+            className="mt-1 w-fit"
+          >
+            <Button.Text>{cta}</Button.Text>
+            <ArrowRight className="w-3 h-3" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+
+  if (!enabled || completed) {
+    return <div className="flex-1 flex">{content}</div>;
+  }
+
+  return (
+    <Link to={href} className="no-underline flex-1 flex">
+      {content}
     </Link>
   );
 }

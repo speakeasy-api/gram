@@ -31,7 +31,9 @@ import {
   invalidateGetMcpMetadata,
   useAddExternalOAuthServerMutation,
   useAddOAuthProxyServerMutation,
+useGetDomain,
   useGetMcpMetadata,
+  useLatestDeployment,
   useRemoveOAuthServerMutation,
   useUpdateSecurityVariableDisplayNameMutation,
   useUpdateToolsetMutation,
@@ -53,8 +55,15 @@ export function MCPDetailsRoot() {
 
 export function MCPDetailPage() {
   const { toolsetSlug } = useParams();
+  const routes = useRoutes();
+  const client = useSdkClient();
+  const queryClient = useQueryClient();
+  const telemetry = useTelemetry();
 
   const { data: toolset, isLoading } = useToolset(toolsetSlug);
+  const { data: deploymentResult, refetch: refetchDeployment } =
+    useLatestDeployment();
+  const deployment = deploymentResult?.deployment;
 
   const isOAuthConnected = !!(
     toolset?.oauthProxyServer || toolset?.externalOauthServer
@@ -62,6 +71,65 @@ export function MCPDetailPage() {
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
+
+  const handleDeleteMcpServer = async () => {
+    if (!toolset) return;
+
+    if (
+      !confirm(
+        "Are you sure you want to delete this MCP server? This action cannot be undone.",
+      )
+    ) {
+      return;
+    }
+
+    // Navigate immediately, show loading toast
+    routes.mcp.goTo();
+    const toastId = toast.loading("Deleting MCP server...");
+
+    console.log("Deleting toolset:", toolset.slug, "toolUrns:", toolset.toolUrns);
+
+    try {
+      // Check if this toolset uses an external MCP from the catalog
+      const externalMcpUrn = toolset.toolUrns?.find((urn) =>
+        urn.includes(":externalmcp:"),
+      );
+
+      if (externalMcpUrn && deployment) {
+        // Extract the external MCP slug from the URN (format: tools:externalmcp:{slug}:proxy)
+        const parts = externalMcpUrn.split(":");
+        const externalMcpSlug = parts[2];
+
+        if (externalMcpSlug) {
+          // Remove the external MCP from the deployment
+          await client.deployments.evolveDeployment({
+            evolveForm: {
+              deploymentId: deployment.id,
+              excludeExternalMcps: [externalMcpSlug],
+            },
+          });
+        }
+      }
+
+      // Delete the toolset
+      await client.toolsets.deleteBySlug({ slug: toolset.slug });
+
+      telemetry.capture("mcp_event", {
+        action: "mcp_server_deleted",
+        slug: toolset.slug,
+      });
+
+      invalidateAllToolset(queryClient);
+      invalidateAllGetPeriodUsage(queryClient);
+      refetchDeployment();
+
+      console.log("Successfully deleted toolset:", toolset.slug);
+      toast.success("MCP server deleted", { id: toastId });
+    } catch (error) {
+      console.error("Failed to delete MCP server:", error);
+      toast.error(`Failed to delete: ${error instanceof Error ? error.message : "Unknown error"}`, { id: toastId });
+    }
+  };
 
   useEffect(() => {
     localStorage.setItem(onboardingStepStorageKeys.configure, "true");
@@ -119,6 +187,18 @@ export function MCPDetailPage() {
             )}
           </Tooltip>
           <MCPEnableButton toolset={toolset} />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={handleDeleteMcpServer}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Delete MCP server</TooltipContent>
+          </Tooltip>
         </Stack>
       </Stack>
       <PageSection

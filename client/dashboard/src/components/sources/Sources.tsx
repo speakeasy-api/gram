@@ -258,7 +258,7 @@ export default function Sources() {
                 <Button.LeftIcon>
                   <Plus className="w-4 h-4" />
                 </Button.LeftIcon>
-                <Button.Text>Add Source</Button.Text>
+                <Button.Text >Add Source</Button.Text>
                 <ChevronDown className="w-4 h-4 ml-1" />
               </Button>
             </DropdownMenuTrigger>
