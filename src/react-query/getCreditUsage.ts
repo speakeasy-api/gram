@@ -11,6 +11,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -31,6 +42,17 @@ export {
   queryKeyGetCreditUsage,
 };
 
+export type GetCreditUsageQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * creditUsage chat
  *
@@ -40,8 +62,8 @@ export {
 export function useGetCreditUsage(
   request?: operations.CreditUsageRequest | undefined,
   security?: operations.CreditUsageSecurity | undefined,
-  options?: QueryHookOptions<GetCreditUsageQueryData>,
-): UseQueryResult<GetCreditUsageQueryData, Error> {
+  options?: QueryHookOptions<GetCreditUsageQueryData, GetCreditUsageQueryError>,
+): UseQueryResult<GetCreditUsageQueryData, GetCreditUsageQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildGetCreditUsageQuery(
@@ -63,8 +85,11 @@ export function useGetCreditUsage(
 export function useGetCreditUsageSuspense(
   request?: operations.CreditUsageRequest | undefined,
   security?: operations.CreditUsageSecurity | undefined,
-  options?: SuspenseQueryHookOptions<GetCreditUsageQueryData>,
-): UseSuspenseQueryResult<GetCreditUsageQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    GetCreditUsageQueryData,
+    GetCreditUsageQueryError
+  >,
+): UseSuspenseQueryResult<GetCreditUsageQueryData, GetCreditUsageQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildGetCreditUsageQuery(

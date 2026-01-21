@@ -13,6 +13,17 @@ import { environmentsSetSourceLink } from "../funcs/environmentsSetSourceLink.js
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
@@ -27,6 +38,17 @@ export type SetSourceEnvironmentLinkMutationVariables = {
 export type SetSourceEnvironmentLinkMutationData =
   components.SourceEnvironmentLink;
 
+export type SetSourceEnvironmentLinkMutationError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * setSourceEnvironmentLink environments
  *
@@ -36,12 +58,12 @@ export type SetSourceEnvironmentLinkMutationData =
 export function useSetSourceEnvironmentLinkMutation(
   options?: MutationHookOptions<
     SetSourceEnvironmentLinkMutationData,
-    Error,
+    SetSourceEnvironmentLinkMutationError,
     SetSourceEnvironmentLinkMutationVariables
   >,
 ): UseMutationResult<
   SetSourceEnvironmentLinkMutationData,
-  Error,
+  SetSourceEnvironmentLinkMutationError,
   SetSourceEnvironmentLinkMutationVariables
 > {
   const client = useGramContext();

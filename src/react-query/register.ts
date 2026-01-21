@@ -12,6 +12,17 @@ import { GramCore } from "../core.js";
 import { authRegister } from "../funcs/authRegister.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
@@ -25,6 +36,17 @@ export type RegisterMutationVariables = {
 
 export type RegisterMutationData = void;
 
+export type RegisterMutationError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * register auth
  *
@@ -34,10 +56,14 @@ export type RegisterMutationData = void;
 export function useRegisterMutation(
   options?: MutationHookOptions<
     RegisterMutationData,
-    Error,
+    RegisterMutationError,
     RegisterMutationVariables
   >,
-): UseMutationResult<RegisterMutationData, Error, RegisterMutationVariables> {
+): UseMutationResult<
+  RegisterMutationData,
+  RegisterMutationError,
+  RegisterMutationVariables
+> {
   const client = useGramContext();
   return useMutation({
     ...buildRegisterMutation(client, options),

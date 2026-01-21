@@ -11,6 +11,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -31,6 +42,17 @@ export {
   type SessionInfoQueryData,
 };
 
+export type SessionInfoQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * info auth
  *
@@ -40,8 +62,8 @@ export {
 export function useSessionInfo(
   request?: operations.SessionInfoRequest | undefined,
   security?: operations.SessionInfoSecurity | undefined,
-  options?: QueryHookOptions<SessionInfoQueryData>,
-): UseQueryResult<SessionInfoQueryData, Error> {
+  options?: QueryHookOptions<SessionInfoQueryData, SessionInfoQueryError>,
+): UseQueryResult<SessionInfoQueryData, SessionInfoQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildSessionInfoQuery(
@@ -63,8 +85,11 @@ export function useSessionInfo(
 export function useSessionInfoSuspense(
   request?: operations.SessionInfoRequest | undefined,
   security?: operations.SessionInfoSecurity | undefined,
-  options?: SuspenseQueryHookOptions<SessionInfoQueryData>,
-): UseSuspenseQueryResult<SessionInfoQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    SessionInfoQueryData,
+    SessionInfoQueryError
+  >,
+): UseSuspenseQueryResult<SessionInfoQueryData, SessionInfoQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildSessionInfoQuery(

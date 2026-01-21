@@ -11,6 +11,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -31,6 +42,17 @@ export {
   queryKeyGetMcpMetadata,
 };
 
+export type GetMcpMetadataQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * getMcpMetadata mcpMetadata
  *
@@ -40,8 +62,8 @@ export {
 export function useGetMcpMetadata(
   request: operations.GetMcpMetadataRequest,
   security?: operations.GetMcpMetadataSecurity | undefined,
-  options?: QueryHookOptions<GetMcpMetadataQueryData>,
-): UseQueryResult<GetMcpMetadataQueryData, Error> {
+  options?: QueryHookOptions<GetMcpMetadataQueryData, GetMcpMetadataQueryError>,
+): UseQueryResult<GetMcpMetadataQueryData, GetMcpMetadataQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildGetMcpMetadataQuery(
@@ -63,8 +85,11 @@ export function useGetMcpMetadata(
 export function useGetMcpMetadataSuspense(
   request: operations.GetMcpMetadataRequest,
   security?: operations.GetMcpMetadataSecurity | undefined,
-  options?: SuspenseQueryHookOptions<GetMcpMetadataQueryData>,
-): UseSuspenseQueryResult<GetMcpMetadataQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    GetMcpMetadataQueryData,
+    GetMcpMetadataQueryError
+  >,
+): UseSuspenseQueryResult<GetMcpMetadataQueryData, GetMcpMetadataQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildGetMcpMetadataQuery(

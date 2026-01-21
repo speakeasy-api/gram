@@ -11,6 +11,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -31,6 +42,17 @@ export {
   queryKeyGlobalVariations,
 };
 
+export type GlobalVariationsQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * listGlobal variations
  *
@@ -40,8 +62,11 @@ export {
 export function useGlobalVariations(
   request?: operations.ListGlobalVariationsRequest | undefined,
   security?: operations.ListGlobalVariationsSecurity | undefined,
-  options?: QueryHookOptions<GlobalVariationsQueryData>,
-): UseQueryResult<GlobalVariationsQueryData, Error> {
+  options?: QueryHookOptions<
+    GlobalVariationsQueryData,
+    GlobalVariationsQueryError
+  >,
+): UseQueryResult<GlobalVariationsQueryData, GlobalVariationsQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildGlobalVariationsQuery(
@@ -63,8 +88,14 @@ export function useGlobalVariations(
 export function useGlobalVariationsSuspense(
   request?: operations.ListGlobalVariationsRequest | undefined,
   security?: operations.ListGlobalVariationsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<GlobalVariationsQueryData>,
-): UseSuspenseQueryResult<GlobalVariationsQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    GlobalVariationsQueryData,
+    GlobalVariationsQueryError
+  >,
+): UseSuspenseQueryResult<
+  GlobalVariationsQueryData,
+  GlobalVariationsQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildGlobalVariationsQuery(

@@ -11,6 +11,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -31,6 +42,17 @@ export {
   type ToolExecutionLogsQueryData,
 };
 
+export type ToolExecutionLogsQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * listToolExecutionLogs logs
  *
@@ -40,8 +62,11 @@ export {
 export function useToolExecutionLogs(
   request?: operations.ListToolExecutionLogsRequest | undefined,
   security?: operations.ListToolExecutionLogsSecurity | undefined,
-  options?: QueryHookOptions<ToolExecutionLogsQueryData>,
-): UseQueryResult<ToolExecutionLogsQueryData, Error> {
+  options?: QueryHookOptions<
+    ToolExecutionLogsQueryData,
+    ToolExecutionLogsQueryError
+  >,
+): UseQueryResult<ToolExecutionLogsQueryData, ToolExecutionLogsQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildToolExecutionLogsQuery(
@@ -63,8 +88,14 @@ export function useToolExecutionLogs(
 export function useToolExecutionLogsSuspense(
   request?: operations.ListToolExecutionLogsRequest | undefined,
   security?: operations.ListToolExecutionLogsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ToolExecutionLogsQueryData>,
-): UseSuspenseQueryResult<ToolExecutionLogsQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    ToolExecutionLogsQueryData,
+    ToolExecutionLogsQueryError
+  >,
+): UseSuspenseQueryResult<
+  ToolExecutionLogsQueryData,
+  ToolExecutionLogsQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildToolExecutionLogsQuery(

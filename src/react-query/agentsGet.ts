@@ -11,6 +11,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -31,6 +42,17 @@ export {
   queryKeyAgentsGet,
 };
 
+export type AgentsGetQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * getResponse agents
  *
@@ -40,8 +62,8 @@ export {
 export function useAgentsGet(
   request: operations.GetAgentResponseRequest,
   security?: operations.GetAgentResponseSecurity | undefined,
-  options?: QueryHookOptions<AgentsGetQueryData>,
-): UseQueryResult<AgentsGetQueryData, Error> {
+  options?: QueryHookOptions<AgentsGetQueryData, AgentsGetQueryError>,
+): UseQueryResult<AgentsGetQueryData, AgentsGetQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildAgentsGetQuery(
@@ -63,8 +85,8 @@ export function useAgentsGet(
 export function useAgentsGetSuspense(
   request: operations.GetAgentResponseRequest,
   security?: operations.GetAgentResponseSecurity | undefined,
-  options?: SuspenseQueryHookOptions<AgentsGetQueryData>,
-): UseSuspenseQueryResult<AgentsGetQueryData, Error> {
+  options?: SuspenseQueryHookOptions<AgentsGetQueryData, AgentsGetQueryError>,
+): UseSuspenseQueryResult<AgentsGetQueryData, AgentsGetQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildAgentsGetQuery(

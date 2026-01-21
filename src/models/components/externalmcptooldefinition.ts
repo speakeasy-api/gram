@@ -9,6 +9,11 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  CanonicalToolAttributes,
+  CanonicalToolAttributes$inboundSchema,
+} from "./canonicaltoolattributes.js";
+import { ToolVariation, ToolVariation$inboundSchema } from "./toolvariation.js";
 
 /**
  * The transport type used to connect to the MCP server
@@ -27,7 +32,23 @@ export type TransportType = ClosedEnum<typeof TransportType>;
  */
 export type ExternalMCPToolDefinition = {
   /**
-   * When the tool definition was created.
+   * The original details of a tool
+   */
+  canonical?: CanonicalToolAttributes | undefined;
+  /**
+   * The canonical name of the tool. Will be the same as the name if there is no variation.
+   */
+  canonicalName: string;
+  /**
+   * Confirmation mode for the tool
+   */
+  confirm?: string | undefined;
+  /**
+   * Prompt for the confirmation
+   */
+  confirmPrompt?: string | undefined;
+  /**
+   * The creation date of the tool.
    */
   createdAt: Date;
   /**
@@ -39,11 +60,15 @@ export type ExternalMCPToolDefinition = {
    */
   deploymentId: string;
   /**
-   * The ID of the tool definition
+   * Description of the tool
+   */
+  description: string;
+  /**
+   * The ID of the tool
    */
   id: string;
   /**
-   * The reverse-DNS name of the external MCP server (e.g., ai.exa/exa)
+   * The name of the tool
    */
   name: string;
   /**
@@ -67,9 +92,17 @@ export type ExternalMCPToolDefinition = {
    */
   oauthVersion: string;
   /**
+   * The ID of the project
+   */
+  projectId: string;
+  /**
    * The ID of the MCP registry
    */
   registryId: string;
+  /**
+   * The name of the external MCP server (e.g., exa)
+   */
+  registryServerName: string;
   /**
    * The URL to connect to the MCP server
    */
@@ -79,11 +112,23 @@ export type ExternalMCPToolDefinition = {
    */
   requiresOauth: boolean;
   /**
+   * JSON schema for the request
+   */
+  schema: string;
+  /**
+   * Version of the schema
+   */
+  schemaVersion?: string | undefined;
+  /**
    * The slug used for tool prefixing (e.g., github)
    */
   slug: string;
   /**
-   * The URN of this tool (tools:externalmcp:<slug>:proxy)
+   * Summarizer for the tool
+   */
+  summarizer?: string | undefined;
+  /**
+   * The URN of this tool
    */
   toolUrn: string;
   /**
@@ -91,9 +136,14 @@ export type ExternalMCPToolDefinition = {
    */
   transportType: TransportType;
   /**
-   * When the tool definition was last updated.
+   * Whether or not the tool is a proxy tool
+   */
+  type?: string | undefined;
+  /**
+   * The last update date of the tool.
    */
   updatedAt: Date;
+  variation?: ToolVariation | undefined;
 };
 
 /** @internal */
@@ -107,9 +157,14 @@ export const ExternalMCPToolDefinition$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  canonical: CanonicalToolAttributes$inboundSchema.optional(),
+  canonical_name: z.string(),
+  confirm: z.string().optional(),
+  confirm_prompt: z.string().optional(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   deployment_external_mcp_id: z.string(),
   deployment_id: z.string(),
+  description: z.string(),
   id: z.string(),
   name: z.string(),
   oauth_authorization_endpoint: z.string().optional(),
@@ -117,15 +172,24 @@ export const ExternalMCPToolDefinition$inboundSchema: z.ZodType<
   oauth_scopes_supported: z.array(z.string()).optional(),
   oauth_token_endpoint: z.string().optional(),
   oauth_version: z.string(),
+  project_id: z.string(),
   registry_id: z.string(),
+  registry_server_name: z.string(),
   remote_url: z.string(),
   requires_oauth: z.boolean(),
+  schema: z.string(),
+  schema_version: z.string().optional(),
   slug: z.string(),
+  summarizer: z.string().optional(),
   tool_urn: z.string(),
   transport_type: TransportType$inboundSchema,
+  type: z.string().optional(),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
+  variation: ToolVariation$inboundSchema.optional(),
 }).transform((v) => {
   return remap$(v, {
+    "canonical_name": "canonicalName",
+    "confirm_prompt": "confirmPrompt",
     "created_at": "createdAt",
     "deployment_external_mcp_id": "deploymentExternalMcpId",
     "deployment_id": "deploymentId",
@@ -134,9 +198,12 @@ export const ExternalMCPToolDefinition$inboundSchema: z.ZodType<
     "oauth_scopes_supported": "oauthScopesSupported",
     "oauth_token_endpoint": "oauthTokenEndpoint",
     "oauth_version": "oauthVersion",
+    "project_id": "projectId",
     "registry_id": "registryId",
+    "registry_server_name": "registryServerName",
     "remote_url": "remoteUrl",
     "requires_oauth": "requiresOauth",
+    "schema_version": "schemaVersion",
     "tool_urn": "toolUrn",
     "transport_type": "transportType",
     "updated_at": "updatedAt",

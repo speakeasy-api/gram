@@ -11,6 +11,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -31,6 +42,17 @@ export {
   queryKeyGetSourceEnvironment,
 };
 
+export type GetSourceEnvironmentQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * getSourceEnvironment environments
  *
@@ -40,8 +62,14 @@ export {
 export function useGetSourceEnvironment(
   request: operations.GetSourceEnvironmentRequest,
   security?: operations.GetSourceEnvironmentSecurity | undefined,
-  options?: QueryHookOptions<GetSourceEnvironmentQueryData>,
-): UseQueryResult<GetSourceEnvironmentQueryData, Error> {
+  options?: QueryHookOptions<
+    GetSourceEnvironmentQueryData,
+    GetSourceEnvironmentQueryError
+  >,
+): UseQueryResult<
+  GetSourceEnvironmentQueryData,
+  GetSourceEnvironmentQueryError
+> {
   const client = useGramContext();
   return useQuery({
     ...buildGetSourceEnvironmentQuery(
@@ -63,8 +91,14 @@ export function useGetSourceEnvironment(
 export function useGetSourceEnvironmentSuspense(
   request: operations.GetSourceEnvironmentRequest,
   security?: operations.GetSourceEnvironmentSecurity | undefined,
-  options?: SuspenseQueryHookOptions<GetSourceEnvironmentQueryData>,
-): UseSuspenseQueryResult<GetSourceEnvironmentQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    GetSourceEnvironmentQueryData,
+    GetSourceEnvironmentQueryError
+  >,
+): UseSuspenseQueryResult<
+  GetSourceEnvironmentQueryData,
+  GetSourceEnvironmentQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildGetSourceEnvironmentQuery(

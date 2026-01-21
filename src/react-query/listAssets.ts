@@ -11,6 +11,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -31,6 +42,17 @@ export {
   queryKeyListAssets,
 };
 
+export type ListAssetsQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * listAssets assets
  *
@@ -40,8 +62,8 @@ export {
 export function useListAssets(
   request?: operations.ListAssetsRequest | undefined,
   security?: operations.ListAssetsSecurity | undefined,
-  options?: QueryHookOptions<ListAssetsQueryData>,
-): UseQueryResult<ListAssetsQueryData, Error> {
+  options?: QueryHookOptions<ListAssetsQueryData, ListAssetsQueryError>,
+): UseQueryResult<ListAssetsQueryData, ListAssetsQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildListAssetsQuery(
@@ -63,8 +85,8 @@ export function useListAssets(
 export function useListAssetsSuspense(
   request?: operations.ListAssetsRequest | undefined,
   security?: operations.ListAssetsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ListAssetsQueryData>,
-): UseSuspenseQueryResult<ListAssetsQueryData, Error> {
+  options?: SuspenseQueryHookOptions<ListAssetsQueryData, ListAssetsQueryError>,
+): UseSuspenseQueryResult<ListAssetsQueryData, ListAssetsQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildListAssetsQuery(
