@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/client"
 
-	"github.com/speakeasy-api/gram/openrouter/models/components"
 	or "github.com/speakeasy-api/gram/openrouter/models/components"
 	"github.com/speakeasy-api/gram/openrouter/optionalnullable"
 	"github.com/speakeasy-api/gram/server/internal/agents"
@@ -216,7 +215,12 @@ func convertInputToMessages(input agents.ResponseInput) ([]or.Message, error) {
 						Content: optionalnullable.From(
 							conv.Ptr(or.CreateAssistantMessageContentStr(textContent)),
 						),
-						Name: nil,
+						Name:             nil,
+						ToolCalls:        nil,
+						Refusal:          nil,
+						Reasoning:        nil,
+						ReasoningDetails: nil,
+						Images:           nil,
 					})
 				case or.MessageTypeTool:
 					msg = or.CreateMessageTool(or.ToolResponseMessage{
@@ -305,7 +309,7 @@ func convertInputToMessages(input agents.ResponseInput) ([]or.Message, error) {
 
 				var msg or.Message
 				switch or.MessageType(role) {
-				case components.MessageTypeAssistant:
+				case or.MessageTypeAssistant:
 					msg = or.CreateMessageAssistant(or.AssistantMessage{
 						Content: optionalnullable.From(
 							conv.Ptr(or.CreateAssistantMessageContentStr(content)),
@@ -317,22 +321,22 @@ func convertInputToMessages(input agents.ResponseInput) ([]or.Message, error) {
 						ReasoningDetails: nil,
 						Images:           nil,
 					})
-				case components.MessageTypeDeveloper:
+				case or.MessageTypeDeveloper:
 					msg = or.CreateMessageDeveloper(or.MessageDeveloper{
 						Content: or.CreateMessageContentStr(content),
 						Name:    nil,
 					})
-				case components.MessageTypeSystem:
+				case or.MessageTypeSystem:
 					msg = or.CreateMessageSystem(or.SystemMessage{
 						Content: or.CreateSystemMessageContentStr(content),
 						Name:    nil,
 					})
-				case components.MessageTypeTool:
+				case or.MessageTypeTool:
 					msg = or.CreateMessageTool(or.ToolResponseMessage{
 						Content:    or.CreateToolResponseMessageContentStr(content),
 						ToolCallID: "",
 					})
-				case components.MessageTypeUser:
+				case or.MessageTypeUser:
 					msg = or.CreateMessageUser(or.UserMessage{
 						Content: or.CreateUserMessageContentStr(content),
 						Name:    nil,
@@ -367,7 +371,7 @@ func convertOutputItemsToMessages(output []agents.OutputItem) []or.Message {
 
 			var msg or.Message
 			switch or.MessageType(item.Role) {
-			case components.MessageTypeAssistant:
+			case or.MessageTypeAssistant:
 				msg = or.CreateMessageAssistant(or.AssistantMessage{
 					Content: optionalnullable.From(
 						conv.Ptr(or.CreateAssistantMessageContentStr(textContent)),
@@ -379,28 +383,28 @@ func convertOutputItemsToMessages(output []agents.OutputItem) []or.Message {
 					ReasoningDetails: nil,
 					Images:           nil,
 				})
-			case components.MessageTypeDeveloper:
+			case or.MessageTypeDeveloper:
 				msg = or.CreateMessageDeveloper(or.MessageDeveloper{
 					Content: or.CreateMessageContentStr(textContent),
 					Name:    nil,
 				})
-			case components.MessageTypeSystem:
+			case or.MessageTypeSystem:
 				msg = or.CreateMessageSystem(or.SystemMessage{
 					Content: or.CreateSystemMessageContentStr(textContent),
 					Name:    nil,
 				})
-			case components.MessageTypeTool:
+			case or.MessageTypeTool:
 				msg = or.CreateMessageTool(or.ToolResponseMessage{
 					Content:    or.CreateToolResponseMessageContentStr(textContent),
 					ToolCallID: "",
 				})
-			case components.MessageTypeUser:
+			case or.MessageTypeUser:
 				msg = or.CreateMessageUser(or.UserMessage{
 					Content: or.CreateUserMessageContentStr(textContent),
 					Name:    nil,
 				})
 			default:
-				panic("unexpected components.MessageType")
+				panic("unexpected or.MessageType")
 			}
 
 			messages = append(messages, msg)
