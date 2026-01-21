@@ -306,7 +306,6 @@ const ElementsProviderWithApproval = ({
             model: modelToUse,
             messages: modelMessages,
             tools,
-            
             stopWhen: stepCountIs(10),
             experimental_transform: smoothStream({ delayInMs: 15 }),
             abortSignal,
