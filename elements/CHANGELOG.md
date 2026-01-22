@@ -1,5 +1,17 @@
 # @gram-ai/elements
 
+## 1.22.3
+
+### Patch Changes
+
+- d733319: Add chat-id header to mcp discovery
+
+## 1.22.2
+
+### Patch Changes
+
+- 9073203: Fix elements onboarding in dashboard which was broken by shadow DOM changes
+
 ## 1.22.1
 
 ### Patch Changes

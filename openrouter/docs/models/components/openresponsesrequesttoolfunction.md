@@ -1,0 +1,14 @@
+# OpenResponsesRequestToolFunction
+
+Function tool definition
+
+
+## Fields
+
+| Field                                                                                      | Type                                                                                       | Required                                                                                   | Description                                                                                |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `Type`                                                                                     | [components.OpenResponsesRequestType](../../models/components/openresponsesrequesttype.md) | :heavy_check_mark:                                                                         | N/A                                                                                        |
+| `Name`                                                                                     | *string*                                                                                   | :heavy_check_mark:                                                                         | N/A                                                                                        |
+| `Description`                                                                              | **string*                                                                                  | :heavy_minus_sign:                                                                         | N/A                                                                                        |
+| `Strict`                                                                                   | **bool*                                                                                    | :heavy_minus_sign:                                                                         | N/A                                                                                        |
+| `Parameters`                                                                               | map[string]*any*                                                                           | :heavy_check_mark:                                                                         | N/A                                                                                        |

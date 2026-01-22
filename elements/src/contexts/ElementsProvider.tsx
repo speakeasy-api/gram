@@ -140,12 +140,17 @@ const ElementsProviderWithApproval = ({
     })
   }, [])
 
+  // Generate a stable chat ID for server-side persistence (when history is disabled)
+  // When history is enabled, the thread adapter manages chat IDs instead
+  const chatIdRef = useRef<string | null>(null)
+
   const { data: mcpTools } = useMCPTools({
     auth,
     mcp: config.mcp,
     environment: config.environment ?? {},
     toolsToInclude: config.tools?.toolsToInclude,
     gramEnvironment: config.gramEnvironment,
+    chatId: chatIdRef.current ?? undefined,
   })
 
   // Store approval helpers in ref so they can be used in async contexts
@@ -189,10 +194,6 @@ const ElementsProviderWithApproval = ({
   // This solves a circular dependency: transport needs runtime.thread.getModelContext(),
   // but runtime is created using transport. The ref gets populated after runtime creation.
   const runtimeRef = useRef<ReturnType<typeof useChatRuntime> | null>(null)
-
-  // Generate a stable chat ID for server-side persistence (when history is disabled)
-  // When history is enabled, the thread adapter manages chat IDs instead
-  const chatIdRef = useRef<string | null>(null)
 
   // Map to share local thread IDs to UUIDs between adapter and transport (for history mode)
   const localIdToUuidMapRef = useRef(new Map<string, string>())

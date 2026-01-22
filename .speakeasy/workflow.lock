@@ -2,8 +2,8 @@ speakeasyVersion: 1.685.0
 sources:
     Gram-Internal:
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:16e6e71da79f388659178b1065a1f86d60a7e91e167e8fe986340432204febdd
-        sourceBlobDigest: sha256:02ed270c01c02194fb20e7d87e38c50f262b61e30544fee323b2f2b1ceefb8cf
+        sourceRevisionDigest: sha256:de310e96d624429be4abe7e153a288848ffee7484a4b98c6567f7c5639f81522
+        sourceBlobDigest: sha256:878dd34d1b672cd174addb59370bf631936f127467b47bc7eda0e92242043ae4
         tags:
             - latest
             - 0.0.1
@@ -11,10 +11,10 @@ targets:
     gram-internal:
         source: Gram-Internal
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:16e6e71da79f388659178b1065a1f86d60a7e91e167e8fe986340432204febdd
-        sourceBlobDigest: sha256:02ed270c01c02194fb20e7d87e38c50f262b61e30544fee323b2f2b1ceefb8cf
-        codeSamplesNamespace: gram-api-description-typescript-code-samples
-        codeSamplesRevisionDigest: sha256:1a8a5fa1a9911c975563383fb0bbc202bcec14216af4aa0ba781d8b9fcc33b7f
+        sourceRevisionDigest: sha256:de310e96d624429be4abe7e153a288848ffee7484a4b98c6567f7c5639f81522
+        sourceBlobDigest: sha256:878dd34d1b672cd174addb59370bf631936f127467b47bc7eda0e92242043ae4
+    openrouter:
+        source: OpenRouter
 workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: pinned
@@ -36,6 +36,12 @@ workflow:
             output: .speakeasy/openapi-public.yaml
             registry:
                 location: registry.speakeasyapi.dev/gram/gram/gram-public-api-description
+        OpenRouter:
+            inputs:
+                - location: https://raw.githubusercontent.com/OpenRouterTeam/typescript-sdk/refs/heads/main/.speakeasy/out.openapi.yaml
+            output: .speakeasy/openrouter.yaml
+            registry:
+                location: registry.speakeasyapi.dev/gram/gram/openrouter
     targets:
         gram-internal:
             target: typescript
@@ -47,3 +53,7 @@ workflow:
                 labelOverride:
                     fixedValue: Typescript (SDK)
                 blocking: false
+        openrouter:
+            target: go
+            source: OpenRouter
+            output: openrouter

@@ -19,7 +19,9 @@ VALUES (
     NOW(),
     NOW()
 )
-ON CONFLICT (id) DO NOTHING
+-- Use no-op update (id = EXCLUDED.id) to ensure RETURNING always returns a row,
+-- whether the chat was newly inserted or already existed.
+ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
 RETURNING id;
 
 -- name: CreateChatMessage :copyfrom

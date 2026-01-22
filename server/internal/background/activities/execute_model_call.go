@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	or "github.com/speakeasy-api/gram/openrouter/models/components"
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -13,14 +14,14 @@ import (
 type ExecuteModelCallInput struct {
 	OrgID       string
 	ProjectID   string
-	Messages    []openrouter.OpenAIChatMessage
+	Messages    []or.Message
 	ToolDefs    []openrouter.Tool
 	Temperature *float64
 	Model       string
 }
 
 type ExecuteModelCallOutput struct {
-	Message *openrouter.OpenAIChatMessage
+	Message *or.Message
 	Error   error
 }
 

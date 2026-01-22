@@ -1,5 +1,22 @@
 # dashboard
 
+## 0.26.15
+
+### Patch Changes
+
+- Updated dependencies [d733319]
+  - @gram-ai/elements@1.22.3
+
+## 0.26.14
+
+### Patch Changes
+
+- 9073203: Fix elements onboarding in dashboard which was broken by shadow DOM changes
+- d6ae47c: Always connect to servers in playground through gram domain in order to avoid
+  conflicting with CSP connect-src
+- Updated dependencies [9073203]
+  - @gram-ai/elements@1.22.2
+
 ## 0.26.13
 
 ### Patch Changes

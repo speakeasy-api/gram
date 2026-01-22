@@ -1,0 +1,10 @@
+# ChatMessageToolCall
+
+
+## Fields
+
+| Field                                                                                            | Type                                                                                             | Required                                                                                         | Description                                                                                      |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `ID`                                                                                             | *string*                                                                                         | :heavy_check_mark:                                                                               | N/A                                                                                              |
+| `Type`                                                                                           | *string*                                                                                         | :heavy_check_mark:                                                                               | N/A                                                                                              |
+| `Function`                                                                                       | [components.ChatMessageToolCallFunction](../../models/components/chatmessagetoolcallfunction.md) | :heavy_check_mark:                                                                               | N/A                                                                                              |

@@ -1,0 +1,5 @@
+# Generated files - exclude from language stats and diffs
+client/sdk/** linguist-generated
+server/gen/** linguist-generated
+server/internal/**/*.sql.go linguist-generated
+openrouter/** linguist-generated

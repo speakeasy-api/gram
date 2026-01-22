@@ -212,6 +212,10 @@ type ExternalMcpToolDefinition struct {
 	RemoteUrl                  string
 	TransportType              types.TransportType
 	RequiresOauth              bool
+	Type                       string
+	Name                       pgtype.Text
+	Description                pgtype.Text
+	Schema                     []byte
 	OauthVersion               string
 	OauthAuthorizationEndpoint pgtype.Text
 	OauthTokenEndpoint         pgtype.Text

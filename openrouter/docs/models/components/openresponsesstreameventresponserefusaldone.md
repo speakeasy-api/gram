@@ -1,0 +1,15 @@
+# OpenResponsesStreamEventResponseRefusalDone
+
+Event emitted when refusal streaming is complete
+
+
+## Fields
+
+| Field                                                                                    | Type                                                                                     | Required                                                                                 | Description                                                                              |
+| ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `Type`                                                                                   | [components.TypeResponseRefusalDone](../../models/components/typeresponserefusaldone.md) | :heavy_check_mark:                                                                       | N/A                                                                                      |
+| `OutputIndex`                                                                            | *float64*                                                                                | :heavy_check_mark:                                                                       | N/A                                                                                      |
+| `ItemID`                                                                                 | *string*                                                                                 | :heavy_check_mark:                                                                       | N/A                                                                                      |
+| `ContentIndex`                                                                           | *float64*                                                                                | :heavy_check_mark:                                                                       | N/A                                                                                      |
+| `Refusal`                                                                                | *string*                                                                                 | :heavy_check_mark:                                                                       | N/A                                                                                      |
+| `SequenceNumber`                                                                         | *float64*                                                                                | :heavy_check_mark:                                                                       | N/A                                                                                      |

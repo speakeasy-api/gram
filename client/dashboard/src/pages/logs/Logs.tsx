@@ -40,7 +40,7 @@ export default function LogsPage() {
 
   const logsElementsConfig: ElementsConfig = {
     ...gramMcpConfig,
-    variant: "widget",
+    variant: "sidecar",
     welcome: {
       title: "Logs Chat",
       subtitle: "Ask me about your logs! Powered by Elements + Gram MCP",
@@ -403,10 +403,9 @@ const useGramMcpConfig = () => {
     };
   }
 
-  const mcpUrl =
-    process.env.NODE_ENV === "production"
-      ? "https://chat.speakeasy.com/mcp/gram"
-      : "https://dev.getgram.ai/mcp/speakeasy-team-gram";
+  const mcpUrl = getServerURL().includes("app.getgram.ai")
+    ? "https://app.getgram.ai/mcp/speakeasy-team-gram"
+    : "https://dev.getgram.ai/mcp/speakeasy-team-gram";
 
   return {
     ...baseConfig,
