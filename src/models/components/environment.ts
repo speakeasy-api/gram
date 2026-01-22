@@ -30,10 +30,6 @@ export type Environment = {
    */
   entries: Array<EnvironmentEntry>;
   /**
-   * Map of entry names to custom display names
-   */
-  entryDisplayNames?: { [k: string]: string } | undefined;
-  /**
    * The ID of the environment
    */
   id: string;
@@ -68,7 +64,6 @@ export const Environment$inboundSchema: z.ZodType<
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   description: z.string().optional(),
   entries: z.array(EnvironmentEntry$inboundSchema),
-  entry_display_names: z.record(z.string()).optional(),
   id: z.string(),
   name: z.string(),
   organization_id: z.string(),
@@ -78,7 +73,6 @@ export const Environment$inboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     "created_at": "createdAt",
-    "entry_display_names": "entryDisplayNames",
     "organization_id": "organizationId",
     "project_id": "projectId",
     "updated_at": "updatedAt",
