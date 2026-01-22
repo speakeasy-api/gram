@@ -930,6 +930,7 @@ CREATE TABLE IF NOT EXISTS mcp_metadata (
   external_documentation_url TEXT,
   logo_id UUID,
   instructions TEXT,
+  header_display_names JSONB NOT NULL DEFAULT '{}'::JSONB, -- maps security scheme key to user-friendly display name
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
