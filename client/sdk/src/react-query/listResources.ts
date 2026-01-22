@@ -5,28 +5,30 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { resourcesList } from "../funcs/resourcesList.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
-
-export type ListResourcesQueryData = components.ListResourcesResult;
+import {
+  buildListResourcesQuery,
+  ListResourcesQueryData,
+  prefetchListResources,
+  queryKeyListResources,
+} from "./listResources.core.js";
+export {
+  buildListResourcesQuery,
+  type ListResourcesQueryData,
+  prefetchListResources,
+  queryKeyListResources,
+};
 
 /**
  * listResources resources
@@ -71,21 +73,6 @@ export function useListResourcesSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchListResources(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request?: operations.ListResourcesRequest | undefined,
-  security?: operations.ListResourcesSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildListResourcesQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -134,52 +121,4 @@ export function invalidateAllListResources(
     ...filters,
     queryKey: ["@gram/client", "resources", "list"],
   });
-}
-
-export function buildListResourcesQuery(
-  client$: GramCore,
-  request?: operations.ListResourcesRequest | undefined,
-  security?: operations.ListResourcesSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<ListResourcesQueryData>;
-} {
-  return {
-    queryKey: queryKeyListResources({
-      cursor: request?.cursor,
-      limit: request?.limit,
-      deploymentId: request?.deploymentId,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
-    queryFn: async function listResourcesQueryFn(
-      ctx,
-    ): Promise<ListResourcesQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(resourcesList(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyListResources(
-  parameters: {
-    cursor?: string | undefined;
-    limit?: number | undefined;
-    deploymentId?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "resources", "list", parameters];
 }

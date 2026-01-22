@@ -1,5 +1,4 @@
 # Telemetry
-(*telemetry*)
 
 ## Overview
 

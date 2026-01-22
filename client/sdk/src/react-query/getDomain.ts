@@ -5,28 +5,30 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { domainsGetDomain } from "../funcs/domainsGetDomain.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
-
-export type GetDomainQueryData = components.CustomDomain;
+import {
+  buildGetDomainQuery,
+  GetDomainQueryData,
+  prefetchGetDomain,
+  queryKeyGetDomain,
+} from "./getDomain.core.js";
+export {
+  buildGetDomainQuery,
+  type GetDomainQueryData,
+  prefetchGetDomain,
+  queryKeyGetDomain,
+};
 
 /**
  * getDomain domains
@@ -74,21 +76,6 @@ export function useGetDomainSuspense(
   });
 }
 
-export function prefetchGetDomain(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request?: operations.GetDomainRequest | undefined,
-  security?: operations.GetDomainSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildGetDomainQuery(
-      client$,
-      request,
-      security,
-    ),
-  });
-}
-
 export function setGetDomainData(
   client: QueryClient,
   queryKeyBase: [
@@ -128,44 +115,4 @@ export function invalidateAllGetDomain(
     ...filters,
     queryKey: ["@gram/client", "domains", "getDomain"],
   });
-}
-
-export function buildGetDomainQuery(
-  client$: GramCore,
-  request?: operations.GetDomainRequest | undefined,
-  security?: operations.GetDomainSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<GetDomainQueryData>;
-} {
-  return {
-    queryKey: queryKeyGetDomain({
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
-    queryFn: async function getDomainQueryFn(ctx): Promise<GetDomainQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(domainsGetDomain(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyGetDomain(
-  parameters: {
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "domains", "getDomain", parameters];
 }
