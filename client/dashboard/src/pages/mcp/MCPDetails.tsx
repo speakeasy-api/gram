@@ -28,8 +28,10 @@ import { ToolsetEntry } from "@gram/client/models/components";
 import {
   invalidateAllGetPeriodUsage,
   invalidateAllToolset,
+  invalidateGetMcpMetadata,
   useAddExternalOAuthServerMutation,
   useAddOAuthProxyServerMutation,
+  useGetMcpMetadata,
   useRemoveOAuthServerMutation,
   useUpdateSecurityVariableDisplayNameMutation,
   useUpdateToolsetMutation,
@@ -577,10 +579,21 @@ function AuthorizationHeadersSection({ toolset }: { toolset: Toolset }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
+  // Fetch MCP metadata to get saved header display names
+  const { data: mcpMetadata } = useGetMcpMetadata(
+    { toolsetSlug: toolset.slug },
+    undefined,
+    { enabled: !!toolset.slug },
+  );
+
+  // Get the saved display names map from metadata
+  const headerDisplayNames = mcpMetadata?.metadata?.headerDisplayNames ?? {};
+
   const updateDisplayNameMutation =
     useUpdateSecurityVariableDisplayNameMutation({
       onSuccess: () => {
         invalidateAllToolset(queryClient);
+        invalidateGetMcpMetadata(queryClient, { toolsetSlug: toolset.slug });
         toast.success("Header display name updated");
         setEditingId(null);
         setEditValue("");
@@ -635,21 +648,18 @@ function AuthorizationHeadersSection({ toolset }: { toolset: Toolset }) {
           id: secVar.id,
           envVar: secVar.name,
           securityVariableId: secVar.id,
-          // displayName would need to come from headerDisplayNames in mcpMetadata
-          // For now, we use the secVar.displayName as fallback
-          displayName: secVar.displayName,
+          displayName: headerDisplayNames[secVar.name] || secVar.displayName,
         },
       ];
     }
 
-    // Create one entry per env var
+    // Create one entry per env var, looking up display name from metadata
     return filteredEnvVars.map((envVar, index) => ({
       id: `${secVar.id}-${index}`,
       envVar: envVar,
       securityVariableId: secVar.id,
-      // For display name, we'd ideally look up from headerDisplayNames map
-      // but since that's in mcpMetadata, we use a default derivation
-      displayName: undefined as string | undefined,
+      // Look up the saved display name from headerDisplayNames map
+      displayName: headerDisplayNames[envVar] as string | undefined,
     }));
   });
 
