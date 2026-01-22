@@ -40,6 +40,7 @@ import {
   Search,
   Server,
 } from "lucide-react";
+import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -183,6 +184,7 @@ export default function ChatElements() {
   const { projectSlug } = useSlugs();
   const session = useSession();
   const project = useProject();
+  const { theme: appTheme } = useMoonshineConfig();
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [previewKey, setPreviewKey] = useState(0);
   const [rightPanelTab, setRightPanelTab] = useState<"preview" | "install">(
@@ -271,7 +273,7 @@ export default function ChatElements() {
       systemPrompt: config.systemPrompt || undefined,
       variant: config.variant,
       theme: {
-        colorScheme: config.colorScheme,
+        colorScheme: config.colorScheme === "system" ? appTheme : config.colorScheme,
         density: config.density,
         radius: config.radius,
       },
@@ -298,7 +300,7 @@ export default function ChatElements() {
         expandToolGroupsByDefault: config.expandToolGroupsByDefault,
       },
     }),
-    [config, project.slug],
+    [config, project.slug, appTheme],
   );
 
   const apiUrl = getServerURL();
@@ -737,9 +739,13 @@ function ElementsPreview({
   apiUrl: string;
   sessionToken: string | null;
 }) {
+  const { theme } = useMoonshineConfig();
+
   const gradientStyle = {
     background:
-      "linear-gradient(135deg, #89CFF0 0%, #5DADE2 25%, #3498DB 50%, #85C1E9 75%, #AED6F1 100%)",
+      theme === "dark"
+        ? "linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #1a1a2e 50%, #0f0f1a 75%, #1a1a2e 100%)"
+        : "linear-gradient(135deg, #89CFF0 0%, #5DADE2 25%, #3498DB 50%, #85C1E9 75%, #AED6F1 100%)",
   };
 
   const loadingContent = (
@@ -836,6 +842,7 @@ function InstallationGuide({
   const [generatedApiKey, setGeneratedApiKey] = useState<string | null>(null);
   const [keyCreationAttempted, setKeyCreationAttempted] = useState(false);
   const telemetry = useTelemetry();
+  const { theme } = useMoonshineConfig();
 
   useEffect(() => {
     if (!projectSlug || !selectedFramework || !selectedProduct) return;
@@ -1185,7 +1192,9 @@ export default function GramChat() {
                 style={{
                   background:
                     selectedProduct === product.id
-                      ? "linear-gradient(135deg, #89CFF0 0%, #5DADE2 25%, #3498DB 50%, #85C1E9 75%, #AED6F1 100%)"
+                      ? theme === "dark"
+                        ? "linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #1a1a2e 50%, #0f0f1a 75%, #1a1a2e 100%)"
+                        : "linear-gradient(135deg, #89CFF0 0%, #5DADE2 25%, #3498DB 50%, #85C1E9 75%, #AED6F1 100%)"
                       : "hsl(var(--muted) / 0.3)",
                 }}
               >

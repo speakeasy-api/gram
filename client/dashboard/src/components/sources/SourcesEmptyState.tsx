@@ -23,8 +23,8 @@ export function SourcesEmptyState() {
       <Page.Section.Title>Sources</Page.Section.Title>
       <Page.Section.Description>
         {isFunctionsEnabled
-          ? "OpenAPI documents and Gram Functions providing tools for your project"
-          : "OpenAPI documents providing tools for your project"}
+          ? "OpenAPI documents, Gram Functions, and third-party MCP servers providing tools for your project"
+          : "OpenAPI documents and third-party MCP servers providing tools for your project"}
       </Page.Section.Description>
       <Page.Section.Body>
         <div className="flex flex-col items-center justify-center py-16 px-8 rounded-xl border border-dashed bg-muted/20">

@@ -247,8 +247,8 @@ export default function Sources() {
         <Page.Section.Title>Sources</Page.Section.Title>
         <Page.Section.Description>
           {isFunctionsEnabled
-            ? "OpenAPI documents and Gram Functions providing tools for your project"
-            : "OpenAPI documents providing tools for your project"}
+            ? "OpenAPI documents, Gram Functions, and third-party MCP servers providing tools for your project"
+            : "OpenAPI documents and third-party MCP servers providing tools for your project"}
         </Page.Section.Description>
         <DeploymentHistoryCTA deploymentId={deployment?.id} />
         <Page.Section.CTA>
