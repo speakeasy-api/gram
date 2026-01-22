@@ -459,7 +459,7 @@ const ElementsProviderWithHistory = ({
       <HistoryProvider>
         <ElementsContext.Provider value={contextValue}>
           <div
-            className={`${ROOT_SELECTOR}${contextValue.config.variant === 'standalone' || contextValue.config.variant === 'sidecar' ? ' h-full' : ''}`}
+            className={`${ROOT_SELECTOR}${contextValue.config.variant === 'standalone' || contextValue.config.variant === 'sidecar' ? 'h-full' : ''}`}
           >
             {children}
           </div>
@@ -498,7 +498,7 @@ const ElementsProviderWithoutHistory = ({
     <AssistantRuntimeProvider runtime={runtime}>
       <ElementsContext.Provider value={contextValue}>
         <div
-          className={`${ROOT_SELECTOR}${contextValue.config.variant === 'standalone' || contextValue.config.variant === 'sidecar' ? ' h-full' : ''}`}
+          className={`${ROOT_SELECTOR}${contextValue.config.variant === 'standalone' || contextValue.config.variant === 'sidecar' ? 'h-full' : ''}`}
         >
           {children}
         </div>

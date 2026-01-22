@@ -77,9 +77,8 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
   )
   const thread = useAssistantState(({ thread }) => thread)
   const isGenerating =
-    thread?.messages?.some(
-      (message) => message.status?.type === 'running'
-    ) ?? false
+    thread?.messages?.some((message) => message.status?.type === 'running') ??
+    false
 
   const effectiveWidth = isExpanded
     ? expandedDimensions.width
