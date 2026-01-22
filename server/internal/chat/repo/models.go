@@ -33,13 +33,17 @@ type ChatMessage struct {
 	Content          string
 	Model            pgtype.Text
 	MessageID        pgtype.Text
-	UserID           pgtype.Text
-	ExternalUserID   pgtype.Text
 	FinishReason     pgtype.Text
 	ToolCalls        []byte
 	PromptTokens     int64
 	CompletionTokens int64
 	TotalTokens      int64
+	UserID           pgtype.Text
+	ExternalUserID   pgtype.Text
+	Origin           pgtype.Text
+	UserAgent        pgtype.Text
+	IpAddress        pgtype.Text
+	Source           pgtype.Text
 	ToolCallID       pgtype.Text
 	ToolUrn          urn.Tool
 	ToolOutcome      pgtype.Text

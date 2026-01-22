@@ -770,13 +770,18 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   content TEXT NOT NULL,
   model TEXT,
   message_id TEXT,
-  user_id TEXT,
-  external_user_id TEXT,
   finish_reason TEXT,
   tool_calls JSONB,
   prompt_tokens BIGINT NOT NULL DEFAULT 0,
   completion_tokens BIGINT NOT NULL DEFAULT 0,
   total_tokens BIGINT NOT NULL DEFAULT 0,
+
+  user_id TEXT,
+  external_user_id TEXT,
+  origin TEXT,
+  user_agent TEXT,
+  ip_address TEXT,
+  source TEXT, -- Elements, Playground, etc.
 
   tool_call_id TEXT,
   tool_urn TEXT,
