@@ -593,7 +593,7 @@ function AuthorizationHeadersSection({ toolset }: { toolset: Toolset }) {
     useUpdateSecurityVariableDisplayNameMutation({
       onSuccess: () => {
         invalidateAllToolset(queryClient);
-        invalidateGetMcpMetadata(queryClient, { toolsetSlug: toolset.slug });
+        invalidateGetMcpMetadata(queryClient, [{ toolsetSlug: toolset.slug }]);
         toast.success("Header display name updated");
         setEditingId(null);
         setEditValue("");
@@ -726,7 +726,8 @@ function AuthorizationHeadersSection({ toolset }: { toolset: Toolset }) {
                           "Unknown"}
                       </Type>
                       {entry.displayName &&
-                        entry.displayName !== entry.envVar.replace(/_/g, "-") && (
+                        entry.displayName !==
+                          entry.envVar.replace(/_/g, "-") && (
                           <Badge variant="neutral" className="text-xs">
                             renamed
                           </Badge>
