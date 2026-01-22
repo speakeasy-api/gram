@@ -3,7 +3,6 @@ package environments
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"time"
@@ -119,9 +118,8 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 		Name:              environment.Name,
 		Slug:              types.Slug(environment.Slug),
 		Description:       conv.FromPGText[string](environment.Description),
-		Entries:           entries,
-		EntryDisplayNames: parseEntryDisplayNames(environment.EntryDisplayNames),
-		CreatedAt:         environment.CreatedAt.Time.Format(time.RFC3339),
+		Entries:   entries,
+		CreatedAt: environment.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:         environment.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
@@ -161,9 +159,8 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 			Name:              environment.Name,
 			Slug:              types.Slug(environment.Slug),
 			Description:       conv.FromPGText[string](environment.Description),
-			Entries:           genEntries,
-			EntryDisplayNames: parseEntryDisplayNames(environment.EntryDisplayNames),
-			CreatedAt:         environment.CreatedAt.Time.Format(time.RFC3339),
+			Entries:   genEntries,
+			CreatedAt: environment.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:         environment.UpdatedAt.Time.Format(time.RFC3339),
 		})
 	}
@@ -228,37 +225,6 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		}
 	}
 
-	// Handle display name updates
-	if len(payload.EntryDisplayNamesToUpdate) > 0 {
-		displayNamesJSON, err := json.Marshal(payload.EntryDisplayNamesToUpdate)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal display names").Log(ctx, s.logger)
-		}
-		_, err = s.repo.UpdateEntryDisplayNames(ctx, repo.UpdateEntryDisplayNamesParams{
-			EntryDisplayNames: displayNamesJSON,
-			EnvironmentID:     environment.ID,
-			ProjectID:         projectID,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to update entry display names").Log(ctx, s.logger)
-		}
-	}
-
-	// Handle display name removals (including auto-cleanup for removed entries)
-	displayNamesToRemove := make([]string, 0, len(payload.EntryDisplayNamesToRemove)+len(payload.EntriesToRemove))
-	displayNamesToRemove = append(displayNamesToRemove, payload.EntryDisplayNamesToRemove...)
-	displayNamesToRemove = append(displayNamesToRemove, payload.EntriesToRemove...) // Auto-cleanup
-	if len(displayNamesToRemove) > 0 {
-		_, err = s.repo.RemoveEntryDisplayNames(ctx, repo.RemoveEntryDisplayNamesParams{
-			EntryNames:    displayNamesToRemove,
-			EnvironmentID: environment.ID,
-			ProjectID:     projectID,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to remove entry display names").Log(ctx, s.logger)
-		}
-	}
-
 	// Re-fetch environment to get the latest state after all updates
 	environment, err = s.repo.GetEnvironmentBySlug(ctx, repo.GetEnvironmentBySlugParams{
 		Slug:      conv.ToLower(payload.Slug),
@@ -290,10 +256,9 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		Name:              environment.Name,
 		Slug:              types.Slug(environment.Slug),
 		Description:       conv.FromPGText[string](environment.Description),
-		Entries:           genEntries,
-		EntryDisplayNames: parseEntryDisplayNames(environment.EntryDisplayNames),
-		CreatedAt:         environment.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:         environment.UpdatedAt.Time.Format(time.RFC3339),
+		Entries:   genEntries,
+		CreatedAt: environment.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt: environment.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
 
@@ -410,11 +375,10 @@ func (s *Service) GetSourceEnvironment(ctx context.Context, payload *gen.GetSour
 		ProjectID:         environment.ProjectID.String(),
 		Name:              environment.Name,
 		Slug:              types.Slug(environment.Slug),
-		Description:       conv.FromPGText[string](environment.Description),
-		Entries:           genEntries,
-		EntryDisplayNames: parseEntryDisplayNames(environment.EntryDisplayNames),
-		CreatedAt:         environment.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:         environment.UpdatedAt.Time.Format(time.RFC3339),
+		Description: conv.FromPGText[string](environment.Description),
+		Entries:     genEntries,
+		CreatedAt:   environment.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:   environment.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
 
@@ -525,23 +489,13 @@ func (s *Service) GetToolsetEnvironment(ctx context.Context, payload *gen.GetToo
 		ProjectID:         environment.ProjectID.String(),
 		Name:              environment.Name,
 		Slug:              types.Slug(environment.Slug),
-		Description:       conv.FromPGText[string](environment.Description),
-		Entries:           genEntries,
-		EntryDisplayNames: parseEntryDisplayNames(environment.EntryDisplayNames),
-		CreatedAt:         environment.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:         environment.UpdatedAt.Time.Format(time.RFC3339),
+		Description: conv.FromPGText[string](environment.Description),
+		Entries:     genEntries,
+		CreatedAt:   environment.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:   environment.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
-}
-
-// parseEntryDisplayNames converts JSONB bytes to a map of entry names to display names.
-func parseEntryDisplayNames(data []byte) map[string]string {
-	result := make(map[string]string)
-	if len(data) > 0 {
-		_ = json.Unmarshal(data, &result)
-	}
-	return result
 }

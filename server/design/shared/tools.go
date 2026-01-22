@@ -187,7 +187,6 @@ var Environment = Type("Environment", func() {
 	Attribute("slug", Slug, "The slug identifier for the environment")
 	Attribute("description", String, "The description of the environment")
 	Attribute("entries", ArrayOf(EnvironmentEntry), "List of environment entries")
-	Attribute("entry_display_names", MapOf(String, String), "Map of entry names to custom display names")
 	Attribute("created_at", String, func() {
 		Description("The creation date of the environment")
 		Format(FormatDateTime)

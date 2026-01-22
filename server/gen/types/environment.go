@@ -24,8 +24,6 @@ type Environment struct {
 	Description *string
 	// List of environment entries
 	Entries []*EnvironmentEntry
-	// Map of entry names to custom display names
-	EntryDisplayNames map[string]string
 	// The creation date of the environment
 	CreatedAt string
 	// When the environment was last updated

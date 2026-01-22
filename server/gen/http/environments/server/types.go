@@ -37,10 +37,6 @@ type UpdateEnvironmentRequestBody struct {
 	EntriesToUpdate []*EnvironmentEntryInputRequestBody `form:"entries_to_update,omitempty" json:"entries_to_update,omitempty" xml:"entries_to_update,omitempty"`
 	// List of environment entry names to remove
 	EntriesToRemove []string `form:"entries_to_remove,omitempty" json:"entries_to_remove,omitempty" xml:"entries_to_remove,omitempty"`
-	// Map of entry names to display names to set or update
-	EntryDisplayNamesToUpdate map[string]string `form:"entry_display_names_to_update,omitempty" json:"entry_display_names_to_update,omitempty" xml:"entry_display_names_to_update,omitempty"`
-	// Entry names to remove display names from
-	EntryDisplayNamesToRemove []string `form:"entry_display_names_to_remove,omitempty" json:"entry_display_names_to_remove,omitempty" xml:"entry_display_names_to_remove,omitempty"`
 }
 
 // SetSourceEnvironmentLinkRequestBody is the type of the "environments"
@@ -80,8 +76,6 @@ type CreateEnvironmentResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of environment entries
 	Entries []*EnvironmentEntryResponseBody `form:"entries" json:"entries" xml:"entries"`
-	// Map of entry names to custom display names
-	EntryDisplayNames map[string]string `form:"entry_display_names,omitempty" json:"entry_display_names,omitempty" xml:"entry_display_names,omitempty"`
 	// The creation date of the environment
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the environment was last updated
@@ -111,8 +105,6 @@ type UpdateEnvironmentResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of environment entries
 	Entries []*EnvironmentEntryResponseBody `form:"entries" json:"entries" xml:"entries"`
-	// Map of entry names to custom display names
-	EntryDisplayNames map[string]string `form:"entry_display_names,omitempty" json:"entry_display_names,omitempty" xml:"entry_display_names,omitempty"`
 	// The creation date of the environment
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the environment was last updated
@@ -149,8 +141,6 @@ type GetSourceEnvironmentResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of environment entries
 	Entries []*EnvironmentEntryResponseBody `form:"entries" json:"entries" xml:"entries"`
-	// Map of entry names to custom display names
-	EntryDisplayNames map[string]string `form:"entry_display_names,omitempty" json:"entry_display_names,omitempty" xml:"entry_display_names,omitempty"`
 	// The creation date of the environment
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the environment was last updated
@@ -185,8 +175,6 @@ type GetToolsetEnvironmentResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of environment entries
 	Entries []*EnvironmentEntryResponseBody `form:"entries" json:"entries" xml:"entries"`
-	// Map of entry names to custom display names
-	EntryDisplayNames map[string]string `form:"entry_display_names,omitempty" json:"entry_display_names,omitempty" xml:"entry_display_names,omitempty"`
 	// The creation date of the environment
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the environment was last updated
@@ -2121,8 +2109,6 @@ type EnvironmentResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of environment entries
 	Entries []*EnvironmentEntryResponseBody `form:"entries" json:"entries" xml:"entries"`
-	// Map of entry names to custom display names
-	EntryDisplayNames map[string]string `form:"entry_display_names,omitempty" json:"entry_display_names,omitempty" xml:"entry_display_names,omitempty"`
 	// The creation date of the environment
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the environment was last updated
@@ -2162,14 +2148,6 @@ func NewCreateEnvironmentResponseBody(res *types.Environment) *CreateEnvironment
 		}
 	} else {
 		body.Entries = []*EnvironmentEntryResponseBody{}
-	}
-	if res.EntryDisplayNames != nil {
-		body.EntryDisplayNames = make(map[string]string, len(res.EntryDisplayNames))
-		for key, val := range res.EntryDisplayNames {
-			tk := key
-			tv := val
-			body.EntryDisplayNames[tk] = tv
-		}
 	}
 	return body
 }
@@ -2218,14 +2196,6 @@ func NewUpdateEnvironmentResponseBody(res *types.Environment) *UpdateEnvironment
 	} else {
 		body.Entries = []*EnvironmentEntryResponseBody{}
 	}
-	if res.EntryDisplayNames != nil {
-		body.EntryDisplayNames = make(map[string]string, len(res.EntryDisplayNames))
-		for key, val := range res.EntryDisplayNames {
-			tk := key
-			tv := val
-			body.EntryDisplayNames[tk] = tv
-		}
-	}
 	return body
 }
 
@@ -2267,14 +2237,6 @@ func NewGetSourceEnvironmentResponseBody(res *types.Environment) *GetSourceEnvir
 	} else {
 		body.Entries = []*EnvironmentEntryResponseBody{}
 	}
-	if res.EntryDisplayNames != nil {
-		body.EntryDisplayNames = make(map[string]string, len(res.EntryDisplayNames))
-		for key, val := range res.EntryDisplayNames {
-			tk := key
-			tv := val
-			body.EntryDisplayNames[tk] = tv
-		}
-	}
 	return body
 }
 
@@ -2314,14 +2276,6 @@ func NewGetToolsetEnvironmentResponseBody(res *types.Environment) *GetToolsetEnv
 		}
 	} else {
 		body.Entries = []*EnvironmentEntryResponseBody{}
-	}
-	if res.EntryDisplayNames != nil {
-		body.EntryDisplayNames = make(map[string]string, len(res.EntryDisplayNames))
-		for key, val := range res.EntryDisplayNames {
-			tk := key
-			tv := val
-			body.EntryDisplayNames[tk] = tv
-		}
 	}
 	return body
 }
@@ -3858,20 +3812,6 @@ func NewUpdateEnvironmentPayload(body *UpdateEnvironmentRequestBody, slug string
 	v.EntriesToRemove = make([]string, len(body.EntriesToRemove))
 	for i, val := range body.EntriesToRemove {
 		v.EntriesToRemove[i] = val
-	}
-	if body.EntryDisplayNamesToUpdate != nil {
-		v.EntryDisplayNamesToUpdate = make(map[string]string, len(body.EntryDisplayNamesToUpdate))
-		for key, val := range body.EntryDisplayNamesToUpdate {
-			tk := key
-			tv := val
-			v.EntryDisplayNamesToUpdate[tk] = tv
-		}
-	}
-	if body.EntryDisplayNamesToRemove != nil {
-		v.EntryDisplayNamesToRemove = make([]string, len(body.EntryDisplayNamesToRemove))
-		for i, val := range body.EntryDisplayNamesToRemove {
-			v.EntryDisplayNamesToRemove[i] = val
-		}
 	}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
