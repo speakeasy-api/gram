@@ -82,9 +82,7 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	tracerProvider := testenv.NewTracerProvider(t)
-
-	chClient := repo.New(logger, tracerProvider, chConn)
+	chClient := repo.New(chConn)
 
 	featClient := productfeatures.NewClient(logger, conn, redisClient)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
