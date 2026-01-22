@@ -108,6 +108,7 @@ func handleToolsCall(
 
 	// Special handling for PROXY external MCP tools.
 	// External MCP tools that can be unfolded will proceed below
+	// TODO: Remove me? This functionality should be redundant with proxy.doExternalMCPToolCall()
 	if proxyTool, externalToolName, ok := findExternalMCPTool(toolset.Tools, params.Name); ok {
 		return handleExternalMCPToolCall(ctx, logger, req.ID, proxyTool, externalToolName, params.Arguments, payload.oauthTokenInputs)
 	}
