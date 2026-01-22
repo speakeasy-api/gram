@@ -1,5 +1,13 @@
 # dashboard
 
+## 0.26.16
+
+### Patch Changes
+
+- 484bbe0: Enable renaming of MCP authorization headers and with user friendly display names. These names are used as the default names of environment variables on the user facing MCP config.
+- Updated dependencies [484bbe0]
+  - @gram/client@0.25.16
+
 ## 0.26.15
 
 ### Patch Changes
