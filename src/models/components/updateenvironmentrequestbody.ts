@@ -25,14 +25,6 @@ export type UpdateEnvironmentRequestBody = {
    */
   entriesToUpdate: Array<EnvironmentEntryInput>;
   /**
-   * Entry names to remove display names from
-   */
-  entryDisplayNamesToRemove?: Array<string> | undefined;
-  /**
-   * Map of entry names to display names to set or update
-   */
-  entryDisplayNamesToUpdate?: { [k: string]: string } | undefined;
-  /**
    * The name of the environment
    */
   name?: string | undefined;
@@ -43,8 +35,6 @@ export type UpdateEnvironmentRequestBody$Outbound = {
   description?: string | undefined;
   entries_to_remove: Array<string>;
   entries_to_update: Array<EnvironmentEntryInput$Outbound>;
-  entry_display_names_to_remove?: Array<string> | undefined;
-  entry_display_names_to_update?: { [k: string]: string } | undefined;
   name?: string | undefined;
 };
 
@@ -57,15 +47,11 @@ export const UpdateEnvironmentRequestBody$outboundSchema: z.ZodType<
   description: z.string().optional(),
   entriesToRemove: z.array(z.string()),
   entriesToUpdate: z.array(EnvironmentEntryInput$outboundSchema),
-  entryDisplayNamesToRemove: z.array(z.string()).optional(),
-  entryDisplayNamesToUpdate: z.record(z.string()).optional(),
   name: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     entriesToRemove: "entries_to_remove",
     entriesToUpdate: "entries_to_update",
-    entryDisplayNamesToRemove: "entry_display_names_to_remove",
-    entryDisplayNamesToUpdate: "entry_display_names_to_update",
   });
 });
 
