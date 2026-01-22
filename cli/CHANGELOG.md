@@ -1,5 +1,11 @@
 # cli
 
+## 0.15.4
+
+### Patch Changes
+
+- 484bbe0: Enable renaming of MCP authorization headers and with user friendly display names. These names are used as the default names of environment variables on the user facing MCP config.
+
 ## 0.15.3
 
 ### Patch Changes
