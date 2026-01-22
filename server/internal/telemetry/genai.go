@@ -20,6 +20,7 @@ import (
 const (
 	GenAIOperationChat        = "chat"
 	GenAIOperationExecuteTool = "execute_tool"
+	serviceName               = "gram-server"
 )
 
 // ResourceAttributeKeys defines which attribute keys should be stored as resource attributes
@@ -104,6 +105,9 @@ func buildTelemetryLogParams(attrs map[string]any) (repo.InsertTelemetryLogParam
 		defaultSeverity := "INFO"
 		severityText = &defaultSeverity
 	}
+
+	// manually add service name, as it's always going to be gram server
+	attrs[string(attr.ServiceNameKey)] = serviceName
 
 	spanAttrs, resourceAttrs := parseAttributes(attrs)
 

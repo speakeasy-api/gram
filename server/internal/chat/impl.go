@@ -891,27 +891,27 @@ func (r *responseCaptor) emitGenAITelemetry(toolCallsJSON []byte) {
 		return
 	}
 
-	durationMs := float64(time.Since(r.startTime).Milliseconds())
+	duration := float64(time.Since(r.startTime).Seconds())
 
 	// Build attributes map. Column-mapped keys are extracted to dedicated columns
 	// but remain in the attributes JSON. Resource attributes are auto-partitioned
 	// based on telemetry.ResourceAttributeKeys.
 	attrs := map[string]any{
 		// Column-mapped keys
-		string(attr.ProjectIDKey):    r.projectID.String(),
-		string(attr.ResourceURNKey):  "agents:chat:completion",
+		string(attr.ProjectIDKey):   r.projectID.String(),
+		string(attr.ResourceURNKey): "agents:chat:completion",
 		string(attr.LogBodyKey): fmt.Sprintf("LLM chat completion: model=%s, input_tokens=%d, output_tokens=%d",
 			r.model, r.usage.PromptTokens, r.usage.CompletionTokens),
 
 		// GenAI semantic convention attributes
-		string(attr.GenAIOperationNameKey):    telemetry.GenAIOperationChat,
-		string(attr.GenAIRequestModelKey):     r.model,
-		string(attr.GenAIResponseModelKey):    r.model,
-		string(attr.GenAIUsageInputTokensKey): r.usage.PromptTokens,
+		string(attr.GenAIOperationNameKey):     telemetry.GenAIOperationChat,
+		string(attr.GenAIRequestModelKey):      r.model,
+		string(attr.GenAIResponseModelKey):     r.model,
+		string(attr.GenAIUsageInputTokensKey):  r.usage.PromptTokens,
 		string(attr.GenAIUsageOutputTokensKey): r.usage.CompletionTokens,
-		string(attr.GenAIUsageTotalTokensKey): r.usage.TotalTokens,
-		string(attr.GenAIConversationIDKey):   r.chatID.String(),
-		string(attr.HTTPClientRequestDurationKey): durationMs,
+		string(attr.GenAIUsageTotalTokensKey):  r.usage.TotalTokens,
+		string(attr.GenAIConversationIDKey):    r.chatID.String(),
+		string(attr.GenAIConversationDuration): duration,
 	}
 
 	if r.messageID != "" {

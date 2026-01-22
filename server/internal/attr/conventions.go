@@ -211,8 +211,9 @@ const (
 	GenAISystemInstructionsKey = semconv.GenAISystemInstructionsKey
 
 	// Custom GenAI keys not in official semconv (yet)
-	GenAIToolCallsKey        = attribute.Key("gen_ai.tool.calls")         // Array of tool calls
-	GenAIUsageTotalTokensKey = attribute.Key("gen_ai.usage.total_tokens") // Total tokens (input + output)
+	GenAIToolCallsKey         = attribute.Key("gen_ai.tool.calls")         // Array of tool calls
+	GenAIUsageTotalTokensKey  = attribute.Key("gen_ai.usage.total_tokens") // Total tokens (input + output)
+	GenAIConversationDuration = attribute.Key("gen_ai.conversation.duration")
 )
 
 const (
