@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
@@ -56,6 +57,10 @@ type ChatTitleGenerator interface {
 	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID string) error
 }
 
+// GenAITelemetryProvider defines the interface for emitting GenAI telemetry.
+// This matches the telemetry.ToolMetricsProvider interface.
+type GenAITelemetryProvider = telemetry.ToolMetricsProvider
+
 type Service struct {
 	auth                 *auth.Auth
 	repo                 *repo.Queries
@@ -69,6 +74,7 @@ type Service struct {
 	fallbackUsageTracker FallbackModelUsageTracker
 	chatTitleGenerator   ChatTitleGenerator
 	posthog              *posthog.Posthog
+	telemetryProvider    GenAITelemetryProvider
 }
 
 func NewService(
@@ -81,6 +87,7 @@ func NewService(
 	fallbackUsageTracker FallbackModelUsageTracker,
 	chatTitleGenerator ChatTitleGenerator,
 	posthog *posthog.Posthog,
+	telemetryProvider GenAITelemetryProvider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
@@ -97,6 +104,7 @@ func NewService(
 		fallbackUsageTracker: fallbackUsageTracker,
 		chatTitleGenerator:   chatTitleGenerator,
 		posthog:              posthog,
+		telemetryProvider:    telemetryProvider,
 	}
 }
 
@@ -430,6 +438,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			usageSet:           false,
 			isFirstMessage:     chatResult.IsFirstMessage,
 			chatTitleGenerator: s.chatTitleGenerator,
+			// GenAI telemetry fields
+			telemetryProvider: s.telemetryProvider,
+			userID:            userID,
+			externalUserID:    authCtx.ExternalUserID,
+			startTime:         time.Now(),
 		}
 	}
 
@@ -680,6 +693,11 @@ type responseCaptor struct {
 	// Title generation
 	isFirstMessage     bool
 	chatTitleGenerator ChatTitleGenerator
+	// GenAI telemetry
+	telemetryProvider GenAITelemetryProvider
+	userID            string
+	externalUserID    string
+	startTime         time.Time // Track request start time for duration calculation
 }
 
 func (r *responseCaptor) WriteHeader(statusCode int) {
@@ -778,6 +796,9 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 				r.logger.WarnContext(r.ctx, "failed to schedule chat title generation", attr.SlogError(err))
 			}
 		}
+
+		// Emit GenAI telemetry for observability
+		r.emitGenAITelemetry(toolCallsJSON)
 	}
 
 	n, err := r.ResponseWriter.Write(b)
@@ -862,4 +883,52 @@ func (r *responseCaptor) processLine(line string) {
 			r.logger.ErrorContext(r.ctx, "failed to parse streaming chunk", attr.SlogError(err))
 		}
 	}
+}
+
+// emitGenAITelemetry emits GenAI telemetry to ClickHouse for observability.
+func (r *responseCaptor) emitGenAITelemetry(toolCallsJSON []byte) {
+	if r.telemetryProvider == nil {
+		return
+	}
+
+	durationMs := float64(time.Since(r.startTime).Milliseconds())
+
+	// Build attributes map. Column-mapped keys are extracted to dedicated columns
+	// but remain in the attributes JSON. Resource attributes are auto-partitioned
+	// based on telemetry.ResourceAttributeKeys.
+	attrs := map[string]any{
+		// Column-mapped keys
+		string(attr.ProjectIDKey):    r.projectID.String(),
+		string(attr.ResourceURNKey):  "agents:chat:completion",
+		string(attr.LogBodyKey): fmt.Sprintf("LLM chat completion: model=%s, input_tokens=%d, output_tokens=%d",
+			r.model, r.usage.PromptTokens, r.usage.CompletionTokens),
+
+		// GenAI semantic convention attributes
+		string(attr.GenAIOperationNameKey):    telemetry.GenAIOperationChat,
+		string(attr.GenAIRequestModelKey):     r.model,
+		string(attr.GenAIResponseModelKey):    r.model,
+		string(attr.GenAIUsageInputTokensKey): r.usage.PromptTokens,
+		string(attr.GenAIUsageOutputTokensKey): r.usage.CompletionTokens,
+		string(attr.GenAIUsageTotalTokensKey): r.usage.TotalTokens,
+		string(attr.GenAIConversationIDKey):   r.chatID.String(),
+		string(attr.HTTPClientRequestDurationKey): durationMs,
+	}
+
+	if r.messageID != "" {
+		attrs[string(attr.GenAIResponseIDKey)] = r.messageID
+	}
+	if r.finishReason != nil {
+		attrs[string(attr.GenAIResponseFinishReasonsKey)] = []string{*r.finishReason}
+	}
+	if len(toolCallsJSON) > 0 {
+		attrs[string(attr.GenAIToolCallsKey)] = string(toolCallsJSON)
+	}
+	if r.userID != "" {
+		attrs[string(attr.UserIDKey)] = r.userID
+	}
+	if r.externalUserID != "" {
+		attrs[string(attr.ExternalUserIDKey)] = r.externalUserID
+	}
+
+	telemetry.EmitTelemetryLog(r.ctx, r.logger, r.telemetryProvider, attrs)
 }
