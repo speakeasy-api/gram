@@ -146,7 +146,7 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 		return nil, nilFunc, fmt.Errorf("failed to ping clickhouse after %d attempts: %w", maxRetries+1, pingErr)
 	}
 
-	cc := tm_repo.New(logger, tracerProvider, conn)
+	cc := tm_repo.New(conn)
 
 	shutdown := func(ctx context.Context) error {
 		if err := conn.Close(); err != nil {

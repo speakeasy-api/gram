@@ -21,17 +21,17 @@ generation:
     oAuth2PasswordEnabled: true
     hoistGlobalSecurity: true
   sdkHooksConfigAccess: true
+  schemas:
+    allOfMergeStrategy: shallowMerge
+  requestBodyFieldName: ""
+  persistentEdits:
+    enabled: never
   tests:
     generateTests: true
     generateNewTests: false
     skipResponseBodyAssertions: false
-  persistentEdits:
-    enabled: "true"
-  requestBodyFieldName: ""
-  schemas:
-    allOfMergeStrategy: shallowMerge
 typescript:
-  version: 0.25.15
+  version: 0.26.0
   acceptHeaderEnum: true
   additionalDependencies:
     dependencies: {}
