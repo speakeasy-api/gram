@@ -26,7 +26,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Check, CheckCircle2, Copy, Globe, Loader2, ShieldAlert, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { useCustomDomain } from "../mcp/MCPDetails";
+import { useCustomDomain } from "@/hooks/useToolsetUrl";
 import { SettingsProjectsTable } from "./SettingsProjectsTable";
 
 export default function Settings() {

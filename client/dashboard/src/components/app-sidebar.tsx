@@ -44,7 +44,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     connect: [routes.sources] as AppRoute[],
     build: [routes.elements, routes.mcp],
     observe: [routes.logs],
-    settings: [routes.settings, routes.docs] as AppRoute[],
+    settings: [routes.settings, routes.billing, routes.docs] as AppRoute[],
   };
 
   if (isCatalogEnabled) {

@@ -6,7 +6,7 @@ interface IllustrationProps {
 
 /**
  * Skeleton illustration of an OpenAPI document
- * Shows fake endpoints with HTTP methods
+ * Shows parsed endpoints extracted from the spec
  */
 export function OpenAPIIllustration({ className }: IllustrationProps) {
   return (
@@ -19,36 +19,53 @@ export function OpenAPIIllustration({ className }: IllustrationProps) {
       aria-hidden="true"
     >
       {/* Background */}
-      <rect width="280" height="120" className="fill-blue-500/5" />
+      <rect width="280" height="120" className="fill-slate-500/[0.03]" />
 
-      {/* Header bar */}
-      <rect x="16" y="12" width="80" height="8" rx="2" className="fill-blue-500/30" />
-      <rect x="16" y="24" width="120" height="4" rx="1" className="fill-blue-500/15" />
+      {/* Document header area */}
+      <rect x="16" y="10" width="248" height="24" rx="3" className="fill-slate-500/[0.05]" />
+      <rect x="24" y="16" width="60" height="5" rx="1" className="fill-slate-500/15" />
+      <rect x="24" y="24" width="100" height="3" rx="1" className="fill-slate-500/8" />
+      <text x="240" y="24" className="fill-slate-400/30 text-[7px] font-mono">v1.0</text>
 
-      {/* Endpoint rows */}
+      {/* Endpoints list */}
       {/* GET endpoint */}
-      <rect x="16" y="40" width="28" height="14" rx="3" className="fill-emerald-500/40" />
-      <text x="22" y="50" className="fill-emerald-700 dark:fill-emerald-300 text-[8px] font-mono font-medium">GET</text>
-      <rect x="50" y="44" width="90" height="6" rx="1" className="fill-blue-500/20" />
+      <rect x="16" y="42" width="130" height="18" rx="2" className="fill-slate-500/[0.04]" />
+      <rect x="22" y="47" width="24" height="10" rx="2" className="fill-emerald-500/20" />
+      <text x="26" y="55" className="fill-emerald-600/50 dark:fill-emerald-400/50 text-[6px] font-mono font-medium">GET</text>
+      <text x="52" y="54" className="fill-slate-500/40 text-[7px] font-mono">/users</text>
 
       {/* POST endpoint */}
-      <rect x="16" y="60" width="28" height="14" rx="3" className="fill-amber-500/40" />
-      <text x="19" y="70" className="fill-amber-700 dark:fill-amber-300 text-[8px] font-mono font-medium">POST</text>
-      <rect x="50" y="64" width="70" height="6" rx="1" className="fill-blue-500/20" />
+      <rect x="16" y="64" width="130" height="18" rx="2" className="fill-slate-500/[0.04]" />
+      <rect x="22" y="69" width="28" height="10" rx="2" className="fill-amber-500/20" />
+      <text x="26" y="77" className="fill-amber-600/50 dark:fill-amber-400/50 text-[6px] font-mono font-medium">POST</text>
+      <text x="56" y="76" className="fill-slate-500/40 text-[7px] font-mono">/users</text>
 
       {/* DELETE endpoint */}
-      <rect x="16" y="80" width="28" height="14" rx="3" className="fill-red-500/40" />
-      <text x="18" y="90" className="fill-red-700 dark:fill-red-300 text-[7px] font-mono font-medium">DEL</text>
-      <rect x="50" y="84" width="60" height="6" rx="1" className="fill-blue-500/20" />
+      <rect x="16" y="86" width="130" height="18" rx="2" className="fill-slate-500/[0.04]" />
+      <rect x="22" y="91" width="38" height="10" rx="2" className="fill-red-500/20" />
+      <text x="25" y="99" className="fill-red-600/50 dark:fill-red-400/50 text-[6px] font-mono font-medium">DELETE</text>
+      <text x="66" y="98" className="fill-slate-500/40 text-[7px] font-mono">/users/{"{id}"}</text>
 
-      {/* Right side - schema preview */}
-      <rect x="160" y="40" width="100" height="54" rx="4" className="fill-blue-500/10 stroke-blue-500/20" strokeWidth="1" />
-      <rect x="168" y="48" width="40" height="4" rx="1" className="fill-blue-500/25" />
-      <rect x="168" y="56" width="60" height="3" rx="1" className="fill-blue-500/15" />
-      <rect x="168" y="63" width="50" height="3" rx="1" className="fill-blue-500/15" />
-      <rect x="168" y="70" width="70" height="3" rx="1" className="fill-blue-500/15" />
-      <rect x="168" y="77" width="45" height="3" rx="1" className="fill-blue-500/15" />
-      <rect x="168" y="84" width="55" height="3" rx="1" className="fill-blue-500/15" />
+      {/* Right side - schema code preview */}
+      <rect x="156" y="42" width="108" height="62" rx="3" className="fill-slate-500/[0.04] stroke-slate-500/8" strokeWidth="1" />
+
+      {/* Mini line numbers */}
+      <text x="162" y="52" className="fill-slate-400/25 text-[6px] font-mono">1</text>
+      <text x="162" y="60" className="fill-slate-400/25 text-[6px] font-mono">2</text>
+      <text x="162" y="68" className="fill-slate-400/25 text-[6px] font-mono">3</text>
+      <text x="162" y="76" className="fill-slate-400/25 text-[6px] font-mono">4</text>
+      <text x="162" y="84" className="fill-slate-400/25 text-[6px] font-mono">5</text>
+      <text x="162" y="92" className="fill-slate-400/25 text-[6px] font-mono">6</text>
+      <text x="162" y="100" className="fill-slate-400/25 text-[6px] font-mono">7</text>
+
+      {/* Code lines */}
+      <rect x="172" y="48" width="30" height="4" rx="1" className="fill-slate-500/12" />
+      <rect x="172" y="56" width="50" height="3" rx="1" className="fill-slate-500/8" />
+      <rect x="178" y="64" width="42" height="3" rx="1" className="fill-slate-500/8" />
+      <rect x="178" y="72" width="55" height="3" rx="1" className="fill-slate-500/8" />
+      <rect x="178" y="80" width="38" height="3" rx="1" className="fill-slate-500/8" />
+      <rect x="172" y="88" width="45" height="3" rx="1" className="fill-slate-500/8" />
+      <rect x="172" y="96" width="20" height="3" rx="1" className="fill-slate-500/8" />
     </svg>
   );
 }
