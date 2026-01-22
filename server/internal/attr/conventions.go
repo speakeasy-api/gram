@@ -14,6 +14,7 @@ type Key = attribute.Key
 const (
 	ErrorMessageKey                   = semconv.ErrorMessageKey
 	ExceptionStacktraceKey            = semconv.ExceptionStacktraceKey
+	ExternalUserIDKey                 = attribute.Key("gram.external_user.id")
 	ContainerIDKey                    = semconv.ContainerIDKey
 	ContainerNetworkIDKey             = attribute.Key("container.network.id")
 	FilePathKey                       = semconv.FilePathKey
@@ -31,10 +32,12 @@ const (
 	HTTPClientRequestDurationKey      = attribute.Key("http.client.request.duration_ms")
 	HTTPRequestSizeKey                = semconv.HTTPRequestSizeKey
 	HTTPResponseSizeKey               = semconv.HTTPResponseSizeKey
+	ObservedTimeUnixNanoKey           = attribute.Key("observed_time_unix_nano")
 	ServerAddressKey                  = semconv.ServerAddressKey
 	ServiceEnvKey                     = semconv.DeploymentEnvironmentNameKey
 	ServiceNameKey                    = semconv.ServiceNameKey
 	ServiceVersionKey                 = semconv.ServiceVersionKey
+	TimeUnixNanoKey                   = attribute.Key("time_unix_nano")
 	URLDomainKey                      = semconv.URLDomainKey
 	URLFullKey                        = semconv.URLFullKey
 	URLOriginalKey                    = semconv.URLOriginalKey
@@ -49,6 +52,8 @@ const (
 
 	SpanIDKey              = attribute.Key("span.id")
 	TraceIDKey             = attribute.Key("trace.id")
+	LogSeverityKey         = attribute.Key("gram.log.severity_text")
+	LogBodyKey             = attribute.Key("gram.log.body")
 	DataDogGitCommitSHAKey = attribute.Key("git.commit.sha")
 	DataDogGitRepoURLKey   = attribute.Key("git.repository_url")
 	DataDogTraceIDKey      = attribute.Key("dd.trace_id")
@@ -100,6 +105,7 @@ const (
 	ErrorIDKey                     = attribute.Key("gram.error.id")
 	FilterExpressionKey            = attribute.Key("gram.filter.src")
 	FlyAppInternalIDKey            = attribute.Key("gram.fly.app_id")
+	FunctionIDKey                  = attribute.Key("gram.function.id")
 	FunctionsBackendKey            = attribute.Key("gram.functions.backend")
 	FunctionsManifestVersionKey    = attribute.Key("gram.functions.manifest_version")
 	FunctionsRunnerImageKey        = attribute.Key("gram.functions.runner_image")
@@ -178,6 +184,39 @@ const (
 
 	RetryAttemptKey = attribute.Key("retry.attempt")
 	RetryWaitKey    = attribute.Key("retry.wait")
+
+	// GenAI semantic convention keys (OTel GenAI semconv - experimental)
+	// See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
+	GenAIOperationNameKey         = semconv.GenAIOperationNameKey
+	GenAIProviderNameKey          = semconv.GenAIProviderNameKey
+	GenAIRequestModelKey          = semconv.GenAIRequestModelKey
+	GenAIResponseModelKey         = semconv.GenAIResponseModelKey
+	GenAIResponseIDKey            = semconv.GenAIResponseIDKey
+	GenAIResponseFinishReasonsKey = semconv.GenAIResponseFinishReasonsKey
+	GenAIConversationIDKey        = semconv.GenAIConversationIDKey
+	GenAIUsageInputTokensKey      = semconv.GenAIUsageInputTokensKey
+	GenAIUsageOutputTokensKey     = semconv.GenAIUsageOutputTokensKey
+
+	// Additional GenAI semconv keys for request parameters
+	GenAIRequestTemperatureKey = semconv.GenAIRequestTemperatureKey
+	GenAIRequestMaxTokensKey   = semconv.GenAIRequestMaxTokensKey
+	GenAIRequestTopPKey        = semconv.GenAIRequestTopPKey
+
+	// GenAI semconv keys for tool calling
+	GenAIToolCallIDKey      = semconv.GenAIToolCallIDKey
+	GenAIToolNameKey        = semconv.GenAIToolNameKey
+	GenAIToolTypeKey        = semconv.GenAIToolTypeKey
+	GenAIToolDescriptionKey = semconv.GenAIToolDescriptionKey
+
+	// GenAI semconv keys for messages (opt-in due to PII concerns)
+	GenAIInputMessagesKey      = semconv.GenAIInputMessagesKey
+	GenAIOutputMessagesKey     = semconv.GenAIOutputMessagesKey
+	GenAISystemInstructionsKey = semconv.GenAISystemInstructionsKey
+
+	// Custom GenAI keys not in official semconv (yet)
+	GenAIToolCallsKey         = attribute.Key("gen_ai.tool.calls")         // Array of tool calls
+	GenAIUsageTotalTokensKey  = attribute.Key("gen_ai.usage.total_tokens") // Total tokens (input + output)
+	GenAIConversationDuration = attribute.Key("gen_ai.conversation.duration")
 )
 
 const (
@@ -286,6 +325,9 @@ func SlogURLOriginal(v string) slog.Attr      { return slog.String(string(URLOri
 
 func UserID(v string) attribute.KeyValue { return UserIDKey.String(v) }
 func SlogUserID(v string) slog.Attr      { return slog.String(string(UserIDKey), v) }
+
+func ExternalUserID(v string) attribute.KeyValue { return ExternalUserIDKey.String(v) }
+func SlogExternalUserID(v string) slog.Attr      { return slog.String(string(ExternalUserIDKey), v) }
 
 func Actual(v any) attribute.KeyValue { return ActualKey.String(fmt.Sprintf("%v", v)) }
 func SlogActual(v any) slog.Attr      { return slog.Any(string(ActualKey), v) }
@@ -397,6 +439,9 @@ func DeploymentFunctionsSlug[V ~string](v V) attribute.KeyValue {
 func SlogDeploymentFunctionsSlug[V ~string](v V) slog.Attr {
 	return slog.String(string(DeploymentFunctionsSlugKey), string(v))
 }
+
+func FunctionID(v string) attribute.KeyValue { return FunctionIDKey.String(v) }
+func SlogFunctionID(v string) slog.Attr      { return slog.String(string(FunctionIDKey), v) }
 
 func DeploymentOpenAPIID(v string) attribute.KeyValue { return DeploymentOpenAPIIDKey.String(v) }
 func SlogDeploymentOpenAPIID(v string) slog.Attr {
@@ -767,3 +812,119 @@ func SlogRetryAttempt(v int) slog.Attr      { return slog.Int(string(RetryAttemp
 
 func RetryWait(v time.Duration) attribute.KeyValue { return RetryWaitKey.String(v.String()) }
 func SlogRetryWait(v time.Duration) slog.Attr      { return slog.Duration(string(RetryWaitKey), v) }
+
+// GenAI semantic convention helpers
+
+func GenAIOperationName(v string) attribute.KeyValue { return GenAIOperationNameKey.String(v) }
+func SlogGenAIOperationName(v string) slog.Attr {
+	return slog.String(string(GenAIOperationNameKey), v)
+}
+
+func GenAIProviderName(v string) attribute.KeyValue { return GenAIProviderNameKey.String(v) }
+func SlogGenAIProviderName(v string) slog.Attr {
+	return slog.String(string(GenAIProviderNameKey), v)
+}
+
+func GenAIRequestModel(v string) attribute.KeyValue { return GenAIRequestModelKey.String(v) }
+func SlogGenAIRequestModel(v string) slog.Attr {
+	return slog.String(string(GenAIRequestModelKey), v)
+}
+
+func GenAIResponseModel(v string) attribute.KeyValue { return GenAIResponseModelKey.String(v) }
+func SlogGenAIResponseModel(v string) slog.Attr {
+	return slog.String(string(GenAIResponseModelKey), v)
+}
+
+func GenAIResponseID(v string) attribute.KeyValue { return GenAIResponseIDKey.String(v) }
+func SlogGenAIResponseID(v string) slog.Attr      { return slog.String(string(GenAIResponseIDKey), v) }
+
+func GenAIResponseFinishReasons(v []string) attribute.KeyValue {
+	return GenAIResponseFinishReasonsKey.StringSlice(v)
+}
+func SlogGenAIResponseFinishReasons(v []string) slog.Attr {
+	return slog.Any(string(GenAIResponseFinishReasonsKey), v)
+}
+
+func GenAIConversationID(v string) attribute.KeyValue { return GenAIConversationIDKey.String(v) }
+func SlogGenAIConversationID(v string) slog.Attr {
+	return slog.String(string(GenAIConversationIDKey), v)
+}
+
+func GenAIUsageInputTokens(v int) attribute.KeyValue { return GenAIUsageInputTokensKey.Int(v) }
+func SlogGenAIUsageInputTokens(v int) slog.Attr      { return slog.Int(string(GenAIUsageInputTokensKey), v) }
+
+func GenAIUsageOutputTokens(v int) attribute.KeyValue { return GenAIUsageOutputTokensKey.Int(v) }
+func SlogGenAIUsageOutputTokens(v int) slog.Attr {
+	return slog.Int(string(GenAIUsageOutputTokensKey), v)
+}
+
+func GenAIUsageTotalTokens(v int) attribute.KeyValue { return GenAIUsageTotalTokensKey.Int(v) }
+func SlogGenAIUsageTotalTokens(v int) slog.Attr      { return slog.Int(string(GenAIUsageTotalTokensKey), v) }
+
+func GenAIRequestTemperature(v float64) attribute.KeyValue {
+	return GenAIRequestTemperatureKey.Float64(v)
+}
+func SlogGenAIRequestTemperature(v float64) slog.Attr {
+	return slog.Float64(string(GenAIRequestTemperatureKey), v)
+}
+
+func GenAIRequestMaxTokens(v int) attribute.KeyValue { return GenAIRequestMaxTokensKey.Int(v) }
+func SlogGenAIRequestMaxTokens(v int) slog.Attr      { return slog.Int(string(GenAIRequestMaxTokensKey), v) }
+
+func GenAIRequestTopP(v float64) attribute.KeyValue { return GenAIRequestTopPKey.Float64(v) }
+func SlogGenAIRequestTopP(v float64) slog.Attr      { return slog.Float64(string(GenAIRequestTopPKey), v) }
+
+func GenAIToolCallID(v string) attribute.KeyValue { return GenAIToolCallIDKey.String(v) }
+func SlogGenAIToolCallID(v string) slog.Attr      { return slog.String(string(GenAIToolCallIDKey), v) }
+
+func GenAIToolName(v string) attribute.KeyValue { return GenAIToolNameKey.String(v) }
+func SlogGenAIToolName(v string) slog.Attr      { return slog.String(string(GenAIToolNameKey), v) }
+
+func GenAIToolType(v string) attribute.KeyValue { return GenAIToolTypeKey.String(v) }
+func SlogGenAIToolType(v string) slog.Attr      { return slog.String(string(GenAIToolTypeKey), v) }
+
+func GenAIToolDescription(v string) attribute.KeyValue { return GenAIToolDescriptionKey.String(v) }
+func SlogGenAIToolDescription(v string) slog.Attr {
+	return slog.String(string(GenAIToolDescriptionKey), v)
+}
+
+func GenAIToolCalls(v string) attribute.KeyValue { return GenAIToolCallsKey.String(v) }
+func SlogGenAIToolCalls(v string) slog.Attr      { return slog.String(string(GenAIToolCallsKey), v) }
+
+func GenAIInputMessages(v string) attribute.KeyValue { return GenAIInputMessagesKey.String(v) }
+func SlogGenAIInputMessages(v string) slog.Attr {
+	return slog.String(string(GenAIInputMessagesKey), v)
+}
+
+func GenAIOutputMessages(v string) attribute.KeyValue { return GenAIOutputMessagesKey.String(v) }
+func SlogGenAIOutputMessages(v string) slog.Attr {
+	return slog.String(string(GenAIOutputMessagesKey), v)
+}
+
+func GenAISystemInstructions(v string) attribute.KeyValue {
+	return GenAISystemInstructionsKey.String(v)
+}
+func SlogGenAISystemInstructions(v string) slog.Attr {
+	return slog.String(string(GenAISystemInstructionsKey), v)
+}
+
+func GenAIConversationDurationMs(v float64) attribute.KeyValue {
+	return GenAIConversationDuration.Float64(v)
+}
+func SlogGenAIConversationDurationMs(v float64) slog.Attr {
+	return slog.Float64(string(GenAIConversationDuration), v)
+}
+
+func TimeUnixNano(v int64) attribute.KeyValue { return TimeUnixNanoKey.Int64(v) }
+func SlogTimeUnixNano(v int64) slog.Attr      { return slog.Int64(string(TimeUnixNanoKey), v) }
+
+func ObservedTimeUnixNano(v int64) attribute.KeyValue { return ObservedTimeUnixNanoKey.Int64(v) }
+func SlogObservedTimeUnixNano(v int64) slog.Attr {
+	return slog.Int64(string(ObservedTimeUnixNanoKey), v)
+}
+
+func LogSeverityText(v string) attribute.KeyValue { return LogSeverityKey.String(v) }
+func SlogLogSeverityText(v string) slog.Attr      { return slog.String(string(LogSeverityKey), v) }
+
+func LogBody(v string) attribute.KeyValue { return LogBodyKey.String(v) }
+func SlogLogBody(v string) slog.Attr      { return slog.String(string(LogBodyKey), v) }

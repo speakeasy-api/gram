@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
@@ -69,6 +70,7 @@ type Service struct {
 	fallbackUsageTracker FallbackModelUsageTracker
 	chatTitleGenerator   ChatTitleGenerator
 	posthog              *posthog.Posthog
+	telemetryProvider    telemetry.ToolMetricsProvider
 }
 
 func NewService(
@@ -81,6 +83,7 @@ func NewService(
 	fallbackUsageTracker FallbackModelUsageTracker,
 	chatTitleGenerator ChatTitleGenerator,
 	posthog *posthog.Posthog,
+	telemetryProvider telemetry.ToolMetricsProvider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
@@ -97,6 +100,7 @@ func NewService(
 		fallbackUsageTracker: fallbackUsageTracker,
 		chatTitleGenerator:   chatTitleGenerator,
 		posthog:              posthog,
+		telemetryProvider:    telemetryProvider,
 	}
 }
 
@@ -430,6 +434,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			usageSet:           false,
 			isFirstMessage:     chatResult.IsFirstMessage,
 			chatTitleGenerator: s.chatTitleGenerator,
+			// GenAI telemetry fields
+			telemetryProvider: s.telemetryProvider,
+			userID:            userID,
+			externalUserID:    authCtx.ExternalUserID,
+			startTime:         time.Now(),
 		}
 	}
 
@@ -680,6 +689,11 @@ type responseCaptor struct {
 	// Title generation
 	isFirstMessage     bool
 	chatTitleGenerator ChatTitleGenerator
+	// GenAI telemetry
+	telemetryProvider telemetry.ToolMetricsProvider
+	userID            string
+	externalUserID    string
+	startTime         time.Time // Track request start time for duration calculation
 }
 
 func (r *responseCaptor) WriteHeader(statusCode int) {
@@ -778,6 +792,9 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 				r.logger.WarnContext(r.ctx, "failed to schedule chat title generation", attr.SlogError(err))
 			}
 		}
+
+		// Emit GenAI telemetry for observability
+		r.emitGenAITelemetry(toolCallsJSON)
 	}
 
 	n, err := r.ResponseWriter.Write(b)
@@ -862,4 +879,52 @@ func (r *responseCaptor) processLine(line string) {
 			r.logger.ErrorContext(r.ctx, "failed to parse streaming chunk", attr.SlogError(err))
 		}
 	}
+}
+
+// emitGenAITelemetry emits GenAI telemetry to ClickHouse for observability.
+func (r *responseCaptor) emitGenAITelemetry(toolCallsJSON []byte) {
+	if r.telemetryProvider == nil {
+		return
+	}
+
+	duration := float64(time.Since(r.startTime).Seconds())
+
+	// Build attributes map. Column-mapped keys are extracted to dedicated columns
+	// but remain in the attributes JSON. Resource attributes are auto-partitioned
+	// based on telemetry.ResourceAttributeKeys.
+	attrs := map[attr.Key]any{
+		// Column-mapped keys
+		attr.ProjectIDKey:   r.projectID.String(),
+		attr.ResourceURNKey: "agents:chat:completion",
+		attr.LogBodyKey: fmt.Sprintf("LLM chat completion: model=%s, input_tokens=%d, output_tokens=%d",
+			r.model, r.usage.PromptTokens, r.usage.CompletionTokens),
+
+		// GenAI semantic convention attributes
+		attr.GenAIOperationNameKey:     telemetry.GenAIOperationChat,
+		attr.GenAIRequestModelKey:      r.model,
+		attr.GenAIResponseModelKey:     r.model,
+		attr.GenAIUsageInputTokensKey:  r.usage.PromptTokens,
+		attr.GenAIUsageOutputTokensKey: r.usage.CompletionTokens,
+		attr.GenAIUsageTotalTokensKey:  r.usage.TotalTokens,
+		attr.GenAIConversationIDKey:    r.chatID.String(),
+		attr.GenAIConversationDuration: duration,
+	}
+
+	if r.messageID != "" {
+		attrs[attr.GenAIResponseIDKey] = r.messageID
+	}
+	if r.finishReason != nil {
+		attrs[attr.GenAIResponseFinishReasonsKey] = []string{*r.finishReason}
+	}
+	if len(toolCallsJSON) > 0 {
+		attrs[attr.GenAIToolCallsKey] = string(toolCallsJSON)
+	}
+	if r.userID != "" {
+		attrs[attr.UserIDKey] = r.userID
+	}
+	if r.externalUserID != "" {
+		attrs[attr.ExternalUserIDKey] = r.externalUserID
+	}
+
+	telemetry.EmitTelemetryLog(r.ctx, r.logger, r.telemetryProvider, attrs)
 }
