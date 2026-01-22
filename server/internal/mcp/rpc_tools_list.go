@@ -126,32 +126,21 @@ func unfoldExternalMCPTools(ctx context.Context, logger *slog.Logger, tools []*t
 	var result []*toolListEntry
 
 	for _, tool := range tools {
-		if tool.ExternalMcpToolDefinition == nil {
-			continue
-		}
-
-		proxy := tool.ExternalMcpToolDefinition
-
-		// For non-proxy tools, we already have the tool info
 		if !conv.IsProxyTool(tool) {
-			result = append(result, &toolListEntry{
-				Name:        proxy.Name,
-				Description: proxy.Description,
-				InputSchema: json.RawMessage(proxy.Schema),
-				Meta:        nil,
-			})
 			continue
 		}
+
+		externalMcpTool := tool.ExternalMcpToolDefinition
 
 		var opts *externalmcp.ClientOptions
-		if proxy.RequiresOauth && oauthToken != "" {
+		if externalMcpTool.RequiresOauth && oauthToken != "" {
 			opts = &externalmcp.ClientOptions{
 				Authorization: "Bearer " + oauthToken,
-				TransportType: externalmcptypes.TransportType(proxy.TransportType),
+				TransportType: externalmcptypes.TransportType(externalMcpTool.TransportType),
 			}
 		}
 
-		mcpClient, err := externalmcp.NewClient(ctx, logger, proxy.RemoteURL, externalmcptypes.TransportType(proxy.TransportType), opts)
+		mcpClient, err := externalmcp.NewClient(ctx, logger, externalMcpTool.RemoteURL, externalmcptypes.TransportType(externalMcpTool.TransportType), opts)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP").Log(ctx, logger)
 		}
@@ -165,7 +154,7 @@ func unfoldExternalMCPTools(ctx context.Context, logger *slog.Logger, tools []*t
 
 		for _, extTool := range externalTools {
 			result = append(result, &toolListEntry{
-				Name:        proxy.Slug + "--" + extTool.Name,
+				Name:        externalMcpTool.Slug + "--" + extTool.Name,
 				Description: extTool.Description,
 				InputSchema: extTool.Schema,
 				Meta:        nil,

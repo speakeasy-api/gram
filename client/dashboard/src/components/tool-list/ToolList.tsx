@@ -9,7 +9,6 @@ import { useLatestDeployment } from "@/hooks/toolTypes";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
 import { Tool, Toolset, isHttpTool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
-import { useListMCPCatalog } from "@gram/client/react-query";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
 import {
   ChevronDown,
@@ -123,6 +122,8 @@ function groupTools(
   const customTools: Tool[] = [];
   const higherOrderTools: Tool[] = [];
 
+  console.log("🐋🐋🐋🐋🐋 TOOLS", tools);
+
   tools.forEach((tool) => {
     if (tool.type === "http") {
       let groupKey: string | undefined;
@@ -160,11 +161,6 @@ function groupTools(
       const groupKey = tool.registryServerName;
       const existing = registryServerNameToTools.get(groupKey) || [];
       registryServerNameToTools.set(groupKey, [...existing, tool]);
-      // if (tool.icon) {
-      //   registryServerNameToIcon.set(groupKey, tool.icon);
-      // } else {
-      //   registryServerNameToIcon.set(groupKey, "mcp");
-      // }
     } else {
       // Everything else (prompts without higher order, etc.)
       customTools.push(tool);
@@ -563,14 +559,6 @@ export function ToolList({
   onToolClick,
 }: ToolListProps) {
   const { data: deployment } = useLatestDeployment();
-  const { data: catalog } = useListMCPCatalog();
-
-  const registryServerIdToIcon = useMemo(() => {
-    return catalog?.servers.reduce((acc, server) => {
-      acc[server.] server.icon;
-      return acc;
-    }, {} as Record<string, string>);
-  }, [catalog]);
 
   const documentIdToName = useMemo(() => {
     return deployment?.deployment?.openapiv3Assets?.reduce(

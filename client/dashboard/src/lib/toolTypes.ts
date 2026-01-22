@@ -28,7 +28,9 @@ export type Tool =
   | ({ type: "http" } & HTTPToolDefinition)
   | ({ type: "prompt" } & PromptTemplate)
   | ({ type: "function" } & FunctionToolDefinition)
-  | ({ type: "external-mcp" } & ExternalMCPToolDefinition);
+  | ({ type: "external-mcp" } & ExternalMCPToolDefinition & {
+        isProxy: boolean;
+      });
 
 export type ToolGroup = {
   key: string;
@@ -49,7 +51,11 @@ export const asTool = (tool: GeneratedTool): Tool | undefined => {
     return { type: "function", ...tool.functionToolDefinition };
   } else if (tool.externalMcpToolDefinition) {
     if (tool.externalMcpToolDefinition.type !== "proxy") {
-      return { type: "external-mcp", ...tool.externalMcpToolDefinition };
+      return {
+        ...tool.externalMcpToolDefinition, // Has to be done in this order because externalMcpToolDefinition also has a type field
+        type: "external-mcp",
+        isProxy: tool.externalMcpToolDefinition.type === "proxy",
+      };
     } else {
       return undefined; // Omit external MCP proxy tools, as they require special handling
     }

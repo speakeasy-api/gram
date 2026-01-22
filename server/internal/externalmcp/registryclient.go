@@ -133,10 +133,6 @@ type serverDetailsJSON struct {
 	Remotes     []serverRemoteBasic `json:"remotes"`
 }
 
-type remoteMetadata struct {
-	Tools []serverTool `json:"tools"`
-}
-
 type serverTool struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
