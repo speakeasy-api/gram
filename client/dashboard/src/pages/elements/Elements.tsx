@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Dialog } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TextArea } from "@/components/ui/textarea";
@@ -187,9 +188,10 @@ export default function ChatElements() {
   const { theme: appTheme } = useMoonshineConfig();
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [previewKey, setPreviewKey] = useState(0);
-  const [rightPanelTab, setRightPanelTab] = useState<"preview" | "install">(
-    "preview",
+  const [installMethod, setInstallMethod] = useState<"manual" | "hosted">(
+    "manual",
   );
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
 
   const [config, setConfig] = useState<ElementsFormConfig>(defaultConfig);
   const [openSection, setOpenSection] = useState<string | null>("connection");
@@ -321,26 +323,24 @@ export default function ChatElements() {
           <Page.Section.Description>
             Embeddable AI chat experience for your applications
           </Page.Section.Description>
-          <Page.Section.CTA>
-            <Tabs
-              value={rightPanelTab}
-              onValueChange={(v) =>
-                setRightPanelTab(v as "preview" | "install")
-              }
-            >
-              <TabsList>
-                <TabsTrigger value="preview">Preview</TabsTrigger>
-                <TabsTrigger value="install">Installation</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </Page.Section.CTA>
           <Page.Section.Body>
-            <div className="mt-3">
-              {/* Preview Mode */}
-              <div
-                className={`${rightPanelTab === "preview" ? "block" : "hidden"}`}
+            {/* Top-level tabs: Manual vs Hosted */}
+            <div className="mt-3 border border-border rounded-lg p-0 overflow-hidden">
+              <Tabs
+                value={installMethod}
+                onValueChange={(v) => setInstallMethod(v as "manual" | "hosted")}
+                className="gap-0"
               >
-                <div className="flex gap-12 min-h-fit">
+                <div className="w-full bg-stone-200 dark:bg-stone-800 rounded-t-lg py-2 px-4">
+                  <TabsList className="rounded-b-none bg-transparent p-0 h-auto">
+                    <TabsTrigger value="manual">Manual installation</TabsTrigger>
+                    <TabsTrigger value="hosted">Hosted</TabsTrigger>
+                  </TabsList>
+                </div>
+
+              {/* Manual Installation Tab Content */}
+              <div className={installMethod === "manual" ? "block" : "hidden"}>
+                <div className="flex gap-12 min-h-fit px-4 py-4">
                   {/* Config Panel */}
 
                   <div className="w-1/3 h-full overflow-y-auto pr-4 space-y-6">
@@ -685,6 +685,15 @@ export default function ChatElements() {
                         }
                       />
                     </ConfigSection>
+
+                    {/* Setup Button */}
+                    <Button
+                      className="w-full"
+                      onClick={() => setShowInstallGuide(true)}
+                    >
+                      <ArrowRight className="h-4 w-4 mr-2" />
+                      Setup
+                    </Button>
                   </div>
 
                   {/* Preview Panel */}
@@ -695,7 +704,7 @@ export default function ChatElements() {
                         size="sm"
                         onClick={refreshPreview}
                         className={cn(
-                          "absolute top-6 right-6 z-10 h-8 px-2 bg-background/80 backdrop-blur-sm hover:bg-background",
+                          "absolute top-6 right-6 z-10 h-8 px-2 bg-foreground/[0.7] text-background backdrop-blur-sm hover:bg-foreground/80 hover:text-background",
                           config.variant === "sidecar" && "left-6 right-auto",
                         )}
                       >
@@ -713,19 +722,36 @@ export default function ChatElements() {
                 </div>
               </div>
 
-              {/* Installation Mode */}
-              <div
-                className={`${rightPanelTab === "install" ? "block" : "hidden"}`}
-              >
-                <InstallationGuide
-                  config={config}
-                  projectSlug={projectSlug ?? "your-project"}
-                />
+              {/* Hosted Tab Content */}
+              <div className={installMethod === "hosted" ? "block px-4 py-4" : "hidden"}>
+                <div className="flex flex-col items-center justify-center h-[700px] text-center">
+                  <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                    <Server className="w-8 h-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">Coming Soon</h3>
+                  <p className="text-muted-foreground max-w-md">
+                    Hosted Elements will allow you to deploy chat experiences without any code changes. Stay tuned!
+                  </p>
+                </div>
               </div>
+              </Tabs>
             </div>
           </Page.Section.Body>
         </Page.Section>
       </Page.Body>
+
+      {/* Installation Guide Dialog */}
+      <Dialog open={showInstallGuide} onOpenChange={setShowInstallGuide}>
+        <Dialog.Content className="max-w-6xl sm:max-w-6xl max-h-[90vh] overflow-y-auto">
+          <Dialog.Header>
+            <Dialog.Title>Setup Guide</Dialog.Title>
+          </Dialog.Header>
+          <InstallationGuide
+            config={config}
+            projectSlug={projectSlug ?? "your-project"}
+          />
+        </Dialog.Content>
+      </Dialog>
     </Page>
   );
 }
@@ -785,7 +811,7 @@ function ElementsPreview({
         style={{
           height: "100%",
           width: "100%",
-          padding: "40px",
+          padding: "24px",
           boxSizing: "border-box",
           ...gradientStyle,
         }}
