@@ -57,10 +57,6 @@ type ChatTitleGenerator interface {
 	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID string) error
 }
 
-// GenAITelemetryProvider defines the interface for emitting GenAI telemetry.
-// This matches the telemetry.ToolMetricsProvider interface.
-type GenAITelemetryProvider = telemetry.ToolMetricsProvider
-
 type Service struct {
 	auth                 *auth.Auth
 	repo                 *repo.Queries
@@ -74,7 +70,7 @@ type Service struct {
 	fallbackUsageTracker FallbackModelUsageTracker
 	chatTitleGenerator   ChatTitleGenerator
 	posthog              *posthog.Posthog
-	telemetryProvider    GenAITelemetryProvider
+	telemetryProvider    telemetry.ToolMetricsProvider
 }
 
 func NewService(
@@ -87,7 +83,7 @@ func NewService(
 	fallbackUsageTracker FallbackModelUsageTracker,
 	chatTitleGenerator ChatTitleGenerator,
 	posthog *posthog.Posthog,
-	telemetryProvider GenAITelemetryProvider,
+	telemetryProvider telemetry.ToolMetricsProvider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
@@ -694,7 +690,7 @@ type responseCaptor struct {
 	isFirstMessage     bool
 	chatTitleGenerator ChatTitleGenerator
 	// GenAI telemetry
-	telemetryProvider GenAITelemetryProvider
+	telemetryProvider telemetry.ToolMetricsProvider
 	userID            string
 	externalUserID    string
 	startTime         time.Time // Track request start time for duration calculation
