@@ -7,6 +7,7 @@ import {
 import { useMCPTools } from '@/hooks/useMCPTools'
 import { useToolApproval } from '@/hooks/useToolApproval'
 import { getApiUrl } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { initErrorTracking, trackError } from '@/lib/errorTracking'
 import { MODELS } from '@/lib/models'
 import {
@@ -459,7 +460,12 @@ const ElementsProviderWithHistory = ({
       <HistoryProvider>
         <ElementsContext.Provider value={contextValue}>
           <div
-            className={`${ROOT_SELECTOR}${contextValue.config.variant === 'standalone' || contextValue.config.variant === 'sidecar' ? 'h-full' : ''}`}
+            className={cn(
+              ROOT_SELECTOR,
+              (contextValue?.config.variant === 'standalone' ||
+                contextValue?.config.variant === 'sidecar') &&
+                'h-full'
+            )}
           >
             {children}
           </div>
@@ -498,7 +504,12 @@ const ElementsProviderWithoutHistory = ({
     <AssistantRuntimeProvider runtime={runtime}>
       <ElementsContext.Provider value={contextValue}>
         <div
-          className={`${ROOT_SELECTOR}${contextValue.config.variant === 'standalone' || contextValue.config.variant === 'sidecar' ? 'h-full' : ''}`}
+          className={cn(
+            ROOT_SELECTOR,
+            (contextValue?.config.variant === 'standalone' ||
+              contextValue?.config.variant === 'sidecar') &&
+              'h-full'
+          )}
         >
           {children}
         </div>
