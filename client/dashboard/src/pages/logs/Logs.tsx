@@ -16,7 +16,7 @@ import {
   useListToolsets,
 } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Button, Icon, useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { XIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -35,14 +35,15 @@ export default function LogsPage() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const client = useGramContext();
+  const { theme } = useMoonshineConfig();
 
   const gramMcpConfig = useGramMcpConfig();
 
   const logsElementsConfig: ElementsConfig = {
     ...gramMcpConfig,
-    variant: "sidecar",
+    variant: "standalone",
     welcome: {
-      title: "Logs Chat",
+      title: "Explore Logs",
       subtitle: "Ask me about your logs! Powered by Elements + Gram MCP",
       suggestions: [
         {
@@ -50,7 +51,15 @@ export default function LogsPage() {
           label: "Summarize failing tool calls",
           prompt: "Summarize failing tool calls",
         },
+        {
+          title: "Visualize top tool calls",
+          label: "Plot tool call counts",
+          prompt: "Plot a chart of the top tool calls and their counts",
+        },
       ],
+    },
+    theme: {
+      colorScheme: theme === "dark" ? "dark" : "light",
     },
   };
 
@@ -154,25 +163,24 @@ export default function LogsPage() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs />
+        <Page.Header.Breadcrumbs fullWidth />
       </Page.Header>
-      <Page.Body>
-        <Page.Section>
-          {null}
-          <Page.Section.Body>
-            <div className="flex flex-col gap-4">
-              {/* Search Row */}
-              <div className="flex items-center gap-4">
-                <SearchBar
-                  value={searchInput}
-                  onChange={setSearchInput}
-                  placeholder="Search by tool URN"
-                  className="w-1/3"
-                />
-              </div>
+      <Page.Body fullWidth fullHeight className="!p-0">
+        <div className="flex flex-row h-full w-full">
+          {/* Logs Table */}
+          <div className="flex flex-col gap-4 w-1/2 min-w-0 p-8">
+                {/* Search Row */}
+                <div className="flex items-center gap-4">
+                  <SearchBar
+                    value={searchInput}
+                    onChange={setSearchInput}
+                    placeholder="Search by tool URN"
+                    className="w-1/3"
+                  />
+                </div>
 
-              {/* Trace list container */}
-              <div className="border border-border rounded-lg overflow-hidden w-full flex flex-col relative bg-surface-default">
+                {/* Trace list container */}
+                <div className="border border-border rounded-lg overflow-hidden w-full flex flex-col flex-1 relative bg-surface-default">
                 {/* Loading indicator */}
                 {isFetching && allTraces.length > 0 && (
                   <div className="absolute top-0 left-0 right-0 h-1 bg-primary-default/20 z-20">
@@ -191,8 +199,7 @@ export default function LogsPage() {
                 {/* Scrollable trace list */}
                 <div
                   ref={containerRef}
-                  className="overflow-y-auto"
-                  style={{ maxHeight: "calc(100vh - 280px)" }}
+                  className="overflow-y-auto flex-1"
                   onScroll={handleScroll}
                 >
                   {error ? (
@@ -314,9 +321,15 @@ export default function LogsPage() {
                   </div>
                 )}
               </div>
-            </div>
-          </Page.Section.Body>
-        </Page.Section>
+              </div>
+
+          {/* Chat Panel */}
+          <div className="w-1/2 border-l border-border p-8">
+                <GramElementsProvider config={logsElementsConfig}>
+                  <Chat />
+                </GramElementsProvider>
+          </div>
+        </div>
       </Page.Body>
 
       {/* Log Detail Sheet */}
@@ -325,9 +338,6 @@ export default function LogsPage() {
         open={!!selectedLog}
         onOpenChange={(open) => !open && setSelectedLog(null)}
       />
-      <GramElementsProvider config={logsElementsConfig}>
-        <Chat />
-      </GramElementsProvider>
     </Page>
   );
 }

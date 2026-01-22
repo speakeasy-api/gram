@@ -7,6 +7,7 @@ import { SyntaxHighlighterProps } from '@assistant-ui/react-markdown'
 import { AlertCircleIcon } from 'lucide-react'
 import { FC, useEffect, useMemo, useRef, useState } from 'react'
 import { parse, View, Warn } from 'vega'
+import { expressionInterpreter } from 'vega-interpreter'
 
 export const ChartRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -56,12 +57,13 @@ export const ChartRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
           viewRef.current = null
         }
 
-        const chart = parse(parsedSpec)
+        const chart = parse(parsedSpec, undefined, { ast: true })
         const view = new View(chart, {
           container: containerRef.current ?? undefined,
           renderer: 'svg',
           hover: true,
           logLevel: Warn,
+          expr: expressionInterpreter,
         })
         viewRef.current = view
 

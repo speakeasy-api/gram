@@ -76,9 +76,10 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
     [config.modal?.dimensions?.expanded]
   )
   const thread = useAssistantState(({ thread }) => thread)
-  const isGenerating = thread.messages.some(
-    (message) => message.status?.type === 'running'
-  )
+  const isGenerating =
+    thread?.messages?.some(
+      (message) => message.status?.type === 'running'
+    ) ?? false
 
   const effectiveWidth = isExpanded
     ? expandedDimensions.width
@@ -166,8 +167,8 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
                   <div className={cn('flex min-w-0 items-center')}>
                     <span
                       className={cn(
-                        'text-md flex items-center gap-2 truncate font-medium',
-                        isGenerating && 'shimmer'
+                        'text-foreground text-md flex items-center gap-2 truncate font-medium',
+                        isGenerating && 'title-shimmer'
                       )}
                     >
                       <span className="truncate">{title}</span>

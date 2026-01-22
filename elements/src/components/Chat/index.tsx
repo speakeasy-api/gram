@@ -11,14 +11,6 @@ interface ChatProps {
   className?: string
 }
 
-function RootWrapper({ children }: { children: React.ReactNode }) {
-  return (
-    <ShadowRoot hostStyle={{ height: 'inherit', width: 'inherit' }}>
-      {children}
-    </ShadowRoot>
-  )
-}
-
 export const Chat = ({ className }: ChatProps) => {
   const { config } = useElements()
 
@@ -27,26 +19,26 @@ export const Chat = ({ className }: ChatProps) => {
       // Standalone variant wraps Thread with ErrorBoundary at this level
       return (
         <ErrorBoundary>
-          <RootWrapper>
+          <ShadowRoot hostStyle={{ height: 'inherit', width: 'inherit' }}>
             <Thread />
-          </RootWrapper>
+          </ShadowRoot>
         </ErrorBoundary>
       )
     case 'sidecar':
       // Sidecar has its own internal ErrorBoundary around Thread
       return (
-        <RootWrapper>
+        <ShadowRoot hostStyle={{ height: 'inherit', width: 'inherit' }}>
           <AssistantSidecar />
-        </RootWrapper>
+        </ShadowRoot>
       )
 
     // If no variant is provided then fallback to the modal
     // Modal has its own internal ErrorBoundary around Thread
     default:
       return (
-        <RootWrapper>
+        <ShadowRoot>
           <AssistantModal className={className} />
-        </RootWrapper>
+        </ShadowRoot>
       )
   }
 }

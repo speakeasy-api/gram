@@ -7,6 +7,20 @@ import { createElementsServerHandlers } from '../src/server'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
+const cspPlugin = (): Plugin => ({
+  name: 'csp-headers',
+  configureServer(server: ViteDevServer) {
+    server.middlewares.use((req, res, next) => {
+      // Strict CSP without unsafe-eval - matches production
+      res.setHeader(
+        'Content-Security-Policy',
+        "script-src 'self' 'wasm-unsafe-eval'"
+      )
+      next()
+    })
+  },
+})
+
 const apiMiddlewarePlugin = (): Plugin => ({
   name: 'chat-api-middleware',
   configureServer(server: ViteDevServer) {
@@ -33,7 +47,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   return {
-    plugins: [react(), tailwindcss(), apiMiddlewarePlugin()],
+    plugins: [react(), tailwindcss(), apiMiddlewarePlugin(), cspPlugin()],
     resolve: {
       alias: {
         '@': resolve(__dirname, '../src'),
