@@ -23,7 +23,9 @@ const (
 	HTTPRequestHeaderUserAgentKey     = attribute.Key("http.request.header.user_agent")
 	HTTPRequestMethodKey              = semconv.HTTPRequestMethodKey
 	HTTPRequestBodyKey                = attribute.Key("http.request.body")
+	HTTPResponseBodyKey               = attribute.Key("http.response.body")
 	HTTPRequestHeadersKey             = attribute.Key("http.request.headers")
+	HTTPResponseHeadersKey            = attribute.Key("http.response.headers")
 	HTTPResponseHeaderContentTypeKey  = attribute.Key("http.response.header.content_type")
 	HTTPResponseStatusCodeKey         = semconv.HTTPResponseStatusCodeKey
 	HTTPResponseOriginalStatusCodeKey = attribute.Key("http.response.original_status_code")
