@@ -76,7 +76,11 @@ export const ShadowRoot = ({
               ref={containerRef}
               className={rootClassName}
               data-radius={config.theme?.radius}
-              style={{ height: '100%', width: '100%' }}
+              style={
+                config.variant === 'standalone'
+                  ? { height: '100%', width: '100%' }
+                  : undefined
+              }
             >
               <PortalContainerProvider containerRef={containerRef}>
                 {children}

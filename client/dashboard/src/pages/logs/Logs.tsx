@@ -16,7 +16,7 @@ import {
   useListToolsets,
 } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Button, Icon, useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { XIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -35,14 +35,15 @@ export default function LogsPage() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const client = useGramContext();
+  const { theme } = useMoonshineConfig();
 
   const gramMcpConfig = useGramMcpConfig();
 
   const logsElementsConfig: ElementsConfig = {
     ...gramMcpConfig,
-    variant: "sidecar",
+    variant: "standalone",
     welcome: {
-      title: "Logs Chat",
+      title: "Explore Logs",
       subtitle: "Ask me about your logs! Powered by Elements + Gram MCP",
       suggestions: [
         {
@@ -50,7 +51,15 @@ export default function LogsPage() {
           label: "Summarize failing tool calls",
           prompt: "Summarize failing tool calls",
         },
+        {
+          title: "Visualize top tool calls",
+          label: "Plot tool call counts",
+          prompt: "Plot a chart of the top tool calls and their counts",
+        },
       ],
+    },
+    theme: {
+      colorScheme: theme === "dark" ? "dark" : "light",
     },
   };
 
@@ -154,169 +163,171 @@ export default function LogsPage() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs />
+        <Page.Header.Breadcrumbs fullWidth />
       </Page.Header>
-      <Page.Body>
-        <Page.Section>
-          {null}
-          <Page.Section.Body>
-            <div className="flex flex-col gap-4">
-              {/* Search Row */}
-              <div className="flex items-center gap-4">
-                <SearchBar
-                  value={searchInput}
-                  onChange={setSearchInput}
-                  placeholder="Search by tool URN"
-                  className="w-1/3"
-                />
+      <Page.Body fullWidth fullHeight className="!p-0">
+        <div className="flex flex-row h-full w-full">
+          {/* Logs Table */}
+          <div className="flex flex-col gap-4 w-1/2 min-w-0 p-8">
+            {/* Search Row */}
+            <div className="flex items-center gap-4">
+              <SearchBar
+                value={searchInput}
+                onChange={setSearchInput}
+                placeholder="Search by tool URN"
+                className="w-1/3"
+              />
+            </div>
+
+            {/* Trace list container */}
+            <div className="border border-border rounded-lg overflow-hidden w-full flex flex-col flex-1 relative bg-surface-default">
+              {/* Loading indicator */}
+              {isFetching && allTraces.length > 0 && (
+                <div className="absolute top-0 left-0 right-0 h-1 bg-primary-default/20 z-20">
+                  <div className="h-full bg-primary-default animate-pulse" />
+                </div>
+              )}
+
+              {/* Header */}
+              <div className="flex items-center gap-3 px-3 py-2.5 bg-surface-secondary-default border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                <div className="shrink-0 w-[150px]">Timestamp</div>
+                <div className="shrink-0 w-5" />
+                <div className="flex-1">Source / Tool</div>
+                <div className="shrink-0 w-16 text-right">Status</div>
               </div>
 
-              {/* Trace list container */}
-              <div className="border border-border rounded-lg overflow-hidden w-full flex flex-col relative bg-surface-default">
-                {/* Loading indicator */}
-                {isFetching && allTraces.length > 0 && (
-                  <div className="absolute top-0 left-0 right-0 h-1 bg-primary-default/20 z-20">
-                    <div className="h-full bg-primary-default animate-pulse" />
-                  </div>
-                )}
-
-                {/* Header */}
-                <div className="flex items-center gap-3 px-3 py-2.5 bg-surface-secondary-default border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  <div className="shrink-0 w-[150px]">Timestamp</div>
-                  <div className="shrink-0 w-5" />
-                  <div className="flex-1">Source / Tool</div>
-                  <div className="shrink-0 w-16 text-right">Status</div>
-                </div>
-
-                {/* Scrollable trace list */}
-                <div
-                  ref={containerRef}
-                  className="overflow-y-auto"
-                  style={{ maxHeight: "calc(100vh - 280px)" }}
-                  onScroll={handleScroll}
-                >
-                  {error ? (
-                    <div className="flex flex-col items-center gap-2 py-12">
-                      <XIcon className="size-6 stroke-destructive-default" />
-                      <span className="text-destructive-default font-medium">
-                        Error loading traces
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        {error instanceof Error
-                          ? error.message
-                          : "An unexpected error occurred"}
-                      </span>
-                    </div>
-                  ) : isLoading ? (
-                    <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
-                      <Icon
-                        name="loader-circle"
-                        className="size-4 animate-spin"
-                      />
-                      <span>Loading traces...</span>
-                    </div>
-                  ) : allTraces.length === 0 ? (
-                    <div className="py-12 text-center text-muted-foreground">
-                      {logsEnabled ? (
-                        searchQuery ? (
-                          "No traces match your search"
-                        ) : (
-                          "No traces found"
-                        )
-                      ) : (
-                        <div className="flex flex-col items-center gap-3">
-                          <span>Logs are disabled for your organization.</span>
-                          <Button
-                            onClick={() => handleSetLogs(true)}
-                            disabled={isMutatingLogs}
-                            size="sm"
-                            variant="secondary"
-                          >
-                            <Button.LeftIcon>
-                              <Icon
-                                name="test-tube-diagonal"
-                                className="size-4"
-                              />
-                            </Button.LeftIcon>
-                            <Button.Text>
-                              {isMutatingLogs ? "Updating Logs" : "Enable Logs"}
-                            </Button.Text>
-                          </Button>
-                          {logsMutationError && (
-                            <span className="text-sm text-destructive-default">
-                              {logsMutationError}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <>
-                      {allTraces.map((trace) => (
-                        <TraceRow
-                          key={trace.traceId}
-                          trace={trace}
-                          isExpanded={expandedTraceId === trace.traceId}
-                          onToggle={() => toggleExpand(trace.traceId)}
-                          onLogClick={handleLogClick}
-                        />
-                      ))}
-
-                      {isFetchingNextPage && (
-                        <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground border-t border-border">
-                          <Icon
-                            name="loader-circle"
-                            className="size-4 animate-spin"
-                          />
-                          <span className="text-sm">
-                            Loading more traces...
-                          </span>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                {/* Footer */}
-                {allTraces.length > 0 && (
-                  <div className="flex items-center justify-between gap-4 px-4 py-2 bg-surface-secondary-default border-t border-border text-sm text-muted-foreground">
-                    <span>
-                      {allTraces.length}{" "}
-                      {allTraces.length === 1 ? "trace" : "traces"}
-                      {hasNextPage && " • Scroll to load more"}
+              {/* Scrollable trace list */}
+              <div
+                ref={containerRef}
+                className="overflow-y-auto flex-1"
+                onScroll={handleScroll}
+              >
+                {error ? (
+                  <div className="flex flex-col items-center gap-2 py-12">
+                    <XIcon className="size-6 stroke-destructive-default" />
+                    <span className="text-destructive-default font-medium">
+                      Error loading traces
                     </span>
+                    <span className="text-sm text-muted-foreground">
+                      {error instanceof Error
+                        ? error.message
+                        : "An unexpected error occurred"}
+                    </span>
+                  </div>
+                ) : isLoading ? (
+                  <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+                    <Icon
+                      name="loader-circle"
+                      className="size-4 animate-spin"
+                    />
+                    <span>Loading traces...</span>
+                  </div>
+                ) : allTraces.length === 0 ? (
+                  <div className="py-12 text-center text-muted-foreground">
                     {logsEnabled ? (
-                      <Button
-                        onClick={() => handleSetLogs(false)}
-                        disabled={isMutatingLogs}
-                        size="sm"
-                        variant="secondary"
-                      >
-                        <Button.Text>
-                          {isMutatingLogs ? "Updating Logs" : "Disable Logs"}
-                        </Button.Text>
-                      </Button>
+                      searchQuery ? (
+                        "No traces match your search"
+                      ) : (
+                        "No traces found"
+                      )
                     ) : (
-                      <Button
-                        onClick={() => handleSetLogs(true)}
-                        disabled={isMutatingLogs}
-                        size="sm"
-                        variant="secondary"
-                      >
-                        <Button.LeftIcon>
-                          <Icon name="test-tube-diagonal" className="size-4" />
-                        </Button.LeftIcon>
-                        <Button.Text>
-                          {isMutatingLogs ? "Updating Logs" : "Enable Logs"}
-                        </Button.Text>
-                      </Button>
+                      <div className="flex flex-col items-center gap-3">
+                        <span>Logs are disabled for your organization.</span>
+                        <Button
+                          onClick={() => handleSetLogs(true)}
+                          disabled={isMutatingLogs}
+                          size="sm"
+                          variant="secondary"
+                        >
+                          <Button.LeftIcon>
+                            <Icon
+                              name="test-tube-diagonal"
+                              className="size-4"
+                            />
+                          </Button.LeftIcon>
+                          <Button.Text>
+                            {isMutatingLogs ? "Updating Logs" : "Enable Logs"}
+                          </Button.Text>
+                        </Button>
+                        {logsMutationError && (
+                          <span className="text-sm text-destructive-default">
+                            {logsMutationError}
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
+                ) : (
+                  <>
+                    {allTraces.map((trace) => (
+                      <TraceRow
+                        key={trace.traceId}
+                        trace={trace}
+                        isExpanded={expandedTraceId === trace.traceId}
+                        onToggle={() => toggleExpand(trace.traceId)}
+                        onLogClick={handleLogClick}
+                      />
+                    ))}
+
+                    {isFetchingNextPage && (
+                      <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground border-t border-border">
+                        <Icon
+                          name="loader-circle"
+                          className="size-4 animate-spin"
+                        />
+                        <span className="text-sm">Loading more traces...</span>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
+
+              {/* Footer */}
+              {allTraces.length > 0 && (
+                <div className="flex items-center justify-between gap-4 px-4 py-2 bg-surface-secondary-default border-t border-border text-sm text-muted-foreground">
+                  <span>
+                    {allTraces.length}{" "}
+                    {allTraces.length === 1 ? "trace" : "traces"}
+                    {hasNextPage && " • Scroll to load more"}
+                  </span>
+                  {logsEnabled ? (
+                    <Button
+                      onClick={() => handleSetLogs(false)}
+                      disabled={isMutatingLogs}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      <Button.Text>
+                        {isMutatingLogs ? "Updating Logs" : "Disable Logs"}
+                      </Button.Text>
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => handleSetLogs(true)}
+                      disabled={isMutatingLogs}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      <Button.LeftIcon>
+                        <Icon name="test-tube-diagonal" className="size-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>
+                        {isMutatingLogs ? "Updating Logs" : "Enable Logs"}
+                      </Button.Text>
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
-          </Page.Section.Body>
-        </Page.Section>
+          </div>
+
+          {/* Chat Panel */}
+          <div className="w-1/2 border-l border-border p-8">
+            <GramElementsProvider config={logsElementsConfig}>
+              <Chat />
+            </GramElementsProvider>
+          </div>
+        </div>
       </Page.Body>
 
       {/* Log Detail Sheet */}
@@ -325,9 +336,6 @@ export default function LogsPage() {
         open={!!selectedLog}
         onOpenChange={(open) => !open && setSelectedLog(null)}
       />
-      <GramElementsProvider config={logsElementsConfig}>
-        <Chat />
-      </GramElementsProvider>
     </Page>
   );
 }
