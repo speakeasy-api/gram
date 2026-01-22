@@ -42,7 +42,7 @@ func EmitTelemetryLog(
 	ctx context.Context,
 	logger *slog.Logger,
 	provider ToolMetricsProvider,
-	attrs map[string]any,
+	attrs map[attr.Key]any,
 ) {
 	if provider == nil {
 		return
@@ -78,22 +78,22 @@ func EmitTelemetryLog(
 }
 
 // buildTelemetryLogParams constructs InsertTelemetryLogParams from attributes.
-func buildTelemetryLogParams(attrs map[string]any) (*repo.InsertTelemetryLogParams, error) {
+func buildTelemetryLogParams(attrs map[attr.Key]any) (*repo.InsertTelemetryLogParams, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate telemetry log id")
 	}
 
 	observedTimeUnixNano := time.Now().UnixNano()
-	attrs[string(attr.ObservedTimeUnixNanoKey)] = observedTimeUnixNano
+	attrs[attr.ObservedTimeUnixNanoKey] = observedTimeUnixNano
 
 	// If time is present in attrs, use that; otherwise use the observed time
 	var timeUnixNano int64
-	if tun, ok := attrs[string(attr.TimeUnixNanoKey)]; ok {
+	if tun, ok := attrs[attr.TimeUnixNanoKey]; ok {
 		timeUnixNano = getInt64(tun)
 	} else {
 		timeUnixNano = observedTimeUnixNano
-		attrs[string(attr.TimeUnixNanoKey)] = observedTimeUnixNano
+		attrs[attr.TimeUnixNanoKey] = observedTimeUnixNano
 	}
 
 	// Default severity to INFO if not provided
@@ -104,7 +104,7 @@ func buildTelemetryLogParams(attrs map[string]any) (*repo.InsertTelemetryLogPara
 	}
 
 	// Manually add service name, as it's always going to be gram server
-	attrs[string(attr.ServiceNameKey)] = serviceName
+	attrs[attr.ServiceNameKey] = serviceName
 
 	spanAttrs, resourceAttrs, err := parseAttributes(attrs)
 	if err != nil {
@@ -136,14 +136,14 @@ func buildTelemetryLogParams(attrs map[string]any) (*repo.InsertTelemetryLogPara
 
 // parseAttributes splits attributes into resource and span attributes
 // based on ResourceAttributeKeys.
-func parseAttributes(attrs map[string]any) (spanAttrsJSON, resourceAttrsJSON string, err error) {
-	spanAttrs := make(map[string]any)
-	resourceAttrs := make(map[string]any)
+func parseAttributes(attrs map[attr.Key]any) (spanAttrsJSON, resourceAttrsJSON string, err error) {
+	spanAttrs := make(map[attr.Key]any)
+	resourceAttrs := make(map[attr.Key]any)
 
 	for k, v := range attrs {
-		if k == string(attr.GenAIRequestModelKey) {
+		if k == attr.GenAIRequestModelKey {
 			if model, ok := v.(string); ok {
-				spanAttrs[string(attr.GenAIProviderNameKey)] = inferProvider(model)
+				spanAttrs[attr.GenAIProviderNameKey] = inferProvider(model)
 				continue
 			}
 		}
@@ -223,8 +223,8 @@ func getInt64(v any) int64 {
 }
 
 // getString gets a string value from attrs without removing it.
-func getString(attrs map[string]any, key attribute.Key) string {
-	if v, ok := attrs[string(key)]; ok {
+func getString(attrs map[attr.Key]any, key attribute.Key) string {
+	if v, ok := attrs[key]; ok {
 		if s, ok := v.(string); ok {
 			return s
 		}
@@ -233,7 +233,7 @@ func getString(attrs map[string]any, key attribute.Key) string {
 }
 
 // getStringPtr gets a string pointer from attrs without removing it.
-func getStringPtr(attrs map[string]any, key attribute.Key) *string {
+func getStringPtr(attrs map[attr.Key]any, key attribute.Key) *string {
 	s := getString(attrs, key)
 	if s == "" {
 		return nil
@@ -242,8 +242,8 @@ func getStringPtr(attrs map[string]any, key attribute.Key) *string {
 }
 
 // getInt32Ptr gets an int32 pointer from attrs without removing it.
-func getInt32Ptr(attrs map[string]any, key attribute.Key) *int32 {
-	if v, ok := attrs[string(key)]; ok {
+func getInt32Ptr(attrs map[attr.Key]any, key attribute.Key) *int32 {
+	if v, ok := attrs[key]; ok {
 		switch n := v.(type) {
 		case int:
 			i := int32(n) //nolint:gosec // Column values are bounded
