@@ -765,6 +765,7 @@ func readToolsetTools(
 					DeploymentID:               def.DeploymentID.String(),
 					RegistryID:                 def.RegistryID.String(),
 					RegistryServerName:         def.RegistryServerName,
+					RegistrySpecifier:          def.RegistryServerSpecifier,
 					Slug:                       def.Slug,
 					RemoteURL:                  def.RemoteUrl,
 					TransportType:              def.TransportType.String(),

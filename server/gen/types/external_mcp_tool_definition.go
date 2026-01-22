@@ -17,6 +17,9 @@ type ExternalMCPToolDefinition struct {
 	DeploymentID string
 	// The ID of the MCP registry
 	RegistryID string
+	// The specifier of the external MCP server (e.g.,
+	// 'io.modelcontextprotocol.anonymous/exa')
+	RegistrySpecifier string
 	// The name of the external MCP server (e.g., exa)
 	RegistryServerName string
 	// The slug used for tool prefixing (e.g., github)

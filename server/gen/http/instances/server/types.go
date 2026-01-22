@@ -449,6 +449,9 @@ type ExternalMCPToolDefinitionResponseBody struct {
 	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
 	// The ID of the MCP registry
 	RegistryID string `form:"registry_id" json:"registry_id" xml:"registry_id"`
+	// The specifier of the external MCP server (e.g.,
+	// 'io.modelcontextprotocol.anonymous/exa')
+	RegistrySpecifier string `form:"registry_specifier" json:"registry_specifier" xml:"registry_specifier"`
 	// The name of the external MCP server (e.g., exa)
 	RegistryServerName string `form:"registry_server_name" json:"registry_server_name" xml:"registry_server_name"`
 	// The slug used for tool prefixing (e.g., github)

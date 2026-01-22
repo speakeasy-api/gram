@@ -12632,6 +12632,9 @@ components:
                 registry_server_name:
                     type: string
                     description: The name of the external MCP server (e.g., exa)
+                registry_specifier:
+                    type: string
+                    description: The specifier of the external MCP server (e.g., 'io.modelcontextprotocol.anonymous/exa')
                 remote_url:
                     type: string
                     description: The URL to connect to the MCP server
@@ -12672,6 +12675,7 @@ components:
             required:
                 - deployment_external_mcp_id
                 - deployment_id
+                - registry_specifier
                 - registry_server_name
                 - registry_id
                 - slug

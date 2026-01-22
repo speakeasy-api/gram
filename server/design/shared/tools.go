@@ -111,6 +111,7 @@ var ExternalMCPToolDefinition = Type("ExternalMCPToolDefinition", func() {
 	Attribute("deployment_external_mcp_id", String, "The ID of the deployments_external_mcps record")
 	Attribute("deployment_id", String, "The ID of the deployment")
 	Attribute("registry_id", String, "The ID of the MCP registry")
+	Attribute("registry_specifier", String, "The specifier of the external MCP server (e.g., 'io.modelcontextprotocol.anonymous/exa')")
 	Attribute("registry_server_name", String, "The name of the external MCP server (e.g., exa)")
 	Attribute("slug", String, "The slug used for tool prefixing (e.g., github)")
 	Attribute("remote_url", String, "The URL to connect to the MCP server")
@@ -136,7 +137,7 @@ var ExternalMCPToolDefinition = Type("ExternalMCPToolDefinition", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("deployment_external_mcp_id", "deployment_id", "registry_server_name", "registry_id", "slug", "remote_url", "transport_type", "requires_oauth", "oauth_version", "created_at", "updated_at")
+	Required("deployment_external_mcp_id", "deployment_id", "registry_specifier", "registry_server_name", "registry_id", "slug", "remote_url", "transport_type", "requires_oauth", "oauth_version", "created_at", "updated_at")
 })
 
 // Tool is a discriminated union of HTTP tools and prompt templates.

@@ -1,40 +1,31 @@
 workflowVersion: 1.0.0
 speakeasyVersion: pinned
 sources:
-    Gram-Internal:
-        inputs:
-            - location: server/gen/http/openapi3.yaml
-        overlays:
-            - location: overlays/goa.yaml
-        output: .speakeasy/out.openapi.yaml
-        registry:
-            location: registry.speakeasyapi.dev/gram/gram/gram-api-description
-    Gram-Public:
-        inputs:
-            - location: server/gen/http/openapi3.yaml
-        overlays:
-            - location: overlays/goa.yaml
-            - location: overlays/public-sdk.yaml
-        output: .speakeasy/openapi-public.yaml
-        registry:
-            location: registry.speakeasyapi.dev/gram/gram/gram-public-api-description
-    PulseMCP:
-        inputs:
-            - location: overlays/pulse-openapi.yaml
-        registry:
-            location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/pulse-mcp
+  Gram-Internal:
+    inputs:
+      - location: server/gen/http/openapi3.yaml
+    overlays:
+      - location: overlays/goa.yaml
+    output: .speakeasy/out.openapi.yaml
+    registry:
+      location: registry.speakeasyapi.dev/gram/gram/gram-api-description
+  Gram-Public:
+    inputs:
+      - location: server/gen/http/openapi3.yaml
+    overlays:
+      - location: overlays/goa.yaml
+      - location: overlays/public-sdk.yaml
+    output: .speakeasy/openapi-public.yaml
+    registry:
+      location: registry.speakeasyapi.dev/gram/gram/gram-public-api-description
 targets:
-    gram-internal:
-        target: typescript
-        source: Gram-Internal
-        output: client/sdk
-        codeSamples:
-            registry:
-                location: registry.speakeasyapi.dev/gram/gram/gram-api-description-typescript-code-samples
-            labelOverride:
-                fixedValue: Typescript (SDK)
-            blocking: false
-    pulse-mcp:
-        target: go
-        source: PulseMCP
-        output: server/internal/thirdparty/pulsemcp
+  gram-internal:
+    target: typescript
+    source: Gram-Internal
+    output: client/sdk
+    codeSamples:
+      registry:
+        location: registry.speakeasyapi.dev/gram/gram/gram-api-description-typescript-code-samples
+      labelOverride:
+        fixedValue: Typescript (SDK)
+      blocking: false

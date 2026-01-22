@@ -104,6 +104,10 @@ export type ExternalMCPToolDefinition = {
    */
   registryServerName: string;
   /**
+   * The specifier of the external MCP server (e.g., 'io.modelcontextprotocol.anonymous/exa')
+   */
+  registrySpecifier: string;
+  /**
    * The URL to connect to the MCP server
    */
   remoteUrl: string;
@@ -175,6 +179,7 @@ export const ExternalMCPToolDefinition$inboundSchema: z.ZodType<
   project_id: z.string(),
   registry_id: z.string(),
   registry_server_name: z.string(),
+  registry_specifier: z.string(),
   remote_url: z.string(),
   requires_oauth: z.boolean(),
   schema: z.string(),
@@ -201,6 +206,7 @@ export const ExternalMCPToolDefinition$inboundSchema: z.ZodType<
     "project_id": "projectId",
     "registry_id": "registryId",
     "registry_server_name": "registryServerName",
+    "registry_specifier": "registrySpecifier",
     "remote_url": "remoteUrl",
     "requires_oauth": "requiresOauth",
     "schema_version": "schemaVersion",

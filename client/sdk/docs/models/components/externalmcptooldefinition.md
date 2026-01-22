@@ -19,6 +19,7 @@ let value: ExternalMCPToolDefinition = {
   projectId: "<id>",
   registryId: "<id>",
   registryServerName: "<value>",
+  registrySpecifier: "<value>",
   remoteUrl: "https://overcooked-tuber.biz/",
   requiresOauth: false,
   schema: "<value>",
@@ -51,6 +52,7 @@ let value: ExternalMCPToolDefinition = {
 | `projectId`                                                                                   | *string*                                                                                      | :heavy_check_mark:                                                                            | The ID of the project                                                                         |
 | `registryId`                                                                                  | *string*                                                                                      | :heavy_check_mark:                                                                            | The ID of the MCP registry                                                                    |
 | `registryServerName`                                                                          | *string*                                                                                      | :heavy_check_mark:                                                                            | The name of the external MCP server (e.g., exa)                                               |
+| `registrySpecifier`                                                                           | *string*                                                                                      | :heavy_check_mark:                                                                            | The specifier of the external MCP server (e.g., 'io.modelcontextprotocol.anonymous/exa')      |
 | `remoteUrl`                                                                                   | *string*                                                                                      | :heavy_check_mark:                                                                            | The URL to connect to the MCP server                                                          |
 | `requiresOauth`                                                                               | *boolean*                                                                                     | :heavy_check_mark:                                                                            | Whether the external MCP server requires OAuth authentication                                 |
 | `schema`                                                                                      | *string*                                                                                      | :heavy_check_mark:                                                                            | JSON schema for the request                                                                   |

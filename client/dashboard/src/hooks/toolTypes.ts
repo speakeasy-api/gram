@@ -23,13 +23,15 @@ import {
 } from "@gram/client/react-query/listTools.js";
 import { useToolset as useToolsetQuery } from "@gram/client/react-query/toolset.js";
 
-export type ToolsetKind = "default" | "external-mcp";
+export type ToolsetKind = "default" | "external-mcp-proxy";
 
 function detectToolsetKind(tools: GeneratedTool[]): ToolsetKind {
-  const hasExternalMcp = tools.some(
-    (t) => t.externalMcpToolDefinition !== undefined,
+  const hasExternalMcpProxy = tools.some(
+    (t) =>
+      t.externalMcpToolDefinition !== undefined &&
+      t.externalMcpToolDefinition.type === "proxy",
   );
-  return hasExternalMcp ? "external-mcp" : "default";
+  return hasExternalMcpProxy ? "external-mcp-proxy" : "default";
 }
 
 export function useToolset(toolsetSlug: string | undefined) {

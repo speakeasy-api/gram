@@ -645,6 +645,61 @@ func (tp *ToolProxy) doExternalMCP(
 	return nil
 }
 
+// // handleExternalMCPToolCall proxies a tool call to an external MCP server.
+// func handleExternalMCPToolCall(
+// 	ctx context.Context,
+// 	logger *slog.Logger,
+// 	reqID msgID,
+// 	proxy *types.ExternalMCPToolDefinition,
+// 	toolName string,
+// 	arguments json.RawMessage,
+// 	tokenInputs []oauthTokenInputs,
+// ) (json.RawMessage, error) {
+// 	// Extract OAuth token for external MCP servers
+// 	var oauthToken string
+// 	for _, t := range tokenInputs {
+// 		if len(t.securityKeys) == 0 && t.Token != "" {
+// 			oauthToken = t.Token
+// 			break
+// 		}
+// 	}
+
+// 	// Build client options with OAuth token if the proxy requires it
+// 	var opts *externalmcp.ClientOptions
+// 	if proxy.RequiresOauth && oauthToken != "" {
+// 		opts = &externalmcp.ClientOptions{
+// 			Authorization: "Bearer " + oauthToken,
+// 			TransportType: externalmcptypes.TransportType(proxy.TransportType),
+// 		}
+// 	}
+
+// 	// Create client and call tool
+// 	client, err := externalmcp.NewClient(ctx, logger, proxy.RemoteURL, externalmcptypes.TransportType(proxy.TransportType), opts)
+// 	if err != nil {
+// 		return nil, oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").Log(ctx, logger)
+// 	}
+// 	defer o11y.LogDefer(ctx, logger, client.Close)
+
+// 	callResult, err := client.CallTool(ctx, toolName, arguments)
+// 	if err != nil {
+// 		return nil, oops.E(oops.CodeUnexpected, err, "failed to call external MCP tool").Log(ctx, logger)
+// 	}
+
+// 	// Return the result in MCP format - Content is already a JSON array from the external server
+// 	bs, err := json.Marshal(result[toolCallResult]{
+// 		ID: reqID,
+// 		Result: toolCallResult{
+// 			Content: callResult.Content,
+// 			IsError: callResult.IsError,
+// 		},
+// 	})
+// 	if err != nil {
+// 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize external MCP tool result").Log(ctx, logger)
+// 	}
+
+// 	return bs, nil
+// }
+
 type retryConfig struct {
 	initialInterval time.Duration
 	maxInterval     time.Duration

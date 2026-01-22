@@ -106,6 +106,8 @@ func handleToolsCall(
 		metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, mcpURL, params.Name)
 	}
 
+	// Special handling for PROXY external MCP tools.
+	// External MCP tools that can be unfolded will proceed below
 	if proxyTool, externalToolName, ok := findExternalMCPTool(toolset.Tools, params.Name); ok {
 		return handleExternalMCPToolCall(ctx, logger, req.ID, proxyTool, externalToolName, params.Arguments, payload.oauthTokenInputs)
 	}
@@ -348,6 +350,15 @@ func resolveUserConfiguration(
 		for _, token := range payload.oauthTokenInputs {
 			if plan.Function.AuthInput.Type == "oauth2" {
 				userConfig.Set(plan.Function.AuthInput.Variable, token.Token)
+			}
+		}
+	}
+
+	// Process OAuth tokens for External MCP tools
+	if plan != nil && plan.Kind == gateway.ToolKindExternalMCP {
+		for _, token := range payload.oauthTokenInputs {
+			if plan.ExternalMCP.RequiresOAuth && len(token.securityKeys) == 0 && token.Token != "" {
+				userConfig.Set(gateway.ExternalMCPOAuthTokenKey, token.Token)
 			}
 		}
 	}

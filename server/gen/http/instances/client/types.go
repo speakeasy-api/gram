@@ -449,6 +449,9 @@ type ExternalMCPToolDefinitionResponseBody struct {
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 	// The ID of the MCP registry
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
+	// The specifier of the external MCP server (e.g.,
+	// 'io.modelcontextprotocol.anonymous/exa')
+	RegistrySpecifier *string `form:"registry_specifier,omitempty" json:"registry_specifier,omitempty" xml:"registry_specifier,omitempty"`
 	// The name of the external MCP server (e.g., exa)
 	RegistryServerName *string `form:"registry_server_name,omitempty" json:"registry_server_name,omitempty" xml:"registry_server_name,omitempty"`
 	// The slug used for tool prefixing (e.g., github)
@@ -1362,6 +1365,9 @@ func ValidateExternalMCPToolDefinitionResponseBody(body *ExternalMCPToolDefiniti
 	}
 	if body.DeploymentID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_id", "body"))
+	}
+	if body.RegistrySpecifier == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("registry_specifier", "body"))
 	}
 	if body.RegistryServerName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("registry_server_name", "body"))

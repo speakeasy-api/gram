@@ -500,6 +500,7 @@ func unmarshalExternalMCPToolDefinitionResponseBodyToTypesExternalMCPToolDefinit
 		DeploymentExternalMcpID:    *v.DeploymentExternalMcpID,
 		DeploymentID:               *v.DeploymentID,
 		RegistryID:                 *v.RegistryID,
+		RegistrySpecifier:          *v.RegistrySpecifier,
 		RegistryServerName:         *v.RegistryServerName,
 		Slug:                       *v.Slug,
 		RemoteURL:                  *v.RemoteURL,
