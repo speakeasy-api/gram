@@ -1844,10 +1844,10 @@ paths:
             x-speakeasy-name-override: creditUsage
             x-speakeasy-react-hook:
                 name: GetCreditUsage
-    /rpc/chat.generateTitle:
+    /rpc/chat.getTitle:
         post:
-            description: Generate a title for a chat based on its messages
-            operationId: chat#generateTitle
+            description: Get the title for a chat
+            operationId: chat#getTitle
             parameters:
                 - description: Session header
                   in: header
@@ -1865,65 +1865,65 @@ paths:
                   required: false
                   type: string
                 - in: body
-                  name: GenerateTitleRequestBody
+                  name: GetTitleRequestBody
                   required: true
                   schema:
-                    $ref: '#/definitions/ChatGenerateTitleRequestBody'
+                    $ref: '#/definitions/ChatGetTitleRequestBody'
                     required:
                         - id
             responses:
                 "200":
                     description: OK response.
                     schema:
-                        $ref: '#/definitions/ChatGenerateTitleResponseBody'
+                        $ref: '#/definitions/ChatGetTitleResponseBody'
                         required:
                             - title
                 "400":
                     description: Bad Request response.
                     schema:
-                        $ref: '#/definitions/ChatGenerateTitleBadRequestResponseBody'
+                        $ref: '#/definitions/ChatGetTitleBadRequestResponseBody'
                 "401":
                     description: Unauthorized response.
                     schema:
-                        $ref: '#/definitions/ChatGenerateTitleUnauthorizedResponseBody'
+                        $ref: '#/definitions/ChatGetTitleUnauthorizedResponseBody'
                 "403":
                     description: Forbidden response.
                     schema:
-                        $ref: '#/definitions/ChatGenerateTitleForbiddenResponseBody'
+                        $ref: '#/definitions/ChatGetTitleForbiddenResponseBody'
                 "404":
                     description: Not Found response.
                     schema:
-                        $ref: '#/definitions/ChatGenerateTitleNotFoundResponseBody'
+                        $ref: '#/definitions/ChatGetTitleNotFoundResponseBody'
                 "409":
                     description: Conflict response.
                     schema:
-                        $ref: '#/definitions/ChatGenerateTitleConflictResponseBody'
+                        $ref: '#/definitions/ChatGetTitleConflictResponseBody'
                 "415":
                     description: Unsupported Media Type response.
                     schema:
-                        $ref: '#/definitions/ChatGenerateTitleUnsupportedMediaResponseBody'
+                        $ref: '#/definitions/ChatGetTitleUnsupportedMediaResponseBody'
                 "422":
                     description: Unprocessable Entity response.
                     schema:
-                        $ref: '#/definitions/ChatGenerateTitleInvalidResponseBody'
+                        $ref: '#/definitions/ChatGetTitleInvalidResponseBody'
                 "500":
                     description: Internal Server Error response.
                     schema:
-                        $ref: '#/definitions/ChatGenerateTitleUnexpectedResponseBody'
+                        $ref: '#/definitions/ChatGetTitleUnexpectedResponseBody'
                 "502":
                     description: Bad Gateway response.
                     schema:
-                        $ref: '#/definitions/ChatGenerateTitleGatewayErrorResponseBody'
+                        $ref: '#/definitions/ChatGetTitleGatewayErrorResponseBody'
             schemes:
                 - http
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
                 - chat_sessions_token_header_Gram-Chat-Session: []
-            summary: generateTitle chat
+            summary: getTitle chat
             tags:
                 - chat
-            x-speakeasy-name-override: generateTitle
+            x-speakeasy-name-override: getTitle
     /rpc/chat.list:
         get:
             description: List all chats for a project
@@ -19481,7 +19481,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    ChatGenerateTitleBadRequestResponseBody:
+    ChatGetTitleBadRequestResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -19524,7 +19524,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    ChatGenerateTitleConflictResponseBody:
+    ChatGetTitleConflictResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -19567,7 +19567,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    ChatGenerateTitleForbiddenResponseBody:
+    ChatGetTitleForbiddenResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -19610,7 +19610,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    ChatGenerateTitleGatewayErrorResponseBody:
+    ChatGetTitleGatewayErrorResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -19653,7 +19653,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    ChatGenerateTitleInvalidResponseBody:
+    ChatGetTitleInvalidResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -19696,7 +19696,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    ChatGenerateTitleInvariantViolationResponseBody:
+    ChatGetTitleInvariantViolationResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -19739,7 +19739,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    ChatGenerateTitleNotFoundResponseBody:
+    ChatGetTitleNotFoundResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -19782,8 +19782,8 @@ definitions:
             - temporary
             - timeout
             - fault
-    ChatGenerateTitleRequestBody:
-        title: ChatGenerateTitleRequestBody
+    ChatGetTitleRequestBody:
+        title: ChatGetTitleRequestBody
         type: object
         properties:
             id:
@@ -19794,19 +19794,19 @@ definitions:
             id: Vel reiciendis.
         required:
             - id
-    ChatGenerateTitleResponseBody:
-        title: ChatGenerateTitleResponseBody
+    ChatGetTitleResponseBody:
+        title: ChatGetTitleResponseBody
         type: object
         properties:
             title:
                 type: string
-                description: The generated title
+                description: The chat title
                 example: Quo sunt autem ut pariatur enim voluptatum.
         example:
             title: Doloremque ut quas.
         required:
             - title
-    ChatGenerateTitleUnauthorizedResponseBody:
+    ChatGetTitleUnauthorizedResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -19849,7 +19849,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    ChatGenerateTitleUnexpectedResponseBody:
+    ChatGetTitleUnexpectedResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -19892,7 +19892,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    ChatGenerateTitleUnsupportedMediaResponseBody:
+    ChatGetTitleUnsupportedMediaResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:

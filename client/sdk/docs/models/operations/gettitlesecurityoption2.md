@@ -1,11 +1,11 @@
-# GenerateTitleSecurityOption2
+# GetTitleSecurityOption2
 
 ## Example Usage
 
 ```typescript
-import { GenerateTitleSecurityOption2 } from "@gram/client/models/operations";
+import { GetTitleSecurityOption2 } from "@gram/client/models/operations";
 
-let value: GenerateTitleSecurityOption2 = {
+let value: GetTitleSecurityOption2 = {
   chatSessionsTokenHeaderGramChatSession: "<value>",
 };
 ```

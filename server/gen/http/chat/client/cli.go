@@ -77,36 +77,36 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatSessionToken string
 	return v, nil
 }
 
-// BuildGenerateTitlePayload builds the payload for the chat generateTitle
-// endpoint from CLI flags.
-func BuildGenerateTitlePayload(chatGenerateTitleBody string, chatGenerateTitleSessionToken string, chatGenerateTitleProjectSlugInput string, chatGenerateTitleChatSessionsToken string) (*chat.GenerateTitlePayload, error) {
+// BuildGetTitlePayload builds the payload for the chat getTitle endpoint from
+// CLI flags.
+func BuildGetTitlePayload(chatGetTitleBody string, chatGetTitleSessionToken string, chatGetTitleProjectSlugInput string, chatGetTitleChatSessionsToken string) (*chat.GetTitlePayload, error) {
 	var err error
-	var body GenerateTitleRequestBody
+	var body GetTitleRequestBody
 	{
-		err = json.Unmarshal([]byte(chatGenerateTitleBody), &body)
+		err = json.Unmarshal([]byte(chatGetTitleBody), &body)
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"Nihil eum optio recusandae.\"\n   }'")
 		}
 	}
 	var sessionToken *string
 	{
-		if chatGenerateTitleSessionToken != "" {
-			sessionToken = &chatGenerateTitleSessionToken
+		if chatGetTitleSessionToken != "" {
+			sessionToken = &chatGetTitleSessionToken
 		}
 	}
 	var projectSlugInput *string
 	{
-		if chatGenerateTitleProjectSlugInput != "" {
-			projectSlugInput = &chatGenerateTitleProjectSlugInput
+		if chatGetTitleProjectSlugInput != "" {
+			projectSlugInput = &chatGetTitleProjectSlugInput
 		}
 	}
 	var chatSessionsToken *string
 	{
-		if chatGenerateTitleChatSessionsToken != "" {
-			chatSessionsToken = &chatGenerateTitleChatSessionsToken
+		if chatGetTitleChatSessionsToken != "" {
+			chatSessionsToken = &chatGetTitleChatSessionsToken
 		}
 	}
-	v := &chat.GenerateTitlePayload{
+	v := &chat.GetTitlePayload{
 		ID: body.ID,
 	}
 	v.SessionToken = sessionToken

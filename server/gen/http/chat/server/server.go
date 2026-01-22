@@ -19,11 +19,11 @@ import (
 
 // Server lists the chat service endpoint HTTP handlers.
 type Server struct {
-	Mounts        []*MountPoint
-	ListChats     http.Handler
-	LoadChat      http.Handler
-	GenerateTitle http.Handler
-	CreditUsage   http.Handler
+	Mounts      []*MountPoint
+	ListChats   http.Handler
+	LoadChat    http.Handler
+	GetTitle    http.Handler
+	CreditUsage http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -55,13 +55,13 @@ func New(
 		Mounts: []*MountPoint{
 			{"ListChats", "GET", "/rpc/chat.list"},
 			{"LoadChat", "GET", "/rpc/chat.load"},
-			{"GenerateTitle", "POST", "/rpc/chat.generateTitle"},
+			{"GetTitle", "POST", "/rpc/chat.getTitle"},
 			{"CreditUsage", "GET", "/rpc/chat.creditUsage"},
 		},
-		ListChats:     NewListChatsHandler(e.ListChats, mux, decoder, encoder, errhandler, formatter),
-		LoadChat:      NewLoadChatHandler(e.LoadChat, mux, decoder, encoder, errhandler, formatter),
-		GenerateTitle: NewGenerateTitleHandler(e.GenerateTitle, mux, decoder, encoder, errhandler, formatter),
-		CreditUsage:   NewCreditUsageHandler(e.CreditUsage, mux, decoder, encoder, errhandler, formatter),
+		ListChats:   NewListChatsHandler(e.ListChats, mux, decoder, encoder, errhandler, formatter),
+		LoadChat:    NewLoadChatHandler(e.LoadChat, mux, decoder, encoder, errhandler, formatter),
+		GetTitle:    NewGetTitleHandler(e.GetTitle, mux, decoder, encoder, errhandler, formatter),
+		CreditUsage: NewCreditUsageHandler(e.CreditUsage, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -72,7 +72,7 @@ func (s *Server) Service() string { return "chat" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListChats = m(s.ListChats)
 	s.LoadChat = m(s.LoadChat)
-	s.GenerateTitle = m(s.GenerateTitle)
+	s.GetTitle = m(s.GetTitle)
 	s.CreditUsage = m(s.CreditUsage)
 }
 
@@ -83,7 +83,7 @@ func (s *Server) MethodNames() []string { return chat.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountListChatsHandler(mux, h.ListChats)
 	MountLoadChatHandler(mux, h.LoadChat)
-	MountGenerateTitleHandler(mux, h.GenerateTitle)
+	MountGetTitleHandler(mux, h.GetTitle)
 	MountCreditUsageHandler(mux, h.CreditUsage)
 }
 
@@ -198,21 +198,21 @@ func NewLoadChatHandler(
 	})
 }
 
-// MountGenerateTitleHandler configures the mux to serve the "chat" service
-// "generateTitle" endpoint.
-func MountGenerateTitleHandler(mux goahttp.Muxer, h http.Handler) {
+// MountGetTitleHandler configures the mux to serve the "chat" service
+// "getTitle" endpoint.
+func MountGetTitleHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/chat.generateTitle", otelhttp.WithRouteTag("/rpc/chat.generateTitle", f).ServeHTTP)
+	mux.Handle("POST", "/rpc/chat.getTitle", otelhttp.WithRouteTag("/rpc/chat.getTitle", f).ServeHTTP)
 }
 
-// NewGenerateTitleHandler creates a HTTP handler which loads the HTTP request
-// and calls the "chat" service "generateTitle" endpoint.
-func NewGenerateTitleHandler(
+// NewGetTitleHandler creates a HTTP handler which loads the HTTP request and
+// calls the "chat" service "getTitle" endpoint.
+func NewGetTitleHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -221,13 +221,13 @@ func NewGenerateTitleHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeGenerateTitleRequest(mux, decoder)
-		encodeResponse = EncodeGenerateTitleResponse(encoder)
-		encodeError    = EncodeGenerateTitleError(encoder, formatter)
+		decodeRequest  = DecodeGetTitleRequest(mux, decoder)
+		encodeResponse = EncodeGetTitleResponse(encoder)
+		encodeError    = EncodeGetTitleError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "generateTitle")
+		ctx = context.WithValue(ctx, goa.MethodKey, "getTitle")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
 		payload, err := decodeRequest(r)
 		if err != nil {

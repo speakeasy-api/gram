@@ -17,9 +17,9 @@ func LoadChatChatPath() string {
 	return "/rpc/chat.load"
 }
 
-// GenerateTitleChatPath returns the URL path to the chat service generateTitle HTTP endpoint.
-func GenerateTitleChatPath() string {
-	return "/rpc/chat.generateTitle"
+// GetTitleChatPath returns the URL path to the chat service getTitle HTTP endpoint.
+func GetTitleChatPath() string {
+	return "/rpc/chat.getTitle"
 }
 
 // CreditUsageChatPath returns the URL path to the chat service creditUsage HTTP endpoint.

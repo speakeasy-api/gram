@@ -497,13 +497,13 @@ func DecodeLoadChatResponse(decoder func(*http.Response) goahttp.Decoder, restor
 	}
 }
 
-// BuildGenerateTitleRequest instantiates a HTTP request object with method and
-// path set to call the "chat" service "generateTitle" endpoint
-func (c *Client) BuildGenerateTitleRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GenerateTitleChatPath()}
+// BuildGetTitleRequest instantiates a HTTP request object with method and path
+// set to call the "chat" service "getTitle" endpoint
+func (c *Client) BuildGetTitleRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetTitleChatPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("chat", "generateTitle", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("chat", "getTitle", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -512,13 +512,13 @@ func (c *Client) BuildGenerateTitleRequest(ctx context.Context, v any) (*http.Re
 	return req, nil
 }
 
-// EncodeGenerateTitleRequest returns an encoder for requests sent to the chat
-// generateTitle server.
-func EncodeGenerateTitleRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeGetTitleRequest returns an encoder for requests sent to the chat
+// getTitle server.
+func EncodeGetTitleRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*chat.GenerateTitlePayload)
+		p, ok := v.(*chat.GetTitlePayload)
 		if !ok {
-			return goahttp.ErrInvalidType("chat", "generateTitle", "*chat.GenerateTitlePayload", v)
+			return goahttp.ErrInvalidType("chat", "getTitle", "*chat.GetTitlePayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -532,18 +532,18 @@ func EncodeGenerateTitleRequest(encoder func(*http.Request) goahttp.Encoder) fun
 			head := *p.ChatSessionsToken
 			req.Header.Set("Gram-Chat-Session", head)
 		}
-		body := NewGenerateTitleRequestBody(p)
+		body := NewGetTitleRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("chat", "generateTitle", err)
+			return goahttp.ErrEncodingError("chat", "getTitle", err)
 		}
 		return nil
 	}
 }
 
-// DecodeGenerateTitleResponse returns a decoder for responses returned by the
-// chat generateTitle endpoint. restoreBody controls whether the response body
-// should be restored after having been read.
-// DecodeGenerateTitleResponse may return the following errors:
+// DecodeGetTitleResponse returns a decoder for responses returned by the chat
+// getTitle endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeGetTitleResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -555,7 +555,7 @@ func EncodeGenerateTitleRequest(encoder func(*http.Request) goahttp.Encoder) fun
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeGenerateTitleResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeGetTitleResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -572,169 +572,169 @@ func DecodeGenerateTitleResponse(decoder func(*http.Response) goahttp.Decoder, r
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body GenerateTitleResponseBody
+				body GetTitleResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "generateTitle", err)
+				return nil, goahttp.ErrDecodingError("chat", "getTitle", err)
 			}
-			err = ValidateGenerateTitleResponseBody(&body)
+			err = ValidateGetTitleResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "generateTitle", err)
+				return nil, goahttp.ErrValidationError("chat", "getTitle", err)
 			}
-			res := NewGenerateTitleResultOK(&body)
+			res := NewGetTitleResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body GenerateTitleUnauthorizedResponseBody
+				body GetTitleUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "generateTitle", err)
+				return nil, goahttp.ErrDecodingError("chat", "getTitle", err)
 			}
-			err = ValidateGenerateTitleUnauthorizedResponseBody(&body)
+			err = ValidateGetTitleUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "generateTitle", err)
+				return nil, goahttp.ErrValidationError("chat", "getTitle", err)
 			}
-			return nil, NewGenerateTitleUnauthorized(&body)
+			return nil, NewGetTitleUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body GenerateTitleForbiddenResponseBody
+				body GetTitleForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "generateTitle", err)
+				return nil, goahttp.ErrDecodingError("chat", "getTitle", err)
 			}
-			err = ValidateGenerateTitleForbiddenResponseBody(&body)
+			err = ValidateGetTitleForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "generateTitle", err)
+				return nil, goahttp.ErrValidationError("chat", "getTitle", err)
 			}
-			return nil, NewGenerateTitleForbidden(&body)
+			return nil, NewGetTitleForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body GenerateTitleBadRequestResponseBody
+				body GetTitleBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "generateTitle", err)
+				return nil, goahttp.ErrDecodingError("chat", "getTitle", err)
 			}
-			err = ValidateGenerateTitleBadRequestResponseBody(&body)
+			err = ValidateGetTitleBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "generateTitle", err)
+				return nil, goahttp.ErrValidationError("chat", "getTitle", err)
 			}
-			return nil, NewGenerateTitleBadRequest(&body)
+			return nil, NewGetTitleBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body GenerateTitleNotFoundResponseBody
+				body GetTitleNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "generateTitle", err)
+				return nil, goahttp.ErrDecodingError("chat", "getTitle", err)
 			}
-			err = ValidateGenerateTitleNotFoundResponseBody(&body)
+			err = ValidateGetTitleNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "generateTitle", err)
+				return nil, goahttp.ErrValidationError("chat", "getTitle", err)
 			}
-			return nil, NewGenerateTitleNotFound(&body)
+			return nil, NewGetTitleNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body GenerateTitleConflictResponseBody
+				body GetTitleConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "generateTitle", err)
+				return nil, goahttp.ErrDecodingError("chat", "getTitle", err)
 			}
-			err = ValidateGenerateTitleConflictResponseBody(&body)
+			err = ValidateGetTitleConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "generateTitle", err)
+				return nil, goahttp.ErrValidationError("chat", "getTitle", err)
 			}
-			return nil, NewGenerateTitleConflict(&body)
+			return nil, NewGetTitleConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body GenerateTitleUnsupportedMediaResponseBody
+				body GetTitleUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "generateTitle", err)
+				return nil, goahttp.ErrDecodingError("chat", "getTitle", err)
 			}
-			err = ValidateGenerateTitleUnsupportedMediaResponseBody(&body)
+			err = ValidateGetTitleUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "generateTitle", err)
+				return nil, goahttp.ErrValidationError("chat", "getTitle", err)
 			}
-			return nil, NewGenerateTitleUnsupportedMedia(&body)
+			return nil, NewGetTitleUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body GenerateTitleInvalidResponseBody
+				body GetTitleInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "generateTitle", err)
+				return nil, goahttp.ErrDecodingError("chat", "getTitle", err)
 			}
-			err = ValidateGenerateTitleInvalidResponseBody(&body)
+			err = ValidateGetTitleInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "generateTitle", err)
+				return nil, goahttp.ErrValidationError("chat", "getTitle", err)
 			}
-			return nil, NewGenerateTitleInvalid(&body)
+			return nil, NewGetTitleInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body GenerateTitleInvariantViolationResponseBody
+					body GetTitleInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("chat", "generateTitle", err)
+					return nil, goahttp.ErrDecodingError("chat", "getTitle", err)
 				}
-				err = ValidateGenerateTitleInvariantViolationResponseBody(&body)
+				err = ValidateGetTitleInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("chat", "generateTitle", err)
+					return nil, goahttp.ErrValidationError("chat", "getTitle", err)
 				}
-				return nil, NewGenerateTitleInvariantViolation(&body)
+				return nil, NewGetTitleInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body GenerateTitleUnexpectedResponseBody
+					body GetTitleUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("chat", "generateTitle", err)
+					return nil, goahttp.ErrDecodingError("chat", "getTitle", err)
 				}
-				err = ValidateGenerateTitleUnexpectedResponseBody(&body)
+				err = ValidateGetTitleUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("chat", "generateTitle", err)
+					return nil, goahttp.ErrValidationError("chat", "getTitle", err)
 				}
-				return nil, NewGenerateTitleUnexpected(&body)
+				return nil, NewGetTitleUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("chat", "generateTitle", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("chat", "getTitle", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body GenerateTitleGatewayErrorResponseBody
+				body GetTitleGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "generateTitle", err)
+				return nil, goahttp.ErrDecodingError("chat", "getTitle", err)
 			}
-			err = ValidateGenerateTitleGatewayErrorResponseBody(&body)
+			err = ValidateGetTitleGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "generateTitle", err)
+				return nil, goahttp.ErrValidationError("chat", "getTitle", err)
 			}
-			return nil, NewGenerateTitleGatewayError(&body)
+			return nil, NewGetTitleGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("chat", "generateTitle", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("chat", "getTitle", resp.StatusCode, string(body))
 		}
 	}
 }

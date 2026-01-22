@@ -25,9 +25,9 @@ type Client struct {
 	// endpoint.
 	LoadChatDoer goahttp.Doer
 
-	// GenerateTitle Doer is the HTTP client used to make requests to the
-	// generateTitle endpoint.
-	GenerateTitleDoer goahttp.Doer
+	// GetTitle Doer is the HTTP client used to make requests to the getTitle
+	// endpoint.
+	GetTitleDoer goahttp.Doer
 
 	// CreditUsage Doer is the HTTP client used to make requests to the creditUsage
 	// endpoint.
@@ -55,7 +55,7 @@ func NewClient(
 	return &Client{
 		ListChatsDoer:       doer,
 		LoadChatDoer:        doer,
-		GenerateTitleDoer:   doer,
+		GetTitleDoer:        doer,
 		CreditUsageDoer:     doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
@@ -113,15 +113,15 @@ func (c *Client) LoadChat() goa.Endpoint {
 	}
 }
 
-// GenerateTitle returns an endpoint that makes HTTP requests to the chat
-// service generateTitle server.
-func (c *Client) GenerateTitle() goa.Endpoint {
+// GetTitle returns an endpoint that makes HTTP requests to the chat service
+// getTitle server.
+func (c *Client) GetTitle() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeGenerateTitleRequest(c.encoder)
-		decodeResponse = DecodeGenerateTitleResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeGetTitleRequest(c.encoder)
+		decodeResponse = DecodeGetTitleResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGenerateTitleRequest(ctx, v)
+		req, err := c.BuildGetTitleRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -129,9 +129,9 @@ func (c *Client) GenerateTitle() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.GenerateTitleDoer.Do(req)
+		resp, err := c.GetTitleDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("chat", "generateTitle", err)
+			return nil, goahttp.ErrRequestError("chat", "getTitle", err)
 		}
 		return decodeResponse(resp)
 	}

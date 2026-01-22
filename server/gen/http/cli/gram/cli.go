@@ -53,7 +53,7 @@ func UsageCommands() []string {
 		"agents (create-response|get-response|delete-response)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
-		"chat (list-chats|load-chat|generate-title|credit-usage)",
+		"chat (list-chats|load-chat|get-title|credit-usage)",
 		"chat-sessions (create|revoke)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"domains (get-domain|create-domain|delete-domain)",
@@ -235,11 +235,11 @@ func ParseEndpoint(
 		chatLoadChatProjectSlugInputFlag  = chatLoadChatFlags.String("project-slug-input", "", "")
 		chatLoadChatChatSessionsTokenFlag = chatLoadChatFlags.String("chat-sessions-token", "", "")
 
-		chatGenerateTitleFlags                 = flag.NewFlagSet("generate-title", flag.ExitOnError)
-		chatGenerateTitleBodyFlag              = chatGenerateTitleFlags.String("body", "REQUIRED", "")
-		chatGenerateTitleSessionTokenFlag      = chatGenerateTitleFlags.String("session-token", "", "")
-		chatGenerateTitleProjectSlugInputFlag  = chatGenerateTitleFlags.String("project-slug-input", "", "")
-		chatGenerateTitleChatSessionsTokenFlag = chatGenerateTitleFlags.String("chat-sessions-token", "", "")
+		chatGetTitleFlags                 = flag.NewFlagSet("get-title", flag.ExitOnError)
+		chatGetTitleBodyFlag              = chatGetTitleFlags.String("body", "REQUIRED", "")
+		chatGetTitleSessionTokenFlag      = chatGetTitleFlags.String("session-token", "", "")
+		chatGetTitleProjectSlugInputFlag  = chatGetTitleFlags.String("project-slug-input", "", "")
+		chatGetTitleChatSessionsTokenFlag = chatGetTitleFlags.String("chat-sessions-token", "", "")
 
 		chatCreditUsageFlags                 = flag.NewFlagSet("credit-usage", flag.ExitOnError)
 		chatCreditUsageSessionTokenFlag      = chatCreditUsageFlags.String("session-token", "", "")
@@ -798,7 +798,7 @@ func ParseEndpoint(
 	chatFlags.Usage = chatUsage
 	chatListChatsFlags.Usage = chatListChatsUsage
 	chatLoadChatFlags.Usage = chatLoadChatUsage
-	chatGenerateTitleFlags.Usage = chatGenerateTitleUsage
+	chatGetTitleFlags.Usage = chatGetTitleUsage
 	chatCreditUsageFlags.Usage = chatCreditUsageUsage
 
 	chatSessionsFlags.Usage = chatSessionsUsage
@@ -1102,8 +1102,8 @@ func ParseEndpoint(
 			case "load-chat":
 				epf = chatLoadChatFlags
 
-			case "generate-title":
-				epf = chatGenerateTitleFlags
+			case "get-title":
+				epf = chatGetTitleFlags
 
 			case "credit-usage":
 				epf = chatCreditUsageFlags
@@ -1569,9 +1569,9 @@ func ParseEndpoint(
 			case "load-chat":
 				endpoint = c.LoadChat()
 				data, err = chatc.BuildLoadChatPayload(*chatLoadChatIDFlag, *chatLoadChatSessionTokenFlag, *chatLoadChatProjectSlugInputFlag, *chatLoadChatChatSessionsTokenFlag)
-			case "generate-title":
-				endpoint = c.GenerateTitle()
-				data, err = chatc.BuildGenerateTitlePayload(*chatGenerateTitleBodyFlag, *chatGenerateTitleSessionTokenFlag, *chatGenerateTitleProjectSlugInputFlag, *chatGenerateTitleChatSessionsTokenFlag)
+			case "get-title":
+				endpoint = c.GetTitle()
+				data, err = chatc.BuildGetTitlePayload(*chatGetTitleBodyFlag, *chatGetTitleSessionTokenFlag, *chatGetTitleProjectSlugInputFlag, *chatGetTitleChatSessionsTokenFlag)
 			case "credit-usage":
 				endpoint = c.CreditUsage()
 				data, err = chatc.BuildCreditUsagePayload(*chatCreditUsageSessionTokenFlag, *chatCreditUsageProjectSlugInputFlag, *chatCreditUsageChatSessionsTokenFlag)
@@ -2480,7 +2480,7 @@ func chatUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-chats: List all chats for a project`)
 	fmt.Fprintln(os.Stderr, `    load-chat: Load a chat by its ID`)
-	fmt.Fprintln(os.Stderr, `    generate-title: Generate a title for a chat based on its messages`)
+	fmt.Fprintln(os.Stderr, `    get-title: Get the title for a chat`)
 	fmt.Fprintln(os.Stderr, `    credit-usage: Load a chat by its ID`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -2532,9 +2532,9 @@ func chatLoadChatUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat load-chat --id \"Qui praesentium numquam quisquam quisquam et.\" --session-token \"Maxime voluptate hic quia eius et vel.\" --project-slug-input \"Quis repudiandae ipsam.\" --chat-sessions-token \"Sunt architecto laudantium atque pariatur velit.\"")
 }
 
-func chatGenerateTitleUsage() {
+func chatGetTitleUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] chat generate-title", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] chat get-title", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -2543,7 +2543,7 @@ func chatGenerateTitleUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Generate a title for a chat based on its messages`)
+	fmt.Fprintln(os.Stderr, `Get the title for a chat`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -2553,7 +2553,7 @@ func chatGenerateTitleUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat generate-title --body '{\n      \"id\": \"Nihil eum optio recusandae.\"\n   }' --session-token \"Sed et.\" --project-slug-input \"Aut et reprehenderit.\" --chat-sessions-token \"Accusantium labore error eos.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat get-title --body '{\n      \"id\": \"Nihil eum optio recusandae.\"\n   }' --session-token \"Sed et.\" --project-slug-input \"Aut et reprehenderit.\" --chat-sessions-token \"Accusantium labore error eos.\"")
 }
 
 func chatCreditUsageUsage() {

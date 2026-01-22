@@ -304,9 +304,8 @@ export function useGramThreadListAdapter(
         await new Promise((r) => setTimeout(r, TITLE_GENERATION_DELAY_MS))
 
         try {
-          // TODO: rename generateTitle endpoint to getTitle
           const response = await fetch(
-            `${optionsRef.current.apiUrl}/rpc/chat.generateTitle`,
+            `${optionsRef.current.apiUrl}/rpc/chat.getTitle`,
             {
               method: 'POST',
               headers: {

@@ -460,24 +460,24 @@ func EncodeLoadChatError(encoder func(context.Context, http.ResponseWriter) goah
 	}
 }
 
-// EncodeGenerateTitleResponse returns an encoder for responses returned by the
-// chat generateTitle endpoint.
-func EncodeGenerateTitleResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeGetTitleResponse returns an encoder for responses returned by the chat
+// getTitle endpoint.
+func EncodeGetTitleResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*chat.GenerateTitleResult)
+		res, _ := v.(*chat.GetTitleResult)
 		enc := encoder(ctx, w)
-		body := NewGenerateTitleResponseBody(res)
+		body := NewGetTitleResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeGenerateTitleRequest returns a decoder for requests sent to the chat
-// generateTitle endpoint.
-func DecodeGenerateTitleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*chat.GenerateTitlePayload, error) {
-	return func(r *http.Request) (*chat.GenerateTitlePayload, error) {
+// DecodeGetTitleRequest returns a decoder for requests sent to the chat
+// getTitle endpoint.
+func DecodeGetTitleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*chat.GetTitlePayload, error) {
+	return func(r *http.Request) (*chat.GetTitlePayload, error) {
 		var (
-			body GenerateTitleRequestBody
+			body GetTitleRequestBody
 			err  error
 		)
 		err = decoder(r).Decode(&body)
@@ -491,7 +491,7 @@ func DecodeGenerateTitleRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 			}
 			return nil, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateGenerateTitleRequestBody(&body)
+		err = ValidateGetTitleRequestBody(&body)
 		if err != nil {
 			return nil, err
 		}
@@ -513,7 +513,7 @@ func DecodeGenerateTitleRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if chatSessionsTokenRaw != "" {
 			chatSessionsToken = &chatSessionsTokenRaw
 		}
-		payload := NewGenerateTitlePayload(&body, sessionToken, projectSlugInput, chatSessionsToken)
+		payload := NewGetTitlePayload(&body, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -540,9 +540,9 @@ func DecodeGenerateTitleRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 	}
 }
 
-// EncodeGenerateTitleError returns an encoder for errors returned by the
-// generateTitle chat endpoint.
-func EncodeGenerateTitleError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeGetTitleError returns an encoder for errors returned by the getTitle
+// chat endpoint.
+func EncodeGetTitleError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -559,7 +559,7 @@ func EncodeGenerateTitleError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGenerateTitleUnauthorizedResponseBody(res)
+				body = NewGetTitleUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -573,7 +573,7 @@ func EncodeGenerateTitleError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGenerateTitleForbiddenResponseBody(res)
+				body = NewGetTitleForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -587,7 +587,7 @@ func EncodeGenerateTitleError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGenerateTitleBadRequestResponseBody(res)
+				body = NewGetTitleBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -601,7 +601,7 @@ func EncodeGenerateTitleError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGenerateTitleNotFoundResponseBody(res)
+				body = NewGetTitleNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -615,7 +615,7 @@ func EncodeGenerateTitleError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGenerateTitleConflictResponseBody(res)
+				body = NewGetTitleConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -629,7 +629,7 @@ func EncodeGenerateTitleError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGenerateTitleUnsupportedMediaResponseBody(res)
+				body = NewGetTitleUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -643,7 +643,7 @@ func EncodeGenerateTitleError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGenerateTitleInvalidResponseBody(res)
+				body = NewGetTitleInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -657,7 +657,7 @@ func EncodeGenerateTitleError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGenerateTitleInvariantViolationResponseBody(res)
+				body = NewGetTitleInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -671,7 +671,7 @@ func EncodeGenerateTitleError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGenerateTitleUnexpectedResponseBody(res)
+				body = NewGetTitleUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -685,7 +685,7 @@ func EncodeGenerateTitleError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGenerateTitleGatewayErrorResponseBody(res)
+				body = NewGetTitleGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
