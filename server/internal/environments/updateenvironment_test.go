@@ -44,11 +44,8 @@ func TestEnvironmentsService_UpdateEnvironment(t *testing.T) {
 		require.NotNil(t, updatedEnv)
 
 		require.Equal(t, env.ID, updatedEnv.ID)
-		// NOTE: There appears to be a bug in the implementation where it returns the original
-		// environment data instead of the updated data. The update call succeeds but the
-		// response shows old values.
-		require.Equal(t, "initial-env", updatedEnv.Name)                 // Should be "updated-env" but implementation has bug
-		require.Equal(t, "Initial description", *updatedEnv.Description) // Should be "Updated description" but implementation has bug
+		require.Equal(t, "updated-env", updatedEnv.Name)
+		require.Equal(t, "Updated description", *updatedEnv.Description)
 		require.Len(t, updatedEnv.Entries, 1)
 	})
 
