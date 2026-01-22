@@ -10450,6 +10450,236 @@ paths:
       x-speakeasy-name-override: updateBySlug
       x-speakeasy-react-hook:
         name: UpdateToolset
+  /rpc/toolsets.updateExternalOAuthServer:
+    post:
+      description: Update an external OAuth server's metadata for a toolset
+      operationId: updateExternalOAuthServer
+      parameters:
+        - allowEmptyValue: true
+          description: The slug of the toolset to update
+          in: query
+          name: slug
+          required: true
+          schema:
+            description: A short url-friendly label that uniquely identifies a resource.
+            maxLength: 40
+            pattern: ^[a-z0-9_-]{1,128}$
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateExternalOAuthServerRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Toolset'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: updateExternalOAuthServer toolsets
+      tags:
+        - toolsets
+      x-speakeasy-name-override: updateExternalOAuthServer
+      x-speakeasy-react-hook:
+        name: UpdateExternalOAuthServer
+  /rpc/toolsets.updateOAuthProxyServer:
+    post:
+      description: Update an OAuth proxy server's configuration for a toolset
+      operationId: updateOAuthProxyServer
+      parameters:
+        - allowEmptyValue: true
+          description: The slug of the toolset to update
+          in: query
+          name: slug
+          required: true
+          schema:
+            description: A short url-friendly label that uniquely identifies a resource.
+            maxLength: 40
+            pattern: ^[a-z0-9_-]{1,128}$
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOAuthProxyServerRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Toolset'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: updateOAuthProxyServer toolsets
+      tags:
+        - toolsets
+      x-speakeasy-name-override: updateOAuthProxyServer
+      x-speakeasy-react-hook:
+        name: UpdateOAuthProxyServer
   /rpc/usage.createCheckout:
     post:
       description: Create a checkout link for upgrading to the business plan
@@ -15737,6 +15967,85 @@ components:
       required:
         - entries_to_update
         - entries_to_remove
+    UpdateExternalOAuthServerForm:
+      type: object
+      properties:
+        metadata:
+          description: The updated metadata for the external OAuth server
+        project_slug_input:
+          type: string
+        slug:
+          type: string
+          description: A short url-friendly label that uniquely identifies a resource.
+          pattern: ^[a-z0-9_-]{1,128}$
+          maxLength: 40
+      required:
+        - slug
+        - metadata
+    UpdateExternalOAuthServerRequestBody:
+      type: object
+      properties:
+        metadata:
+          description: The updated metadata for the external OAuth server
+      required:
+        - metadata
+    UpdateOAuthProxyServerForm:
+      type: object
+      properties:
+        authorization_endpoint:
+          type: string
+          description: The authorization endpoint URL
+        environment_slug:
+          type: string
+          description: A short url-friendly label that uniquely identifies a resource.
+          pattern: ^[a-z0-9_-]{1,128}$
+          maxLength: 40
+        project_slug_input:
+          type: string
+        scopes_supported:
+          type: array
+          items:
+            type: string
+          description: OAuth scopes to request
+        slug:
+          type: string
+          description: A short url-friendly label that uniquely identifies a resource.
+          pattern: ^[a-z0-9_-]{1,128}$
+          maxLength: 40
+        token_endpoint:
+          type: string
+          description: The token endpoint URL
+        token_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
+          description: Auth methods (client_secret_basic or client_secret_post)
+      required:
+        - slug
+    UpdateOAuthProxyServerRequestBody:
+      type: object
+      properties:
+        authorization_endpoint:
+          type: string
+          description: The authorization endpoint URL
+        environment_slug:
+          type: string
+          description: The environment slug to store secrets
+          pattern: ^[a-z0-9_-]{1,128}$
+          maxLength: 40
+        scopes_supported:
+          type: array
+          items:
+            type: string
+          description: OAuth scopes to request
+        token_endpoint:
+          type: string
+          description: The token endpoint URL
+        token_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
+          description: Auth methods (client_secret_basic or client_secret_post)
     UpdatePackageForm:
       type: object
       properties:

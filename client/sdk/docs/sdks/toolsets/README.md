@@ -16,6 +16,8 @@ Managed toolsets for gram AI consumers.
 * [list](#list) - listToolsets toolsets
 * [removeOAuthServer](#removeoauthserver) - removeOAuthServer toolsets
 * [updateBySlug](#updatebyslug) - updateToolset toolsets
+* [updateExternalOAuthServer](#updateexternaloauthserver) - updateExternalOAuthServer toolsets
+* [updateOAuthProxyServer](#updateoauthproxyserver) - updateOAuthProxyServer toolsets
 
 ## addExternalOAuthServer
 
@@ -950,6 +952,192 @@ import {
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `request`                                                                                                                                                                      | [operations.UpdateToolsetRequest](../../models/operations/updatetoolsetrequest.md)                                                                                             | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
 | `security`                                                                                                                                                                     | [operations.UpdateToolsetSecurity](../../models/operations/updatetoolsetsecurity.md)                                                                                           | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
+| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+
+### Response
+
+**Promise\<[components.Toolset](../../models/components/toolset.md)\>**
+
+### Errors
+
+| Error Type                        | Status Code                       | Content Type                      |
+| --------------------------------- | --------------------------------- | --------------------------------- |
+| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
+| errors.ServiceError               | 500, 502                          | application/json                  |
+| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+
+## updateExternalOAuthServer
+
+Update an external OAuth server's metadata for a toolset
+
+### Example Usage
+
+<!-- UsageSnippet language="typescript" operationID="updateExternalOAuthServer" method="post" path="/rpc/toolsets.updateExternalOAuthServer" -->
+```typescript
+import { Gram } from "@gram/client";
+
+const gram = new Gram();
+
+async function run() {
+  const result = await gram.toolsets.updateExternalOAuthServer({
+    slug: "<value>",
+    updateExternalOAuthServerRequestBody: {
+      metadata: "<value>",
+    },
+  });
+
+  console.log(result);
+}
+
+run();
+```
+
+### Standalone function
+
+The standalone function version of this method:
+
+```typescript
+import { GramCore } from "@gram/client/core.js";
+import { toolsetsUpdateExternalOAuthServer } from "@gram/client/funcs/toolsetsUpdateExternalOAuthServer.js";
+
+// Use `GramCore` for best tree-shaking performance.
+// You can create one instance of it to use across an application.
+const gram = new GramCore();
+
+async function run() {
+  const res = await toolsetsUpdateExternalOAuthServer(gram, {
+    slug: "<value>",
+    updateExternalOAuthServerRequestBody: {
+      metadata: "<value>",
+    },
+  });
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("toolsetsUpdateExternalOAuthServer failed:", res.error);
+  }
+}
+
+run();
+```
+
+### React hooks and utilities
+
+This method can be used in React components through the following hooks and
+associated utilities.
+
+> Check out [this guide][hook-guide] for information about each of the utilities
+> below and how to get started using React hooks.
+
+[hook-guide]: ../../../REACT_QUERY.md
+
+```tsx
+import {
+  // Mutation hook for triggering the API call.
+  useUpdateExternalOAuthServerMutation
+} from "@gram/client/react-query/toolsetsUpdateExternalOAuthServer.js";
+```
+
+### Parameters
+
+| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`                                                                                                                                                                      | [operations.UpdateExternalOAuthServerRequest](../../models/operations/updateexternaloauthserverrequest.md)                                                                     | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `security`                                                                                                                                                                     | [operations.UpdateExternalOAuthServerSecurity](../../models/operations/updateexternaloauthserversecurity.md)                                                                   | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
+| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+
+### Response
+
+**Promise\<[components.Toolset](../../models/components/toolset.md)\>**
+
+### Errors
+
+| Error Type                        | Status Code                       | Content Type                      |
+| --------------------------------- | --------------------------------- | --------------------------------- |
+| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
+| errors.ServiceError               | 500, 502                          | application/json                  |
+| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+
+## updateOAuthProxyServer
+
+Update an OAuth proxy server's configuration for a toolset
+
+### Example Usage
+
+<!-- UsageSnippet language="typescript" operationID="updateOAuthProxyServer" method="post" path="/rpc/toolsets.updateOAuthProxyServer" -->
+```typescript
+import { Gram } from "@gram/client";
+
+const gram = new Gram();
+
+async function run() {
+  const result = await gram.toolsets.updateOAuthProxyServer({
+    slug: "<value>",
+    updateOAuthProxyServerRequestBody: {},
+  });
+
+  console.log(result);
+}
+
+run();
+```
+
+### Standalone function
+
+The standalone function version of this method:
+
+```typescript
+import { GramCore } from "@gram/client/core.js";
+import { toolsetsUpdateOAuthProxyServer } from "@gram/client/funcs/toolsetsUpdateOAuthProxyServer.js";
+
+// Use `GramCore` for best tree-shaking performance.
+// You can create one instance of it to use across an application.
+const gram = new GramCore();
+
+async function run() {
+  const res = await toolsetsUpdateOAuthProxyServer(gram, {
+    slug: "<value>",
+    updateOAuthProxyServerRequestBody: {},
+  });
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("toolsetsUpdateOAuthProxyServer failed:", res.error);
+  }
+}
+
+run();
+```
+
+### React hooks and utilities
+
+This method can be used in React components through the following hooks and
+associated utilities.
+
+> Check out [this guide][hook-guide] for information about each of the utilities
+> below and how to get started using React hooks.
+
+[hook-guide]: ../../../REACT_QUERY.md
+
+```tsx
+import {
+  // Mutation hook for triggering the API call.
+  useUpdateOAuthProxyServerMutation
+} from "@gram/client/react-query/toolsetsUpdateOAuthProxyServer.js";
+```
+
+### Parameters
+
+| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`                                                                                                                                                                      | [operations.UpdateOAuthProxyServerRequest](../../models/operations/updateoauthproxyserverrequest.md)                                                                           | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `security`                                                                                                                                                                     | [operations.UpdateOAuthProxyServerSecurity](../../models/operations/updateoauthproxyserversecurity.md)                                                                         | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |

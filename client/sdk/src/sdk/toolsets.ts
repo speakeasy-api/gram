@@ -13,6 +13,8 @@ import { toolsetsGetBySlug } from "../funcs/toolsetsGetBySlug.js";
 import { toolsetsList } from "../funcs/toolsetsList.js";
 import { toolsetsRemoveOAuthServer } from "../funcs/toolsetsRemoveOAuthServer.js";
 import { toolsetsUpdateBySlug } from "../funcs/toolsetsUpdateBySlug.js";
+import { toolsetsUpdateExternalOAuthServer } from "../funcs/toolsetsUpdateExternalOAuthServer.js";
+import { toolsetsUpdateOAuthProxyServer } from "../funcs/toolsetsUpdateOAuthProxyServer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -202,6 +204,44 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Toolset> {
     return unwrapAsync(toolsetsUpdateBySlug(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateExternalOAuthServer toolsets
+   *
+   * @remarks
+   * Update an external OAuth server's metadata for a toolset
+   */
+  async updateExternalOAuthServer(
+    request: operations.UpdateExternalOAuthServerRequest,
+    security?: operations.UpdateExternalOAuthServerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Toolset> {
+    return unwrapAsync(toolsetsUpdateExternalOAuthServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateOAuthProxyServer toolsets
+   *
+   * @remarks
+   * Update an OAuth proxy server's configuration for a toolset
+   */
+  async updateOAuthProxyServer(
+    request: operations.UpdateOAuthProxyServerRequest,
+    security?: operations.UpdateOAuthProxyServerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Toolset> {
+    return unwrapAsync(toolsetsUpdateOAuthProxyServer(
       this,
       request,
       security,

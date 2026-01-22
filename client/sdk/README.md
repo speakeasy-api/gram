@@ -291,6 +291,8 @@ run();
 * [list](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 * [removeOAuthServer](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
 * [updateBySlug](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
+* [updateExternalOAuthServer](docs/sdks/toolsets/README.md#updateexternaloauthserver) - updateExternalOAuthServer toolsets
+* [updateOAuthProxyServer](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
 
 ### [Usage](docs/sdks/usage/README.md)
 
@@ -422,6 +424,8 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`toolsetsList`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`toolsetsRemoveOAuthServer`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
 - [`toolsetsUpdateBySlug`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
+- [`toolsetsUpdateExternalOAuthServer`](docs/sdks/toolsets/README.md#updateexternaloauthserver) - updateExternalOAuthServer toolsets
+- [`toolsetsUpdateOAuthProxyServer`](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
 - [`toolsList`](docs/sdks/tools/README.md#list) - listTools tools
 - [`usageCreateCheckout`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`usageCreateCustomerSession`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
@@ -548,6 +552,8 @@ To learn about this feature and how to get started, check
 - [`useToolExecutionLogs`](docs/sdks/logs/README.md#listtoolexecutionlogs) - listToolExecutionLogs logs
 - [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
+- [`useUpdateExternalOAuthServerMutation`](docs/sdks/toolsets/README.md#updateexternaloauthserver) - updateExternalOAuthServer toolsets
+- [`useUpdateOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages
 - [`useUpdateSlackConnectionMutation`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates

@@ -1,16 +1,16 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 11cf0f68cc297eb2518a5cf65266f526
+  docChecksum: cead736ec1ce5eee9d87c8c2afeea202
   docVersion: 0.0.1
   speakeasyVersion: 1.685.0
   generationVersion: 2.794.1
-  releaseVersion: 0.25.12
-  configChecksum: 99abe72f5e55d2b72e9ea58bc4684dfc
+  releaseVersion: 0.25.13
+  configChecksum: 15be224408ef893191f74072728595aa
 persistentEdits:
-  generation_id: 41e04799-0ef0-4d5f-82c4-e4c5c041597b
-  pristine_commit_hash: 587002280bffaa5de1ca21216935ed1313eb0986
-  pristine_tree_hash: 2cf3b8e29a1708bf79817b9473f5ffbea2a1c38b
+  generation_id: 74e0c5ba-8d1c-468b-9a5e-28d3e97c1cc5
+  pristine_commit_hash: 4cbb38f7a39f491862af1731eaea5ee37f77d90f
+  pristine_tree_hash: a6f19344e6dbdb4a935b6ac11a7321130faefe5a
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -768,6 +768,14 @@ trackedFiles:
     id: 76fdc8e4488c
     last_write_checksum: sha1:857f7719ac65c86650daee98bc50a523abc12b5e
     pristine_git_object: ac65633f8d441d14662182fbe7f09c352e490a77
+  docs/models/components/updateexternaloauthserverrequestbody.md:
+    id: 8a60d8d54983
+    last_write_checksum: sha1:58d0c83931470965d7f081734c313017ec5dff67
+    pristine_git_object: 944d3f9b32c422ba2779781aee22b476d0d15a82
+  docs/models/components/updateoauthproxyserverrequestbody.md:
+    id: 10132efe3e8b
+    last_write_checksum: sha1:a89a49381984241de4e73d4fd98f4f3899b65a6e
+    pristine_git_object: 66cdac1b6ad5a35af83ec390156b7a80f6a3f0a7
   docs/models/components/updatepackageform.md:
     id: 176b3fe2c1c8
     last_write_checksum: sha1:e0d10c31236e4439b64c6b107163d44ba7040e2b
@@ -2124,6 +2132,38 @@ trackedFiles:
     id: 48e5f72b92b1
     last_write_checksum: sha1:9d35ec4b7b7641a8b624ccaab0ccd8ac169cffaa
     pristine_git_object: 8e1d5e2dd7288759c466317841f1ac2b83d4f6d0
+  docs/models/operations/updateexternaloauthserverrequest.md:
+    id: 81d1c6f2f107
+    last_write_checksum: sha1:8a932a367f79b66cc75a044df435af4a2e113b29
+    pristine_git_object: d5d56213e1f2e4a3b218567b85d1ad48191b806d
+  docs/models/operations/updateexternaloauthserversecurity.md:
+    id: f746ed95dec5
+    last_write_checksum: sha1:bb63d1ce369d8e270a508e097412840e4ea56e9f
+    pristine_git_object: 3900d9469a57b4dea1894ac26f99aa0f6788e6c0
+  docs/models/operations/updateexternaloauthserversecurityoption1.md:
+    id: 0c9b84270f40
+    last_write_checksum: sha1:4b41d16fbb69a3b0a42870bd577a4dc0f83ab2f9
+    pristine_git_object: 709bfade0fb468f1fe50a3d26ec845cf0fc52864
+  docs/models/operations/updateexternaloauthserversecurityoption2.md:
+    id: 3d4b24d5b1cd
+    last_write_checksum: sha1:82dc081ba4aa180f209186d3dbf71d5fa2070863
+    pristine_git_object: 4b641deb0c0ee89655b55dbc2e5fb362439c044b
+  docs/models/operations/updateoauthproxyserverrequest.md:
+    id: 60acf9934f7f
+    last_write_checksum: sha1:30ab4be23c51eaaf10f3429de3c538bcdf0b3a15
+    pristine_git_object: 0e52a3a6905b98ad6a980f79bf1e9c071b6a4d17
+  docs/models/operations/updateoauthproxyserversecurity.md:
+    id: c50a6634c92b
+    last_write_checksum: sha1:0a4fcddf67bda9805039dd59ae0122912246c96f
+    pristine_git_object: aa0f0223cf221657281f4bd95ce05eee4ef09dc6
+  docs/models/operations/updateoauthproxyserversecurityoption1.md:
+    id: a3a698b786fe
+    last_write_checksum: sha1:38fe1546b81e041eb56c749765649d1895290da9
+    pristine_git_object: 8a408605ccd79ff4133f03bb959fd90d9d16f889
+  docs/models/operations/updateoauthproxyserversecurityoption2.md:
+    id: 4bc36e637548
+    last_write_checksum: sha1:33da29d774996ddd62101c8f175c3e358bbc0673
+    pristine_git_object: 0a108d4e65a7466c9988e111245a8d1f00229560
   docs/models/operations/updatepackagerequest.md:
     id: f0a00817e4f1
     last_write_checksum: sha1:f2adb1afd0daf9f2aadec1a84114c0c72b4d9e1b
@@ -2382,8 +2422,8 @@ trackedFiles:
     pristine_git_object: 75c6407b451b23f105d74225570082fe8373acb7
   docs/sdks/toolsets/README.md:
     id: 180bfa4b9dd4
-    last_write_checksum: sha1:885a4465f07115ce4f0629be55be6a10695c40ba
-    pristine_git_object: 20b9c0819d11f71aa7c63231589ffed6e41a1b7e
+    last_write_checksum: sha1:26550c7aaad3e356cd6956ea20980ac377870110
+    pristine_git_object: 5230607a629af5186d1fa1ca1d75d5039b038521
   docs/sdks/usage/README.md:
     id: 631af2d7ce26
     last_write_checksum: sha1:be8c4b86d33ce443517fac8610b1b2d9a33bc45c
@@ -2414,12 +2454,12 @@ trackedFiles:
     pristine_git_object: 8a33dbb4b9cb9cefaa43e10ddf535cbcd13c9e72
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:f2f563fc8e7faf011a8c6d58bb9f7104431c86fd
-    pristine_git_object: 3b9457a30eac737225bdb3ecc370507cb9bc2c56
+    last_write_checksum: sha1:aea55e7262eaf3212afec3ece61e147a1fc82df9
+    pristine_git_object: 5eb888fb007fc3bc9d4a0c582f2cd8af891abef7
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:e96eb12a5097265ef87c74dcce5284725e7991c2
-    pristine_git_object: 88033c3a960c8c1b56d27b5d5cb60d6dc1158cc0
+    last_write_checksum: sha1:e0d18c03b010a82e867f2ec3dfda378b646ce4a2
+    pristine_git_object: b17dc9b7013e3061d3a4308df3f82745505a90d1
   src/core.ts:
     id: f431fdbcd144
     last_write_checksum: sha1:e86d7ab315ff1ca00bf8eb2400e2f92ba258fa2a
@@ -2824,6 +2864,14 @@ trackedFiles:
     id: 11ddf65847cb
     last_write_checksum: sha1:044d2f0e22bf2db264e5284f99b97612c3431a87
     pristine_git_object: 28bab5415ea1190e7b53e6af9cc767ae0e398cc3
+  src/funcs/toolsetsUpdateExternalOAuthServer.ts:
+    id: 36208248e726
+    last_write_checksum: sha1:abae0b1241f52766d080a7b11de6feb9539ea859
+    pristine_git_object: 5f9e0473f124c314915f2e0fd9380ce1d2398d99
+  src/funcs/toolsetsUpdateOAuthProxyServer.ts:
+    id: 2f221deaf973
+    last_write_checksum: sha1:01d917dd613874e2715c0ba34c72225bb2429506
+    pristine_git_object: 296816f05ecbf790b9255c38139ca97988fa648b
   src/funcs/usageCreateCheckout.ts:
     id: c1c1286d55a5
     last_write_checksum: sha1:62cf048dd1e98dadef4dbeb97a0ea01772168c91
@@ -2874,8 +2922,8 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:6cab5e8a895dd49e50af91d379c37f329dc7ec0d
-    pristine_git_object: 9fd273a954a1b3744c0b9354ee20a4c3a5802d70
+    last_write_checksum: sha1:8d384a6fdd7ccd504034761d4ccf232307dfe095
+    pristine_git_object: 0339f0b0f3ed5d82b80dd6447e1eb0b7edf366fe
   src/lib/dlv.ts:
     id: b1988214835a
     last_write_checksum: sha1:7ba84b91a48e901ce1bddd587082652d09830ba4
@@ -3226,8 +3274,8 @@ trackedFiles:
     pristine_git_object: 952a38917fc20703e2f0fe554737def9a704387d
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:35a42d71735b3cba4ec17b1c1e6e512c892ba9e1
-    pristine_git_object: 16c5bd05588dfceb8cb0e1031fbcf46ee1dae51a
+    last_write_checksum: sha1:8fd1622649d94411ad518365fa6c171328001d9e
+    pristine_git_object: 2bc044f0bbef5c888d19b622b5b7a9551b56ff7c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
     last_write_checksum: sha1:bb79a6838633c4b2ff268fc5de0b47f8207613a2
@@ -3540,6 +3588,14 @@ trackedFiles:
     id: 238a2dbcc80b
     last_write_checksum: sha1:707b35bb2b0de120d931cbe750f8d9f32dba7f62
     pristine_git_object: ab2a5061b61f6c0a5849ae630c980fa324b98e18
+  src/models/components/updateexternaloauthserverrequestbody.ts:
+    id: 996c957d9a42
+    last_write_checksum: sha1:267bb69e95c7eb1c51a23b4df55ed4ec4870eda1
+    pristine_git_object: 21d52527425558dca99a6d3b4b4b1584771d3cf6
+  src/models/components/updateoauthproxyserverrequestbody.ts:
+    id: d50b5586c767
+    last_write_checksum: sha1:c9f312b71b2a92dea0cd7ff822075a406bb1a27d
+    pristine_git_object: 3982db32a562ceb9e203c939020aedaff670b973
   src/models/components/updatepackageform.ts:
     id: ef9273a03dfe
     last_write_checksum: sha1:f907bf174de97f55f259dca5d59cb708b6e11b73
@@ -3834,8 +3890,8 @@ trackedFiles:
     pristine_git_object: c847d55d0e1a60c6f2aafe8e29c62fe699a75588
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:46d583be85f400291529798d6ca3bb2eeb68aa19
-    pristine_git_object: 3ca79b34d979142b952033f34d53af2e50e7bb96
+    last_write_checksum: sha1:397e2c82a659bb15f546e7a0079e7662c8115374
+    pristine_git_object: 4078a6c7f1f3243431ab86b9ecb62254222e8e6c
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
     last_write_checksum: sha1:dcdd3ea0c43179c717cd784f3d4acfba7275629e
@@ -4024,6 +4080,14 @@ trackedFiles:
     id: 608493f1b169
     last_write_checksum: sha1:a5518a9a2d8ebe95a506ef9a140be8eb16a8d025
     pristine_git_object: 022db0e1885a00ab0839de0a69e1e973f770d22f
+  src/models/operations/updateexternaloauthserver.ts:
+    id: 5e00c5fc6658
+    last_write_checksum: sha1:9c78a51147d97ec551a46f3441d5461c15ddde49
+    pristine_git_object: bd615db29be1141ae9a404223cadda615b54da3f
+  src/models/operations/updateoauthproxyserver.ts:
+    id: 2bb6b90e9112
+    last_write_checksum: sha1:73593e4aea511c9d9ac77bd5f68188a25b78cbd9
+    pristine_git_object: 788da431f13fc11a4a5db31e4374d84584fa3d9c
   src/models/operations/updatepackage.ts:
     id: 3137e339dc54
     last_write_checksum: sha1:c0c8836d36ff89ed4df523ef72bca955633709f6
@@ -4310,8 +4374,8 @@ trackedFiles:
     pristine_git_object: 48f56cd5f501f734c3428170db837bbe2568246f
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:c4981fc674c1ba0a30caec6df84d018aa4518fc2
-    pristine_git_object: 7a9d1513d8c16705eeb61bdc0a65d2db84e46090
+    last_write_checksum: sha1:fa356586b572cd103233a2f3f18123adbc7cc496
+    pristine_git_object: 0b5d7e3ad4ddbc8bc04204a38fb00cd8b4df570d
   src/react-query/instance.core.ts:
     id: b18e0a042b11
     last_write_checksum: sha1:a602af0389e4e8536c0549a088f8f39c3d15f7f4
@@ -4632,6 +4696,14 @@ trackedFiles:
     id: 30ca2d05fc78
     last_write_checksum: sha1:398c5ca2037962e22db67e3804ca6506d7300d5b
     pristine_git_object: 2cf356c08feca9a3e7c51a8c3549076780ac8ea5
+  src/react-query/updateExternalOAuthServer.ts:
+    id: 3a394816dcac
+    last_write_checksum: sha1:ea671c1e4f37c0ec91ec4c9360eb9df68c2e60ea
+    pristine_git_object: 2ad05739531ccc379ad218bc2b69156f998325c8
+  src/react-query/updateOAuthProxyServer.ts:
+    id: 34391aa24b18
+    last_write_checksum: sha1:c3083d4208e461be7abe4ae70245dd0816b9ae6b
+    pristine_git_object: 3c7481e661fb664d32fd705d9203aa23af0caf11
   src/react-query/updatePackage.ts:
     id: 50a0d18b0a84
     last_write_checksum: sha1:d2ec3ecffcca743a691cce46fb74f5d64a9e7ff5
@@ -4778,8 +4850,8 @@ trackedFiles:
     pristine_git_object: 4c7e184e2d9dee5ccd82b2ef46f3236d7ec30efb
   src/sdk/toolsets.ts:
     id: 0715c1588060
-    last_write_checksum: sha1:0a53a9589ab794c70c025114ba6cfa2e20c2b8a2
-    pristine_git_object: fae0dfdc43d7d47a88b102dc66ff5b040c7d590a
+    last_write_checksum: sha1:faa86260d9260aa57a4f2c713a1ac5e2c449d1b1
+    pristine_git_object: 1fbf4b2a61e2364919ab60e88a844ebc277c6c8f
   src/sdk/usage.ts:
     id: e4cbe77b260e
     last_write_checksum: sha1:566500e9fbd5ba66b7a72763f349b2f4b0c995af
@@ -6040,6 +6112,34 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  updateExternalOAuthServer:
+    speakeasy-default-update-external-O-auth-server:
+      parameters:
+        query:
+          slug: "<value>"
+      requestBody:
+        application/json: {"metadata": "<value>"}
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2024-02-10T19:26:01.706Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 613606}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "tools": [], "toolset_version": 38578, "updated_at": "2025-03-20T19:08:01.858Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  updateOAuthProxyServer:
+    speakeasy-default-update-O-auth-proxy-server:
+      parameters:
+        query:
+          slug: "<value>"
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2025-12-15T09:07:12.816Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 108041}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2026-04-28T22:58:22.798Z", "description": "pillow dazzling twin equally when inculcate", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>"], "updated_at": "2024-01-01T22:57:51.926Z"}], "resource_urns": ["<value 1>", "<value 2>"], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [{}], "toolset_version": 477020, "updated_at": "2024-03-09T13:04:57.481Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

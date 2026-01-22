@@ -72,6 +72,28 @@ type AddOAuthProxyServerRequestBody struct {
 	OauthProxyServer *OAuthProxyServerFormRequestBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
 }
 
+// UpdateExternalOAuthServerRequestBody is the type of the "toolsets" service
+// "updateExternalOAuthServer" endpoint HTTP request body.
+type UpdateExternalOAuthServerRequestBody struct {
+	// The updated metadata for the external OAuth server
+	Metadata any `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
+}
+
+// UpdateOAuthProxyServerRequestBody is the type of the "toolsets" service
+// "updateOAuthProxyServer" endpoint HTTP request body.
+type UpdateOAuthProxyServerRequestBody struct {
+	// The authorization endpoint URL
+	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
+	// The token endpoint URL
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// OAuth scopes to request
+	ScopesSupported []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	// Auth methods (client_secret_basic or client_secret_post)
+	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	// The environment slug to store secrets
+	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
+}
+
 // CreateToolsetResponseBody is the type of the "toolsets" service
 // "createToolset" endpoint HTTP response body.
 type CreateToolsetResponseBody struct {
@@ -442,6 +464,126 @@ type RemoveOAuthServerResponseBody struct {
 // AddOAuthProxyServerResponseBody is the type of the "toolsets" service
 // "addOAuthProxyServer" endpoint HTTP response body.
 type AddOAuthProxyServerResponseBody struct {
+	// The ID of the toolset
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this toolset belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The organization ID this toolset belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The account type of the organization
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// The name of the toolset
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Description of the toolset
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The metadata surrounding oauth enabled tools within this server
+	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata" json:"oauth_enablement_metadata" xml:"oauth_enablement_metadata"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// The tool URNs in this toolset
+	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
+	// The resources in this toolset
+	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
+	// The resource URNs in this toolset
+	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// The ID of the custom domain to use for the toolset
+	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// When the toolset was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the toolset was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// UpdateExternalOAuthServerResponseBody is the type of the "toolsets" service
+// "updateExternalOAuthServer" endpoint HTTP response body.
+type UpdateExternalOAuthServerResponseBody struct {
+	// The ID of the toolset
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this toolset belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The organization ID this toolset belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The account type of the organization
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// The name of the toolset
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Description of the toolset
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The metadata surrounding oauth enabled tools within this server
+	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata" json:"oauth_enablement_metadata" xml:"oauth_enablement_metadata"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// The tool URNs in this toolset
+	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
+	// The resources in this toolset
+	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
+	// The resource URNs in this toolset
+	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// The ID of the custom domain to use for the toolset
+	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// When the toolset was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the toolset was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// UpdateOAuthProxyServerResponseBody is the type of the "toolsets" service
+// "updateOAuthProxyServer" endpoint HTTP response body.
+type UpdateOAuthProxyServerResponseBody struct {
 	// The ID of the toolset
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID this toolset belongs to
@@ -2345,6 +2487,386 @@ type AddOAuthProxyServerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// UpdateExternalOAuthServerUnauthorizedResponseBody is the type of the
+// "toolsets" service "updateExternalOAuthServer" endpoint HTTP response body
+// for the "unauthorized" error.
+type UpdateExternalOAuthServerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateExternalOAuthServerForbiddenResponseBody is the type of the "toolsets"
+// service "updateExternalOAuthServer" endpoint HTTP response body for the
+// "forbidden" error.
+type UpdateExternalOAuthServerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateExternalOAuthServerBadRequestResponseBody is the type of the
+// "toolsets" service "updateExternalOAuthServer" endpoint HTTP response body
+// for the "bad_request" error.
+type UpdateExternalOAuthServerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateExternalOAuthServerNotFoundResponseBody is the type of the "toolsets"
+// service "updateExternalOAuthServer" endpoint HTTP response body for the
+// "not_found" error.
+type UpdateExternalOAuthServerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateExternalOAuthServerConflictResponseBody is the type of the "toolsets"
+// service "updateExternalOAuthServer" endpoint HTTP response body for the
+// "conflict" error.
+type UpdateExternalOAuthServerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateExternalOAuthServerUnsupportedMediaResponseBody is the type of the
+// "toolsets" service "updateExternalOAuthServer" endpoint HTTP response body
+// for the "unsupported_media" error.
+type UpdateExternalOAuthServerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateExternalOAuthServerInvalidResponseBody is the type of the "toolsets"
+// service "updateExternalOAuthServer" endpoint HTTP response body for the
+// "invalid" error.
+type UpdateExternalOAuthServerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateExternalOAuthServerInvariantViolationResponseBody is the type of the
+// "toolsets" service "updateExternalOAuthServer" endpoint HTTP response body
+// for the "invariant_violation" error.
+type UpdateExternalOAuthServerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateExternalOAuthServerUnexpectedResponseBody is the type of the
+// "toolsets" service "updateExternalOAuthServer" endpoint HTTP response body
+// for the "unexpected" error.
+type UpdateExternalOAuthServerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateExternalOAuthServerGatewayErrorResponseBody is the type of the
+// "toolsets" service "updateExternalOAuthServer" endpoint HTTP response body
+// for the "gateway_error" error.
+type UpdateExternalOAuthServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateOAuthProxyServerUnauthorizedResponseBody is the type of the "toolsets"
+// service "updateOAuthProxyServer" endpoint HTTP response body for the
+// "unauthorized" error.
+type UpdateOAuthProxyServerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateOAuthProxyServerForbiddenResponseBody is the type of the "toolsets"
+// service "updateOAuthProxyServer" endpoint HTTP response body for the
+// "forbidden" error.
+type UpdateOAuthProxyServerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateOAuthProxyServerBadRequestResponseBody is the type of the "toolsets"
+// service "updateOAuthProxyServer" endpoint HTTP response body for the
+// "bad_request" error.
+type UpdateOAuthProxyServerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateOAuthProxyServerNotFoundResponseBody is the type of the "toolsets"
+// service "updateOAuthProxyServer" endpoint HTTP response body for the
+// "not_found" error.
+type UpdateOAuthProxyServerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateOAuthProxyServerConflictResponseBody is the type of the "toolsets"
+// service "updateOAuthProxyServer" endpoint HTTP response body for the
+// "conflict" error.
+type UpdateOAuthProxyServerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateOAuthProxyServerUnsupportedMediaResponseBody is the type of the
+// "toolsets" service "updateOAuthProxyServer" endpoint HTTP response body for
+// the "unsupported_media" error.
+type UpdateOAuthProxyServerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateOAuthProxyServerInvalidResponseBody is the type of the "toolsets"
+// service "updateOAuthProxyServer" endpoint HTTP response body for the
+// "invalid" error.
+type UpdateOAuthProxyServerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateOAuthProxyServerInvariantViolationResponseBody is the type of the
+// "toolsets" service "updateOAuthProxyServer" endpoint HTTP response body for
+// the "invariant_violation" error.
+type UpdateOAuthProxyServerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateOAuthProxyServerUnexpectedResponseBody is the type of the "toolsets"
+// service "updateOAuthProxyServer" endpoint HTTP response body for the
+// "unexpected" error.
+type UpdateOAuthProxyServerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateOAuthProxyServerGatewayErrorResponseBody is the type of the "toolsets"
+// service "updateOAuthProxyServer" endpoint HTTP response body for the
+// "gateway_error" error.
+type UpdateOAuthProxyServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SecurityVariableResponseBody is used to define fields on response body types.
 type SecurityVariableResponseBody struct {
 	// The type of security
@@ -3614,6 +4136,249 @@ func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResp
 // result of the "addOAuthProxyServer" endpoint of the "toolsets" service.
 func NewAddOAuthProxyServerResponseBody(res *types.Toolset) *AddOAuthProxyServerResponseBody {
 	body := &AddOAuthProxyServerResponseBody{
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		OrganizationID:    res.OrganizationID,
+		AccountType:       res.AccountType,
+		Name:              res.Name,
+		Slug:              string(res.Slug),
+		Description:       res.Description,
+		ToolsetVersion:    res.ToolsetVersion,
+		McpIsPublic:       res.McpIsPublic,
+		McpEnabled:        res.McpEnabled,
+		ToolSelectionMode: res.ToolSelectionMode,
+		CustomDomainID:    res.CustomDomainID,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
+	}
+	if res.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
+		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if res.McpSlug != nil {
+		mcpSlug := string(*res.McpSlug)
+		body.McpSlug = &mcpSlug
+	}
+	if res.SecurityVariables != nil {
+		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
+		for i, val := range res.SecurityVariables {
+			if val == nil {
+				body.SecurityVariables[i] = nil
+				continue
+			}
+			body.SecurityVariables[i] = marshalTypesSecurityVariableToSecurityVariableResponseBody(val)
+		}
+	}
+	if res.ServerVariables != nil {
+		body.ServerVariables = make([]*ServerVariableResponseBody, len(res.ServerVariables))
+		for i, val := range res.ServerVariables {
+			if val == nil {
+				body.ServerVariables[i] = nil
+				continue
+			}
+			body.ServerVariables[i] = marshalTypesServerVariableToServerVariableResponseBody(val)
+		}
+	}
+	if res.FunctionEnvironmentVariables != nil {
+		body.FunctionEnvironmentVariables = make([]*FunctionEnvironmentVariableResponseBody, len(res.FunctionEnvironmentVariables))
+		for i, val := range res.FunctionEnvironmentVariables {
+			if val == nil {
+				body.FunctionEnvironmentVariables[i] = nil
+				continue
+			}
+			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
+		}
+	}
+	if res.OauthEnablementMetadata != nil {
+		body.OauthEnablementMetadata = marshalTypesOAuthEnablementMetadataToOAuthEnablementMetadataResponseBody(res.OauthEnablementMetadata)
+	}
+	if res.Tools != nil {
+		body.Tools = make([]*ToolResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			if val == nil {
+				body.Tools[i] = nil
+				continue
+			}
+			body.Tools[i] = marshalTypesToolToToolResponseBody(val)
+		}
+	} else {
+		body.Tools = []*ToolResponseBody{}
+	}
+	if res.ToolUrns != nil {
+		body.ToolUrns = make([]string, len(res.ToolUrns))
+		for i, val := range res.ToolUrns {
+			body.ToolUrns[i] = val
+		}
+	} else {
+		body.ToolUrns = []string{}
+	}
+	if res.Resources != nil {
+		body.Resources = make([]*ResourceResponseBody, len(res.Resources))
+		for i, val := range res.Resources {
+			if val == nil {
+				body.Resources[i] = nil
+				continue
+			}
+			body.Resources[i] = marshalTypesResourceToResourceResponseBody(val)
+		}
+	} else {
+		body.Resources = []*ResourceResponseBody{}
+	}
+	if res.ResourceUrns != nil {
+		body.ResourceUrns = make([]string, len(res.ResourceUrns))
+		for i, val := range res.ResourceUrns {
+			body.ResourceUrns[i] = val
+		}
+	} else {
+		body.ResourceUrns = []string{}
+	}
+	if res.PromptTemplates != nil {
+		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
+		for i, val := range res.PromptTemplates {
+			if val == nil {
+				body.PromptTemplates[i] = nil
+				continue
+			}
+			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+		}
+	} else {
+		body.PromptTemplates = []*PromptTemplateResponseBody{}
+	}
+	if res.ExternalOauthServer != nil {
+		body.ExternalOauthServer = marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody(res.ExternalOauthServer)
+	}
+	if res.OauthProxyServer != nil {
+		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerResponseBody builds the HTTP response body from
+// the result of the "updateExternalOAuthServer" endpoint of the "toolsets"
+// service.
+func NewUpdateExternalOAuthServerResponseBody(res *types.Toolset) *UpdateExternalOAuthServerResponseBody {
+	body := &UpdateExternalOAuthServerResponseBody{
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		OrganizationID:    res.OrganizationID,
+		AccountType:       res.AccountType,
+		Name:              res.Name,
+		Slug:              string(res.Slug),
+		Description:       res.Description,
+		ToolsetVersion:    res.ToolsetVersion,
+		McpIsPublic:       res.McpIsPublic,
+		McpEnabled:        res.McpEnabled,
+		ToolSelectionMode: res.ToolSelectionMode,
+		CustomDomainID:    res.CustomDomainID,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
+	}
+	if res.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
+		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if res.McpSlug != nil {
+		mcpSlug := string(*res.McpSlug)
+		body.McpSlug = &mcpSlug
+	}
+	if res.SecurityVariables != nil {
+		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
+		for i, val := range res.SecurityVariables {
+			if val == nil {
+				body.SecurityVariables[i] = nil
+				continue
+			}
+			body.SecurityVariables[i] = marshalTypesSecurityVariableToSecurityVariableResponseBody(val)
+		}
+	}
+	if res.ServerVariables != nil {
+		body.ServerVariables = make([]*ServerVariableResponseBody, len(res.ServerVariables))
+		for i, val := range res.ServerVariables {
+			if val == nil {
+				body.ServerVariables[i] = nil
+				continue
+			}
+			body.ServerVariables[i] = marshalTypesServerVariableToServerVariableResponseBody(val)
+		}
+	}
+	if res.FunctionEnvironmentVariables != nil {
+		body.FunctionEnvironmentVariables = make([]*FunctionEnvironmentVariableResponseBody, len(res.FunctionEnvironmentVariables))
+		for i, val := range res.FunctionEnvironmentVariables {
+			if val == nil {
+				body.FunctionEnvironmentVariables[i] = nil
+				continue
+			}
+			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
+		}
+	}
+	if res.OauthEnablementMetadata != nil {
+		body.OauthEnablementMetadata = marshalTypesOAuthEnablementMetadataToOAuthEnablementMetadataResponseBody(res.OauthEnablementMetadata)
+	}
+	if res.Tools != nil {
+		body.Tools = make([]*ToolResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			if val == nil {
+				body.Tools[i] = nil
+				continue
+			}
+			body.Tools[i] = marshalTypesToolToToolResponseBody(val)
+		}
+	} else {
+		body.Tools = []*ToolResponseBody{}
+	}
+	if res.ToolUrns != nil {
+		body.ToolUrns = make([]string, len(res.ToolUrns))
+		for i, val := range res.ToolUrns {
+			body.ToolUrns[i] = val
+		}
+	} else {
+		body.ToolUrns = []string{}
+	}
+	if res.Resources != nil {
+		body.Resources = make([]*ResourceResponseBody, len(res.Resources))
+		for i, val := range res.Resources {
+			if val == nil {
+				body.Resources[i] = nil
+				continue
+			}
+			body.Resources[i] = marshalTypesResourceToResourceResponseBody(val)
+		}
+	} else {
+		body.Resources = []*ResourceResponseBody{}
+	}
+	if res.ResourceUrns != nil {
+		body.ResourceUrns = make([]string, len(res.ResourceUrns))
+		for i, val := range res.ResourceUrns {
+			body.ResourceUrns[i] = val
+		}
+	} else {
+		body.ResourceUrns = []string{}
+	}
+	if res.PromptTemplates != nil {
+		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
+		for i, val := range res.PromptTemplates {
+			if val == nil {
+				body.PromptTemplates[i] = nil
+				continue
+			}
+			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+		}
+	} else {
+		body.PromptTemplates = []*PromptTemplateResponseBody{}
+	}
+	if res.ExternalOauthServer != nil {
+		body.ExternalOauthServer = marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody(res.ExternalOauthServer)
+	}
+	if res.OauthProxyServer != nil {
+		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	return body
+}
+
+// NewUpdateOAuthProxyServerResponseBody builds the HTTP response body from the
+// result of the "updateOAuthProxyServer" endpoint of the "toolsets" service.
+func NewUpdateOAuthProxyServerResponseBody(res *types.Toolset) *UpdateOAuthProxyServerResponseBody {
+	body := &UpdateOAuthProxyServerResponseBody{
 		ID:                res.ID,
 		ProjectID:         res.ProjectID,
 		OrganizationID:    res.OrganizationID,
@@ -5166,6 +5931,306 @@ func NewAddOAuthProxyServerGatewayErrorResponseBody(res *goa.ServiceError) *AddO
 	return body
 }
 
+// NewUpdateExternalOAuthServerUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "updateExternalOAuthServer" endpoint of
+// the "toolsets" service.
+func NewUpdateExternalOAuthServerUnauthorizedResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerUnauthorizedResponseBody {
+	body := &UpdateExternalOAuthServerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerForbiddenResponseBody builds the HTTP response
+// body from the result of the "updateExternalOAuthServer" endpoint of the
+// "toolsets" service.
+func NewUpdateExternalOAuthServerForbiddenResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerForbiddenResponseBody {
+	body := &UpdateExternalOAuthServerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerBadRequestResponseBody builds the HTTP response
+// body from the result of the "updateExternalOAuthServer" endpoint of the
+// "toolsets" service.
+func NewUpdateExternalOAuthServerBadRequestResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerBadRequestResponseBody {
+	body := &UpdateExternalOAuthServerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerNotFoundResponseBody builds the HTTP response
+// body from the result of the "updateExternalOAuthServer" endpoint of the
+// "toolsets" service.
+func NewUpdateExternalOAuthServerNotFoundResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerNotFoundResponseBody {
+	body := &UpdateExternalOAuthServerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerConflictResponseBody builds the HTTP response
+// body from the result of the "updateExternalOAuthServer" endpoint of the
+// "toolsets" service.
+func NewUpdateExternalOAuthServerConflictResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerConflictResponseBody {
+	body := &UpdateExternalOAuthServerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "updateExternalOAuthServer" endpoint of
+// the "toolsets" service.
+func NewUpdateExternalOAuthServerUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerUnsupportedMediaResponseBody {
+	body := &UpdateExternalOAuthServerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerInvalidResponseBody builds the HTTP response
+// body from the result of the "updateExternalOAuthServer" endpoint of the
+// "toolsets" service.
+func NewUpdateExternalOAuthServerInvalidResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerInvalidResponseBody {
+	body := &UpdateExternalOAuthServerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "updateExternalOAuthServer" endpoint of
+// the "toolsets" service.
+func NewUpdateExternalOAuthServerInvariantViolationResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerInvariantViolationResponseBody {
+	body := &UpdateExternalOAuthServerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerUnexpectedResponseBody builds the HTTP response
+// body from the result of the "updateExternalOAuthServer" endpoint of the
+// "toolsets" service.
+func NewUpdateExternalOAuthServerUnexpectedResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerUnexpectedResponseBody {
+	body := &UpdateExternalOAuthServerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "updateExternalOAuthServer" endpoint of
+// the "toolsets" service.
+func NewUpdateExternalOAuthServerGatewayErrorResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerGatewayErrorResponseBody {
+	body := &UpdateExternalOAuthServerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateOAuthProxyServerUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "updateOAuthProxyServer" endpoint of the
+// "toolsets" service.
+func NewUpdateOAuthProxyServerUnauthorizedResponseBody(res *goa.ServiceError) *UpdateOAuthProxyServerUnauthorizedResponseBody {
+	body := &UpdateOAuthProxyServerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateOAuthProxyServerForbiddenResponseBody builds the HTTP response body
+// from the result of the "updateOAuthProxyServer" endpoint of the "toolsets"
+// service.
+func NewUpdateOAuthProxyServerForbiddenResponseBody(res *goa.ServiceError) *UpdateOAuthProxyServerForbiddenResponseBody {
+	body := &UpdateOAuthProxyServerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateOAuthProxyServerBadRequestResponseBody builds the HTTP response
+// body from the result of the "updateOAuthProxyServer" endpoint of the
+// "toolsets" service.
+func NewUpdateOAuthProxyServerBadRequestResponseBody(res *goa.ServiceError) *UpdateOAuthProxyServerBadRequestResponseBody {
+	body := &UpdateOAuthProxyServerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateOAuthProxyServerNotFoundResponseBody builds the HTTP response body
+// from the result of the "updateOAuthProxyServer" endpoint of the "toolsets"
+// service.
+func NewUpdateOAuthProxyServerNotFoundResponseBody(res *goa.ServiceError) *UpdateOAuthProxyServerNotFoundResponseBody {
+	body := &UpdateOAuthProxyServerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateOAuthProxyServerConflictResponseBody builds the HTTP response body
+// from the result of the "updateOAuthProxyServer" endpoint of the "toolsets"
+// service.
+func NewUpdateOAuthProxyServerConflictResponseBody(res *goa.ServiceError) *UpdateOAuthProxyServerConflictResponseBody {
+	body := &UpdateOAuthProxyServerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateOAuthProxyServerUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "updateOAuthProxyServer" endpoint of
+// the "toolsets" service.
+func NewUpdateOAuthProxyServerUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateOAuthProxyServerUnsupportedMediaResponseBody {
+	body := &UpdateOAuthProxyServerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateOAuthProxyServerInvalidResponseBody builds the HTTP response body
+// from the result of the "updateOAuthProxyServer" endpoint of the "toolsets"
+// service.
+func NewUpdateOAuthProxyServerInvalidResponseBody(res *goa.ServiceError) *UpdateOAuthProxyServerInvalidResponseBody {
+	body := &UpdateOAuthProxyServerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateOAuthProxyServerInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "updateOAuthProxyServer" endpoint of
+// the "toolsets" service.
+func NewUpdateOAuthProxyServerInvariantViolationResponseBody(res *goa.ServiceError) *UpdateOAuthProxyServerInvariantViolationResponseBody {
+	body := &UpdateOAuthProxyServerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateOAuthProxyServerUnexpectedResponseBody builds the HTTP response
+// body from the result of the "updateOAuthProxyServer" endpoint of the
+// "toolsets" service.
+func NewUpdateOAuthProxyServerUnexpectedResponseBody(res *goa.ServiceError) *UpdateOAuthProxyServerUnexpectedResponseBody {
+	body := &UpdateOAuthProxyServerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateOAuthProxyServerGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "updateOAuthProxyServer" endpoint of the
+// "toolsets" service.
+func NewUpdateOAuthProxyServerGatewayErrorResponseBody(res *goa.ServiceError) *UpdateOAuthProxyServerGatewayErrorResponseBody {
+	body := &UpdateOAuthProxyServerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateToolsetPayload builds a toolsets service createToolset endpoint
 // payload.
 func NewCreateToolsetPayload(body *CreateToolsetRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.CreateToolsetPayload {
@@ -5337,6 +6402,51 @@ func NewAddOAuthProxyServerPayload(body *AddOAuthProxyServerRequestBody, slug st
 	return v
 }
 
+// NewUpdateExternalOAuthServerPayload builds a toolsets service
+// updateExternalOAuthServer endpoint payload.
+func NewUpdateExternalOAuthServerPayload(body *UpdateExternalOAuthServerRequestBody, slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.UpdateExternalOAuthServerPayload {
+	v := &toolsets.UpdateExternalOAuthServerPayload{
+		Metadata: body.Metadata,
+	}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewUpdateOAuthProxyServerPayload builds a toolsets service
+// updateOAuthProxyServer endpoint payload.
+func NewUpdateOAuthProxyServerPayload(body *UpdateOAuthProxyServerRequestBody, slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.UpdateOAuthProxyServerPayload {
+	v := &toolsets.UpdateOAuthProxyServerPayload{
+		AuthorizationEndpoint: body.AuthorizationEndpoint,
+		TokenEndpoint:         body.TokenEndpoint,
+	}
+	if body.EnvironmentSlug != nil {
+		environmentSlug := types.Slug(*body.EnvironmentSlug)
+		v.EnvironmentSlug = &environmentSlug
+	}
+	if body.ScopesSupported != nil {
+		v.ScopesSupported = make([]string, len(body.ScopesSupported))
+		for i, val := range body.ScopesSupported {
+			v.ScopesSupported[i] = val
+		}
+	}
+	if body.TokenEndpointAuthMethodsSupported != nil {
+		v.TokenEndpointAuthMethodsSupported = make([]string, len(body.TokenEndpointAuthMethodsSupported))
+		for i, val := range body.TokenEndpointAuthMethodsSupported {
+			v.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // ValidateCreateToolsetRequestBody runs the validations defined on
 // CreateToolsetRequestBody
 func ValidateCreateToolsetRequestBody(body *CreateToolsetRequestBody) (err error) {
@@ -5399,6 +6509,29 @@ func ValidateAddOAuthProxyServerRequestBody(body *AddOAuthProxyServerRequestBody
 	if body.OauthProxyServer != nil {
 		if err2 := ValidateOAuthProxyServerFormRequestBody(body.OauthProxyServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateUpdateExternalOAuthServerRequestBody runs the validations defined on
+// UpdateExternalOAuthServerRequestBody
+func ValidateUpdateExternalOAuthServerRequestBody(body *UpdateExternalOAuthServerRequestBody) (err error) {
+	if body.Metadata == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("metadata", "body"))
+	}
+	return
+}
+
+// ValidateUpdateOAuthProxyServerRequestBody runs the validations defined on
+// UpdateOAuthProxyServerRequestBody
+func ValidateUpdateOAuthProxyServerRequestBody(body *UpdateOAuthProxyServerRequestBody) (err error) {
+	if body.EnvironmentSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.environment_slug", *body.EnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.EnvironmentSlug != nil {
+		if utf8.RuneCountInString(*body.EnvironmentSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.environment_slug", *body.EnvironmentSlug, utf8.RuneCountInString(*body.EnvironmentSlug), 40, false))
 		}
 	}
 	return

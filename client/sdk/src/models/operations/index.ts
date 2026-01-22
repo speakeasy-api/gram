@@ -98,6 +98,8 @@ export * from "./slackcallback.js";
 export * from "./slacklogin.js";
 export * from "./switchauthscopes.js";
 export * from "./updateenvironment.js";
+export * from "./updateexternaloauthserver.js";
+export * from "./updateoauthproxyserver.js";
 export * from "./updatepackage.js";
 export * from "./updateslackconnection.js";
 export * from "./updatetemplate.js";

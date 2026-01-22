@@ -202,6 +202,36 @@ func (q *Queries) ListOAuthProxyProvidersByServer(ctx context.Context, arg ListO
 	return items, nil
 }
 
+const updateExternalOAuthServerMetadata = `-- name: UpdateExternalOAuthServerMetadata :one
+UPDATE external_oauth_server_metadata SET
+    metadata = $1,
+    updated_at = clock_timestamp()
+WHERE project_id = $2 AND id = $3 AND deleted IS FALSE
+RETURNING id, project_id, slug, metadata, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateExternalOAuthServerMetadataParams struct {
+	Metadata  []byte
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) UpdateExternalOAuthServerMetadata(ctx context.Context, arg UpdateExternalOAuthServerMetadataParams) (ExternalOauthServerMetadatum, error) {
+	row := q.db.QueryRow(ctx, updateExternalOAuthServerMetadata, arg.Metadata, arg.ProjectID, arg.ID)
+	var i ExternalOauthServerMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Slug,
+		&i.Metadata,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const upsertOAuthProxyProvider = `-- name: UpsertOAuthProxyProvider :one
 
 INSERT INTO oauth_proxy_providers (

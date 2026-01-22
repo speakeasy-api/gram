@@ -31,12 +31,14 @@ import {
   useAddExternalOAuthServerMutation,
   useAddOAuthProxyServerMutation,
   useRemoveOAuthServerMutation,
+  useUpdateExternalOAuthServerMutation,
+  useUpdateOAuthProxyServerMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { Badge, Button, Grid, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Globe, Trash2 } from "lucide-react";
+import { Globe, Pencil, Trash2 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
@@ -762,6 +764,56 @@ function OAuthDetailsModal({
 }) {
   const { url: mcpUrl } = useMcpUrl(toolset);
   const queryClient = useQueryClient();
+  const [isEditing, setIsEditing] = useState(false);
+
+  // Edit state for OAuth Proxy
+  const provider = toolset.oauthProxyServer?.oauthProxyProviders?.[0];
+  const [proxyAuthorizationEndpoint, setProxyAuthorizationEndpoint] = useState(
+    provider?.authorizationEndpoint ?? "",
+  );
+  const [proxyTokenEndpoint, setProxyTokenEndpoint] = useState(
+    provider?.tokenEndpoint ?? "",
+  );
+  const [proxyScopes, setProxyScopes] = useState(
+    provider?.scopesSupported?.join(", ") ?? "",
+  );
+  const [proxyTokenAuthMethod, setProxyTokenAuthMethod] = useState(
+    provider?.tokenEndpointAuthMethodsSupported?.[0] ?? "client_secret_post",
+  );
+  const [proxyEnvironmentSlug, setProxyEnvironmentSlug] = useState(
+    provider?.environmentSlug ?? toolset.defaultEnvironmentSlug ?? "",
+  );
+
+  // Edit state for External OAuth
+  const [externalMetadataJson, setExternalMetadataJson] = useState(
+    toolset.externalOauthServer?.metadata
+      ? JSON.stringify(toolset.externalOauthServer.metadata, null, 2)
+      : "",
+  );
+  const [jsonError, setJsonError] = useState<string | null>(null);
+
+  // Reset edit state when modal opens/closes or toolset changes
+  useEffect(() => {
+    if (isOpen) {
+      setIsEditing(false);
+      setProxyAuthorizationEndpoint(provider?.authorizationEndpoint ?? "");
+      setProxyTokenEndpoint(provider?.tokenEndpoint ?? "");
+      setProxyScopes(provider?.scopesSupported?.join(", ") ?? "");
+      setProxyTokenAuthMethod(
+        provider?.tokenEndpointAuthMethodsSupported?.[0] ??
+          "client_secret_post",
+      );
+      setProxyEnvironmentSlug(
+        provider?.environmentSlug ?? toolset.defaultEnvironmentSlug ?? "",
+      );
+      setExternalMetadataJson(
+        toolset.externalOauthServer?.metadata
+          ? JSON.stringify(toolset.externalOauthServer.metadata, null, 2)
+          : "",
+      );
+      setJsonError(null);
+    }
+  }, [isOpen, toolset, provider]);
 
   const removeOAuthMutation = useRemoveOAuthServerMutation({
     onSuccess: () => {
@@ -770,8 +822,109 @@ function OAuthDetailsModal({
     },
   });
 
+  const updateExternalOAuthMutation = useUpdateExternalOAuthServerMutation({
+    onSuccess: () => {
+      invalidateAllToolset(queryClient);
+      toast.success("External OAuth metadata updated successfully");
+      setIsEditing(false);
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update external OAuth metadata",
+      );
+    },
+  });
+
+  const updateOAuthProxyMutation = useUpdateOAuthProxyServerMutation({
+    onSuccess: () => {
+      invalidateAllToolset(queryClient);
+      toast.success("OAuth proxy configuration updated successfully");
+      setIsEditing(false);
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update OAuth proxy configuration",
+      );
+    },
+  });
+
   const isGramOAuth =
     toolset.oauthProxyServer?.oauthProxyProviders?.[0]?.providerType === "gram";
+
+  const handleSaveExternalOAuth = () => {
+    let parsedMetadata;
+    try {
+      parsedMetadata = JSON.parse(externalMetadataJson);
+    } catch {
+      setJsonError("Invalid JSON format");
+      return;
+    }
+
+    const requiredEndpoints = [
+      "authorization_endpoint",
+      "token_endpoint",
+      "registration_endpoint",
+    ];
+    const missingEndpoints = requiredEndpoints.filter(
+      (endpoint) => !parsedMetadata[endpoint],
+    );
+
+    if (missingEndpoints.length > 0) {
+      setJsonError(
+        `Missing required endpoints: ${missingEndpoints.join(", ")}`,
+      );
+      return;
+    }
+
+    setJsonError(null);
+    updateExternalOAuthMutation.mutate({
+      request: {
+        slug: toolset.slug,
+        metadata: parsedMetadata,
+      },
+    });
+  };
+
+  const handleSaveOAuthProxy = () => {
+    const scopesArray = proxyScopes
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    updateOAuthProxyMutation.mutate({
+      request: {
+        slug: toolset.slug,
+        authorizationEndpoint: proxyAuthorizationEndpoint,
+        tokenEndpoint: proxyTokenEndpoint,
+        scopesSupported: scopesArray,
+        tokenEndpointAuthMethodsSupported: [proxyTokenAuthMethod],
+        environmentSlug: proxyEnvironmentSlug,
+      },
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setProxyAuthorizationEndpoint(provider?.authorizationEndpoint ?? "");
+    setProxyTokenEndpoint(provider?.tokenEndpoint ?? "");
+    setProxyScopes(provider?.scopesSupported?.join(", ") ?? "");
+    setProxyTokenAuthMethod(
+      provider?.tokenEndpointAuthMethodsSupported?.[0] ?? "client_secret_post",
+    );
+    setProxyEnvironmentSlug(
+      provider?.environmentSlug ?? toolset.defaultEnvironmentSlug ?? "",
+    );
+    setExternalMetadataJson(
+      toolset.externalOauthServer?.metadata
+        ? JSON.stringify(toolset.externalOauthServer.metadata, null, 2)
+        : "",
+    );
+    setJsonError(null);
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -818,19 +971,31 @@ function OAuthDetailsModal({
               <>
                 <div className="flex items-center justify-between">
                   <Type className="font-medium">OAuth Proxy Server</Type>
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    className="hover:bg-destructive hover:text-white border-none"
-                    onClick={() =>
-                      removeOAuthMutation.mutate({
-                        request: { slug: toolset.slug },
-                      })
-                    }
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Unlink
-                  </Button>
+                  <Stack direction="horizontal" gap={2}>
+                    {!isEditing && (
+                      <Button
+                        variant="tertiary"
+                        size="sm"
+                        onClick={() => setIsEditing(true)}
+                      >
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Edit
+                      </Button>
+                    )}
+                    <Button
+                      variant="tertiary"
+                      size="sm"
+                      className="hover:bg-destructive hover:text-white border-none"
+                      onClick={() =>
+                        removeOAuthMutation.mutate({
+                          request: { slug: toolset.slug },
+                        })
+                      }
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Unlink
+                    </Button>
+                  </Stack>
                 </div>
                 <Stack gap={2} className="pl-4">
                   <div>
@@ -845,9 +1010,9 @@ function OAuthDetailsModal({
               </>
             )}
             {toolset.oauthProxyServer?.oauthProxyProviders?.map(
-              (provider) =>
-                provider.providerType !== "gram" && (
-                  <Stack key={provider.id} gap={2}>
+              (prov) =>
+                prov.providerType !== "gram" && (
+                  <Stack key={prov.id} gap={2}>
                     <Stack gap={2} className="pl-4">
                       <div>
                         <Type
@@ -856,9 +1021,18 @@ function OAuthDetailsModal({
                         >
                           Authorization Endpoint:
                         </Type>
-                        <CodeBlock className="mt-1">
-                          {provider.authorizationEndpoint}
-                        </CodeBlock>
+                        {isEditing ? (
+                          <Input
+                            className="mt-1"
+                            value={proxyAuthorizationEndpoint}
+                            onChange={setProxyAuthorizationEndpoint}
+                            placeholder="https://provider.com/oauth/authorize"
+                          />
+                        ) : (
+                          <CodeBlock className="mt-1">
+                            {prov.authorizationEndpoint}
+                          </CodeBlock>
+                        )}
                       </div>
                       <div>
                         <Type
@@ -867,54 +1041,98 @@ function OAuthDetailsModal({
                         >
                           Token Endpoint:
                         </Type>
-                        <CodeBlock className="mt-1">
-                          {provider.tokenEndpoint}
-                        </CodeBlock>
+                        {isEditing ? (
+                          <Input
+                            className="mt-1"
+                            value={proxyTokenEndpoint}
+                            onChange={setProxyTokenEndpoint}
+                            placeholder="https://provider.com/oauth/token"
+                          />
+                        ) : (
+                          <CodeBlock className="mt-1">
+                            {prov.tokenEndpoint}
+                          </CodeBlock>
+                        )}
                       </div>
-                      {provider.tokenEndpointAuthMethodsSupported &&
-                        provider.tokenEndpointAuthMethodsSupported.length >
-                          0 && (
-                          <div>
-                            <Type
-                              small
-                              className="font-medium text-muted-foreground"
-                            >
-                              Token Auth Method:
-                            </Type>
+                      <div>
+                        <Type
+                          small
+                          className="font-medium text-muted-foreground"
+                        >
+                          Token Auth Method:
+                        </Type>
+                        {isEditing ? (
+                          <select
+                            className="mt-1 w-full border rounded px-3 py-2 bg-background"
+                            value={proxyTokenAuthMethod}
+                            onChange={(e) =>
+                              setProxyTokenAuthMethod(e.target.value)
+                            }
+                          >
+                            <option value="client_secret_post">
+                              client_secret_post
+                            </option>
+                            <option value="client_secret_basic">
+                              client_secret_basic
+                            </option>
+                            <option value="none">none</option>
+                          </select>
+                        ) : (
+                          prov.tokenEndpointAuthMethodsSupported &&
+                          prov.tokenEndpointAuthMethodsSupported.length > 0 && (
                             <CodeBlock className="mt-1">
-                              {provider.tokenEndpointAuthMethodsSupported.join(
+                              {prov.tokenEndpointAuthMethodsSupported.join(
                                 ", ",
                               )}
                             </CodeBlock>
-                          </div>
+                          )
                         )}
-                      {provider.scopesSupported &&
-                        provider.scopesSupported.length > 0 && (
-                          <div>
-                            <Type
-                              small
-                              className="font-medium text-muted-foreground"
-                            >
-                              Supported Scopes:
-                            </Type>
+                      </div>
+                      <div>
+                        <Type
+                          small
+                          className="font-medium text-muted-foreground"
+                        >
+                          Supported Scopes:
+                        </Type>
+                        {isEditing ? (
+                          <Input
+                            className="mt-1"
+                            value={proxyScopes}
+                            onChange={setProxyScopes}
+                            placeholder="read, write, openid"
+                          />
+                        ) : (
+                          prov.scopesSupported &&
+                          prov.scopesSupported.length > 0 && (
                             <CodeBlock className="mt-1">
-                              {provider.scopesSupported.join(", ")}
+                              {prov.scopesSupported.join(", ")}
                             </CodeBlock>
-                          </div>
+                          )
                         )}
-                      {provider.environmentSlug && (
-                        <div>
-                          <Type
-                            small
-                            className="font-medium text-muted-foreground"
-                          >
-                            Environment:
-                          </Type>
-                          <CodeBlock className="mt-1">
-                            {provider.environmentSlug}
-                          </CodeBlock>
-                        </div>
-                      )}
+                      </div>
+                      <div>
+                        <Type
+                          small
+                          className="font-medium text-muted-foreground"
+                        >
+                          Environment:
+                        </Type>
+                        {isEditing ? (
+                          <EnvironmentDropdown
+                            selectedEnvironment={proxyEnvironmentSlug}
+                            setSelectedEnvironment={setProxyEnvironmentSlug}
+                            tooltip="Select environment for OAuth credentials"
+                            className="mt-1 w-full max-w-full"
+                          />
+                        ) : (
+                          prov.environmentSlug && (
+                            <CodeBlock className="mt-1">
+                              {prov.environmentSlug}
+                            </CodeBlock>
+                          )
+                        )}
+                      </div>
                     </Stack>
                   </Stack>
                 ),
@@ -923,20 +1141,32 @@ function OAuthDetailsModal({
               <Stack gap={2}>
                 <div className="flex items-center justify-between">
                   <Type className="font-medium">External OAuth Server</Type>
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    className="text-muted-foreground hover:text-destructive hover:border-destructive"
-                    onClick={() =>
-                      removeOAuthMutation.mutate({
-                        request: { slug: toolset.slug },
-                      })
-                    }
-                  >
-                    <Button.Icon>
-                      <Trash2 className="w-4 h-4" />
-                    </Button.Icon>
-                  </Button>
+                  <Stack direction="horizontal" gap={2}>
+                    {!isEditing && (
+                      <Button
+                        variant="tertiary"
+                        size="sm"
+                        onClick={() => setIsEditing(true)}
+                      >
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Edit
+                      </Button>
+                    )}
+                    <Button
+                      variant="tertiary"
+                      size="sm"
+                      className="text-muted-foreground hover:text-destructive hover:border-destructive"
+                      onClick={() =>
+                        removeOAuthMutation.mutate({
+                          request: { slug: toolset.slug },
+                        })
+                      }
+                    >
+                      <Button.Icon>
+                        <Trash2 className="w-4 h-4" />
+                      </Button.Icon>
+                    </Button>
+                  </Stack>
                 </div>
                 <Stack gap={2} className="pl-4">
                   <div>
@@ -965,37 +1195,82 @@ function OAuthDetailsModal({
                     <Type small className="font-medium text-muted-foreground">
                       OAuth Authorization Server Metadata:
                     </Type>
-                    <CodeBlock className="mt-1">
-                      {JSON.stringify(
-                        toolset.externalOauthServer.metadata,
-                        null,
-                        2,
-                      )}
-                    </CodeBlock>
+                    {jsonError && (
+                      <Type className="!text-red-500 text-sm mt-1">
+                        {jsonError}
+                      </Type>
+                    )}
+                    {isEditing ? (
+                      <TextArea
+                        className="mt-1 font-mono text-sm"
+                        value={externalMetadataJson}
+                        onChange={(value: string) => {
+                          setExternalMetadataJson(value);
+                          setJsonError(null);
+                        }}
+                        rows={12}
+                      />
+                    ) : (
+                      <CodeBlock className="mt-1">
+                        {JSON.stringify(
+                          toolset.externalOauthServer.metadata,
+                          null,
+                          2,
+                        )}
+                      </CodeBlock>
+                    )}
                   </div>
                 </Stack>
               </Stack>
             )}
           </Stack>
         </div>
-        {isGramOAuth && (
-          <Dialog.Footer>
+        <Dialog.Footer>
+          {isEditing ? (
+            <>
+              <Button variant="tertiary" onClick={handleCancelEdit}>
+                Cancel
+              </Button>
+              <Button
+                onClick={
+                  toolset.externalOauthServer
+                    ? handleSaveExternalOAuth
+                    : handleSaveOAuthProxy
+                }
+                disabled={
+                  updateExternalOAuthMutation.isPending ||
+                  updateOAuthProxyMutation.isPending
+                }
+              >
+                {updateExternalOAuthMutation.isPending ||
+                updateOAuthProxyMutation.isPending
+                  ? "Saving..."
+                  : "Save Changes"}
+              </Button>
+            </>
+          ) : isGramOAuth ? (
+            <>
+              <Button variant="tertiary" onClick={onClose}>
+                Close
+              </Button>
+              <Button
+                variant="destructive-primary"
+                onClick={() =>
+                  removeOAuthMutation.mutate({
+                    request: { slug: toolset.slug },
+                  })
+                }
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Unlink
+              </Button>
+            </>
+          ) : (
             <Button variant="tertiary" onClick={onClose}>
               Close
             </Button>
-            <Button
-              variant="destructive-primary"
-              onClick={() =>
-                removeOAuthMutation.mutate({
-                  request: { slug: toolset.slug },
-                })
-              }
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Unlink
-            </Button>
-          </Dialog.Footer>
-        )}
+          )}
+        </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
   );

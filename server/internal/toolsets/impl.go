@@ -791,6 +791,199 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 	return toolsetDetails, nil
 }
 
+func (s *Service) UpdateExternalOAuthServer(ctx context.Context, payload *gen.UpdateExternalOAuthServerPayload) (*types.Toolset, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Get the current toolset to find the external OAuth server
+	existingToolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
+		Slug:      conv.ToLower(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset").Log(ctx, s.logger)
+	}
+
+	// Check if the toolset has an external OAuth server
+	if !existingToolset.ExternalOauthServerID.Valid {
+		return nil, oops.E(oops.CodeNotFound, nil, "toolset does not have an external OAuth server").Log(ctx, s.logger)
+	}
+
+	// Marshal metadata to JSON bytes
+	metadataBytes, err := json.Marshal(payload.Metadata)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid metadata format").Log(ctx, s.logger)
+	}
+
+	// Update the external OAuth server metadata
+	_, err = s.oauthRepo.UpdateExternalOAuthServerMetadata(ctx, oauthRepo.UpdateExternalOAuthServerMetadataParams{
+		ProjectID: *authCtx.ProjectID,
+		ID:        existingToolset.ExternalOauthServerID.UUID,
+		Metadata:  metadataBytes,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "external OAuth server not found").Log(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update external OAuth server metadata").Log(ctx, s.logger)
+	}
+
+	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache)
+	if err != nil {
+		return nil, err
+	}
+
+	return toolsetDetails, nil
+}
+
+func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.UpdateOAuthProxyServerPayload) (*types.Toolset, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Get the current toolset to find the OAuth proxy server
+	existingToolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
+		Slug:      conv.ToLower(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset").Log(ctx, s.logger)
+	}
+
+	// Check if the toolset has an OAuth proxy server
+	if !existingToolset.OauthProxyServerID.Valid {
+		return nil, oops.E(oops.CodeNotFound, nil, "toolset does not have an OAuth proxy server").Log(ctx, s.logger)
+	}
+
+	// Get the existing OAuth proxy server
+	oauthProxyServer, err := s.oauthRepo.GetOAuthProxyServer(ctx, oauthRepo.GetOAuthProxyServerParams{
+		ProjectID: *authCtx.ProjectID,
+		ID:        existingToolset.OauthProxyServerID.UUID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "OAuth proxy server not found").Log(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get OAuth proxy server").Log(ctx, s.logger)
+	}
+
+	// Get existing providers to preserve values that aren't being updated
+	existingProviders, err := s.oauthRepo.ListOAuthProxyProvidersByServer(ctx, oauthRepo.ListOAuthProxyProvidersByServerParams{
+		OauthProxyServerID: oauthProxyServer.ID,
+		ProjectID:          *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get OAuth proxy providers").Log(ctx, s.logger)
+	}
+
+	if len(existingProviders) == 0 {
+		return nil, oops.E(oops.CodeNotFound, nil, "no OAuth proxy providers found").Log(ctx, s.logger)
+	}
+
+	// Use the first provider (there should only be one)
+	existingProvider := existingProviders[0]
+
+	// Don't allow updating gram provider type
+	if existingProvider.ProviderType == "gram" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "cannot update gram OAuth proxy provider").Log(ctx, s.logger)
+	}
+
+	// Validate token_endpoint_auth_methods_supported if provided
+	if len(payload.TokenEndpointAuthMethodsSupported) > 0 {
+		validAuthMethods := map[string]bool{
+			"client_secret_basic": true,
+			"client_secret_post":  true,
+			"none":                true,
+		}
+		for _, method := range payload.TokenEndpointAuthMethodsSupported {
+			if !validAuthMethods[method] {
+				return nil, oops.E(oops.CodeBadRequest, nil, "invalid token_endpoint_auth_methods_supported value: %s", method).Log(ctx, s.logger)
+			}
+		}
+	}
+
+	// Build update parameters, using existing values as defaults
+	authorizationEndpoint := existingProvider.AuthorizationEndpoint
+	if payload.AuthorizationEndpoint != nil {
+		authorizationEndpoint = pgtype.Text{String: *payload.AuthorizationEndpoint, Valid: true}
+	}
+
+	tokenEndpoint := existingProvider.TokenEndpoint
+	if payload.TokenEndpoint != nil {
+		tokenEndpoint = pgtype.Text{String: *payload.TokenEndpoint, Valid: true}
+	}
+
+	scopesSupported := existingProvider.ScopesSupported
+	if len(payload.ScopesSupported) > 0 {
+		scopesSupported = payload.ScopesSupported
+	}
+
+	tokenEndpointAuthMethodsSupported := existingProvider.TokenEndpointAuthMethodsSupported
+	if len(payload.TokenEndpointAuthMethodsSupported) > 0 {
+		tokenEndpointAuthMethodsSupported = payload.TokenEndpointAuthMethodsSupported
+	}
+
+	// Handle environment_slug update
+	secrets := existingProvider.Secrets
+	if payload.EnvironmentSlug != nil && string(*payload.EnvironmentSlug) != "" {
+		// Validate that the environment exists for this project
+		_, err = s.environmentRepo.GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
+			Slug:      string(*payload.EnvironmentSlug),
+			ProjectID: *authCtx.ProjectID,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeNotFound, err, "environment not found").Log(ctx, s.logger)
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment").Log(ctx, s.logger)
+		}
+
+		secrets, err = json.Marshal(map[string]string{
+			"environment_slug": string(*payload.EnvironmentSlug),
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal secrets").Log(ctx, s.logger)
+		}
+	}
+
+	// Update the OAuth proxy provider
+	_, err = s.oauthRepo.UpsertOAuthProxyProvider(ctx, oauthRepo.UpsertOAuthProxyProviderParams{
+		ProjectID:                         *authCtx.ProjectID,
+		OauthProxyServerID:                oauthProxyServer.ID,
+		Slug:                              existingProvider.Slug,
+		ProviderType:                      existingProvider.ProviderType,
+		AuthorizationEndpoint:             authorizationEndpoint,
+		TokenEndpoint:                     tokenEndpoint,
+		RegistrationEndpoint:              existingProvider.RegistrationEndpoint,
+		ScopesSupported:                   scopesSupported,
+		ResponseTypesSupported:            existingProvider.ResponseTypesSupported,
+		ResponseModesSupported:            existingProvider.ResponseModesSupported,
+		GrantTypesSupported:               existingProvider.GrantTypesSupported,
+		TokenEndpointAuthMethodsSupported: tokenEndpointAuthMethodsSupported,
+		SecurityKeyNames:                  existingProvider.SecurityKeyNames,
+		Secrets:                           secrets,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update OAuth proxy provider").Log(ctx, s.logger)
+	}
+
+	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache)
+	if err != nil {
+		return nil, err
+	}
+
+	return toolsetDetails, nil
+}
+
 // createToolsetVersion creates a toolset version using the tool URNs and resource URNs from the payload
 func (s *Service) createToolsetVersion(ctx context.Context, toolUrnStrings []string, resourceUrnStrings []string, toolsetID uuid.UUID, tr *repo.Queries) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

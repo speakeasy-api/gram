@@ -270,6 +270,56 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "addOAuthProxyServer")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AddOAuthProxyServer"}`)
 	})
+
+	Method("updateExternalOAuthServer", func() {
+		Description("Update an external OAuth server's metadata for a toolset")
+
+		Payload(func() {
+			Extend(UpdateExternalOAuthServerForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(shared.Toolset)
+
+		HTTP(func() {
+			Param("slug")
+			POST("/rpc/toolsets.updateExternalOAuthServer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateExternalOAuthServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateExternalOAuthServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateExternalOAuthServer"}`)
+	})
+
+	Method("updateOAuthProxyServer", func() {
+		Description("Update an OAuth proxy server's configuration for a toolset")
+
+		Payload(func() {
+			Extend(UpdateOAuthProxyServerForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(shared.Toolset)
+
+		HTTP(func() {
+			Param("slug")
+			POST("/rpc/toolsets.updateOAuthProxyServer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateOAuthProxyServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateOAuthProxyServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateOAuthProxyServer"}`)
+	})
 })
 
 var CreateToolsetForm = Type("CreateToolsetForm", func() {
@@ -316,4 +366,22 @@ var AddOAuthProxyServerForm = Type("AddOAuthProxyServerForm", func() {
 	Attribute("oauth_proxy_server", shared.OAuthProxyServerForm, "The OAuth proxy server data to create and associate with the toolset")
 	security.ProjectPayload()
 	Required("slug", "oauth_proxy_server")
+})
+
+var UpdateExternalOAuthServerForm = Type("UpdateExternalOAuthServerForm", func() {
+	Attribute("slug", shared.Slug, "The slug of the toolset to update")
+	Attribute("metadata", Any, "The updated metadata for the external OAuth server")
+	security.ProjectPayload()
+	Required("slug", "metadata")
+})
+
+var UpdateOAuthProxyServerForm = Type("UpdateOAuthProxyServerForm", func() {
+	Attribute("slug", shared.Slug, "The slug of the toolset to update")
+	Attribute("authorization_endpoint", String, "The authorization endpoint URL")
+	Attribute("token_endpoint", String, "The token endpoint URL")
+	Attribute("scopes_supported", ArrayOf(String), "OAuth scopes to request")
+	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String), "Auth methods (client_secret_basic or client_secret_post)")
+	Attribute("environment_slug", shared.Slug, "The environment slug to store secrets")
+	security.ProjectPayload()
+	Required("slug")
 })

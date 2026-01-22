@@ -154,6 +154,8 @@ export * from "./toolsetentry.js";
 export * from "./toolsetenvironmentlink.js";
 export * from "./toolvariation.js";
 export * from "./updateenvironmentrequestbody.js";
+export * from "./updateexternaloauthserverrequestbody.js";
+export * from "./updateoauthproxyserverrequestbody.js";
 export * from "./updatepackageform.js";
 export * from "./updatepackageresult.js";
 export * from "./updateprompttemplateform.js";

@@ -98,6 +98,8 @@ export * from "./templates.js";
 export * from "./toolExecutionLogs.js";
 export * from "./toolset.js";
 export * from "./updateEnvironment.js";
+export * from "./updateExternalOAuthServer.js";
+export * from "./updateOAuthProxyServer.js";
 export * from "./updatePackage.js";
 export * from "./updateSlackConnection.js";
 export * from "./updateTemplate.js";
