@@ -14,7 +14,7 @@ type Key = attribute.Key
 const (
 	ErrorMessageKey                   = semconv.ErrorMessageKey
 	ExceptionStacktraceKey            = semconv.ExceptionStacktraceKey
-	ExternalUserIDKey                 = attribute.Key("external_user.id")
+	ExternalUserIDKey                 = attribute.Key("gram.external_user.id")
 	ContainerIDKey                    = semconv.ContainerIDKey
 	ContainerNetworkIDKey             = attribute.Key("container.network.id")
 	FilePathKey                       = semconv.FilePathKey
@@ -52,8 +52,8 @@ const (
 
 	SpanIDKey              = attribute.Key("span.id")
 	TraceIDKey             = attribute.Key("trace.id")
-	LogSeverityKey         = attribute.Key("log.severity")
-	LogBodyKey             = attribute.Key("log.body")
+	LogSeverityKey         = attribute.Key("gram.log.severity_text")
+	LogBodyKey             = attribute.Key("gram.log.body")
 	DataDogGitCommitSHAKey = attribute.Key("git.commit.sha")
 	DataDogGitRepoURLKey   = attribute.Key("git.repository_url")
 	DataDogTraceIDKey      = attribute.Key("dd.trace_id")
@@ -922,3 +922,9 @@ func ObservedTimeUnixNano(v int64) attribute.KeyValue { return ObservedTimeUnixN
 func SlogObservedTimeUnixNano(v int64) slog.Attr {
 	return slog.Int64(string(ObservedTimeUnixNanoKey), v)
 }
+
+func LogSeverityText(v string) attribute.KeyValue { return LogSeverityKey.String(v) }
+func SlogLogSeverityText(v string) slog.Attr      { return slog.String(string(LogSeverityKey), v) }
+
+func LogBody(v string) attribute.KeyValue { return LogBodyKey.String(v) }
+func SlogLogBody(v string) slog.Attr      { return slog.String(string(LogBodyKey), v) }
