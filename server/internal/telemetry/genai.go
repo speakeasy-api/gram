@@ -148,7 +148,7 @@ func parseAttributes(attrs map[attr.Key]any) (spanAttrsJSON, resourceAttrsJSON s
 			}
 		}
 
-		if _, ok := ResourceAttributeKeys[attribute.Key(k)]; ok {
+		if _, ok := ResourceAttributeKeys[k]; ok {
 			resourceAttrs[k] = v
 			continue
 		}
