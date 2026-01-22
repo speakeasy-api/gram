@@ -41,13 +41,15 @@ useGetDomain,
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { Badge, Button, Grid, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, Globe, Pencil, Trash2, X } from "lucide-react";
+import { Check, CheckCircleIcon, Globe, LockIcon, Pencil, Trash2, X, XCircleIcon } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import { onboardingStepStorageKeys } from "../home/Home";
 import { ToolsetCard } from "../toolsets/ToolsetCard";
+import { MCPHeroIllustration } from "@/components/sources/SourceCardIllustrations";
+import { Page } from "@/components/page-layout";
 
 export function MCPDetailsRoot() {
   return <Outlet />;
@@ -64,6 +66,9 @@ export function MCPDetailPage() {
   const { data: deploymentResult, refetch: refetchDeployment } =
     useLatestDeployment();
   const deployment = deploymentResult?.deployment;
+
+  // Call hooks before any conditional returns
+  const { url: mcpUrl } = useMcpUrl(toolset);
 
   const isOAuthConnected = !!(
     toolset?.oauthProxyServer || toolset?.externalOauthServer
@@ -143,74 +148,161 @@ export function MCPDetailPage() {
   const availableOAuthAuthCode =
     toolset?.oauthEnablementMetadata?.oauth2SecurityCount > 0;
 
+  let statusBadge = null;
+  if (!toolset.mcpEnabled) {
+    statusBadge = (
+      <Badge variant="secondary" className="flex items-center gap-1">
+        <XCircleIcon className="w-3 h-3" />
+        Disabled
+      </Badge>
+    );
+  } else if (toolset.mcpIsPublic) {
+    statusBadge = (
+      <Badge variant="secondary" className="flex items-center gap-1">
+        <CheckCircleIcon className="w-3 h-3 text-green-600" />
+        Public
+      </Badge>
+    );
+  } else {
+    statusBadge = (
+      <Badge variant="secondary" className="flex items-center gap-1">
+        <LockIcon className="w-3 h-3" />
+        Private
+      </Badge>
+    );
+  }
+
   return (
-    <Stack>
-      <Stack
-        direction="horizontal"
-        align="center"
-        className="mb-8 justify-between"
-      >
-        <Heading variant="h2">MCP Details</Heading>
-        <Stack direction="horizontal" gap={2}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              {!toolset?.mcpEnabled ||
-              (toolset.mcpIsPublic && !availableOAuthAuthCode) ? (
-                <span className="inline-block">
-                  <Button variant="secondary" size="md" disabled={true}>
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body fullWidth noPadding>
+        {/* Hero Header with Animation - full width */}
+        <div className="relative w-full h-64 overflow-hidden mb-8">
+        <MCPHeroIllustration mcpUrl={mcpUrl || ""} toolsetSlug={toolset.slug} />
+
+        {/* Overlay content */}
+        <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/40 to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
+          <Stack gap={2}>
+            <div className="flex items-center gap-3 ml-1">
+              <Heading variant="h1" className="text-foreground">
+                {toolset.name}
+              </Heading>
+              {statusBadge}
+            </div>
+            <div className="flex items-center gap-2 ml-1">
+              <Type muted className="max-w-2xl truncate">
+                {mcpUrl}
+              </Type>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  if (mcpUrl) {
+                    navigator.clipboard.writeText(mcpUrl);
+                    toast.success("URL copied to clipboard");
+                  }
+                }}
+                className="shrink-0"
+              >
+                <Button.Icon>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                  </svg>
+                </Button.Icon>
+              </Button>
+            </div>
+          </Stack>
+        </div>
+
+        {/* Action buttons */}
+        <div className="absolute top-6 left-0 right-0 px-8 max-w-[1270px] mx-auto w-full">
+          <Stack direction="horizontal" gap={2} className="justify-end">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {!toolset?.mcpEnabled ||
+                (toolset.mcpIsPublic && !availableOAuthAuthCode) ? (
+                  <span className="inline-block">
+                    <Button variant="secondary" size="md" disabled={true}>
+                      {isOAuthConnected ? "OAuth Connected" : "Configure OAuth"}
+                    </Button>
+                  </span>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={() =>
+                      isOAuthConnected
+                        ? setIsOAuthDetailsModalOpen(true)
+                        : toolset.mcpIsPublic
+                          ? setIsOAuthModalOpen(true)
+                          : setIsGramOAuthModalOpen(true)
+                    }
+                  >
                     {isOAuthConnected ? "OAuth Connected" : "Configure OAuth"}
                   </Button>
-                </span>
-              ) : (
+                )}
+              </TooltipTrigger>
+              {(!toolset?.mcpEnabled ||
+                (toolset.mcpIsPublic && !availableOAuthAuthCode)) && (
+                <TooltipContent>
+                  {!toolset?.mcpEnabled
+                    ? "Enable server to configure OAuth"
+                    : "This MCP server does not require the OAuth authorization code flow"}
+                </TooltipContent>
+              )}
+            </Tooltip>
+            <MCPEnableButton toolset={toolset} />
+            <Tooltip>
+              <TooltipTrigger asChild>
                 <Button
                   variant="secondary"
                   size="md"
-                  onClick={() =>
-                    isOAuthConnected
-                      ? setIsOAuthDetailsModalOpen(true)
-                      : toolset.mcpIsPublic
-                        ? setIsOAuthModalOpen(true)
-                        : setIsGramOAuthModalOpen(true)
-                  }
+                  onClick={handleDeleteMcpServer}
                 >
-                  {isOAuthConnected ? "OAuth Connected" : "Configure OAuth"}
+                  <Trash2 className="w-4 h-4" />
                 </Button>
-              )}
-            </TooltipTrigger>
-            {(!toolset?.mcpEnabled ||
-              (toolset.mcpIsPublic && !availableOAuthAuthCode)) && (
-              <TooltipContent>
-                {!toolset?.mcpEnabled
-                  ? "Enable server to configure OAuth"
-                  : "This MCP server does not require the OAuth authorization code flow"}
-              </TooltipContent>
-            )}
-          </Tooltip>
-          <MCPEnableButton toolset={toolset} />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="secondary"
-                size="md"
-                onClick={handleDeleteMcpServer}
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Delete MCP server</TooltipContent>
-          </Tooltip>
-        </Stack>
-      </Stack>
-      <PageSection
-        heading="Source Toolset"
-        description="MCP servers expose the contents of a single toolset. To change the
-          tools or prompts exposed by this MCP server, update the source toolset
-          below."
-        className="max-w-2xl"
-      >
-        <ToolsetCard toolset={toolset} />
-      </PageSection>
-      <MCPDetails toolset={toolset} />
+              </TooltipTrigger>
+              <TooltipContent>Delete MCP server</TooltipContent>
+            </Tooltip>
+          </Stack>
+        </div>
+      </div>
+
+      {/* Page Content - constrained with max-width */}
+      <div className="max-w-[1270px] mx-auto px-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main content - left side */}
+          <div className="lg:col-span-2">
+            <MCPDetails toolset={toolset} />
+          </div>
+
+          {/* Sidebar - right side */}
+          <div className="lg:col-span-1">
+            <PageSection
+              heading="Source Toolset"
+              description="The toolset powering this MCP server."
+              className="sticky top-6"
+            >
+              <ToolsetCard toolset={toolset} />
+            </PageSection>
+          </div>
+        </div>
+      </div>
+
       <ConnectOAuthModal
         isOpen={isOAuthModalOpen}
         onClose={() => setIsOAuthModalOpen(false)}
@@ -227,7 +319,8 @@ export function MCPDetailPage() {
         onClose={() => setIsOAuthDetailsModalOpen(false)}
         toolset={toolset}
       />
-    </Stack>
+      </Page.Body>
+    </Page>
   );
 }
 

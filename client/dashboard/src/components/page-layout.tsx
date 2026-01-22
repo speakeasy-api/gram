@@ -25,11 +25,13 @@ function PageBody({
   children,
   fullWidth = false,
   fullHeight = false,
+  noPadding = false,
   className,
 }: {
   children: React.ReactNode;
   fullWidth?: boolean;
   fullHeight?: boolean;
+  noPadding?: boolean;
   className?: string;
 }) {
   return (
@@ -37,7 +39,8 @@ function PageBody({
     <div className="overflow-y-auto h-full w-full">
       <div
         className={cn(
-          "@container/main flex flex-col gap-4 p-8 w-full",
+          "@container/main flex flex-col gap-4 w-full",
+          noPadding ? "p-0" : "p-8",
           !fullWidth && "max-w-7xl mx-auto",
           fullHeight && "h-full",
           className,

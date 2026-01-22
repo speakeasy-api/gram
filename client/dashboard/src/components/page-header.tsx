@@ -53,6 +53,7 @@ function PageHeaderTitle({
 const breadcrumbSubstitutions = {
   mcp: "MCP",
   sdks: "SDKs",
+  elements: "Chat Elements",
   "custom-tools": "Custom Tools",
   "add-openapi": "Add OpenAPI",
   "add-function": "Add Function",

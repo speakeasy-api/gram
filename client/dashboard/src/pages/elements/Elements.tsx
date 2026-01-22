@@ -44,6 +44,7 @@ import {
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 
 type ColorScheme = "light" | "dark" | "system";
 type Density = "compact" | "normal" | "spacious";
@@ -186,6 +187,7 @@ export default function ChatElements() {
   const session = useSession();
   const project = useProject();
   const { theme: appTheme } = useMoonshineConfig();
+  const [searchParams] = useSearchParams();
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [previewKey, setPreviewKey] = useState(0);
   const [installMethod, setInstallMethod] = useState<"manual" | "hosted">(
@@ -196,6 +198,9 @@ export default function ChatElements() {
   const [config, setConfig] = useState<ElementsFormConfig>(defaultConfig);
   const [openSection, setOpenSection] = useState<string | null>("connection");
   const routes = useRoutes();
+
+  // Get toolset slug from URL params (when navigating from home page)
+  const toolsetSlugFromUrl = searchParams.get("toolset");
 
   // Load available MCP servers (toolsets)
   const { data: toolsetsData, isLoading: toolsetsLoading } = useListToolsets();
@@ -213,15 +218,32 @@ export default function ChatElements() {
     return `${getServerURL()}/mcp/${urlSuffix}`;
   };
 
-  // Set first available toolset as default when toolsets load
+  // Set toolset from URL param (priority) or first available toolset as default when toolsets load
   useEffect(() => {
-    if (toolsets.length > 0 && !config.mcp) {
+    if (toolsets.length === 0) return;
+
+    // If URL param is provided, always try to select that toolset
+    if (toolsetSlugFromUrl) {
+      const toolsetFromUrl = toolsets.find(
+        (t) => t.slug === toolsetSlugFromUrl && t.mcpEnabled
+      );
+      if (toolsetFromUrl) {
+        const mcpUrl = getMcpUrl(toolsetFromUrl);
+        if (config.mcp !== mcpUrl) {
+          updateConfig("mcp", mcpUrl);
+        }
+        return;
+      }
+    }
+
+    // Otherwise, if no MCP is set, use first enabled toolset
+    if (!config.mcp) {
       const firstEnabledToolset = toolsets.find((t) => t.mcpEnabled);
       if (firstEnabledToolset) {
         updateConfig("mcp", getMcpUrl(firstEnabledToolset));
       }
     }
-  }, [toolsets]);
+  }, [toolsets, toolsetSlugFromUrl]);
 
   const updateConfig = <K extends keyof ElementsFormConfig>(
     key: K,
@@ -340,10 +362,10 @@ export default function ChatElements() {
 
               {/* Manual Installation Tab Content */}
               <div className={installMethod === "manual" ? "block" : "hidden"}>
-                <div className="flex gap-12 min-h-fit px-4 py-4">
+                <div className="flex gap-12 min-h-fit p-6">
                   {/* Config Panel */}
 
-                  <div className="w-1/3 h-full overflow-y-auto pr-4 space-y-6">
+                  <div className="w-1/3 h-full overflow-y-auto pr-4 space-y-6 flex flex-col">
                     {/* Connection */}
                     <ConfigSection
                       title="MCP"
@@ -687,6 +709,7 @@ export default function ChatElements() {
                     </ConfigSection>
 
                     {/* Setup Button */}
+                    <div className="flex-1" />
                     <Button
                       className="w-full"
                       onClick={() => setShowInstallGuide(true)}

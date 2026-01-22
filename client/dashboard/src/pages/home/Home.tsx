@@ -73,6 +73,13 @@ export default function Home() {
     return toolsetsResult.toolsets.some((t) => t.mcpIsPublic);
   }, [toolsetsResult]);
 
+  // Get the first public MCP toolset slug to pass to elements page
+  const firstPublicToolsetSlug = useMemo(() => {
+    if (!toolsetsResult?.toolsets) return undefined;
+    const publicToolset = toolsetsResult.toolsets.find((t) => t.mcpIsPublic && t.mcpEnabled);
+    return publicToolset?.slug;
+  }, [toolsetsResult]);
+
   // Check localStorage for chat/claude setup completion
   // Only count as complete if prior steps are also complete
   const hasDeployedChatFlag =
@@ -135,7 +142,7 @@ export default function Home() {
                 description="Embed chat on your site or connect via Claude"
                 completed={hasDeployedChat}
                 enabled={hasSource && hasMcpPublic}
-                href={routes.elements.href()}
+                href={`${routes.elements.href()}${firstPublicToolsetSlug ? `?toolset=${firstPublicToolsetSlug}` : ""}`}
                 icon={
                   <MessageCircleIcon
                     className="h-[18px] w-[18px]"
@@ -166,7 +173,7 @@ export default function Home() {
               </div>
             </div>
             <div className="mt-auto flex justify-end">
-              <routes.elements.Link className="no-underline">
+              <routes.elements.Link className="no-underline" queryParams={firstPublicToolsetSlug ? { toolset: firstPublicToolsetSlug } : {}}>
                 <Button size="sm">
                   <Button.Text>Get started</Button.Text>
                 </Button>
