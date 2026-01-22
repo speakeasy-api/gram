@@ -2,11 +2,18 @@ import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import { useSdkClient } from "@/contexts/Sdk";
+import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import { Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
+import { DeploymentExternalMCP } from "@gram/client/models/components";
+import { useLatestDeployment } from "@gram/client/react-query";
 import { Badge, Button, Input, Stack } from "@speakeasy-api/moonshine";
+import { useMutation } from "@tanstack/react-query";
 import {
   Loader2,
+  Minus,
+  Plus,
   Search,
   SearchXIcon,
   Server as ServerIcon,
@@ -20,10 +27,45 @@ export function CatalogRoot() {
 
 export default function Catalog() {
   const routes = useRoutes();
+  const client = useSdkClient();
   const [searchQuery, setSearchQuery] = useState("");
+  const [serverToAdd, setServerToAdd] = useState<Server | null>(null);
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteListMCPCatalog(searchQuery);
+  const { data: deploymentResult, refetch: refetchDeployment } = useLatestDeployment();
+  const deployment = deploymentResult?.deployment;
+  const externalMcps = deployment?.externalMcps ?? [];
   const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  const removeServerMutation = useMutation({
+    mutationFn: async (slug: string) => {
+      const toolUrn = `tools:externalmcp:${slug}:proxy`;
+
+      // Find and delete any toolsets that use this external MCP
+      const toolsets = await client.toolsets.list();
+      const matchingToolsets = toolsets.toolsets?.filter(
+        (ts) => ts.toolUrns?.includes(toolUrn)
+      ) ?? [];
+
+      // Delete matching toolsets
+      await Promise.all(
+        matchingToolsets.map((ts) =>
+          client.toolsets.deleteBySlug({ slug: ts.slug })
+        )
+      );
+
+      // Remove the external MCP from the deployment
+      await client.deployments.evolveDeployment({
+        evolveForm: {
+          deploymentId: deployment?.id,
+          excludeExternalMcps: [slug],
+        },
+      });
+    },
+    onSuccess: async () => {
+      await refetchDeployment();
+    },
+  });
 
   // Flatten all pages into a single list
   const allServers = useMemo(() => {
@@ -83,8 +125,12 @@ export default function Catalog() {
                       key={`${server.registryId}-${server.registrySpecifier}`}
                       server={server}
                       detailHref={routes.catalog.detail.href(
-                        encodeURIComponent(server.registrySpecifier)
+                        encodeURIComponent(server.registrySpecifier),
                       )}
+                      externalMcps={externalMcps}
+                      onAdd={() => setServerToAdd(server)}
+                      onRemove={(slug) => removeServerMutation.mutate(slug)}
+                      isRemoving={removeServerMutation.isPending}
                     />
                   ))}
               </div>
@@ -113,6 +159,12 @@ export default function Catalog() {
           </Page.Section.Body>
         </Page.Section>
       </Page.Body>
+      <AddServerDialog
+        server={serverToAdd}
+        open={!!serverToAdd}
+        onOpenChange={(open) => !open && setServerToAdd(null)}
+        onServerAdded={() => refetchDeployment()}
+      />
     </Page>
   );
 }
@@ -147,13 +199,29 @@ function EmptySearchResult({ onClear }: { onClear: () => void }) {
 interface MCPServerCardProps {
   server: Server;
   detailHref: string;
+  externalMcps: DeploymentExternalMCP[];
+  onAdd: () => void;
+  onRemove: (slug: string) => void;
+  isRemoving: boolean;
 }
 
-function MCPServerCard({ server, detailHref }: MCPServerCardProps) {
+function MCPServerCard({
+  server,
+  detailHref,
+  externalMcps,
+  onAdd,
+  onRemove,
+  isRemoving,
+}: MCPServerCardProps) {
   const meta = server.meta["com.pulsemcp/server"];
   const isOfficial = meta?.isOfficial;
   const visitorsTotal = meta?.visitorsEstimateLastFourWeeks;
   const displayName = server.title ?? server.registrySpecifier;
+
+  const existingMcp = externalMcps.find(
+    (mcp) => mcp.registryServerSpecifier === server.registrySpecifier,
+  );
+  const isAdded = !!existingMcp;
 
   return (
     <Link to={detailHref}>
@@ -172,7 +240,10 @@ function MCPServerCard({ server, detailHref }: MCPServerCardProps) {
           </div>
           <Stack gap={1} className="min-w-0">
             <Stack direction="horizontal" gap={2} align="center">
-              <Type variant="subheading" className="group-hover:text-primary transition-colors">
+              <Type
+                variant="subheading"
+                className="group-hover:text-primary transition-colors"
+              >
                 {displayName}
               </Type>
               {isOfficial && <Badge>Official</Badge>}
@@ -193,6 +264,45 @@ function MCPServerCard({ server, detailHref }: MCPServerCardProps) {
               </Type>
             ) : (
               <div />
+            )}
+            {isAdded ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={isRemoving}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (existingMcp) {
+                    onRemove(existingMcp.slug);
+                  }
+                }}
+              >
+                {isRemoving ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <Button.Text>Removing...</Button.Text>
+                  </>
+                ) : (
+                  <>
+                    <Minus className="w-3.5 h-3.5" />
+                    <Button.Text>Remove</Button.Text>
+                  </>
+                )}
+              </Button>
+            ) : (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onAdd();
+                }}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <Button.Text>Add</Button.Text>
+              </Button>
             )}
           </Stack>
         </div>

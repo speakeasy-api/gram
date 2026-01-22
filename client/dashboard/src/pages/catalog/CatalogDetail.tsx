@@ -1,31 +1,26 @@
 import { Page } from "@/components/page-layout";
 import { Card } from "@/components/ui/card";
-import { Dialog } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
+import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import { Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query";
-import { Badge, Button, Input, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
 import { useMutation } from "@tanstack/react-query";
 import {
-  ArrowRight,
-  CheckCircle,
   ChevronDown,
   ChevronUp,
   ExternalLink,
   Loader2,
-  MessageCircle,
   Minus,
   Plus,
-  Plug,
   Server as ServerIcon,
   Wrench,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
 
 // Map of server specifiers to their website URLs
@@ -42,22 +37,12 @@ export function CatalogDetailRoot() {
   return <Outlet />;
 }
 
-function generateSlug(name: string): string {
-  const lastPart = name.split("/").pop() || name;
-  return lastPart
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
 export default function CatalogDetail() {
   const { serverSpecifier } = useParams<{ serverSpecifier: string }>();
   const routes = useRoutes();
   const client = useSdkClient();
   const { data, isLoading } = useInfiniteListMCPCatalog();
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [desiredToolsetName, setDesiredToolsetName] = useState("");
-  const [createdToolsetSlug, setCreatedToolsetSlug] = useState<string | null>(null);
 
   const { data: deploymentResult, refetch: refetchDeployment } = useLatestDeployment();
   const deployment = deploymentResult?.deployment;
@@ -69,55 +54,6 @@ export default function CatalogDetail() {
     const decodedSpecifier = decodeURIComponent(serverSpecifier);
     return allServers.find((s) => s.registrySpecifier === decodedSpecifier) ?? null;
   }, [data, serverSpecifier]);
-
-  const addServerMutation = useMutation({
-    mutationFn: async ({
-      server,
-      toolsetName,
-    }: {
-      server: Server;
-      toolsetName: string;
-    }) => {
-      const slug = generateSlug(server.registrySpecifier);
-      const toolUrn = `tools:externalmcp:${slug}:proxy`;
-
-      await client.deployments.evolveDeployment({
-        evolveForm: {
-          deploymentId: deployment?.id,
-          upsertExternalMcps: [
-            {
-              registryId: server.registryId,
-              name: toolsetName,
-              slug,
-              registryServerSpecifier: server.registrySpecifier,
-            },
-          ],
-        },
-      });
-
-      const toolset = await client.toolsets.create({
-        createToolsetRequestBody: {
-          name: toolsetName,
-          description: server.description ?? `MCP server: ${server.registrySpecifier}`,
-        },
-      });
-
-      await client.toolsets.updateBySlug({
-        slug: toolset.slug,
-        updateToolsetRequestBody: {
-          toolUrns: [toolUrn],
-          mcpEnabled: true,
-          mcpIsPublic: true,
-        },
-      });
-
-      return toolset.slug;
-    },
-    onSuccess: async (toolsetSlug) => {
-      await refetchDeployment();
-      setCreatedToolsetSlug(toolsetSlug);
-    },
-  });
 
   const removeServerMutation = useMutation({
     mutationFn: async (slug: string) => {
@@ -148,19 +84,6 @@ export default function CatalogDetail() {
       await refetchDeployment();
     },
   });
-
-  useEffect(() => {
-    if (server) {
-      setDesiredToolsetName(server.title ?? "");
-    }
-  }, [server]);
-
-  useEffect(() => {
-    if (!showAddDialog) {
-      setCreatedToolsetSlug(null);
-      addServerMutation.reset();
-    }
-  }, [showAddDialog]);
 
   const meta = server?.meta["com.pulsemcp/server"];
   const versionMeta = server?.meta["com.pulsemcp/server-version"];
@@ -226,72 +149,6 @@ export default function CatalogDetail() {
       </Page>
     );
   }
-
-  const addDialog = (
-    <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-      <Dialog.Content className="gap-2">
-        <Dialog.Header>
-          <Dialog.Title>Add to Project</Dialog.Title>
-          <Dialog.Description className="">
-            {createdToolsetSlug
-              ? ""
-              : "Add this MCP server to your project. This will create a new toolset."}
-          </Dialog.Description>
-        </Dialog.Header>
-        {createdToolsetSlug ? (
-          <div className="pb-2">
-            <Type small muted className="mb-3">
-              <span className="font-medium text-foreground">{server.title || displayName}</span> has been added to your project. It will be available to deploy as an MCP server.
-            </Type>
-            <Type className="text-sm font-medium mb-2">Next steps</Type>
-            <div className="flex flex-col gap-2">
-              <routes.sources.Link className="no-underline hover:no-underline">
-                <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline">
-                  <div className="w-8 h-8 rounded-md bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center shrink-0">
-                    <Plus className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div className="flex-1">
-                    <Type className="text-sm font-medium no-underline">Add more sources</Type>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-              </routes.sources.Link>
-              <routes.elements.Link className="no-underline hover:no-underline">
-                <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline">
-                  <div className="w-8 h-8 rounded-md bg-violet-500/10 dark:bg-violet-500/20 flex items-center justify-center shrink-0">
-                    <MessageCircle className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-                  </div>
-                  <div className="flex-1">
-                    <Type className="text-sm font-medium no-underline">Deploy as chat</Type>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-              </routes.elements.Link>
-              <routes.mcp.details.hosted_page.Link params={[createdToolsetSlug]} className="no-underline hover:no-underline">
-                <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline">
-                  <div className="w-8 h-8 rounded-md bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center shrink-0">
-                    <Plug className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <div className="flex-1">
-                    <Type className="text-sm font-medium no-underline">Connect via Claude, Cursor</Type>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-              </routes.mcp.details.hosted_page.Link>
-            </div>
-          </div>
-        ) : (
-          <AddServerForm
-            server={server}
-            desiredToolsetName={desiredToolsetName}
-            setDesiredToolsetName={setDesiredToolsetName}
-            addServerMutation={addServerMutation}
-            onCancel={() => setShowAddDialog(false)}
-          />
-        )}
-      </Dialog.Content>
-    </Dialog>
-  );
 
   const weeklyUsage = meta?.visitorsEstimateMostRecentWeek;
   const totalUsage = meta?.visitorsEstimateTotal;
@@ -520,73 +377,14 @@ export default function CatalogDetail() {
             </Card>
           </div>
         </div>
-        {addDialog}
+        <AddServerDialog
+          server={server}
+          open={showAddDialog}
+          onOpenChange={setShowAddDialog}
+          onServerAdded={() => refetchDeployment()}
+        />
       </Page.Body>
     </Page>
-  );
-}
-
-function AddServerForm({
-  server,
-  desiredToolsetName,
-  setDesiredToolsetName,
-  addServerMutation,
-  onCancel,
-}: {
-  server: Server;
-  desiredToolsetName: string;
-  setDesiredToolsetName: (name: string) => void;
-  addServerMutation: ReturnType<typeof useMutation<string, Error, { server: Server; toolsetName: string }>>;
-  onCancel: () => void;
-}) {
-  const handleSubmit = () => {
-    addServerMutation.mutate({
-      server,
-      toolsetName: desiredToolsetName || server.title || server.registrySpecifier,
-    });
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !addServerMutation.isPending) {
-      e.preventDefault();
-      handleSubmit();
-    }
-  };
-
-  return (
-    <div onKeyDown={handleKeyDown}>
-      <div className="flex flex-col gap-2 py-2">
-        <Label>Source name</Label>
-        <Input
-          placeholder={server.title || server.registrySpecifier}
-          value={desiredToolsetName}
-          onChange={(e) => setDesiredToolsetName(e.target.value)}
-          disabled={addServerMutation.isPending}
-        />
-      </div>
-      <Dialog.Footer>
-        <Button
-          variant="secondary"
-          onClick={onCancel}
-          disabled={addServerMutation.isPending}
-        >
-          Cancel
-        </Button>
-        <Button
-          disabled={addServerMutation.isPending}
-          onClick={handleSubmit}
-        >
-          {addServerMutation.isPending ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              <Button.Text>Adding...</Button.Text>
-            </>
-          ) : (
-            <Button.Text>Add</Button.Text>
-          )}
-        </Button>
-      </Dialog.Footer>
-    </div>
   );
 }
 

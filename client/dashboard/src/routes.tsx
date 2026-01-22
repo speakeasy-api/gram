@@ -19,7 +19,6 @@ import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
 import Logs from "./pages/logs/Logs";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
-import { MCPHostedPage } from "./pages/mcp/MCPHostedPage";
 import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
@@ -250,13 +249,6 @@ const ROUTE_STRUCTURE = {
         url: ":toolsetSlug",
         component: MCPDetailsRoot,
         indexComponent: MCPDetailPage,
-        subPages: {
-          hosted_page: {
-            title: "Hosted MCP Page",
-            url: "page",
-            component: MCPHostedPage,
-          },
-        },
       },
     },
   },

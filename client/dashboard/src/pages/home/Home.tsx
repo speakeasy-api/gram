@@ -41,8 +41,10 @@ export default function Home() {
   const routes = useRoutes();
   const user = useUser();
   const { data, isLoading } = useInfiniteListMCPCatalog();
-  const { data: deploymentResult } = useLatestDeployment();
-  const { data: toolsetsResult } = useListToolsets();
+  const { data: deploymentResult, isLoading: isDeploymentLoading } =
+    useLatestDeployment();
+  const { data: toolsetsResult, isLoading: isToolsetsLoading } =
+    useListToolsets();
   const externalMcps = deploymentResult?.deployment?.externalMcps ?? [];
   const deployment = deploymentResult?.deployment;
 
@@ -50,7 +52,7 @@ export default function Home() {
     if (!data?.pages) return [];
     const allServers = data.pages.flatMap((page) => page.servers as Server[]);
     return FEATURED_SERVER_SPECIFIERS.map((specifier) =>
-      allServers.find((s) => s.registrySpecifier === specifier)
+      allServers.find((s) => s.registrySpecifier === specifier),
     ).filter((s): s is Server => s !== undefined);
   }, [data]);
 
@@ -73,12 +75,16 @@ export default function Home() {
 
   // Check localStorage for chat/claude setup completion
   // Only count as complete if prior steps are also complete
-  const hasDeployedChatFlag = typeof window !== "undefined" &&
+  const hasDeployedChatFlag =
+    typeof window !== "undefined" &&
     localStorage.getItem(onboardingStepStorageKeys.configure) === "true";
   const hasDeployedChat = hasSource && hasMcpPublic && hasDeployedChatFlag;
 
-  const completedSteps = [hasSource, hasMcpPublic, hasDeployedChat].filter(Boolean).length;
+  const completedSteps = [hasSource, hasMcpPublic, hasDeployedChat].filter(
+    Boolean,
+  ).length;
   const isSetupComplete = completedSteps === 3;
+  const isSetupDataLoading = isDeploymentLoading || isToolsetsLoading;
 
   return (
     <Page>
@@ -86,10 +92,12 @@ export default function Home() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <h1 className="text-2xl font-semibold mb-6">Welcome{firstName ? `, ${firstName}` : ""}</h1>
+        <h1 className="text-2xl font-semibold mb-6">
+          Welcome{firstName ? `, ${firstName}` : ""}
+        </h1>
 
         {/* Setup Progress Widget */}
-        {!isSetupComplete && (
+        {!isSetupDataLoading && !isSetupComplete && (
           <div className="mb-8">
             <div className="flex flex-col md:flex-row items-stretch">
               {/* Step 1: Add a source */}
@@ -100,7 +108,9 @@ export default function Home() {
                 completed={hasSource}
                 enabled={true}
                 href={routes.sources.href()}
-                icon={<Database className="h-[18px] w-[18px]" strokeWidth={1.5} />}
+                icon={
+                  <Database className="h-[18px] w-[18px]" strokeWidth={1.5} />
+                }
                 position="first"
                 cta="Add source"
               />
@@ -126,7 +136,12 @@ export default function Home() {
                 completed={hasDeployedChat}
                 enabled={hasSource && hasMcpPublic}
                 href={routes.elements.href()}
-                icon={<MessageCircleIcon className="h-[18px] w-[18px]" strokeWidth={1.5} />}
+                icon={
+                  <MessageCircleIcon
+                    className="h-[18px] w-[18px]"
+                    strokeWidth={1.5}
+                  />
+                }
                 position="last"
                 cta="Deploy"
               />
@@ -139,10 +154,15 @@ export default function Home() {
           <div className="relative flex flex-col gap-3 rounded-lg border bg-background p-4 pb-5 overflow-hidden">
             <div className="absolute bottom-0 inset-x-0 h-[3px] bg-gradient-primary" />
             <div className="flex flex-row items-start gap-2">
-              <MessageCircleIcon className="h-[18px] w-[18px] mt-0.5 shrink-0" strokeWidth={1.5} />
+              <MessageCircleIcon
+                className="h-[18px] w-[18px] mt-0.5 shrink-0"
+                strokeWidth={1.5}
+              />
               <div className="flex flex-col gap-1">
                 <h3 className="font-medium">Deploy chat</h3>
-                <p className="text-sm text-muted-foreground">Embed an AI chat interface on your website with tool access</p>
+                <p className="text-sm text-muted-foreground">
+                  Embed an AI chat interface on your website with tool access
+                </p>
               </div>
             </div>
             <div className="mt-auto flex justify-end">
@@ -156,10 +176,15 @@ export default function Home() {
           <div className="relative flex flex-col gap-3 rounded-lg border bg-background p-4 pb-5 overflow-hidden">
             <div className="absolute bottom-0 inset-x-0 h-[3px] bg-gradient-primary" />
             <div className="flex flex-row items-start gap-2">
-              <BlocksIcon className="h-[18px] w-[18px] mt-0.5 shrink-0" strokeWidth={1.5} />
+              <BlocksIcon
+                className="h-[18px] w-[18px] mt-0.5 shrink-0"
+                strokeWidth={1.5}
+              />
               <div className="flex flex-col gap-1">
                 <h3 className="font-medium">Connect to popular tools</h3>
-                <p className="text-sm text-muted-foreground">Browse and connect pre-built integrations from our catalog</p>
+                <p className="text-sm text-muted-foreground">
+                  Browse and connect pre-built integrations from our catalog
+                </p>
               </div>
             </div>
             <div className="mt-auto flex justify-end">
@@ -173,10 +198,15 @@ export default function Home() {
           <div className="relative flex flex-col gap-3 rounded-lg border bg-background p-4 pb-5 overflow-hidden">
             <div className="absolute bottom-0 inset-x-0 h-[3px] bg-gradient-primary" />
             <div className="flex flex-row items-start gap-2">
-              <ServerIcon className="h-[18px] w-[18px] mt-0.5 shrink-0" strokeWidth={1.5} />
+              <ServerIcon
+                className="h-[18px] w-[18px] mt-0.5 shrink-0"
+                strokeWidth={1.5}
+              />
               <div className="flex flex-col gap-1">
                 <h3 className="font-medium">Host your own tools</h3>
-                <p className="text-sm text-muted-foreground">Create and deploy custom MCP servers from your APIs</p>
+                <p className="text-sm text-muted-foreground">
+                  Create and deploy custom MCP servers from your APIs
+                </p>
               </div>
             </div>
             <div className="mt-auto flex justify-end">
@@ -191,8 +221,15 @@ export default function Home() {
 
         {/* Featured Servers Section */}
         <div className="mt-10">
-          <Stack direction="horizontal" justify="space-between" align="center" className="mb-4">
-            <h2 className="text-lg font-semibold">Featured Third-Party Servers</h2>
+          <Stack
+            direction="horizontal"
+            justify="space-between"
+            align="center"
+            className="mb-4"
+          >
+            <h2 className="text-lg font-semibold">
+              Featured Third-Party Servers
+            </h2>
             <routes.catalog.Link>
               <span className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1">
                 Browse all <ArrowRight className="w-4 h-4" />
@@ -210,7 +247,7 @@ export default function Home() {
                   key={server.registrySpecifier}
                   server={server}
                   detailHref={routes.catalog.detail.href(
-                    encodeURIComponent(server.registrySpecifier)
+                    encodeURIComponent(server.registrySpecifier),
                   )}
                   externalMcps={externalMcps}
                 />
@@ -237,7 +274,7 @@ function FeaturedServerCard({
   const displayName = server.title ?? server.registrySpecifier;
 
   const isAdded = externalMcps.some(
-    (mcp) => mcp.registryServerSpecifier === server.registrySpecifier
+    (mcp) => mcp.registryServerSpecifier === server.registrySpecifier,
   );
 
   return (
@@ -257,7 +294,10 @@ function FeaturedServerCard({
           </div>
           <Stack gap={1} className="min-w-0">
             <Stack direction="horizontal" gap={2} align="center">
-              <Type variant="subheading" className="group-hover:text-primary transition-colors">
+              <Type
+                variant="subheading"
+                className="group-hover:text-primary transition-colors"
+              >
                 {displayName}
               </Type>
               {isOfficial && <Badge>Official</Badge>}
@@ -303,7 +343,7 @@ function SetupStep({
   completed,
   enabled,
   href,
-  icon,
+  icon: _icon,
   position,
   cta,
 }: {
@@ -342,31 +382,35 @@ function SetupStep({
         paddingLeft: position === "first" ? "16px" : "52px",
       }}
     >
-      <div className={`flex items-center justify-center w-7 h-7 rounded-full shrink-0 border ${
-        isActive ? "bg-white dark:bg-white border-primary" : "bg-background"
-      }`}>
+      <div
+        className={`flex items-center justify-center w-7 h-7 rounded-full shrink-0 border ${
+          isActive ? "bg-white dark:bg-white border-primary" : "bg-background"
+        }`}
+      >
         {completed ? (
           <CheckCircle className="h-4 w-4 text-emerald-500" strokeWidth={2} />
         ) : (
-          <span className={`text-sm font-medium ${isActive ? "text-primary" : "text-muted-foreground"}`}>{number}</span>
+          <span
+            className={`text-sm font-medium ${isActive ? "text-primary" : "text-muted-foreground"}`}
+          >
+            {number}
+          </span>
         )}
       </div>
       <div className="flex flex-col gap-1.5 min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <h3 className="font-medium text-sm truncate">{title}</h3>
           {completed && (
-            <Type small className="text-emerald-600 shrink-0">Done</Type>
+            <Type small className="text-emerald-600 shrink-0">
+              Done
+            </Type>
           )}
         </div>
         <Type small muted className="truncate">
           {description}
         </Type>
         {!completed && (
-          <Button
-            size="sm"
-            disabled={!enabled}
-            className="mt-1 w-fit"
-          >
+          <Button size="sm" disabled={!enabled} className="mt-1 w-fit">
             <Button.Text>{cta}</Button.Text>
             <ArrowRight className="w-3 h-3" />
           </Button>

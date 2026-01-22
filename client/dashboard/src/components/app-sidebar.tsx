@@ -12,7 +12,11 @@ import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { onboardingStepStorageKeys } from "@/pages/home/Home";
 import { AppRoute, useRoutes } from "@/routes";
-import { useGetPeriodUsage, useLatestDeployment, useListToolsets } from "@gram/client/react-query";
+import {
+  useGetPeriodUsage,
+  useLatestDeployment,
+  useListToolsets,
+} from "@gram/client/react-query";
 import { cn, Stack } from "@speakeasy-api/moonshine";
 import {
   AlertTriangleIcon,
@@ -103,8 +107,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
 const GettingStartedWidget = () => {
   const routes = useRoutes();
-  const { data: deploymentResult } = useLatestDeployment();
-  const { data: toolsetsResult } = useListToolsets();
+  const { data: deploymentResult, isLoading: isDeploymentLoading } =
+    useLatestDeployment();
+  const { data: toolsetsResult, isLoading: isToolsetsLoading } =
+    useListToolsets();
   const deployment = deploymentResult?.deployment;
 
   const hasSource = useMemo(() => {
@@ -126,11 +132,13 @@ const GettingStartedWidget = () => {
     localStorage.getItem(onboardingStepStorageKeys.configure) === "true";
   const hasDeployedChat = hasSource && hasMcpPublic && hasDeployedChatFlag;
 
-  const completedSteps = [hasSource, hasMcpPublic, hasDeployedChat].filter(Boolean).length;
+  const completedSteps = [hasSource, hasMcpPublic, hasDeployedChat].filter(
+    Boolean,
+  ).length;
   const isSetupComplete = completedSteps === 3;
 
-  // Don't show if setup is complete
-  if (isSetupComplete) {
+  // Don't show while loading or if setup is complete
+  if (isDeploymentLoading || isToolsetsLoading || isSetupComplete) {
     return null;
   }
 
@@ -144,7 +152,9 @@ const GettingStartedWidget = () => {
   return (
     <Link to={nextStepHref} className="no-underline" unstable_viewTransition>
       <div className="mx-2 mb-2 px-4 py-2.5 rounded-full bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-muted transition-colors flex items-center justify-between gap-3 shadow-sm">
-        <span className="text-sm font-medium">Setup progress: {Math.round((completedSteps / 3) * 100)}%</span>
+        <span className="text-sm font-medium">
+          Setup progress: {Math.round((completedSteps / 3) * 100)}%
+        </span>
         <svg className="w-7 h-7 -rotate-90 shrink-0" viewBox="0 0 24 24">
           <circle
             cx="12"
@@ -164,11 +174,19 @@ const GettingStartedWidget = () => {
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeDasharray={2 * Math.PI * 10}
-            strokeDashoffset={2 * Math.PI * 10 * (1 - Math.max(0.08, completedSteps / 3))}
+            strokeDashoffset={
+              2 * Math.PI * 10 * (1 - Math.max(0.08, completedSteps / 3))
+            }
             className="transition-all duration-300"
           />
           <defs>
-            <linearGradient id="sidebar-progress-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <linearGradient
+              id="sidebar-progress-gradient"
+              x1="0%"
+              y1="0%"
+              x2="100%"
+              y2="0%"
+            >
               <stop offset="0%" stopColor="hsl(var(--primary))" />
               <stop offset="100%" stopColor="#f97316" />
             </linearGradient>

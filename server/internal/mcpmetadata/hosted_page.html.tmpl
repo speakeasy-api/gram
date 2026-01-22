@@ -962,6 +962,23 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
                 View Docs
               </a>
               {{- end }}
+              <button class="external-docs header-action" id="share-button">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                  <polyline points="16 6 12 2 8 6" />
+                  <line x1="12" x2="12" y1="2" y2="15" />
+                </svg>
+                Share
+              </button>
               <div class="popover">
                 <button class="action-button header-action" id="action-button">
                   Add to Client
@@ -1524,5 +1541,40 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
       type="module"
       src="{{ .SiteURL }}/external/hosted-install-page-c0ab18d3.js"
     ></script>
+    <script>
+      document.getElementById('share-button').addEventListener('click', async function() {
+        const url = window.location.href;
+        const button = this;
+        const originalText = button.innerHTML;
+
+        if (navigator.share) {
+          try {
+            await navigator.share({
+              title: '{{ .MCPName }} - MCP Server',
+              text: 'Install {{ .MCPName }} MCP server by {{ .OrganizationName }}',
+              url: url
+            });
+          } catch (err) {
+            if (err.name !== 'AbortError') {
+              await copyToClipboard(url, button, originalText);
+            }
+          }
+        } else {
+          await copyToClipboard(url, button, originalText);
+        }
+      });
+
+      async function copyToClipboard(url, button, originalText) {
+        try {
+          await navigator.clipboard.writeText(url);
+          button.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Copied!';
+          setTimeout(() => {
+            button.innerHTML = originalText;
+          }, 2000);
+        } catch (err) {
+          console.error('Failed to copy URL:', err);
+        }
+      }
+    </script>
   </body>
 </html>
