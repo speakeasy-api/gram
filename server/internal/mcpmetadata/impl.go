@@ -230,15 +230,14 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert MCP install page metadata").Log(ctx, s.logger)
 	}
 
-	// Convert UpsertMetadataRow to GetMetadataForToolsetRow (identical struct layout)
-	return toMcpMetadata(repo.GetMetadataForToolsetRow(result)), nil
+	return toMcpMetadata(result), nil
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func toMcpMetadata(record repo.GetMetadataForToolsetRow) *types.McpMetadata {
+func toMcpMetadata(record repo.McpMetadatum) *types.McpMetadata {
 	// Parse header display names from JSONB
 	headerDisplayNames := make(map[string]string)
 	if len(record.HeaderDisplayNames) > 0 {
