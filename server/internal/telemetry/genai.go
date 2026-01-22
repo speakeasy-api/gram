@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -59,7 +60,7 @@ func EmitTelemetryLog(
 			return
 		}
 
-		if err := provider.InsertTelemetryLog(logCtx, logParams); err != nil {
+		if err := provider.InsertTelemetryLog(logCtx, *logParams); err != nil {
 			logger.ErrorContext(logCtx,
 				"failed to emit telemetry log to ClickHouse",
 				attr.SlogError(err),
@@ -77,45 +78,89 @@ func EmitTelemetryLog(
 }
 
 // buildTelemetryLogParams constructs InsertTelemetryLogParams from attributes.
-func buildTelemetryLogParams(attrs map[string]any) (repo.InsertTelemetryLogParams, error) {
+func buildTelemetryLogParams(attrs map[string]any) (*repo.InsertTelemetryLogParams, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
-		return repo.InsertTelemetryLogParams{}, fmt.Errorf("generate telemetry log id: %w", err)
+		return nil, oops.E(oops.CodeUnexpected, err, "generate telemetry log id")
 	}
 
-	now := time.Now()
-	timeUnixNano := now.UnixNano()
+	observedTimeUnixNano := time.Now().UnixNano()
+	attrs[string(attr.ObservedTimeUnixNanoKey)] = observedTimeUnixNano
 
-	// Extract column values (but keep them in attrs for JSON)
-	projectID := getString(attrs, attr.ProjectIDKey)
-	deploymentID := getStringPtr(attrs, attr.DeploymentIDKey)
-	functionID := getStringPtr(attrs, attr.DeploymentFunctionsIDKey)
-	serviceVersion := getStringPtr(attrs, attr.ServiceVersionKey)
-	urn := getString(attrs, attr.ResourceURNKey)
-	traceID := getStringPtr(attrs, attr.TraceIDKey)
-	spanID := getStringPtr(attrs, attr.SpanIDKey)
+	// If time is present in attrs, use that; otherwise use the observed time
+	var timeUnixNano int64
+	if tun, ok := attrs[string(attr.TimeUnixNanoKey)]; ok {
+		timeUnixNano = getInt64(tun)
+	} else {
+		timeUnixNano = observedTimeUnixNano
+		attrs[string(attr.TimeUnixNanoKey)] = observedTimeUnixNano
+	}
+
+	// Default severity to INFO if not provided
 	severityText := getStringPtr(attrs, attr.LogSeverityKey)
-	body := getString(attrs, attr.LogBodyKey)
-	httpMethod := getStringPtr(attrs, attr.HTTPRequestMethodKey)
-	httpStatusCode := getInt32Ptr(attrs, attr.HTTPResponseStatusCodeKey)
-	httpRoute := getStringPtr(attrs, attr.HTTPRouteKey)
-	httpServerURL := getStringPtr(attrs, attr.URLFullKey)
-
 	if severityText == nil {
 		defaultSeverity := "INFO"
 		severityText = &defaultSeverity
 	}
 
-	// manually add service name, as it's always going to be gram server
+	// Manually add service name, as it's always going to be gram server
 	attrs[string(attr.ServiceNameKey)] = serviceName
 
-	spanAttrs, resourceAttrs := parseAttributes(attrs)
+	spanAttrs, resourceAttrs, err := parseAttributes(attrs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "parse log attributes")
+	}
+
+	return &repo.InsertTelemetryLogParams{
+		ID:                     id.String(),
+		TimeUnixNano:           timeUnixNano,
+		ObservedTimeUnixNano:   observedTimeUnixNano,
+		SeverityText:           severityText,
+		Body:                   getString(attrs, attr.LogBodyKey),
+		TraceID:                getStringPtr(attrs, attr.TraceIDKey),
+		SpanID:                 getStringPtr(attrs, attr.SpanIDKey),
+		Attributes:             spanAttrs,
+		ResourceAttributes:     resourceAttrs,
+		GramProjectID:          getString(attrs, attr.ProjectIDKey),
+		GramDeploymentID:       getStringPtr(attrs, attr.DeploymentIDKey),
+		GramFunctionID:         getStringPtr(attrs, attr.FunctionIDKey),
+		GramURN:                getString(attrs, attr.ResourceURNKey),
+		ServiceName:            serviceName,
+		ServiceVersion:         getStringPtr(attrs, attr.ServiceVersionKey),
+		HTTPRequestMethod:      getStringPtr(attrs, attr.HTTPRequestMethodKey),
+		HTTPResponseStatusCode: getInt32Ptr(attrs, attr.HTTPResponseStatusCodeKey),
+		HTTPRoute:              getStringPtr(attrs, attr.HTTPRouteKey),
+		HTTPServerURL:          getStringPtr(attrs, attr.URLFullKey),
+	}, nil
+}
+
+// parseAttributes splits attributes into resource and span attributes
+// based on ResourceAttributeKeys.
+func parseAttributes(attrs map[string]any) (spanAttrsJSON, resourceAttrsJSON string, err error) {
+	spanAttrs := make(map[string]any)
+	resourceAttrs := make(map[string]any)
+
+	for k, v := range attrs {
+		if k == string(attr.GenAIRequestModelKey) {
+			if model, ok := v.(string); ok {
+				spanAttrs[string(attr.GenAIProviderNameKey)] = inferProvider(model)
+				continue
+			}
+		}
+
+		if _, ok := ResourceAttributeKeys[attribute.Key(k)]; ok {
+			resourceAttrs[k] = v
+			continue
+		}
+
+		spanAttrs[k] = v
+	}
 
 	attrsJSON := "{}"
 	if len(spanAttrs) > 0 {
 		b, err := json.Marshal(spanAttrs)
 		if err != nil {
-			return repo.InsertTelemetryLogParams{}, fmt.Errorf("marshal attributes: %w", err)
+			return "", "", fmt.Errorf("marshal attributes: %w", err)
 		}
 		attrsJSON = string(b)
 	}
@@ -125,32 +170,56 @@ func buildTelemetryLogParams(attrs map[string]any) (repo.InsertTelemetryLogParam
 	if len(resourceAttrs) > 0 {
 		b, err := json.Marshal(resourceAttrs)
 		if err != nil {
-			return repo.InsertTelemetryLogParams{}, fmt.Errorf("marshal resource attributes: %w", err)
+			return "", "", fmt.Errorf("marshal resource attributes: %w", err)
 		}
 		resAttrsJSON = string(b)
 	}
 
-	return repo.InsertTelemetryLogParams{
-		ID:                     id.String(),
-		TimeUnixNano:           timeUnixNano,
-		ObservedTimeUnixNano:   timeUnixNano,
-		SeverityText:           severityText,
-		Body:                   body,
-		TraceID:                traceID,
-		SpanID:                 spanID,
-		Attributes:             attrsJSON,
-		ResourceAttributes:     resAttrsJSON,
-		GramProjectID:          projectID,
-		GramDeploymentID:       deploymentID,
-		GramFunctionID:         functionID,
-		GramURN:                urn,
-		ServiceName:            "gram-server",
-		ServiceVersion:         serviceVersion,
-		HTTPRequestMethod:      httpMethod,
-		HTTPResponseStatusCode: httpStatusCode,
-		HTTPRoute:              httpRoute,
-		HTTPServerURL:          httpServerURL,
-	}, nil
+	return attrsJSON, resAttrsJSON, nil
+}
+
+// inferProvider infers the provider from the model name.
+// OpenRouter model names are typically in the format "provider/model-name".
+func inferProvider(model string) string {
+	if model == "" {
+		return "unknown"
+	}
+
+	// OpenRouter uses format like "openai/gpt-4o" or "anthropic/claude-3-opus"
+	if idx := strings.Index(model, "/"); idx > 0 {
+		return model[:idx]
+	}
+
+	// Fallback heuristics for direct model names
+	lowerModel := strings.ToLower(model)
+	switch {
+	case strings.HasPrefix(lowerModel, "gpt-"):
+		return "openai"
+	case strings.HasPrefix(lowerModel, "claude-"):
+		return "anthropic"
+	case strings.HasPrefix(lowerModel, "gemini-"):
+		return "google"
+	case strings.HasPrefix(lowerModel, "mistral-"):
+		return "mistral"
+	default:
+		return "openrouter"
+	}
+}
+
+// getInt64 converts a value to int64, handling various numeric types.
+func getInt64(v any) int64 {
+	switch n := v.(type) {
+	case int64:
+		return n
+	case int:
+		return int64(n)
+	case int32:
+		return int64(n)
+	case float64:
+		return int64(n)
+	default:
+		return 0
+	}
 }
 
 // getString gets a string value from attrs without removing it.
@@ -190,53 +259,4 @@ func getInt32Ptr(attrs map[string]any, key attribute.Key) *int32 {
 		}
 	}
 	return nil
-}
-
-// parseAttributes splits attributes into resource and span attributes
-// based on ResourceAttributeKeys.
-func parseAttributes(attrs map[string]any) (spanAttrs, resourceAttrs map[string]any) {
-	spanAttrs = make(map[string]any)
-	resourceAttrs = make(map[string]any)
-
-	for k, v := range attrs {
-		if _, ok := ResourceAttributeKeys[attribute.Key(k)]; ok {
-			resourceAttrs[k] = v
-		} else {
-			spanAttrs[k] = v
-		}
-
-		if k == string(attr.GenAIRequestModelKey) {
-			spanAttrs[string(attr.GenAIProviderNameKey)] = inferProvider(v.(string))
-		}
-	}
-
-	return spanAttrs, resourceAttrs
-}
-
-// inferProvider infers the provider from the model name.
-// OpenRouter model names are typically in the format "provider/model-name".
-func inferProvider(model string) string {
-	if model == "" {
-		return "unknown"
-	}
-
-	// OpenRouter uses format like "openai/gpt-4o" or "anthropic/claude-3-opus"
-	if idx := strings.Index(model, "/"); idx > 0 {
-		return model[:idx]
-	}
-
-	// Fallback heuristics for direct model names
-	lowerModel := strings.ToLower(model)
-	switch {
-	case strings.HasPrefix(lowerModel, "gpt-"):
-		return "openai"
-	case strings.HasPrefix(lowerModel, "claude-"):
-		return "anthropic"
-	case strings.HasPrefix(lowerModel, "gemini-"):
-		return "google"
-	case strings.HasPrefix(lowerModel, "mistral-"):
-		return "mistral"
-	default:
-		return "openrouter"
-	}
 }
