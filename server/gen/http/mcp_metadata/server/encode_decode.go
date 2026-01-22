@@ -477,6 +477,14 @@ func marshalTypesMcpMetadataToMcpMetadataResponseBody(v *types.McpMetadata) *Mcp
 		CreatedAt:                v.CreatedAt,
 		UpdatedAt:                v.UpdatedAt,
 	}
+	if v.HeaderDisplayNames != nil {
+		res.HeaderDisplayNames = make(map[string]string, len(v.HeaderDisplayNames))
+		for key, val := range v.HeaderDisplayNames {
+			tk := key
+			tv := val
+			res.HeaderDisplayNames[tk] = tv
+		}
+	}
 
 	return res
 }

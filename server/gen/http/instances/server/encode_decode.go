@@ -543,8 +543,10 @@ func marshalTypesSecurityVariableToSecurityVariableResponseBody(v *types.Securit
 		return nil
 	}
 	res := &SecurityVariableResponseBody{
+		ID:           v.ID,
 		Type:         v.Type,
 		Name:         v.Name,
+		DisplayName:  v.DisplayName,
 		InPlacement:  v.InPlacement,
 		Scheme:       v.Scheme,
 		BearerFormat: v.BearerFormat,

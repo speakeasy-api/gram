@@ -112,15 +112,15 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 	}
 
 	return &types.Environment{
-		ID:             environment.ID.String(),
-		OrganizationID: environment.OrganizationID,
-		ProjectID:      environment.ProjectID.String(),
-		Name:           environment.Name,
-		Slug:           types.Slug(environment.Slug),
-		Description:    conv.FromPGText[string](environment.Description),
-		Entries:        entries,
-		CreatedAt:      environment.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      environment.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                environment.ID.String(),
+		OrganizationID:    environment.OrganizationID,
+		ProjectID:         environment.ProjectID.String(),
+		Name:              environment.Name,
+		Slug:              types.Slug(environment.Slug),
+		Description:       conv.FromPGText[string](environment.Description),
+		Entries:   entries,
+		CreatedAt: environment.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:         environment.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
 
@@ -153,15 +153,15 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 		}
 
 		result = append(result, &types.Environment{
-			ID:             environment.ID.String(),
-			OrganizationID: environment.OrganizationID,
-			ProjectID:      environment.ProjectID.String(),
-			Name:           environment.Name,
-			Slug:           types.Slug(environment.Slug),
-			Description:    conv.FromPGText[string](environment.Description),
-			Entries:        genEntries,
-			CreatedAt:      environment.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:      environment.UpdatedAt.Time.Format(time.RFC3339),
+			ID:                environment.ID.String(),
+			OrganizationID:    environment.OrganizationID,
+			ProjectID:         environment.ProjectID.String(),
+			Name:              environment.Name,
+			Slug:              types.Slug(environment.Slug),
+			Description:       conv.FromPGText[string](environment.Description),
+			Entries:   genEntries,
+			CreatedAt: environment.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:         environment.UpdatedAt.Time.Format(time.RFC3339),
 		})
 	}
 
@@ -225,6 +225,15 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		}
 	}
 
+	// Re-fetch environment to get the latest state after all updates
+	environment, err = s.repo.GetEnvironmentBySlug(ctx, repo.GetEnvironmentBySlugParams{
+		Slug:      conv.ToLower(payload.Slug),
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to re-fetch environment").Log(ctx, s.logger)
+	}
+
 	entries, err := s.entries.ListEnvironmentEntries(ctx, projectID, environment.ID, true)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").Log(ctx, s.logger)
@@ -241,15 +250,15 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 	}
 
 	return &types.Environment{
-		ID:             environment.ID.String(),
-		OrganizationID: environment.OrganizationID,
-		ProjectID:      environment.ProjectID.String(),
-		Name:           environment.Name,
-		Slug:           types.Slug(environment.Slug),
-		Description:    conv.FromPGText[string](environment.Description),
-		Entries:        genEntries,
-		CreatedAt:      environment.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      environment.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                environment.ID.String(),
+		OrganizationID:    environment.OrganizationID,
+		ProjectID:         environment.ProjectID.String(),
+		Name:              environment.Name,
+		Slug:              types.Slug(environment.Slug),
+		Description:       conv.FromPGText[string](environment.Description),
+		Entries:   genEntries,
+		CreatedAt: environment.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt: environment.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
 
@@ -361,15 +370,15 @@ func (s *Service) GetSourceEnvironment(ctx context.Context, payload *gen.GetSour
 	}
 
 	return &types.Environment{
-		ID:             environment.ID.String(),
-		OrganizationID: environment.OrganizationID,
-		ProjectID:      environment.ProjectID.String(),
-		Name:           environment.Name,
-		Slug:           types.Slug(environment.Slug),
-		Description:    conv.FromPGText[string](environment.Description),
-		Entries:        genEntries,
-		CreatedAt:      environment.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      environment.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                environment.ID.String(),
+		OrganizationID:    environment.OrganizationID,
+		ProjectID:         environment.ProjectID.String(),
+		Name:              environment.Name,
+		Slug:              types.Slug(environment.Slug),
+		Description: conv.FromPGText[string](environment.Description),
+		Entries:     genEntries,
+		CreatedAt:   environment.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:   environment.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
 
@@ -475,15 +484,15 @@ func (s *Service) GetToolsetEnvironment(ctx context.Context, payload *gen.GetToo
 	}
 
 	return &types.Environment{
-		ID:             environment.ID.String(),
-		OrganizationID: environment.OrganizationID,
-		ProjectID:      environment.ProjectID.String(),
-		Name:           environment.Name,
-		Slug:           types.Slug(environment.Slug),
-		Description:    conv.FromPGText[string](environment.Description),
-		Entries:        genEntries,
-		CreatedAt:      environment.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      environment.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                environment.ID.String(),
+		OrganizationID:    environment.OrganizationID,
+		ProjectID:         environment.ProjectID.String(),
+		Name:              environment.Name,
+		Slug:              types.Slug(environment.Slug),
+		Description: conv.FromPGText[string](environment.Description),
+		Entries:     genEntries,
+		CreatedAt:   environment.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:   environment.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
 

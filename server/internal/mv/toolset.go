@@ -20,6 +20,7 @@ import (
 	deploymentR "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	externalmcpR "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	mcpmetadataR "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	oauth "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	org "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -212,7 +213,7 @@ func DescribeToolsetEntry(
 			})
 		}
 
-		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, envQueries)
+		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, toolset.ID, envQueries)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment variables for toolset").Log(ctx, logger)
 		}
@@ -731,7 +732,7 @@ func readToolsetTools(
 			})
 		}
 
-		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, envQueries)
+		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, toolsetID, envQueries)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment variables for toolset").Log(ctx, logger)
 		}
@@ -950,12 +951,13 @@ type toolEnvLookupParams struct {
 	serverEnvVar string
 }
 
-func environmentVariablesForTools(ctx context.Context, tx DBTX, tools []toolEnvLookupParams) ([]*types.SecurityVariable, []*types.ServerVariable, error) {
+func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.UUID, tools []toolEnvLookupParams) ([]*types.SecurityVariable, []*types.ServerVariable, error) {
 	if len(tools) == 0 {
 		return []*types.SecurityVariable{}, []*types.ServerVariable{}, nil
 	}
 
 	toolsetRepo := tsr.New(tx)
+	mcpmetadataRepo := mcpmetadataR.New(tx)
 
 	securityKeysMap := make(map[string]bool)
 	serverEnvVarsMap := make(map[string]bool)
@@ -987,14 +989,34 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, tools []toolEnvL
 		return nil, nil, fmt.Errorf("read toolset security definitions: %w", err)
 	}
 
+	// Fetch header display names from MCP metadata (if available)
+	headerDisplayNames := make(map[string]string)
+	if toolsetID != uuid.Nil {
+		displayNamesJSON, err := mcpmetadataRepo.GetHeaderDisplayNames(ctx, toolsetID)
+		if err == nil && len(displayNamesJSON) > 0 {
+			// Parse the JSONB data into a map
+			_ = json.Unmarshal(displayNamesJSON, &headerDisplayNames)
+		}
+		// If no MCP metadata exists or error occurs, we just use empty map (no display names)
+	}
+
 	// Build security variables map to avoid duplicates
 	securityVarsMap := make(map[string]*types.SecurityVariable)
 	for _, entry := range securityEntries {
 		key := entry.Key
 		if _, exists := securityVarsMap[key]; !exists {
+			// Look up display name from MCP metadata
+			// Use entry.Name (header name) as the key since that's what the frontend sends
+			var displayName *string
+			if dn, ok := headerDisplayNames[entry.Name.String]; ok && dn != "" {
+				displayName = &dn
+			}
+
 			securityVar := &types.SecurityVariable{
+				ID:           entry.ID.String(),
 				Type:         conv.FromPGText[string](entry.Type),
 				Name:         entry.Name.String,
+				DisplayName:  displayName,
 				InPlacement:  entry.InPlacement.String,
 				Scheme:       entry.Scheme.String,
 				BearerFormat: conv.FromPGText[string](entry.BearerFormat),

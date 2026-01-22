@@ -479,10 +479,15 @@ type ExternalMCPToolDefinitionResponseBody struct {
 
 // SecurityVariableResponseBody is used to define fields on response body types.
 type SecurityVariableResponseBody struct {
+	// The unique identifier of the security variable
+	ID string `form:"id" json:"id" xml:"id"`
 	// The type of security
 	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
-	// The name of the security scheme
+	// The name of the security scheme (actual header/parameter name)
 	Name string `form:"name" json:"name" xml:"name"`
+	// User-friendly display name for the security variable (defaults to name if
+	// not set)
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// Where the security token is placed
 	InPlacement string `form:"in_placement" json:"in_placement" xml:"in_placement"`
 	// The security scheme
