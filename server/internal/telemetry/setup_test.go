@@ -88,7 +88,7 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok, "auth context should be set")
 
-	pfRepo :=  productfeaturesrepo.New(conn)
+	pfRepo := productfeaturesrepo.New(conn)
 
 	_, err = pfRepo.EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -108,18 +108,6 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 		featClient:     featClient,
 		sessionManager: sessionManager,
 	}
-}
-
-func setProjectID(t *testing.T, ctx context.Context, projectID string) context.Context {
-	t.Helper()
-
-	authContext, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	id := uuid.MustParse(projectID)
-	authContext.ProjectID = &id
-
-	return contextvalues.SetAuthContext(ctx, authContext)
 }
 
 func switchOrganizationInCtx(t *testing.T, ctx context.Context) context.Context {
