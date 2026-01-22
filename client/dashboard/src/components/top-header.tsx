@@ -131,8 +131,8 @@ export function TopHeader() {
           <ThemeSwitcher />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 rounded-full p-0">
-                <Avatar className="h-8 w-8">
+              <Button variant="ghost" className="size-9 rounded-full p-0 border border-[#dbdbdb] dark:border-[#333]/30">
+                <Avatar className="size-9">
                   <AvatarImage src={user.photoUrl} alt={user.displayName || user.email} />
                   <AvatarFallback className="text-xs">{userInitials}</AvatarFallback>
                 </Avatar>
