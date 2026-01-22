@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	or "github.com/speakeasy-api/gram/openrouter/models/components"
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -188,8 +189,8 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 	var userPrompt string
 	if len(messages) > 0 {
 		lastMsg := messages[len(messages)-1]
-		if lastMsg.Role == "user" {
-			userPrompt = lastMsg.Content
+		if lastMsg.Type == or.MessageTypeUser && lastMsg.UserMessage != nil && lastMsg.UserMessage.Content.Str != nil {
+			userPrompt = *lastMsg.UserMessage.Content.Str
 		}
 	}
 
@@ -198,18 +199,15 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 		Prompt:       userPrompt,
 	}
 
-	if len(messages) > 0 && messages[0].Role == "system" {
-		combinedPrompt := orchestratorSystemPrompt + "\n\nUser Instructions:\n" + messages[0].Content
-		messages[0].Content = combinedPrompt
+	if len(messages) > 0 && messages[0].Type == or.MessageTypeSystem && messages[0].SystemMessage != nil && messages[0].SystemMessage.Content.Str != nil && *messages[0].SystemMessage.Content.Str != "" {
+		combinedPrompt := orchestratorSystemPrompt + "\n\nUser Instructions:\n" + *messages[0].SystemMessage.Content.Str
+		messages[0].SystemMessage.Content = or.CreateSystemMessageContentStr(combinedPrompt)
 	} else {
-		messages = append([]openrouter.OpenAIChatMessage{
-			{
-				Role:       "system",
-				Content:    orchestratorSystemPrompt,
-				ToolCalls:  nil,
-				ToolCallID: "",
-				Name:       "",
-			},
+		messages = append([]or.Message{
+			or.CreateMessageSystem(or.SystemMessage{
+				Content: or.CreateSystemMessageContentStr(orchestratorSystemPrompt),
+				Name:    nil,
+			}),
 		}, messages...)
 	}
 
@@ -264,14 +262,14 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 			return buildErrorResponse(ctx, params, responseID, &errMsg, executionHistory, inputDetails), nil
 		}
 
-		msg := modelCallOutput.Message
-		messages = append(messages, *msg)
+		msg := *modelCallOutput.Message
+		messages = append(messages, msg)
 
 		// Generate unique message ID for this chat completion
 		messageID := "msg_" + workflow.Now(ctx).Format("20060102150405") + "_" + uuid.Must(uuid.NewV7()).String()[:8]
 
 		// Add output item for every chat completion
-		if len(msg.ToolCalls) == 0 {
+		if msg.Type != or.MessageTypeAssistant {
 			// Final message without tool calls
 			output = append(output, agents.OutputMessage{
 				Type:   "message",
@@ -281,7 +279,7 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 				Content: []agents.OutputTextContent{
 					{
 						Type: "output_text",
-						Text: msg.Content,
+						Text: openrouter.GetText(msg),
 					},
 				},
 			})
@@ -296,7 +294,7 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 				Content: []agents.OutputTextContent{
 					{
 						Type: "output_text",
-						Text: msg.Content,
+						Text: openrouter.GetText(msg),
 					},
 				},
 			})
@@ -304,14 +302,14 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 
 		// Execute tool calls in parallel
 		type toolCallFuture struct {
-			toolCall     openrouter.ToolCall
+			toolCall     or.ChatMessageToolCall
 			future       workflow.Future
 			toolCallName string
 			isSubAgent   bool
 		}
 
-		toolCallFutures := make([]toolCallFuture, 0, len(msg.ToolCalls))
-		for _, tc := range msg.ToolCalls {
+		toolCallFutures := make([]toolCallFuture, 0, len(msg.AssistantMessage.ToolCalls))
+		for _, tc := range msg.AssistantMessage.ToolCalls {
 			// Check if this is a sub-agent tool
 			if subAgentConfig, isSubAgent := subAgentConfigs[tc.Function.Name]; isSubAgent {
 				var args struct {
@@ -321,13 +319,10 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 				if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
 					logger.Error("failed to parse sub-agent arguments", "error", err)
 					errMsg := fmt.Sprintf("Error parsing sub-agent arguments: %v", err)
-					messages = append(messages, openrouter.OpenAIChatMessage{
-						Role:       "tool",
-						Content:    errMsg,
-						Name:       tc.Function.Name,
+					messages = append(messages, or.CreateMessageTool(or.ToolResponseMessage{
+						Content:    or.CreateToolResponseMessageContentStr(errMsg),
 						ToolCallID: tc.ID,
-						ToolCalls:  nil,
-					})
+					}))
 					continue
 				}
 
@@ -463,13 +458,10 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 				})
 			}
 
-			messages = append(messages, openrouter.OpenAIChatMessage{
-				Role:       "tool",
-				Content:    toolCallOutput.ToolOutput,
-				Name:       tcf.toolCall.Function.Name,
+			messages = append(messages, or.CreateMessageTool(or.ToolResponseMessage{
+				Content:    or.CreateToolResponseMessageContentStr(toolCallOutput.ToolOutput),
 				ToolCallID: tcf.toolCall.ID,
-				ToolCalls:  nil,
-			})
+			}))
 		}
 	}
 

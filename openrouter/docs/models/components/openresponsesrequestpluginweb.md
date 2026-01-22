@@ -1,0 +1,12 @@
+# OpenResponsesRequestPluginWeb
+
+
+## Fields
+
+| Field                                                                             | Type                                                                              | Required                                                                          | Description                                                                       |
+| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `ID`                                                                              | [components.IDWeb](../../models/components/idweb.md)                              | :heavy_check_mark:                                                                | N/A                                                                               |
+| `Enabled`                                                                         | **bool*                                                                           | :heavy_minus_sign:                                                                | Set to false to disable the web-search plugin for this request. Defaults to true. |
+| `MaxResults`                                                                      | **float64*                                                                        | :heavy_minus_sign:                                                                | N/A                                                                               |
+| `SearchPrompt`                                                                    | **string*                                                                         | :heavy_minus_sign:                                                                | N/A                                                                               |
+| `Engine`                                                                          | [*components.WebSearchEngine](../../models/components/websearchengine.md)         | :heavy_minus_sign:                                                                | The search engine to use for web search.                                          |

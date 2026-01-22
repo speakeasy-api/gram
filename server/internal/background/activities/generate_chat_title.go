@@ -85,7 +85,7 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, firstMessa
 		return "New Chat"
 	}
 
-	title := strings.TrimSpace(msg.Content)
+	title := strings.TrimSpace(openrouter.GetText(*msg))
 	if title == "" {
 		return "New Chat"
 	}
