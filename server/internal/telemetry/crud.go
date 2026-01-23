@@ -32,7 +32,7 @@ var ResourceAttributeKeys = map[attribute.Key]struct{}{
 }
 
 type LogParams struct {
-	Timestmp   time.Time
+	Timestamp  time.Time
 	ToolInfo   ToolInfo
 	Attributes map[attr.Key]any
 }
@@ -84,7 +84,7 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 
 	observedTimeUnixNano := time.Now().UnixNano()
 	allAttrs[attr.ObservedTimeUnixNanoKey] = observedTimeUnixNano
-	allAttrs[attr.TimeUnixNanoKey] = params.Timestmp.UnixNano()
+	allAttrs[attr.TimeUnixNanoKey] = params.Timestamp.UnixNano()
 
 	// Manually add service name, as it's always going to be gram server
 	allAttrs[attr.ServiceNameKey] = serviceName
@@ -96,7 +96,7 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 
 	return &repo.InsertTelemetryLogParams{
 		ID:                     id.String(),
-		TimeUnixNano:           params.Timestmp.UnixNano(),
+		TimeUnixNano:           params.Timestamp.UnixNano(),
 		ObservedTimeUnixNano:   observedTimeUnixNano,
 		SeverityText:           getSeverityText(allAttrs),
 		Body:                   getString(allAttrs, attr.LogBodyKey),

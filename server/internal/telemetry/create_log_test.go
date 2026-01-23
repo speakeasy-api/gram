@@ -15,19 +15,19 @@ func TestCreateLog_LogsCorrectly(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestLogsService(t)
 
-	attrs := telemetry.AttributeRecorder{}
-	attrs.RecordHTTPMethod("POST")
-	attrs.RecordHTTPRoute("/api/test")
-	attrs.RecordHTTPStatusCode(200)
-	attrs.RecordHTTPServerURL("https://example.com")
-	attrs.RecordHTTPDuration(123.45)
-	attrs.RecordHTTPUserAgent("test-client/1.0")
+	attrs := telemetry.HTTPLogAttributes{}
+	attrs.RecordMethod("POST")
+	attrs.RecordRoute("/api/test")
+	attrs.RecordStatusCode(200)
+	attrs.RecordServerURL("https://example.com", repo.ToolTypeHTTP)
+	attrs.RecordDuration(123.45)
+	attrs.RecordUserAgent("test-client/1.0")
 
 	toolInfo := newTestToolInfo()
 	timestamp := time.Now().UTC()
 
 	ti.service.CreateLog(ctx, telemetry.LogParams{
-		Timestmp:   timestamp,
+		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
 	})
@@ -41,7 +41,7 @@ func TestCreateLog_LogsCorrectly(t *testing.T) {
 	require.Equal(t, int32(200), *log.HTTPResponseStatusCode)
 	require.Equal(t, "https://example.com", *log.HTTPServerURL)
 
-	/// logs tool info 
+	/// logs tool info
 	require.Equal(t, toolInfo.ProjectID, log.GramProjectID)
 	require.NotNil(t, log.GramDeploymentID)
 	require.Equal(t, toolInfo.DeploymentID, *log.GramDeploymentID)
@@ -58,16 +58,16 @@ func TestCreateLog_NilFunctionID(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestLogsService(t)
 
-	attrs := telemetry.AttributeRecorder{}
-	attrs.RecordHTTPMethod("GET")
-	attrs.RecordHTTPStatusCode(200)
+	attrs := telemetry.HTTPLogAttributes{}
+	attrs.RecordMethod("GET")
+	attrs.RecordStatusCode(200)
 
 	toolInfo := newTestToolInfo()
 	toolInfo.FunctionID = nil
 	timestamp := time.Now().UTC()
 
 	ti.service.CreateLog(ctx, telemetry.LogParams{
-		Timestmp:   timestamp,
+		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
 	})
@@ -81,9 +81,9 @@ func TestCreateLog_NonNilFunctionID(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestLogsService(t)
 
-	attrs := telemetry.AttributeRecorder{}
-	attrs.RecordHTTPMethod("GET")
-	attrs.RecordHTTPStatusCode(200)
+	attrs := telemetry.HTTPLogAttributes{}
+	attrs.RecordMethod("GET")
+	attrs.RecordStatusCode(200)
 
 	funcID := uuid.New().String()
 	toolInfo := newTestToolInfo()
@@ -91,7 +91,7 @@ func TestCreateLog_NonNilFunctionID(t *testing.T) {
 	timestamp := time.Now().UTC()
 
 	ti.service.CreateLog(ctx, telemetry.LogParams{
-		Timestmp:   timestamp,
+		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
 	})
@@ -120,15 +120,15 @@ func TestCreateLog_SeverityFromStatusCode(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestLogsService(t)
 
-			attrs := telemetry.AttributeRecorder{}
-			attrs.RecordHTTPMethod("GET")
-			attrs.RecordHTTPStatusCode(tc.statusCode)
+			attrs := telemetry.HTTPLogAttributes{}
+			attrs.RecordMethod("GET")
+			attrs.RecordStatusCode(tc.statusCode)
 
 			toolInfo := newTestToolInfo()
 			timestamp := time.Now().UTC()
 
 			ti.service.CreateLog(ctx, telemetry.LogParams{
-				Timestmp:   timestamp,
+				Timestamp:  timestamp,
 				ToolInfo:   toolInfo,
 				Attributes: attrs,
 			})
@@ -145,15 +145,15 @@ func TestCreateLog_DefaultSeverityWithoutStatusCode(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestLogsService(t)
 
-	attrs := telemetry.AttributeRecorder{}
-	attrs.RecordHTTPMethod("GET")
+	attrs := telemetry.HTTPLogAttributes{}
+	attrs.RecordMethod("GET")
 	// No status code recorded
 
 	toolInfo := newTestToolInfo()
 	timestamp := time.Now().UTC()
 
 	ti.service.CreateLog(ctx, telemetry.LogParams{
-		Timestmp:   timestamp,
+		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
 	})
@@ -168,10 +168,10 @@ func TestCreateLog_RequestHeaders(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestLogsService(t)
 
-	attrs := telemetry.AttributeRecorder{}
-	attrs.RecordHTTPMethod("POST")
-	attrs.RecordHTTPStatusCode(200)
-	attrs.RecordHTTPRequestHeaders(map[string]string{
+	attrs := telemetry.HTTPLogAttributes{}
+	attrs.RecordMethod("POST")
+	attrs.RecordStatusCode(200)
+	attrs.RecordRequestHeaders(map[string]string{
 		"Content-Type": "application/json",
 		"X-Request-ID": "req-123",
 	}, false)
@@ -180,7 +180,7 @@ func TestCreateLog_RequestHeaders(t *testing.T) {
 	timestamp := time.Now().UTC()
 
 	ti.service.CreateLog(ctx, telemetry.LogParams{
-		Timestmp:   timestamp,
+		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
 	})
@@ -197,10 +197,10 @@ func TestCreateLog_ResponseHeaders(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestLogsService(t)
 
-	attrs := telemetry.AttributeRecorder{}
-	attrs.RecordHTTPMethod("GET")
-	attrs.RecordHTTPStatusCode(200)
-	attrs.RecordHTTPResponseHeaders(map[string]string{
+	attrs := telemetry.HTTPLogAttributes{}
+	attrs.RecordMethod("GET")
+	attrs.RecordStatusCode(200)
+	attrs.RecordResponseHeaders(map[string]string{
 		"Content-Type":   "application/json",
 		"Content-Length": "1234",
 	})
@@ -209,7 +209,7 @@ func TestCreateLog_ResponseHeaders(t *testing.T) {
 	timestamp := time.Now().UTC()
 
 	ti.service.CreateLog(ctx, telemetry.LogParams{
-		Timestmp:   timestamp,
+		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
 	})
@@ -225,16 +225,16 @@ func TestCreateLog_LogMessageBody(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestLogsService(t)
 
-	attrs := telemetry.AttributeRecorder{}
-	attrs.RecordHTTPMethod("POST")
-	attrs.RecordHTTPStatusCode(200)
-	attrs.RecordLogMessageBody("POST /api/test -> 200 (0.12s)")
+	attrs := telemetry.HTTPLogAttributes{}
+	attrs.RecordMethod("POST")
+	attrs.RecordStatusCode(200)
+	attrs.RecordMessageBody("POST /api/test -> 200 (0.12s)")
 
 	toolInfo := newTestToolInfo()
 	timestamp := time.Now().UTC()
 
 	ti.service.CreateLog(ctx, telemetry.LogParams{
-		Timestmp:   timestamp,
+		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
 	})
@@ -248,15 +248,17 @@ func TestCreateLog_Timestamp(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestLogsService(t)
 
-	attrs := telemetry.AttributeRecorder{}
-	attrs.RecordHTTPMethod("GET")
-	attrs.RecordHTTPStatusCode(200)
+	attrs := telemetry.HTTPLogAttributes{}
+	attrs.RecordMethod("GET")
+	attrs.RecordStatusCode(200)
 
 	toolInfo := newTestToolInfo()
-	timestamp := time.Date(2025, 6, 15, 10, 30, 0, 0, time.UTC)
+	// Use a timestamp within the ClickHouse TTL window (30 days)
+	// but still specific enough to verify timestamp storage
+	timestamp := time.Now().UTC().Truncate(time.Second).Add(-24 * time.Hour)
 
 	ti.service.CreateLog(ctx, telemetry.LogParams{
-		Timestmp:   timestamp,
+		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
 	})

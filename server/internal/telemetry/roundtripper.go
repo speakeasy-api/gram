@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -101,7 +102,7 @@ func filterAllowedHeaders(headers map[string]string) map[string]string {
 
 // ToolCallLogRoundTripper wraps an http.RoundTripper and logs HTTP requests to ClickHouse
 type ToolCallLogRoundTripper struct {
-	AttrRecorder AttributeRecorder
+	AttrRecorder HTTPLogAttributes
 	rt           http.RoundTripper
 	logger       *slog.Logger
 	tracer       trace.Tracer
@@ -113,11 +114,11 @@ func NewToolCallLogRoundTripper(
 	rt http.RoundTripper,
 	logger *slog.Logger,
 	tracer trace.Tracer,
-	toolInfo *ToolInfo) *ToolCallLogRoundTripper {
-	attrRecorder := AttributeRecorder{}
+	toolInfo *ToolInfo,
+	recorder HTTPLogAttributes) *ToolCallLogRoundTripper {
 
 	return &ToolCallLogRoundTripper{
-		AttrRecorder: attrRecorder,
+		AttrRecorder: recorder,
 
 		rt:       rt,
 		logger:   logger,
@@ -160,21 +161,21 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	requestHeaders = filterAllowedHeaders(requestHeaders)
 	// Construct full server URL with scheme
 	serverURL := req.URL.Scheme + "://" + req.URL.Host
-	h.AttrRecorder.RecordHTTPServerURL(serverURL)
-	h.AttrRecorder.RecordHTTPMethod(req.Method)
-	h.AttrRecorder.RecordHTTPRoute(req.URL.Path)
-	h.AttrRecorder.RecordHTTPUserAgent(req.UserAgent())
-	h.AttrRecorder.RecordHTTPRequestHeaders(requestHeaders, false)
+	h.AttrRecorder.RecordServerURL(serverURL, repo.ToolTypeHTTP)
+	h.AttrRecorder.RecordMethod(req.Method)
+	h.AttrRecorder.RecordRoute(req.URL.Path)
+	h.AttrRecorder.RecordUserAgent(req.UserAgent())
+	h.AttrRecorder.RecordRequestHeaders(requestHeaders, false)
 
 	resp, err := base.RoundTrip(req)
 
 	duration := time.Since(startTime).Seconds()
-	h.AttrRecorder.RecordHTTPDuration(duration)
+	h.AttrRecorder.RecordDuration(duration)
 
 	logBody := fmt.Sprintf("%s %s -> %d (%.2fs)",
 		req.Method, req.URL.Path, resp.StatusCode, duration)
 
-	h.AttrRecorder.RecordLogMessageBody(logBody)
+	h.AttrRecorder.RecordMessageBody(logBody)
 
 	tool := h.toolInfo
 	if tool == nil {
@@ -214,7 +215,7 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			attr.SlogHTTPClientRequestDuration(duration),
 		)
 
-		h.AttrRecorder.RecordHTTPStatusCode(0)
+		h.AttrRecorder.RecordStatusCode(0)
 
 		return resp, fmt.Errorf("roundtrip: %w", err)
 	}
@@ -254,8 +255,8 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		responseHeaders = filterAllowedHeaders(responseHeaders)
 	}
 
-	h.AttrRecorder.RecordHTTPStatusCode(statusCode)
-	h.AttrRecorder.RecordHTTPResponseHeaders(responseHeaders)
+	h.AttrRecorder.RecordStatusCode(statusCode)
+	h.AttrRecorder.RecordResponseHeaders(responseHeaders)
 
 	if resp == nil || resp.Body == nil {
 		return resp, nil

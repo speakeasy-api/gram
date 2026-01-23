@@ -29,7 +29,7 @@ import (
 type Service struct {
 	auth          *auth.Auth
 	db            *pgxpool.Pool
-	chConn        *clickhouse.Conn
+	chConn        clickhouse.Conn
 	chRepo        *repo.Queries
 	featureClient *productfeatures.Client
 	logger        *slog.Logger
@@ -54,6 +54,7 @@ func NewService(
 	return &Service{
 		auth:          auth.New(logger, db, sessions),
 		db:            db,
+		chConn:        chConn,
 		chRepo:        repo.New(chConn),
 		logger:        logger,
 		featureClient: features,
