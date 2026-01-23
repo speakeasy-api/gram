@@ -179,7 +179,7 @@ export function MCPDetailPage() {
       </Page.Header>
       <Page.Body fullWidth noPadding>
         {/* Hero Header with Animation - full width */}
-        <div className="relative w-full h-64 overflow-hidden mb-8">
+        <div className="relative w-full h-64 overflow-hidden">
         <MCPHeroIllustration mcpUrl={mcpUrl || ""} toolsetSlug={toolset.slug} />
 
         {/* Overlay content */}
@@ -282,26 +282,48 @@ export function MCPDetailPage() {
         </div>
       </div>
 
-      {/* Page Content - constrained with max-width */}
-      <div className="max-w-[1270px] mx-auto px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main content - left side */}
-          <div className="lg:col-span-2">
-            <MCPDetails toolset={toolset} />
-          </div>
-
-          {/* Sidebar - right side */}
-          <div className="lg:col-span-1">
-            <PageSection
-              heading="Source Toolset"
-              description="The toolset powering this MCP server."
-              className="sticky top-6"
-            >
-              <ToolsetCard toolset={toolset} />
-            </PageSection>
+      {/* Sub-navigation tabs */}
+      <Tabs defaultValue="overview" className="w-full flex-1 flex flex-col">
+        <div className="border-b">
+          <div className="max-w-[1270px] mx-auto px-8">
+            <TabsList className="h-auto bg-transparent p-0 gap-6 rounded-none">
+              <TabsTrigger
+                value="overview"
+                className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+              >
+                Overview
+              </TabsTrigger>
+              <TabsTrigger
+                value="tools"
+                className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+              >
+                Tools
+              </TabsTrigger>
+              <TabsTrigger
+                value="settings"
+                className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+              >
+                Settings
+              </TabsTrigger>
+            </TabsList>
           </div>
         </div>
-      </div>
+
+        {/* Tab Content */}
+        <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
+          <TabsContent value="overview" className="mt-0 w-full">
+            <MCPOverviewTab toolset={toolset} />
+          </TabsContent>
+
+          <TabsContent value="tools" className="mt-0 w-full">
+            <MCPToolsTab toolset={toolset} />
+          </TabsContent>
+
+          <TabsContent value="settings" className="mt-0 w-full">
+            <MCPSettingsTab toolset={toolset} />
+          </TabsContent>
+        </div>
+      </Tabs>
 
       <ConnectOAuthModal
         isOpen={isOAuthModalOpen}
@@ -374,7 +396,68 @@ export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
   );
 }
 
-export function MCPDetails({ toolset }: { toolset: Toolset }) {
+/**
+ * Overview Tab - Hosted URL and Installation instructions
+ */
+function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
+  const { url: mcpUrl } = useMcpUrl(toolset);
+
+  return (
+    <Stack
+      className={cn(
+        "mb-4",
+        !toolset.mcpEnabled && "blur-[2px] pointer-events-none",
+      )}
+    >
+      <PageSection
+        heading="Hosted URL"
+        description="The URL you or your users will use to access this MCP server."
+      >
+        <CodeBlock className="mb-2">{mcpUrl ?? ""}</CodeBlock>
+      </PageSection>
+
+      <PageSection
+        heading="MCP Installation"
+        description="Share this page with your users to give simple instructions for getting started with your MCP in their client like Cursor or Claude Desktop."
+      >
+        {!toolset.mcpIsPublic && (
+          <Type small italic destructive>
+            Your server is private. To share with external users, you must make
+            it public.
+          </Type>
+        )}
+        <Stack className="mt-2" gap={1}>
+          <ConfigForm toolset={toolset} />
+        </Stack>
+      </PageSection>
+    </Stack>
+  );
+}
+
+/**
+ * Tools Tab - Coming soon placeholder
+ */
+function MCPToolsTab({ toolset }: { toolset: Toolset }) {
+  return (
+    <Stack
+      className={cn(
+        "mb-4",
+        !toolset.mcpEnabled && "blur-[2px] pointer-events-none",
+      )}
+    >
+      <div className="flex items-center justify-center h-64 border rounded-lg bg-muted/20">
+        <Stack align="center" gap={2}>
+          <Type muted>Tools management coming soon</Type>
+        </Stack>
+      </div>
+    </Stack>
+  );
+}
+
+/**
+ * Settings Tab - Visibility, Slug, Custom Domain, Tool Selection Mode
+ */
+function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   const telemetry = useTelemetry();
   const queryClient = useQueryClient();
   const session = useSession();
@@ -586,11 +669,17 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
       )}
     >
       <PageSection
-        heading="Hosted URL"
-        description="The URL you or your users will use to access this MCP server."
+        heading="Visibility"
+        description="Make your MCP server visible to the world, or protected behind a Gram key."
       >
-        <CodeBlock className="mb-2">{mcpUrl ?? ""}</CodeBlock>
-        <Block label="Custom Slug" error={mcpSlugError} className="p-0">
+        <PublicToggle isPublic={mcpIsPublic ?? false} />
+      </PageSection>
+
+      <PageSection
+        heading="Custom Slug"
+        description="Customize the URL path for your MCP server."
+      >
+        <Block label="Slug" error={mcpSlugError} className="p-0">
           <BlockInner>
             <Stack direction="horizontal" align="center">
               <Type
@@ -634,7 +723,13 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
             </Stack>
           </BlockInner>
         </Block>
-        <Block label="Custom Domain" className="p-0">
+      </PageSection>
+
+      <PageSection
+        heading="Custom Domain"
+        description="Host your MCP server at your own domain."
+      >
+        <Block label="Domain" className="p-0">
           <BlockInner>
             <Stack direction="horizontal" align="center">
               <Type mono small>
@@ -651,30 +746,6 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
             </Stack>
           </BlockInner>
         </Block>
-      </PageSection>
-
-      <PageSection
-        heading="Visibility"
-        description="Make your MCP server visible to the world, or protected behind a Gram key."
-      >
-        <PublicToggle isPublic={mcpIsPublic ?? false} />
-      </PageSection>
-
-      <PageSection
-        heading="MCP Installation"
-        description="Share this page with your users to give simple instructions
-          for gettings started with your MCP to their client like Cursor or
-          Claude Desktop."
-      >
-        {!toolset.mcpIsPublic && (
-          <Type small italic destructive>
-            Your server is private. To share with external users, you must make
-            it public.
-          </Type>
-        )}
-        <Stack className="mt-2" gap={1}>
-          <ConfigForm toolset={toolset} />
-        </Stack>
       </PageSection>
 
       <PageSection
@@ -713,6 +784,11 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
       />
     </Stack>
   );
+}
+
+// Keep the old MCPDetails for backward compatibility (can be removed later)
+export function MCPDetails({ toolset }: { toolset: Toolset }) {
+  return <MCPSettingsTab toolset={toolset} />;
 }
 
 function PageSection({

@@ -158,8 +158,8 @@ function hashStringToColor(str: string): { bg: string; accent: string; text: str
 }
 
 /**
- * MCP Card illustration with parallax hover effect
- * Uses pastel colors and whimsical server-themed patterns
+ * MCP Card illustration with hand-drawn doodle style
+ * Sketch-like line work with organic, informal aesthetic
  */
 export function MCPIllustration({
   className,
@@ -172,151 +172,143 @@ export function MCPIllustration({
 
   const renderPattern = () => {
     switch (pattern) {
-      case 0: // Happy clouds
+      case 0: // Doodle cloud with connection
         return (
-          <>
-            {/* Cloud 1 - moves up-left on hover */}
-            <g className="transition-transform duration-700 ease-out group-hover:-translate-x-1 group-hover:-translate-y-2">
-              <circle cx="60" cy="35" r="12" fill={colors.accent} opacity="0.2" className="transition-opacity duration-700 group-hover:opacity-30" />
-              <circle cx="72" cy="35" r="10" fill={colors.accent} opacity="0.2" className="transition-opacity duration-700 group-hover:opacity-30" />
-              <circle cx="66" cy="28" r="8" fill={colors.accent} opacity="0.2" className="transition-opacity duration-700 group-hover:opacity-30" />
-            </g>
-            {/* Cloud 2 - moves right on hover */}
-            <g className="transition-transform duration-700 ease-out group-hover:translate-x-2 group-hover:-translate-y-1">
-              <circle cx="180" cy="55" r="14" fill={colors.accent} opacity="0.18" className="transition-opacity duration-700 group-hover:opacity-28" />
-              <circle cx="195" cy="55" r="12" fill={colors.accent} opacity="0.18" className="transition-opacity duration-700 group-hover:opacity-28" />
-              <circle cx="188" cy="47" r="10" fill={colors.accent} opacity="0.18" className="transition-opacity duration-700 group-hover:opacity-28" />
-            </g>
-            {/* Cloud 3 - moves down-left on hover */}
-            <g className="transition-transform duration-700 ease-out group-hover:-translate-x-2 group-hover:translate-y-1">
-              <circle cx="110" cy="80" r="10" fill={colors.accent} opacity="0.22" className="transition-opacity duration-700 group-hover:opacity-32" />
-              <circle cx="120" cy="80" r="9" fill={colors.accent} opacity="0.22" className="transition-opacity duration-700 group-hover:opacity-32" />
-              <circle cx="115" cy="74" r="7" fill={colors.accent} opacity="0.22" className="transition-opacity duration-700 group-hover:opacity-32" />
-            </g>
-            {/* Little sparkles - pulse on hover */}
-            <circle cx="45" cy="28" r="2" fill={colors.accent} opacity="0.4" className="transition-all duration-500 group-hover:opacity-70 group-hover:scale-125" />
-            <circle cx="220" cy="45" r="2" fill={colors.accent} opacity="0.4" className="transition-all duration-500 group-hover:opacity-70 group-hover:scale-125" />
-          </>
+          <g className="transition-transform duration-500 group-hover:-translate-y-1">
+            {/* Cloud shape - hand drawn style */}
+            <path
+              d="M55 55 Q45 55 45 45 Q45 35 55 35 Q55 25 70 25 Q85 25 90 35 Q100 30 110 40 Q120 35 125 45 Q135 45 135 55 Q135 65 125 65 L55 65 Q45 65 45 55"
+              fill="none"
+              stroke={colors.accent}
+              strokeWidth="1.5"
+              opacity="0.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            {/* Connection line to server */}
+            <path d="M135 55 Q155 55 175 50" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" strokeDasharray="4 3" />
+            {/* Small server box */}
+            <rect x="175" y="35" width="35" height="45" rx="3" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.5" />
+            <line x1="180" y1="48" x2="205" y2="48" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
+            <line x1="180" y1="58" x2="205" y2="58" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
+            <line x1="180" y1="68" x2="205" y2="68" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
+            {/* Status dots */}
+            <circle cx="183" cy="43" r="2" fill={colors.accent} opacity="0.5" />
+            <circle cx="190" cy="43" r="2" fill={colors.accent} opacity="0.3" />
+          </g>
         );
 
-      case 1: // Flying data packets
+      case 1: // Network nodes doodle
         return (
-          <>
-            {/* Packet 1 - flies forward on hover */}
-            <g className="transition-transform duration-700 ease-out group-hover:translate-x-4 group-hover:-translate-y-1">
-              <rect x="45" y="30" width="20" height="14" rx="3" fill={colors.accent} opacity="0.25" className="transition-opacity duration-700 group-hover:opacity-35" />
-              <path d="M55,30 L55,25 L65,30" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" fill="none" className="transition-opacity duration-700 group-hover:opacity-50" />
-            </g>
-            {/* Packet 2 - flies forward slower */}
-            <g className="transition-transform duration-700 ease-out group-hover:translate-x-3 group-hover:translate-y-1">
-              <rect x="150" y="50" width="18" height="12" rx="3" fill={colors.accent} opacity="0.2" className="transition-opacity duration-700 group-hover:opacity-30" />
-              <path d="M159,50 L159,45 L168,50" stroke={colors.accent} strokeWidth="1.5" opacity="0.25" fill="none" className="transition-opacity duration-700 group-hover:opacity-40" />
-            </g>
-            {/* Packet 3 - flies forward fastest */}
-            <g className="transition-transform duration-700 ease-out group-hover:translate-x-5">
-              <rect x="200" y="75" width="22" height="15" rx="3" fill={colors.accent} opacity="0.22" className="transition-opacity duration-700 group-hover:opacity-32" />
-              <path d="M211,75 L211,70 L222,75" stroke={colors.accent} strokeWidth="1.5" opacity="0.28" fill="none" className="transition-opacity duration-700 group-hover:opacity-45" />
-            </g>
-            {/* Motion lines - extend on hover */}
-            <line x1="70" y1="37" x2="85" y2="37" stroke={colors.accent} strokeWidth="1" opacity="0.2" strokeDasharray="2 2" className="transition-opacity duration-700 group-hover:opacity-40" />
-            <line x1="175" y1="56" x2="190" y2="56" stroke={colors.accent} strokeWidth="1" opacity="0.15" strokeDasharray="2 2" className="transition-opacity duration-700 group-hover:opacity-35" />
-          </>
+          <g className="transition-transform duration-500 group-hover:scale-[1.02]" style={{ transformOrigin: '140px 60px' }}>
+            {/* Central hub - sketchy circle */}
+            <circle cx="140" cy="60" r="18" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
+            <circle cx="140" cy="60" r="6" fill={colors.accent} opacity="0.4" />
+            {/* Outer nodes */}
+            <circle cx="70" cy="40" r="10" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.45" />
+            <circle cx="70" cy="40" r="3" fill={colors.accent} opacity="0.35" />
+            <circle cx="210" cy="40" r="10" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.45" />
+            <circle cx="210" cy="40" r="3" fill={colors.accent} opacity="0.35" />
+            <circle cx="90" cy="90" r="8" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
+            <circle cx="190" cy="90" r="8" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
+            {/* Connection lines - dashed hand-drawn style */}
+            <path d="M125 50 Q100 45 80 42" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" strokeDasharray="5 4" />
+            <path d="M155 50 Q180 45 200 42" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" strokeDasharray="5 4" />
+            <path d="M130 75 Q110 82 95 88" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" strokeDasharray="5 4" />
+            <path d="M150 75 Q170 82 185 88" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" strokeDasharray="5 4" />
+          </g>
         );
 
-      case 2: // Cute server racks
+      case 2: // Server rack doodle
         return (
-          <>
-            {/* Server 1 - shifts up on hover */}
-            <g className="transition-transform duration-700 ease-out group-hover:-translate-y-2 group-hover:-translate-x-1">
-              <rect x="50" y="35" width="30" height="40" rx="3" fill={colors.accent} opacity="0.15" className="transition-opacity duration-700 group-hover:opacity-25" />
-              <rect x="54" y="40" width="22" height="6" rx="1" fill={colors.accent} opacity="0.3" className="transition-opacity duration-700 group-hover:opacity-40" />
-              <rect x="54" y="50" width="22" height="6" rx="1" fill={colors.accent} opacity="0.3" className="transition-opacity duration-700 group-hover:opacity-40" />
-              <rect x="54" y="60" width="22" height="6" rx="1" fill={colors.accent} opacity="0.3" className="transition-opacity duration-700 group-hover:opacity-40" />
-              <circle cx="58" cy="43" r="1.5" fill={colors.accent} opacity="0.5" className="transition-opacity duration-500 group-hover:opacity-80" />
-              <circle cx="58" cy="53" r="1.5" fill={colors.accent} opacity="0.5" className="transition-opacity duration-500 group-hover:opacity-80" />
-            </g>
-            {/* Server 2 - shifts down on hover */}
-            <g className="transition-transform duration-700 ease-out group-hover:translate-y-1 group-hover:translate-x-1">
-              <rect x="170" y="45" width="35" height="45" rx="3" fill={colors.accent} opacity="0.12" className="transition-opacity duration-700 group-hover:opacity-22" />
-              <rect x="175" y="51" width="25" height="7" rx="1" fill={colors.accent} opacity="0.28" className="transition-opacity duration-700 group-hover:opacity-38" />
-              <rect x="175" y="62" width="25" height="7" rx="1" fill={colors.accent} opacity="0.28" className="transition-opacity duration-700 group-hover:opacity-38" />
-              <rect x="175" y="73" width="25" height="7" rx="1" fill={colors.accent} opacity="0.28" className="transition-opacity duration-700 group-hover:opacity-38" />
-              <circle cx="180" cy="54" r="1.5" fill={colors.accent} opacity="0.5" className="transition-opacity duration-500 group-hover:opacity-80" />
-            </g>
-          </>
+          <g className="transition-transform duration-500 group-hover:-translate-y-1">
+            {/* Server 1 */}
+            <rect x="45" y="30" width="50" height="65" rx="3" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.5" />
+            <line x1="52" y1="45" x2="88" y2="45" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
+            <line x1="52" y1="58" x2="88" y2="58" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
+            <line x1="52" y1="71" x2="88" y2="71" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
+            <line x1="52" y1="84" x2="88" y2="84" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
+            {/* LED indicators */}
+            <circle cx="55" cy="38" r="2" fill={colors.accent} opacity="0.5" />
+            <circle cx="62" cy="38" r="2" fill={colors.accent} opacity="0.3" />
+            {/* Server 2 */}
+            <rect x="170" y="35" width="55" height="55" rx="3" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.45" />
+            <line x1="178" y1="50" x2="218" y2="50" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" />
+            <line x1="178" y1="63" x2="218" y2="63" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" />
+            <line x1="178" y1="76" x2="218" y2="76" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" />
+            <circle cx="180" cy="43" r="2" fill={colors.accent} opacity="0.45" />
+            {/* Connection between servers */}
+            <path d="M95 62 Q130 55 170 62" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.3" strokeDasharray="3 3" />
+          </g>
         );
 
-      case 3: // Database cylinders
+      case 3: // Database doodle
         return (
-          <>
-            {/* DB 1 - lifts up on hover */}
-            <g className="transition-transform duration-700 ease-out group-hover:-translate-y-2 group-hover:-translate-x-1">
-              <ellipse cx="70" cy="35" rx="18" ry="6" fill={colors.accent} opacity="0.25" className="transition-opacity duration-700 group-hover:opacity-35" />
-              <rect x="52" y="35" width="36" height="25" fill={colors.accent} opacity="0.2" className="transition-opacity duration-700 group-hover:opacity-30" />
-              <ellipse cx="70" cy="60" rx="18" ry="6" fill={colors.accent} opacity="0.25" className="transition-opacity duration-700 group-hover:opacity-35" />
-              <ellipse cx="70" cy="45" rx="18" ry="6" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.3" />
-            </g>
-            {/* DB 2 - lifts up slower on hover */}
-            <g className="transition-transform duration-700 ease-out group-hover:-translate-y-3">
-              <ellipse cx="180" cy="45" rx="22" ry="7" fill={colors.accent} opacity="0.2" className="transition-opacity duration-700 group-hover:opacity-30" />
-              <rect x="158" y="45" width="44" height="30" fill={colors.accent} opacity="0.15" className="transition-opacity duration-700 group-hover:opacity-25" />
-              <ellipse cx="180" cy="75" rx="22" ry="7" fill={colors.accent} opacity="0.2" className="transition-opacity duration-700 group-hover:opacity-30" />
-              <ellipse cx="180" cy="55" rx="22" ry="7" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.25" />
-              <ellipse cx="180" cy="65" rx="22" ry="7" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.2" />
-            </g>
-            {/* Sync lines */}
-            <line x1="92" y1="50" x2="155" y2="55" stroke={colors.accent} strokeWidth="1" opacity="0.2" strokeDasharray="3 3" className="transition-opacity duration-500 group-hover:opacity-40" />
-          </>
+          <g className="transition-transform duration-500 group-hover:-translate-y-1">
+            {/* Database cylinder 1 */}
+            <ellipse cx="75" cy="35" rx="25" ry="8" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.5" />
+            <path d="M50 35 L50 75 Q50 83 75 83 Q100 83 100 75 L100 35" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.5" />
+            <ellipse cx="75" cy="75" rx="25" ry="8" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" />
+            <ellipse cx="75" cy="55" rx="25" ry="8" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.25" strokeDasharray="3 2" />
+            {/* Database cylinder 2 */}
+            <ellipse cx="190" cy="40" rx="30" ry="10" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.45" />
+            <path d="M160 40 L160 85 Q160 95 190 95 Q220 95 220 85 L220 40" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.45" />
+            <ellipse cx="190" cy="85" rx="30" ry="10" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" />
+            <ellipse cx="190" cy="62" rx="30" ry="10" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.2" strokeDasharray="3 2" />
+            {/* Sync arrow */}
+            <path d="M105 55 L155 60" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" strokeDasharray="4 3" />
+            <path d="M150 56 L155 60 L150 64" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" />
+          </g>
         );
 
-      case 4: // Signal broadcast
+      case 4: // Wifi/Signal doodle
         return (
-          <>
-            {/* Antenna - pulses on hover */}
-            <g className="transition-transform duration-500 group-hover:-translate-y-1">
-              <line x1="140" y1="45" x2="140" y2="85" stroke={colors.accent} strokeWidth="2" opacity="0.4" />
-              <circle cx="140" cy="40" r="4" fill={colors.accent} opacity="0.5" className="transition-all duration-500 group-hover:opacity-80" />
-            </g>
-            {/* Signal waves - expand on hover */}
-            <g className="transition-all duration-700 group-hover:scale-110" style={{ transformOrigin: '140px 40px' }}>
-              <path d="M120 40 Q130 25 140 40 Q150 55 160 40" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.2" className="transition-opacity duration-500 group-hover:opacity-35" />
-              <path d="M105 40 Q122 15 140 40 Q158 65 175 40" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.15" className="transition-opacity duration-700 group-hover:opacity-25" />
-              <path d="M90 40 Q115 5 140 40 Q165 75 190 40" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.1" className="transition-opacity duration-900 group-hover:opacity-18" />
-            </g>
-            {/* Small receiver dots */}
-            <circle cx="60" cy="70" r="5" fill={colors.accent} opacity="0.25" className="transition-all duration-500 group-hover:opacity-45" />
-            <circle cx="220" cy="65" r="5" fill={colors.accent} opacity="0.25" className="transition-all duration-700 group-hover:opacity-45" />
-          </>
+          <g className="transition-transform duration-500 group-hover:-translate-y-1">
+            {/* Router box */}
+            <rect x="110" y="65" width="60" height="30" rx="4" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.5" />
+            <circle cx="125" cy="80" r="3" fill={colors.accent} opacity="0.4" />
+            <circle cx="140" cy="80" r="3" fill={colors.accent} opacity="0.3" />
+            <circle cx="155" cy="80" r="3" fill={colors.accent} opacity="0.4" />
+            {/* Antenna */}
+            <line x1="140" y1="65" x2="140" y2="45" stroke={colors.accent} strokeWidth="1.5" opacity="0.5" />
+            <circle cx="140" cy="42" r="4" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.5" />
+            {/* Signal waves */}
+            <path d="M120 35 Q130 20 140 35" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" strokeLinecap="round" />
+            <path d="M140 35 Q150 20 160 35" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" strokeLinecap="round" />
+            <path d="M105 25 Q122 5 140 25" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.25" strokeLinecap="round" />
+            <path d="M140 25 Q158 5 175 25" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.25" strokeLinecap="round" />
+            {/* Connected devices */}
+            <rect x="50" y="70" width="20" height="14" rx="2" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.35" />
+            <rect x="210" y="70" width="20" height="14" rx="2" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.35" />
+            <path d="M70 77 Q90 77 110 80" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.25" strokeDasharray="3 2" />
+            <path d="M170 80 Q190 77 210 77" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.25" strokeDasharray="3 2" />
+          </g>
         );
 
-      case 5: // Network nodes
+      case 5: // Globe/World doodle
       default:
         return (
-          <>
-            {/* Central node */}
-            <g className="transition-transform duration-500 group-hover:scale-110" style={{ transformOrigin: '140px 60px' }}>
-              <circle cx="140" cy="60" r="16" fill={colors.accent} opacity="0.3" className="transition-opacity duration-500 group-hover:opacity-45" />
-              <circle cx="140" cy="60" r="8" fill={colors.accent} opacity="0.5" className="transition-opacity duration-500 group-hover:opacity-70" />
+          <g className="transition-transform duration-500 group-hover:rotate-[5deg]" style={{ transformOrigin: '140px 60px' }}>
+            {/* Globe */}
+            <circle cx="140" cy="60" r="35" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.5" />
+            {/* Latitude lines */}
+            <ellipse cx="140" cy="60" rx="35" ry="12" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.3" />
+            <ellipse cx="140" cy="60" rx="28" ry="35" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.3" />
+            {/* Meridian */}
+            <line x1="140" y1="25" x2="140" y2="95" stroke={colors.accent} strokeWidth="1" opacity="0.25" />
+            {/* Orbit ring */}
+            <ellipse cx="140" cy="60" rx="50" ry="18" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" strokeDasharray="6 4" />
+            {/* Satellite */}
+            <g>
+              <rect x="55" y="45" width="12" height="8" rx="1" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.4" />
+              <line x1="50" y1="49" x2="55" y2="49" stroke={colors.accent} strokeWidth="1" opacity="0.4" />
+              <line x1="67" y1="49" x2="72" y2="49" stroke={colors.accent} strokeWidth="1" opacity="0.4" />
             </g>
-            {/* Surrounding nodes - spread out on hover */}
-            <g className="transition-transform duration-700 group-hover:-translate-x-2 group-hover:-translate-y-2">
-              <circle cx="70" cy="35" r="8" fill={colors.accent} opacity="0.25" className="transition-opacity duration-500 group-hover:opacity-40" />
-            </g>
-            <g className="transition-transform duration-700 group-hover:translate-x-2 group-hover:-translate-y-2">
-              <circle cx="210" cy="35" r="8" fill={colors.accent} opacity="0.25" className="transition-opacity duration-500 group-hover:opacity-40" />
-            </g>
-            <g className="transition-transform duration-700 group-hover:-translate-x-2 group-hover:translate-y-2">
-              <circle cx="70" cy="85" r="8" fill={colors.accent} opacity="0.25" className="transition-opacity duration-500 group-hover:opacity-40" />
-            </g>
-            <g className="transition-transform duration-700 group-hover:translate-x-2 group-hover:translate-y-2">
-              <circle cx="210" cy="85" r="8" fill={colors.accent} opacity="0.25" className="transition-opacity duration-500 group-hover:opacity-40" />
-            </g>
-            {/* Connection lines */}
-            <line x1="140" y1="60" x2="70" y2="35" stroke={colors.accent} strokeWidth="1.5" opacity="0.2" strokeDasharray="3 3" className="transition-opacity duration-500 group-hover:opacity-35" />
-            <line x1="140" y1="60" x2="210" y2="35" stroke={colors.accent} strokeWidth="1.5" opacity="0.2" strokeDasharray="3 3" className="transition-opacity duration-500 group-hover:opacity-35" />
-            <line x1="140" y1="60" x2="70" y2="85" stroke={colors.accent} strokeWidth="1.5" opacity="0.2" strokeDasharray="3 3" className="transition-opacity duration-500 group-hover:opacity-35" />
-            <line x1="140" y1="60" x2="210" y2="85" stroke={colors.accent} strokeWidth="1.5" opacity="0.2" strokeDasharray="3 3" className="transition-opacity duration-500 group-hover:opacity-35" />
-          </>
+            {/* Connection points */}
+            <circle cx="115" cy="50" r="3" fill={colors.accent} opacity="0.35" />
+            <circle cx="165" cy="70" r="3" fill={colors.accent} opacity="0.35" />
+            <circle cx="140" cy="90" r="3" fill={colors.accent} opacity="0.35" />
+          </g>
         );
     }
   };
@@ -384,6 +376,7 @@ export function MCPIllustration({
 
 /**
  * Large hero illustration for MCP details page
+ * Hand-drawn doodle style matching card illustrations
  */
 export function MCPHeroIllustration({
   className,
@@ -395,145 +388,188 @@ export function MCPHeroIllustration({
 
   const renderHeroPattern = () => {
     switch (pattern) {
-      case 0: // Floating clouds
+      case 0: // Cloud network doodle
         return (
           <>
-            {/* Cloud clusters */}
+            {/* Large cloud */}
             <g className="animate-[float_6s_ease-in-out_infinite]">
-              <circle cx="120" cy="100" r="35" fill={colors.accent} opacity="0.2" />
-              <circle cx="150" cy="100" r="30" fill={colors.accent} opacity="0.2" />
-              <circle cx="135" cy="80" r="25" fill={colors.accent} opacity="0.2" />
+              <path
+                d="M100 150 Q70 150 70 120 Q70 90 100 90 Q100 60 140 60 Q180 60 190 90 Q220 80 240 100 Q270 90 280 110 Q310 110 310 140 Q310 170 280 170 L100 170 Q70 170 70 150"
+                fill="none"
+                stroke={colors.accent}
+                strokeWidth="2"
+                opacity="0.5"
+                strokeLinecap="round"
+              />
             </g>
+            {/* Small cloud */}
             <g className="animate-[float_8s_ease-in-out_infinite]" style={{ animationDelay: '2s' }}>
-              <circle cx="550" cy="150" r="45" fill={colors.accent} opacity="0.15" />
-              <circle cx="590" cy="150" r="38" fill={colors.accent} opacity="0.15" />
-              <circle cx="570" cy="120" r="32" fill={colors.accent} opacity="0.15" />
+              <path
+                d="M500 180 Q480 180 480 160 Q480 140 500 140 Q500 120 530 120 Q560 120 565 140 Q580 135 590 150 Q600 150 600 165 Q600 180 580 180 Z"
+                fill="none"
+                stroke={colors.accent}
+                strokeWidth="2"
+                opacity="0.4"
+                strokeLinecap="round"
+              />
             </g>
-            <g className="animate-[float_7s_ease-in-out_infinite]" style={{ animationDelay: '4s' }}>
-              <circle cx="350" cy="220" r="28" fill={colors.accent} opacity="0.18" />
-              <circle cx="375" cy="220" r="24" fill={colors.accent} opacity="0.18" />
-              <circle cx="362" cy="200" r="20" fill={colors.accent} opacity="0.18" />
+            {/* Connection to servers */}
+            <path d="M310 155 Q400 140 480 160" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.3" strokeDasharray="8 6" />
+            {/* Server boxes */}
+            <g className="animate-[float_7s_ease-in-out_infinite]" style={{ animationDelay: '1s' }}>
+              <rect x="620" y="100" width="80" height="100" rx="4" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.45" />
+              <line x1="635" y1="125" x2="685" y2="125" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
+              <line x1="635" y1="150" x2="685" y2="150" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
+              <line x1="635" y1="175" x2="685" y2="175" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
+              <circle cx="643" cy="113" r="4" fill={colors.accent} opacity="0.4" />
+              <circle cx="656" cy="113" r="4" fill={colors.accent} opacity="0.25" />
             </g>
-            {/* Sparkles */}
-            <circle cx="200" cy="60" r="5" fill={colors.accent} opacity="0.4" className="animate-pulse" />
-            <circle cx="650" cy="80" r="4" fill={colors.accent} opacity="0.4" className="animate-pulse" style={{ animationDelay: '1s' }} />
-            <circle cx="450" cy="250" r="6" fill={colors.accent} opacity="0.35" className="animate-pulse" style={{ animationDelay: '2s' }} />
+            <path d="M600 160 Q610 155 620 150" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.3" strokeDasharray="5 4" />
           </>
         );
 
-      case 1: // Data packets flowing
-        return (
-          <>
-            {/* Packets */}
-            <g className="animate-[flow_4s_linear_infinite]">
-              <rect x="80" y="100" width="40" height="28" rx="6" fill={colors.accent} opacity="0.25" />
-              <path d="M100,100 L100,90 L120,100" stroke={colors.accent} strokeWidth="2" fill="none" opacity="0.35" />
-            </g>
-            <g className="animate-[flow_5s_linear_infinite]" style={{ animationDelay: '1.5s' }}>
-              <rect x="300" y="160" width="35" height="24" rx="5" fill={colors.accent} opacity="0.2" />
-              <path d="M317,160 L317,150 L335,160" stroke={colors.accent} strokeWidth="2" fill="none" opacity="0.3" />
-            </g>
-            <g className="animate-[flow_4.5s_linear_infinite]" style={{ animationDelay: '3s' }}>
-              <rect x="550" y="120" width="45" height="32" rx="7" fill={colors.accent} opacity="0.22" />
-              <path d="M572,120 L572,108 L595,120" stroke={colors.accent} strokeWidth="2" fill="none" opacity="0.32" />
-            </g>
-            {/* Flow lines */}
-            <line x1="130" y1="114" x2="280" y2="168" stroke={colors.accent} strokeWidth="2" opacity="0.15" strokeDasharray="8 8" />
-            <line x1="345" y1="172" x2="540" y2="136" stroke={colors.accent} strokeWidth="2" opacity="0.15" strokeDasharray="8 8" />
-          </>
-        );
-
-      case 2: // Server racks
-        return (
-          <>
-            {/* Server 1 */}
-            <g className="animate-[lift_3s_ease-in-out_infinite]">
-              <rect x="100" y="80" width="80" height="120" rx="8" fill={colors.accent} opacity="0.15" />
-              <rect x="110" y="95" width="60" height="18" rx="3" fill={colors.accent} opacity="0.3" />
-              <rect x="110" y="120" width="60" height="18" rx="3" fill={colors.accent} opacity="0.3" />
-              <rect x="110" y="145" width="60" height="18" rx="3" fill={colors.accent} opacity="0.3" />
-              <circle cx="120" cy="104" r="4" fill={colors.accent} opacity="0.6" className="animate-pulse" />
-              <circle cx="120" cy="129" r="4" fill={colors.accent} opacity="0.6" className="animate-pulse" style={{ animationDelay: '0.5s' }} />
-              <circle cx="120" cy="154" r="4" fill={colors.accent} opacity="0.6" className="animate-pulse" style={{ animationDelay: '1s' }} />
-            </g>
-            {/* Server 2 */}
-            <g className="animate-[lift_4s_ease-in-out_infinite]" style={{ animationDelay: '1s' }}>
-              <rect x="550" y="100" width="90" height="130" rx="8" fill={colors.accent} opacity="0.12" />
-              <rect x="562" y="118" width="66" height="20" rx="3" fill={colors.accent} opacity="0.28" />
-              <rect x="562" y="145" width="66" height="20" rx="3" fill={colors.accent} opacity="0.28" />
-              <rect x="562" y="172" width="66" height="20" rx="3" fill={colors.accent} opacity="0.28" />
-              <circle cx="574" cy="128" r="4" fill={colors.accent} opacity="0.55" className="animate-pulse" style={{ animationDelay: '0.3s' }} />
-              <circle cx="574" cy="155" r="4" fill={colors.accent} opacity="0.55" className="animate-pulse" style={{ animationDelay: '0.8s' }} />
-            </g>
-            {/* Connection */}
-            <line x1="190" y1="140" x2="540" y2="165" stroke={colors.accent} strokeWidth="2" opacity="0.2" strokeDasharray="10 6" />
-          </>
-        );
-
-      case 3: // Database cylinders
-        return (
-          <>
-            {/* DB 1 */}
-            <g className="animate-[lift_4s_ease-in-out_infinite]">
-              <ellipse cx="180" cy="100" rx="50" ry="18" fill={colors.accent} opacity="0.25" />
-              <rect x="130" y="100" width="100" height="80" fill={colors.accent} opacity="0.18" />
-              <ellipse cx="180" cy="180" rx="50" ry="18" fill={colors.accent} opacity="0.25" />
-              <ellipse cx="180" cy="130" rx="50" ry="18" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.25" />
-              <ellipse cx="180" cy="155" rx="50" ry="18" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.2" />
-            </g>
-            {/* DB 2 */}
-            <g className="animate-[lift_5s_ease-in-out_infinite]" style={{ animationDelay: '1.5s' }}>
-              <ellipse cx="550" cy="120" rx="60" ry="20" fill={colors.accent} opacity="0.2" />
-              <rect x="490" y="120" width="120" height="90" fill={colors.accent} opacity="0.14" />
-              <ellipse cx="550" cy="210" rx="60" ry="20" fill={colors.accent} opacity="0.2" />
-              <ellipse cx="550" cy="150" rx="60" ry="20" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.22" />
-              <ellipse cx="550" cy="180" rx="60" ry="20" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.18" />
-            </g>
-            {/* Sync arrow */}
-            <path d="M240 150 Q380 100 480 160" stroke={colors.accent} strokeWidth="2" opacity="0.2" fill="none" strokeDasharray="8 6" />
-          </>
-        );
-
-      case 4: // Signal broadcast
-        return (
-          <>
-            {/* Antenna */}
-            <g className="animate-[pulse_2s_ease-in-out_infinite]">
-              <line x1="400" y1="100" x2="400" y2="220" stroke={colors.accent} strokeWidth="4" opacity="0.4" />
-              <circle cx="400" cy="90" r="12" fill={colors.accent} opacity="0.6" />
-            </g>
-            {/* Signal waves */}
-            <g className="animate-[rings_3s_ease-out_infinite]">
-              <path d="M340 90 Q370 40 400 90 Q430 140 460 90" fill="none" stroke={colors.accent} strokeWidth="2.5" opacity="0.25" />
-              <path d="M300 90 Q350 10 400 90 Q450 170 500 90" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.18" />
-              <path d="M260 90 Q330 -20 400 90 Q470 200 540 90" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.12" />
-            </g>
-            {/* Receiver nodes */}
-            <circle cx="150" cy="200" r="15" fill={colors.accent} opacity="0.25" className="animate-pulse" style={{ animationDelay: '0.5s' }} />
-            <circle cx="650" cy="180" r="18" fill={colors.accent} opacity="0.22" className="animate-pulse" style={{ animationDelay: '1s' }} />
-            <circle cx="300" cy="250" r="12" fill={colors.accent} opacity="0.28" className="animate-pulse" style={{ animationDelay: '1.5s' }} />
-          </>
-        );
-
-      case 5: // Network nodes
-      default:
+      case 1: // Network topology doodle
         return (
           <>
             {/* Central hub */}
             <g className="animate-[pulse_3s_ease-in-out_infinite]">
-              <circle cx="400" cy="150" r="45" fill={colors.accent} opacity="0.25" />
-              <circle cx="400" cy="150" r="25" fill={colors.accent} opacity="0.4" />
+              <circle cx="400" cy="150" r="40" fill="none" stroke={colors.accent} strokeWidth="2.5" opacity="0.5" />
+              <circle cx="400" cy="150" r="15" fill={colors.accent} opacity="0.35" />
             </g>
-            {/* Surrounding nodes */}
-            <circle cx="180" cy="100" r="20" fill={colors.accent} opacity="0.2" className="animate-[float_4s_ease-in-out_infinite]" />
-            <circle cx="620" cy="100" r="20" fill={colors.accent} opacity="0.2" className="animate-[float_5s_ease-in-out_infinite]" style={{ animationDelay: '1s' }} />
-            <circle cx="180" cy="220" r="20" fill={colors.accent} opacity="0.2" className="animate-[float_4.5s_ease-in-out_infinite]" style={{ animationDelay: '2s' }} />
-            <circle cx="620" cy="220" r="20" fill={colors.accent} opacity="0.2" className="animate-[float_5.5s_ease-in-out_infinite]" style={{ animationDelay: '0.5s' }} />
+            {/* Outer nodes */}
+            <g className="animate-[float_4s_ease-in-out_infinite]">
+              <circle cx="200" cy="100" r="25" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.4" />
+              <circle cx="200" cy="100" r="8" fill={colors.accent} opacity="0.3" />
+            </g>
+            <g className="animate-[float_5s_ease-in-out_infinite]" style={{ animationDelay: '1s' }}>
+              <circle cx="600" cy="100" r="25" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.4" />
+              <circle cx="600" cy="100" r="8" fill={colors.accent} opacity="0.3" />
+            </g>
+            <g className="animate-[float_4.5s_ease-in-out_infinite]" style={{ animationDelay: '2s' }}>
+              <circle cx="250" cy="230" r="20" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
+              <circle cx="250" cy="230" r="6" fill={colors.accent} opacity="0.25" />
+            </g>
+            <g className="animate-[float_5.5s_ease-in-out_infinite]" style={{ animationDelay: '0.5s' }}>
+              <circle cx="550" cy="230" r="20" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
+              <circle cx="550" cy="230" r="6" fill={colors.accent} opacity="0.25" />
+            </g>
             {/* Connection lines */}
-            <line x1="400" y1="150" x2="180" y2="100" stroke={colors.accent} strokeWidth="2" opacity="0.2" strokeDasharray="6 4" />
-            <line x1="400" y1="150" x2="620" y2="100" stroke={colors.accent} strokeWidth="2" opacity="0.2" strokeDasharray="6 4" />
-            <line x1="400" y1="150" x2="180" y2="220" stroke={colors.accent} strokeWidth="2" opacity="0.2" strokeDasharray="6 4" />
-            <line x1="400" y1="150" x2="620" y2="220" stroke={colors.accent} strokeWidth="2" opacity="0.2" strokeDasharray="6 4" />
+            <path d="M365 130 Q280 110 225 105" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.3" strokeDasharray="8 5" />
+            <path d="M435 130 Q520 110 575 105" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.3" strokeDasharray="8 5" />
+            <path d="M375 180 Q310 205 268 222" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.25" strokeDasharray="8 5" />
+            <path d="M425 180 Q490 205 532 222" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.25" strokeDasharray="8 5" />
+          </>
+        );
+
+      case 2: // Server rack doodle
+        return (
+          <>
+            {/* Server 1 */}
+            <g className="animate-[lift_3s_ease-in-out_infinite]">
+              <rect x="120" y="70" width="120" height="160" rx="6" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
+              <line x1="135" y1="100" x2="225" y2="100" stroke={colors.accent} strokeWidth="2" opacity="0.4" />
+              <line x1="135" y1="130" x2="225" y2="130" stroke={colors.accent} strokeWidth="2" opacity="0.4" />
+              <line x1="135" y1="160" x2="225" y2="160" stroke={colors.accent} strokeWidth="2" opacity="0.4" />
+              <line x1="135" y1="190" x2="225" y2="190" stroke={colors.accent} strokeWidth="2" opacity="0.4" />
+              <circle cx="145" cy="85" r="5" fill={colors.accent} opacity="0.45" />
+              <circle cx="162" cy="85" r="5" fill={colors.accent} opacity="0.3" />
+            </g>
+            {/* Server 2 */}
+            <g className="animate-[lift_4s_ease-in-out_infinite]" style={{ animationDelay: '1s' }}>
+              <rect x="560" y="80" width="130" height="150" rx="6" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.45" />
+              <line x1="578" y1="110" x2="672" y2="110" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
+              <line x1="578" y1="140" x2="672" y2="140" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
+              <line x1="578" y1="170" x2="672" y2="170" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
+              <line x1="578" y1="200" x2="672" y2="200" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
+              <circle cx="588" cy="95" r="5" fill={colors.accent} opacity="0.4" />
+            </g>
+            {/* Connection */}
+            <path d="M240 150 Q400 120 560 155" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.25" strokeDasharray="10 6" />
+          </>
+        );
+
+      case 3: // Database doodle
+        return (
+          <>
+            {/* DB 1 */}
+            <g className="animate-[lift_4s_ease-in-out_infinite]">
+              <ellipse cx="200" cy="90" rx="70" ry="22" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
+              <path d="M130 90 L130 180 Q130 202 200 202 Q270 202 270 180 L270 90" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
+              <ellipse cx="200" cy="180" rx="70" ry="22" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
+              <ellipse cx="200" cy="120" rx="70" ry="22" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.25" strokeDasharray="5 3" />
+              <ellipse cx="200" cy="150" rx="70" ry="22" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.2" strokeDasharray="5 3" />
+            </g>
+            {/* DB 2 */}
+            <g className="animate-[lift_5s_ease-in-out_infinite]" style={{ animationDelay: '1.5s' }}>
+              <ellipse cx="580" cy="100" rx="80" ry="25" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.45" />
+              <path d="M500 100 L500 200 Q500 225 580 225 Q660 225 660 200 L660 100" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.45" />
+              <ellipse cx="580" cy="200" rx="80" ry="25" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.3" />
+              <ellipse cx="580" cy="133" rx="80" ry="25" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.2" strokeDasharray="5 3" />
+              <ellipse cx="580" cy="166" rx="80" ry="25" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.15" strokeDasharray="5 3" />
+            </g>
+            {/* Sync arrow */}
+            <path d="M280 140 Q400 100 490 130" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.25" strokeDasharray="8 6" />
+            <path d="M480 125 L490 130 L480 138" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.25" />
+          </>
+        );
+
+      case 4: // Wifi/Signal doodle
+        return (
+          <>
+            {/* Router */}
+            <g className="animate-[float_5s_ease-in-out_infinite]">
+              <rect x="320" y="160" width="160" height="60" rx="6" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
+              <circle cx="360" cy="190" r="8" fill={colors.accent} opacity="0.35" />
+              <circle cx="400" cy="190" r="8" fill={colors.accent} opacity="0.25" />
+              <circle cx="440" cy="190" r="8" fill={colors.accent} opacity="0.35" />
+            </g>
+            {/* Antenna */}
+            <line x1="400" y1="160" x2="400" y2="110" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
+            <circle cx="400" cy="100" r="10" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
+            {/* Signal waves */}
+            <path d="M360 80 Q380 50 400 80" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.35" strokeLinecap="round" />
+            <path d="M400 80 Q420 50 440 80" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.35" strokeLinecap="round" />
+            <path d="M330 60 Q365 20 400 60" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.25" strokeLinecap="round" />
+            <path d="M400 60 Q435 20 470 60" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.25" strokeLinecap="round" />
+            <path d="M300 40 Q350 -10 400 40" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.15" strokeLinecap="round" />
+            <path d="M400 40 Q450 -10 500 40" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.15" strokeLinecap="round" />
+            {/* Devices */}
+            <rect x="120" y="170" width="50" height="35" rx="4" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" />
+            <rect x="630" y="170" width="50" height="35" rx="4" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" />
+            <path d="M170 188 Q245 185 320 190" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.2" strokeDasharray="6 4" />
+            <path d="M480 190 Q555 185 630 188" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.2" strokeDasharray="6 4" />
+          </>
+        );
+
+      case 5: // Globe doodle
+      default:
+        return (
+          <>
+            {/* Globe */}
+            <g className="animate-[float_6s_ease-in-out_infinite]">
+              <circle cx="400" cy="150" r="80" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
+              <ellipse cx="400" cy="150" rx="80" ry="30" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" />
+              <ellipse cx="400" cy="150" rx="30" ry="80" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" />
+              <line x1="400" y1="70" x2="400" y2="230" stroke={colors.accent} strokeWidth="1.5" opacity="0.2" />
+              <line x1="320" y1="150" x2="480" y2="150" stroke={colors.accent} strokeWidth="1.5" opacity="0.2" />
+            </g>
+            {/* Orbit */}
+            <ellipse cx="400" cy="150" rx="120" ry="40" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.25" strokeDasharray="10 6" className="animate-[spin_20s_linear_infinite]" style={{ transformOrigin: '400px 150px' }} />
+            {/* Satellites */}
+            <g className="animate-[float_4s_ease-in-out_infinite]">
+              <rect x="180" y="100" width="30" height="20" rx="3" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
+              <line x1="165" y1="110" x2="180" y2="110" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
+              <line x1="210" y1="110" x2="225" y2="110" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
+            </g>
+            <g className="animate-[float_5s_ease-in-out_infinite]" style={{ animationDelay: '2s' }}>
+              <rect x="590" y="180" width="30" height="20" rx="3" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" />
+              <line x1="575" y1="190" x2="590" y2="190" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" />
+              <line x1="620" y1="190" x2="635" y2="190" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" />
+            </g>
+            {/* Connection points */}
+            <circle cx="350" cy="110" r="6" fill={colors.accent} opacity="0.3" />
+            <circle cx="450" cy="190" r="6" fill={colors.accent} opacity="0.3" />
+            <circle cx="380" cy="220" r="6" fill={colors.accent} opacity="0.3" />
           </>
         );
     }
