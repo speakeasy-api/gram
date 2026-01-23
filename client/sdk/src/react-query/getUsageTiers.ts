@@ -10,6 +10,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { useGramContext } from "./_context.js";
 import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
@@ -25,6 +36,17 @@ export {
   queryKeyGetUsageTiers,
 };
 
+export type GetUsageTiersQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * getUsageTiers usage
  *
@@ -32,8 +54,8 @@ export {
  * Get the usage tiers
  */
 export function useGetUsageTiers(
-  options?: QueryHookOptions<GetUsageTiersQueryData>,
-): UseQueryResult<GetUsageTiersQueryData, Error> {
+  options?: QueryHookOptions<GetUsageTiersQueryData, GetUsageTiersQueryError>,
+): UseQueryResult<GetUsageTiersQueryData, GetUsageTiersQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildGetUsageTiersQuery(
@@ -51,8 +73,11 @@ export function useGetUsageTiers(
  * Get the usage tiers
  */
 export function useGetUsageTiersSuspense(
-  options?: SuspenseQueryHookOptions<GetUsageTiersQueryData>,
-): UseSuspenseQueryResult<GetUsageTiersQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    GetUsageTiersQueryData,
+    GetUsageTiersQueryError
+  >,
+): UseSuspenseQueryResult<GetUsageTiersQueryData, GetUsageTiersQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildGetUsageTiersQuery(

@@ -24,6 +24,10 @@ ORDER BY created_at ASC;
 INSERT INTO external_mcp_tool_definitions (
   external_mcp_attachment_id,
   tool_urn,
+  type,
+  name,
+  description,
+  schema,
   remote_url,
   transport_type,
   requires_oauth,
@@ -36,6 +40,10 @@ INSERT INTO external_mcp_tool_definitions (
 VALUES (
   @external_mcp_attachment_id,
   @tool_urn,
+  @type,
+  @name,
+  @description,
+  @schema,
   @remote_url,
   @transport_type,
   @requires_oauth,
@@ -45,7 +53,7 @@ VALUES (
   @oauth_registration_endpoint,
   @oauth_scopes_supported
 )
-RETURNING id, external_mcp_attachment_id, tool_urn, remote_url, requires_oauth,
+RETURNING id, external_mcp_attachment_id, tool_urn, type, name, description, schema, remote_url, requires_oauth,
   oauth_version, oauth_authorization_endpoint, oauth_token_endpoint,
   oauth_registration_endpoint, oauth_scopes_supported, created_at, updated_at;
 
@@ -54,6 +62,10 @@ SELECT
   t.id,
   t.external_mcp_attachment_id,
   t.tool_urn,
+  t.type,
+  t.name,
+  t.description,
+  t.schema,
   t.remote_url,
   t.transport_type,
   t.requires_oauth,
@@ -66,7 +78,7 @@ SELECT
   t.updated_at,
   e.deployment_id,
   e.registry_id,
-  e.name,
+  e.name as registry_server_name,
   e.slug,
   e.registry_server_specifier
 FROM external_mcp_tool_definitions t
@@ -81,6 +93,10 @@ SELECT
   t.id,
   t.external_mcp_attachment_id,
   t.tool_urn,
+  t.type,
+  t.name,
+  t.description,
+  t.schema,
   t.remote_url,
   t.transport_type,
   t.requires_oauth,
@@ -93,7 +109,7 @@ SELECT
   t.updated_at,
   e.deployment_id,
   e.registry_id,
-  e.name,
+  e.name as registry_server_name,
   e.slug,
   e.registry_server_specifier
 FROM external_mcp_tool_definitions t
@@ -107,6 +123,10 @@ SELECT
   t.id,
   t.external_mcp_attachment_id,
   t.tool_urn,
+  t.type,
+  t.name,
+  t.description,
+  t.schema,
   t.remote_url,
   t.requires_oauth,
   t.oauth_version,
@@ -118,7 +138,7 @@ SELECT
   t.updated_at,
   e.deployment_id,
   e.registry_id,
-  e.name,
+  e.name as registry_server_name,
   e.slug,
   e.registry_server_specifier
 FROM external_mcp_tool_definitions t

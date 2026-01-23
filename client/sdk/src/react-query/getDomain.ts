@@ -10,6 +10,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -30,6 +41,17 @@ export {
   queryKeyGetDomain,
 };
 
+export type GetDomainQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * getDomain domains
  *
@@ -39,8 +61,8 @@ export {
 export function useGetDomain(
   request?: operations.GetDomainRequest | undefined,
   security?: operations.GetDomainSecurity | undefined,
-  options?: QueryHookOptions<GetDomainQueryData>,
-): UseQueryResult<GetDomainQueryData, Error> {
+  options?: QueryHookOptions<GetDomainQueryData, GetDomainQueryError>,
+): UseQueryResult<GetDomainQueryData, GetDomainQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildGetDomainQuery(
@@ -62,8 +84,8 @@ export function useGetDomain(
 export function useGetDomainSuspense(
   request?: operations.GetDomainRequest | undefined,
   security?: operations.GetDomainSecurity | undefined,
-  options?: SuspenseQueryHookOptions<GetDomainQueryData>,
-): UseSuspenseQueryResult<GetDomainQueryData, Error> {
+  options?: SuspenseQueryHookOptions<GetDomainQueryData, GetDomainQueryError>,
+): UseSuspenseQueryResult<GetDomainQueryData, GetDomainQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildGetDomainQuery(

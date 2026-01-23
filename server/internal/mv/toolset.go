@@ -754,12 +754,19 @@ func readToolsetTools(
 
 			tools = append(tools, &types.Tool{
 				ExternalMcpToolDefinition: &types.ExternalMCPToolDefinition{
-					ID:                         def.ID.String(),
-					ToolUrn:                    def.ToolUrn,
+					ID:          def.ID.String(),
+					ProjectID:   pid.String(),
+					ToolUrn:     def.ToolUrn,
+					Type:        conv.Ptr(def.Type),
+					Name:        def.Name.String,
+					Description: def.Description.String,
+					Schema:      string(def.Schema),
+
 					DeploymentExternalMcpID:    def.ExternalMcpAttachmentID.String(),
 					DeploymentID:               def.DeploymentID.String(),
 					RegistryID:                 def.RegistryID.String(),
-					Name:                       def.Name,
+					RegistryServerName:         def.RegistryServerName,
+					RegistrySpecifier:          def.RegistryServerSpecifier,
 					Slug:                       def.Slug,
 					RemoteURL:                  def.RemoteUrl,
 					TransportType:              def.TransportType.String(),
@@ -771,6 +778,13 @@ func readToolsetTools(
 					OauthScopesSupported:       def.OauthScopesSupported,
 					CreatedAt:                  def.CreatedAt.Time.Format(time.RFC3339),
 					UpdatedAt:                  def.UpdatedAt.Time.Format(time.RFC3339),
+					CanonicalName:              def.Name.String,
+					SchemaVersion:              nil,
+					Confirm:                    nil,
+					ConfirmPrompt:              nil,
+					Summarizer:                 nil,
+					Canonical:                  nil,
+					Variation:                  nil,
 				},
 			})
 		}
@@ -1006,10 +1020,13 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.U
 		key := entry.Key
 		if _, exists := securityVarsMap[key]; !exists {
 			// Look up display name from MCP metadata
-			// Use entry.Name (header name) as the key since that's what the frontend sends
+			// Display names are keyed by env var name, so we check each env var
 			var displayName *string
-			if dn, ok := headerDisplayNames[entry.Name.String]; ok && dn != "" {
-				displayName = &dn
+			for _, envVar := range entry.EnvVariables {
+				if dn, ok := headerDisplayNames[envVar]; ok && dn != "" {
+					displayName = &dn
+					break // Use first matching display name
+				}
 			}
 
 			securityVar := &types.SecurityVariable{

@@ -334,12 +334,50 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	}, nil
 }
 
+// httpMetadata contains HTTP request metadata to be stored with chat messages.
+type httpMetadata struct {
+	Origin    string
+	UserAgent string
+	IPAddress string
+	Source    string
+}
+
+// extractHTTPMetadata extracts metadata from the HTTP request.
+func extractHTTPMetadata(r *http.Request) httpMetadata {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		origin = r.Header.Get("Referer")
+	}
+
+	userAgent := r.Header.Get("User-Agent")
+
+	ipAddress := r.Header.Get("X-Forwarded-For")
+	if ipAddress == "" {
+		ipAddress = r.Header.Get("X-Real-IP")
+	}
+	if ipAddress == "" {
+		ipAddress = r.RemoteAddr
+	}
+
+	source := r.Header.Get(constants.HeaderSource)
+
+	return httpMetadata{
+		Origin:    origin,
+		UserAgent: userAgent,
+		IPAddress: ipAddress,
+		Source:    source,
+	}
+}
+
 // HandleCompletion is a proxy to the OpenAI API that logs request and response data.
 func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error {
 	ctx, authCtx, err := s.directAuthorize(r.Context(), r)
 	if err != nil {
 		return err
 	}
+
+	// Extract HTTP metadata for message tracking
+	metadata := extractHTTPMetadata(r)
 
 	orgID := authCtx.ActiveOrganizationID
 	userID := authCtx.UserID
@@ -399,7 +437,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	respCaptor := w
 
 	if chatIDHeader != "" {
-		chatResult, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatIDHeader, chatRequest)
+		chatResult, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatIDHeader, chatRequest, metadata)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to start or resume chat").Log(ctx, s.logger)
 		}
@@ -439,10 +477,10 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			userID:           userID,
 			externalUserID:   authCtx.ExternalUserID,
 			startTime:        time.Now(),
+			httpMetadata:     metadata,
 		}
 	}
 
-	// Set up the proxy to OpenRouter
 	target, err := url.Parse(openrouter.OpenRouterBaseURL)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error parsing openrouter url").Log(ctx, s.logger)
@@ -596,7 +634,7 @@ type startOrResumeChatResult struct {
 	IsFirstMessage bool // True if this is the first assistant response for this chat
 }
 
-func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID uuid.UUID, userID string, externalUserID string, chatIDHeader string, request openrouter.OpenAIChatRequest) (*startOrResumeChatResult, error) {
+func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID uuid.UUID, userID string, externalUserID string, chatIDHeader string, request openrouter.OpenAIChatRequest, metadata httpMetadata) (*startOrResumeChatResult, error) {
 	chatID, err := uuid.Parse(chatIDHeader)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID in header")
@@ -647,6 +685,10 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 				PromptTokens:     0,
 				CompletionTokens: 0,
 				TotalTokens:      0,
+				Origin:           conv.ToPGText(metadata.Origin),
+				UserAgent:        conv.ToPGText(metadata.UserAgent),
+				IpAddress:        conv.ToPGText(metadata.IPAddress),
+				Source:           conv.ToPGText(metadata.Source),
 			}})
 
 			if err != nil {
@@ -694,6 +736,7 @@ type responseCaptor struct {
 	userID           string
 	externalUserID   string
 	startTime        time.Time // Track request start time for duration calculation
+	httpMetadata     httpMetadata
 }
 
 func (r *responseCaptor) WriteHeader(statusCode int) {
@@ -776,6 +819,10 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 			FinishReason:     conv.PtrToPGText(r.finishReason),
 			UserID:           conv.ToPGTextEmpty(""), // These are agent messages, not user messages
 			ExternalUserID:   conv.ToPGTextEmpty(""), // These are agent messages, not user messages
+			Origin:           conv.ToPGText(r.httpMetadata.Origin),
+			UserAgent:        conv.ToPGText(r.httpMetadata.UserAgent),
+			IpAddress:        conv.ToPGText(r.httpMetadata.IPAddress),
+			Source:           conv.ToPGText(r.httpMetadata.Source),
 		}})
 		if err != nil {
 			r.logger.ErrorContext(r.ctx, "failed to store chat message", attr.SlogError(err))

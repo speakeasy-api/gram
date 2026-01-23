@@ -10,6 +10,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -30,6 +41,17 @@ export {
   queryKeyDeployment,
 };
 
+export type DeploymentQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * getDeployment deployments
  *
@@ -39,8 +61,8 @@ export {
 export function useDeployment(
   request: operations.GetDeploymentRequest,
   security?: operations.GetDeploymentSecurity | undefined,
-  options?: QueryHookOptions<DeploymentQueryData>,
-): UseQueryResult<DeploymentQueryData, Error> {
+  options?: QueryHookOptions<DeploymentQueryData, DeploymentQueryError>,
+): UseQueryResult<DeploymentQueryData, DeploymentQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildDeploymentQuery(
@@ -62,8 +84,8 @@ export function useDeployment(
 export function useDeploymentSuspense(
   request: operations.GetDeploymentRequest,
   security?: operations.GetDeploymentSecurity | undefined,
-  options?: SuspenseQueryHookOptions<DeploymentQueryData>,
-): UseSuspenseQueryResult<DeploymentQueryData, Error> {
+  options?: SuspenseQueryHookOptions<DeploymentQueryData, DeploymentQueryError>,
+): UseSuspenseQueryResult<DeploymentQueryData, DeploymentQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildDeploymentQuery(

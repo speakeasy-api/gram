@@ -70,7 +70,32 @@ type listResponse struct {
 
 type serverEntry struct {
 	Server serverJSON `json:"server"`
-	Meta   any        `json:"_meta"`
+	Meta   serverMeta `json:"_meta"`
+}
+
+type serverMeta struct {
+	Server  serverMetaServer  `json:"com.pulsemcp/server"`
+	Version serverMetaVersion `json:"com.pulsemcp/server-version"`
+}
+
+type serverMetaServer struct {
+	VisitorsEstimateMostRecentWeek int  `json:"visitorsEstimateMostRecentWeek"`
+	VisitorsEstimateLastFourWeeks  int  `json:"visitorsEstimateLastFourWeeks"`
+	VisitorsEstimateTotal          int  `json:"visitorsEstimateTotal"`
+	IsOfficial                     bool `json:"isOfficial"`
+}
+
+type serverMetaVersion struct {
+	Source       string           `json:"source"`
+	Status       string           `json:"status"`
+	PublishedAt  string           `json:"publishedAt"`
+	UpdatedAt    string           `json:"updatedAt"`
+	IsLatest     bool             `json:"isLatest"`
+	FirstRemote  serverRemoteMeta `json:"remotes[0]"`
+	SecondRemote serverRemoteMeta `json:"remotes[1]"`
+	ThirdRemote  serverRemoteMeta `json:"remotes[2]"`
+	FourthRemote serverRemoteMeta `json:"remotes[3]"`
+	FifthRemote  serverRemoteMeta `json:"remotes[4]"`
 }
 
 type serverJSON struct {
@@ -82,12 +107,37 @@ type serverJSON struct {
 	Icons       []struct {
 		Src string `json:"src"`
 	} `json:"icons"`
-	Remotes []serverRemote `json:"remotes"`
+	Remotes []serverRemoteBasic `json:"remotes"`
 }
 
-type serverRemote struct {
+type serverRemoteBasic struct {
 	URL  string `json:"url"`
 	Type string `json:"type"`
+}
+
+type serverRemoteMeta struct {
+	Auth  any          `json:"auth"`
+	Tools []serverTool `json:"tools"`
+}
+
+// serverDetailsEntry represents the response from the server details endpoint
+type serverDetailsEntry struct {
+	Server serverDetailsJSON `json:"server"`
+	Meta   serverMeta        `json:"_meta"`
+}
+
+type serverDetailsJSON struct {
+	Name        string              `json:"name"`
+	Description string              `json:"description"`
+	Version     string              `json:"version"`
+	Remotes     []serverRemoteBasic `json:"remotes"`
+}
+
+type serverTool struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	InputSchema json.RawMessage `json:"inputSchema"`
+	Annotations map[string]any  `json:"annotations"`
 }
 
 // ListServers fetches servers from the given registry.
@@ -143,6 +193,16 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			iconURL = &s.Server.Icons[0].Src
 		}
 
+		tools := make([]*types.ExternalMCPTool, 0)
+		for _, tool := range s.Meta.Version.FirstRemote.Tools {
+			tools = append(tools, &types.ExternalMCPTool{
+				Name:        &tool.Name,
+				Description: &tool.Description,
+				InputSchema: tool.InputSchema,
+				Annotations: tool.Annotations,
+			})
+		}
+
 		server := &types.ExternalMCPServer{
 			RegistrySpecifier: s.Server.Name,
 			Version:           s.Server.Version,
@@ -151,25 +211,13 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			Title:             s.Server.Title,
 			IconURL:           iconURL,
 			Meta:              s.Meta,
+			Tools:             tools,
 		}
 
 		servers = append(servers, server)
 	}
 
-	hackilyEnrichWithLogos(servers)
 	return servers, nil
-}
-
-// hackilyEnrichWithLogos patches servers with hardcoded logo URLs for servers
-// that don't have icons from the registry.
-func hackilyEnrichWithLogos(servers []*types.ExternalMCPServer) {
-	for _, s := range servers {
-		if s.IconURL == nil {
-			if logo, ok := HardcodedLogos[s.RegistrySpecifier]; ok {
-				s.IconURL = &logo
-			}
-		}
-	}
 }
 
 // ServerDetails contains detailed information about an MCP server including connection info.
@@ -179,11 +227,7 @@ type ServerDetails struct {
 	Version       string
 	RemoteURL     string
 	TransportType externalmcptypes.TransportType
-}
-
-// getServerResponse wraps a single server from the registry.
-type getServerResponse struct {
-	Server serverJSON `json:"server"`
+	Tools         []serverTool
 }
 
 // GetServerDetails fetches server details including the remote URL from the registry.
@@ -227,7 +271,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		return nil, fmt.Errorf("read external mcp server details response: %w", err)
 	}
 
-	var serverResp getServerResponse
+	var serverResp serverDetailsEntry
 	if err := json.Unmarshal(body, &serverResp); err != nil {
 		return nil, fmt.Errorf("decode external mcp server details response: %w", err)
 	}
@@ -235,19 +279,33 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 	// Find the remote URL, preferring streamable-http over sse
 	var remoteURL string
 	var transportType externalmcptypes.TransportType
-	for _, remote := range serverResp.Server.Remotes {
+	var tools []serverTool
+	var remoteIndex int
+	for i, remote := range serverResp.Server.Remotes {
 		if remote.Type == "streamable-http" {
 			remoteURL = remote.URL
 			transportType = externalmcptypes.TransportTypeStreamableHTTP
+			remoteIndex = i
 			break
 		} else if remote.Type == "sse" {
 			remoteURL = remote.URL
 			transportType = externalmcptypes.TransportTypeSSE
+			remoteIndex = i
 		}
 	}
 
-	if remoteURL == "" {
-		return nil, oops.Permanent(fmt.Errorf("server %s has no streamable-http or sse remote", serverName))
+	// Obviously not ideal, this is just the way the registry API is structured
+	switch remoteIndex {
+	case 0:
+		tools = serverResp.Meta.Version.FirstRemote.Tools
+	case 1:
+		tools = serverResp.Meta.Version.SecondRemote.Tools
+	case 2:
+		tools = serverResp.Meta.Version.ThirdRemote.Tools
+	case 3:
+		tools = serverResp.Meta.Version.FourthRemote.Tools
+	case 4:
+		tools = serverResp.Meta.Version.FifthRemote.Tools
 	}
 
 	return &ServerDetails{
@@ -256,5 +314,6 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		Version:       serverResp.Server.Version,
 		RemoteURL:     remoteURL,
 		TransportType: transportType,
+		Tools:         tools,
 	}, nil
 }
