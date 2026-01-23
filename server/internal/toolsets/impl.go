@@ -911,6 +911,16 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 		}
 	}
 
+	// Validate required fields for custom provider type - reject empty strings
+	if existingProvider.ProviderType == "custom" {
+		if payload.AuthorizationEndpoint != nil && *payload.AuthorizationEndpoint == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "authorization_endpoint cannot be empty for custom provider type").Log(ctx, s.logger)
+		}
+		if payload.TokenEndpoint != nil && *payload.TokenEndpoint == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "token_endpoint cannot be empty for custom provider type").Log(ctx, s.logger)
+		}
+	}
+
 	// Build update parameters, using existing values as defaults
 	authorizationEndpoint := existingProvider.AuthorizationEndpoint
 	if payload.AuthorizationEndpoint != nil {
