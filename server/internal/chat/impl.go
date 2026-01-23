@@ -477,12 +477,10 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			userID:            userID,
 			externalUserID:    authCtx.ExternalUserID,
 			startTime:         time.Now(),
-			// HTTP metadata
-			httpMetadata: metadata,
+			httpMetadata:      metadata,
 		}
 	}
 
-	// Set up the proxy to OpenRouter
 	target, err := url.Parse(openrouter.OpenRouterBaseURL)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error parsing openrouter url").Log(ctx, s.logger)
