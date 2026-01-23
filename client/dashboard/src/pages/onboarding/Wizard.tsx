@@ -683,9 +683,10 @@ export const UploadedDocument = ({
             onClick={onReset}
             className="size-6 opacity-50 hover:opacity-100"
           >
-            <Button.Icon>
+            <Button.LeftIcon>
               <X className="w-4 h-4" />
-            </Button.Icon>
+            </Button.LeftIcon>
+            <Button.Text className="sr-only">Remove file</Button.Text>
           </Button>
         </Stack>
       </Expandable.Trigger>

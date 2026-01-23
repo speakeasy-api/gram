@@ -84,7 +84,7 @@ function PlaygroundInner() {
   });
 
   const logsButton = (
-    <Button size="sm" variant="ghost" onClick={() => setShowLogs(!showLogs)}>
+    <Button size="sm" variant="tertiary" onClick={() => setShowLogs(!showLogs)}>
       <ScrollTextIcon className="size-4 mr-2" />
       {showLogs ? "Hide" : "Show"} Logs
     </Button>

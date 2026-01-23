@@ -181,7 +181,7 @@ export default function CatalogDetail() {
                 <Stack direction="horizontal" gap={3} align="center" className="mb-2">
                   <h1 className="text-2xl font-bold">{displayName}</h1>
                   {isOfficial && <Badge>Official</Badge>}
-                  {versionMeta?.isLatest && <Badge variant="secondary">Latest</Badge>}
+                  {versionMeta?.isLatest && <Badge variant="neutral">Latest</Badge>}
                 </Stack>
                 {SERVER_WEBSITE_MAP[server.registrySpecifier] ? (
                   <a
@@ -426,7 +426,7 @@ function ToolCard({ tool }: { tool: Tool }) {
           <Stack direction="horizontal" gap={2} align="center">
             <Type className="font-mono text-sm font-medium">{tool.name}</Type>
             {tool.annotations?.readOnlyHint && (
-              <Badge variant="secondary" className="text-xs">Read-only</Badge>
+              <Badge variant="neutral" className="text-xs">Read-only</Badge>
             )}
           </Stack>
           {hasMoreContent && (

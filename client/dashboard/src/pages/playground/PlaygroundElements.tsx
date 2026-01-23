@@ -166,7 +166,7 @@ export function PlaygroundElements({
           <div className="flex items-center justify-between gap-2 py-3 shrink-0 border-b-border border-b px-4">
             <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
               <PopoverTrigger asChild>
-                <Button size="sm" variant="ghost">
+                <Button size="sm" variant="tertiary">
                   <HistoryIcon className="size-4 mr-2" />
                   Chat History
                 </Button>

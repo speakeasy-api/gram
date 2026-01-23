@@ -272,10 +272,10 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
           <Dialog open={open} onOpenChange={setOpen}>
             <Dialog.Trigger asChild>
               <Button variant="secondary">
-                Edit
-                <Button.Text>
+                <Button.Text>Edit</Button.Text>
+                <Button.RightIcon>
                   <Icon name="settings" />
-                </Button.Text>
+                </Button.RightIcon>
               </Button>
             </Dialog.Trigger>
             <Dialog.Content>

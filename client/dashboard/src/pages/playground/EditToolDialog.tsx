@@ -129,7 +129,7 @@ export function EditToolDialog({
           <Dialog.Title className="flex items-center gap-2">
             <ToolIcon className="size-4 text-muted-foreground" />
             <span>{source}</span>
-            <Badge variant="secondary" className="text-xs">
+            <Badge variant="neutral" className="text-xs">
               {typeLabel}
             </Badge>
           </Dialog.Title>

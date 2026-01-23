@@ -82,7 +82,7 @@ export function TopHeader() {
           {/* Org/Project Switcher */}
           <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-              <Button variant="ghost" className="h-8 !px-2 gap-2 relative -left-1">
+              <Button variant="tertiary" className="h-8 !px-2 gap-2 relative -left-1">
                 <ProjectAvatar project={project} className="h-5 w-5 rounded shrink-0" />
                 <span className="text-base font-medium">
                   {project?.slug || projectSlug || "Select"}
@@ -131,7 +131,7 @@ export function TopHeader() {
           <ThemeSwitcher />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="size-9 rounded-full p-0 border border-[#dbdbdb] dark:border-[#333]/30">
+              <Button variant="tertiary" className="size-9 rounded-full p-0 border border-[#dbdbdb] dark:border-[#333]/30">
                 <Avatar className="size-9">
                   <AvatarImage src={user.photoUrl} alt={user.displayName || user.email} />
                   <AvatarFallback className="text-xs">{userInitials}</AvatarFallback>

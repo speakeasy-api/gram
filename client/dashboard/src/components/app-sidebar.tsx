@@ -267,7 +267,7 @@ const PersistentNotification = ({
 
   const closeButton = (
     <Button
-      variant="ghost"
+      variant="tertiary"
       size="icon"
       className="absolute top-1 right-1 hover:bg-transparent"
       onClick={() => setIsMinimized(true)}
@@ -292,7 +292,7 @@ const PersistentNotification = ({
       {!isMinimized && closeButton}
       {isMinimized && (
         <Button
-          variant="ghost"
+          variant="tertiary"
           size="icon"
           className="flex items-center justify-center h-full w-full"
         >

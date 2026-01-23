@@ -116,9 +116,10 @@ export function SettingsProjectsTable() {
             disabled={isDefault}
             className={isDefault ? "" : "hover:text-destructive"}
           >
-            <Button.Text>
+            <Button.LeftIcon>
               <Icon name="trash-2" className="h-4 w-4" />
-            </Button.Text>
+            </Button.LeftIcon>
+            <Button.Text className="sr-only">Delete project</Button.Text>
           </Button>
         );
 

@@ -197,7 +197,7 @@ export function SourceCard({
 
         {/* Footer row with type badge and metadata */}
         <div className="flex items-center justify-between gap-2 mt-auto pt-2">
-          <Badge variant="secondary">{config.label}</Badge>
+          <Badge variant="neutral">{config.label}</Badge>
           <div className="flex items-center gap-2">
             {hasEnvironment && (
               <SimpleTooltip

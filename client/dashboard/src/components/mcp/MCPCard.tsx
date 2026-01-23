@@ -39,23 +39,29 @@ export function MCPCard({
   let statusBadge = null;
   if (!toolset.mcpEnabled) {
     statusBadge = (
-      <Badge variant="secondary" className="flex items-center gap-1">
-        <XCircleIcon className="w-3 h-3" />
-        Disabled
+      <Badge variant="neutral">
+        <Badge.LeftIcon>
+          <XCircleIcon className="w-3 h-3" />
+        </Badge.LeftIcon>
+        <Badge.Text>Disabled</Badge.Text>
       </Badge>
     );
   } else if (toolset.mcpIsPublic) {
     statusBadge = (
-      <Badge variant="secondary" className="flex items-center gap-1">
-        <CheckCircleIcon className="w-3 h-3 text-green-600" />
-        Public
+      <Badge variant="neutral">
+        <Badge.LeftIcon>
+          <CheckCircleIcon className="w-3 h-3 text-green-600" />
+        </Badge.LeftIcon>
+        <Badge.Text>Public</Badge.Text>
       </Badge>
     );
   } else {
     statusBadge = (
-      <Badge variant="secondary" className="flex items-center gap-1">
-        <LockIcon className="w-3 h-3" />
-        Private
+      <Badge variant="neutral">
+        <Badge.LeftIcon>
+          <LockIcon className="w-3 h-3" />
+        </Badge.LeftIcon>
+        <Badge.Text>Private</Badge.Text>
       </Badge>
     );
   }

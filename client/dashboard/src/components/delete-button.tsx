@@ -15,7 +15,7 @@ export function DeleteButton({
 }) {
   return (
     <Button
-      variant="ghost"
+      variant="tertiary"
       size={size}
       className={cn(
         "text-muted-foreground hover:text-destructive hover:border-destructive",

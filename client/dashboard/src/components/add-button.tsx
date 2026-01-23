@@ -8,9 +8,10 @@ export const AddButton = ({ onClick }: { onClick?: () => void }) => {
       className="text-muted-foreground hover:text-foreground"
       onClick={onClick}
     >
-      <Button.Icon>
+      <Button.LeftIcon>
         <PlusIcon className="w-4 h-4" />
-      </Button.Icon>
+      </Button.LeftIcon>
+      <Button.Text className="sr-only">Add</Button.Text>
     </Button>
   );
 };

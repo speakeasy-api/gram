@@ -339,7 +339,7 @@ export function PlaygroundConfigPanel({
 
             <Button
               size="sm"
-              variant="ghost"
+              variant="tertiary"
               className="h-6 px-2"
               onClick={(e: React.MouseEvent) => {
                 e.stopPropagation();

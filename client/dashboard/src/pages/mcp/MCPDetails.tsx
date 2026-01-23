@@ -155,23 +155,29 @@ export function MCPDetailPage() {
   let statusBadge = null;
   if (!toolset.mcpEnabled) {
     statusBadge = (
-      <Badge variant="secondary" className="flex items-center gap-1">
-        <XCircleIcon className="w-3 h-3" />
-        Disabled
+      <Badge variant="neutral">
+        <Badge.LeftIcon>
+          <XCircleIcon className="w-3 h-3" />
+        </Badge.LeftIcon>
+        <Badge.Text>Disabled</Badge.Text>
       </Badge>
     );
   } else if (toolset.mcpIsPublic) {
     statusBadge = (
-      <Badge variant="secondary" className="flex items-center gap-1">
-        <CheckCircleIcon className="w-3 h-3 text-green-600" />
-        Public
+      <Badge variant="neutral">
+        <Badge.LeftIcon>
+          <CheckCircleIcon className="w-3 h-3 text-green-600" />
+        </Badge.LeftIcon>
+        <Badge.Text>Public</Badge.Text>
       </Badge>
     );
   } else {
     statusBadge = (
-      <Badge variant="secondary" className="flex items-center gap-1">
-        <LockIcon className="w-3 h-3" />
-        Private
+      <Badge variant="neutral">
+        <Badge.LeftIcon>
+          <LockIcon className="w-3 h-3" />
+        </Badge.LeftIcon>
+        <Badge.Text>Private</Badge.Text>
       </Badge>
     );
   }
@@ -201,7 +207,7 @@ export function MCPDetailPage() {
                 {mcpUrl}
               </Type>
               <Button
-                variant="ghost"
+                variant="tertiary"
                 size="sm"
                 onClick={() => {
                   if (mcpUrl) {
@@ -211,7 +217,7 @@ export function MCPDetailPage() {
                 }}
                 className="shrink-0"
               >
-                <Button.Icon>
+                <Button.LeftIcon>
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="16"
@@ -226,7 +232,8 @@ export function MCPDetailPage() {
                     <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
                     <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
                   </svg>
-                </Button.Icon>
+                </Button.LeftIcon>
+                <Button.Text className="sr-only">Copy URL</Button.Text>
               </Button>
             </div>
           </Stack>
@@ -277,7 +284,10 @@ export function MCPDetailPage() {
                   size="md"
                   onClick={handleDeleteMcpServer}
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Button.LeftIcon>
+                    <Trash2 className="w-4 h-4" />
+                  </Button.LeftIcon>
+                  <Button.Text className="sr-only">Delete MCP server</Button.Text>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Delete MCP server</TooltipContent>
@@ -1577,9 +1587,10 @@ function OAuthDetailsModal({
                       })
                     }
                   >
-                    <Button.Icon>
+                    <Button.LeftIcon>
                       <Trash2 className="w-4 h-4" />
-                    </Button.Icon>
+                    </Button.LeftIcon>
+                    <Button.Text className="sr-only">Remove OAuth</Button.Text>
                   </Button>
                 </div>
                 <Stack gap={2} className="pl-4">

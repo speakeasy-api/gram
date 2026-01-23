@@ -171,7 +171,7 @@ export const CodeBlockCopyButton = ({
       className={cn("shrink-0", className)}
       onClick={copyToClipboard}
       size="icon"
-      variant="ghost"
+      variant="tertiary"
       {...props}
     >
       {children ?? <Icon size={14} />}

@@ -723,7 +723,7 @@ export default function ChatElements() {
                   <div className="w-2/3 flex flex-col h-[700px]">
                     <div className="relative flex-1 rounded-lg border overflow-hidden bg-muted/30">
                       <Button
-                        variant="ghost"
+                        variant="tertiary"
                         size="sm"
                         onClick={refreshPreview}
                         className={cn(

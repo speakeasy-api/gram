@@ -116,7 +116,7 @@ export function InputDialog({
           ))}
         </Stack>
         <Dialog.Footer>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="tertiary" onClick={() => onOpenChange(false)}>
             Back
           </Button>
           <Button onClick={submit} disabled={!formValid}>

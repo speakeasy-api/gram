@@ -433,7 +433,7 @@ function ToolRow({
             {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
           <Dialog.Footer>
-            <Button variant="ghost" onClick={() => setEditDialogOpen(false)}>
+            <Button variant="tertiary" onClick={() => setEditDialogOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleSave}>Save</Button>
@@ -855,7 +855,7 @@ export function ToolList({
 
                     return (
                       <ToolRow
-                        key={tool.canonicalName}
+                        key={tool.toolUrn}
                         groupName={group.title}
                         availableToolUrns={toolset?.tools
                           ?.map((t) => t.toolUrn)
