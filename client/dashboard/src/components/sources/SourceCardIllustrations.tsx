@@ -237,12 +237,14 @@ export function MCPIllustration({
   ];
 
   return (
-    <div className={cn("w-full h-full overflow-hidden", className)} style={{ backgroundColor: colors.bg }}>
-      {/* Dotted background */}
-      <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
-        <pattern id={`dots-${toolsetSlug}`} x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
-          <circle cx="8" cy="8" r="1" fill={colors.accent} opacity="0.15" />
-        </pattern>
+    <div className={cn("w-full h-full overflow-hidden relative", className)} style={{ backgroundColor: colors.bg }}>
+      {/* Dotted background - contained within this element */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id={`dots-${toolsetSlug}`} x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
+            <circle cx="8" cy="8" r="1" fill={colors.accent} opacity="0.15" />
+          </pattern>
+        </defs>
         <rect width="100%" height="100%" fill={`url(#dots-${toolsetSlug})`} />
       </svg>
 
@@ -264,7 +266,7 @@ export function MCPIllustration({
 
       {/* MCP URL overlay */}
       <div
-        className="absolute top-3 right-2"
+        className="absolute top-3 right-2 z-10"
         style={{
           backgroundColor: 'rgba(255, 255, 255, 0.75)',
           backdropFilter: 'blur(8px)',
@@ -403,10 +405,12 @@ export function MCPHeroIllustration({
       `}</style>
 
       {/* Dotted background */}
-      <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
-        <pattern id={`hero-dots-${toolsetSlug}`} x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
-          <circle cx="12" cy="12" r="1.5" fill={colors.accent} opacity="0.12" />
-        </pattern>
+      <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id={`hero-dots-${toolsetSlug}`} x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
+            <circle cx="12" cy="12" r="1.5" fill={colors.accent} opacity="0.12" />
+          </pattern>
+        </defs>
         <rect width="100%" height="100%" fill={`url(#hero-dots-${toolsetSlug})`} />
       </svg>
 
