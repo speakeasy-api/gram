@@ -240,8 +240,8 @@ export function MCPIllustration({
       {/* Dotted background - contained within this element */}
       <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
         <defs>
-          <pattern id={`dots-${toolsetSlug}`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
-            <circle cx="7" cy="7" r="1.5" fill={colors.accent} opacity="0.25" />
+          <pattern id={`dots-${toolsetSlug}`} x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
+            <circle cx="8" cy="8" r="1" fill={colors.accent} opacity="0.18" />
           </pattern>
         </defs>
         <rect width="100%" height="100%" fill={`url(#dots-${toolsetSlug})`} />
