@@ -769,7 +769,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'tool')),
   content TEXT NOT NULL,
   -- if message content is small enough then we'll store it straight in the
-  -- database column for fast retrieval. If it's tool large then the
+  -- database column for fast retrieval. If it's too large then the
   -- `content_raw` will be NULL. We'll always store messages in an asset store
   -- referenced by `content_asset_id` and `content_asset_url`.
   content_raw JSONB,
