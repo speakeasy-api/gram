@@ -262,7 +262,7 @@ export function ToolsetView({
 
   const tools = toolset?.tools ?? [];
 
-  const isExternalMcp = toolset?.kind === "external-mcp";
+  const isExternalMcpProxy = toolset?.kind === "external-mcp-proxy";
 
   // Get initial tab from URL hash, default depends on toolset kind
   const getTabFromHash = (): ToolsetTabs => {
@@ -295,7 +295,7 @@ export function ToolsetView({
     if (!toolset) return;
 
     if (
-      isExternalMcp &&
+      isExternalMcpProxy &&
       (activeTab === "tools" ||
         activeTab === "resources" ||
         activeTab === "prompts")
@@ -303,7 +303,7 @@ export function ToolsetView({
       // External MCP toolsets should show "server" tab instead of tools/resources/prompts
       setActiveTab("server");
       navigate("#server", { replace: true });
-    } else if (!isExternalMcp && activeTab === "server") {
+    } else if (!isExternalMcpProxy && activeTab === "server") {
       // Default toolsets shouldn't show "server" tab
       setActiveTab("tools");
       navigate("#tools", { replace: true });
@@ -334,7 +334,7 @@ export function ToolsetView({
 
     const pageActions = [
       // Only show "Add tools" for default toolsets
-      ...(toolset.kind !== "external-mcp"
+      ...(toolset.kind !== "external-mcp-proxy"
         ? [
             {
               id: "toolset-add-tools",
@@ -535,7 +535,7 @@ export function ToolsetView({
 
   const actions = (
     <Stack direction="horizontal" gap={2} align="center">
-      {!isExternalMcp && (
+      {!isExternalMcpProxy && (
         <Button onClick={gotoAddTools} size="sm">
           <Button.LeftIcon>
             <Icon name="plus" className="h-4 w-4" />
@@ -609,14 +609,14 @@ export function ToolsetView({
         />
       )}
       <ToolsetHeader toolsetSlug={toolsetSlug} actions={actions} />
-      {!isExternalMcp && groupFilterItems.length > 1 && filterButton}
+      {!isExternalMcpProxy && groupFilterItems.length > 1 && filterButton}
       <Tabs
         value={activeTab}
         onValueChange={(value) => handleTabChange(value as ToolsetTabs)}
         className="h-full relative"
       >
         <TabsList className="mb-4">
-          {isExternalMcp ? (
+          {isExternalMcpProxy ? (
             <TabsTrigger value="server">Server</TabsTrigger>
           ) : (
             <>

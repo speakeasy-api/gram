@@ -10,6 +10,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -30,6 +41,17 @@ export {
   queryKeyGetPeriodUsage,
 };
 
+export type GetPeriodUsageQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * getPeriodUsage usage
  *
@@ -39,8 +61,8 @@ export {
 export function useGetPeriodUsage(
   request?: operations.GetPeriodUsageRequest | undefined,
   security?: operations.GetPeriodUsageSecurity | undefined,
-  options?: QueryHookOptions<GetPeriodUsageQueryData>,
-): UseQueryResult<GetPeriodUsageQueryData, Error> {
+  options?: QueryHookOptions<GetPeriodUsageQueryData, GetPeriodUsageQueryError>,
+): UseQueryResult<GetPeriodUsageQueryData, GetPeriodUsageQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildGetPeriodUsageQuery(
@@ -62,8 +84,11 @@ export function useGetPeriodUsage(
 export function useGetPeriodUsageSuspense(
   request?: operations.GetPeriodUsageRequest | undefined,
   security?: operations.GetPeriodUsageSecurity | undefined,
-  options?: SuspenseQueryHookOptions<GetPeriodUsageQueryData>,
-): UseSuspenseQueryResult<GetPeriodUsageQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    GetPeriodUsageQueryData,
+    GetPeriodUsageQueryError
+  >,
+): UseSuspenseQueryResult<GetPeriodUsageQueryData, GetPeriodUsageQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildGetPeriodUsageQuery(

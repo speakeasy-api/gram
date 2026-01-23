@@ -10,6 +10,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -30,6 +41,17 @@ export {
   queryKeyListResources,
 };
 
+export type ListResourcesQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * listResources resources
  *
@@ -39,8 +61,8 @@ export {
 export function useListResources(
   request?: operations.ListResourcesRequest | undefined,
   security?: operations.ListResourcesSecurity | undefined,
-  options?: QueryHookOptions<ListResourcesQueryData>,
-): UseQueryResult<ListResourcesQueryData, Error> {
+  options?: QueryHookOptions<ListResourcesQueryData, ListResourcesQueryError>,
+): UseQueryResult<ListResourcesQueryData, ListResourcesQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildListResourcesQuery(
@@ -62,8 +84,11 @@ export function useListResources(
 export function useListResourcesSuspense(
   request?: operations.ListResourcesRequest | undefined,
   security?: operations.ListResourcesSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ListResourcesQueryData>,
-): UseSuspenseQueryResult<ListResourcesQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    ListResourcesQueryData,
+    ListResourcesQueryError
+  >,
+): UseSuspenseQueryResult<ListResourcesQueryData, ListResourcesQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildListResourcesQuery(

@@ -61,7 +61,12 @@ export default function Catalog() {
       toolsetName: string;
     }) => {
       const slug = generateSlug(server.registrySpecifier);
-      const toolUrn = `tools:externalmcp:${slug}:proxy`;
+      let toolUrns = [`tools:externalmcp:${slug}:proxy`];
+      if (server.tools && server.tools.length > 0) {
+        toolUrns = server.tools.map(
+          (tool) => `tools:externalmcp:${slug}:${tool.name}`,
+        );
+      }
 
       // 1. Evolve deployment with the external MCP source
       await client.deployments.evolveDeployment({
@@ -84,14 +89,7 @@ export default function Catalog() {
           name: toolsetName,
           description:
             server.description ?? `MCP server: ${server.registrySpecifier}`,
-        },
-      });
-
-      // 3. Add the proxy tool URN to the toolset
-      await client.toolsets.updateBySlug({
-        slug: toolset.slug,
-        updateToolsetRequestBody: {
-          toolUrns: [toolUrn],
+          toolUrns: toolUrns,
         },
       });
 

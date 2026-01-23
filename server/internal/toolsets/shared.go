@@ -280,7 +280,7 @@ func (t *Toolsets) extractExternalMCPToolCallPlan(ctx context.Context, tool exte
 		return nil, fmt.Errorf("get project with organization metadata: %w", err)
 	}
 
-	description := fmt.Sprintf("External MCP proxy tool for %s", tool.Name)
+	description := fmt.Sprintf("External MCP proxy tool for %s", tool.Name.String)
 
 	descriptor := &gateway.ToolDescriptor{
 		ID:               tool.ID.String(),
