@@ -11263,6 +11263,7 @@ components:
                 content:
                     type: string
                     description: The content of the message
+                    format: binary
                 created_at:
                     type: string
                     description: When the message was created.

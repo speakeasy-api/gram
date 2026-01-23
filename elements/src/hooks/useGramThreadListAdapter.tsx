@@ -11,6 +11,8 @@ import {
   GramChatOverview,
   GramChat,
   convertGramMessagesToExported,
+  convertGramMessagePartsToUIMessageParts,
+  convertGramMessagesToUIMessages,
 } from '@/lib/messageConverter'
 import {
   useCallback,
@@ -108,55 +110,51 @@ class GramThreadHistoryAdapter {
           return { messages: [], headId: null }
         }
 
-        try {
-          const response = await fetch(
-            `${this.apiUrl}/rpc/chat.load?id=${encodeURIComponent(remoteId)}`,
-            { headers: this.headers }
-          )
+        const response = await fetch(
+          `${this.apiUrl}/rpc/chat.load?id=${encodeURIComponent(remoteId)}`,
+          { headers: this.headers }
+        )
 
-          if (!response.ok) {
-            console.error('Failed to load chat (withFormat):', response.status)
-            return { messages: [], headId: null }
-          }
-
-          const chat = (await response.json()) as GramChat
-
-          // Filter out system messages (assistant-ui doesn't support them in the import path)
-          const filteredMessages = chat.messages.filter(
-            (msg) => msg.role !== 'system'
-          )
-
-          if (filteredMessages.length === 0) {
-            return { messages: [], headId: null }
-          }
-
-          // Convert to the format expected by useExternalHistory
-          // It expects UIMessage format with role and parts array
-          let prevId: string | null = null
-          const messages = filteredMessages.map((msg, index) => {
-            // Generate a fallback ID if missing (required by assistant-ui's MessageRepository)
-            const messageId = msg.id || `fallback-${index}-${Date.now()}`
-            const uiMessage = {
-              parentId: prevId,
-              message: {
-                id: messageId,
-                role: msg.role as 'user' | 'assistant',
-                parts: [{ type: 'text' as const, text: msg.content || '' }],
-                createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
-              },
-            }
-            prevId = messageId
-            return uiMessage
-          })
-
-          return {
-            headId: prevId,
-            messages,
-          }
-        } catch (error) {
-          console.error('Error loading chat (withFormat):', error)
+        if (!response.ok) {
+          console.error('Failed to load chat (withFormat):', response.status)
           return { messages: [], headId: null }
         }
+
+        const chat = (await response.json()) as GramChat
+        return convertGramMessagesToUIMessages(chat.messages)
+
+        // // Filter out system messages (assistant-ui doesn't support them in the import path)
+        // const filteredMessages = chat.messages.filter(
+        //   (msg) => msg.role !== 'system'
+        // )
+
+        // if (filteredMessages.length === 0) {
+        //   return { messages: [], headId: null }
+        // }
+
+        // // Convert to the format expected by useExternalHistory
+        // // It expects UIMessage format with role and parts array
+        // let prevId: string | null = null
+        // const messages = filteredMessages.map((msg, index) => {
+        //   // Generate a fallback ID if missing (required by assistant-ui's MessageRepository)
+        //   const messageId = msg.id || `fallback-${index}-${Date.now()}`
+        //   const uiMessage = {
+        //     parentId: prevId,
+        //     message: {
+        //       id: messageId,
+        //       role: msg.role as 'user' | 'assistant',
+        //       parts: [{ type: 'text' as const, text: msg.content || '' }],
+        //       createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
+        //     },
+        //   }
+        //   prevId = messageId
+        //   return uiMessage
+        // })
+
+        // return {
+        //   headId: prevId,
+        //   messages,
+        // }
       },
       append: async () => {
         // No-op

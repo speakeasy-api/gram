@@ -2,6 +2,7 @@ package openrouter
 
 import (
 	"encoding/json"
+	"fmt"
 
 	or "github.com/speakeasy-api/gram/openrouter/models/components"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -21,6 +22,23 @@ func GetRole(msg or.Message) string {
 		return msg.UserMessage.GetRole()
 	default:
 		return ""
+	}
+}
+
+func GetContentJSON(msg or.Message) ([]byte, error) {
+	switch msg.Type {
+	case or.MessageTypeAssistant:
+		return json.Marshal(msg.AssistantMessage.Content)
+	case or.MessageTypeDeveloper:
+		return json.Marshal(msg.MessageDeveloper.Content)
+	case or.MessageTypeSystem:
+		return json.Marshal(msg.SystemMessage.Content)
+	case or.MessageTypeTool:
+		return json.Marshal(msg.ToolResponseMessage.Content)
+	case or.MessageTypeUser:
+		return json.Marshal(msg.UserMessage.Content)
+	default:
+		return nil, fmt.Errorf("unknown message type: %s", msg.Type)
 	}
 }
 
