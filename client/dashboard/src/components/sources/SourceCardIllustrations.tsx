@@ -387,8 +387,8 @@ export function MCPHeroIllustration({
       {/* Dotted background */}
       <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
         <defs>
-          <pattern id={`hero-dots-${toolsetSlug}`} x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
-            <circle cx="12" cy="12" r="1.5" fill={colors.accent} opacity="0.12" />
+          <pattern id={`hero-dots-${toolsetSlug}`} x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
+            <circle cx="8" cy="8" r="1.2" fill={colors.accent} opacity="0.2" />
           </pattern>
         </defs>
         <rect width="100%" height="100%" fill={`url(#hero-dots-${toolsetSlug})`} />
