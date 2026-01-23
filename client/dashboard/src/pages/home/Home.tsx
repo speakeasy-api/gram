@@ -328,7 +328,9 @@ function FeaturedServerCard({
             )}
             {isAdded ? (
               <Button variant="secondary" size="sm">
-                <CheckCircle className="w-3.5 h-3.5" />
+                <Button.LeftIcon>
+                  <CheckCircle className="w-3.5 h-3.5" />
+                </Button.LeftIcon>
                 <Button.Text>Added</Button.Text>
               </Button>
             ) : (
@@ -411,13 +413,17 @@ function SetupStep({
         </Type>
         {completed ? (
           <Button size="sm" disabled className="mt-1 w-fit">
-            <CheckCircle className="w-3 h-3" />
+            <Button.LeftIcon>
+              <CheckCircle className="w-3 h-3" />
+            </Button.LeftIcon>
             <Button.Text>Done</Button.Text>
           </Button>
         ) : (
           <Button size="sm" disabled={!enabled} className="mt-1 w-fit">
             <Button.Text>{cta}</Button.Text>
-            <ArrowRight className="w-3 h-3" />
+            <Button.RightIcon>
+              <ArrowRight className="w-3 h-3" />
+            </Button.RightIcon>
           </Button>
         )}
       </div>

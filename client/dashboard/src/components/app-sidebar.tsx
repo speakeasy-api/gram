@@ -150,7 +150,7 @@ const GettingStartedWidget = () => {
       : routes.elements.href();
 
   return (
-    <Link to={nextStepHref} className="no-underline" unstable_viewTransition>
+    <Link to={nextStepHref} className="no-underline">
       <div className="mx-2 mb-2 px-4 py-2.5 rounded-full bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-muted transition-colors flex items-center justify-between gap-3 shadow-sm">
         <span className="text-sm font-medium">
           Setup progress: {Math.round((completedSteps / 3) * 100)}%

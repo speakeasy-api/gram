@@ -278,17 +278,14 @@ function MCPServerCard({
                   }
                 }}
               >
-                {isRemoving ? (
-                  <>
+                <Button.LeftIcon>
+                  {isRemoving ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <Button.Text>Removing...</Button.Text>
-                  </>
-                ) : (
-                  <>
+                  ) : (
                     <Minus className="w-3.5 h-3.5" />
-                    <Button.Text>Remove</Button.Text>
-                  </>
-                )}
+                  )}
+                </Button.LeftIcon>
+                <Button.Text>{isRemoving ? "Removing..." : "Remove"}</Button.Text>
               </Button>
             ) : (
               <Button
@@ -300,7 +297,9 @@ function MCPServerCard({
                   onAdd();
                 }}
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Button.LeftIcon>
+                  <Plus className="w-3.5 h-3.5" />
+                </Button.LeftIcon>
                 <Button.Text>Add</Button.Text>
               </Button>
             )}
