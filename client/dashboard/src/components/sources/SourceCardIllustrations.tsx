@@ -325,9 +325,9 @@ export function MCPIllustration({
       {/* Background with pastel color */}
       <rect width="280" height="120" fill={colors.bg} />
 
-      {/* Decorative grid pattern */}
-      <pattern id={`grid-${toolsetSlug}`} x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
-        <circle cx="2" cy="2" r="0.5" fill={colors.accent} opacity="0.15" />
+      {/* Dotted background pattern */}
+      <pattern id={`grid-${toolsetSlug}`} x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
+        <circle cx="8" cy="8" r="1" fill={colors.accent} opacity="0.2" />
       </pattern>
       <rect width="280" height="120" fill={`url(#grid-${toolsetSlug})`} />
 
