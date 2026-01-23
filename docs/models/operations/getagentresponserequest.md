@@ -1,0 +1,19 @@
+# GetAgentResponseRequest
+
+## Example Usage
+
+```typescript
+import { GetAgentResponseRequest } from "@gram/client/models/operations";
+
+let value: GetAgentResponseRequest = {
+  responseId: "<id>",
+};
+```
+
+## Fields
+
+| Field                              | Type                               | Required                           | Description                        |
+| ---------------------------------- | ---------------------------------- | ---------------------------------- | ---------------------------------- |
+| `responseId`                       | *string*                           | :heavy_check_mark:                 | The ID of the response to retrieve |
+| `gramKey`                          | *string*                           | :heavy_minus_sign:                 | API Key header                     |
+| `gramProject`                      | *string*                           | :heavy_minus_sign:                 | project header                     |
