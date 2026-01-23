@@ -127,15 +127,6 @@ export function FunctionIllustration({ className }: IllustrationProps) {
 }
 
 
-// Generate deterministic pattern index from string
-function getIllustrationPattern(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return Math.abs(hash) % 6;
-}
-
 // Generate deterministic color from string
 function hashStringToColor(str: string): { bg: string; accent: string; text: string } {
   let hash = 0;
@@ -158,8 +149,8 @@ function hashStringToColor(str: string): { bg: string; accent: string; text: str
 }
 
 /**
- * MCP Card illustration with hand-drawn doodle style
- * Sketch-like line work with organic, informal aesthetic
+ * MCP Card illustration with repeating hand-drawn doodles
+ * Parallax horizontal scroll on hover
  */
 export function MCPIllustration({
   className,
@@ -167,216 +158,135 @@ export function MCPIllustration({
   toolsetSlug,
 }: IllustrationProps & { mcpUrl: string; toolsetSlug: string }) {
   const colors = hashStringToColor(toolsetSlug);
-  const pattern = getIllustrationPattern(toolsetSlug);
   const displayUrl = mcpUrl.replace(/^https?:\/\//, '');
 
-  const renderPattern = () => {
-    switch (pattern) {
-      case 0: // Doodle cloud with connection
-        return (
-          <g className="transition-transform duration-500 group-hover:-translate-y-1">
-            {/* Cloud shape - hand drawn style */}
-            <path
-              d="M55 55 Q45 55 45 45 Q45 35 55 35 Q55 25 70 25 Q85 25 90 35 Q100 30 110 40 Q120 35 125 45 Q135 45 135 55 Q135 65 125 65 L55 65 Q45 65 45 55"
-              fill="none"
-              stroke={colors.accent}
-              strokeWidth="1.5"
-              opacity="0.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            {/* Connection line to server */}
-            <path d="M135 55 Q155 55 175 50" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" strokeDasharray="4 3" />
-            {/* Small server box */}
-            <rect x="175" y="35" width="35" height="45" rx="3" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.5" />
-            <line x1="180" y1="48" x2="205" y2="48" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
-            <line x1="180" y1="58" x2="205" y2="58" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
-            <line x1="180" y1="68" x2="205" y2="68" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
-            {/* Status dots */}
-            <circle cx="183" cy="43" r="2" fill={colors.accent} opacity="0.5" />
-            <circle cx="190" cy="43" r="2" fill={colors.accent} opacity="0.3" />
-          </g>
-        );
+  // Individual doodle icons - small hand-drawn style
+  const ServerDoodle = ({ x, y }: { x: number; y: number }) => (
+    <g transform={`translate(${x}, ${y})`}>
+      <rect x="0" y="0" width="18" height="24" rx="2" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.6" />
+      <line x1="3" y1="6" x2="15" y2="6" stroke={colors.accent} strokeWidth="1" opacity="0.4" />
+      <line x1="3" y1="11" x2="15" y2="11" stroke={colors.accent} strokeWidth="1" opacity="0.4" />
+      <line x1="3" y1="16" x2="15" y2="16" stroke={colors.accent} strokeWidth="1" opacity="0.4" />
+      <circle cx="5" cy="21" r="1.5" fill={colors.accent} opacity="0.5" />
+      <circle cx="10" cy="21" r="1.5" fill={colors.accent} opacity="0.3" />
+    </g>
+  );
 
-      case 1: // Network nodes doodle
-        return (
-          <g className="transition-transform duration-500 group-hover:scale-[1.02]" style={{ transformOrigin: '140px 60px' }}>
-            {/* Central hub - sketchy circle */}
-            <circle cx="140" cy="60" r="18" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
-            <circle cx="140" cy="60" r="6" fill={colors.accent} opacity="0.4" />
-            {/* Outer nodes */}
-            <circle cx="70" cy="40" r="10" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.45" />
-            <circle cx="70" cy="40" r="3" fill={colors.accent} opacity="0.35" />
-            <circle cx="210" cy="40" r="10" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.45" />
-            <circle cx="210" cy="40" r="3" fill={colors.accent} opacity="0.35" />
-            <circle cx="90" cy="90" r="8" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
-            <circle cx="190" cy="90" r="8" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
-            {/* Connection lines - dashed hand-drawn style */}
-            <path d="M125 50 Q100 45 80 42" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" strokeDasharray="5 4" />
-            <path d="M155 50 Q180 45 200 42" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" strokeDasharray="5 4" />
-            <path d="M130 75 Q110 82 95 88" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" strokeDasharray="5 4" />
-            <path d="M150 75 Q170 82 185 88" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" strokeDasharray="5 4" />
-          </g>
-        );
+  const CloudDoodle = ({ x, y }: { x: number; y: number }) => (
+    <g transform={`translate(${x}, ${y})`}>
+      <path
+        d="M5 18 Q0 18 0 12 Q0 6 6 6 Q6 0 14 0 Q22 0 24 6 Q30 4 32 10 Q36 10 36 14 Q36 18 32 18 Z"
+        fill="none"
+        stroke={colors.accent}
+        strokeWidth="1.2"
+        opacity="0.5"
+        strokeLinecap="round"
+      />
+    </g>
+  );
 
-      case 2: // Server rack doodle
-        return (
-          <g className="transition-transform duration-500 group-hover:-translate-y-1">
-            {/* Server 1 */}
-            <rect x="45" y="30" width="50" height="65" rx="3" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.5" />
-            <line x1="52" y1="45" x2="88" y2="45" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
-            <line x1="52" y1="58" x2="88" y2="58" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
-            <line x1="52" y1="71" x2="88" y2="71" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
-            <line x1="52" y1="84" x2="88" y2="84" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
-            {/* LED indicators */}
-            <circle cx="55" cy="38" r="2" fill={colors.accent} opacity="0.5" />
-            <circle cx="62" cy="38" r="2" fill={colors.accent} opacity="0.3" />
-            {/* Server 2 */}
-            <rect x="170" y="35" width="55" height="55" rx="3" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.45" />
-            <line x1="178" y1="50" x2="218" y2="50" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" />
-            <line x1="178" y1="63" x2="218" y2="63" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" />
-            <line x1="178" y1="76" x2="218" y2="76" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" />
-            <circle cx="180" cy="43" r="2" fill={colors.accent} opacity="0.45" />
-            {/* Connection between servers */}
-            <path d="M95 62 Q130 55 170 62" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.3" strokeDasharray="3 3" />
-          </g>
-        );
+  const DatabaseDoodle = ({ x, y }: { x: number; y: number }) => (
+    <g transform={`translate(${x}, ${y})`}>
+      <ellipse cx="10" cy="4" rx="10" ry="4" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.5" />
+      <path d="M0 4 L0 20 Q0 24 10 24 Q20 24 20 20 L20 4" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.5" />
+      <ellipse cx="10" cy="20" rx="10" ry="4" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.3" />
+      <ellipse cx="10" cy="12" rx="10" ry="4" fill="none" stroke={colors.accent} strokeWidth="0.8" opacity="0.2" strokeDasharray="2 2" />
+    </g>
+  );
 
-      case 3: // Database doodle
-        return (
-          <g className="transition-transform duration-500 group-hover:-translate-y-1">
-            {/* Database cylinder 1 */}
-            <ellipse cx="75" cy="35" rx="25" ry="8" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.5" />
-            <path d="M50 35 L50 75 Q50 83 75 83 Q100 83 100 75 L100 35" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.5" />
-            <ellipse cx="75" cy="75" rx="25" ry="8" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" />
-            <ellipse cx="75" cy="55" rx="25" ry="8" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.25" strokeDasharray="3 2" />
-            {/* Database cylinder 2 */}
-            <ellipse cx="190" cy="40" rx="30" ry="10" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.45" />
-            <path d="M160 40 L160 85 Q160 95 190 95 Q220 95 220 85 L220 40" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.45" />
-            <ellipse cx="190" cy="85" rx="30" ry="10" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" />
-            <ellipse cx="190" cy="62" rx="30" ry="10" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.2" strokeDasharray="3 2" />
-            {/* Sync arrow */}
-            <path d="M105 55 L155 60" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" strokeDasharray="4 3" />
-            <path d="M150 56 L155 60 L150 64" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" />
-          </g>
-        );
+  const WifiDoodle = ({ x, y }: { x: number; y: number }) => (
+    <g transform={`translate(${x}, ${y})`}>
+      <circle cx="10" cy="20" r="2" fill={colors.accent} opacity="0.5" />
+      <path d="M4 14 Q10 8 16 14" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.4" strokeLinecap="round" />
+      <path d="M0 9 Q10 0 20 9" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.3" strokeLinecap="round" />
+    </g>
+  );
 
-      case 4: // Wifi/Signal doodle
-        return (
-          <g className="transition-transform duration-500 group-hover:-translate-y-1">
-            {/* Router box */}
-            <rect x="110" y="65" width="60" height="30" rx="4" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.5" />
-            <circle cx="125" cy="80" r="3" fill={colors.accent} opacity="0.4" />
-            <circle cx="140" cy="80" r="3" fill={colors.accent} opacity="0.3" />
-            <circle cx="155" cy="80" r="3" fill={colors.accent} opacity="0.4" />
-            {/* Antenna */}
-            <line x1="140" y1="65" x2="140" y2="45" stroke={colors.accent} strokeWidth="1.5" opacity="0.5" />
-            <circle cx="140" cy="42" r="4" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.5" />
-            {/* Signal waves */}
-            <path d="M120 35 Q130 20 140 35" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" strokeLinecap="round" />
-            <path d="M140 35 Q150 20 160 35" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" strokeLinecap="round" />
-            <path d="M105 25 Q122 5 140 25" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.25" strokeLinecap="round" />
-            <path d="M140 25 Q158 5 175 25" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.25" strokeLinecap="round" />
-            {/* Connected devices */}
-            <rect x="50" y="70" width="20" height="14" rx="2" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.35" />
-            <rect x="210" y="70" width="20" height="14" rx="2" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.35" />
-            <path d="M70 77 Q90 77 110 80" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.25" strokeDasharray="3 2" />
-            <path d="M170 80 Q190 77 210 77" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.25" strokeDasharray="3 2" />
-          </g>
-        );
+  const GlobeDoodle = ({ x, y }: { x: number; y: number }) => (
+    <g transform={`translate(${x}, ${y})`}>
+      <circle cx="12" cy="12" r="11" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.5" />
+      <ellipse cx="12" cy="12" rx="11" ry="4" fill="none" stroke={colors.accent} strokeWidth="0.8" opacity="0.3" />
+      <ellipse cx="12" cy="12" rx="4" ry="11" fill="none" stroke={colors.accent} strokeWidth="0.8" opacity="0.3" />
+    </g>
+  );
 
-      case 5: // Globe/World doodle
-      default:
-        return (
-          <g className="transition-transform duration-500 group-hover:rotate-[5deg]" style={{ transformOrigin: '140px 60px' }}>
-            {/* Globe */}
-            <circle cx="140" cy="60" r="35" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.5" />
-            {/* Latitude lines */}
-            <ellipse cx="140" cy="60" rx="35" ry="12" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.3" />
-            <ellipse cx="140" cy="60" rx="28" ry="35" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.3" />
-            {/* Meridian */}
-            <line x1="140" y1="25" x2="140" y2="95" stroke={colors.accent} strokeWidth="1" opacity="0.25" />
-            {/* Orbit ring */}
-            <ellipse cx="140" cy="60" rx="50" ry="18" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" strokeDasharray="6 4" />
-            {/* Satellite */}
-            <g>
-              <rect x="55" y="45" width="12" height="8" rx="1" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.4" />
-              <line x1="50" y1="49" x2="55" y2="49" stroke={colors.accent} strokeWidth="1" opacity="0.4" />
-              <line x1="67" y1="49" x2="72" y2="49" stroke={colors.accent} strokeWidth="1" opacity="0.4" />
-            </g>
-            {/* Connection points */}
-            <circle cx="115" cy="50" r="3" fill={colors.accent} opacity="0.35" />
-            <circle cx="165" cy="70" r="3" fill={colors.accent} opacity="0.35" />
-            <circle cx="140" cy="90" r="3" fill={colors.accent} opacity="0.35" />
-          </g>
-        );
-    }
-  };
+  const NodeDoodle = ({ x, y }: { x: number; y: number }) => (
+    <g transform={`translate(${x}, ${y})`}>
+      <circle cx="10" cy="10" r="8" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.5" />
+      <circle cx="10" cy="10" r="3" fill={colors.accent} opacity="0.4" />
+      <line x1="18" y1="10" x2="24" y2="10" stroke={colors.accent} strokeWidth="1" opacity="0.3" strokeDasharray="2 2" />
+      <line x1="10" y1="18" x2="10" y2="24" stroke={colors.accent} strokeWidth="1" opacity="0.3" strokeDasharray="2 2" />
+    </g>
+  );
+
+  // Create a repeating pattern of doodles
+  const doodles = [
+    { Component: ServerDoodle, x: 0, y: 48 },
+    { Component: CloudDoodle, x: 35, y: 20 },
+    { Component: DatabaseDoodle, x: 85, y: 50 },
+    { Component: WifiDoodle, x: 120, y: 15 },
+    { Component: NodeDoodle, x: 155, y: 55 },
+    { Component: GlobeDoodle, x: 195, y: 25 },
+    { Component: ServerDoodle, x: 235, y: 60 },
+    { Component: CloudDoodle, x: 270, y: 35 },
+    // Repeat for seamless scroll
+    { Component: DatabaseDoodle, x: 320, y: 50 },
+    { Component: WifiDoodle, x: 355, y: 15 },
+    { Component: NodeDoodle, x: 390, y: 55 },
+    { Component: GlobeDoodle, x: 430, y: 25 },
+  ];
 
   return (
-    <svg
-      viewBox="0 0 280 120"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      preserveAspectRatio="xMidYMid slice"
-      className={cn("w-full h-full", className)}
-      aria-hidden="true"
-    >
-      {/* Background with pastel color */}
-      <rect width="280" height="120" fill={colors.bg} />
+    <div className={cn("w-full h-full overflow-hidden", className)} style={{ backgroundColor: colors.bg }}>
+      {/* Dotted background */}
+      <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
+        <pattern id={`dots-${toolsetSlug}`} x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
+          <circle cx="8" cy="8" r="1" fill={colors.accent} opacity="0.15" />
+        </pattern>
+        <rect width="100%" height="100%" fill={`url(#dots-${toolsetSlug})`} />
+      </svg>
 
-      {/* Dotted background pattern */}
-      <pattern id={`grid-${toolsetSlug}`} x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
-        <circle cx="8" cy="8" r="1" fill={colors.accent} opacity="0.2" />
-      </pattern>
-      <rect width="280" height="120" fill={`url(#grid-${toolsetSlug})`} />
-
-      {/* Unique whimsical pattern */}
-      {renderPattern()}
+      {/* Parallax scrolling doodles */}
+      <svg
+        viewBox="0 0 280 120"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        preserveAspectRatio="xMidYMid slice"
+        className="w-full h-full relative"
+        aria-hidden="true"
+      >
+        <g className="transition-transform duration-700 ease-out group-hover:-translate-x-12">
+          {doodles.map((doodle, i) => (
+            <doodle.Component key={i} x={doodle.x} y={doodle.y} />
+          ))}
+        </g>
+      </svg>
 
       {/* MCP URL overlay */}
-      <foreignObject x="0" y="0" width="280" height="120">
-        <div
-          xmlns="http://www.w3.org/1999/xhtml"
-          style={{
-            width: '100%',
-            height: '100%',
-            position: 'relative',
-          }}
+      <div
+        className="absolute top-3 right-2"
+        style={{
+          backgroundColor: 'rgba(255, 255, 255, 0.75)',
+          backdropFilter: 'blur(8px)',
+          padding: '3px 6px',
+          borderRadius: '4px',
+          border: `1px solid ${colors.accent}40`,
+        }}
+      >
+        <span
+          className="text-[8px] font-mono font-medium whitespace-nowrap"
+          style={{ color: colors.text }}
         >
-          <div
-            style={{
-              position: 'absolute',
-              top: '12px',
-              right: '8px',
-              backgroundColor: 'rgba(255, 255, 255, 0.7)',
-              backdropFilter: 'blur(8px)',
-              padding: '4px 8px',
-              borderRadius: '4px',
-              border: `1px solid ${colors.accent}40`,
-            }}
-          >
-            <div
-              style={{
-                fontSize: '8px',
-                fontFamily: 'ui-monospace, monospace',
-                color: colors.text,
-                whiteSpace: 'nowrap',
-                fontWeight: 500,
-              }}
-            >
-              {displayUrl}
-            </div>
-          </div>
-        </div>
-      </foreignObject>
-    </svg>
+          {displayUrl}
+        </span>
+      </div>
+    </div>
   );
 }
 
 /**
  * Large hero illustration for MCP details page
- * Hand-drawn doodle style matching card illustrations
+ * Repeating hand-drawn doodles with slow continuous scroll animation
  */
 export function MCPHeroIllustration({
   className,
@@ -384,227 +294,123 @@ export function MCPHeroIllustration({
   mcpUrl: _mcpUrl,
 }: IllustrationProps & { toolsetSlug: string; mcpUrl?: string }) {
   const colors = hashStringToColor(toolsetSlug);
-  const pattern = getIllustrationPattern(toolsetSlug);
 
-  const renderHeroPattern = () => {
-    switch (pattern) {
-      case 0: // Cloud network doodle
-        return (
-          <>
-            {/* Large cloud */}
-            <g className="animate-[float_6s_ease-in-out_infinite]">
-              <path
-                d="M100 150 Q70 150 70 120 Q70 90 100 90 Q100 60 140 60 Q180 60 190 90 Q220 80 240 100 Q270 90 280 110 Q310 110 310 140 Q310 170 280 170 L100 170 Q70 170 70 150"
-                fill="none"
-                stroke={colors.accent}
-                strokeWidth="2"
-                opacity="0.5"
-                strokeLinecap="round"
-              />
-            </g>
-            {/* Small cloud */}
-            <g className="animate-[float_8s_ease-in-out_infinite]" style={{ animationDelay: '2s' }}>
-              <path
-                d="M500 180 Q480 180 480 160 Q480 140 500 140 Q500 120 530 120 Q560 120 565 140 Q580 135 590 150 Q600 150 600 165 Q600 180 580 180 Z"
-                fill="none"
-                stroke={colors.accent}
-                strokeWidth="2"
-                opacity="0.4"
-                strokeLinecap="round"
-              />
-            </g>
-            {/* Connection to servers */}
-            <path d="M310 155 Q400 140 480 160" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.3" strokeDasharray="8 6" />
-            {/* Server boxes */}
-            <g className="animate-[float_7s_ease-in-out_infinite]" style={{ animationDelay: '1s' }}>
-              <rect x="620" y="100" width="80" height="100" rx="4" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.45" />
-              <line x1="635" y1="125" x2="685" y2="125" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
-              <line x1="635" y1="150" x2="685" y2="150" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
-              <line x1="635" y1="175" x2="685" y2="175" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
-              <circle cx="643" cy="113" r="4" fill={colors.accent} opacity="0.4" />
-              <circle cx="656" cy="113" r="4" fill={colors.accent} opacity="0.25" />
-            </g>
-            <path d="M600 160 Q610 155 620 150" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.3" strokeDasharray="5 4" />
-          </>
-        );
+  // Larger doodle icons for hero
+  const ServerDoodle = ({ x, y }: { x: number; y: number }) => (
+    <g transform={`translate(${x}, ${y})`}>
+      <rect x="0" y="0" width="45" height="60" rx="4" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
+      <line x1="8" y1="15" x2="37" y2="15" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
+      <line x1="8" y1="27" x2="37" y2="27" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
+      <line x1="8" y1="39" x2="37" y2="39" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
+      <circle cx="12" cy="52" r="3" fill={colors.accent} opacity="0.5" />
+      <circle cx="23" cy="52" r="3" fill={colors.accent} opacity="0.3" />
+    </g>
+  );
 
-      case 1: // Network topology doodle
-        return (
-          <>
-            {/* Central hub */}
-            <g className="animate-[pulse_3s_ease-in-out_infinite]">
-              <circle cx="400" cy="150" r="40" fill="none" stroke={colors.accent} strokeWidth="2.5" opacity="0.5" />
-              <circle cx="400" cy="150" r="15" fill={colors.accent} opacity="0.35" />
-            </g>
-            {/* Outer nodes */}
-            <g className="animate-[float_4s_ease-in-out_infinite]">
-              <circle cx="200" cy="100" r="25" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.4" />
-              <circle cx="200" cy="100" r="8" fill={colors.accent} opacity="0.3" />
-            </g>
-            <g className="animate-[float_5s_ease-in-out_infinite]" style={{ animationDelay: '1s' }}>
-              <circle cx="600" cy="100" r="25" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.4" />
-              <circle cx="600" cy="100" r="8" fill={colors.accent} opacity="0.3" />
-            </g>
-            <g className="animate-[float_4.5s_ease-in-out_infinite]" style={{ animationDelay: '2s' }}>
-              <circle cx="250" cy="230" r="20" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
-              <circle cx="250" cy="230" r="6" fill={colors.accent} opacity="0.25" />
-            </g>
-            <g className="animate-[float_5.5s_ease-in-out_infinite]" style={{ animationDelay: '0.5s' }}>
-              <circle cx="550" cy="230" r="20" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
-              <circle cx="550" cy="230" r="6" fill={colors.accent} opacity="0.25" />
-            </g>
-            {/* Connection lines */}
-            <path d="M365 130 Q280 110 225 105" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.3" strokeDasharray="8 5" />
-            <path d="M435 130 Q520 110 575 105" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.3" strokeDasharray="8 5" />
-            <path d="M375 180 Q310 205 268 222" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.25" strokeDasharray="8 5" />
-            <path d="M425 180 Q490 205 532 222" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.25" strokeDasharray="8 5" />
-          </>
-        );
+  const CloudDoodle = ({ x, y }: { x: number; y: number }) => (
+    <g transform={`translate(${x}, ${y})`}>
+      <path
+        d="M12 45 Q0 45 0 30 Q0 15 15 15 Q15 0 35 0 Q55 0 60 15 Q75 10 80 25 Q90 25 90 35 Q90 45 80 45 Z"
+        fill="none"
+        stroke={colors.accent}
+        strokeWidth="2"
+        opacity="0.45"
+        strokeLinecap="round"
+      />
+    </g>
+  );
 
-      case 2: // Server rack doodle
-        return (
-          <>
-            {/* Server 1 */}
-            <g className="animate-[lift_3s_ease-in-out_infinite]">
-              <rect x="120" y="70" width="120" height="160" rx="6" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
-              <line x1="135" y1="100" x2="225" y2="100" stroke={colors.accent} strokeWidth="2" opacity="0.4" />
-              <line x1="135" y1="130" x2="225" y2="130" stroke={colors.accent} strokeWidth="2" opacity="0.4" />
-              <line x1="135" y1="160" x2="225" y2="160" stroke={colors.accent} strokeWidth="2" opacity="0.4" />
-              <line x1="135" y1="190" x2="225" y2="190" stroke={colors.accent} strokeWidth="2" opacity="0.4" />
-              <circle cx="145" cy="85" r="5" fill={colors.accent} opacity="0.45" />
-              <circle cx="162" cy="85" r="5" fill={colors.accent} opacity="0.3" />
-            </g>
-            {/* Server 2 */}
-            <g className="animate-[lift_4s_ease-in-out_infinite]" style={{ animationDelay: '1s' }}>
-              <rect x="560" y="80" width="130" height="150" rx="6" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.45" />
-              <line x1="578" y1="110" x2="672" y2="110" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
-              <line x1="578" y1="140" x2="672" y2="140" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
-              <line x1="578" y1="170" x2="672" y2="170" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
-              <line x1="578" y1="200" x2="672" y2="200" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
-              <circle cx="588" cy="95" r="5" fill={colors.accent} opacity="0.4" />
-            </g>
-            {/* Connection */}
-            <path d="M240 150 Q400 120 560 155" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.25" strokeDasharray="10 6" />
-          </>
-        );
+  const DatabaseDoodle = ({ x, y }: { x: number; y: number }) => (
+    <g transform={`translate(${x}, ${y})`}>
+      <ellipse cx="25" cy="10" rx="25" ry="10" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
+      <path d="M0 10 L0 50 Q0 60 25 60 Q50 60 50 50 L50 10" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
+      <ellipse cx="25" cy="50" rx="25" ry="10" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" />
+      <ellipse cx="25" cy="30" rx="25" ry="10" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.2" strokeDasharray="4 3" />
+    </g>
+  );
 
-      case 3: // Database doodle
-        return (
-          <>
-            {/* DB 1 */}
-            <g className="animate-[lift_4s_ease-in-out_infinite]">
-              <ellipse cx="200" cy="90" rx="70" ry="22" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
-              <path d="M130 90 L130 180 Q130 202 200 202 Q270 202 270 180 L270 90" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
-              <ellipse cx="200" cy="180" rx="70" ry="22" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.35" />
-              <ellipse cx="200" cy="120" rx="70" ry="22" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.25" strokeDasharray="5 3" />
-              <ellipse cx="200" cy="150" rx="70" ry="22" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.2" strokeDasharray="5 3" />
-            </g>
-            {/* DB 2 */}
-            <g className="animate-[lift_5s_ease-in-out_infinite]" style={{ animationDelay: '1.5s' }}>
-              <ellipse cx="580" cy="100" rx="80" ry="25" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.45" />
-              <path d="M500 100 L500 200 Q500 225 580 225 Q660 225 660 200 L660 100" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.45" />
-              <ellipse cx="580" cy="200" rx="80" ry="25" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.3" />
-              <ellipse cx="580" cy="133" rx="80" ry="25" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.2" strokeDasharray="5 3" />
-              <ellipse cx="580" cy="166" rx="80" ry="25" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.15" strokeDasharray="5 3" />
-            </g>
-            {/* Sync arrow */}
-            <path d="M280 140 Q400 100 490 130" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.25" strokeDasharray="8 6" />
-            <path d="M480 125 L490 130 L480 138" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.25" />
-          </>
-        );
+  const WifiDoodle = ({ x, y }: { x: number; y: number }) => (
+    <g transform={`translate(${x}, ${y})`}>
+      <circle cx="25" cy="50" r="5" fill={colors.accent} opacity="0.5" />
+      <path d="M10 35 Q25 20 40 35" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.4" strokeLinecap="round" />
+      <path d="M0 22 Q25 0 50 22" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.3" strokeLinecap="round" />
+    </g>
+  );
 
-      case 4: // Wifi/Signal doodle
-        return (
-          <>
-            {/* Router */}
-            <g className="animate-[float_5s_ease-in-out_infinite]">
-              <rect x="320" y="160" width="160" height="60" rx="6" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
-              <circle cx="360" cy="190" r="8" fill={colors.accent} opacity="0.35" />
-              <circle cx="400" cy="190" r="8" fill={colors.accent} opacity="0.25" />
-              <circle cx="440" cy="190" r="8" fill={colors.accent} opacity="0.35" />
-            </g>
-            {/* Antenna */}
-            <line x1="400" y1="160" x2="400" y2="110" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
-            <circle cx="400" cy="100" r="10" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
-            {/* Signal waves */}
-            <path d="M360 80 Q380 50 400 80" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.35" strokeLinecap="round" />
-            <path d="M400 80 Q420 50 440 80" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.35" strokeLinecap="round" />
-            <path d="M330 60 Q365 20 400 60" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.25" strokeLinecap="round" />
-            <path d="M400 60 Q435 20 470 60" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.25" strokeLinecap="round" />
-            <path d="M300 40 Q350 -10 400 40" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.15" strokeLinecap="round" />
-            <path d="M400 40 Q450 -10 500 40" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.15" strokeLinecap="round" />
-            {/* Devices */}
-            <rect x="120" y="170" width="50" height="35" rx="4" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" />
-            <rect x="630" y="170" width="50" height="35" rx="4" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" />
-            <path d="M170 188 Q245 185 320 190" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.2" strokeDasharray="6 4" />
-            <path d="M480 190 Q555 185 630 188" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.2" strokeDasharray="6 4" />
-          </>
-        );
+  const GlobeDoodle = ({ x, y }: { x: number; y: number }) => (
+    <g transform={`translate(${x}, ${y})`}>
+      <circle cx="30" cy="30" r="28" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.45" />
+      <ellipse cx="30" cy="30" rx="28" ry="10" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.3" />
+      <ellipse cx="30" cy="30" rx="10" ry="28" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.3" />
+    </g>
+  );
 
-      case 5: // Globe doodle
-      default:
-        return (
-          <>
-            {/* Globe */}
-            <g className="animate-[float_6s_ease-in-out_infinite]">
-              <circle cx="400" cy="150" r="80" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
-              <ellipse cx="400" cy="150" rx="80" ry="30" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" />
-              <ellipse cx="400" cy="150" rx="30" ry="80" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" />
-              <line x1="400" y1="70" x2="400" y2="230" stroke={colors.accent} strokeWidth="1.5" opacity="0.2" />
-              <line x1="320" y1="150" x2="480" y2="150" stroke={colors.accent} strokeWidth="1.5" opacity="0.2" />
-            </g>
-            {/* Orbit */}
-            <ellipse cx="400" cy="150" rx="120" ry="40" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.25" strokeDasharray="10 6" className="animate-[spin_20s_linear_infinite]" style={{ transformOrigin: '400px 150px' }} />
-            {/* Satellites */}
-            <g className="animate-[float_4s_ease-in-out_infinite]">
-              <rect x="180" y="100" width="30" height="20" rx="3" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
-              <line x1="165" y1="110" x2="180" y2="110" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
-              <line x1="210" y1="110" x2="225" y2="110" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
-            </g>
-            <g className="animate-[float_5s_ease-in-out_infinite]" style={{ animationDelay: '2s' }}>
-              <rect x="590" y="180" width="30" height="20" rx="3" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" />
-              <line x1="575" y1="190" x2="590" y2="190" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" />
-              <line x1="620" y1="190" x2="635" y2="190" stroke={colors.accent} strokeWidth="1.5" opacity="0.35" />
-            </g>
-            {/* Connection points */}
-            <circle cx="350" cy="110" r="6" fill={colors.accent} opacity="0.3" />
-            <circle cx="450" cy="190" r="6" fill={colors.accent} opacity="0.3" />
-            <circle cx="380" cy="220" r="6" fill={colors.accent} opacity="0.3" />
-          </>
-        );
-    }
-  };
+  const NodeDoodle = ({ x, y }: { x: number; y: number }) => (
+    <g transform={`translate(${x}, ${y})`}>
+      <circle cx="25" cy="25" r="20" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.45" />
+      <circle cx="25" cy="25" r="8" fill={colors.accent} opacity="0.35" />
+      <line x1="45" y1="25" x2="60" y2="25" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" strokeDasharray="4 3" />
+      <line x1="25" y1="45" x2="25" y2="60" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" strokeDasharray="4 3" />
+    </g>
+  );
+
+  // Create rows of doodles that repeat for seamless scroll
+  const heroDoodles = [
+    // Row 1 (top)
+    { Component: CloudDoodle, x: 0, y: 30 },
+    { Component: ServerDoodle, x: 120, y: 50 },
+    { Component: NodeDoodle, x: 200, y: 20 },
+    { Component: DatabaseDoodle, x: 300, y: 55 },
+    { Component: WifiDoodle, x: 400, y: 25 },
+    { Component: GlobeDoodle, x: 480, y: 60 },
+    { Component: ServerDoodle, x: 560, y: 30 },
+    { Component: CloudDoodle, x: 650, y: 50 },
+    // Row 2 (middle)
+    { Component: DatabaseDoodle, x: 50, y: 130 },
+    { Component: WifiDoodle, x: 150, y: 145 },
+    { Component: GlobeDoodle, x: 240, y: 120 },
+    { Component: CloudDoodle, x: 340, y: 150 },
+    { Component: ServerDoodle, x: 450, y: 125 },
+    { Component: NodeDoodle, x: 530, y: 150 },
+    { Component: DatabaseDoodle, x: 620, y: 120 },
+    // Row 3 (bottom)
+    { Component: NodeDoodle, x: 20, y: 210 },
+    { Component: GlobeDoodle, x: 100, y: 230 },
+    { Component: ServerDoodle, x: 200, y: 205 },
+    { Component: WifiDoodle, x: 280, y: 235 },
+    { Component: CloudDoodle, x: 370, y: 210 },
+    { Component: DatabaseDoodle, x: 480, y: 230 },
+    { Component: NodeDoodle, x: 570, y: 205 },
+    { Component: ServerDoodle, x: 660, y: 225 },
+    // Repeat for seamless loop
+    { Component: CloudDoodle, x: 750, y: 30 },
+    { Component: ServerDoodle, x: 870, y: 50 },
+    { Component: NodeDoodle, x: 950, y: 20 },
+    { Component: WifiDoodle, x: 700, y: 145 },
+    { Component: GlobeDoodle, x: 790, y: 120 },
+    { Component: CloudDoodle, x: 890, y: 150 },
+    { Component: GlobeDoodle, x: 750, y: 230 },
+    { Component: ServerDoodle, x: 850, y: 205 },
+  ];
 
   return (
-    <div className={cn("w-full h-full relative overflow-hidden", className)} style={{ backgroundColor: colors.bg }}>
+    <div className={cn("w-full h-full relative overflow-hidden group", className)} style={{ backgroundColor: colors.bg }}>
       <style>{`
-        @keyframes float {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-10px); }
-        }
-        @keyframes flow {
+        @keyframes scrollLeft {
           0% { transform: translateX(0); }
-          100% { transform: translateX(100px); opacity: 0; }
-        }
-        @keyframes lift {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-8px); }
-        }
-        @keyframes rings {
-          0% { transform: scale(1); opacity: 0.3; }
-          100% { transform: scale(1.3); opacity: 0; }
+          100% { transform: translateX(-200px); }
         }
       `}</style>
 
-      {/* Grid pattern background */}
+      {/* Dotted background */}
       <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
-        <pattern id={`hero-grid-${toolsetSlug}`} x="0" y="0" width="30" height="30" patternUnits="userSpaceOnUse">
-          <circle cx="3" cy="3" r="1" fill={colors.accent} opacity="0.12" />
+        <pattern id={`hero-dots-${toolsetSlug}`} x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
+          <circle cx="12" cy="12" r="1.5" fill={colors.accent} opacity="0.12" />
         </pattern>
-        <rect width="100%" height="100%" fill={`url(#hero-grid-${toolsetSlug})`} />
+        <rect width="100%" height="100%" fill={`url(#hero-dots-${toolsetSlug})`} />
       </svg>
 
-      {/* Animated elements */}
+      {/* Scrolling doodles */}
       <svg
         viewBox="0 0 800 300"
         fill="none"
@@ -613,7 +419,11 @@ export function MCPHeroIllustration({
         className="w-full h-full relative"
         aria-hidden="true"
       >
-        {renderHeroPattern()}
+        <g className="animate-[scrollLeft_30s_linear_infinite]">
+          {heroDoodles.map((doodle, i) => (
+            <doodle.Component key={i} x={doodle.x} y={doodle.y} />
+          ))}
+        </g>
       </svg>
     </div>
   );
