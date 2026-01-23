@@ -202,21 +202,3 @@ type OpenAIChatResponse struct {
 	} `json:"choices"`
 	Usage *Usage `json:"usage,omitempty"`
 }
-
-// AIEmbeddingRequest represents the generic request payload for embeddings
-type AIEmbeddingRequest struct {
-	Model string   `json:"model"`
-	Input []string `json:"input"`
-}
-
-// AIEmbeddingResponse represents the generic response payload for embeddings
-type AIEmbeddingResponse struct {
-	ID     string `json:"id"`
-	Object string `json:"object"`
-	Model  string `json:"model"`
-	Data   []struct {
-		Index     int       `json:"index"`
-		Object    string    `json:"object"`
-		Embedding []float64 `json:"embedding"`
-	} `json:"data"`
-}
