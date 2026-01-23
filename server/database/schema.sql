@@ -768,6 +768,12 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   project_id uuid,
   role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'tool')),
   content TEXT NOT NULL,
+  -- if message content is small enough then we'll store it straight in the
+  -- database column for fast retrieval. If it's tool large then the
+  -- `content_raw` will be NULL. We'll always store messages in an asset store
+  -- referenced by `content_asset_id` and `content_asset_url`.
+  content_raw JSONB,
+  content_asset_url TEXT, -- denormalization of the asset URL for faster access
   model TEXT,
   message_id TEXT,
   finish_reason TEXT,
@@ -775,6 +781,10 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   prompt_tokens BIGINT NOT NULL DEFAULT 0,
   completion_tokens BIGINT NOT NULL DEFAULT 0,
   total_tokens BIGINT NOT NULL DEFAULT 0,
+
+  -- If there was an error storing the message content in the asset store,
+  -- we can record the error message here for debugging.
+  storage_error TEXT,
 
   user_id TEXT,
   external_user_id TEXT,
