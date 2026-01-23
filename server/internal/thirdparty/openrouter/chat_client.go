@@ -57,10 +57,7 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 	truncatedInputs := make([]string, len(inputs))
 	for i, input := range inputs {
 		if len(input) > maxChars {
-			c.logger.WarnContext(ctx, "truncating input for embedding",
-				slog.Int("index", i),
-				slog.Int("original_length", len(input)),
-				slog.Int("truncated_length", maxChars))
+			c.logger.WarnContext(ctx, fmt.Sprintf("truncating input for embedding, orgID: %s, model: %s, input length: %d", orgID, model, len(input)))
 			truncatedInputs[i] = input[:maxChars]
 		} else {
 			truncatedInputs[i] = input
@@ -70,8 +67,13 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 
 	orClient := or_base.New(or_base.WithSecurity(openrouterKey))
 	result, err := orClient.Embeddings.Generate(ctx, or_operations.CreateEmbeddingsRequest{
-		Model: model,
-		Input: or_operations.CreateInputUnionArrayOfStr(inputs),
+		Model:          model,
+		Input:          or_operations.CreateInputUnionArrayOfStr(inputs),
+		EncodingFormat: nil,
+		Dimensions:     nil,
+		User:           nil,
+		Provider:       nil,
+		InputType:      nil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create embeddings error: %w", err)
@@ -95,7 +97,7 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 	results := make([][]float32, len(inputs))
 	for _, data := range embeddingsData {
 		if data.Index == nil {
-			return nil, fmt.Errorf("embedding index is nil")
+			return nil, fmt.Errorf("embedding data missing index")
 		}
 		index := int(*data.Index)
 		if index < 0 || index >= len(results) {
