@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,7 +28,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
-	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -58,7 +58,7 @@ func handleResourcesRead(
 	env gateway.EnvironmentLoader,
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
-	tcm tm.ToolMetricsProvider,
+	telemSvc *tm.Service,
 	featuresClient *productfeatures.Client) (json.RawMessage, error) {
 	var params resourceReadParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -99,22 +99,22 @@ func handleResourcesRead(
 	}
 
 	descriptor := plan.Descriptor
-	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, tcm, featuresClient, descriptor.OrganizationID, tm.ToolInfo{
-		ID:             descriptor.ID,
-		Urn:            descriptor.URN.String(),
-		Name:           descriptor.Name,
-		ProjectID:      descriptor.ProjectID,
-		DeploymentID:   descriptor.DeploymentID,
-		OrganizationID: descriptor.OrganizationID,
-	}, descriptor.Name, tm_repo.ToolTypeFunction)
-	if logErr != nil {
-		logger.ErrorContext(ctx,
-			"failed to prepare resource call log entry",
-			attr.SlogError(logErr),
-			attr.SlogToolName(descriptor.Name),
-			attr.SlogToolURN(descriptor.URN.String()),
-		)
-	}
+	// toolCallLogger, logErr := tm.NewToolCallLogger(ctx, tcm, featuresClient, descriptor.OrganizationID, tm.CoreAttributes{
+	// 	ID:             descriptor.ID,
+	// 	Urn:            descriptor.URN.String(),
+	// 	Name:           descriptor.Name,
+	// 	ProjectID:      descriptor.ProjectID,
+	// 	DeploymentID:   descriptor.DeploymentID,
+	// 	OrganizationID: descriptor.OrganizationID,
+	// }, descriptor.Name, tm_repo.ToolTypeFunction)
+	// if logErr != nil {
+	// 	logger.ErrorContext(ctx,
+	// 		"failed to prepare resource call log entry",
+	// 		attr.SlogError(logErr),
+	// 		attr.SlogToolName(descriptor.Name),
+	// 		attr.SlogToolURN(descriptor.URN.String()),
+	// 	)
+	// }
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
 	userConfig, err := resolveUserConfiguration(ctx, logger, env, payload, nil)
@@ -151,6 +151,7 @@ func handleResourcesRead(
 		return nil, err
 	}
 
+	logAttrs := tm.HTTPLogAttributes{}
 	defer func() {
 		// for billing purposes we still treat fetching a resource as a type of tool call right now
 		go billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
@@ -175,16 +176,30 @@ func handleResourcesRead(
 			FunctionExecutionTime: functionsExecutionTime,
 		})
 
-		toolCallLogger.RecordStatusCode(rw.statusCode)
-		toolCallLogger.RecordRequestBodyBytes(requestBytes)
-		toolCallLogger.RecordResponseBodyBytes(outputBytes)
-		toolCallLogger.Emit(context.WithoutCancel(ctx), logger)
+		logAttrs.RecordStatusCode(rw.statusCode)
+		logAttrs.RecordRequestBody(requestBytes)
+		logAttrs.RecordResponseBody(outputBytes)
+
+		params := tm.LogParams{
+			Timestamp: time.Now(),
+			ToolInfo: tm.ToolInfo{
+				ID:             descriptor.ID,
+				URN:            descriptor.URN.String(),
+				Name:           descriptor.Name,
+				ProjectID:      descriptor.ProjectID,
+				DeploymentID:   descriptor.DeploymentID,
+				OrganizationID: descriptor.OrganizationID,
+				FunctionID:     nil,
+			},
+			Attributes: logAttrs,
+		}
+		telemSvc.CreateLog(context.WithoutCancel(ctx), params)
 	}()
 
 	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), gateway.ToolCallEnv{
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,
-	}, plan, toolCallLogger)
+	}, plan, logAttrs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").Log(ctx, logger)
 	}

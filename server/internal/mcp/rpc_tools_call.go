@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -33,7 +34,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
-	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	temporal_client "go.temporal.io/sdk/client"
 )
@@ -61,7 +61,7 @@ func handleToolsCall(
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
-	tcm tm.ToolMetricsProvider,
+	telemSvc *tm.Service,
 	featuresClient *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporal temporal_client.Client,
@@ -159,34 +159,6 @@ func handleToolsCall(
 	}
 
 	descriptor := plan.Descriptor
-	var toolType tm_repo.ToolType
-	switch plan.Kind {
-	case gateway.ToolKindHTTP:
-		toolType = tm_repo.ToolTypeHTTP
-	case gateway.ToolKindFunction:
-		toolType = tm_repo.ToolTypeFunction
-	case gateway.ToolKindPrompt:
-		toolType = tm_repo.ToolTypePrompt
-	case gateway.ToolKindExternalMCP:
-		toolType = tm_repo.ToolTypeExternalMCP
-	}
-
-	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, tcm, featuresClient, descriptor.OrganizationID, tm.ToolInfo{
-		ID:             descriptor.ID,
-		Urn:            descriptor.URN.String(),
-		Name:           descriptor.Name,
-		ProjectID:      descriptor.ProjectID,
-		DeploymentID:   descriptor.DeploymentID,
-		OrganizationID: descriptor.OrganizationID,
-	}, descriptor.Name, toolType)
-	if logErr != nil {
-		logger.ErrorContext(ctx,
-			"failed to prepare tool call log entry",
-			attr.SlogError(logErr),
-			attr.SlogToolName(descriptor.Name),
-			attr.SlogToolURN(descriptor.URN.String()),
-		)
-	}
 
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
@@ -208,6 +180,7 @@ func handleToolsCall(
 		return nil, err
 	}
 
+	logAttrs := tm.HTTPLogAttributes{}
 	defer func() {
 		go billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
 			OrganizationID:        toolset.OrganizationID,
@@ -231,14 +204,27 @@ func handleToolsCall(
 			FunctionExecutionTime: functionsExecutionTime,
 		})
 
-		toolCallLogger.RecordStatusCode(rw.statusCode)
-		toolCallLogger.RecordRequestBodyBytes(requestBytes)
-		toolCallLogger.RecordResponseBodyBytes(outputBytes)
-		toolCallLogger.Emit(context.WithoutCancel(ctx), logger)
+		logAttrs.RecordStatusCode(rw.statusCode)
+		logAttrs.RecordRequestBody(requestBytes)
+		logAttrs.RecordResponseBody(outputBytes)
+		params := tm.LogParams{
+			Timestamp: time.Now(),
+			ToolInfo: tm.ToolInfo{
+				ID:             descriptor.ID,
+				URN:            descriptor.URN.String(),
+				Name:           descriptor.Name,
+				ProjectID:      descriptor.ProjectID,
+				DeploymentID:   descriptor.DeploymentID,
+				OrganizationID: descriptor.OrganizationID,
+				FunctionID:     nil,
+			},
+			Attributes: logAttrs,
+		}
+		telemSvc.CreateLog(ctx, params)
 	}()
 
 	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), gateway.ToolCallEnv{
-		UserConfig: userConfig, SystemEnv: systemConfig}, plan, toolCallLogger)
+		UserConfig: userConfig, SystemEnv: systemConfig}, plan, logAttrs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
 	}

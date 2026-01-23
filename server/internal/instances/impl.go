@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 
@@ -45,7 +46,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
@@ -65,7 +65,7 @@ type Service struct {
 	tracking          billing.Tracker
 	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
 	featuresClient    *productfeatures.Client
-	tcm               tm.ToolMetricsProvider
+	telemService      *tm.Service
 	customDomainsRepo *customdomainsRepo.Queries
 	serverURL         *url.URL
 }
@@ -86,7 +86,7 @@ func NewService(
 	guardianPolicy *guardian.Policy,
 	funcCaller functions.ToolCaller,
 	tracking billing.Tracker,
-	tcm tm.ToolMetricsProvider,
+	telemService *tm.Service,
 	featClient *productfeatures.Client,
 	serverURL *url.URL,
 ) *Service {
@@ -115,7 +115,7 @@ func NewService(
 			funcCaller,
 		),
 		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
-		tcm:               tcm,
+		telemService:      telemService,
 		featuresClient:    featClient,
 		customDomainsRepo: customdomainsRepo.New(db),
 		serverURL:         serverURL,
@@ -289,34 +289,19 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	}
 
 	descriptor := plan.Descriptor
-	var toolType tm_repo.ToolType
-	switch plan.Kind {
-	case gateway.ToolKindHTTP:
-		toolType = tm_repo.ToolTypeHTTP
-	case gateway.ToolKindFunction:
-		toolType = tm_repo.ToolTypeFunction
-	case gateway.ToolKindPrompt:
-		toolType = tm_repo.ToolTypePrompt
-	case gateway.ToolKindExternalMCP:
-		return fmt.Errorf("execute external mcp tool from instance: %s", toolURN.String())
-	}
+	// var toolType tm_repo.ToolType
+	// switch plan.Kind {
+	// case gateway.ToolKindHTTP:
+	// 	toolType = tm_repo.ToolTypeHTTP
+	// case gateway.ToolKindFunction:
+	// 	toolType = tm_repo.ToolTypeFunction
+	// case gateway.ToolKindPrompt:
+	// 	toolType = tm_repo.ToolTypePrompt
+	// case gateway.ToolKindExternalMCP:
+	// 	return fmt.Errorf("execute external mcp tool from instance: %s", toolURN.String())
+	// }
 
-	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, s.tcm, s.featuresClient, descriptor.OrganizationID, tm.ToolInfo{
-		ID:             descriptor.ID,
-		Urn:            descriptor.URN.String(),
-		Name:           descriptor.Name,
-		ProjectID:      descriptor.ProjectID,
-		DeploymentID:   descriptor.DeploymentID,
-		OrganizationID: descriptor.OrganizationID,
-	}, descriptor.Name, toolType)
-	if logErr != nil {
-		logger.ErrorContext(ctx,
-			"failed to prepare tool call log entry",
-			attr.SlogError(logErr),
-			attr.SlogToolName(descriptor.Name),
-			attr.SlogToolURN(descriptor.URN.String()),
-		)
-	}
+	attrRecorder := tm.HTTPLogAttributes{}
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
 	var toolset *types.Toolset
@@ -354,7 +339,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	err = s.toolProxy.Do(ctx, interceptor, requestBody, gateway.ToolCallEnv{
 		SystemEnv:  systemConfig,
 		UserConfig: ciEnv,
-	}, plan, toolCallLogger)
+	}, plan, attrRecorder)
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)
 	}
@@ -438,10 +423,24 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			FunctionExecutionTime: functionsExecutionTime,
 		})
 
-		toolCallLogger.RecordStatusCode(interceptor.statusCode)
-		toolCallLogger.RecordRequestBodyBytes(requestNumBytes)
-		toolCallLogger.RecordResponseBodyBytes(outputNumBytes)
-		toolCallLogger.Emit(context.WithoutCancel(ctx), logger)
+		attrRecorder.RecordStatusCode(interceptor.statusCode)
+		attrRecorder.RecordRequestBody(requestNumBytes)
+		attrRecorder.RecordResponseBody(outputNumBytes)
+
+		logParams := tm.LogParams{
+			Timestamp: time.Now(),
+			ToolInfo: tm.ToolInfo{
+				ID:             descriptor.ID,
+				URN:            descriptor.URN.String(),
+				Name:           descriptor.Name,
+				ProjectID:      descriptor.ProjectID,
+				DeploymentID:   descriptor.DeploymentID,
+				OrganizationID: descriptor.OrganizationID,
+				FunctionID: nil,
+			},
+			Attributes: attrRecorder,
+		}
+		s.telemService.CreateLog(ctx, logParams)
 	}()
 
 	return nil

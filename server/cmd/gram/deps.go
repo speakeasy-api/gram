@@ -46,9 +46,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
-	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
@@ -67,9 +64,7 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 	return cfgLoader(c)
 }
 
-func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context, tracerProvider trace.TracerProvider, featureClient *productfeatures.Client) (tm.ToolMetricsProvider, func(context.Context) error, error) {
-	nilFunc := func(context.Context) error { return nil }
-
+func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, error) {
 	host := c.String("clickhouse-host")
 	database := c.String("clickhouse-database")
 	username := c.String("clickhouse-username")
@@ -86,7 +81,7 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 		"clickhouse native port must be set", nativePort != "",
 	)
 	if err != nil {
-		return nil, nilFunc, fmt.Errorf("invalid clickhouse config: %w", err)
+		return nil, fmt.Errorf("invalid clickhouse config: %w", err)
 	}
 
 	opts := &clickhouse.Options{
@@ -108,7 +103,7 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 
 	conn, err := clickhouse.Open(opts)
 	if err != nil {
-		return nil, nilFunc, fmt.Errorf("failed to open clickhouse connection: %w", err)
+		return nil, fmt.Errorf("failed to open clickhouse connection: %w", err)
 	}
 
 	// Retry ping with exponential backoff
@@ -143,20 +138,10 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 	}
 
 	if pingErr != nil {
-		return nil, nilFunc, fmt.Errorf("failed to ping clickhouse after %d attempts: %w", maxRetries+1, pingErr)
+		return nil, fmt.Errorf("failed to ping clickhouse after %d attempts: %w", maxRetries+1, pingErr)
 	}
 
-	cc := tm_repo.New(conn)
-
-	shutdown := func(ctx context.Context) error {
-		if err := conn.Close(); err != nil {
-			logger.ErrorContext(ctx, "failed to close tool metrics client connection", attr.SlogError(err))
-			return fmt.Errorf("close tool metrics client: %w", err)
-		}
-		return nil
-	}
-
-	return cc, shutdown, nil
+	return conn, nil
 }
 
 type dbClientOptions struct {

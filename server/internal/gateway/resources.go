@@ -25,7 +25,7 @@ func (tp *ToolProxy) ReadResource(
 	requestBody io.Reader,
 	env ToolCallEnv,
 	plan *ResourceCallPlan,
-	toolCallLogger tm.ToolCallLogger,
+	attrRecorder tm.HTTPLogAttributes,
 ) (err error) {
 	ctx, span := tp.tracer.Start(ctx, "gateway.readResource", trace.WithAttributes(
 		attr.ResourceName(plan.Descriptor.Name),
@@ -53,7 +53,7 @@ func (tp *ToolProxy) ReadResource(
 	case "":
 		return oops.E(oops.CodeInvariantViolation, nil, "resource kind is not set").Log(ctx, tp.logger)
 	case ResourceKindFunction:
-		return tp.doFunctionResource(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Function, toolCallLogger)
+		return tp.doFunctionResource(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Function, attrRecorder)
 	default:
 		return fmt.Errorf("resource type not supported: %s", plan.Kind)
 	}
@@ -67,7 +67,7 @@ func (tp *ToolProxy) doFunctionResource(
 	env ToolCallEnv,
 	descriptor *ResourceDescriptor,
 	plan *ResourceFunctionCallPlan,
-	toolCallLogger tm.ToolCallLogger,
+	attrs tm.HTTPLogAttributes,
 ) error {
 	span := trace.SpanFromContext(ctx)
 	invocationID, err := uuid.NewV7()
@@ -161,7 +161,7 @@ func (tp *ToolProxy) doFunctionResource(
 		FilterConfig:              DisableResponseFiltering,
 		Policy:                    tp.policy,
 		ResponseStatusCodeCapture: &responseStatusCode,
-		ToolCallLogger:            toolCallLogger,
+		Attributes:                attrs,
 		VerifyResponse: func(resp *http.Response) error {
 			if resp.Header.Get("Gram-Invoke-ID") != invocationID.String() {
 				return fmt.Errorf("failed to verify function invocation ID")
