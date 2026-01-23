@@ -3,11 +3,13 @@ import { CodeBlock } from "@/components/code";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { ConfigForm } from "@/components/mcp_install_page/config_form";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
+import { ToolList } from "@/components/tool-list";
 import { BigToggle } from "@/components/ui/big-toggle";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Link } from "@/components/ui/link";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TextArea } from "@/components/ui/textarea";
 import {
@@ -21,14 +23,15 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools, useToolset } from "@/hooks/toolTypes";
 import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
-import { isHttpTool, Toolset } from "@/lib/toolTypes";
+import { isHttpTool, Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { ToolsetEntry } from "@gram/client/models/components";
+import { Confirm, ToolsetEntry } from "@gram/client/models/components";
 import {
   invalidateAllGetPeriodUsage,
   invalidateAllToolset,
-  invalidateGetMcpMetadata,
+invalidateGetMcpMetadata,
+  invalidateTemplate,
   useAddExternalOAuthServerMutation,
   useAddOAuthProxyServerMutation,
 useGetDomain,
@@ -39,15 +42,16 @@ useGetDomain,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
-import { Badge, Button, Grid, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Button, Grid, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, CheckCircleIcon, Globe, LockIcon, Pencil, Trash2, X, XCircleIcon } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import { onboardingStepStorageKeys } from "../home/Home";
-import { ToolsetCard } from "../toolsets/ToolsetCard";
+import { AddToolsDialog } from "../toolsets/AddToolsDialog";
+import { ToolsetEmptyState } from "../toolsets/ToolsetEmptyState";
 import { MCPHeroIllustration } from "@/components/sources/SourceCardIllustrations";
 import { Page } from "@/components/page-layout";
 
@@ -435,9 +439,130 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
 }
 
 /**
- * Tools Tab - Coming soon placeholder
+ * Tools Tab - Manage tools in the MCP server
  */
 function MCPToolsTab({ toolset }: { toolset: Toolset }) {
+  const queryClient = useQueryClient();
+  const telemetry = useTelemetry();
+  const client = useSdkClient();
+  const routes = useRoutes();
+  const { data: fullToolset, refetch } = useToolset(toolset.slug);
+
+  const [addToolsDialogOpen, setAddToolsDialogOpen] = useState(false);
+
+  const tools = fullToolset?.tools ?? [];
+
+  const updateToolsetMutation = useUpdateToolsetMutation({
+    onSuccess: () => {
+      telemetry.capture("toolset_event", { action: "toolset_updated" });
+      refetch();
+      invalidateAllToolset(queryClient);
+    },
+    onError: (error) => {
+      telemetry.capture("toolset_event", {
+        action: "toolset_update_failed",
+        error: error.message,
+      });
+    },
+  });
+
+  const handleToolUpdate = async (
+    tool: Tool,
+    updates: { name?: string; description?: string },
+  ) => {
+    if (tool.type === "prompt") {
+      await client.templates.update({
+        updatePromptTemplateForm: {
+          ...tool,
+          ...updates,
+        },
+      });
+      invalidateTemplate(queryClient, [{ name: tool.name }]);
+    } else {
+      await client.variations.upsertGlobal({
+        upsertGlobalToolVariationForm: {
+          ...tool.variation,
+          confirm: tool.variation?.confirm as Confirm,
+          ...updates,
+          srcToolName: tool.canonicalName,
+          srcToolUrn: tool.toolUrn,
+        },
+      });
+    }
+
+    telemetry.capture("toolset_event", {
+      action: "tool_variation_updated",
+      tool_name: tool.name,
+      overridden_fields: Object.keys(updates).join(", "),
+    });
+
+    refetch();
+  };
+
+  const handleToolsRemove = useCallback(
+    (removedUrns: string[]) => {
+      const currentUrns = fullToolset?.toolUrns || [];
+      const updatedUrns = currentUrns.filter(
+        (urn) => !removedUrns.includes(urn),
+      );
+
+      updateToolsetMutation.mutate(
+        {
+          request: {
+            slug: toolset.slug,
+            updateToolsetRequestBody: {
+              toolUrns: updatedUrns,
+            },
+          },
+        },
+        {
+          onSuccess: () => {
+            telemetry.capture("toolset_event", {
+              action: "tools_removed",
+              count: removedUrns.length,
+            });
+            toast.success(
+              `Removed ${removedUrns.length} tool${removedUrns.length !== 1 ? "s" : ""}`,
+            );
+          },
+        },
+      );
+    },
+    [fullToolset?.toolUrns, toolset.slug],
+  );
+
+  const handleTestInPlayground = useCallback(() => {
+    routes.playground.goTo(toolset.slug);
+  }, [toolset.slug]);
+
+  // Group filtering
+  const grouped = useGroupedTools(tools);
+  const [selectedGroups, setSelectedGroups] = useState<string[]>(
+    grouped.map((group) => group.key),
+  );
+
+  // Update selected groups when grouped changes
+  useEffect(() => {
+    setSelectedGroups(grouped.map((group) => group.key));
+  }, [grouped.length]);
+
+  const groupFilterItems = grouped.map((group) => ({
+    label: group.key,
+    value: group.key,
+  }));
+
+  // Filter tools based on selected groups
+  const groupedToolNames = new Set(
+    grouped
+      .filter((group) => selectedGroups.includes(group.key))
+      .flatMap((group) => group.tools.map((t) => t.name)),
+  );
+
+  let toolsToDisplay = tools.filter((tool) => groupedToolNames.has(tool.name));
+  if (toolsToDisplay.length === 0) {
+    toolsToDisplay = tools;
+  }
+
   return (
     <Stack
       className={cn(
@@ -445,11 +570,70 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
         !toolset.mcpEnabled && "blur-[2px] pointer-events-none",
       )}
     >
-      <div className="flex items-center justify-center h-64 border rounded-lg bg-muted/20">
-        <Stack align="center" gap={2}>
-          <Type muted>Tools management coming soon</Type>
-        </Stack>
-      </div>
+      {/* Header with Add Tools button */}
+      <Stack direction="horizontal" justify="space-between" align="center" className="mb-4">
+        <Heading variant="h3">Tools</Heading>
+        <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
+          <Button.LeftIcon>
+            <Icon name="plus" className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Add Tools</Button.Text>
+        </Button>
+      </Stack>
+
+      {/* Group filter */}
+      {groupFilterItems.length > 1 && (
+        <MultiSelect
+          options={groupFilterItems}
+          defaultValue={groupFilterItems.map((group) => group.value)}
+          onValueChange={setSelectedGroups}
+          placeholder="Filter tools"
+          className="w-fit mb-4 capitalize"
+        />
+      )}
+
+      {/* Tools list or empty state */}
+      {toolsToDisplay.length > 0 ? (
+        <ToolList
+          tools={toolsToDisplay}
+          toolset={fullToolset}
+          onToolUpdate={handleToolUpdate}
+          onToolsRemove={handleToolsRemove}
+          onTestInPlayground={handleTestInPlayground}
+        />
+      ) : (
+        <ToolsetEmptyState
+          toolsetSlug={toolset.slug}
+          onAddTools={() => setAddToolsDialogOpen(true)}
+        />
+      )}
+
+      {/* Add Tools Dialog */}
+      {fullToolset && (
+        <AddToolsDialog
+          open={addToolsDialogOpen}
+          onOpenChange={setAddToolsDialogOpen}
+          toolset={fullToolset}
+          onAddTools={async (toolUrns) => {
+            const currentUrns = fullToolset.toolUrns || [];
+            const newUrns = [...new Set([...currentUrns, ...toolUrns])];
+
+            await client.toolsets.updateBySlug({
+              slug: toolset.slug,
+              updateToolsetRequestBody: {
+                toolUrns: newUrns,
+              },
+            });
+
+            toast.success(
+              `Added ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""} to ${toolset.name}`,
+            );
+
+            await refetch();
+            invalidateAllToolset(queryClient);
+          }}
+        />
+      )}
     </Stack>
   );
 }
