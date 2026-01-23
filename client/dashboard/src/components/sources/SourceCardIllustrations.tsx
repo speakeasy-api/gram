@@ -242,7 +242,7 @@ export function MCPIllustration({
       <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <pattern id={`dots-${toolsetSlug}`} x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
-            <circle cx="8" cy="8" r="1.2" fill={colors.accent} opacity="0.2" />
+            <circle cx="8" cy="8" r="1.2" fill={colors.accent} opacity="0.1" />
           </pattern>
         </defs>
         <rect width="100%" height="100%" fill={`url(#dots-${toolsetSlug})`} />
@@ -389,7 +389,7 @@ export function MCPHeroIllustration({
       <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <pattern id={`hero-dots-${toolsetSlug}`} x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
-            <circle cx="8" cy="8" r="1.2" fill={colors.accent} opacity="0.28" />
+            <circle cx="8" cy="8" r="1.2" fill={colors.accent} opacity="0.18" />
           </pattern>
         </defs>
         <rect width="100%" height="100%" fill={`url(#hero-dots-${toolsetSlug})`} />
