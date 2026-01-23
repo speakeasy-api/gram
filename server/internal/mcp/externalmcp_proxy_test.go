@@ -352,6 +352,7 @@ func setupToolsetWithExternalMCP(
 	toolDef, err := externalmcpRepo.CreateExternalMCPToolDefinition(ctx, externalmcp_repo.CreateExternalMCPToolDefinitionParams{
 		ExternalMcpAttachmentID:    attachment.ID,
 		ToolUrn:                    toolURN,
+		Type:                       "proxy",
 		RemoteUrl:                  mockServerURL,
 		TransportType:              transportType,
 		RequiresOauth:              false,

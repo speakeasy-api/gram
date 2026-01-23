@@ -45,7 +45,7 @@ func GetToolURN(tool types.Tool) (*urn.Tool, error) {
 }
 
 func IsProxyTool(tool *types.Tool) bool {
-	return tool != nil && tool.ExternalMcpToolDefinition != nil && tool.ExternalMcpToolDefinition.Name == "proxy"
+	return tool != nil && tool.ExternalMcpToolDefinition != nil && tool.ExternalMcpToolDefinition.Type != nil && *tool.ExternalMcpToolDefinition.Type == "proxy"
 }
 
 func ToBaseTool(tool *types.Tool) (types.BaseToolAttributes, error) {
