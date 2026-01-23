@@ -10,13 +10,8 @@ import {
 } from "@/components/ui/sidebar";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { onboardingStepStorageKeys } from "@/pages/home/Home";
 import { AppRoute, useRoutes } from "@/routes";
-import {
-  useGetPeriodUsage,
-  useLatestDeployment,
-  useListToolsets,
-} from "@gram/client/react-query";
+import { useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Stack } from "@speakeasy-api/moonshine";
 import {
   AlertTriangleIcon,
@@ -25,8 +20,7 @@ import {
   TestTube2Icon,
 } from "lucide-react";
 import * as React from "react";
-import { useMemo, useState } from "react";
-import { Link } from "react-router";
+import { useState } from "react";
 import { FeatureRequestModal } from "./FeatureRequestModal";
 import { Button } from "./ui/button";
 import { Type } from "./ui/type";
@@ -81,7 +75,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         ))}
       </SidebarContent>
       <SidebarFooter>
-        <GettingStartedWidget />
         <FreeTierExceededNotification />
       </SidebarFooter>
       <FeatureRequestModal
@@ -104,98 +97,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     </Sidebar>
   );
 }
-
-const GettingStartedWidget = () => {
-  const routes = useRoutes();
-  const { data: deploymentResult, isLoading: isDeploymentLoading } =
-    useLatestDeployment();
-  const { data: toolsetsResult, isLoading: isToolsetsLoading } =
-    useListToolsets();
-  const deployment = deploymentResult?.deployment;
-
-  const hasSource = useMemo(() => {
-    if (!deployment) return false;
-    return (
-      deployment.openapiv3Assets.length > 0 ||
-      (deployment.functionsAssets?.length ?? 0) > 0 ||
-      (deployment.externalMcps?.length ?? 0) > 0
-    );
-  }, [deployment]);
-
-  const hasMcpPublic = useMemo(() => {
-    if (!toolsetsResult?.toolsets) return false;
-    return toolsetsResult.toolsets.some((t) => t.mcpIsPublic);
-  }, [toolsetsResult]);
-
-  const hasDeployedChatFlag =
-    typeof window !== "undefined" &&
-    localStorage.getItem(onboardingStepStorageKeys.configure) === "true";
-  const hasDeployedChat = hasSource && hasMcpPublic && hasDeployedChatFlag;
-
-  const completedSteps = [hasSource, hasMcpPublic, hasDeployedChat].filter(
-    Boolean,
-  ).length;
-  const isSetupComplete = completedSteps === 3;
-
-  // Don't show while loading or if setup is complete
-  if (isDeploymentLoading || isToolsetsLoading || isSetupComplete) {
-    return null;
-  }
-
-  // Determine next step link
-  const nextStepHref = !hasSource
-    ? routes.sources.href()
-    : !hasMcpPublic
-      ? routes.mcp.href()
-      : routes.elements.href();
-
-  return (
-    <Link to={nextStepHref} className="no-underline">
-      <div className="mx-2 mb-2 px-4 py-2.5 rounded-full bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-muted transition-colors flex items-center justify-between gap-3 shadow-sm">
-        <span className="text-sm font-medium">
-          Setup progress: {Math.round((completedSteps / 3) * 100)}%
-        </span>
-        <svg className="w-7 h-7 -rotate-90 shrink-0" viewBox="0 0 24 24">
-          <circle
-            cx="12"
-            cy="12"
-            r="10"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            className="text-muted"
-          />
-          <circle
-            cx="12"
-            cy="12"
-            r="10"
-            fill="none"
-            stroke="url(#sidebar-progress-gradient)"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeDasharray={2 * Math.PI * 10}
-            strokeDashoffset={
-              2 * Math.PI * 10 * (1 - Math.max(0.08, completedSteps / 3))
-            }
-            className="transition-all duration-300"
-          />
-          <defs>
-            <linearGradient
-              id="sidebar-progress-gradient"
-              x1="0%"
-              y1="0%"
-              x2="100%"
-              y2="0%"
-            >
-              <stop offset="0%" stopColor="hsl(var(--primary))" />
-              <stop offset="100%" stopColor="#f97316" />
-            </linearGradient>
-          </defs>
-        </svg>
-      </div>
-    </Link>
-  );
-};
 
 const FreeTierExceededNotification = () => {
   const session = useSession();
