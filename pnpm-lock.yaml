@@ -482,6 +482,9 @@ importers:
       vega:
         specifier: ^6.2.0
         version: 6.2.0
+      vega-interpreter:
+        specifier: ^1.0.5
+        version: 1.2.1
       vite-plugin-externalize-deps:
         specifier: ^0.10.0
         version: 0.10.0(vite@7.2.4(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))
@@ -7001,6 +7004,9 @@ packages:
   vega-hierarchy@5.1.0:
     resolution: {integrity: sha512-rZlU8QJNETlB6o73lGCPybZtw2fBBsRIRuFE77aCLFHdGsh6wIifhplVarqE9icBqjUHRRUOmcEYfzwVIPr65g==}
 
+  vega-interpreter@1.2.1:
+    resolution: {integrity: sha512-EMHLGxJ+SWfh1K/fHDRlHEZtLA/2ZNAXItYb5e8CxuAIm/Ha/3DHX/8VlvbTGIciUpuwmcKx4tVhJWlKreQ/Yw==}
+
   vega-label@2.1.0:
     resolution: {integrity: sha512-/hgf+zoA3FViDBehrQT42Lta3t8In6YwtMnwjYlh72zNn1p3c7E3YUBwqmAqTM1x+tudgzMRGLYig+bX1ewZxQ==}
 
@@ -7039,6 +7045,9 @@ packages:
 
   vega-typings@2.1.0:
     resolution: {integrity: sha512-zdis4Fg4gv37yEvTTSZEVMNhp8hwyEl7GZ4X4HHddRVRKxWFsbyKvZx/YW5Z9Ox4sjxVA2qHzEbod4Fdx+SEJA==}
+
+  vega-util@1.17.4:
+    resolution: {integrity: sha512-+y3ZW7dEqM8Ck+KRsd+jkMfxfE7MrQxUyIpNjkfhIpGEreym+aTn7XUw1DKXqclr8mqTQvbilPo16B3lnBr0wA==}
 
   vega-util@2.1.0:
     resolution: {integrity: sha512-PGfp0m0QCufDmcxKJCWQy4Ov23FoF8DSXmoJwSezi3itQaa2hbxK0+xwsTMP2vy4PR16Pu25HMzgMwXVW1+33w==}
@@ -14568,6 +14577,10 @@ snapshots:
       vega-dataflow: 6.1.0
       vega-util: 2.1.0
 
+  vega-interpreter@1.2.1:
+    dependencies:
+      vega-util: 1.17.4
+
   vega-label@2.1.0:
     dependencies:
       vega-canvas: 2.0.0
@@ -14656,6 +14669,8 @@ snapshots:
       vega-event-selector: 4.0.0
       vega-expression: 6.1.0
       vega-util: 2.1.0
+
+  vega-util@1.17.4: {}
 
   vega-util@2.1.0: {}
 

@@ -23,18 +23,10 @@ const (
 
 // ToolMetricsProvider defines the interface for tool metrics operations.
 type ToolMetricsProvider interface {
-	// List tool call logs
-	ListHTTPRequests(ctx context.Context, opts repo.ListToolLogsOptions) (*repo.ListResult, error)
-	// List structured tool logs
-	ListToolLogs(ctx context.Context, params repo.ListToolLogsParams) (*repo.ToolLogsListResult, error)
 	// List unified telemetry logs (new OTel-based table)
 	ListTelemetryLogs(ctx context.Context, params repo.ListTelemetryLogsParams) ([]repo.TelemetryLog, error)
 	// List trace summaries for distributed tracing
 	ListTraces(ctx context.Context, params repo.ListTracesParams) ([]repo.TraceSummary, error)
-	// List all logs for a specific trace ID
-	ListLogsForTrace(ctx context.Context, params repo.ListLogsForTraceParams) ([]repo.TelemetryLog, error)
-	// Log tool call request/response
-	LogHTTPRequest(context.Context, repo.ToolHTTPRequest) error
 	// Insert telemetry log
 	InsertTelemetryLog(ctx context.Context, params repo.InsertTelemetryLogParams) error
 }
@@ -116,7 +108,6 @@ func (l *toolCallLogger) Emit(ctx context.Context, logger *slog.Logger) {
 	if l.provider == nil || l.entry == nil || l.entry.ID == "" {
 		return
 	}
-	EmitHTTPRequestLog(ctx, logger, l.provider, l.toolName, *l.entry)
 
 	params := toolReqToTelemetryLog(*l.entry)
 	createTelemetryLog(ctx, logger, l.provider, params)
@@ -276,44 +267,6 @@ func newToolLog(ctx context.Context, tool ToolInfo, toolType repo.ToolType) (*re
 		ResponseHeaders:   map[string]string{},
 		ResponseBodyBytes: 0,
 	}, nil
-}
-
-// EmitHTTPRequestLog logs the provided HTTP request using the tool metrics provider.
-// Errors are reported through the supplied logger. Logging happens asynchronously to
-// avoid blocking the caller and the request struct is copied to prevent data races.
-func EmitHTTPRequestLog(
-	ctx context.Context,
-	logger *slog.Logger,
-	provider ToolMetricsProvider,
-	toolName string,
-	request repo.ToolHTTPRequest,
-) {
-	if provider == nil || request.ID == "" {
-		return
-	}
-
-	go func() {
-		logCtx := context.WithoutCancel(ctx)
-
-		if err := provider.LogHTTPRequest(logCtx, request); err != nil {
-			logger.ErrorContext(logCtx,
-				"failed to log HTTP attempt to ClickHouse",
-				attr.SlogError(err),
-				attr.SlogToolURN(request.ToolURN),
-				attr.SlogToolName(toolName),
-				attr.SlogHTTPRequestMethod(request.HTTPMethod),
-			)
-			return
-		}
-
-		logger.DebugContext(logCtx,
-			"logged HTTP request to ClickHouse",
-			attr.SlogToolURN(request.ToolURN),
-			attr.SlogToolName(toolName),
-			attr.SlogHTTPRequestMethod(request.HTTPMethod),
-			attr.SlogHTTPResponseStatusCode(int(request.StatusCode)),
-		)
-	}()
 }
 
 // createTelemetryLog logs a telemetry entry using the tool metrics provider.

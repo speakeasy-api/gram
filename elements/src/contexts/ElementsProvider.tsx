@@ -7,6 +7,7 @@ import {
 import { useMCPTools } from '@/hooks/useMCPTools'
 import { useToolApproval } from '@/hooks/useToolApproval'
 import { getApiUrl } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { initErrorTracking, trackError } from '@/lib/errorTracking'
 import { MODELS } from '@/lib/models'
 import {
@@ -458,7 +459,16 @@ const ElementsProviderWithHistory = ({
     <AssistantRuntimeProvider runtime={runtime}>
       <HistoryProvider>
         <ElementsContext.Provider value={contextValue}>
-          <div className={`${ROOT_SELECTOR} h-full`}>{children}</div>
+          <div
+            className={cn(
+              ROOT_SELECTOR,
+              (contextValue?.config.variant === 'standalone' ||
+                contextValue?.config.variant === 'sidecar') &&
+                'h-full'
+            )}
+          >
+            {children}
+          </div>
           <FrontendTools tools={frontendTools} />
         </ElementsContext.Provider>
       </HistoryProvider>
@@ -493,7 +503,16 @@ const ElementsProviderWithoutHistory = ({
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ElementsContext.Provider value={contextValue}>
-        <div className={`${ROOT_SELECTOR} h-full`}>{children}</div>
+        <div
+          className={cn(
+            ROOT_SELECTOR,
+            (contextValue?.config.variant === 'standalone' ||
+              contextValue?.config.variant === 'sidecar') &&
+              'h-full'
+          )}
+        >
+          {children}
+        </div>
         <FrontendTools tools={frontendTools} />
       </ElementsContext.Provider>
     </AssistantRuntimeProvider>

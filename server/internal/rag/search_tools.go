@@ -29,7 +29,10 @@ const (
 	// If you would like to add another embedding model you must modify the table to handle and index embeddings of that dimension
 	defaultEmbeddingModel         = "openai/text-embedding-3-small"
 	defaultFindToolsResultSize    = 3
-	embeddingBatchSize            = 50
+	// OpenAI embedding limit: 300,000 tokens max per request, 8192 tokens per input
+	// Using ~4 bytes per token approximation: 300k tokens * 4 bytes = 1.2MB
+	// Use conservative 800KB to account for JSON overhead
+	embeddingMaxBatchBytes        = 800 * 1024 // 800KB
 	embeddingMaxConcurrentBatches = 5
 )
 
@@ -395,6 +398,11 @@ func (s *ToolsetVectorStore) insertToolEmbedding(
 	return nil
 }
 
+type embeddingBatch struct {
+	startIdx int
+	endIdx   int
+}
+
 func (s *ToolsetVectorStore) generateEmbeddings(ctx context.Context, orgID string, candidates []embeddingCandidate) ([][]float32, error) {
 	if len(candidates) == 0 {
 		return nil, nil
@@ -403,20 +411,21 @@ func (s *ToolsetVectorStore) generateEmbeddings(ctx context.Context, orgID strin
 	total := len(candidates)
 	results := make([][]float32, total)
 
-	batchCount := (total + embeddingBatchSize - 1) / embeddingBatchSize
-	workerCount := embeddingMaxConcurrentBatches
-	if workerCount > batchCount {
-		workerCount = batchCount
+	// Create batches based on byte size
+	batches := s.createBatchesBySize(candidates)
+	if len(batches) == 0 {
+		return results, nil
 	}
 
+	workerCount := min(embeddingMaxConcurrentBatches, len(batches))
 	if workerCount == 0 {
 		return results, nil
 	}
 
-	workChan := make(chan int, batchCount)
+	workChan := make(chan embeddingBatch, len(batches))
 
-	for i := 0; i < batchCount; i++ {
-		workChan <- i
+	for _, batch := range batches {
+		workChan <- batch
 	}
 	close(workChan)
 
@@ -431,24 +440,18 @@ func (s *ToolsetVectorStore) generateEmbeddings(ctx context.Context, orgID strin
 		})
 	}
 
-	for w := 0; w < workerCount; w++ {
+	for range workerCount {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for batchIdx := range workChan {
+			for batch := range workChan {
 				if firstErr != nil {
 					return
 				}
 
-				start := batchIdx * embeddingBatchSize
-				end := start + embeddingBatchSize
-				if end > total {
-					end = total
-				}
-
-				inputs := make([]string, end-start)
-				for i := start; i < end; i++ {
-					inputs[i-start] = candidates[i].content
+				inputs := make([]string, 0, batch.endIdx-batch.startIdx)
+				for i := batch.startIdx; i < batch.endIdx; i++ {
+					inputs = append(inputs, candidates[i].content)
 				}
 
 				vectors, err := s.chatClient.CreateEmbeddings(ctx, orgID, s.embeddingModel, inputs)
@@ -463,8 +466,8 @@ func (s *ToolsetVectorStore) generateEmbeddings(ctx context.Context, orgID strin
 
 				// Mutex prevents race condition from multiple goroutines writing to shared results slice
 				mu.Lock()
-				for i := start; i < end; i++ {
-					results[i] = vectors[i-start]
+				for i := batch.startIdx; i < batch.endIdx; i++ {
+					results[i] = vectors[i-batch.startIdx]
 				}
 				mu.Unlock()
 			}
@@ -484,6 +487,38 @@ func (s *ToolsetVectorStore) generateEmbeddings(ctx context.Context, orgID strin
 	}
 
 	return results, nil
+}
+
+func (s *ToolsetVectorStore) createBatchesBySize(candidates []embeddingCandidate) []embeddingBatch {
+	var batches []embeddingBatch
+	currentBatchStart := 0
+	currentBatchBytes := 0
+
+	for i, candidate := range candidates {
+		contentBytes := len(candidate.content)
+
+		// If adding this candidate would exceed the limit, finalize current batch
+		if currentBatchBytes > 0 && currentBatchBytes+contentBytes > embeddingMaxBatchBytes {
+			batches = append(batches, embeddingBatch{
+				startIdx: currentBatchStart,
+				endIdx:   i,
+			})
+			currentBatchStart = i
+			currentBatchBytes = 0
+		}
+
+		currentBatchBytes += contentBytes
+	}
+
+	// Add final batch if there are remaining candidates
+	if currentBatchStart < len(candidates) {
+		batches = append(batches, embeddingBatch{
+			startIdx: currentBatchStart,
+			endIdx:   len(candidates),
+		})
+	}
+
+	return batches
 }
 
 type toolListEntry struct {

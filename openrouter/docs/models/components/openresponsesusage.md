@@ -1,0 +1,17 @@
+# OpenResponsesUsage
+
+Token usage information for the response
+
+
+## Fields
+
+| Field                                                                            | Type                                                                             | Required                                                                         | Description                                                                      |
+| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `InputTokens`                                                                    | *float64*                                                                        | :heavy_check_mark:                                                               | N/A                                                                              |
+| `InputTokensDetails`                                                             | [components.InputTokensDetails](../../models/components/inputtokensdetails.md)   | :heavy_check_mark:                                                               | N/A                                                                              |
+| `OutputTokens`                                                                   | *float64*                                                                        | :heavy_check_mark:                                                               | N/A                                                                              |
+| `OutputTokensDetails`                                                            | [components.OutputTokensDetails](../../models/components/outputtokensdetails.md) | :heavy_check_mark:                                                               | N/A                                                                              |
+| `TotalTokens`                                                                    | *float64*                                                                        | :heavy_check_mark:                                                               | N/A                                                                              |
+| `Cost`                                                                           | **float64*                                                                       | :heavy_minus_sign:                                                               | Cost of the completion                                                           |
+| `IsByok`                                                                         | **bool*                                                                          | :heavy_minus_sign:                                                               | Whether a request was made using a Bring Your Own Key configuration              |
+| `CostDetails`                                                                    | [*components.CostDetails](../../models/components/costdetails.md)                | :heavy_minus_sign:                                                               | N/A                                                                              |

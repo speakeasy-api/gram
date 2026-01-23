@@ -215,11 +215,6 @@ run();
 * [revokeById](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 * [validate](docs/sdks/keys/README.md#validate) - verifyKey keys
 
-### [Logs](docs/sdks/logs/README.md)
-
-* [list](docs/sdks/logs/README.md#list) - listLogs logs
-* [listToolExecutionLogs](docs/sdks/logs/README.md#listtoolexecutionlogs) - listToolExecutionLogs logs
-
 ### [McpMetadata](docs/sdks/mcpmetadata/README.md)
 
 * [get](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
@@ -291,6 +286,7 @@ run();
 * [list](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 * [removeOAuthServer](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
 * [updateBySlug](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
+* [updateSecurityVariableDisplayName](docs/sdks/toolsets/README.md#updatesecurityvariabledisplayname) - updateSecurityVariableDisplayName toolsets
 
 ### [Usage](docs/sdks/usage/README.md)
 
@@ -379,8 +375,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`keysValidate`](docs/sdks/keys/README.md#validate) - verifyKey keys
-- [`logsList`](docs/sdks/logs/README.md#list) - listLogs logs
-- [`logsListToolExecutionLogs`](docs/sdks/logs/README.md#listtoolexecutionlogs) - listToolExecutionLogs logs
 - [`mcpMetadataGet`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 - [`mcpMetadataSet`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`mcpRegistriesListCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
@@ -422,6 +416,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`toolsetsList`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`toolsetsRemoveOAuthServer`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
 - [`toolsetsUpdateBySlug`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
+- [`toolsetsUpdateSecurityVariableDisplayName`](docs/sdks/toolsets/README.md#updatesecurityvariabledisplayname) - updateSecurityVariableDisplayName toolsets
 - [`toolsList`](docs/sdks/tools/README.md#list) - listTools tools
 - [`usageCreateCheckout`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`usageCreateCustomerSession`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
@@ -514,7 +509,6 @@ To learn about this feature and how to get started, check
 - [`useListPackages`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListResources`](docs/sdks/resources/README.md#list) - listResources resources
-- [`useListToolLogs`](docs/sdks/logs/README.md#list) - listLogs logs
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
@@ -545,10 +539,10 @@ To learn about this feature and how to get started, check
 - [`useTelemetryCaptureEventMutation`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates
 - [`useTemplates`](docs/sdks/templates/README.md#list) - listTemplates templates
-- [`useToolExecutionLogs`](docs/sdks/logs/README.md#listtoolexecutionlogs) - listToolExecutionLogs logs
 - [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages
+- [`useUpdateSecurityVariableDisplayNameMutation`](docs/sdks/toolsets/README.md#updatesecurityvariabledisplayname) - updateSecurityVariableDisplayName toolsets
 - [`useUpdateSlackConnectionMutation`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets

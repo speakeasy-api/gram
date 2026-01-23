@@ -7,15 +7,17 @@ import (
 var SecurityVariable = Type("SecurityVariable", func() {
 	Meta("struct:pkg:path", "types")
 
+	Attribute("id", String, "The unique identifier of the security variable")
 	Attribute("type", String, "The type of security")
-	Attribute("name", String, "The name of the security scheme")
+	Attribute("name", String, "The name of the security scheme (actual header/parameter name)")
+	Attribute("display_name", String, "User-friendly display name for the security variable (defaults to name if not set)")
 	Attribute("in_placement", String, "Where the security token is placed")
 	Attribute("scheme", String, "The security scheme")
 	Attribute("bearer_format", String, "The bearer format")
 	Attribute("oauth_types", ArrayOf(String), "The OAuth types")
 	Attribute("oauth_flows", Bytes, "The OAuth flows")
 	Attribute("env_variables", ArrayOf(String), "The environment variables")
-	Required("name", "in_placement", "scheme", "env_variables")
+	Required("id", "name", "in_placement", "scheme", "env_variables")
 })
 
 var ServerVariable = Type("ServerVariable", func() {

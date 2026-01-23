@@ -1,0 +1,11 @@
+# ListMemberAssignmentsResponseBody
+
+List of member assignments
+
+
+## Fields
+
+| Field                                                                                          | Type                                                                                           | Required                                                                                       | Description                                                                                    | Example                                                                                        |
+| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `Data`                                                                                         | [][operations.ListMemberAssignmentsData](../../models/operations/listmemberassignmentsdata.md) | :heavy_check_mark:                                                                             | List of member assignments                                                                     |                                                                                                |
+| `TotalCount`                                                                                   | *float64*                                                                                      | :heavy_check_mark:                                                                             | Total number of member assignments                                                             | 10                                                                                             |

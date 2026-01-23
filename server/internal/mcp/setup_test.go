@@ -111,7 +111,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	toolMetrics := tm_repo.New(logger, tracerProvider, chConn)
+	toolMetrics := tm_repo.New(chConn)
 
 	var temporalClient temporal_client.Client
 	temporalClient, devserver := infra.NewTemporalClient(t)
@@ -191,7 +191,7 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	toolMetrics := tm_repo.New(logger, tracerProvider, chConn)
+	toolMetrics := tm_repo.New(chConn)
 
 	var temporalClient temporal_client.Client
 	temporalClient, devserver := infra.NewTemporalClient(t)

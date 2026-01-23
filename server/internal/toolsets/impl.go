@@ -32,6 +32,7 @@ import (
 	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	mcpmetadataRepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -60,6 +61,7 @@ type Service struct {
 	domainsRepo     *domainsRepo.Queries
 	usageRepo       *usageRepo.Queries
 	oauthRepo       *oauthRepo.Queries
+	mcpmetadataRepo *mcpmetadataRepo.Queries
 	toolsetCache    cache.TypedCacheObject[mv.ToolsetBaseContents]
 }
 
@@ -79,6 +81,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		domainsRepo:     domainsRepo.New(db),
 		usageRepo:       usageRepo.New(db),
 		oauthRepo:       oauthRepo.New(db),
+		mcpmetadataRepo: mcpmetadataRepo.New(db),
 		toolsetCache:    cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
 	}
 }
@@ -969,4 +972,112 @@ func (s *Service) InvalidateCacheByTool(ctx context.Context, toolURN urn.Tool, p
 	}
 
 	return nil
+}
+
+// UpdateSecurityVariableDisplayName updates the display name of a security variable in MCP metadata
+func (s *Service) UpdateSecurityVariableDisplayName(ctx context.Context, payload *gen.UpdateSecurityVariableDisplayNamePayload) (*types.SecurityVariable, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+		attr.SlogToolsetSlug(string(payload.ToolsetSlug)),
+		attr.SlogSecurityScheme(payload.SecurityKey),
+	)
+
+	// Get the toolset to verify it exists and get its ID
+	toolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
+		Slug:      string(payload.ToolsetSlug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset").Log(ctx, logger)
+	}
+
+	// Update the header display name in MCP metadata
+	_, err = s.mcpmetadataRepo.UpdateHeaderDisplayName(ctx, mcpmetadataRepo.UpdateHeaderDisplayNameParams{
+		ToolsetID:   toolset.ID,
+		ProjectID:   *authCtx.ProjectID,
+		SecurityKey: payload.SecurityKey,
+		DisplayName: payload.DisplayName,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// MCP metadata doesn't exist yet - create it first, then retry
+		if _, err = s.mcpmetadataRepo.UpsertMetadata(ctx, mcpmetadataRepo.UpsertMetadataParams{
+			ToolsetID:                toolset.ID,
+			ProjectID:                *authCtx.ProjectID,
+			ExternalDocumentationUrl: pgtype.Text{String: "", Valid: false},
+			LogoID:                   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			Instructions:             pgtype.Text{String: "", Valid: false},
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to create MCP metadata").Log(ctx, logger)
+		}
+		if _, err = s.mcpmetadataRepo.UpdateHeaderDisplayName(ctx, mcpmetadataRepo.UpdateHeaderDisplayNameParams{
+			ToolsetID:   toolset.ID,
+			ProjectID:   *authCtx.ProjectID,
+			SecurityKey: payload.SecurityKey,
+			DisplayName: payload.DisplayName,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to update header display name").Log(ctx, logger)
+		}
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update header display name").Log(ctx, logger)
+	}
+
+	logger.InfoContext(ctx, "updated security variable display name",
+		attr.SlogName(payload.DisplayName))
+
+	// Invalidate toolset cache since security variables are cached
+	dr := deploymentsRepo.New(s.db)
+	deploymentID, deployErr := dr.GetActiveDeploymentID(ctx, *authCtx.ProjectID)
+	switch {
+	case errors.Is(deployErr, pgx.ErrNoRows):
+		// No active deployment - nothing to invalidate
+		logger.DebugContext(ctx, "no active deployment to invalidate cache for")
+	case deployErr != nil:
+		logger.WarnContext(ctx, "failed to get active deployment for cache invalidation",
+			attr.SlogError(deployErr))
+	default:
+		latestVersion, versionErr := s.repo.GetLatestToolsetVersion(ctx, toolset.ID)
+		if versionErr != nil {
+			logger.WarnContext(ctx, "failed to get latest toolset version for cache invalidation",
+				attr.SlogError(versionErr))
+			break
+		}
+		cacheKey := mv.ToolsetCacheKey(toolset.ID.String(), deploymentID.String(), latestVersion.Version)
+		if cacheErr := s.toolsetCache.DeleteByKey(ctx, cacheKey); cacheErr != nil {
+			logger.WarnContext(ctx, "failed to invalidate toolset cache",
+				attr.SlogError(cacheErr),
+				attr.SlogCacheKey(cacheKey))
+		} else {
+			logger.InfoContext(ctx, "invalidated toolset cache for display name update",
+				attr.SlogCacheKey(cacheKey))
+		}
+	}
+
+	// Return a SecurityVariable with the updated display name
+	// Note: We return a minimal response since the full security variable details
+	// come from http_security which is keyed by the security_key
+	displayName := payload.DisplayName
+	if displayName == "" {
+		displayName = payload.SecurityKey // Fall back to key if cleared
+	}
+	return &types.SecurityVariable{
+		ID:           payload.SecurityKey, // Use security key as ID for this response
+		Type:         nil,
+		Name:         payload.SecurityKey,
+		DisplayName:  &displayName,
+		InPlacement:  "header",
+		Scheme:       "",
+		BearerFormat: nil,
+		OauthTypes:   nil,
+		OauthFlows:   nil,
+		EnvVariables: []string{},
+	}, nil
 }

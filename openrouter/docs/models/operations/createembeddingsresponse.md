@@ -1,0 +1,10 @@
+# CreateEmbeddingsResponse
+
+
+## Fields
+
+| Field                                                                                               | Type                                                                                                | Required                                                                                            | Description                                                                                         |
+| --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `HTTPMeta`                                                                                          | [components.HTTPMetadata](../../models/components/httpmetadata.md)                                  | :heavy_check_mark:                                                                                  | N/A                                                                                                 |
+| `Object`                                                                                            | [*operations.CreateEmbeddingsResponseBody](../../models/operations/createembeddingsresponsebody.md) | :heavy_minus_sign:                                                                                  | Embedding response                                                                                  |
+| `Res`                                                                                               | **string*                                                                                           | :heavy_minus_sign:                                                                                  | Embedding response                                                                                  |

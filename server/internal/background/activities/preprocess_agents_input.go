@@ -8,8 +8,11 @@ import (
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/client"
 
+	or "github.com/speakeasy-api/gram/openrouter/models/components"
+	"github.com/speakeasy-api/gram/openrouter/optionalnullable"
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -29,7 +32,7 @@ type ToolMetadata struct {
 }
 
 type PreprocessAgentsInputOutput struct {
-	Messages     []openrouter.OpenAIChatMessage
+	Messages     []or.Message
 	ToolDefs     []openrouter.Tool
 	ToolMetadata map[string]ToolMetadata
 }
@@ -51,7 +54,7 @@ func NewPreprocessAgentsInput(logger *slog.Logger, agentsService *agents.Service
 func (a *PreprocessAgentsInput) Do(ctx context.Context, input PreprocessAgentsInputInput) (*PreprocessAgentsInputOutput, error) {
 	// If PreviousResponseID is provided, fetch its output and convert to messages
 	request := input.Request
-	var messages []openrouter.OpenAIChatMessage
+	var messages []or.Message
 	if request.PreviousResponseID != nil && *request.PreviousResponseID != "" {
 
 		workflowRun := a.temporalClient.GetWorkflow(ctx, *request.PreviousResponseID, "")
@@ -85,14 +88,11 @@ func (a *PreprocessAgentsInput) Do(ctx context.Context, input PreprocessAgentsIn
 
 	// Add system prompt if provided
 	if request.Instructions != nil {
-		messages = append([]openrouter.OpenAIChatMessage{
-			{
-				Role:       "system",
-				Content:    *request.Instructions,
-				ToolCalls:  nil,
-				ToolCallID: "",
-				Name:       "",
-			},
+		messages = append([]or.Message{
+			or.CreateMessageSystem(or.SystemMessage{
+				Content: or.CreateSystemMessageContentStr(*request.Instructions),
+				Name:    nil,
+			}),
 		}, messages...)
 	}
 
@@ -143,24 +143,19 @@ func (a *PreprocessAgentsInput) Do(ctx context.Context, input PreprocessAgentsIn
 
 // convertInputToMessages converts ResponseInput (any JSON value) directly to chat messages
 // TODO: Figure out some union like approach to do this in a cleaner way
-func convertInputToMessages(input agents.ResponseInput) ([]openrouter.OpenAIChatMessage, error) {
+func convertInputToMessages(input agents.ResponseInput) ([]or.Message, error) {
 	if input == nil {
-		return []openrouter.OpenAIChatMessage{}, nil
+		return []or.Message{}, nil
 	}
 
-	var messages []openrouter.OpenAIChatMessage
+	var messages []or.Message
 
 	switch requestInput := input.(type) {
 	case string:
-		// Single string input becomes a user message
-		messages = append(messages, openrouter.OpenAIChatMessage{
-			Role:       "user",
-			Content:    requestInput,
-			ToolCalls:  nil,
-			ToolCallID: "",
-			Name:       "",
-		})
-
+		messages = append(messages, or.CreateMessageUser(or.UserMessage{
+			Content: or.CreateUserMessageContentStr(requestInput),
+			Name:    nil,
+		}))
 	case []interface{}:
 		// Array of output items - can be agents.OutputMessage or agents.MCPToolCall
 
@@ -198,14 +193,44 @@ func convertInputToMessages(input agents.ResponseInput) ([]openrouter.OpenAIChat
 					}
 				}
 
-				messages = append(messages, openrouter.OpenAIChatMessage{
-					Role:       role,
-					Content:    textContent,
-					ToolCalls:  nil,
-					ToolCallID: "",
-					Name:       "",
-				})
-
+				var msg or.Message
+				switch or.MessageType(role) {
+				case or.MessageTypeSystem:
+					msg = or.CreateMessageSystem(or.SystemMessage{
+						Content: or.CreateSystemMessageContentStr(textContent),
+						Name:    nil,
+					})
+				case or.MessageTypeUser:
+					msg = or.CreateMessageUser(or.UserMessage{
+						Content: or.CreateUserMessageContentStr(textContent),
+						Name:    nil,
+					})
+				case or.MessageTypeDeveloper:
+					msg = or.CreateMessageDeveloper(or.MessageDeveloper{
+						Content: or.CreateMessageContentStr(textContent),
+						Name:    nil,
+					})
+				case or.MessageTypeAssistant:
+					msg = or.CreateMessageAssistant(or.AssistantMessage{
+						Content: optionalnullable.From(
+							conv.Ptr(or.CreateAssistantMessageContentStr(textContent)),
+						),
+						Name:             nil,
+						ToolCalls:        nil,
+						Refusal:          nil,
+						Reasoning:        nil,
+						ReasoningDetails: nil,
+						Images:           nil,
+					})
+				case or.MessageTypeTool:
+					msg = or.CreateMessageTool(or.ToolResponseMessage{
+						Content:    or.CreateToolResponseMessageContentStr(textContent),
+						ToolCallID: "",
+					})
+				default:
+					return nil, fmt.Errorf("unknown message role: %s", role)
+				}
+				messages = append(messages, msg)
 			case "mcp_call":
 				// agents.MCPToolCall - convert to assistant message with tool_calls + tool response
 				id, _ := itemMap["id"].(string)
@@ -214,55 +239,52 @@ func convertInputToMessages(input agents.ResponseInput) ([]openrouter.OpenAIChat
 				output, _ := itemMap["output"].(string)
 
 				// Add assistant message with tool_calls
-				messages = append(messages, openrouter.OpenAIChatMessage{
-					Role:       "assistant",
-					Content:    "",
-					ToolCallID: "",
-					Name:       "",
-					ToolCalls: []openrouter.ToolCall{
+				messages = append(messages, or.CreateMessageAssistant(or.AssistantMessage{
+					Content: nil,
+					Name:    nil,
+					ToolCalls: []or.ChatMessageToolCall{
 						{
-							Index: 0,
-							ID:    id,
-							Type:  "function",
-							Function: openrouter.ToolCallFunction{
+							ID: id,
+							Function: or.ChatMessageToolCallFunction{
 								Name:      name,
 								Arguments: arguments,
 							},
 						},
 					},
-				})
+					Refusal:          nil,
+					Reasoning:        nil,
+					ReasoningDetails: nil,
+					Images:           nil,
+				}))
 
 				// Add tool response message
-				messages = append(messages, openrouter.OpenAIChatMessage{
-					Role:       "tool",
-					Content:    output,
-					Name:       name,
+				messages = append(messages, or.CreateMessageTool(or.ToolResponseMessage{
+					Content:    or.CreateToolResponseMessageContentStr(output),
 					ToolCallID: id,
-					ToolCalls:  nil,
-				})
-
+				}))
 			case "function_call":
 				// function_call - convert to assistant message with tool_calls
 				toolCallID, _ := itemMap["call_id"].(string)
 				name, _ := itemMap["name"].(string)
 				arguments, _ := itemMap["arguments"].(string)
-				messages = append(messages, openrouter.OpenAIChatMessage{
-					Role:       "assistant",
-					Content:    "",
-					ToolCallID: "",
-					Name:       "",
-					ToolCalls: []openrouter.ToolCall{
+
+				messages = append(messages, or.CreateMessageAssistant(or.AssistantMessage{
+					Content: nil,
+					Name:    nil,
+					ToolCalls: []or.ChatMessageToolCall{
 						{
-							Index: 0,
-							ID:    toolCallID,
-							Type:  "function",
-							Function: openrouter.ToolCallFunction{
+							ID: toolCallID,
+							Function: or.ChatMessageToolCallFunction{
 								Name:      name,
 								Arguments: arguments,
 							},
 						},
 					},
-				})
+					Refusal:          nil,
+					Reasoning:        nil,
+					ReasoningDetails: nil,
+					Images:           nil,
+				}))
 
 			case "function_call_output":
 				// function_call_output - convert to tool response message
@@ -270,30 +292,60 @@ func convertInputToMessages(input agents.ResponseInput) ([]openrouter.OpenAIChat
 				output, _ := itemMap["output"].(string)
 
 				// Add tool response message
-				messages = append(messages, openrouter.OpenAIChatMessage{
-					Role:       "tool",
-					Content:    output,
-					Name:       "",
+				messages = append(messages, or.CreateMessageTool(or.ToolResponseMessage{
+					Content:    or.CreateToolResponseMessageContentStr(output),
 					ToolCallID: callID,
-					ToolCalls:  nil,
-				})
+				}))
 
 			default:
 				// No type field - treat as simple message object (role/content)
-				role, _ := itemMap["role"].(string)
+				rawRole, _ := itemMap["role"].(string)
+				role := rawRole
 				// to chat completions mapping
 				if role == "role" {
 					role = "user"
 				}
 				content, _ := itemMap["content"].(string)
 
-				messages = append(messages, openrouter.OpenAIChatMessage{
-					Role:       role,
-					Content:    content,
-					ToolCalls:  nil,
-					ToolCallID: "",
-					Name:       "",
-				})
+				var msg or.Message
+				switch or.MessageType(role) {
+				case or.MessageTypeAssistant:
+					msg = or.CreateMessageAssistant(or.AssistantMessage{
+						Content: optionalnullable.From(
+							conv.Ptr(or.CreateAssistantMessageContentStr(content)),
+						),
+						Name:             nil,
+						ToolCalls:        nil,
+						Refusal:          nil,
+						Reasoning:        nil,
+						ReasoningDetails: nil,
+						Images:           nil,
+					})
+				case or.MessageTypeDeveloper:
+					msg = or.CreateMessageDeveloper(or.MessageDeveloper{
+						Content: or.CreateMessageContentStr(content),
+						Name:    nil,
+					})
+				case or.MessageTypeSystem:
+					msg = or.CreateMessageSystem(or.SystemMessage{
+						Content: or.CreateSystemMessageContentStr(content),
+						Name:    nil,
+					})
+				case or.MessageTypeTool:
+					msg = or.CreateMessageTool(or.ToolResponseMessage{
+						Content:    or.CreateToolResponseMessageContentStr(content),
+						ToolCallID: "",
+					})
+				case or.MessageTypeUser:
+					msg = or.CreateMessageUser(or.UserMessage{
+						Content: or.CreateUserMessageContentStr(content),
+						Name:    nil,
+					})
+				default:
+					return nil, fmt.Errorf("unknown message role: %s", rawRole)
+				}
+
+				messages = append(messages, msg)
 			}
 		}
 
@@ -305,8 +357,8 @@ func convertInputToMessages(input agents.ResponseInput) ([]openrouter.OpenAIChat
 }
 
 // convertOutputItemsToMessages converts output items (OutputMessage, MCPToolCall) to chat messages
-func convertOutputItemsToMessages(output []agents.OutputItem) []openrouter.OpenAIChatMessage {
-	var messages []openrouter.OpenAIChatMessage
+func convertOutputItemsToMessages(output []agents.OutputItem) []or.Message {
+	var messages []or.Message
 
 	for _, item := range output {
 		switch item := item.(type) {
@@ -317,42 +369,71 @@ func convertOutputItemsToMessages(output []agents.OutputItem) []openrouter.OpenA
 				textContent = item.Content[0].Text
 			}
 
-			messages = append(messages, openrouter.OpenAIChatMessage{
-				Role:       item.Role,
-				Content:    textContent,
-				ToolCalls:  nil,
-				ToolCallID: "",
-				Name:       "",
-			})
+			var msg or.Message
+			switch or.MessageType(item.Role) {
+			case or.MessageTypeAssistant:
+				msg = or.CreateMessageAssistant(or.AssistantMessage{
+					Content: optionalnullable.From(
+						conv.Ptr(or.CreateAssistantMessageContentStr(textContent)),
+					),
+					Name:             nil,
+					ToolCalls:        nil,
+					Refusal:          nil,
+					Reasoning:        nil,
+					ReasoningDetails: nil,
+					Images:           nil,
+				})
+			case or.MessageTypeDeveloper:
+				msg = or.CreateMessageDeveloper(or.MessageDeveloper{
+					Content: or.CreateMessageContentStr(textContent),
+					Name:    nil,
+				})
+			case or.MessageTypeSystem:
+				msg = or.CreateMessageSystem(or.SystemMessage{
+					Content: or.CreateSystemMessageContentStr(textContent),
+					Name:    nil,
+				})
+			case or.MessageTypeTool:
+				msg = or.CreateMessageTool(or.ToolResponseMessage{
+					Content:    or.CreateToolResponseMessageContentStr(textContent),
+					ToolCallID: "",
+				})
+			case or.MessageTypeUser:
+				msg = or.CreateMessageUser(or.UserMessage{
+					Content: or.CreateUserMessageContentStr(textContent),
+					Name:    nil,
+				})
+			default:
+				panic("unexpected or.MessageType")
+			}
+
+			messages = append(messages, msg)
 
 		case agents.MCPToolCall:
 			// Add assistant message with tool_calls
-			messages = append(messages, openrouter.OpenAIChatMessage{
-				Role:       "assistant",
-				Content:    "",
-				ToolCallID: "",
-				Name:       "",
-				ToolCalls: []openrouter.ToolCall{
+			messages = append(messages, or.CreateMessageAssistant(or.AssistantMessage{
+				ToolCalls: []or.ChatMessageToolCall{
 					{
-						Index: 0,
-						ID:    item.ID,
-						Type:  "function",
-						Function: openrouter.ToolCallFunction{
+						ID: item.ID,
+						Function: or.ChatMessageToolCallFunction{
 							Name:      item.Name,
 							Arguments: item.Arguments,
 						},
 					},
 				},
-			})
+				Content:          nil,
+				Name:             nil,
+				Refusal:          nil,
+				Reasoning:        nil,
+				ReasoningDetails: nil,
+				Images:           nil,
+			}))
 
 			// Add tool response message
-			messages = append(messages, openrouter.OpenAIChatMessage{
-				Role:       "tool",
-				Content:    item.Output,
-				Name:       item.Name,
+			messages = append(messages, or.CreateMessageTool(or.ToolResponseMessage{
+				Content:    or.CreateToolResponseMessageContentStr(item.Output),
 				ToolCallID: item.ID,
-				ToolCalls:  nil,
-			})
+			}))
 		}
 	}
 

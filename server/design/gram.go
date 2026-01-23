@@ -26,7 +26,6 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/slack"
 	_ "github.com/speakeasy-api/gram/server/design/telemetry"
 	_ "github.com/speakeasy-api/gram/server/design/templates"
-	_ "github.com/speakeasy-api/gram/server/design/toolmetrics"
 	_ "github.com/speakeasy-api/gram/server/design/tools"
 	_ "github.com/speakeasy-api/gram/server/design/toolsets"
 	_ "github.com/speakeasy-api/gram/server/design/usage"

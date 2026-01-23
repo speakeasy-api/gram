@@ -28,15 +28,18 @@ import { ToolsetEntry } from "@gram/client/models/components";
 import {
   invalidateAllGetPeriodUsage,
   invalidateAllToolset,
+  invalidateGetMcpMetadata,
   useAddExternalOAuthServerMutation,
   useAddOAuthProxyServerMutation,
+  useGetMcpMetadata,
   useRemoveOAuthServerMutation,
+  useUpdateSecurityVariableDisplayNameMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { Badge, Button, Grid, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Globe, Trash2 } from "lucide-react";
+import { Check, Globe, Pencil, Trash2, X } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
@@ -511,6 +514,10 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         />
       </PageSection>
 
+      {toolset.securityVariables && toolset.securityVariables.length > 0 && (
+        <AuthorizationHeadersSection toolset={toolset} />
+      )}
+
       <FeatureRequestModal
         isOpen={isCustomDomainModalOpen}
         onClose={() => setIsCustomDomainModalOpen(false)}
@@ -564,6 +571,192 @@ function PageSection({
       </Type>
       {children}
     </Stack>
+  );
+}
+
+function AuthorizationHeadersSection({ toolset }: { toolset: Toolset }) {
+  const queryClient = useQueryClient();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+
+  // Fetch MCP metadata to get saved header display names
+  // Use throwOnError: false since metadata may not exist for all toolsets
+  const { data: mcpMetadata } = useGetMcpMetadata(
+    { toolsetSlug: toolset.slug },
+    undefined,
+    { enabled: !!toolset.slug, throwOnError: false },
+  );
+
+  // Get the saved display names map from metadata
+  const headerDisplayNames = mcpMetadata?.metadata?.headerDisplayNames ?? {};
+
+  const updateDisplayNameMutation =
+    useUpdateSecurityVariableDisplayNameMutation({
+      onSuccess: () => {
+        invalidateAllToolset(queryClient);
+        invalidateGetMcpMetadata(queryClient, [{ toolsetSlug: toolset.slug }]);
+        toast.success("Header display name updated");
+        setEditingId(null);
+        setEditValue("");
+      },
+      onError: (error) => {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to update display name",
+        );
+      },
+    });
+
+  const handleEditStart = (
+    id: string,
+    currentDisplayName: string | undefined,
+    name: string,
+  ) => {
+    setEditingId(id);
+    setEditValue(currentDisplayName || name);
+  };
+
+  const handleEditCancel = () => {
+    setEditingId(null);
+    setEditValue("");
+  };
+
+  const handleEditSave = (securityKey: string) => {
+    updateDisplayNameMutation.mutate({
+      request: {
+        updateSecurityVariableDisplayNameRequestBody: {
+          displayName: editValue.trim(),
+          securityKey: securityKey,
+          toolsetSlug: toolset.slug,
+        },
+      },
+    });
+  };
+
+  // Flatten security variables to show one row per environment variable
+  // This handles cases like basic auth where one securityVariable has multiple envVariables
+  const envVarEntries = toolset.securityVariables?.flatMap((secVar) => {
+    // Filter out token_url env vars as they're not user-facing
+    const filteredEnvVars = secVar.envVariables.filter(
+      (envVar) => !envVar.toLowerCase().includes("token_url"),
+    );
+
+    // If no env vars after filtering, show the security variable itself
+    if (filteredEnvVars.length === 0) {
+      return [
+        {
+          id: secVar.id,
+          envVar: secVar.name,
+          securityVariableId: secVar.id,
+          displayName: headerDisplayNames[secVar.name] || secVar.displayName,
+        },
+      ];
+    }
+
+    // Create one entry per env var, looking up display name from metadata
+    return filteredEnvVars.map((envVar, index) => ({
+      id: `${secVar.id}-${index}`,
+      envVar: envVar,
+      securityVariableId: secVar.id,
+      // Look up the saved display name from headerDisplayNames map
+      displayName: headerDisplayNames[envVar] as string | undefined,
+    }));
+  });
+
+  return (
+    <PageSection
+      heading="Authorization Headers"
+      description="Customize how authorization headers are displayed to users. These friendly names will appear in MCP clients while the actual header names are used internally."
+    >
+      <Stack gap={2} className="max-w-2xl">
+        {envVarEntries?.map((entry) => (
+          <div
+            key={entry.id}
+            className="bg-stone-100 dark:bg-stone-900 p-1 rounded-md"
+          >
+            <BlockInner>
+              <Stack direction="horizontal" align="center" className="w-full">
+                <Stack className="flex-1 min-w-0">
+                  <Type small muted className="text-xs">
+                    Header: <span className="font-mono">{entry.envVar}</span>
+                  </Type>
+                  {editingId === entry.id ? (
+                    <Stack
+                      direction="horizontal"
+                      align="center"
+                      gap={2}
+                      className="mt-1"
+                    >
+                      <Input
+                        value={editValue}
+                        onChange={setEditValue}
+                        placeholder="Enter display name"
+                        className="flex-1"
+                        autoFocus
+                        onKeyDown={(e: React.KeyboardEvent) => {
+                          if (e.key === "Enter") {
+                            handleEditSave(entry.envVar);
+                          } else if (e.key === "Escape") {
+                            handleEditCancel();
+                          }
+                        }}
+                      />
+                      <Button
+                        variant="tertiary"
+                        size="sm"
+                        onClick={() => handleEditSave(entry.envVar)}
+                        disabled={updateDisplayNameMutation.isPending}
+                      >
+                        <Check className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="tertiary"
+                        size="sm"
+                        onClick={handleEditCancel}
+                        disabled={updateDisplayNameMutation.isPending}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </Stack>
+                  ) : (
+                    <Stack direction="horizontal" align="center" gap={2}>
+                      <Type className="font-medium">
+                        {entry.displayName ||
+                          entry.envVar.replace(/_/g, "-") ||
+                          "Unknown"}
+                      </Type>
+                      {entry.displayName &&
+                        entry.displayName !==
+                          entry.envVar.replace(/_/g, "-") && (
+                          <Badge variant="neutral" className="text-xs">
+                            renamed
+                          </Badge>
+                        )}
+                    </Stack>
+                  )}
+                </Stack>
+                {editingId !== entry.id && (
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    onClick={() =>
+                      handleEditStart(
+                        entry.id,
+                        entry.displayName,
+                        entry.envVar.replace(/_/g, "-"),
+                      )
+                    }
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                )}
+              </Stack>
+            </BlockInner>
+          </div>
+        ))}
+      </Stack>
+    </PageSection>
   );
 }
 
@@ -636,11 +829,29 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
     toolsetTools?.some((tool) => isHttpTool(tool) && !tool.defaultServerUrl) ??
     false;
 
+  // Get env headers using the existing hook for fallback
   const envHeaders = useToolsetEnvVars(toolset, requiresServerURL).filter(
     (header) => !header.toLowerCase().includes("token_url"),
   );
 
   if (!toolset) return { public: "", internal: "" };
+
+  // Build header names using display names when available
+  // Display names make the config more user-friendly (e.g., "API-Key" instead of "X-RAPIDAPI-KEY")
+  const getHeaderNameForMcp = (envVar: string): string => {
+    // Find the security variable that has this env var
+    const secVar = toolset.securityVariables?.find((sv) =>
+      sv.envVariables.some((ev) => ev.toLowerCase() === envVar.toLowerCase()),
+    );
+
+    if (secVar?.displayName) {
+      // Use display name, normalized for header format
+      return secVar.displayName.replace(/\s+/g, "-").replace(/_/g, "-");
+    }
+
+    // Fall back to the env var format
+    return envVar.replace(/_/g, "-");
+  };
 
   // Build the args array for public MCP config
   const mcpJsonPublicArgs = [
@@ -648,7 +859,7 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
     mcpUrl,
     ...envHeaders.flatMap((header) => [
       "--header",
-      `MCP-${header.replace(/_/g, "-")}:${"${VALUE}"}`,
+      `MCP-${getHeaderNameForMcp(header)}:${"${VALUE}"}`,
     ]),
   ];
 

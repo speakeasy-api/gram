@@ -770,13 +770,18 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   content TEXT NOT NULL,
   model TEXT,
   message_id TEXT,
-  user_id TEXT,
-  external_user_id TEXT,
   finish_reason TEXT,
   tool_calls JSONB,
   prompt_tokens BIGINT NOT NULL DEFAULT 0,
   completion_tokens BIGINT NOT NULL DEFAULT 0,
   total_tokens BIGINT NOT NULL DEFAULT 0,
+
+  user_id TEXT,
+  external_user_id TEXT,
+  origin TEXT,
+  user_agent TEXT,
+  ip_address TEXT,
+  source TEXT, -- Elements, Playground, etc.
 
   tool_call_id TEXT,
   tool_urn TEXT,
@@ -930,6 +935,7 @@ CREATE TABLE IF NOT EXISTS mcp_metadata (
   external_documentation_url TEXT,
   logo_id UUID,
   instructions TEXT,
+  header_display_names JSONB NOT NULL DEFAULT '{}'::JSONB, -- maps security scheme key to user-friendly display name
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

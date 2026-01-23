@@ -547,8 +547,10 @@ func unmarshalSecurityVariableResponseBodyToTypesSecurityVariable(v *SecurityVar
 		return nil
 	}
 	res := &types.SecurityVariable{
+		ID:           *v.ID,
 		Type:         v.Type,
 		Name:         *v.Name,
+		DisplayName:  v.DisplayName,
 		InPlacement:  *v.InPlacement,
 		Scheme:       *v.Scheme,
 		BearerFormat: v.BearerFormat,

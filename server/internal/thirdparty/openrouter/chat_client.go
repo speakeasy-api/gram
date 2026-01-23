@@ -12,6 +12,9 @@ import (
 
 	"github.com/hashicorp/go-cleanhttp"
 
+	or_base "github.com/speakeasy-api/gram/openrouter"
+	or "github.com/speakeasy-api/gram/openrouter/models/components"
+	or_operations "github.com/speakeasy-api/gram/openrouter/models/operations"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 )
@@ -48,59 +51,66 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 		return nil, fmt.Errorf("at least one input is required")
 	}
 
-	reqBody := AIEmbeddingRequest{Model: model, Input: inputs}
-
-	data, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("marshal request error: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/v1/embeddings", OpenRouterBaseURL), bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("create request error: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+openrouterKey)
-
-	resp, err := c.chatClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("embedding request failed: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			c.logger.ErrorContext(ctx, "failed to close response body", attr.SlogError(err))
+	// Truncate inputs that exceed token limits
+	// Embedding models have 8192 token limit, using ~4 chars/token as conservative estimate
+	const maxChars = 30_000
+	truncatedInputs := make([]string, len(inputs))
+	for i, input := range inputs {
+		if len(input) > maxChars {
+			c.logger.WarnContext(ctx, fmt.Sprintf("truncating input for embedding, orgID: %s, model: %s, input length: %d", orgID, model, len(input)))
+			truncatedInputs[i] = input[:maxChars]
+		} else {
+			truncatedInputs[i] = input
 		}
-	}()
+	}
+	inputs = truncatedInputs
 
-	body, err := io.ReadAll(resp.Body)
+	orClient := or_base.New(or_base.WithSecurity(openrouterKey))
+	result, err := orClient.Embeddings.Generate(ctx, or_operations.CreateEmbeddingsRequest{
+		Model:          model,
+		Input:          or_operations.CreateInputUnionArrayOfStr(inputs),
+		EncodingFormat: nil,
+		Dimensions:     nil,
+		User:           nil,
+		Provider:       nil,
+		InputType:      nil,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("read response error: %w", err)
+		return nil, fmt.Errorf("create embeddings error: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("OpenRouter API error: %s", strings.TrimSpace(string(body)))
+	if result.HTTPMeta.Response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("OpenRouter API error: %s", result.HTTPMeta.Response.Status)
 	}
 
-	var embeddingResp AIEmbeddingResponse
-	if err := json.Unmarshal(body, &embeddingResp); err != nil {
-		return nil, fmt.Errorf("unmarshal response error: %w", err)
+	inputSizes := make([]string, len(inputs))
+	for i, input := range inputs {
+		inputSizes[i] = fmt.Sprintf("%d", len(input))
 	}
 
-	if len(embeddingResp.Data) == 0 {
+	embeddingsData := result.GetObject().GetData()
+
+	if len(embeddingsData) == 0 {
 		return nil, fmt.Errorf("embedding data missing in response")
 	}
 
 	results := make([][]float32, len(inputs))
-	for _, data := range embeddingResp.Data {
-		if data.Index < 0 || data.Index >= len(results) {
-			return nil, fmt.Errorf("embedding index out of range: %d", data.Index)
+	for _, data := range embeddingsData {
+		if data.Index == nil {
+			return nil, fmt.Errorf("embedding data missing index")
+		}
+		index := int(*data.Index)
+		if index < 0 || index >= len(results) {
+			return nil, fmt.Errorf("embedding index out of range: %d", index)
 		}
 
-		vector := make([]float32, len(data.Embedding))
-		for i, v := range data.Embedding {
+		objEmbedding := data.GetEmbedding().ArrayOfNumber
+
+		vector := make([]float32, len(objEmbedding))
+		for i, v := range objEmbedding {
 			vector[i] = float32(v)
 		}
-		results[data.Index] = vector
+		results[index] = vector
 	}
 
 	for i, vector := range results {
@@ -112,33 +122,27 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 	return results, nil
 }
 
-func (c *ChatClient) GetCompletion(ctx context.Context, orgID string, systemPrompt, prompt string, tools []Tool) (*OpenAIChatMessage, error) {
-	var messages []OpenAIChatMessage
+func (c *ChatClient) GetCompletion(ctx context.Context, orgID string, systemPrompt, prompt string, tools []Tool) (*or.Message, error) {
+	var messages []or.Message
 
 	// Optional system prompt
 	if systemPrompt != "" {
-		messages = append(messages, OpenAIChatMessage{
-			Role:       "system",
-			Content:    systemPrompt,
-			ToolCalls:  nil,
-			ToolCallID: "",
-			Name:       "",
-		})
+		messages = append(messages, or.CreateMessageSystem(or.SystemMessage{
+			Content: or.CreateSystemMessageContentStr(systemPrompt),
+			Name:    nil,
+		}))
 	}
 
 	// User message
-	messages = append(messages, OpenAIChatMessage{
-		Role:       "user",
-		Content:    prompt,
-		ToolCalls:  nil,
-		ToolCallID: "",
-		Name:       "",
-	})
+	messages = append(messages, or.CreateMessageUser(or.UserMessage{
+		Content: or.CreateUserMessageContentStr(prompt),
+		Name:    nil,
+	}))
 
 	return c.GetCompletionFromMessages(ctx, orgID, "", messages, tools, nil, "")
 }
 
-func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string, projectID string, messages []OpenAIChatMessage, tools []Tool, temperature *float64, model string) (*OpenAIChatMessage, error) {
+func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string, projectID string, messages []or.Message, tools []Tool, temperature *float64, model string) (*or.Message, error) {
 	openrouterKey, err := c.openRouter.ProvisionAPIKey(ctx, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("provisioning OpenRouter key: %w", err)

@@ -823,7 +823,7 @@ func insertTelemetryLog(t *testing.T, ctx context.Context, projectID, deployment
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	id, err := fromTimeV7(timestamp)
+	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
 	err = conn.Exec(ctx, `
@@ -861,7 +861,7 @@ func insertTelemetryLogWithParams(t *testing.T, ctx context.Context, params test
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	id, err := fromTimeV7(params.timestamp)
+	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
 	err = conn.Exec(ctx, `
