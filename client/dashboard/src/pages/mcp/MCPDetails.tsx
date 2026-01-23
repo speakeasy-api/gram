@@ -580,10 +580,11 @@ function AuthorizationHeadersSection({ toolset }: { toolset: Toolset }) {
   const [editValue, setEditValue] = useState("");
 
   // Fetch MCP metadata to get saved header display names
+  // Use throwOnError: false since metadata may not exist for all toolsets
   const { data: mcpMetadata } = useGetMcpMetadata(
     { toolsetSlug: toolset.slug },
     undefined,
-    { enabled: !!toolset.slug },
+    { enabled: !!toolset.slug, throwOnError: false },
   );
 
   // Get the saved display names map from metadata
