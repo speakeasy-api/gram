@@ -40,8 +40,12 @@ INSERT INTO chat_messages (
   , prompt_tokens
   , completion_tokens
   , total_tokens
+  , origin
+  , user_agent
+  , ip_address
+  , source
 )
-VALUES (@chat_id, @role, @project_id::uuid, @content, @model, @message_id, @tool_call_id, @user_id, @external_user_id, @finish_reason, @tool_calls, @prompt_tokens, @completion_tokens, @total_tokens);
+VALUES (@chat_id, @role, @project_id::uuid, @content, @model, @message_id, @tool_call_id, @user_id, @external_user_id, @finish_reason, @tool_calls, @prompt_tokens, @completion_tokens, @total_tokens, @origin, @user_agent, @ip_address, @source);
 
 -- name: ListAllChats :many
 SELECT 

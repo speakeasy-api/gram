@@ -310,6 +310,7 @@ function ChatInner({
 
   const openrouterChat = useModel(model, {
     "Gram-Chat-ID": chat.id,
+    "X-Gram-Source": "elements",
   });
 
   // Create a ref to access latest allTools without recreating transport
