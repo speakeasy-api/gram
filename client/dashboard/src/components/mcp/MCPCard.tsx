@@ -1,70 +1,60 @@
-import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
+import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
-import { Badge } from "@speakeasy-api/moonshine";
-import { CheckCircleIcon, LockIcon, XCircleIcon } from "lucide-react";
 import { MCPIllustration } from "../sources/SourceCardIllustrations";
 
 export function MCPCard({
   toolset,
-  onConfigClick,
 }: {
   toolset: ToolsetEntry;
-  onConfigClick: () => void;
 }) {
   const routes = useRoutes();
   const { url: mcpUrl } = useMcpUrl(toolset);
 
-  const actions = [
-    {
-      label: "View/Copy Config",
-      onClick: onConfigClick,
-      icon: "braces" as const,
-    },
-    {
-      label: "Manage Tools",
-      onClick: () => routes.mcp.details.goTo(toolset.slug),
-      icon: "blocks" as const,
-    },
-    {
-      label: "MCP Settings",
-      onClick: () => routes.mcp.details.goTo(toolset.slug),
-      icon: "cog" as const,
-    },
-  ];
+  // Pulse indicator for status
+  const getStatusConfig = () => {
+    if (!toolset.mcpEnabled) {
+      return {
+        color: "bg-red-500",
+        pulseColor: "bg-red-400",
+        label: "Disabled",
+      };
+    }
+    return {
+      color: "bg-green-500",
+      pulseColor: "bg-green-400",
+      label: toolset.mcpIsPublic ? "Public" : "Private",
+    };
+  };
 
-  let statusBadge = null;
-  if (!toolset.mcpEnabled) {
-    statusBadge = (
-      <Badge variant="neutral">
-        <Badge.LeftIcon>
-          <XCircleIcon className="w-3 h-3" />
-        </Badge.LeftIcon>
-        <Badge.Text>Disabled</Badge.Text>
-      </Badge>
-    );
-  } else if (toolset.mcpIsPublic) {
-    statusBadge = (
-      <Badge variant="neutral">
-        <Badge.LeftIcon>
-          <CheckCircleIcon className="w-3 h-3 text-green-600" />
-        </Badge.LeftIcon>
-        <Badge.Text>Public</Badge.Text>
-      </Badge>
-    );
-  } else {
-    statusBadge = (
-      <Badge variant="neutral">
-        <Badge.LeftIcon>
-          <LockIcon className="w-3 h-3" />
-        </Badge.LeftIcon>
-        <Badge.Text>Private</Badge.Text>
-      </Badge>
-    );
-  }
+  const status = getStatusConfig();
+
+  const statusIndicator = (
+    <div className="flex items-center gap-2">
+      <div className="relative flex h-2.5 w-2.5">
+        {toolset.mcpEnabled && (
+          <span
+            className={cn(
+              "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
+              status.pulseColor
+            )}
+          />
+        )}
+        <span
+          className={cn(
+            "relative inline-flex rounded-full h-2.5 w-2.5",
+            status.color
+          )}
+        />
+      </div>
+      <Type variant="small" muted>
+        {status.label}
+      </Type>
+    </div>
+  );
 
   return (
     <div
@@ -90,9 +80,9 @@ export function MCPCard({
           </Type>
         </div>
 
-        {/* Footer row with status badge and updated time */}
+        {/* Footer row with status indicator and updated time */}
         <div className="flex items-center justify-between gap-2 mt-auto pt-2">
-          {statusBadge}
+          {statusIndicator}
           <UpdatedAt
             date={new Date(toolset.updatedAt)}
             italic={false}

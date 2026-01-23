@@ -9,10 +9,6 @@ import CatalogDetail, { CatalogDetailRoot } from "./pages/catalog/CatalogDetail"
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import Elements from "./pages/elements/Elements";
-import EnvironmentPage from "./pages/environments/Environment";
-import Environments, {
-  EnvironmentsRoot,
-} from "./pages/environments/Environments";
 import Home from "./pages/home/Home";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
@@ -240,20 +236,6 @@ const ROUTE_STRUCTURE = {
     url: "logs",
     icon: "activity",
     component: Logs,
-  },
-  environments: {
-    title: "Environments",
-    url: "environments",
-    icon: "globe",
-    component: EnvironmentsRoot,
-    indexComponent: Environments,
-    subPages: {
-      environment: {
-        title: "Environment",
-        url: ":environmentSlug",
-        component: EnvironmentPage,
-      },
-    },
   },
   sdks: {
     title: "SDKs",

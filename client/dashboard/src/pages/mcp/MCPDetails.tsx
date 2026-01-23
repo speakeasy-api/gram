@@ -30,11 +30,10 @@ import { Confirm, ToolsetEntry } from "@gram/client/models/components";
 import {
   invalidateAllGetPeriodUsage,
   invalidateAllToolset,
-invalidateGetMcpMetadata,
+  invalidateGetMcpMetadata,
   invalidateTemplate,
   useAddExternalOAuthServerMutation,
   useAddOAuthProxyServerMutation,
-useGetDomain,
   useGetMcpMetadata,
   useLatestDeployment,
   useRemoveOAuthServerMutation,
@@ -44,11 +43,44 @@ useGetDomain,
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { Badge, Button, Grid, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, CheckCircleIcon, Globe, LockIcon, Pencil, Trash2, X, XCircleIcon } from "lucide-react";
-import React, { useCallback, useEffect, useState } from "react";
+import {
+  AlertCircle,
+  Check,
+  CheckCircleIcon,
+  ChevronDown,
+  Globe,
+  LockIcon,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+  XCircleIcon,
+  Eye,
+  EyeOff,
+} from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Label } from "@/components/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+} from "@/components/ui/sheet";
+import { Switch } from "@/components/ui/switch";
+import {
+  useListEnvironments,
+  useUpdateEnvironmentMutation,
+  invalidateAllListEnvironments,
+} from "@gram/client/react-query";
 import { onboardingStepStorageKeys } from "../home/Home";
 import { AddToolsDialog } from "../toolsets/AddToolsDialog";
 import { ToolsetEmptyState } from "../toolsets/ToolsetEmptyState";
@@ -96,7 +128,12 @@ export function MCPDetailPage() {
     routes.mcp.goTo();
     const toastId = toast.loading("Deleting MCP server...");
 
-    console.log("Deleting toolset:", toolset.slug, "toolUrns:", toolset.toolUrns);
+    console.log(
+      "Deleting toolset:",
+      toolset.slug,
+      "toolUrns:",
+      toolset.toolUrns,
+    );
 
     try {
       // Check if this toolset uses an external MCP from the catalog
@@ -136,13 +173,38 @@ export function MCPDetailPage() {
       toast.success("MCP server deleted", { id: toastId });
     } catch (error) {
       console.error("Failed to delete MCP server:", error);
-      toast.error(`Failed to delete: ${error instanceof Error ? error.message : "Unknown error"}`, { id: toastId });
+      toast.error(
+        `Failed to delete: ${error instanceof Error ? error.message : "Unknown error"}`,
+        { id: toastId },
+      );
     }
   };
 
   useEffect(() => {
     localStorage.setItem(onboardingStepStorageKeys.configure, "true");
   }, []);
+
+  // Calculate if there are missing required env vars for the tab indicator
+  // Must be before early return to avoid hooks order issues
+  const missingRequiredEnvVars = useMemo(() => {
+    if (!toolset) return 0;
+    let count = 0;
+    // Count security variables
+    toolset.securityVariables?.forEach((secVar) => {
+      secVar.envVariables.forEach((envVar) => {
+        if (!envVar.toLowerCase().includes("token_url")) {
+          count++;
+        }
+      });
+    });
+    // Count server variables
+    toolset.serverVariables?.forEach((serverVar) => {
+      count += serverVar.envVariables.length;
+    });
+    // Count function environment variables
+    count += toolset.functionEnvironmentVariables?.length || 0;
+    return count;
+  }, [toolset]);
 
   // TODO: better loading state
   if (isLoading || !toolset) {
@@ -190,171 +252,193 @@ export function MCPDetailPage() {
       <Page.Body fullWidth noPadding>
         {/* Hero Header with Animation - full width */}
         <div className="relative w-full h-64 overflow-hidden">
-        <MCPHeroIllustration mcpUrl={mcpUrl || ""} toolsetSlug={toolset.slug} />
+          <MCPHeroIllustration
+            mcpUrl={mcpUrl || ""}
+            toolsetSlug={toolset.slug}
+          />
 
-        {/* Overlay content */}
-        <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/40 to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
-          <Stack gap={2}>
-            <div className="flex items-center gap-3 ml-1">
-              <Heading variant="h1" className="text-foreground">
-                {toolset.name}
-              </Heading>
-              {statusBadge}
-            </div>
-            <div className="flex items-center gap-2 ml-1">
-              <Type muted className="max-w-2xl truncate">
-                {mcpUrl}
-              </Type>
-              <Button
-                variant="tertiary"
-                size="sm"
-                onClick={() => {
-                  if (mcpUrl) {
-                    navigator.clipboard.writeText(mcpUrl);
-                    toast.success("URL copied to clipboard");
-                  }
-                }}
-                className="shrink-0"
-              >
-                <Button.LeftIcon>
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-                    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-                  </svg>
-                </Button.LeftIcon>
-                <Button.Text className="sr-only">Copy URL</Button.Text>
-              </Button>
-            </div>
-          </Stack>
-        </div>
+          {/* Overlay content */}
+          <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/40 to-transparent" />
+          <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
+            <Stack gap={2}>
+              <div className="flex items-center gap-3 ml-1">
+                <Heading variant="h1" className="text-foreground">
+                  {toolset.name}
+                </Heading>
+                {statusBadge}
+              </div>
+              <div className="flex items-center gap-2 ml-1">
+                <Type muted className="max-w-2xl truncate">
+                  {mcpUrl}
+                </Type>
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  onClick={() => {
+                    if (mcpUrl) {
+                      navigator.clipboard.writeText(mcpUrl);
+                      toast.success("URL copied to clipboard");
+                    }
+                  }}
+                  className="shrink-0"
+                >
+                  <Button.LeftIcon>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                    </svg>
+                  </Button.LeftIcon>
+                  <Button.Text className="sr-only">Copy URL</Button.Text>
+                </Button>
+              </div>
+            </Stack>
+          </div>
 
-        {/* Action buttons */}
-        <div className="absolute top-6 left-0 right-0 px-8 max-w-[1270px] mx-auto w-full">
-          <Stack direction="horizontal" gap={2} className="justify-end">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                {!toolset?.mcpEnabled ||
-                (toolset.mcpIsPublic && !availableOAuthAuthCode) ? (
-                  <span className="inline-block">
-                    <Button variant="secondary" size="md" disabled={true}>
+          {/* Action buttons */}
+          <div className="absolute top-6 left-0 right-0 px-8 max-w-[1270px] mx-auto w-full">
+            <Stack direction="horizontal" gap={2} className="justify-end">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  {!toolset?.mcpEnabled ||
+                  (toolset.mcpIsPublic && !availableOAuthAuthCode) ? (
+                    <span className="inline-block">
+                      <Button variant="secondary" size="md" disabled={true}>
+                        {isOAuthConnected
+                          ? "OAuth Connected"
+                          : "Configure OAuth"}
+                      </Button>
+                    </span>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      onClick={() =>
+                        isOAuthConnected
+                          ? setIsOAuthDetailsModalOpen(true)
+                          : toolset.mcpIsPublic
+                            ? setIsOAuthModalOpen(true)
+                            : setIsGramOAuthModalOpen(true)
+                      }
+                    >
                       {isOAuthConnected ? "OAuth Connected" : "Configure OAuth"}
                     </Button>
-                  </span>
-                ) : (
+                  )}
+                </TooltipTrigger>
+                {(!toolset?.mcpEnabled ||
+                  (toolset.mcpIsPublic && !availableOAuthAuthCode)) && (
+                  <TooltipContent>
+                    {!toolset?.mcpEnabled
+                      ? "Enable server to configure OAuth"
+                      : "This MCP server does not require the OAuth authorization code flow"}
+                  </TooltipContent>
+                )}
+              </Tooltip>
+              <MCPEnableButton toolset={toolset} />
+              <Tooltip>
+                <TooltipTrigger asChild>
                   <Button
                     variant="secondary"
                     size="md"
-                    onClick={() =>
-                      isOAuthConnected
-                        ? setIsOAuthDetailsModalOpen(true)
-                        : toolset.mcpIsPublic
-                          ? setIsOAuthModalOpen(true)
-                          : setIsGramOAuthModalOpen(true)
-                    }
+                    onClick={handleDeleteMcpServer}
                   >
-                    {isOAuthConnected ? "OAuth Connected" : "Configure OAuth"}
+                    <Button.LeftIcon>
+                      <Trash2 className="w-4 h-4" />
+                    </Button.LeftIcon>
+                    <Button.Text className="sr-only">
+                      Delete MCP server
+                    </Button.Text>
                   </Button>
-                )}
-              </TooltipTrigger>
-              {(!toolset?.mcpEnabled ||
-                (toolset.mcpIsPublic && !availableOAuthAuthCode)) && (
-                <TooltipContent>
-                  {!toolset?.mcpEnabled
-                    ? "Enable server to configure OAuth"
-                    : "This MCP server does not require the OAuth authorization code flow"}
-                </TooltipContent>
-              )}
-            </Tooltip>
-            <MCPEnableButton toolset={toolset} />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="secondary"
-                  size="md"
-                  onClick={handleDeleteMcpServer}
-                >
-                  <Button.LeftIcon>
-                    <Trash2 className="w-4 h-4" />
-                  </Button.LeftIcon>
-                  <Button.Text className="sr-only">Delete MCP server</Button.Text>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Delete MCP server</TooltipContent>
-            </Tooltip>
-          </Stack>
-        </div>
-      </div>
-
-      {/* Sub-navigation tabs */}
-      <Tabs defaultValue="overview" className="w-full flex-1 flex flex-col">
-        <div className="border-b">
-          <div className="max-w-[1270px] mx-auto px-8">
-            <TabsList className="h-auto bg-transparent p-0 gap-6 rounded-none">
-              <TabsTrigger
-                value="overview"
-                className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-              >
-                Overview
-              </TabsTrigger>
-              <TabsTrigger
-                value="tools"
-                className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-              >
-                Tools
-              </TabsTrigger>
-              <TabsTrigger
-                value="settings"
-                className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-              >
-                Settings
-              </TabsTrigger>
-            </TabsList>
+                </TooltipTrigger>
+                <TooltipContent>Delete MCP server</TooltipContent>
+              </Tooltip>
+            </Stack>
           </div>
         </div>
 
-        {/* Tab Content */}
-        <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
-          <TabsContent value="overview" className="mt-0 w-full">
-            <MCPOverviewTab toolset={toolset} />
-          </TabsContent>
+        {/* Sub-navigation tabs */}
+        <Tabs defaultValue="overview" className="w-full flex-1 flex flex-col">
+          <div className="border-b">
+            <div className="max-w-[1270px] mx-auto px-8">
+              <TabsList className="h-auto bg-transparent p-0 gap-6 rounded-none">
+                <TabsTrigger
+                  value="overview"
+                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                >
+                  Overview
+                </TabsTrigger>
+                <TabsTrigger
+                  value="tools"
+                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                >
+                  Tools
+                </TabsTrigger>
+                <TabsTrigger
+                  value="settings"
+                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                >
+                  Settings
+                </TabsTrigger>
+                <TabsTrigger
+                  value="environments"
+                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                >
+                  <span className="flex items-center gap-1.5">
+                    Environment Variables
+                    {missingRequiredEnvVars > 0 && (
+                      <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                    )}
+                  </span>
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
 
-          <TabsContent value="tools" className="mt-0 w-full">
-            <MCPToolsTab toolset={toolset} />
-          </TabsContent>
+          {/* Tab Content */}
+          <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
+            <TabsContent value="overview" className="mt-0 w-full">
+              <MCPOverviewTab toolset={toolset} />
+            </TabsContent>
 
-          <TabsContent value="settings" className="mt-0 w-full">
-            <MCPSettingsTab toolset={toolset} />
-          </TabsContent>
-        </div>
-      </Tabs>
+            <TabsContent value="tools" className="mt-0 w-full">
+              <MCPToolsTab toolset={toolset} />
+            </TabsContent>
 
-      <ConnectOAuthModal
-        isOpen={isOAuthModalOpen}
-        onClose={() => setIsOAuthModalOpen(false)}
-        toolsetSlug={toolset.slug}
-        toolset={toolset}
-      />
-      <GramOAuthProxyModal
-        isOpen={isGramOAuthModalOpen}
-        onClose={() => setIsGramOAuthModalOpen(false)}
-        toolset={toolset}
-      />
-      <OAuthDetailsModal
-        isOpen={isOAuthDetailsModalOpen}
-        onClose={() => setIsOAuthDetailsModalOpen(false)}
-        toolset={toolset}
-      />
+            <TabsContent value="settings" className="mt-0 w-full">
+              <MCPSettingsTab toolset={toolset} />
+            </TabsContent>
+
+            <TabsContent value="environments" className="mt-0 w-full">
+              <MCPEnvironmentsTab toolset={toolset} />
+            </TabsContent>
+          </div>
+        </Tabs>
+
+        <ConnectOAuthModal
+          isOpen={isOAuthModalOpen}
+          onClose={() => setIsOAuthModalOpen(false)}
+          toolsetSlug={toolset.slug}
+          toolset={toolset}
+        />
+        <GramOAuthProxyModal
+          isOpen={isGramOAuthModalOpen}
+          onClose={() => setIsGramOAuthModalOpen(false)}
+          toolset={toolset}
+        />
+        <OAuthDetailsModal
+          isOpen={isOAuthDetailsModalOpen}
+          onClose={() => setIsOAuthDetailsModalOpen(false)}
+          toolset={toolset}
+        />
       </Page.Body>
     </Page>
   );
@@ -417,12 +501,7 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
   const { url: mcpUrl } = useMcpUrl(toolset);
 
   return (
-    <Stack
-      className={cn(
-        "mb-4",
-        !toolset.mcpEnabled && "blur-[2px] pointer-events-none",
-      )}
-    >
+    <Stack className="mb-4">
       <PageSection
         heading="Hosted URL"
         description="The URL you or your users will use to access this MCP server."
@@ -574,14 +653,14 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
   }
 
   return (
-    <Stack
-      className={cn(
-        "mb-4",
-        !toolset.mcpEnabled && "blur-[2px] pointer-events-none",
-      )}
-    >
+    <Stack className="mb-4">
       {/* Header with Add Tools button */}
-      <Stack direction="horizontal" justify="space-between" align="center" className="mb-4">
+      <Stack
+        direction="horizontal"
+        justify="space-between"
+        align="center"
+        className="mb-4"
+      >
         <Heading variant="h3">Tools</Heading>
         <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
           <Button.LeftIcon>
@@ -649,6 +728,803 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
 }
 
 /**
+ * Environment Variable type for the Environments tab
+ */
+interface EnvironmentVariable {
+  id: string;
+  key: string;
+  value: string;
+  targetEnvironments: string[];
+  isUserProvided: boolean;
+  isRequired: boolean; // True for advertised vars from toolset, false for custom user-added
+  description?: string; // Optional description for required vars
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+/**
+ * Environments Tab - Vercel-style environment variables management
+ */
+function MCPEnvironmentsTab({ toolset }: { toolset: Toolset }) {
+  const queryClient = useQueryClient();
+  const telemetry = useTelemetry();
+
+  const { data: environmentsData } = useListEnvironments();
+  const environments = environmentsData?.environments ?? [];
+
+  // State for the list of environment variables
+  const [envVars, setEnvVars] = useState<EnvironmentVariable[]>([]);
+  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterEnvironment, setFilterEnvironment] = useState<string>("all");
+  const [visibleVars, setVisibleVars] = useState<Set<string>>(new Set());
+
+  // New variable form state
+  const [newKey, setNewKey] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const [newTargetEnvironments, setNewTargetEnvironments] = useState<string[]>(
+    [],
+  );
+  const [newIsUserProvided, setNewIsUserProvided] = useState(false);
+  const [newValueVisible, setNewValueVisible] = useState(false);
+
+  // Update environment mutation
+  const updateEnvironmentMutation = useUpdateEnvironmentMutation({
+    onSuccess: () => {
+      invalidateAllListEnvironments(queryClient);
+      telemetry.capture("environment_event", {
+        action: "environment_variable_updated",
+        toolset_slug: toolset.slug,
+      });
+    },
+  });
+
+  // Load existing environment variables from toolset
+  useEffect(() => {
+    const existingVars: EnvironmentVariable[] = [];
+
+    // Get env vars from security variables (these are required auth credentials)
+    toolset.securityVariables?.forEach((secVar) => {
+      secVar.envVariables.forEach((envVar) => {
+        if (!envVar.toLowerCase().includes("token_url")) {
+          existingVars.push({
+            id: `sec-${secVar.id}-${envVar}`,
+            key: envVar,
+            value: "",
+            targetEnvironments: toolset.defaultEnvironmentSlug
+              ? [toolset.defaultEnvironmentSlug]
+              : [],
+            isUserProvided: true,
+            isRequired: true,
+            description: `Authentication credential for ${secVar.name || "API access"}`,
+            createdAt: new Date(),
+          });
+        }
+      });
+    });
+
+    // Get env vars from server variables (these are required server config)
+    toolset.serverVariables?.forEach((serverVar) => {
+      serverVar.envVariables.forEach((envVar) => {
+        existingVars.push({
+          id: `srv-${envVar}`,
+          key: envVar,
+          value: "",
+          targetEnvironments: toolset.defaultEnvironmentSlug
+            ? [toolset.defaultEnvironmentSlug]
+            : [],
+          isUserProvided: false,
+          isRequired: true,
+          description: "Server configuration variable",
+          createdAt: new Date(),
+        });
+      });
+    });
+
+    // Get env vars from function environment variables (these are required for functions)
+    toolset.functionEnvironmentVariables?.forEach((funcVar) => {
+      existingVars.push({
+        id: `func-${funcVar.name}`,
+        key: funcVar.name,
+        value: "",
+        targetEnvironments: toolset.defaultEnvironmentSlug
+          ? [toolset.defaultEnvironmentSlug]
+          : [],
+        isUserProvided: false,
+        isRequired: true,
+        description: funcVar.description || "Function environment variable",
+        createdAt: new Date(),
+      });
+    });
+
+    setEnvVars(existingVars);
+  }, [toolset.slug]);
+
+  const handleAddVariable = () => {
+    if (!newKey.trim()) return;
+
+    const newVar: EnvironmentVariable = {
+      id: `new-${Date.now()}`,
+      key: newKey.toUpperCase().replace(/\s+/g, "_"),
+      value: newIsUserProvided ? "" : newValue,
+      targetEnvironments: newTargetEnvironments,
+      isUserProvided: newIsUserProvided,
+      isRequired: false, // User-added variables are not required
+      createdAt: new Date(),
+    };
+
+    // Save to selected environments
+    if (!newIsUserProvided && newValue && newTargetEnvironments.length > 0) {
+      newTargetEnvironments.forEach((envSlug) => {
+        updateEnvironmentMutation.mutate({
+          request: {
+            slug: envSlug,
+            updateEnvironmentRequestBody: {
+              entriesToUpdate: [{ name: newVar.key, value: newValue }],
+              entriesToRemove: [],
+            },
+          },
+        });
+      });
+    }
+
+    setEnvVars([...envVars, newVar]);
+    setNewKey("");
+    setNewValue("");
+    setNewTargetEnvironments([]);
+    setNewIsUserProvided(false);
+    setNewValueVisible(false);
+    setIsAddingNew(false);
+
+    telemetry.capture("environment_event", {
+      action: "environment_variable_added",
+      toolset_slug: toolset.slug,
+      is_user_provided: newIsUserProvided,
+    });
+  };
+
+  const handleDeleteVariable = (id: string) => {
+    setEnvVars(envVars.filter((v) => v.id !== id));
+    telemetry.capture("environment_event", {
+      action: "environment_variable_deleted",
+      toolset_slug: toolset.slug,
+    });
+  };
+
+  const toggleVisibility = (id: string) => {
+    setVisibleVars((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // Separate required and custom variables
+  const requiredVars = envVars.filter((v) => v.isRequired);
+  const customVars = envVars.filter((v) => !v.isRequired);
+
+  // Filter variables
+  const filteredRequiredVars = requiredVars.filter((v) => {
+    const matchesSearch = v.key
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
+    const matchesEnv =
+      filterEnvironment === "all" ||
+      v.targetEnvironments.includes(filterEnvironment);
+    return matchesSearch && matchesEnv;
+  });
+
+  const filteredCustomVars = customVars.filter((v) => {
+    const matchesSearch = v.key
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
+    const matchesEnv =
+      filterEnvironment === "all" ||
+      v.targetEnvironments.includes(filterEnvironment);
+    return matchesSearch && matchesEnv;
+  });
+
+  // Count missing required variables (user-provided ones count as configured)
+  const missingRequiredCount = requiredVars.filter(
+    (v) => !v.value && !v.isUserProvided,
+  ).length;
+
+  // Handle value change for required variables
+  const handleValueChange = (id: string, newValue: string) => {
+    setEnvVars(
+      envVars.map((v) => (v.id === id ? { ...v, value: newValue } : v)),
+    );
+  };
+
+  // Toggle user-provided state for a variable
+  const handleToggleUserProvided = (id: string) => {
+    setEnvVars(
+      envVars.map((v) =>
+        v.id === id ? { ...v, isUserProvided: !v.isUserProvided, value: "" } : v,
+      ),
+    );
+  };
+
+  // Save a required variable
+  const handleSaveVariable = (envVar: EnvironmentVariable) => {
+    if (!envVar.value) return;
+
+    // Use target environments, or fall back to all available environments
+    const targetEnvs =
+      envVar.targetEnvironments.length > 0
+        ? envVar.targetEnvironments
+        : environments.map((e) => e.slug);
+
+    if (targetEnvs.length === 0) {
+      toast.error("No environments available to save to");
+      return;
+    }
+
+    targetEnvs.forEach((envSlug) => {
+      updateEnvironmentMutation.mutate({
+        request: {
+          slug: envSlug,
+          updateEnvironmentRequestBody: {
+            entriesToUpdate: [{ name: envVar.key, value: envVar.value }],
+            entriesToRemove: [],
+          },
+        },
+      });
+    });
+
+    toast.success(`Saved ${envVar.key}`);
+
+    telemetry.capture("environment_event", {
+      action: "required_variable_configured",
+      toolset_slug: toolset.slug,
+      variable_key: envVar.key,
+    });
+  };
+
+  const getEnvironmentLabel = (envVar: EnvironmentVariable) => {
+    if (envVar.targetEnvironments.length === 0) return "No Environments";
+    if (envVar.targetEnvironments.length === environments.length)
+      return "All Environments";
+    if (envVar.targetEnvironments.length === 1) {
+      return (
+        environments.find((e) => e.slug === envVar.targetEnvironments[0])
+          ?.name || envVar.targetEnvironments[0]
+      );
+    }
+    return `${envVar.targetEnvironments.length} Environments`;
+  };
+
+  const formatDate = (date?: Date) => {
+    if (!date) return "";
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const year = date.getFullYear().toString().slice(-2);
+    return `${month}/${day}/${year}`;
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">
+            Environment Variables
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Configure required credentials and add custom variables.
+          </p>
+        </div>
+        <Button onClick={() => setIsAddingNew(true)} disabled={isAddingNew}>
+          <Button.Text>Add Custom Variable</Button.Text>
+        </Button>
+      </div>
+
+      {/* Required Configuration Section */}
+      {requiredVars.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <h3 className="text-lg font-medium">Required Configuration</h3>
+            {missingRequiredCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs text-muted-foreground">
+                {missingRequiredCount} not configured
+              </span>
+            )}
+            {missingRequiredCount === 0 && requiredVars.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs text-muted-foreground">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                All configured
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            These variables are required by this MCP server. Set their values to
+            enable full functionality.
+          </p>
+
+          <div className="border rounded-lg overflow-hidden">
+            {filteredRequiredVars.map((envVar, index) => (
+              <div
+                key={envVar.id}
+                className={cn(
+                  "grid grid-cols-[auto_1fr_auto] gap-4 items-center px-5 py-4 transition-colors",
+                  index !== filteredRequiredVars.length - 1 && "border-b",
+                )}
+              >
+                {/* Status indicator */}
+                <div>
+                  {envVar.value || envVar.isUserProvided ? (
+                    <div className="w-2 h-2 rounded-full bg-green-500" />
+                  ) : (
+                    <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />
+                  )}
+                </div>
+
+                {/* Variable Info */}
+                <div className="min-w-0">
+                  <div className="font-medium font-mono text-sm truncate">
+                    {envVar.key}
+                  </div>
+                  {envVar.description && (
+                    <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                      {envVar.description}
+                    </div>
+                  )}
+                </div>
+
+                {/* Right side: Toggle + Value */}
+                <div className="flex items-center gap-4">
+                  {/* User provided toggle */}
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <Switch
+                      checked={envVar.isUserProvided}
+                      onCheckedChange={() => handleToggleUserProvided(envVar.id)}
+                    />
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      User provided
+                    </span>
+                  </label>
+
+                  {/* Value Input or Runtime badge */}
+                  <div className="w-56">
+                    {envVar.isUserProvided ? (
+                      <div className="h-9 flex items-center px-3 rounded-md bg-muted text-xs text-muted-foreground font-mono">
+                        Set at runtime
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <input
+                          type={visibleVars.has(envVar.id) ? "text" : "password"}
+                          value={envVar.value}
+                          onChange={(e) =>
+                            handleValueChange(envVar.id, e.target.value)
+                          }
+                          placeholder="Enter value..."
+                          className="w-full h-9 px-3 pr-9 rounded-md border border-input bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                        <button
+                          onClick={() => toggleVisibility(envVar.id)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {visibleVars.has(envVar.id) ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Save button - always visible for consistent width */}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => handleSaveVariable(envVar)}
+                    disabled={!envVar.value || envVar.isUserProvided}
+                    className={envVar.isUserProvided ? "invisible" : ""}
+                  >
+                    Save
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Add New Variable Sheet */}
+      <Sheet open={isAddingNew} onOpenChange={setIsAddingNew}>
+        <SheetContent
+          side="right"
+          className="w-[500px] sm:max-w-[500px] flex flex-col"
+        >
+          <SheetHeader className="px-6 pt-6 pb-0">
+            <SheetTitle className="text-lg font-semibold">
+              Add Environment Variable
+            </SheetTitle>
+          </SheetHeader>
+
+          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+            {/* Key and Value inputs side by side */}
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <Label className="text-xs text-muted-foreground mb-1.5 block">
+                  Key
+                </Label>
+                <input
+                  type="text"
+                  value={newKey}
+                  onChange={(e) => setNewKey(e.target.value.toUpperCase())}
+                  placeholder="CLIENT_KEY..."
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div className="flex-1">
+                <Label className="text-xs text-muted-foreground mb-1.5 block">
+                  Value
+                </Label>
+                <input
+                  type={newValueVisible ? "text" : "password"}
+                  value={newValue}
+                  onChange={(e) => setNewValue(e.target.value)}
+                  placeholder=""
+                  disabled={newIsUserProvided}
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:bg-muted disabled:cursor-not-allowed"
+                />
+              </div>
+            </div>
+
+            {/* Add Note link */}
+            <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Add Note
+            </button>
+
+            {/* Add Another button */}
+            <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+              <Plus className="h-4 w-4" />
+              Add Another
+            </button>
+
+            {/* Environments section */}
+            <div className="pt-4 border-t">
+              <Label className="text-xs text-muted-foreground mb-2 block">
+                Environments
+              </Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm flex items-center justify-between hover:bg-accent transition-colors">
+                    <div className="flex items-center gap-2">
+                      <svg
+                        className="h-4 w-4 text-muted-foreground"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        strokeWidth="2"
+                      >
+                        <rect x="3" y="3" width="18" height="6" rx="1" />
+                        <rect
+                          x="3"
+                          y="11"
+                          width="18"
+                          height="6"
+                          rx="1"
+                          opacity="0.5"
+                        />
+                      </svg>
+                      <span>
+                        {newTargetEnvironments.length === 0
+                          ? "All Environments"
+                          : newTargetEnvironments.length === 1
+                            ? environments.find(
+                                (e) => e.slug === newTargetEnvironments[0],
+                              )?.name || newTargetEnvironments[0]
+                            : `${newTargetEnvironments.length} Environments`}
+                      </span>
+                    </div>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-[352px] p-1">
+                  <div
+                    className="px-3 py-2 text-sm rounded-sm cursor-pointer hover:bg-accent flex items-center gap-2"
+                    onClick={() => setNewTargetEnvironments([])}
+                  >
+                    <div
+                      className={cn(
+                        "w-4 h-4 rounded-sm border flex items-center justify-center",
+                        newTargetEnvironments.length === 0
+                          ? "bg-primary border-primary text-primary-foreground"
+                          : "border-border",
+                      )}
+                    >
+                      {newTargetEnvironments.length === 0 && (
+                        <Check className="h-3 w-3" />
+                      )}
+                    </div>
+                    All Environments
+                  </div>
+                  {environments.map((env) => (
+                    <div
+                      key={env.slug}
+                      className="px-3 py-2 text-sm rounded-sm cursor-pointer hover:bg-accent flex items-center gap-2"
+                      onClick={() => {
+                        if (newTargetEnvironments.includes(env.slug)) {
+                          setNewTargetEnvironments(
+                            newTargetEnvironments.filter((s) => s !== env.slug),
+                          );
+                        } else {
+                          setNewTargetEnvironments([
+                            ...newTargetEnvironments,
+                            env.slug,
+                          ]);
+                        }
+                      }}
+                    >
+                      <div
+                        className={cn(
+                          "w-4 h-4 rounded-sm border flex items-center justify-center",
+                          newTargetEnvironments.includes(env.slug)
+                            ? "bg-primary border-primary text-primary-foreground"
+                            : "border-border",
+                        )}
+                      >
+                        {newTargetEnvironments.includes(env.slug) && (
+                          <Check className="h-3 w-3" />
+                        )}
+                      </div>
+                      {env.name}
+                    </div>
+                  ))}
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Sensitive toggle */}
+            <div className="flex items-center justify-between pt-4">
+              <div className="flex items-center gap-3">
+                <Switch
+                  checked={newIsUserProvided}
+                  onCheckedChange={setNewIsUserProvided}
+                />
+                <div>
+                  <span className="text-sm font-medium">Sensitive</span>
+                  <span className="text-xs text-yellow-600 ml-2">⚡</span>
+                  <p className="text-xs text-muted-foreground">
+                    Available for Production and Preview only
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <SheetFooter className="px-6 py-4 border-t flex-row justify-between items-center">
+            <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                strokeWidth="2"
+              >
+                <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              Import .env
+            </button>
+            <span className="text-xs text-muted-foreground">
+              or paste .env contents in Key input
+            </span>
+            <Button
+              onClick={() => {
+                handleAddVariable();
+                setIsAddingNew(false);
+              }}
+              disabled={!newKey.trim()}
+            >
+              Save
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* Custom Variables Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-medium">Custom Variables</h3>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Add your own environment variables for additional configuration.
+        </p>
+
+        {/* Filters */}
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-xs">
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search..."
+              className="w-full h-10 pl-9 pr-3 rounded-md border border-input bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="h-10 px-4 rounded-md border border-input bg-background text-sm flex items-center gap-2 hover:bg-accent transition-colors">
+                <span>
+                  {filterEnvironment === "all"
+                    ? "All Environments"
+                    : environments.find((e) => e.slug === filterEnvironment)
+                        ?.name || filterEnvironment}
+                </span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-[200px] p-1">
+              <div
+                className="px-3 py-2 text-sm rounded-sm cursor-pointer hover:bg-accent"
+                onClick={() => setFilterEnvironment("all")}
+              >
+                All Environments
+              </div>
+              {environments.map((env) => (
+                <div
+                  key={env.slug}
+                  className="px-3 py-2 text-sm rounded-sm cursor-pointer hover:bg-accent"
+                  onClick={() => setFilterEnvironment(env.slug)}
+                >
+                  {env.name}
+                </div>
+              ))}
+            </PopoverContent>
+          </Popover>
+        </div>
+
+        {/* Custom Variables List */}
+        {filteredCustomVars.length > 0 ? (
+          <div className="border rounded-lg overflow-hidden">
+            {filteredCustomVars.map((envVar, index) => (
+              <div
+                key={envVar.id}
+                className={cn(
+                  "flex items-center px-5 py-4 hover:bg-muted/40 transition-colors",
+                  index !== filteredCustomVars.length - 1 && "border-b",
+                )}
+              >
+                {/* Code Icon */}
+                <div className="w-10 h-10 rounded-full border border-border flex items-center justify-center text-muted-foreground shrink-0 mr-4">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="16 18 22 12 16 6" />
+                    <polyline points="8 6 2 12 8 18" />
+                  </svg>
+                </div>
+
+                {/* Variable Info */}
+                <div className="flex-1 min-w-0 mr-4">
+                  <div className="font-medium font-mono text-sm">
+                    {envVar.key}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {getEnvironmentLabel(envVar)}
+                  </div>
+                </div>
+
+                {/* Value with visibility toggle */}
+                <div className="flex items-center gap-3 mr-6">
+                  <button
+                    onClick={() => toggleVisibility(envVar.id)}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {visibleVars.has(envVar.id) ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                  <span className="font-mono text-sm text-muted-foreground w-28">
+                    {envVar.isUserProvided
+                      ? "runtime"
+                      : visibleVars.has(envVar.id) && envVar.value
+                        ? envVar.value
+                        : "••••••••••••••"}
+                  </span>
+                </div>
+
+                {/* Date */}
+                <div className="text-sm text-muted-foreground w-28 text-right mr-4">
+                  {envVar.updatedAt
+                    ? `Updated ${formatDate(envVar.updatedAt)}`
+                    : `Added ${formatDate(envVar.createdAt)}`}
+                </div>
+
+                {/* Gradient Circle */}
+                <div
+                  className="w-6 h-6 rounded-full shrink-0 mr-4"
+                  style={{
+                    background: `linear-gradient(135deg, hsl(${(envVar.key.charCodeAt(0) * 15) % 360}, 80%, 65%), hsl(${(envVar.key.charCodeAt(0) * 15 + 90) % 360}, 70%, 55%))`,
+                  }}
+                />
+
+                {/* More Actions */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button className="text-muted-foreground hover:text-foreground transition-colors p-1">
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                      >
+                        <circle cx="12" cy="5" r="2" />
+                        <circle cx="12" cy="12" r="2" />
+                        <circle cx="12" cy="19" r="2" />
+                      </svg>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-[160px] p-1">
+                    <div
+                      className="px-3 py-2 text-sm rounded-sm cursor-pointer hover:bg-accent flex items-center gap-2"
+                      onClick={() => toggleVisibility(envVar.id)}
+                    >
+                      <Eye className="h-4 w-4" />
+                      {visibleVars.has(envVar.id) ? "Hide value" : "Show value"}
+                    </div>
+                    <div
+                      className="px-3 py-2 text-sm rounded-sm cursor-pointer hover:bg-destructive hover:text-destructive-foreground flex items-center gap-2 text-destructive"
+                      onClick={() => handleDeleteVariable(envVar.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            ))}
+          </div>
+        ) : (
+          // Empty State for custom variables
+          <div className="border rounded-lg border-dashed p-8 text-center">
+            <p className="text-muted-foreground mb-4">
+              {searchQuery || filterEnvironment !== "all"
+                ? "No custom variables match your filters."
+                : "No custom environment variables added yet."}
+            </p>
+            {!searchQuery && filterEnvironment === "all" && (
+              <Button onClick={() => setIsAddingNew(true)} variant="secondary">
+                <Button.LeftIcon>
+                  <Plus className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Add Custom Variable</Button.Text>
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Settings Tab - Visibility, Slug, Custom Domain, Tool Selection Mode
  */
 function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
@@ -692,7 +1568,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
 
   const mcpSlugError = useMcpSlugValidation(mcpSlug, toolset.mcpSlug);
 
-  const { url: mcpUrl, customServerURL } = useMcpUrl(toolset);
+  const { url: _mcpUrl, customServerURL } = useMcpUrl(toolset);
 
   const handleMcpSlugChange = (value: string) => {
     value = value.slice(0, 40);
@@ -856,12 +1732,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   };
 
   return (
-    <Stack
-      className={cn(
-        "mb-4",
-        !toolset.mcpEnabled && "blur-[2px] pointer-events-none",
-      )}
-    >
+    <Stack className="mb-4">
       <PageSection
         heading="Visibility"
         description="Make your MCP server visible to the world, or protected behind a Gram key."

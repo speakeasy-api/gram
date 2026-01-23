@@ -1,12 +1,7 @@
 import { MCPCard } from "@/components/mcp/MCPCard";
 import { Page } from "@/components/page-layout";
-import { Dialog } from "@/components/ui/dialog";
-import { ToolsetEntry } from "@gram/client/models/components";
-import { Button } from "@speakeasy-api/moonshine";
-import { useState } from "react";
 import { Outlet } from "react-router";
 import { useToolsets } from "../toolsets/Toolsets";
-import { MCPJson } from "./MCPDetails";
 import { MCPEmptyState } from "./MCPEmptyState";
 
 export function MCPRoot() {
@@ -15,9 +10,6 @@ export function MCPRoot() {
 
 export function MCPOverview() {
   const toolsets = useToolsets();
-  const [configModalOpen, setConfigModalOpen] = useState(false);
-  const [configModalToolset, setConfigModalToolset] =
-    useState<ToolsetEntry | null>(null);
 
   if (!toolsets.isLoading && toolsets.length === 0) {
     return <MCPEmptyState />;
@@ -37,33 +29,9 @@ export function MCPOverview() {
           <Page.Section.Body>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {toolsets.map((toolset) => (
-            <MCPCard
-              key={toolset.id}
-              toolset={toolset}
-              onConfigClick={() => {
-                setConfigModalToolset(toolset);
-                setConfigModalOpen(true);
-              }}
-            />
+            <MCPCard key={toolset.id} toolset={toolset} />
           ))}
         </div>
-        <Dialog open={configModalOpen} onOpenChange={setConfigModalOpen}>
-          <Dialog.Content className="max-w-3xl! p-10!">
-            <Dialog.Header>
-              <Dialog.Title>MCP Config</Dialog.Title>
-            </Dialog.Header>
-            {configModalToolset && (
-              <MCPJson
-                toolset={configModalToolset}
-                fullWidth
-                className="max-h-[70vh] overflow-y-auto"
-                />
-            )}
-            <Dialog.Footer>
-              <Button onClick={() => setConfigModalOpen(false)}>Close</Button>
-            </Dialog.Footer>
-          </Dialog.Content>
-        </Dialog>
           </Page.Section.Body>
         </Page.Section>
       </Page.Body>
