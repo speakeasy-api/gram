@@ -3,7 +3,6 @@ package telemetry
 import (
 	"fmt"
 	"log/slog"
-	"maps"
 	"net/http"
 	"strings"
 	"time"
@@ -13,87 +12,36 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-type HTTPAttributeRecorder map[attr.Key]any
-
-func (h HTTPAttributeRecorder) RecordMethod(method string) {
-	h[attr.HTTPRequestMethodKey] = method
-}
-
-func (h HTTPAttributeRecorder) RecordServerURL(url string) {
-	h[attr.URLFullKey] = url
-}
-
-func (h HTTPAttributeRecorder) RecordRoute(route string) {
-	h[attr.HTTPRouteKey] = route
-}
-
-func (h HTTPAttributeRecorder) RecordStatusCode(code int) {
-	h[attr.HTTPResponseStatusCodeKey] = int64(code)
-}
-
-func (h HTTPAttributeRecorder) RecordUserAgent(agent string) {
-	h[attr.HTTPRequestHeaderUserAgentKey] = agent
-}
-
-func (h HTTPAttributeRecorder) RecordDuration(duration float64) {
-	h[attr.HTTPServerRequestDurationKey] = duration
-}
-
-func (h HTTPAttributeRecorder) RecordRequestHeaders(headers map[string]string, isSensitive bool) {
-	if len(headers) == 0 {
-		return
-	}
-
-	// try to fetch the existing headers - if they dont exist or are nil, create
-	// a map
-	hMap, ok := h[attr.HTTPRequestHeadersKey].(map[string]string)
-	if !ok {
-		hMap = make(map[string]string, len(headers))
-	}
-
-	for header, v := range headers {
-		if isSensitive {
-			v = redactToken(v)
-		}
-		hMap[header] = v
-	}
-
-	h[attr.HTTPRequestHeadersKey] = hMap
-}
-
-func (h HTTPAttributeRecorder) RecordResponseHeaders(headers map[string]string) {
-	if len(headers) == 0 {
-		return
-	}
-
-	// try to fetch the existing headers - if they dont exist or are nil, create
-	// a map
-	hMap, ok := h[attr.HTTPResponseHeadersKey].(map[string]string)
-	if !ok {
-		hMap = make(map[string]string, len(headers))
-	}
-
-	maps.Copy(hMap, headers)
-
-	h[attr.HTTPRequestHeadersKey] = hMap
-}
-
-func (h HTTPAttributeRecorder) RecordRequestBody(body int64) {
-	h[attr.HTTPRequestBodyKey] = body
-}
-
-func (h HTTPAttributeRecorder) RecordResponseBody(body int64) {
-	h[attr.HTTPResponseBodyKey] = body
-}
+const (
+	redactRevealPrefixLen = 3
+	redactMinTokenLen     = 10
+)
 
 // ToolInfo represents the minimal tool information needed for logging
 type ToolInfo struct {
 	ID             string
-	Urn            string
+	URN            string
 	Name           string
 	ProjectID      string
 	DeploymentID   string
+	FunctionID     *string
 	OrganizationID string
+}
+
+func (t ToolInfo) AsAttributes() map[attr.Key]any {
+	attrs := map[attr.Key]any{
+		attr.ToolURNKey:        t.URN,
+		attr.NameKey:           t.Name,
+		attr.ProjectIDKey:      t.ProjectID,
+		attr.DeploymentIDKey:   t.DeploymentID,
+		attr.OrganizationIDKey: t.OrganizationID,
+	}
+
+	if t.FunctionID != nil {
+		attrs[attr.FunctionIDKey] = t.FunctionID
+	}
+
+	return attrs
 }
 
 // allowedNonSensitiveHeaders is a list of standard HTTP header names that are safe to log.
@@ -153,7 +101,7 @@ func filterAllowedHeaders(headers map[string]string) map[string]string {
 
 // ToolCallLogRoundTripper wraps an http.RoundTripper and logs HTTP requests to ClickHouse
 type ToolCallLogRoundTripper struct {
-	AttrRecorder HTTPAttributeRecorder
+	AttrRecorder AttributeRecorder
 	rt           http.RoundTripper
 	logger       *slog.Logger
 	tracer       trace.Tracer
@@ -166,8 +114,10 @@ func NewToolCallLogRoundTripper(
 	logger *slog.Logger,
 	tracer trace.Tracer,
 	toolInfo *ToolInfo) *ToolCallLogRoundTripper {
+	attrRecorder := AttributeRecorder{}
+
 	return &ToolCallLogRoundTripper{
-		AttrRecorder: map[attr.Key]any{},
+		AttrRecorder: attrRecorder,
 
 		rt:       rt,
 		logger:   logger,
@@ -210,16 +160,21 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	requestHeaders = filterAllowedHeaders(requestHeaders)
 	// Construct full server URL with scheme
 	serverURL := req.URL.Scheme + "://" + req.URL.Host
-	h.AttrRecorder.RecordServerURL(serverURL)
-	h.AttrRecorder.RecordMethod(req.Method)
-	h.AttrRecorder.RecordRoute(req.URL.Path)
-	h.AttrRecorder.RecordUserAgent(req.UserAgent())
-	h.AttrRecorder.RecordRequestHeaders(requestHeaders, false)
+	h.AttrRecorder.RecordHTTPServerURL(serverURL)
+	h.AttrRecorder.RecordHTTPMethod(req.Method)
+	h.AttrRecorder.RecordHTTPRoute(req.URL.Path)
+	h.AttrRecorder.RecordHTTPUserAgent(req.UserAgent())
+	h.AttrRecorder.RecordHTTPRequestHeaders(requestHeaders, false)
 
 	resp, err := base.RoundTrip(req)
 
 	duration := time.Since(startTime).Seconds()
-	h.AttrRecorder.RecordDuration(duration)
+	h.AttrRecorder.RecordHTTPDuration(duration)
+
+	logBody := fmt.Sprintf("%s %s -> %d (%.2fs)",
+		req.Method, req.URL.Path, resp.StatusCode, duration)
+
+	h.AttrRecorder.RecordLogMessageBody(logBody)
 
 	tool := h.toolInfo
 	if tool == nil {
@@ -239,7 +194,7 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	// Add tool attributes to span
 	span.SetAttributes(
 		attr.ToolID(tool.ID),
-		attr.ToolURN(tool.Urn),
+		attr.ToolURN(tool.URN),
 		attr.ToolName(tool.Name),
 		attr.ProjectID(tool.ProjectID),
 		attr.DeploymentID(tool.DeploymentID),
@@ -255,11 +210,11 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			attr.SlogError(err),
 			attr.SlogURLOriginal(req.URL.String()),
 			attr.SlogHTTPRequestMethod(req.Method),
-			attr.SlogToolURN(tool.Urn),
+			attr.SlogToolURN(tool.URN),
 			attr.SlogHTTPClientRequestDuration(duration),
 		)
 
-		h.AttrRecorder.RecordStatusCode(0)
+		h.AttrRecorder.RecordHTTPStatusCode(0)
 
 		return resp, fmt.Errorf("roundtrip: %w", err)
 	}
@@ -284,7 +239,7 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			attr.SlogURLOriginal(req.URL.String()),
 			attr.SlogHTTPResponseStatusCode(statusCode),
 			attr.SlogHTTPClientRequestDuration(duration),
-			attr.SlogToolURN(tool.Urn),
+			attr.SlogToolURN(tool.URN),
 		)
 	}
 
@@ -299,12 +254,38 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		responseHeaders = filterAllowedHeaders(responseHeaders)
 	}
 
-	h.AttrRecorder.RecordStatusCode(statusCode)
-	h.AttrRecorder.RecordResponseHeaders(responseHeaders)
+	h.AttrRecorder.RecordHTTPStatusCode(statusCode)
+	h.AttrRecorder.RecordHTTPResponseHeaders(responseHeaders)
 
 	if resp == nil || resp.Body == nil {
 		return resp, nil
 	}
 
 	return resp, nil
+}
+
+// // reasonable redaction of tokens function for tool call logs
+func redactToken(token string) string {
+	trimmed := strings.TrimSpace(token)
+	if trimmed == "" {
+		return trimmed
+	}
+
+	lower := strings.ToLower(trimmed)
+	for _, prefix := range []string{"bearer ", "basic "} {
+		if strings.HasPrefix(lower, prefix) {
+			actualPrefix := trimmed[:len(prefix)]
+			remainder := strings.TrimSpace(trimmed[len(prefix):])
+			if len(remainder) < redactMinTokenLen {
+				return actualPrefix + "***"
+			}
+			return actualPrefix + remainder[:redactRevealPrefixLen] + "***"
+		}
+	}
+
+	if len(trimmed) < redactMinTokenLen {
+		return "***"
+	}
+
+	return trimmed[:redactRevealPrefixLen] + "***"
 }

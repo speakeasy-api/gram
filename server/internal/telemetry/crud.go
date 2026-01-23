@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
+	"maps"
 	"strings"
 	"time"
 
@@ -15,9 +15,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-// GenAI operation type values.
-// These follow the OpenTelemetry GenAI semantic conventions:
-// https://opentelemetry.io/docs/specs/semconv/gen-ai/
 const (
 	GenAIOperationChat        = "chat"
 	GenAIOperationExecuteTool = "execute_tool"
@@ -34,34 +31,29 @@ var ResourceAttributeKeys = map[attribute.Key]struct{}{
 	attr.ServiceVersionKey: {},
 }
 
-// EmitTelemetryLog emits a telemetry log to ClickHouse asynchronously.
-// All data is passed via the attrs map. Known keys are extracted to dedicated columns
-// (but remain in the attributes JSON). Remaining keys are partitioned into resource
-// vs span attributes based on ResourceAttributeKeys.
-func EmitTelemetryLog(
-	ctx context.Context,
-	logger *slog.Logger,
-	provider ToolMetricsProvider,
-	attrs map[attr.Key]any,
-) {
-	if provider == nil {
-		return
-	}
+type LogParams struct {
+	Timestmp   time.Time
+	ToolInfo   ToolInfo
+	Attributes map[attr.Key]any
+}
 
+func (s *Service) CreateLog(
+	ctx context.Context,
+	params LogParams) {
 	go func() {
 		logCtx := context.WithoutCancel(ctx)
 
-		logParams, err := buildTelemetryLogParams(attrs)
+		logParams, err := buildTelemetryLogParams(params)
 		if err != nil {
-			logger.ErrorContext(logCtx,
+			s.logger.ErrorContext(logCtx,
 				"failed to build telemetry log params",
 				attr.SlogError(err),
 			)
 			return
 		}
 
-		if err := provider.InsertTelemetryLog(logCtx, *logParams); err != nil {
-			logger.ErrorContext(logCtx,
+		if err := s.chRepo.InsertTelemetryLog(logCtx, *logParams); err != nil {
+			s.logger.ErrorContext(logCtx,
 				"failed to emit telemetry log to ClickHouse",
 				attr.SlogError(err),
 				attr.SlogResourceURN(logParams.GramURN),
@@ -69,7 +61,7 @@ func EmitTelemetryLog(
 			return
 		}
 
-		logger.DebugContext(logCtx,
+		s.logger.DebugContext(logCtx,
 			"emitted telemetry log",
 			attr.SlogResourceURN(logParams.GramURN),
 			attr.SlogProjectID(logParams.GramProjectID),
@@ -78,69 +70,62 @@ func EmitTelemetryLog(
 }
 
 // buildTelemetryLogParams constructs InsertTelemetryLogParams from attributes.
-func buildTelemetryLogParams(attrs map[attr.Key]any) (*repo.InsertTelemetryLogParams, error) {
+func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate telemetry log id")
 	}
 
+	allAttrs := params.Attributes
+
+	// we want the core tool info data to also be added as attributes to our
+	// attrbutes object
+	maps.Copy(allAttrs, params.ToolInfo.AsAttributes())
+
 	observedTimeUnixNano := time.Now().UnixNano()
-	attrs[attr.ObservedTimeUnixNanoKey] = observedTimeUnixNano
-
-	// If time is present in attrs, use that; otherwise use the observed time
-	var timeUnixNano int64
-	if tun, ok := attrs[attr.TimeUnixNanoKey]; ok {
-		timeUnixNano = getInt64(tun)
-	} else {
-		timeUnixNano = observedTimeUnixNano
-		attrs[attr.TimeUnixNanoKey] = observedTimeUnixNano
-	}
-
-	// Default severity to INFO if not provided
-	severityText := getStringPtr(attrs, attr.LogSeverityKey)
-	if severityText == nil {
-		defaultSeverity := "INFO"
-		severityText = &defaultSeverity
-	}
+	allAttrs[attr.ObservedTimeUnixNanoKey] = observedTimeUnixNano
+	allAttrs[attr.TimeUnixNanoKey] = params.Timestmp.UnixNano()
 
 	// Manually add service name, as it's always going to be gram server
-	attrs[attr.ServiceNameKey] = serviceName
+	allAttrs[attr.ServiceNameKey] = serviceName
 
-	spanAttrs, resourceAttrs, err := parseAttributes(attrs)
+	spanAttrs, resourceAttrs, err := parseAttributes(allAttrs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "parse log attributes")
 	}
 
 	return &repo.InsertTelemetryLogParams{
 		ID:                     id.String(),
-		TimeUnixNano:           timeUnixNano,
+		TimeUnixNano:           params.Timestmp.UnixNano(),
 		ObservedTimeUnixNano:   observedTimeUnixNano,
-		SeverityText:           severityText,
-		Body:                   getString(attrs, attr.LogBodyKey),
-		TraceID:                getStringPtr(attrs, attr.TraceIDKey),
-		SpanID:                 getStringPtr(attrs, attr.SpanIDKey),
+		SeverityText:           getSeverityText(allAttrs),
+		Body:                   getString(allAttrs, attr.LogBodyKey),
+		TraceID:                getStringPtr(allAttrs, attr.TraceIDKey),
+		SpanID:                 getStringPtr(allAttrs, attr.SpanIDKey),
 		Attributes:             spanAttrs,
 		ResourceAttributes:     resourceAttrs,
-		GramProjectID:          getString(attrs, attr.ProjectIDKey),
-		GramDeploymentID:       getStringPtr(attrs, attr.DeploymentIDKey),
-		GramFunctionID:         getStringPtr(attrs, attr.FunctionIDKey),
-		GramURN:                getString(attrs, attr.ResourceURNKey),
+		GramProjectID:          params.ToolInfo.ProjectID,
+		GramDeploymentID:       &params.ToolInfo.DeploymentID,
+		GramFunctionID:         params.ToolInfo.FunctionID,
+		GramURN:                params.ToolInfo.URN,
 		ServiceName:            serviceName,
-		ServiceVersion:         getStringPtr(attrs, attr.ServiceVersionKey),
-		HTTPRequestMethod:      getStringPtr(attrs, attr.HTTPRequestMethodKey),
-		HTTPResponseStatusCode: getInt32Ptr(attrs, attr.HTTPResponseStatusCodeKey),
-		HTTPRoute:              getStringPtr(attrs, attr.HTTPRouteKey),
-		HTTPServerURL:          getStringPtr(attrs, attr.URLFullKey),
+		ServiceVersion:         getStringPtr(allAttrs, attr.ServiceVersionKey),
+		HTTPRequestMethod:      getStringPtr(allAttrs, attr.HTTPRequestMethodKey),
+		HTTPResponseStatusCode: getInt32Ptr(allAttrs, attr.HTTPResponseStatusCodeKey),
+		HTTPRoute:              getStringPtr(allAttrs, attr.HTTPRouteKey),
+		HTTPServerURL:          getStringPtr(allAttrs, attr.URLFullKey),
 	}, nil
 }
 
 // parseAttributes splits attributes into resource and span attributes
-// based on ResourceAttributeKeys.
+// based on ResourceAttributeKeys, and returns their json string representation.
 func parseAttributes(attrs map[attr.Key]any) (spanAttrsJSON, resourceAttrsJSON string, err error) {
 	spanAttrs := make(map[attr.Key]any)
 	resourceAttrs := make(map[attr.Key]any)
 
 	for k, v := range attrs {
+		// if there's an attribute related to a Gen AI request we want
+		// to infer the model provider for insights
 		if k == attr.GenAIRequestModelKey {
 			if model, ok := v.(string); ok {
 				spanAttrs[attr.GenAIProviderNameKey] = inferProvider(model)
@@ -206,19 +191,29 @@ func inferProvider(model string) string {
 	}
 }
 
-// getInt64 converts a value to int64, handling various numeric types.
-func getInt64(v any) int64 {
-	switch n := v.(type) {
-	case int64:
-		return n
-	case int:
-		return int64(n)
-	case int32:
-		return int64(n)
-	case float64:
-		return int64(n)
+func getSeverityText(attrs map[attr.Key]any) *string {
+	defaultSeverity := "INFO"
+
+	severityText := getStringPtr(attrs, attr.LogSeverityKey)
+	if severityText != nil {
+		return severityText
+	}
+
+	code, ok := attrs[attr.HTTPResponseStatusCodeKey].(int64)
+	if !ok {
+		return &defaultSeverity
+	}
+
+	switch {
+	case code >= 500:
+		errorText := "ERROR"
+		return &errorText
+	case code >= 400:
+		warnText := "WARN"
+		return &warnText
 	default:
-		return 0
+		infoText := "INFO"
+		return &infoText
 	}
 }
 
