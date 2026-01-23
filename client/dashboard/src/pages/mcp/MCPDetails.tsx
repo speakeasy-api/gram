@@ -28,8 +28,10 @@ import { ToolsetEntry } from "@gram/client/models/components";
 import {
   invalidateAllGetPeriodUsage,
   invalidateAllToolset,
+  invalidateGetMcpMetadata,
   useAddExternalOAuthServerMutation,
   useAddOAuthProxyServerMutation,
+  useGetMcpMetadata,
   useRemoveOAuthServerMutation,
   useUpdateSecurityVariableDisplayNameMutation,
   useUpdateToolsetMutation,
@@ -577,10 +579,22 @@ function AuthorizationHeadersSection({ toolset }: { toolset: Toolset }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
+  // Fetch MCP metadata to get saved header display names
+  // Use throwOnError: false since metadata may not exist for all toolsets
+  const { data: mcpMetadata } = useGetMcpMetadata(
+    { toolsetSlug: toolset.slug },
+    undefined,
+    { enabled: !!toolset.slug, throwOnError: false },
+  );
+
+  // Get the saved display names map from metadata
+  const headerDisplayNames = mcpMetadata?.metadata?.headerDisplayNames ?? {};
+
   const updateDisplayNameMutation =
     useUpdateSecurityVariableDisplayNameMutation({
       onSuccess: () => {
         invalidateAllToolset(queryClient);
+        invalidateGetMcpMetadata(queryClient, [{ toolsetSlug: toolset.slug }]);
         toast.success("Header display name updated");
         setEditingId(null);
         setEditValue("");
@@ -620,24 +634,54 @@ function AuthorizationHeadersSection({ toolset }: { toolset: Toolset }) {
     });
   };
 
+  // Flatten security variables to show one row per environment variable
+  // This handles cases like basic auth where one securityVariable has multiple envVariables
+  const envVarEntries = toolset.securityVariables?.flatMap((secVar) => {
+    // Filter out token_url env vars as they're not user-facing
+    const filteredEnvVars = secVar.envVariables.filter(
+      (envVar) => !envVar.toLowerCase().includes("token_url"),
+    );
+
+    // If no env vars after filtering, show the security variable itself
+    if (filteredEnvVars.length === 0) {
+      return [
+        {
+          id: secVar.id,
+          envVar: secVar.name,
+          securityVariableId: secVar.id,
+          displayName: headerDisplayNames[secVar.name] || secVar.displayName,
+        },
+      ];
+    }
+
+    // Create one entry per env var, looking up display name from metadata
+    return filteredEnvVars.map((envVar, index) => ({
+      id: `${secVar.id}-${index}`,
+      envVar: envVar,
+      securityVariableId: secVar.id,
+      // Look up the saved display name from headerDisplayNames map
+      displayName: headerDisplayNames[envVar] as string | undefined,
+    }));
+  });
+
   return (
     <PageSection
       heading="Authorization Headers"
       description="Customize how authorization headers are displayed to users. These friendly names will appear in MCP clients while the actual header names are used internally."
     >
       <Stack gap={2} className="max-w-2xl">
-        {toolset.securityVariables?.map((secVar) => (
+        {envVarEntries?.map((entry) => (
           <div
-            key={secVar.id}
+            key={entry.id}
             className="bg-stone-100 dark:bg-stone-900 p-1 rounded-md"
           >
             <BlockInner>
               <Stack direction="horizontal" align="center" className="w-full">
                 <Stack className="flex-1 min-w-0">
                   <Type small muted className="text-xs">
-                    Header: <span className="font-mono">{secVar.name}</span>
+                    Header: <span className="font-mono">{entry.envVar}</span>
                   </Type>
-                  {editingId === secVar.id ? (
+                  {editingId === entry.id ? (
                     <Stack
                       direction="horizontal"
                       align="center"
@@ -652,7 +696,7 @@ function AuthorizationHeadersSection({ toolset }: { toolset: Toolset }) {
                         autoFocus
                         onKeyDown={(e: React.KeyboardEvent) => {
                           if (e.key === "Enter") {
-                            handleEditSave(secVar.name);
+                            handleEditSave(entry.envVar);
                           } else if (e.key === "Escape") {
                             handleEditCancel();
                           }
@@ -661,7 +705,7 @@ function AuthorizationHeadersSection({ toolset }: { toolset: Toolset }) {
                       <Button
                         variant="tertiary"
                         size="sm"
-                        onClick={() => handleEditSave(secVar.name)}
+                        onClick={() => handleEditSave(entry.envVar)}
                         disabled={updateDisplayNameMutation.isPending}
                       >
                         <Check className="w-4 h-4" />
@@ -678,14 +722,13 @@ function AuthorizationHeadersSection({ toolset }: { toolset: Toolset }) {
                   ) : (
                     <Stack direction="horizontal" align="center" gap={2}>
                       <Type className="font-medium">
-                        {secVar.displayName ||
-                          secVar.name ||
-                          secVar.envVariables?.[0] ||
+                        {entry.displayName ||
+                          entry.envVar.replace(/_/g, "-") ||
                           "Unknown"}
                       </Type>
-                      {secVar.displayName &&
-                        secVar.displayName !==
-                          (secVar.name || secVar.envVariables?.[0]) && (
+                      {entry.displayName &&
+                        entry.displayName !==
+                          entry.envVar.replace(/_/g, "-") && (
                           <Badge variant="neutral" className="text-xs">
                             renamed
                           </Badge>
@@ -693,15 +736,15 @@ function AuthorizationHeadersSection({ toolset }: { toolset: Toolset }) {
                     </Stack>
                   )}
                 </Stack>
-                {editingId !== secVar.id && (
+                {editingId !== entry.id && (
                   <Button
                     variant="tertiary"
                     size="sm"
                     onClick={() =>
                       handleEditStart(
-                        secVar.id,
-                        secVar.displayName,
-                        secVar.name || secVar.envVariables?.[0] || "",
+                        entry.id,
+                        entry.displayName,
+                        entry.envVar.replace(/_/g, "-"),
                       )
                     }
                   >

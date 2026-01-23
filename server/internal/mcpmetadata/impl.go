@@ -373,6 +373,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 
 	var docsURL string
 	var instructions string
+	headerDisplayNames := make(map[string]string)
 	metadataRecord, metadataErr := s.repo.GetMetadataForToolset(ctx, toolset.ID)
 	if metadataErr != nil {
 		if !errors.Is(metadataErr, pgx.ErrNoRows) {
@@ -393,10 +394,13 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		if inst := conv.FromPGText[string](metadataRecord.Instructions); inst != nil {
 			instructions = strings.TrimSpace(*inst)
 		}
+		if len(metadataRecord.HeaderDisplayNames) > 0 {
+			_ = json.Unmarshal(metadataRecord.HeaderDisplayNames, &headerDisplayNames)
+		}
 	}
 
 	securityMode := s.resolveSecurityMode(toolset)
-	securityInputs := s.collectEnvironmentVariables(securityMode, toolsetDetails)
+	securityInputs := s.collectEnvironmentVariables(securityMode, toolsetDetails, headerDisplayNames)
 
 	toolNames := []string{}
 
@@ -608,8 +612,9 @@ func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset) securityMo
 	return securityModeGram
 }
 
-// collectEnvironmentVariables returns security inputs based on the security mode
-func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails *types.Toolset) []securityInput {
+// collectEnvironmentVariables returns security inputs based on the security mode.
+// headerDisplayNames maps env var names to their custom display names (from MCP metadata).
+func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails *types.Toolset, headerDisplayNames map[string]string) []securityInput {
 	switch mode {
 	case securityModeGram:
 		return []securityInput{
@@ -644,10 +649,12 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 				if !seen[envVar] {
 					seen[envVar] = true
 
-					// Use custom display name if set, otherwise derive from env var
+					// Priority for display name:
+					// 1. Per-env-var display name from headerDisplayNames (keyed by env var name)
+					// 2. Derive from env var name
 					displayName := fmt.Sprintf("MCP-%s", strings.ReplaceAll(envVar, "_", "-"))
-					if secVar.DisplayName != nil && *secVar.DisplayName != "" {
-						displayName = *secVar.DisplayName
+					if customName, ok := headerDisplayNames[envVar]; ok && customName != "" {
+						displayName = customName
 					}
 
 					inputs = append(inputs, securityInput{
@@ -666,9 +673,15 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 					continue
 				}
 
+				// Check for custom display name for function env vars too
+				displayName := fmt.Sprintf("MCP-%s", strings.ReplaceAll(functionEnvVar.Name, "_", "-"))
+				if customName, ok := headerDisplayNames[functionEnvVar.Name]; ok && customName != "" {
+					displayName = customName
+				}
+
 				inputs = append(inputs, securityInput{
 					SystemName:  fmt.Sprintf("MCP-%s", functionEnvVar.Name),
-					DisplayName: fmt.Sprintf("MCP-%s", strings.ReplaceAll(functionEnvVar.Name, "_", "-")),
+					DisplayName: displayName,
 					Sensitive:   true,
 				})
 			}

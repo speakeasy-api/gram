@@ -1006,10 +1006,13 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.U
 		key := entry.Key
 		if _, exists := securityVarsMap[key]; !exists {
 			// Look up display name from MCP metadata
-			// Use entry.Name (header name) as the key since that's what the frontend sends
+			// Display names are keyed by env var name, so we check each env var
 			var displayName *string
-			if dn, ok := headerDisplayNames[entry.Name.String]; ok && dn != "" {
-				displayName = &dn
+			for _, envVar := range entry.EnvVariables {
+				if dn, ok := headerDisplayNames[envVar]; ok && dn != "" {
+					displayName = &dn
+					break // Use first matching display name
+				}
 			}
 
 			securityVar := &types.SecurityVariable{
