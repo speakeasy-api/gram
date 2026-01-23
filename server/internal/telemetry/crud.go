@@ -43,6 +43,19 @@ func (s *Service) CreateLog(
 	go func() {
 		logCtx := context.WithoutCancel(ctx)
 
+		enabled, err := s.isLogsEnabled(logCtx, params.ToolInfo.OrganizationID)
+		if err != nil {
+			s.logger.ErrorContext(logCtx,
+				"failed to check logs feature flag",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(params.ToolInfo.OrganizationID),
+			)
+			return
+		}
+		if !enabled {
+			return
+		}
+
 		logParams, err := buildTelemetryLogParams(params)
 		if err != nil {
 			s.logger.ErrorContext(logCtx,
@@ -76,10 +89,10 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 		return nil, oops.E(oops.CodeUnexpected, err, "generate telemetry log id")
 	}
 
-	allAttrs := params.Attributes
-
 	// we want the core tool info data to also be added as attributes to our
-	// attrbutes object
+	// attributes object
+	allAttrs := make(map[attr.Key]any)
+	maps.Copy(allAttrs, params.Attributes)
 	maps.Copy(allAttrs, params.ToolInfo.AsAttributes())
 
 	observedTimeUnixNano := time.Now().UnixNano()

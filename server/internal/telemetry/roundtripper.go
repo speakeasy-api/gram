@@ -90,6 +90,8 @@ func NewToolCallLogRoundTripper(
 	toolInfo *ToolInfo,
 	recorder HTTPLogAttributes) *ToolCallLogRoundTripper {
 
+	
+
 	return &ToolCallLogRoundTripper{
 		AttrRecorder: recorder,
 

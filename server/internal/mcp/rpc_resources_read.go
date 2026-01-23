@@ -99,22 +99,7 @@ func handleResourcesRead(
 	}
 
 	descriptor := plan.Descriptor
-	// toolCallLogger, logErr := tm.NewToolCallLogger(ctx, tcm, featuresClient, descriptor.OrganizationID, tm.CoreAttributes{
-	// 	ID:             descriptor.ID,
-	// 	Urn:            descriptor.URN.String(),
-	// 	Name:           descriptor.Name,
-	// 	ProjectID:      descriptor.ProjectID,
-	// 	DeploymentID:   descriptor.DeploymentID,
-	// 	OrganizationID: descriptor.OrganizationID,
-	// }, descriptor.Name, tm_repo.ToolTypeFunction)
-	// if logErr != nil {
-	// 	logger.ErrorContext(ctx,
-	// 		"failed to prepare resource call log entry",
-	// 		attr.SlogError(logErr),
-	// 		attr.SlogToolName(descriptor.Name),
-	// 		attr.SlogToolURN(descriptor.URN.String()),
-	// 	)
-	// }
+	
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
 	userConfig, err := resolveUserConfiguration(ctx, logger, env, payload, nil)
