@@ -9,10 +9,8 @@ import (
 	"log/slog"
 	"net/url"
 	"regexp"
-	"strings"
 	"time"
 
-	"github.com/ettle/strcase"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	slogmulti "github.com/samber/slog-multi"
@@ -290,10 +288,11 @@ type toolDescriptor struct {
 func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *types.OpenAPIv3DeploymentAsset, opID string, op operation) toolDescriptor {
 	// gramExtNode, _ := op.Extensions.Get("x-gram")
 	// speakeasyExtNode, _ := op.Extensions.Get("x-speakeasy-mcp")
-	// Convert doc slug hyphens to underscores for consistency with tool naming
-	sanitizedSlug := strings.ReplaceAll(string(docInfo.Slug), "-", "_")
-	snakeCasedOp := strcase.ToSnake(opID)
-	untruncatedName := tools.SanitizeName(fmt.Sprintf("%s_%s", sanitizedSlug, snakeCasedOp))
+	// Use the slug as-is (hyphens are allowed in tool names)
+	sanitizedSlug := string(docInfo.Slug)
+	// Sanitize the operation ID (preserves hyphens, lowercases, handles special chars)
+	sanitizedOp := tools.SanitizeName(opID)
+	untruncatedName := tools.SanitizeName(fmt.Sprintf("%s_%s", sanitizedSlug, sanitizedOp))
 	// we limit actual tool name to 60 character by default to stay in line with common MCP client restrictions
 	name := truncateWithHash(untruncatedName, 60)
 
@@ -371,7 +370,8 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 		return toolDesc
 	}
 
-	sanitizedName := strcase.ToSnake(tools.SanitizeName(conv.PtrValOr(customName, "")))
+	// Sanitize custom name (preserves hyphens, lowercases, handles special chars)
+	sanitizedName := tools.SanitizeName(conv.PtrValOr(customName, ""))
 	finalName := tools.SanitizeName(conv.Default(sanitizedName, name))
 
 	confirm, valid := mv.SanitizeConfirmPtr(customConfirm)

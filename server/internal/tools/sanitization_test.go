@@ -195,6 +195,34 @@ func Test_SanitizeName(t *testing.T) {
 			want: "kebab-case-name",
 		},
 		{
+			name: "preserves mixed hyphens and underscores",
+			args: args{
+				name: "my-api_get_users",
+			},
+			want: "my-api_get_users",
+		},
+		{
+			name: "preserves hyphens with uppercase conversion",
+			args: args{
+				name: "My-API-Endpoint",
+			},
+			want: "my-api-endpoint",
+		},
+		{
+			name: "handles leading hyphen",
+			args: args{
+				name: "-leading-hyphen",
+			},
+			want: "-leading-hyphen",
+		},
+		{
+			name: "handles trailing hyphen",
+			args: args{
+				name: "trailing-hyphen-",
+			},
+			want: "trailing-hyphen-",
+		},
+		{
 			name: "handles only symbols",
 			args: args{
 				name: "@#$%^&*()",
