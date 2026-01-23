@@ -10,6 +10,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -30,6 +41,17 @@ export {
   type TemplatesQueryData,
 };
 
+export type TemplatesQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * listTemplates templates
  *
@@ -39,8 +61,8 @@ export {
 export function useTemplates(
   request?: operations.ListTemplatesRequest | undefined,
   security?: operations.ListTemplatesSecurity | undefined,
-  options?: QueryHookOptions<TemplatesQueryData>,
-): UseQueryResult<TemplatesQueryData, Error> {
+  options?: QueryHookOptions<TemplatesQueryData, TemplatesQueryError>,
+): UseQueryResult<TemplatesQueryData, TemplatesQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildTemplatesQuery(
@@ -62,8 +84,8 @@ export function useTemplates(
 export function useTemplatesSuspense(
   request?: operations.ListTemplatesRequest | undefined,
   security?: operations.ListTemplatesSecurity | undefined,
-  options?: SuspenseQueryHookOptions<TemplatesQueryData>,
-): UseSuspenseQueryResult<TemplatesQueryData, Error> {
+  options?: SuspenseQueryHookOptions<TemplatesQueryData, TemplatesQueryError>,
+): UseSuspenseQueryResult<TemplatesQueryData, TemplatesQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildTemplatesQuery(

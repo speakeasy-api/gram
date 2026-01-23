@@ -2,7 +2,9 @@ package environments
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"log/slog"
 	"time"
@@ -64,6 +66,13 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
+// computeValueHash computes a SHA-256 hash of the given value.
+// This hash is used to identify matching values across environments without exposing the actual value.
+func computeValueHash(value string) string {
+	hash := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(hash[:])
+}
+
 func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvironmentPayload) (*types.Environment, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -106,6 +115,7 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 		entries[i] = &types.EnvironmentEntry{
 			Name:      entry.Name,
 			Value:     entry.Value,
+			ValueHash: computeValueHash(entry.Value),
 			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
 		}
@@ -147,6 +157,7 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 			genEntries = append(genEntries, &types.EnvironmentEntry{
 				Name:      entry.Name,
 				Value:     entry.Value,
+				ValueHash: computeValueHash(entry.Value),
 				CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
 			})
@@ -244,6 +255,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		genEntries[i] = &types.EnvironmentEntry{
 			Name:      entry.Name,
 			Value:     entry.Value,
+			ValueHash: computeValueHash(entry.Value),
 			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
 		}
@@ -364,6 +376,7 @@ func (s *Service) GetSourceEnvironment(ctx context.Context, payload *gen.GetSour
 		genEntries[i] = &types.EnvironmentEntry{
 			Name:      entry.Name,
 			Value:     entry.Value,
+			ValueHash: computeValueHash(entry.Value),
 			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
 		}
@@ -478,6 +491,7 @@ func (s *Service) GetToolsetEnvironment(ctx context.Context, payload *gen.GetToo
 		genEntries[i] = &types.EnvironmentEntry{
 			Name:      entry.Name,
 			Value:     entry.Value,
+			ValueHash: computeValueHash(entry.Value),
 			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
 		}

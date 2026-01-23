@@ -12230,10 +12230,14 @@ components:
         value:
           type: string
           description: Redacted values of the environment variable
+        value_hash:
+          type: string
+          description: Hash of the value to identify matching values across environments without exposing the actual value
       description: A single environment entry
       required:
         - name
         - value
+        - value_hash
         - created_at
         - updated_at
     EnvironmentEntryInput:

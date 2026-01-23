@@ -10,6 +10,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -30,6 +41,17 @@ export {
   queryKeyInstance,
 };
 
+export type InstanceQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * getInstance instances
  *
@@ -39,8 +61,8 @@ export {
 export function useInstance(
   request: operations.GetInstanceRequest,
   security?: operations.GetInstanceSecurity | undefined,
-  options?: QueryHookOptions<InstanceQueryData>,
-): UseQueryResult<InstanceQueryData, Error> {
+  options?: QueryHookOptions<InstanceQueryData, InstanceQueryError>,
+): UseQueryResult<InstanceQueryData, InstanceQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildInstanceQuery(
@@ -62,8 +84,8 @@ export function useInstance(
 export function useInstanceSuspense(
   request: operations.GetInstanceRequest,
   security?: operations.GetInstanceSecurity | undefined,
-  options?: SuspenseQueryHookOptions<InstanceQueryData>,
-): UseSuspenseQueryResult<InstanceQueryData, Error> {
+  options?: SuspenseQueryHookOptions<InstanceQueryData, InstanceQueryError>,
+): UseSuspenseQueryResult<InstanceQueryData, InstanceQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildInstanceQuery(

@@ -10,6 +10,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -30,6 +41,17 @@ export {
   queryKeyListEnvironments,
 };
 
+export type ListEnvironmentsQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * listEnvironments environments
  *
@@ -39,8 +61,11 @@ export {
 export function useListEnvironments(
   request?: operations.ListEnvironmentsRequest | undefined,
   security?: operations.ListEnvironmentsSecurity | undefined,
-  options?: QueryHookOptions<ListEnvironmentsQueryData>,
-): UseQueryResult<ListEnvironmentsQueryData, Error> {
+  options?: QueryHookOptions<
+    ListEnvironmentsQueryData,
+    ListEnvironmentsQueryError
+  >,
+): UseQueryResult<ListEnvironmentsQueryData, ListEnvironmentsQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildListEnvironmentsQuery(
@@ -62,8 +87,14 @@ export function useListEnvironments(
 export function useListEnvironmentsSuspense(
   request?: operations.ListEnvironmentsRequest | undefined,
   security?: operations.ListEnvironmentsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ListEnvironmentsQueryData>,
-): UseSuspenseQueryResult<ListEnvironmentsQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    ListEnvironmentsQueryData,
+    ListEnvironmentsQueryError
+  >,
+): UseSuspenseQueryResult<
+  ListEnvironmentsQueryData,
+  ListEnvironmentsQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildListEnvironmentsQuery(

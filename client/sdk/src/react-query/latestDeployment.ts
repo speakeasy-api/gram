@@ -10,6 +10,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -30,6 +41,17 @@ export {
   queryKeyLatestDeployment,
 };
 
+export type LatestDeploymentQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * getLatestDeployment deployments
  *
@@ -39,8 +61,11 @@ export {
 export function useLatestDeployment(
   request?: operations.GetLatestDeploymentRequest | undefined,
   security?: operations.GetLatestDeploymentSecurity | undefined,
-  options?: QueryHookOptions<LatestDeploymentQueryData>,
-): UseQueryResult<LatestDeploymentQueryData, Error> {
+  options?: QueryHookOptions<
+    LatestDeploymentQueryData,
+    LatestDeploymentQueryError
+  >,
+): UseQueryResult<LatestDeploymentQueryData, LatestDeploymentQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildLatestDeploymentQuery(
@@ -62,8 +87,14 @@ export function useLatestDeployment(
 export function useLatestDeploymentSuspense(
   request?: operations.GetLatestDeploymentRequest | undefined,
   security?: operations.GetLatestDeploymentSecurity | undefined,
-  options?: SuspenseQueryHookOptions<LatestDeploymentQueryData>,
-): UseSuspenseQueryResult<LatestDeploymentQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    LatestDeploymentQueryData,
+    LatestDeploymentQueryError
+  >,
+): UseSuspenseQueryResult<
+  LatestDeploymentQueryData,
+  LatestDeploymentQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildLatestDeploymentQuery(

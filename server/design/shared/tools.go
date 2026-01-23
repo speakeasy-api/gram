@@ -206,6 +206,7 @@ var EnvironmentEntry = Type("EnvironmentEntry", func() {
 
 	Attribute("name", String, "The name of the environment variable")
 	Attribute("value", String, "Redacted values of the environment variable")
+	Attribute("value_hash", String, "Hash of the value to identify matching values across environments without exposing the actual value")
 	Attribute("created_at", String, func() {
 		Description("The creation date of the environment entry")
 		Format(FormatDateTime)
@@ -215,5 +216,5 @@ var EnvironmentEntry = Type("EnvironmentEntry", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("name", "value", "created_at", "updated_at")
+	Required("name", "value", "value_hash", "created_at", "updated_at")
 })

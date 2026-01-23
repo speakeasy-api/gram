@@ -2232,6 +2232,7 @@ func marshalTypesEnvironmentEntryToEnvironmentEntryResponseBody(v *types.Environ
 	res := &EnvironmentEntryResponseBody{
 		Name:      v.Name,
 		Value:     v.Value,
+		ValueHash: v.ValueHash,
 		CreatedAt: v.CreatedAt,
 		UpdatedAt: v.UpdatedAt,
 	}
