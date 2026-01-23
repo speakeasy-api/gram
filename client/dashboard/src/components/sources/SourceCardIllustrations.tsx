@@ -134,15 +134,16 @@ function hashStringToColor(str: string): { bg: string; accent: string; text: str
     hash = str.charCodeAt(i) + ((hash << 5) - hash);
   }
 
+  // Color palette matching the brand gradient colors
   const colorPalettes = [
-    { bg: "#fef3c7", accent: "#fbbf24", text: "#92400e" }, // Warm yellow
-    { bg: "#dbeafe", accent: "#60a5fa", text: "#1e40af" }, // Cool blue
-    { bg: "#fce7f3", accent: "#f472b6", text: "#9f1239" }, // Pink
-    { bg: "#d1fae5", accent: "#34d399", text: "#065f46" }, // Mint green
-    { bg: "#e0e7ff", accent: "#818cf8", text: "#3730a3" }, // Lavender
-    { bg: "#fed7aa", accent: "#fb923c", text: "#9a3412" }, // Peach
-    { bg: "#fae8ff", accent: "#d946ef", text: "#86198f" }, // Purple
-    { bg: "#ccfbf1", accent: "#2dd4bf", text: "#115e59" }, // Teal
+    { bg: "#fce8e6", accent: "#C83228", text: "#7a1f18" }, // Red
+    { bg: "#fef0e6", accent: "#FB873F", text: "#9a4a1c" }, // Orange
+    { bg: "#f5f7e8", accent: "#D2DC91", text: "#6b7235" }, // Light green
+    { bg: "#e8f0e6", accent: "#5A8250", text: "#3a5434" }, // Green
+    { bg: "#e6ebe8", accent: "#002314", text: "#001a0f" }, // Dark green
+    { bg: "#e6e8ef", accent: "#00143C", text: "#000d28" }, // Dark blue
+    { bg: "#e8f1fc", accent: "#2873D7", text: "#1a4a8c" }, // Blue
+    { bg: "#eef5ff", accent: "#9BC3FF", text: "#4a7ab8" }, // Light blue
   ];
 
   return colorPalettes[Math.abs(hash) % colorPalettes.length];
