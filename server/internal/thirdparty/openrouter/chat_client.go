@@ -94,6 +94,9 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 
 	results := make([][]float32, len(inputs))
 	for _, data := range embeddingsData {
+		if data.Index == nil {
+			return nil, fmt.Errorf("embedding index is nil")
+		}
 		index := int(*data.Index)
 		if index < 0 || index >= len(results) {
 			return nil, fmt.Errorf("embedding index out of range: %d", index)
