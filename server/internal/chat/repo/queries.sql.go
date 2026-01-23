@@ -38,6 +38,10 @@ type CreateChatMessageParams struct {
 	PromptTokens     int64
 	CompletionTokens int64
 	TotalTokens      int64
+	Origin           pgtype.Text
+	UserAgent        pgtype.Text
+	IpAddress        pgtype.Text
+	Source           pgtype.Text
 }
 
 const getChat = `-- name: GetChat :one

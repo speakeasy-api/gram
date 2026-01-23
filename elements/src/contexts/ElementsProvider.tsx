@@ -7,7 +7,6 @@ import {
 import { useMCPTools } from '@/hooks/useMCPTools'
 import { useToolApproval } from '@/hooks/useToolApproval'
 import { getApiUrl } from '@/lib/api'
-import { cn } from '@/lib/utils'
 import { initErrorTracking, trackError } from '@/lib/errorTracking'
 import { MODELS } from '@/lib/models'
 import {
@@ -19,6 +18,7 @@ import {
   type ApprovalHelpers,
   type FrontendTool,
 } from '@/lib/tools'
+import { cn } from '@/lib/utils'
 import { recommended } from '@/plugins'
 import { ElementsConfig, Model } from '@/types'
 import { Plugin } from '@/types/plugins'
@@ -261,6 +261,8 @@ const ElementsProviderWithApproval = ({
         const headersWithChatId = {
           ...auth.headers,
           'Gram-Chat-ID': chatId,
+          'X-Gram-Source': 'elements',
+          ...config.api?.headers, // We do this after X-Gram-Source so the playground can override it
           ...(config.gramEnvironment && {
             'Gram-Environment': config.gramEnvironment,
           }),
