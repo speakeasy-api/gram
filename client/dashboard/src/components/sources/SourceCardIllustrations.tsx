@@ -278,15 +278,15 @@ export function MCPHeroIllustration({
 }: IllustrationProps & { toolsetSlug: string; mcpUrl?: string }) {
   const colors = hashStringToColor(toolsetSlug);
 
-  // Larger doodle icons for hero
+  // Larger doodle icons for hero (lighter stroke weights)
   const ServerDoodle = ({ x, y }: { x: number; y: number }) => (
     <g transform={`translate(${x}, ${y})`}>
-      <rect x="0" y="0" width="45" height="60" rx="4" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
-      <line x1="8" y1="15" x2="37" y2="15" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
-      <line x1="8" y1="27" x2="37" y2="27" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
-      <line x1="8" y1="39" x2="37" y2="39" stroke={colors.accent} strokeWidth="1.5" opacity="0.4" />
-      <circle cx="12" cy="52" r="3" fill={colors.accent} opacity="0.5" />
-      <circle cx="23" cy="52" r="3" fill={colors.accent} opacity="0.3" />
+      <rect x="0" y="0" width="45" height="60" rx="4" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.5" />
+      <line x1="8" y1="15" x2="37" y2="15" stroke={colors.accent} strokeWidth="0.8" opacity="0.4" />
+      <line x1="8" y1="27" x2="37" y2="27" stroke={colors.accent} strokeWidth="0.8" opacity="0.4" />
+      <line x1="8" y1="39" x2="37" y2="39" stroke={colors.accent} strokeWidth="0.8" opacity="0.4" />
+      <circle cx="12" cy="52" r="2.5" fill={colors.accent} opacity="0.5" />
+      <circle cx="23" cy="52" r="2.5" fill={colors.accent} opacity="0.3" />
     </g>
   );
 
@@ -296,7 +296,7 @@ export function MCPHeroIllustration({
         d="M12 45 Q0 45 0 30 Q0 15 15 15 Q15 0 35 0 Q55 0 60 15 Q75 10 80 25 Q90 25 90 35 Q90 45 80 45 Z"
         fill="none"
         stroke={colors.accent}
-        strokeWidth="2"
+        strokeWidth="1.2"
         opacity="0.45"
         strokeLinecap="round"
       />
@@ -305,35 +305,35 @@ export function MCPHeroIllustration({
 
   const DatabaseDoodle = ({ x, y }: { x: number; y: number }) => (
     <g transform={`translate(${x}, ${y})`}>
-      <ellipse cx="25" cy="10" rx="25" ry="10" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
-      <path d="M0 10 L0 50 Q0 60 25 60 Q50 60 50 50 L50 10" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.5" />
-      <ellipse cx="25" cy="50" rx="25" ry="10" fill="none" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" />
-      <ellipse cx="25" cy="30" rx="25" ry="10" fill="none" stroke={colors.accent} strokeWidth="1" opacity="0.2" strokeDasharray="4 3" />
+      <ellipse cx="25" cy="10" rx="25" ry="10" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.5" />
+      <path d="M0 10 L0 50 Q0 60 25 60 Q50 60 50 50 L50 10" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.5" />
+      <ellipse cx="25" cy="50" rx="25" ry="10" fill="none" stroke={colors.accent} strokeWidth="0.8" opacity="0.3" />
+      <ellipse cx="25" cy="30" rx="25" ry="10" fill="none" stroke={colors.accent} strokeWidth="0.6" opacity="0.2" strokeDasharray="4 3" />
     </g>
   );
 
   const WifiDoodle = ({ x, y }: { x: number; y: number }) => (
     <g transform={`translate(${x}, ${y})`}>
-      <circle cx="25" cy="50" r="5" fill={colors.accent} opacity="0.5" />
-      <path d="M10 35 Q25 20 40 35" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.4" strokeLinecap="round" />
-      <path d="M0 22 Q25 0 50 22" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.3" strokeLinecap="round" />
+      <circle cx="25" cy="50" r="4" fill={colors.accent} opacity="0.5" />
+      <path d="M10 35 Q25 20 40 35" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.4" strokeLinecap="round" />
+      <path d="M0 22 Q25 0 50 22" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.3" strokeLinecap="round" />
     </g>
   );
 
   const GlobeDoodle = ({ x, y }: { x: number; y: number }) => (
     <g transform={`translate(${x}, ${y})`}>
-      <circle cx="30" cy="30" r="28" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.45" />
-      <ellipse cx="30" cy="30" rx="28" ry="10" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.3" />
-      <ellipse cx="30" cy="30" rx="10" ry="28" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.3" />
+      <circle cx="30" cy="30" r="28" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.45" />
+      <ellipse cx="30" cy="30" rx="28" ry="10" fill="none" stroke={colors.accent} strokeWidth="0.8" opacity="0.3" />
+      <ellipse cx="30" cy="30" rx="10" ry="28" fill="none" stroke={colors.accent} strokeWidth="0.8" opacity="0.3" />
     </g>
   );
 
   const NodeDoodle = ({ x, y }: { x: number; y: number }) => (
     <g transform={`translate(${x}, ${y})`}>
-      <circle cx="25" cy="25" r="20" fill="none" stroke={colors.accent} strokeWidth="2" opacity="0.45" />
-      <circle cx="25" cy="25" r="8" fill={colors.accent} opacity="0.35" />
-      <line x1="45" y1="25" x2="60" y2="25" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" strokeDasharray="4 3" />
-      <line x1="25" y1="45" x2="25" y2="60" stroke={colors.accent} strokeWidth="1.5" opacity="0.3" strokeDasharray="4 3" />
+      <circle cx="25" cy="25" r="20" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.45" />
+      <circle cx="25" cy="25" r="6" fill={colors.accent} opacity="0.35" />
+      <line x1="45" y1="25" x2="60" y2="25" stroke={colors.accent} strokeWidth="0.8" opacity="0.3" strokeDasharray="4 3" />
+      <line x1="25" y1="45" x2="25" y2="60" stroke={colors.accent} strokeWidth="0.8" opacity="0.3" strokeDasharray="4 3" />
     </g>
   );
 
