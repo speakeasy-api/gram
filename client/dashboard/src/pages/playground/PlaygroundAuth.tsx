@@ -116,13 +116,13 @@ export function PlaygroundAuth({ toolset, environment }: PlaygroundAuthProps) {
       })}
       <Type variant="small" className="text-muted-foreground pt-2">
         Configure auth in the{" "}
-        <routes.toolsets.toolset.Link
+        <routes.mcp.details.Link
           params={[toolset.slug]}
           hash="auth"
           className="underline hover:text-foreground"
         >
           toolset settings
-        </routes.toolsets.toolset.Link>
+        </routes.mcp.details.Link>
       </Type>
     </div>
   );

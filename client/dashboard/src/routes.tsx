@@ -30,14 +30,12 @@ import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
 import Settings from "./pages/settings/Settings";
 import SourceDetails from "./pages/sources/SourceDetails";
-import { SourcesRoot } from "./pages/sources/Sources";
+import { SourcesPage, SourcesRoot } from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
   ToolBuilderNew,
   ToolBuilderPage,
 } from "./pages/toolBuilder/ToolBuilder";
-import ToolsetPage, { ToolsetRoot } from "./pages/toolsets/Toolset";
-import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
 
 type AppRouteBasic = {
   title: string;
@@ -177,27 +175,12 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  toolsets: {
-    title: "Toolsets",
-    url: "toolsets",
-    icon: "blocks",
-    component: ToolsetsRoot,
-    indexComponent: Toolsets,
-    subPages: {
-      toolset: {
-        title: "Toolset",
-        url: ":toolsetSlug",
-        component: ToolsetRoot,
-        indexComponent: ToolsetPage,
-      },
-    },
-  },
   sources: {
     title: "Sources",
     url: "sources",
     icon: "file-code",
     component: SourcesRoot,
-    indexComponent: Toolsets,
+    indexComponent: SourcesPage,
     subPages: {
       source: {
         title: "Source Details",

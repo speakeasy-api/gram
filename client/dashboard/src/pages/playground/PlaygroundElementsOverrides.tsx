@@ -85,13 +85,13 @@ export const GramComposer: FC = () => {
             {authWarning.missingCount} authentication{" "}
             {authWarning.missingCount === 1 ? "variable" : "variables"} not
             configured.{" "}
-            <routes.toolsets.toolset.Link
+            <routes.mcp.details.Link
               params={[authWarning.toolsetSlug]}
               hash="auth"
               className="underline hover:text-foreground font-medium"
             >
               Configure now
-            </routes.toolsets.toolset.Link>
+            </routes.mcp.details.Link>
           </span>
         </div>
       )}

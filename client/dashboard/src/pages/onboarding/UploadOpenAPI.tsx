@@ -139,7 +139,7 @@ function FooterActions() {
       return null;
     case "completed":
       return (
-        <Button variant="primary" onClick={() => routes.toolsets.goTo()}>
+        <Button variant="primary" onClick={() => routes.mcp.goTo()}>
           Continue
           <ArrowRightIcon className="size-4" />
         </Button>

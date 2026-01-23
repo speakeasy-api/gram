@@ -59,9 +59,9 @@ export const AssetsTabContent = () => {
             <Type variant="small">
               The following assets caused this deployment to fail. Correct these
               errors by managing assets in the{" "}
-              <routes.toolsets.Link className="text-link hover:cursor-pointer">
+              <routes.mcp.Link className="text-link hover:cursor-pointer">
                 Toolsets page
-              </routes.toolsets.Link>
+              </routes.mcp.Link>
               . For details on the specific issues with each document, view the{" "}
               <a
                 onClick={() =>

@@ -129,7 +129,7 @@ export default function Home() {
                 description="Enable public access to your MCP server"
                 completed={hasMcpPublic}
                 enabled={hasSource}
-                href={routes.toolsets.href()}
+                href={routes.mcp.href()}
                 icon={<Globe className="h-[18px] w-[18px]" strokeWidth={1.5} />}
                 position="middle"
                 cta="Configure"
@@ -405,18 +405,16 @@ function SetupStep({
         )}
       </div>
       <div className="flex flex-col gap-1.5 min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <h3 className="font-medium text-sm truncate">{title}</h3>
-          {completed && (
-            <Type small className="text-emerald-600 shrink-0">
-              Done
-            </Type>
-          )}
-        </div>
+        <h3 className="font-medium text-sm truncate">{title}</h3>
         <Type small muted className="truncate">
           {description}
         </Type>
-        {!completed && (
+        {completed ? (
+          <Button size="sm" disabled className="mt-1 w-fit">
+            <CheckCircle className="w-3 h-3" />
+            <Button.Text>Done</Button.Text>
+          </Button>
+        ) : (
           <Button size="sm" disabled={!enabled} className="mt-1 w-fit">
             <Button.Text>{cta}</Button.Text>
             <ArrowRight className="w-3 h-3" />

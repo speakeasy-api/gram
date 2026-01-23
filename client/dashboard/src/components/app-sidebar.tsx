@@ -146,7 +146,7 @@ const GettingStartedWidget = () => {
   const nextStepHref = !hasSource
     ? routes.sources.href()
     : !hasMcpPublic
-      ? routes.toolsets.href()
+      ? routes.mcp.href()
       : routes.elements.href();
 
   return (

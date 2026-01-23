@@ -168,7 +168,7 @@ function FooterActions({ onCompletion }: { onCompletion?: () => void }) {
   const handleContinue = () => {
     assetsList.refetch();
     latestDeployment.refetch();
-    routes.toolsets.goTo();
+    routes.mcp.goTo();
     onCompletion?.();
   };
 

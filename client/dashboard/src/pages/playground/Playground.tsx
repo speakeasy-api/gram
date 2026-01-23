@@ -332,7 +332,7 @@ export function ToolsetPanel({
   if (toolsets !== undefined && !configRef.current.toolsetSlug) {
     return (
       <div className="h-full flex items-center justify-center p-8">
-        <ToolsetsEmptyState onCreateToolset={() => routes.toolsets.goTo()} />
+        <ToolsetsEmptyState onCreateToolset={() => routes.mcp.goTo()} />
       </div>
     );
   }

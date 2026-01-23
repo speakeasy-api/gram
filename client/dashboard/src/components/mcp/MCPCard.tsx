@@ -26,7 +26,7 @@ export function MCPCard({
     },
     {
       label: "Manage Tools",
-      onClick: () => routes.toolsets.toolset.goTo(toolset.slug),
+      onClick: () => routes.mcp.details.goTo(toolset.slug),
       icon: "blocks" as const,
     },
     {

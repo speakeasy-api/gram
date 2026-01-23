@@ -161,7 +161,7 @@ const RouteProvider = () => {
         id: "go-toolsets",
         label: "Go to Toolsets",
         icon: "blocks",
-        onSelect: () => routes.toolsets.goTo(),
+        onSelect: () => routes.mcp.goTo(),
         group: "Navigation",
       },
       {
