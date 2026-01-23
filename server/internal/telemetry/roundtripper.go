@@ -18,33 +18,6 @@ const (
 	redactMinTokenLen     = 10
 )
 
-// ToolInfo represents the minimal tool information needed for logging
-type ToolInfo struct {
-	ID             string
-	URN            string
-	Name           string
-	ProjectID      string
-	DeploymentID   string
-	FunctionID     *string
-	OrganizationID string
-}
-
-func (t ToolInfo) AsAttributes() map[attr.Key]any {
-	attrs := map[attr.Key]any{
-		attr.ToolURNKey:        t.URN,
-		attr.NameKey:           t.Name,
-		attr.ProjectIDKey:      t.ProjectID,
-		attr.DeploymentIDKey:   t.DeploymentID,
-		attr.OrganizationIDKey: t.OrganizationID,
-	}
-
-	if t.FunctionID != nil {
-		attrs[attr.FunctionIDKey] = t.FunctionID
-	}
-
-	return attrs
-}
-
 // allowedNonSensitiveHeaders is a list of standard HTTP header names that are safe to log.
 // We use an allowlist approach since we're a proxy and don't want to accidentally
 // log custom headers from upstream services that might contain PII or sensitive data.
