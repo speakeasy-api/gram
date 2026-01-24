@@ -1,7 +1,9 @@
 import { ToolCallMessagePartProps } from '@assistant-ui/react'
 import type { Meta, StoryFn } from '@storybook/react-vite'
 import React from 'react'
+import z from 'zod'
 import { Chat } from '..'
+import { defineFrontendTool } from '../../../lib/tools'
 
 const meta: Meta<typeof Chat> = {
   title: 'Chat/Tools',
@@ -208,6 +210,81 @@ GenerativeUI.parameters = {
               'Show me an analytics overview with page views, bounce rate, session duration, and top pages',
           },
         ],
+      },
+    },
+  },
+}
+
+// Frontend tools for the ActionButton demo
+const ApproveRequestTool = defineFrontendTool<{ id: number }, string>(
+  {
+    description: 'Approve a pending request',
+    parameters: z.object({
+      id: z.number().describe('The request ID to approve'),
+    }),
+    execute: async ({ id }) => {
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      return `Request #${id} has been approved successfully.`
+    },
+  },
+  'approve_request'
+)
+
+const RejectRequestTool = defineFrontendTool<
+  { id: number; reason?: string },
+  string
+>(
+  {
+    description: 'Reject a pending request',
+    parameters: z.object({
+      id: z.number().describe('The request ID to reject'),
+      reason: z.string().optional().describe('Reason for rejection'),
+    }),
+    execute: async ({ id, reason }) => {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      return `Request #${id} has been rejected.${reason ? ` Reason: ${reason}` : ''}`
+    },
+  },
+  'reject_request'
+)
+
+const actionTools = {
+  approve_request: ApproveRequestTool,
+  reject_request: RejectRequestTool,
+}
+
+/**
+ * Demonstrates ActionButton in generative UI that triggers tool calls.
+ *
+ * The LLM generates UI with ActionButton components that, when clicked,
+ * send a structured message to invoke the specified tool.
+ */
+export const GenerativeUIWithActions: Story = () => <Chat />
+GenerativeUIWithActions.parameters = {
+  elements: {
+    config: {
+      variant: 'standalone',
+      welcome: {
+        title: 'Generative UI with Actions',
+        subtitle: 'Interactive widgets that trigger tool calls',
+        suggestions: [
+          {
+            title: 'Pending requests',
+            label: 'approval workflow',
+            prompt:
+              'Show me a list of 3 pending expense requests with approve/reject buttons. Each request should have an ID, employee name, amount, and description.',
+          },
+          {
+            title: 'Task manager',
+            label: 'with actions',
+            prompt:
+              'Show me a task board with 2 tasks. Each task should have a complete button that calls approve_request with the task ID.',
+          },
+        ],
+      },
+      tools: {
+        frontendTools: actionTools,
       },
     },
   },
