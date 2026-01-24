@@ -1,4 +1,3 @@
-import { Combobox } from "@/components/ui/combobox";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { InputAndMultiselect } from "@/components/ui/InputAndMultiselect";
@@ -16,7 +15,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { Type } from "@/components/ui/type";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useEnvironmentVariables";
@@ -633,83 +631,77 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       return 0;
     });
 
-    // Add environment items
-    const envItems = sortedEnvironments.map(env => ({
-      value: env.slug,
-      label: env.name,
-      icon: environmentHasAllRequiredVariables(env.slug) ? (
-        <CheckCircleIcon className="w-4 h-4 text-green-600 mr-2" />
-      ) : (
-        <AlertTriangle className="w-4 h-4 text-yellow-600 mr-2" />
-      ),
-    }));
+    return environments.length > 0 ? (
+      <div className="flex items-center gap-1 border-b">
+        {sortedEnvironments.map(env => {
+          const isSelected = selectedEnvironmentView === env.slug;
+          const hasAllRequired = environmentHasAllRequiredVariables(env.slug);
 
-    // Add "+ New Environment" item
-    const newEnvItem = {
-      value: "__new__",
-      label: "New Environment",
-      icon: <Plus className="w-4 h-4 text-muted-foreground mr-2" />,
-    };
-
-    return environments.length > 0 && (
-      <Combobox
-        items={[...envItems, newEnvItem]}
-        selected={selectedEnvironmentView}
-        onSelectionChange={(item) => {
-          if (item.value === "__new__") {
-            setIsCreateEnvDialogOpen(true);
-          } else {
-            setSelectedEnvironmentView(item.value);
-          }
-        }}
-        variant="outline"
-        className="min-w-[200px]"
-      >
-        <Type variant="small">
-          {environments.find(e => e.slug === selectedEnvironmentView)?.name || selectedEnvironmentView}
-        </Type>
-      </Combobox>
-    )
+          return (
+            <button
+              key={env.slug}
+              onClick={() => setSelectedEnvironmentView(env.slug)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors relative",
+                isSelected
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {hasAllRequired ? (
+                <CheckCircleIcon className="w-4 h-4 text-green-600" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 text-yellow-600" />
+              )}
+              {env.name}
+              {isSelected && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+              )}
+            </button>
+          );
+        })}
+        <button
+          onClick={() => setIsCreateEnvDialogOpen(true)}
+          className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors ml-auto"
+        >
+          <Plus className="w-4 h-4" />
+          New Environment
+        </button>
+      </div>
+    ) : null;
   }, [environments, selectedEnvironmentView, requiredVars, envVars]);
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
+        <div className="flex items-center gap-3">
           <h2 className="text-2xl font-semibold tracking-tight">
             Environment Variables
           </h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Configure required credentials and add custom variables.
-          </p>
+          {missingRequiredCount > 0 && (
+            <Badge variant="warning">
+              <Badge.LeftIcon><AlertTriangle className="h-3.5 w-3.5" /></Badge.LeftIcon>
+              <Badge.Text>{missingRequiredCount} required not configured</Badge.Text>
+            </Badge>
+          )}
         </div>
-       {environmentSwitcher}
+        <Button onClick={() => setIsAddingNew(true)} disabled={isAddingNew}>
+          <Button.Text>Add Variable</Button.Text>
+        </Button>
       </div>
+      <p className="text-sm text-muted-foreground">
+        Configure required credentials and add custom variables. Required variables are indicated with a warning dot when unset.
+      </p>
 
       {/* All Variables Section */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h3 className="text-lg font-medium">Variables</h3>
-            {missingRequiredCount > 0 && (
-              <Badge variant="warning">
-                <Badge.LeftIcon><AlertTriangle className="h-3.5 w-3.5" /></Badge.LeftIcon>
-                <Badge.Text>{missingRequiredCount} required not configured</Badge.Text>
-              </Badge>
-            )} 
-          </div>
-          <Button onClick={() => setIsAddingNew(true)} disabled={isAddingNew}>
-            <Button.Text>Add Variable</Button.Text>
-          </Button>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Configure environment variables for this MCP server. Required variables are indicated with a warning dot when unset.
-        </p>
 
         {/* Variables List */}
         {envVars.length > 0 ? (
           <div className="border rounded-lg overflow-hidden">
+            {/* Environment Switcher Tabs */}
+            {environmentSwitcher}
             {envVars.map((envVar, index) => (
               <div
                 key={envVar.id}
