@@ -64,12 +64,10 @@ const StatusPill: FC<{ state: ConnectionState; isOnline: boolean }> = ({
     <div
       className={cn(
         'pointer-events-auto flex items-center gap-2 rounded-full px-4 py-2 shadow-lg backdrop-blur-md',
-        'border border-white/10',
-        showOffline
-          ? 'bg-zinc-700/90 text-white dark:bg-zinc-800/90'
-          : showReconnecting
-            ? 'bg-amber-500/90 text-white dark:bg-amber-600/90'
-            : 'bg-red-500/90 text-white dark:bg-red-600/90'
+        'border',
+        showOffline || showReconnecting
+          ? 'border-zinc-200 bg-white text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white'
+          : 'border-red-200 bg-red-500/90 text-white dark:border-red-800 dark:bg-red-600/90'
       )}
     >
       {showOffline ? (
