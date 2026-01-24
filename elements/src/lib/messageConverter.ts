@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 /**
  * Message format converter for Gram API <-> assistant-ui.
  *
@@ -21,7 +23,6 @@ import type {
   Message,
   UserMessage,
   AssistantMessage,
-  ToolResponseMessage,
 } from '@openrouter/sdk/models'
 import { UIMessage } from 'ai'
 
@@ -103,7 +104,7 @@ function buildUserContentParts(msg: GramChatMessage): ThreadUserMessagePart[] {
           >,
         })
         break
-      case 'input_audio':
+      case 'input_audio': {
         const format = (item as any).input_audio?.format as FIXME<
           string,
           'Fixed by switching to Gram TS SDK.'
@@ -121,6 +122,7 @@ function buildUserContentParts(msg: GramChatMessage): ThreadUserMessagePart[] {
           })
         }
         break
+      }
       default:
         parts.push({
           type: 'text',
@@ -198,7 +200,7 @@ function buildSystemContentParts(msg: GramChatMessage): [TextMessagePart] {
     return [{ type: 'text', text: msg.content ?? '' }]
   }
 
-  let text: string[] = []
+  const text: string[] = []
 
   for (const item of msg.content) {
     if (item.type !== 'text') {
@@ -320,7 +322,7 @@ export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
       case 'developer':
       case 'tool':
         continue
-      case 'system':
+      case 'system': {
         uiMessages.push({
           parentId: prevId,
           message: {
@@ -343,7 +345,8 @@ export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
           },
         })
         break
-      case 'user':
+      }
+      case 'user': {
         uiMessages.push({
           parentId: prevId,
           message: {
@@ -353,7 +356,8 @@ export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
           },
         })
         break
-      case 'assistant':
+      }
+      case 'assistant': {
         const uiMessage = {
           parentId: prevId,
           message: {
@@ -365,6 +369,7 @@ export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
         uiMessages.push(uiMessage)
 
         break
+      }
     }
 
     prevId = msg.id

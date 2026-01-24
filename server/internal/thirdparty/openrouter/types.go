@@ -28,15 +28,35 @@ func GetRole(msg or.Message) string {
 func GetContentJSON(msg or.Message) ([]byte, error) {
 	switch msg.Type {
 	case or.MessageTypeAssistant:
-		return json.Marshal(msg.AssistantMessage.Content)
+		bs, err := json.Marshal(msg.AssistantMessage.Content)
+		if err != nil {
+			return nil, fmt.Errorf("marshal assistant message: %w", err)
+		}
+		return bs, nil
 	case or.MessageTypeDeveloper:
-		return json.Marshal(msg.MessageDeveloper.Content)
+		bs, err := json.Marshal(msg.MessageDeveloper.Content)
+		if err != nil {
+			return nil, fmt.Errorf("marshal developer message: %w", err)
+		}
+		return bs, nil
 	case or.MessageTypeSystem:
-		return json.Marshal(msg.SystemMessage.Content)
+		bs, err := json.Marshal(msg.SystemMessage.Content)
+		if err != nil {
+			return nil, fmt.Errorf("marshal system message: %w", err)
+		}
+		return bs, nil
 	case or.MessageTypeTool:
-		return json.Marshal(msg.ToolResponseMessage.Content)
+		bs, err := json.Marshal(msg.ToolResponseMessage.Content)
+		if err != nil {
+			return nil, fmt.Errorf("marshal tool response message: %w", err)
+		}
+		return bs, nil
 	case or.MessageTypeUser:
-		return json.Marshal(msg.UserMessage.Content)
+		bs, err := json.Marshal(msg.UserMessage.Content)
+		if err != nil {
+			return nil, fmt.Errorf("marshal user message: %w", err)
+		}
+		return bs, nil
 	default:
 		return nil, fmt.Errorf("unknown message type: %s", msg.Type)
 	}

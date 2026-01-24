@@ -11,7 +11,6 @@ import {
   GramChatOverview,
   GramChat,
   convertGramMessagesToExported,
-  convertGramMessagePartsToUIMessageParts,
   convertGramMessagesToUIMessages,
 } from '@/lib/messageConverter'
 import {
