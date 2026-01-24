@@ -6,9 +6,33 @@ settings:
 
 catalogs:
   default:
+    '@ai-sdk/openai':
+      specifier: ^2.0.0
+      version: 2.0.74
+    '@ai-sdk/react':
+      specifier: ^2.0.118
+      version: 2.0.118
+    '@ai-sdk/ui-utils':
+      specifier: ^1.2.0
+      version: 1.2.11
+    '@modelcontextprotocol/sdk':
+      specifier: ^1.20.1
+      version: 1.25.1
     '@tanstack/react-query':
       specifier: 5.90.10
       version: 5.90.10
+    '@types/react':
+      specifier: ^19.2.7
+      version: 19.2.7
+    '@types/react-dom':
+      specifier: ^19.2.3
+      version: 19.2.3
+    ai:
+      specifier: 5.0.66
+      version: 5.0.66
+    typescript:
+      specifier: 5.9.3
+      version: 5.9.3
 
 overrides:
   glob@>=10.0 <10.5.0: 10.5.0
@@ -401,6 +425,9 @@ importers:
       '@json-render/core':
         specifier: ^0.2.0
         version: 0.2.0(zod@4.2.1)
+      '@json-render/react':
+        specifier: ^0.2.0
+        version: 0.2.0(react@19.2.3)(zod@4.2.1)
       '@openrouter/ai-sdk-provider':
         specifier: ^1.4.1
         version: 1.5.4(ai@5.0.90(zod@4.2.1))(zod@4.2.1)
@@ -1650,6 +1677,11 @@ packages:
     resolution: {integrity: sha512-LBKv4M5skz7JRpTn53g6qF/zj5u/xUhuCp6WtJn/ZTIxGEAogH8sn3Ql/Nk/O0sgbQHtriRmoJuI23/5fGCXPw==}
     peerDependencies:
       zod: ^4.0.0
+
+  '@json-render/react@0.2.0':
+    resolution: {integrity: sha512-4tdoMfc3t0Je+DMNsyJguz7aJkqfLhEY8/mvBchL9kweRfJHAZocT7doyqRCGAnCBtIXCKQ8YAbm0sb0Qr9OFw==}
+    peerDependencies:
+      react: ^19.0.0
 
   '@kwsites/file-exists@1.1.1':
     resolution: {integrity: sha512-m9/5YGR18lIwxSFDwfE3oA7bWuq9kdau6ugN4H2rJeyhFQZcG9AgSHkQtSD15a8WvTgfz9aikZMrKPHvbpqFiw==}
@@ -8469,6 +8501,13 @@ snapshots:
   '@json-render/core@0.2.0(zod@4.2.1)':
     dependencies:
       zod: 4.2.1
+
+  '@json-render/react@0.2.0(react@19.2.3)(zod@4.2.1)':
+    dependencies:
+      '@json-render/core': 0.2.0(zod@4.2.1)
+      react: 19.2.3
+    transitivePeerDependencies:
+      - zod
 
   '@kwsites/file-exists@1.1.1':
     dependencies:
