@@ -52,7 +52,7 @@ export const GenerativeUIRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
     return (
       <div
         className={cn(
-          'border-border bg-card relative min-h-[500px] overflow-hidden border after:hidden',
+          'border-border bg-card relative min-h-[200px] max-w-[600px] overflow-hidden border after:hidden',
           r('lg')
         )}
       >
