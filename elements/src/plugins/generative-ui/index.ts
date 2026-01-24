@@ -52,6 +52,15 @@ List - Bullet or numbered list
 
 Divider - Horizontal line separator
 
+ActionButton - Interactive button that triggers a tool call
+  props: {
+    label: string,           // Button text
+    action: string,          // Tool name to invoke when clicked
+    args?: object,           // Arguments to pass to the tool
+    variant?: "default" | "secondary" | "outline" | "destructive"
+  }
+  NOTE: Only use ActionButton with tools you know are available
+
 STRUCTURE:
 Every UI spec is a tree with:
 - "type": component name (required)
@@ -95,6 +104,23 @@ EXAMPLE - TABLE:
   ]
 }
 
+EXAMPLE - WITH ACTIONS:
+{
+  "type": "Card",
+  "props": { "title": "Pending Request #123" },
+  "children": [
+    { "type": "Text", "props": { "variant": "body" }, "children": [{ "type": "Text", "props": {}, "children": [] }] },
+    {
+      "type": "Stack",
+      "props": { "direction": "horizontal" },
+      "children": [
+        { "type": "ActionButton", "props": { "label": "Approve", "action": "approve_request", "args": { "id": 123 } } },
+        { "type": "ActionButton", "props": { "label": "Reject", "action": "reject_request", "args": { "id": 123 }, "variant": "destructive" } }
+      ]
+    }
+  ]
+}
+
 STYLE GUIDELINES:
 - Prefer spacious, breathable layouts with adequate visual hierarchy
 - Use Grid with 2-3 columns max for metrics; avoid cramming too many items
@@ -106,7 +132,10 @@ STYLE GUIDELINES:
 CONTENT GUIDELINES:
 - Outside the code block, provide context and insights about the data
 - Do not describe technical implementation details
-- Focus on what the data means, not how it's displayed`,
+- Focus on what the data means, not how it's displayed
+
+ACTION HANDLING:
+When you receive a message in the format "[Action: tool_name] {args}", immediately call the specified tool with the provided arguments. Do not ask for confirmation - the user has already clicked the button to initiate this action. After the tool executes, provide a brief confirmation of what happened.`,
   Component: GenerativeUIRenderer,
   Header: undefined,
 }

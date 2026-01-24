@@ -4,8 +4,9 @@ import { useDensity } from '@/hooks/useDensity'
 import { useRadius } from '@/hooks/useRadius'
 import { cn } from '@/lib/utils'
 import { isJsonRenderTree, type JsonRenderNode } from '@/lib/generative-ui'
-import { AlertCircleIcon } from 'lucide-react'
-import { FC, useMemo } from 'react'
+import { useThreadRuntime } from '@assistant-ui/react'
+import { AlertCircleIcon, Loader2Icon } from 'lucide-react'
+import { FC, useMemo, useState, useCallback } from 'react'
 
 interface GenerativeUIProps {
   /** The JSON content to render - can be a json-render tree or raw object */
@@ -222,6 +223,57 @@ const components: Record<string, FC<Record<string, unknown>>> = {
           />
         </div>
       </div>
+    )
+  },
+
+  ActionButton: ({ label, action, args, variant = 'default', className }) => {
+    const r = useRadius()
+    const runtime = useThreadRuntime({ optional: true })
+    const [isLoading, setIsLoading] = useState(false)
+
+    const handleClick = useCallback(async () => {
+      if (!runtime || !action) return
+
+      setIsLoading(true)
+      try {
+        // Send a structured message that instructs the LLM to call the tool
+        const argsJson = args ? JSON.stringify(args) : '{}'
+        runtime.append({
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `[Action: ${action}] ${argsJson}`,
+            },
+          ],
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }, [runtime, action, args])
+
+    const variantClasses: Record<string, string> = {
+      default: 'bg-primary text-primary-foreground hover:bg-primary/90',
+      secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+      outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
+      destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+    }
+
+    return (
+      <button
+        onClick={handleClick}
+        disabled={isLoading || !runtime}
+        className={cn(
+          'inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors',
+          'disabled:pointer-events-none disabled:opacity-50',
+          r('md'),
+          variantClasses[variant as string] ?? variantClasses.default,
+          className as string
+        )}
+      >
+        {isLoading && <Loader2Icon className="size-4 animate-spin" />}
+        {String(label)}
+      </button>
     )
   },
 }
