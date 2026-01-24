@@ -47,13 +47,23 @@ const theme = create({
 
 addons.setConfig({
   theme,
+  showToolbar: true,
   sidebar: {
     showRoots: true,
+    collapsedRoots: ['configuration'],
   },
   toolbar: {
+    title: { hidden: true },
     zoom: { hidden: true },
+    eject: { hidden: true },
+    copy: { hidden: true },
+    fullscreen: { hidden: true },
     backgrounds: { hidden: true },
     outline: { hidden: true },
     measure: { hidden: true },
   },
+  panelPosition: 'right',
+  enableShortcuts: true,
+  showPanel: false,
+  showNav: true,
 })
