@@ -20,6 +20,23 @@ if (IS_CHROMATIC) {
 }
 
 const preview: Preview = {
+  globalTypes: {
+    theme: {
+      description: 'Color theme for components',
+      toolbar: {
+        title: 'Theme',
+        icon: 'paintbrush',
+        items: [
+          { value: 'light', title: 'Light', icon: 'sun' },
+          { value: 'dark', title: 'Dark', icon: 'moon' },
+        ],
+        dynamicTitle: true,
+      },
+    },
+  },
+  initialGlobals: {
+    theme: 'dark',
+  },
   parameters: {
     layout: 'fullscreen',
     chromatic: {
@@ -74,9 +91,10 @@ const preview: Preview = {
       elementsConfig.projectSlug ||= projectSlugArg
       elementsConfig.mcp ||= mcpUrlArg
 
-      // Pass the Storybook theme to the elements config so shadow DOM gets the right color scheme
+      // Pass the Storybook theme to the elements config
+      // withThemeByClassName sets context.globals.theme
       const storybookTheme = context.globals.theme as 'light' | 'dark' | undefined
-      if (storybookTheme && !elementsConfig.theme?.colorScheme) {
+      if (storybookTheme) {
         elementsConfig.theme = {
           ...elementsConfig.theme,
           colorScheme: storybookTheme,
