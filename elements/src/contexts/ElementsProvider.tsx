@@ -54,6 +54,10 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { ElementsContext } from './contexts'
 import { ToolApprovalProvider } from './ToolApprovalContext'
+import {
+  ConnectionStatusProvider,
+  useConnectionStatusOptional,
+} from './ConnectionStatusContext'
 
 export interface ElementsProviderProps {
   children: ReactNode
@@ -158,6 +162,9 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     isToolApproved: toolApproval.isToolApproved,
     whitelistTool: toolApproval.whitelistTool,
   })
+
+  // Connection status for tracking network failures
+  const connectionStatus = useConnectionStatusOptional()
 
   approvalHelpersRef.current = {
     requestApproval: toolApproval.requestApproval,
@@ -312,13 +319,47 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
             onError: ({ error }) => {
               console.error('Stream error in onError callback:', error)
               trackError(error, { source: 'streaming' })
+
+              // Check if this is a network/connection error
+              const isNetworkError =
+                error instanceof TypeError ||
+                (error instanceof Error &&
+                  (error.message.includes('fetch') ||
+                    error.message.includes('network') ||
+                    error.message.includes('Failed to fetch') ||
+                    error.message.includes('NetworkError') ||
+                    error.message.includes('ECONNREFUSED') ||
+                    error.message.includes('ETIMEDOUT')))
+
+              if (isNetworkError) {
+                connectionStatus?.markDisconnected()
+              }
             },
           })
+
+          // Mark as connected when stream starts successfully
+          connectionStatus?.markConnected()
 
           return result.toUIMessageStream()
         } catch (error) {
           console.error('Error creating stream:', error)
           trackError(error, { source: 'stream-creation' })
+
+          // Check if this is a network/connection error
+          const isNetworkError =
+            error instanceof TypeError ||
+            (error instanceof Error &&
+              (error.message.includes('fetch') ||
+                error.message.includes('network') ||
+                error.message.includes('Failed to fetch') ||
+                error.message.includes('NetworkError') ||
+                error.message.includes('ECONNREFUSED') ||
+                error.message.includes('ETIMEDOUT')))
+
+          if (isNetworkError) {
+            connectionStatus?.markDisconnected()
+          }
+
           throw error
         }
       },
@@ -336,6 +377,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       apiUrl,
       auth.headers,
       auth.isLoading,
+      connectionStatus,
     ]
   )
 
@@ -545,9 +587,11 @@ const queryClient = new QueryClient()
 export const ElementsProvider = (props: ElementsProviderProps) => {
   return (
     <QueryClientProvider client={queryClient}>
-      <ToolApprovalProvider>
-        <ElementsProviderInner {...props} />
-      </ToolApprovalProvider>
+      <ConnectionStatusProvider>
+        <ToolApprovalProvider>
+          <ElementsProviderInner {...props} />
+        </ToolApprovalProvider>
+      </ConnectionStatusProvider>
     </QueryClientProvider>
   )
 }
