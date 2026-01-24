@@ -23,6 +23,7 @@ import { Type } from "@/components/ui/type";
 import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useMissingRequiredEnvVars } from "@/hooks/useEnvironmentVariables";
 import { useListTools, useToolset } from "@/hooks/toolTypes";
 import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
@@ -39,6 +40,7 @@ import {
   useAddOAuthProxyServerMutation,
   useGetMcpMetadata,
   useLatestDeployment,
+  useListEnvironments,
   useRemoveOAuthServerMutation,
   useUpdateSecurityVariableDisplayNameMutation,
   useUpdateToolsetMutation,
@@ -83,6 +85,8 @@ export function MCPDetailPage() {
 
   // Call hooks before any conditional returns
   const { url: mcpUrl } = useMcpUrl(toolset);
+  const { data: environmentsData } = useListEnvironments();
+  const environments = environmentsData?.environments ?? [];
 
   const isOAuthConnected = !!(
     toolset?.oauthProxyServer || toolset?.externalOauthServer
@@ -164,25 +168,11 @@ export function MCPDetailPage() {
 
   // Calculate if there are missing required env vars for the tab indicator
   // Must be before early return to avoid hooks order issues
-  const missingRequiredEnvVars = useMemo(() => {
-    if (!toolset) return 0;
-    let count = 0;
-    // Count security variables
-    toolset.securityVariables?.forEach((secVar) => {
-      secVar.envVariables.forEach((envVar) => {
-        if (!envVar.toLowerCase().includes("token_url")) {
-          count++;
-        }
-      });
-    });
-    // Count server variables
-    toolset.serverVariables?.forEach((serverVar) => {
-      count += serverVar.envVariables.length;
-    });
-    // Count function environment variables
-    count += toolset.functionEnvironmentVariables?.length || 0;
-    return count;
-  }, [toolset]);
+  const missingRequiredEnvVars = useMissingRequiredEnvVars(
+    toolset,
+    environments,
+    toolset?.defaultEnvironmentSlug || "default"
+  );
 
   // TODO: better loading state
   if (isLoading || !toolset) {

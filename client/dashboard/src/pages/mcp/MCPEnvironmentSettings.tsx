@@ -1,4 +1,6 @@
 import { Combobox } from "@/components/ui/combobox";
+import { Dialog } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { InputAndMultiselect } from "@/components/ui/InputAndMultiselect";
 import { Label } from "@/components/ui/label";
 import {
@@ -15,32 +17,32 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
+import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useMissingRequiredEnvVars } from "@/hooks/useEnvironmentVariables";
 import { Toolset } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import {
   invalidateAllListEnvironments,
+  useCreateEnvironmentMutation,
   useListEnvironments,
-  useUpdateEnvironmentMutation,
+  useUpdateEnvironmentMutation
 } from "@gram/client/react-query";
-import { Button } from "@speakeasy-api/moonshine";
+import { Badge, Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   Check,
   CheckCircleIcon,
   ChevronDown,
   Eye,
   EyeOff,
   Plus,
-  Trash2,
-  XCircleIcon
+  Trash2
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-/**
- * Environment Variable type for the Environments tab
- */
 interface EnvironmentVariable {
   id: string;
   key: string;
@@ -57,12 +59,10 @@ interface EnvironmentVariable {
   updatedAt?: Date;
 }
 
-/**
- * Environments Tab - Vercel-style environment variables management
- */
 export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
+  const session = useSession();
 
   const { data: environmentsData } = useListEnvironments();
   const environments = environmentsData?.environments ?? [];
@@ -70,17 +70,9 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   // State for the list of environment variables
   const [envVars, setEnvVars] = useState<EnvironmentVariable[]>([]);
   const [isAddingNew, setIsAddingNew] = useState(false);
-  const [selectedEnvironmentView, setSelectedEnvironmentView] = useState<string | null>(null);
-
-  // Initialize selectedEnvironmentView to default environment when environments load
-  useEffect(() => {
-    if (environments.length > 0 && !selectedEnvironmentView && toolset.defaultEnvironmentSlug) {
-      const defaultEnv = environments.find(e => e.slug === toolset.defaultEnvironmentSlug);
-      if (defaultEnv) {
-        setSelectedEnvironmentView(toolset.defaultEnvironmentSlug);
-      }
-    }
-  }, [environments, toolset.defaultEnvironmentSlug, selectedEnvironmentView]);
+  const [selectedEnvironmentView, setSelectedEnvironmentView] = useState<string>(
+    toolset.defaultEnvironmentSlug || "default"
+  );
 
   // Clear editing state when environment view changes
   useEffect(() => {
@@ -112,6 +104,10 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     new Map(),
   );
 
+  // Create environment dialog state
+  const [isCreateEnvDialogOpen, setIsCreateEnvDialogOpen] = useState(false);
+  const [newEnvironmentName, setNewEnvironmentName] = useState("");
+
   // Update environment mutation
   const updateEnvironmentMutation = useUpdateEnvironmentMutation({
     onSuccess: () => {
@@ -120,6 +116,24 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
         action: "environment_variable_updated",
         toolset_slug: toolset.slug,
       });
+    },
+  });
+
+  // Create environment mutation
+  const createEnvironmentMutation = useCreateEnvironmentMutation({
+    onSuccess: (data) => {
+      invalidateAllListEnvironments(queryClient);
+      setSelectedEnvironmentView(data.slug);
+      setIsCreateEnvDialogOpen(false);
+      setNewEnvironmentName("");
+      toast.success(`Created environment "${data.name}"`);
+      telemetry.capture("environment_event", {
+        action: "environment_created",
+        environment_slug: data.slug,
+      });
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to create environment");
     },
   });
 
@@ -305,6 +319,28 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     setEnvVars(existingVars);
   }, [toolset.slug, environments]);
 
+  const handleCreateEnvironment = () => {
+    if (!newEnvironmentName.trim()) {
+      toast.error("Environment name is required");
+      return;
+    }
+
+    if (!session.activeOrganizationId) {
+      toast.error("Organization ID not found");
+      return;
+    }
+
+    createEnvironmentMutation.mutate({
+      request: {
+        createEnvironmentForm: {
+          name: newEnvironmentName.trim(),
+          organizationId: session.activeOrganizationId,
+          entries: [],
+        },
+      },
+    });
+  };
+
   const handleAddVariable = () => {
     if (!newKey.trim()) return;
 
@@ -377,19 +413,6 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     return Array.from(allEnvs);
   };
 
-  const getPrimaryValue = (envVar: EnvironmentVariable): string => {
-    if (envVar.valueGroups.length === 0) return "";
-    // Return the value from the most common group
-    const mostCommonGroup = envVar.valueGroups.reduce((prev, current) =>
-      current.environments.length > prev.environments.length ? current : prev,
-    );
-    return mostCommonGroup.value;
-  };
-
-  const hasValue = (envVar: EnvironmentVariable): boolean => {
-    return envVar.valueGroups.length > 0 && envVar.valueGroups.some(g => g.environments.length > 0);
-  };
-
   // Check if an environment has a value for a specific variable
   const environmentHasValue = (envVar: EnvironmentVariable, environmentSlug: string): boolean => {
     if (envVar.isUserProvided) return true;
@@ -404,7 +427,6 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
 
   // Separate required and custom variables
   const requiredVars = envVars.filter((v) => v.isRequired);
-  const customVars = envVars.filter((v) => !v.isRequired);
 
   // Check if an environment has all required variables configured
   const environmentHasAllRequiredVariables = (environmentSlug: string): boolean => {
@@ -412,28 +434,46 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   };
 
   // Count missing required variables (user-provided ones count as configured)
-  const missingRequiredCount = requiredVars.filter(
-    (v) => !hasValue(v) && !v.isUserProvided,
-  ).length;
+  const missingRequiredCount = useMissingRequiredEnvVars(
+    toolset,
+    environments,
+    selectedEnvironmentView
+  );
 
   // Handle value change for required variables
   const handleValueChange = (id: string, newValue: string) => {
     const envVar = envVars.find((v) => v.id === id);
     if (!envVar) return;
 
-    // Get current or default target environments
+    // If value is empty, clear editing state to reflect current state
+    if (!newValue) {
+      const newEditingState = new Map(editingState);
+      newEditingState.delete(id);
+      setEditingState(newEditingState);
+      return;
+    }
+
+    // Get current or default target environments (only when user starts typing)
     let targetEnvironments: string[];
     if (editingState.has(id)) {
       targetEnvironments = editingState.get(id)!.targetEnvironments;
     } else {
       // Check if the currently viewed environment has a value
-      const currentEnvHasValue = selectedEnvironmentView
-        ? envVar.valueGroups.some(g => g.environments.includes(selectedEnvironmentView))
-        : false;
+      const currentEnvHasValue = envVar.valueGroups.some(g =>
+        g.environments.includes(selectedEnvironmentView)
+      );
 
-      // If viewing a specific environment and it doesn't have a value, default to all environments
-      if (selectedEnvironmentView && !currentEnvHasValue) {
-        targetEnvironments = environments.map((e) => e.slug);
+      // If viewing environment doesn't have a value
+      if (!currentEnvHasValue) {
+        // If completely unset (no values anywhere), default to all environments
+        if (envVar.valueGroups.length === 0) {
+          targetEnvironments = environments.map((e) => e.slug);
+        } else {
+          // Has values in some environments, default to only environments without values
+          targetEnvironments = environments
+            .filter(env => !getValueForEnvironment(envVar, env.slug))
+            .map(env => env.slug);
+        }
       } else if (envVar.valueGroups.length > 0) {
         // If variable has values, use the most common group
         const mostCommonGroup = envVar.valueGroups.reduce((prev, current) =>
@@ -458,11 +498,8 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     if (editingState.has(envVar.id)) {
       return editingState.get(envVar.id)!.value;
     }
-    // If viewing a specific environment, show that environment's value
-    if (selectedEnvironmentView) {
-      return getValueForEnvironment(envVar, selectedEnvironmentView);
-    }
-    return getPrimaryValue(envVar);
+    // Show the value for the currently selected environment
+    return getValueForEnvironment(envVar, selectedEnvironmentView);
   };
 
   // Get selected environments for a variable
@@ -476,29 +513,23 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     const envVar = envVars.find(v => v.id === id);
     if (!envVar) return environments.map((e) => e.slug);
 
-    // If viewing a specific environment, find which environments have that same value
-    if (selectedEnvironmentView) {
-      const viewedValue = getValueForEnvironment(envVar, selectedEnvironmentView);
-      if (viewedValue) {
-        const matchingGroup = envVar.valueGroups.find(g => g.value === viewedValue);
-        if (matchingGroup) {
-          return matchingGroup.environments;
-        }
-      }
-      // If the current environment has no value, default to all environments
-      return environments.map((e) => e.slug);
+    // If completely unset (no value groups), show no environments selected
+    if (envVar.valueGroups.length === 0) {
+      return [];
     }
 
-    // Default to showing environments with the primary value
-    const primaryValue = getPrimaryValue(envVar);
-    if (primaryValue) {
-      const matchingGroup = envVar.valueGroups.find(g => g.value === primaryValue);
+    // Find which environments have the same value as the currently viewed environment
+    const viewedValue = getValueForEnvironment(envVar, selectedEnvironmentView);
+    if (viewedValue) {
+      const matchingGroup = envVar.valueGroups.find(g => g.value === viewedValue);
       if (matchingGroup) {
         return matchingGroup.environments;
       }
     }
 
-    return environments.map((e) => e.slug);
+    // If the current environment has no value (viewing empty), return empty array
+    // This reflects the actual state - no environments are selected for empty value
+    return [];
   };
 
   // Update selected environments for a variable
@@ -595,24 +626,47 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   };
 
   const environmentSwitcher = useMemo(() => {
+    // Sort environments with "default" first
+    const sortedEnvironments = [...environments].sort((a, b) => {
+      if (a.slug === "default") return -1;
+      if (b.slug === "default") return 1;
+      return 0;
+    });
+
+    // Add environment items
+    const envItems = sortedEnvironments.map(env => ({
+      value: env.slug,
+      label: env.name,
+      icon: environmentHasAllRequiredVariables(env.slug) ? (
+        <CheckCircleIcon className="w-4 h-4 text-green-600 mr-2" />
+      ) : (
+        <AlertTriangle className="w-4 h-4 text-yellow-600 mr-2" />
+      ),
+    }));
+
+    // Add "+ New Environment" item
+    const newEnvItem = {
+      value: "__new__",
+      label: "New Environment",
+      icon: <Plus className="w-4 h-4 text-muted-foreground mr-2" />,
+    };
+
     return environments.length > 0 && (
       <Combobox
-        items={environments.map(env => ({
-          value: env.slug,
-          label: env.name,
-          icon: environmentHasAllRequiredVariables(env.slug) ? (
-            <CheckCircleIcon className="w-4 h-4 text-green-600 mr-2" />
-          ) : (
-            <XCircleIcon className="w-4 h-4 text-muted-foreground/50 mr-2" />
-          ),
-        }))}
-        selected={selectedEnvironmentView || undefined}
-        onSelectionChange={(item) => setSelectedEnvironmentView(item.value)}
+        items={[...envItems, newEnvItem]}
+        selected={selectedEnvironmentView}
+        onSelectionChange={(item) => {
+          if (item.value === "__new__") {
+            setIsCreateEnvDialogOpen(true);
+          } else {
+            setSelectedEnvironmentView(item.value);
+          }
+        }}
         variant="outline"
         className="min-w-[200px]"
       >
         <Type variant="small">
-          {environments.find(e => e.slug === selectedEnvironmentView)?.name || "Select Environment"}
+          {environments.find(e => e.slug === selectedEnvironmentView)?.name || selectedEnvironmentView}
         </Type>
       </Combobox>
     )
@@ -639,10 +693,11 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
           <div className="flex items-center gap-3">
             <h3 className="text-lg font-medium">Variables</h3>
             {missingRequiredCount > 0 && (
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs text-muted-foreground">
-                {missingRequiredCount} required not configured
-              </span>
-            )}
+              <Badge variant="warning">
+                <Badge.LeftIcon><AlertTriangle className="h-3.5 w-3.5" /></Badge.LeftIcon>
+                <Badge.Text>{missingRequiredCount} required not configured</Badge.Text>
+              </Badge>
+            )} 
           </div>
           <Button onClick={() => setIsAddingNew(true)} disabled={isAddingNew}>
             <Button.Text>Add Variable</Button.Text>
@@ -667,22 +722,13 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
                 <div className="relative w-6 h-6 flex items-center justify-center">
                   {/* Status indicator - visible by default, hidden on hover for non-required */}
                   <div className={cn(!envVar.isRequired && "group-hover:opacity-0 transition-opacity")}>
-                    {selectedEnvironmentView
-                      ? (environmentHasValue(envVar, selectedEnvironmentView) ? (
-                          <div className="w-2 h-2 rounded-full bg-green-500" />
-                        ) : envVar.isRequired ? (
-                          <div className="w-2 h-2 rounded-full bg-yellow-500" />
-                        ) : (
-                          <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />
-                        ))
-                      : (hasValue(envVar) || envVar.isUserProvided ? (
-                          <div className="w-2 h-2 rounded-full bg-green-500" />
-                        ) : envVar.isRequired ? (
-                          <div className="w-2 h-2 rounded-full bg-yellow-500" />
-                        ) : (
-                          <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />
-                        ))
-                    }
+                    {environmentHasValue(envVar, selectedEnvironmentView) ? (
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                    ) : envVar.isRequired ? (
+                      <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                    ) : (
+                      <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />
+                    )}
                   </div>
 
                   {/* Delete button - hidden by default, visible on hover for non-required */}
@@ -892,38 +938,43 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
                     </div>
                     All Environments
                   </div>
-                  {environments.map((env) => (
-                    <div
-                      key={env.slug}
-                      className="px-3 py-2 text-sm rounded-sm cursor-pointer hover:bg-accent flex items-center gap-2"
-                      onClick={() => {
-                        if (newTargetEnvironments.includes(env.slug)) {
-                          setNewTargetEnvironments(
-                            newTargetEnvironments.filter((s) => s !== env.slug),
-                          );
-                        } else {
-                          setNewTargetEnvironments([
-                            ...newTargetEnvironments,
-                            env.slug,
-                          ]);
-                        }
-                      }}
-                    >
+                  {environments.map((env) => {
+                    const isAllSelected = newTargetEnvironments.length === 0 || newTargetEnvironments.length === environments.length;
+                    const isEnvSelected = isAllSelected || newTargetEnvironments.includes(env.slug);
+
+                    return (
                       <div
-                        className={cn(
-                          "w-4 h-4 rounded-sm border flex items-center justify-center",
-                          newTargetEnvironments.includes(env.slug)
-                            ? "bg-primary border-primary text-primary-foreground"
-                            : "border-border",
-                        )}
+                        key={env.slug}
+                        className="px-3 py-2 text-sm rounded-sm cursor-pointer hover:bg-accent flex items-center gap-2"
+                        onClick={() => {
+                          if (newTargetEnvironments.includes(env.slug)) {
+                            setNewTargetEnvironments(
+                              newTargetEnvironments.filter((s) => s !== env.slug),
+                            );
+                          } else {
+                            setNewTargetEnvironments([
+                              ...newTargetEnvironments,
+                              env.slug,
+                            ]);
+                          }
+                        }}
                       >
-                        {newTargetEnvironments.includes(env.slug) && (
-                          <Check className="h-3 w-3" />
-                        )}
+                        <div
+                          className={cn(
+                            "w-4 h-4 rounded-sm border flex items-center justify-center",
+                            isEnvSelected
+                              ? "bg-primary border-primary text-primary-foreground"
+                              : "border-border",
+                          )}
+                        >
+                          {isEnvSelected && (
+                            <Check className="h-3 w-3" />
+                          )}
+                        </div>
+                        {env.name}
                       </div>
-                      {env.name}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </PopoverContent>
               </Popover>
             </div>
@@ -1221,6 +1272,50 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      {/* Create Environment Dialog */}
+      <Dialog open={isCreateEnvDialogOpen} onOpenChange={setIsCreateEnvDialogOpen}>
+        <Dialog.Content className="max-w-md">
+          <Dialog.Header>
+            <Dialog.Title>Create New Environment</Dialog.Title>
+          </Dialog.Header>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label className="text-sm font-medium mb-2 block">
+                Environment Name
+              </Label>
+              <Input
+                value={newEnvironmentName}
+                onChange={setNewEnvironmentName}
+                placeholder="staging, production, dev..."
+                autoFocus
+                onKeyDown={(e: React.KeyboardEvent) => {
+                  if (e.key === "Enter") {
+                    handleCreateEnvironment();
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <Dialog.Footer className="flex justify-end gap-2">
+            <Button
+              variant="tertiary"
+              onClick={() => {
+                setIsCreateEnvDialogOpen(false);
+                setNewEnvironmentName("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateEnvironment}
+              disabled={!newEnvironmentName.trim() || createEnvironmentMutation.isPending}
+            >
+              {createEnvironmentMutation.isPending ? "Creating..." : "Create"}
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
 
     </div>
   );
