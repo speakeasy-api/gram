@@ -43,7 +43,7 @@
     "test:watch": "vitest",
     "lint": "eslint src",
     "analyze": "pnpm dlx vite-bundle-visualizer",
-    "storybook": "storybook dev -p 6007",
+    "storybook": "storybook dev -p 6007 --no-open",
     "build-storybook": "storybook build --stats-json",
     "chromatic": "chromatic --exit-zero-on-changes",
     "type-check": "tsc --noEmit",
