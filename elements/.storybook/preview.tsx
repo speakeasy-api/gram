@@ -81,28 +81,28 @@ const preview: Preview = {
     (Story, context) => {
       // Stories can override config via parameters.elements
       const elementsParams = context.parameters.elements ?? {}
-      const elementsConfig: Partial<ElementsConfig> =
-        elementsParams.config ?? {}
+      const baseConfig: Partial<ElementsConfig> = elementsParams.config ?? {}
 
-      // Storbook users control these args using the controls panel
+      // Storybook users control these args using the controls panel
       const projectSlugArg = context.args.projectSlug
       const mcpUrlArg = context.args.mcpUrl
 
-      elementsConfig.projectSlug ||= projectSlugArg
-      elementsConfig.mcp ||= mcpUrlArg
-
-      // Pass the Storybook theme to the elements config
-      // withThemeByClassName sets context.globals.theme
+      // Storybook theme from toolbar
       const storybookTheme = context.globals.theme as 'light' | 'dark' | undefined
-      if (storybookTheme) {
-        elementsConfig.theme = {
-          ...elementsConfig.theme,
-          colorScheme: storybookTheme,
-        }
+
+      // Create new config object (immutable) to ensure React detects changes
+      const elementsConfig: Partial<ElementsConfig> = {
+        ...baseConfig,
+        projectSlug: baseConfig.projectSlug || projectSlugArg,
+        mcp: baseConfig.mcp || mcpUrlArg,
+        theme: {
+          ...baseConfig.theme,
+          ...(storybookTheme && { colorScheme: storybookTheme }),
+        },
       }
 
       return (
-        <ElementsDecorator config={elementsConfig}>
+        <ElementsDecorator config={elementsConfig} key={storybookTheme}>
           <Story />
         </ElementsDecorator>
       )
