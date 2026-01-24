@@ -134,6 +134,7 @@
     "@ai-sdk/google": "^2",
     "@eslint/compat": "^2.0.0",
     "@eslint/js": "^9.39.1",
+    "@openrouter/sdk": "^0.3.14",
     "@storybook/addon-docs": "^10.0.8",
     "@storybook/react-vite": "^10.0.8",
     "@tailwindcss/vite": "^4.1.13",

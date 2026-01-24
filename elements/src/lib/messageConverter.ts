@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 /**
  * Message format converter for Gram API <-> assistant-ui.
  *
@@ -17,19 +19,21 @@ import type {
   ThreadAssistantMessagePart,
   TextMessagePart,
 } from '@assistant-ui/react'
+import type {
+  Message,
+  UserMessage,
+  AssistantMessage,
+} from '@openrouter/sdk/models'
+import { UIMessage } from 'ai'
 
 /**
  * Represents a chat message from the Gram API.
  * This mirrors the ChatMessage type from @gram/sdk without requiring the SDK dependency.
  */
-export interface GramChatMessage {
+export type GramChatMessage = Message & {
   id: string
-  role: string
-  content?: string
   model: string
-  toolCallId?: string
-  toolCalls?: string
-  createdAt: Date | string
+  created_at: Date | string
 }
 
 /**
@@ -58,17 +62,6 @@ export interface GramChatOverview {
 }
 
 /**
- * Normalizes a role string to valid ThreadMessage roles.
- */
-function normalizeRole(role: string): 'user' | 'assistant' | 'system' {
-  if (role === 'user') return 'user'
-  if (role === 'assistant') return 'assistant'
-  if (role === 'system') return 'system'
-  // Tool role messages should be handled differently, but for now treat as assistant
-  return 'assistant'
-}
-
-/**
  * Parses a date that might be a string or Date object.
  */
 function parseDate(date: Date | string): Date {
@@ -79,21 +72,64 @@ function parseDate(date: Date | string): Date {
  * Builds content parts for a user message.
  */
 function buildUserContentParts(msg: GramChatMessage): ThreadUserMessagePart[] {
-  const parts: ThreadUserMessagePart[] = []
-
-  if (msg.content) {
-    parts.push({
-      type: 'text',
-      text: msg.content,
-    } as TextMessagePart)
+  if (msg.role !== 'user') {
+    return []
   }
 
-  // Return at least an empty text part if no content
-  if (parts.length === 0) {
-    parts.push({
-      type: 'text',
-      text: '',
-    } as TextMessagePart)
+  if (typeof msg.content === 'string' || !msg.content) {
+    return [
+      {
+        type: 'text',
+        text: msg.content ?? '',
+      },
+    ]
+  }
+
+  const parts: ThreadUserMessagePart[] = []
+
+  for (const item of msg.content) {
+    switch (item.type) {
+      case 'text':
+        parts.push({
+          type: 'text',
+          text: item.text,
+        })
+        break
+      case 'image_url':
+        parts.push({
+          type: 'image',
+          image: (item as any).image_url?.url as FIXME<
+            string,
+            'Fixed by switching to Gram TS SDK.'
+          >,
+        })
+        break
+      case 'input_audio': {
+        const format = (item as any).input_audio?.format as FIXME<
+          string,
+          'Fixed by switching to Gram TS SDK.'
+        >
+        if (format === 'mp3' || format === 'wav') {
+          parts.push({
+            type: 'audio',
+            audio: {
+              data: (item as any).input_audio.data as FIXME<
+                string,
+                'Fixed by switching to Gram TS SDK.'
+              >,
+              format: format,
+            },
+          })
+        }
+        break
+      }
+      default:
+        parts.push({
+          type: 'text',
+          text: '',
+        })
+        break
+    }
   }
 
   return parts
@@ -105,33 +141,43 @@ function buildUserContentParts(msg: GramChatMessage): ThreadUserMessagePart[] {
 function buildAssistantContentParts(
   msg: GramChatMessage
 ): ThreadAssistantMessagePart[] {
-  const parts: ThreadAssistantMessagePart[] = []
-
-  if (msg.content) {
-    parts.push({
-      type: 'text',
-      text: msg.content,
-    } as TextMessagePart)
+  if (msg.role !== 'assistant') {
+    return []
   }
 
-  if (msg.toolCalls) {
-    try {
-      const toolCalls = JSON.parse(msg.toolCalls)
-      for (const tc of toolCalls) {
-        const args = tc.function?.arguments ?? tc.args ?? {}
-        const argsText = typeof args === 'string' ? args : JSON.stringify(args)
-        parts.push({
-          type: 'tool-call',
-          toolCallId: tc.id ?? tc.toolCallId ?? '',
-          toolName: tc.function?.name ?? tc.toolName ?? '',
-          args: typeof args === 'string' ? JSON.parse(args) : args,
-          argsText,
-          result: undefined,
-        } as ThreadAssistantMessagePart)
-      }
-    } catch {
-      // Ignore JSON parse errors for tool calls
-    }
+  if (typeof msg.content === 'string' || !msg.content) {
+    return [
+      {
+        type: 'text',
+        text: msg.content ?? '',
+      },
+    ]
+  }
+
+  const parts: ThreadAssistantMessagePart[] = []
+
+  const toolCallsJSON = (msg as any).tool_calls as FIXME<
+    string | undefined,
+    'Fixed by switching to Gram TS SDK.'
+  >
+
+  let toolCalls = tryParseJSON(toolCallsJSON || '[]')
+  if (!Array.isArray(toolCalls)) {
+    console.warn('Invalid tool_calls format, expected an array.')
+    toolCalls = []
+  }
+
+  for (const tc of toolCalls) {
+    const args = tc.function?.arguments ?? tc.args ?? {}
+    const argsText = typeof args === 'string' ? args : JSON.stringify(args)
+    parts.push({
+      type: 'tool-call',
+      toolCallId: tc.id ?? tc.toolCallId ?? '',
+      toolName: tc.function?.name ?? tc.toolName ?? '',
+      args: typeof args === 'string' ? JSON.parse(args) : args,
+      argsText,
+      result: undefined,
+    } as ThreadAssistantMessagePart)
   }
 
   // Return at least an empty text part if no content
@@ -145,14 +191,34 @@ function buildAssistantContentParts(
   return parts
 }
 
+function buildSystemContentParts(msg: GramChatMessage): [TextMessagePart] {
+  if (msg.role !== 'system') {
+    return [{ type: 'text', text: '' }]
+  }
+
+  if (typeof msg.content === 'string' || !msg.content) {
+    return [{ type: 'text', text: msg.content ?? '' }]
+  }
+
+  const text: string[] = []
+
+  for (const item of msg.content) {
+    if (item.type !== 'text') {
+      continue
+    }
+    text.push(item.text)
+  }
+
+  return [{ type: 'text', text: text.join('\n') }]
+}
+
 /**
  * Converts a single Gram ChatMessage to a ThreadMessage.
  */
 function convertGramMessageToThreadMessage(
   msg: GramChatMessage
 ): ThreadMessage {
-  const role = normalizeRole(msg.role)
-  const createdAt = parseDate(msg.createdAt)
+  const createdAt = parseDate(msg.created_at)
 
   const baseMetadata = {
     unstable_state: undefined,
@@ -163,7 +229,7 @@ function convertGramMessageToThreadMessage(
     custom: {},
   }
 
-  if (role === 'user') {
+  if (msg.role === 'user') {
     return {
       id: msg.id,
       role: 'user',
@@ -174,12 +240,12 @@ function convertGramMessageToThreadMessage(
     }
   }
 
-  if (role === 'system') {
+  if (msg.role === 'system') {
     return {
       id: msg.id,
       role: 'system',
       createdAt,
-      content: [{ type: 'text', text: msg.content ?? '' }],
+      content: buildSystemContentParts(msg),
       metadata: baseMetadata,
     }
   }
@@ -237,5 +303,190 @@ export function convertGramMessagesToExported(
   return {
     messages: exportedMessages,
     headId: prevId,
+  }
+}
+
+export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
+  headId: string | null
+  messages: { parentId: string | null; message: UIMessage }[]
+} {
+  if (messages.length === 0) {
+    return { messages: [], headId: null }
+  }
+
+  const uiMessages: { parentId: string | null; message: UIMessage }[] = []
+  let prevId: string | null = null
+
+  for (const msg of messages) {
+    switch (msg.role) {
+      case 'developer':
+      case 'tool':
+        continue
+      case 'system': {
+        uiMessages.push({
+          parentId: prevId,
+          message: {
+            id: msg.id,
+            role: 'system',
+            parts: [
+              {
+                type: 'text',
+                text:
+                  typeof msg.content === 'string'
+                    ? msg.content
+                    : Array.isArray(msg.content)
+                      ? msg.content
+                          .filter((item) => item.type === 'text')
+                          .map((item) => item.text)
+                          .join('\n')
+                      : '',
+              },
+            ],
+          },
+        })
+        break
+      }
+      case 'user': {
+        uiMessages.push({
+          parentId: prevId,
+          message: {
+            id: msg.id,
+            role: 'user',
+            parts: convertGramMessagePartsToUIMessageParts(msg),
+          },
+        })
+        break
+      }
+      case 'assistant': {
+        const uiMessage = {
+          parentId: prevId,
+          message: {
+            id: msg.id,
+            role: 'assistant',
+            parts: convertGramMessagePartsToUIMessageParts(msg),
+          } satisfies UIMessage,
+        }
+        uiMessages.push(uiMessage)
+
+        break
+      }
+    }
+
+    prevId = msg.id
+  }
+
+  return {
+    messages: uiMessages,
+    headId: prevId,
+  }
+}
+
+export function convertGramMessagePartsToUIMessageParts(
+  msg: UserMessage | AssistantMessage
+): UIMessage['parts'] {
+  const uiparts: UIMessage['parts'] = []
+
+  if (typeof msg.content === 'string' && msg.content) {
+    uiparts.push({
+      type: 'text',
+      text: msg.content,
+    })
+  }
+
+  const content = Array.isArray(msg.content) ? msg.content : []
+  for (const p of content) {
+    switch (p.type) {
+      case 'text': {
+        uiparts.push({
+          type: 'text',
+          text: p.text,
+        })
+        break
+      }
+      case 'image_url': {
+        const url = (p as any).image_url?.url as FIXME<
+          string | undefined,
+          'Fixed by switching to Gram TS SDK.'
+        >
+        if (!url) {
+          break
+        }
+
+        uiparts.push({
+          type: 'file',
+          url,
+          mediaType: mediaTypeFromURL(url),
+        })
+        break
+      }
+      case 'input_audio': {
+        const url = (p as any).input_audio?.data as FIXME<
+          string | undefined,
+          'Fixed by switching to Gram TS SDK.'
+        >
+        if (!url) {
+          break
+        }
+
+        uiparts.push({
+          type: 'file',
+          url,
+          mediaType: mediaTypeFromURL(url),
+        })
+        break
+      }
+    }
+  }
+
+  if (msg.role === 'assistant' && msg.reasoning) {
+    uiparts.push({
+      type: 'reasoning',
+      text: msg.reasoning,
+    })
+  }
+
+  if (msg.role === 'assistant' && (msg as any).tool_calls) {
+    const toolCallsJSON = (msg as any).tool_calls as FIXME<
+      string,
+      'Fixed by switching to Gram TS SDK.'
+    >
+    let toolCalls = tryParseJSON<AssistantMessage['toolCalls']>(
+      toolCallsJSON || '[]'
+    )
+    if (!Array.isArray(toolCalls)) {
+      console.warn('Invalid tool_calls format, expected an array.')
+      toolCalls = []
+    }
+
+    for (const tc of toolCalls) {
+      uiparts.push({
+        type: 'dynamic-tool',
+        toolCallId: tc.id,
+        toolName: tc.function?.name ?? '',
+        state: 'output-available',
+        input: tc.function?.arguments ?? {},
+        output: '',
+      })
+    }
+  }
+
+  return uiparts
+}
+
+function mediaTypeFromURL(url: string): string {
+  const unspecified = 'unknown/unknown'
+  if (!url.startsWith('data:')) {
+    return unspecified
+  }
+
+  const match = url.match(/^data:([^;]+);/)
+  return match?.[1] || unspecified
+}
+
+function tryParseJSON<T = any>(str: string): T | null {
+  try {
+    return JSON.parse(str) as T
+  } catch {
+    return null
   }
 }

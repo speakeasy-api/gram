@@ -9,6 +9,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
@@ -76,7 +77,7 @@ type ChatMessage struct {
 	// The role of the message
 	Role string
 	// The content of the message
-	Content *string
+	Content json.RawMessage
 	// The model that generated the message
 	Model string
 	// The tool call ID of the message

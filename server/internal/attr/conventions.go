@@ -79,6 +79,7 @@ const (
 
 	AssetIDKey                     = attribute.Key("gram.asset.id")
 	AssetURLKey                    = attribute.Key("gram.asset.url")
+	ChatIDKey                      = attribute.Key("gram.chat.id")
 	MCPRegistryIDKey               = attribute.Key("gram.mcp_registry.id")
 	MCPRegistryURLKey              = attribute.Key("gram.mcp_registry.url")
 	ExternalMCPIDKey               = attribute.Key("gram.external_mcp.id")
@@ -398,6 +399,9 @@ func SlogAssetID(v string) slog.Attr      { return slog.String(string(AssetIDKey
 
 func AssetURL(v string) attribute.KeyValue { return AssetURLKey.String(v) }
 func SlogAssetURL(v string) slog.Attr      { return slog.String(string(AssetURLKey), v) }
+
+func ChatID(v string) attribute.KeyValue { return ChatIDKey.String(v) }
+func SlogChatID(v string) slog.Attr      { return slog.String(string(ChatIDKey), v) }
 
 func CacheKey(v string) attribute.KeyValue { return CacheKeyKey.String(v) }
 func SlogCacheKey(v string) slog.Attr      { return slog.String(string(CacheKeyKey), v) }

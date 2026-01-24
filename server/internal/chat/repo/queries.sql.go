@@ -28,6 +28,9 @@ type CreateChatMessageParams struct {
 	Role             string
 	ProjectID        uuid.UUID
 	Content          string
+	ContentRaw       []byte
+	ContentAssetUrl  pgtype.Text
+	StorageError     pgtype.Text
 	Model            pgtype.Text
 	MessageID        pgtype.Text
 	ToolCallID       pgtype.Text
