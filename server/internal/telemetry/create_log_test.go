@@ -23,7 +23,7 @@ func TestCreateLog_LogsCorrectly(t *testing.T) {
 	attrs.RecordDuration(123.45)
 	attrs.RecordUserAgent("test-client/1.0")
 
-	toolInfo := newTestToolInfo()
+	toolInfo := newTestToolInfo(ti.orgID)
 	timestamp := time.Now().UTC()
 
 	ti.service.CreateLog(ctx, telemetry.LogParams{
@@ -62,7 +62,7 @@ func TestCreateLog_NilFunctionID(t *testing.T) {
 	attrs.RecordMethod("GET")
 	attrs.RecordStatusCode(200)
 
-	toolInfo := newTestToolInfo()
+	toolInfo := newTestToolInfo(ti.orgID)
 	toolInfo.FunctionID = nil
 	timestamp := time.Now().UTC()
 
@@ -86,7 +86,7 @@ func TestCreateLog_NonNilFunctionID(t *testing.T) {
 	attrs.RecordStatusCode(200)
 
 	funcID := uuid.New().String()
-	toolInfo := newTestToolInfo()
+	toolInfo := newTestToolInfo(ti.orgID)
 	toolInfo.FunctionID = &funcID
 	timestamp := time.Now().UTC()
 
@@ -124,7 +124,7 @@ func TestCreateLog_SeverityFromStatusCode(t *testing.T) {
 			attrs.RecordMethod("GET")
 			attrs.RecordStatusCode(tc.statusCode)
 
-			toolInfo := newTestToolInfo()
+			toolInfo := newTestToolInfo(ti.orgID)
 			timestamp := time.Now().UTC()
 
 			ti.service.CreateLog(ctx, telemetry.LogParams{
@@ -149,7 +149,7 @@ func TestCreateLog_DefaultSeverityWithoutStatusCode(t *testing.T) {
 	attrs.RecordMethod("GET")
 	// No status code recorded
 
-	toolInfo := newTestToolInfo()
+	toolInfo := newTestToolInfo(ti.orgID)
 	timestamp := time.Now().UTC()
 
 	ti.service.CreateLog(ctx, telemetry.LogParams{
@@ -176,7 +176,7 @@ func TestCreateLog_RequestHeaders(t *testing.T) {
 		"X-Request-ID": "req-123",
 	}, false)
 
-	toolInfo := newTestToolInfo()
+	toolInfo := newTestToolInfo(ti.orgID)
 	timestamp := time.Now().UTC()
 
 	ti.service.CreateLog(ctx, telemetry.LogParams{
@@ -205,7 +205,7 @@ func TestCreateLog_ResponseHeaders(t *testing.T) {
 		"Content-Length": "1234",
 	})
 
-	toolInfo := newTestToolInfo()
+	toolInfo := newTestToolInfo(ti.orgID)
 	timestamp := time.Now().UTC()
 
 	ti.service.CreateLog(ctx, telemetry.LogParams{
@@ -230,7 +230,7 @@ func TestCreateLog_LogMessageBody(t *testing.T) {
 	attrs.RecordStatusCode(200)
 	attrs.RecordMessageBody("POST /api/test -> 200 (0.12s)")
 
-	toolInfo := newTestToolInfo()
+	toolInfo := newTestToolInfo(ti.orgID)
 	timestamp := time.Now().UTC()
 
 	ti.service.CreateLog(ctx, telemetry.LogParams{
@@ -252,7 +252,7 @@ func TestCreateLog_Timestamp(t *testing.T) {
 	attrs.RecordMethod("GET")
 	attrs.RecordStatusCode(200)
 
-	toolInfo := newTestToolInfo()
+	toolInfo := newTestToolInfo(ti.orgID)
 	// Use a timestamp within the ClickHouse TTL window (30 days)
 	// but still specific enough to verify timestamp storage
 	timestamp := time.Now().UTC().Truncate(time.Second).Add(-24 * time.Hour)
@@ -268,14 +268,50 @@ func TestCreateLog_Timestamp(t *testing.T) {
 	require.Equal(t, timestamp.UnixNano(), log.TimeUnixNano)
 }
 
-func newTestToolInfo() telemetry.ToolInfo {
+func TestCreateLog_NoOpWhenFeatureDisabled(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+
+	attrs := telemetry.HTTPLogAttributes{}
+	attrs.RecordMethod("POST")
+	attrs.RecordRoute("/api/test")
+	attrs.RecordStatusCode(200)
+
+	// Use an org ID that doesn't have logs enabled
+	disabledOrgID := uuid.New().String()
+	toolInfo := newTestToolInfo(disabledOrgID)
+	timestamp := time.Now().UTC()
+
+	ti.service.CreateLog(ctx, telemetry.LogParams{
+		Timestamp:  timestamp,
+		ToolInfo:   toolInfo,
+		Attributes: attrs,
+	})
+
+	// Verify no log was created by checking consistently over time
+	// Use Never pattern: fail if a log ever appears within the timeout window
+	require.Never(t, func() bool {
+		logs, err := ti.chClient.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
+			GramProjectID: toolInfo.ProjectID,
+			TimeStart:     timestamp.Add(-1 * time.Minute).UnixNano(),
+			TimeEnd:       timestamp.Add(1 * time.Minute).UnixNano(),
+			GramURNs:      []string{toolInfo.URN},
+			SortOrder:     "desc",
+			Cursor:        "",
+			Limit:         10,
+		})
+		return err == nil && len(logs) > 0
+	}, 300*time.Millisecond, 50*time.Millisecond, "expected no logs when feature is disabled")
+}
+
+func newTestToolInfo(orgID string) telemetry.ToolInfo {
 	return telemetry.ToolInfo{
 		ID:             uuid.New().String(),
 		URN:            "tools:http:test-source:test-tool-" + uuid.New().String(),
 		Name:           "test-tool",
 		ProjectID:      uuid.New().String(),
 		DeploymentID:   uuid.New().String(),
-		OrganizationID: uuid.New().String(),
+		OrganizationID: orgID,
 	}
 }
 
