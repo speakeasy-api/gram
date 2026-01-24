@@ -166,3 +166,49 @@ CustomToolComponent.parameters = {
     },
   },
 }
+
+/**
+ * Demonstrates the generativeUI plugin which renders `ui` code blocks
+ * as dynamic UI widgets.
+ *
+ * The LLM outputs JSON in a ```ui code fence, and the plugin renders it
+ * using the built-in component catalog (Card, Grid, Metric, Table, etc.)
+ */
+export const GenerativeUI: Story = () => <Chat />
+GenerativeUI.parameters = {
+  elements: {
+    config: {
+      variant: 'standalone',
+      welcome: {
+        title: 'Generative UI Demo',
+        subtitle: 'Ask for data and see it rendered as dynamic widgets',
+        suggestions: [
+          {
+            title: 'Sales dashboard',
+            label: 'metrics & charts',
+            prompt:
+              'Show me a sales dashboard with revenue, conversion rate, and order metrics',
+          },
+          {
+            title: 'User directory',
+            label: 'table view',
+            prompt:
+              'Show me a table of users with their name, email, role, and status',
+          },
+          {
+            title: 'Project status',
+            label: 'progress tracking',
+            prompt:
+              'Show me a project status board with task completion progress and team stats',
+          },
+          {
+            title: 'Analytics overview',
+            label: 'KPIs & trends',
+            prompt:
+              'Show me an analytics overview with page views, bounce rate, session duration, and top pages',
+          },
+        ],
+      },
+    },
+  },
+}

@@ -61,6 +61,7 @@
     "@assistant-ui/react": "^0.11.0",
     "@assistant-ui/react-ai-sdk": "^1.1.16",
     "@assistant-ui/react-markdown": "^0.11.0",
+    "@json-render/react": "^0.2.0",
     "@types/react": ">=18 <20",
     "@types/react-dom": ">=18 <20",
     "motion": "^12.0.0",
@@ -103,12 +104,16 @@
     },
     "@assistant-ui/react-markdown": {
       "optional": true
+    },
+    "@json-render/react": {
+      "optional": true
     }
   },
   "dependencies": {
     "@ai-sdk/mcp": "^0.0.11",
     "@chromatic-com/storybook": "^5.0.0",
     "@datadog/browser-rum": "^6.24.1",
+    "@json-render/core": "^0.2.0",
     "@openrouter/ai-sdk-provider": "^1.4.1",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-collapsible": "^1.1.12",
