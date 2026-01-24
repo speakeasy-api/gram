@@ -77,7 +77,7 @@ export function ToolCard({
         value={tool.name}
         validate={(value) => {
           if (!TOOL_NAME_REGEX.test(value)) {
-            return "Tool name may only contain letters, numbers, and underscores";
+            return "Tool name may only contain lowercase letters, numbers, hyphens, and underscores";
           }
           return true;
         }}

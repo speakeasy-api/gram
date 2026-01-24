@@ -260,7 +260,7 @@ function ToolRow({
 
   const handleSave = () => {
     if (editType === "name" && !TOOL_NAME_REGEX.test(editValue)) {
-      setError("Tool name may only contain letters, numbers, and underscores");
+      setError("Tool name may only contain lowercase letters, numbers, hyphens, and underscores");
       return;
     }
 
