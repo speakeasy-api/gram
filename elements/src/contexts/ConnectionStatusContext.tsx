@@ -50,10 +50,19 @@ export const ConnectionStatusProvider = ({
 
     const handleOnline = () => {
       setIsOnline(true)
-      // When coming back online, move from disconnected to reconnecting
-      setState((current) =>
-        current === 'disconnected' ? 'reconnecting' : current
-      )
+
+      // Clear any existing timeout
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
+      }
+
+      // Show "Reconnecting..." briefly, then mark as connected
+      setState('reconnecting')
+      reconnectTimeoutRef.current = setTimeout(() => {
+        setState('connected')
+        setRetryCount(0)
+      }, 1500) // Show reconnecting for 1.5s before clearing
     }
 
     const handleOffline = () => {
