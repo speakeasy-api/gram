@@ -19,7 +19,7 @@ export const Chat = ({ className }: ChatProps) => {
       // Standalone variant wraps Thread with ErrorBoundary at this level
       return (
         <ErrorBoundary>
-          <ShadowRoot hostStyle={{ height: 'inherit', width: 'inherit' }}>
+          <ShadowRoot hostStyle={{ height: '100%', width: '100%' }}>
             <Thread />
           </ShadowRoot>
         </ErrorBoundary>

@@ -36,7 +36,7 @@ const apiMiddlewarePlugin = (): Plugin => ({
     server.middlewares.use('/chat/session', (req, res) =>
       handlers.session(req, res, {
         embedOrigin,
-        userIdentifier: 'test',
+        userIdentifier: process.env.VITE_GRAM_ELEMENTS_STORYBOOK_USER_IDENTIFIER || 'user',
         expiresAfter: 3600,
       })
     )
