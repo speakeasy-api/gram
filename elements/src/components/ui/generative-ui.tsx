@@ -99,23 +99,25 @@ const components: Record<string, FC<Record<string, unknown>>> = {
     )
   },
 
-  Text: ({ children, variant = 'body', className }) => {
+  Text: ({ children, content, variant = 'body', className }) => {
     const variantClasses: Record<string, string> = {
       heading: 'text-lg font-semibold',
       body: 'text-sm',
       caption: 'text-xs text-muted-foreground',
       code: 'font-mono text-sm bg-muted px-1 rounded',
     }
+    // Support both content prop (for direct text) and children (for nested components)
+    const textContent = content != null ? String(content) : null
     return (
       <span
         className={cn(variantClasses[variant as string], className as string)}
       >
-        {children as React.ReactNode}
+        {textContent ?? (children as React.ReactNode)}
       </span>
     )
   },
 
-  Badge: ({ children, variant = 'default', className }) => {
+  Badge: ({ children, content, variant = 'default', className }) => {
     const r = useRadius()
     const variantClasses: Record<string, string> = {
       default: 'bg-primary text-primary-foreground',
@@ -126,6 +128,8 @@ const components: Record<string, FC<Record<string, unknown>>> = {
         'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100',
       error: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100',
     }
+    // Support both content prop (for direct text) and children (for nested components)
+    const textContent = content != null ? String(content) : null
     return (
       <span
         className={cn(
@@ -135,7 +139,7 @@ const components: Record<string, FC<Record<string, unknown>>> = {
           className as string
         )}
       >
-        {children as React.ReactNode}
+        {textContent ?? (children as React.ReactNode)}
       </span>
     )
   },
@@ -201,10 +205,12 @@ const components: Record<string, FC<Record<string, unknown>>> = {
 
   Progress: ({ value, max = 100, label, className }) => {
     const r = useRadius()
-    const percentage = Math.min(
-      100,
-      Math.max(0, ((value as number) / (max as number)) * 100)
-    )
+    const numValue = Number(value)
+    const numMax = Number(max)
+    const percentage =
+      isNaN(numValue) || isNaN(numMax) || numMax === 0
+        ? 0
+        : Math.min(100, Math.max(0, (numValue / numMax) * 100))
     const labelStr = label != null ? String(label) : null
     return (
       <div className={cn('w-full space-y-2', className as string)}>

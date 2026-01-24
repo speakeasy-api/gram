@@ -22,9 +22,14 @@ const protocolSniffingPlugin = (publicPort: number): Plugin => {
   const internalHttpsPort = publicPort + 1 // Storybook HTTPS runs here
   const internalHttpPort = publicPort + 2 // Internal redirect server
 
+  const cleanup = () => {
+    proxyServer?.close()
+    httpRedirectServer?.close()
+  }
+
   return {
     name: 'protocol-sniffing-proxy',
-    configureServer() {
+    configureServer(server: ViteDevServer) {
       // Create internal HTTP server for redirects
       httpRedirectServer = createHttpServer((req, res) => {
         const host = req.headers.host?.split(':')[0] || 'localhost'
@@ -66,11 +71,11 @@ const protocolSniffingPlugin = (publicPort: number): Plugin => {
           console.error('Protocol sniffing proxy error:', err)
         }
       })
+
+      // Clean up when dev server closes
+      server.httpServer?.on('close', cleanup)
     },
-    closeBundle() {
-      proxyServer?.close()
-      httpRedirectServer?.close()
-    },
+    closeBundle: cleanup,
   }
 }
 

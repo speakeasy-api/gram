@@ -37,12 +37,10 @@ Table - Data table
   props: { headers: string[], rows: any[][] }
 
 Text - Text with variants
-  props: { variant?: "heading" | "body" | "caption" | "code" }
-  children: Text components or empty
+  props: { content: string, variant?: "heading" | "body" | "caption" | "code" }
 
 Badge - Status badge
-  props: { variant?: "default" | "success" | "warning" | "error" }
-  children: Text components or empty
+  props: { content: string, variant?: "default" | "success" | "warning" | "error" }
 
 Progress - Progress bar
   props: { value: number, max?: number, label?: string }
