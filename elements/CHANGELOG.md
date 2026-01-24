@@ -1,5 +1,12 @@
 # @gram-ai/elements
 
+## 1.22.4
+
+### Patch Changes
+
+- a57b307: Fix resumption of chats
+- 156bc66: Fix logs page on dashboard and correct display issues in Elements library
+
 ## 1.22.3
 
 ### Patch Changes
