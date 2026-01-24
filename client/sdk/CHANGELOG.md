@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.27.0
+
+### Minor Changes
+
+- 834a770: Removes old tool toolmetrics logs logic and endpoints.
+
 ## 0.25.16
 
 ### Patch Changes
