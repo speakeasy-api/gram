@@ -2,6 +2,7 @@
 
 import {
   useConnectionStatus,
+  useConnectionStatusOptional,
   type ConnectionState,
 } from '@/contexts/ConnectionStatusContext'
 import { cn } from '@/lib/utils'
@@ -92,15 +93,42 @@ const StatusPill: FC<{ state: ConnectionState; isOnline: boolean }> = ({
 
 /**
  * Wrapper version that handles the case when ConnectionStatusProvider is not available.
- * This is useful for backwards compatibility.
+ * Uses useConnectionStatusOptional() which returns null instead of throwing,
+ * since try-catch around JSX won't catch hook errors (they throw during render phase).
  */
 export const ConnectionStatusIndicatorSafe: FC<
   ConnectionStatusIndicatorProps
-> = (props) => {
-  try {
-    return <ConnectionStatusIndicator {...props} />
-  } catch {
-    // ConnectionStatusProvider not available, render nothing
+> = ({ className }) => {
+  const connectionStatus = useConnectionStatusOptional()
+
+  // Provider not available, render nothing
+  if (!connectionStatus) {
     return null
   }
+
+  const { state, isOnline } = connectionStatus
+  const shouldShow = state === 'reconnecting' || state === 'disconnected'
+
+  return (
+    <AnimatePresence>
+      {shouldShow && (
+        <motion.div
+          initial={{ opacity: 0, y: -20, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -20, scale: 0.95 }}
+          transition={{
+            type: 'spring',
+            stiffness: 500,
+            damping: 30,
+          }}
+          className={cn(
+            'pointer-events-none absolute top-4 right-0 left-0 z-50 flex justify-center',
+            className
+          )}
+        >
+          <StatusPill state={state} isOnline={isOnline} />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
 }

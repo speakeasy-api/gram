@@ -81,6 +81,11 @@ export const ConnectionStatusProvider = ({
     return () => {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
+      // Clear any pending timeout to prevent memory leak
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
+      }
     }
   }, [])
 
