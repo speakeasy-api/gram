@@ -47,9 +47,6 @@ const theme = create({
 
 addons.setConfig({
   theme,
-  showToolbar: false,
-  showPanel: false,
-  showNav: true,
   enableShortcuts: true,
   sidebar: {
     showRoots: true,
