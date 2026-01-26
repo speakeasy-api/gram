@@ -37,7 +37,7 @@ function DottedBackground() {
 
 export function JourneyDemo() {
   return (
-    <div className="hidden md:flex flex-col justify-center items-center w-full md:w-1/2 min-h-screen relative overflow-hidden bg-slate-50">
+    <div className="hidden md:flex flex-col justify-center items-center w-full md:w-1/2 min-h-screen relative bg-slate-50 overflow-y-auto">
       {/* Dotted background pattern */}
       <DottedBackground />
 
@@ -46,10 +46,11 @@ export function JourneyDemo() {
       <div className="absolute inset-0 bg-gradient-to-t from-white/60 via-transparent to-white/40 pointer-events-none" />
 
       {/* Main platform diagram */}
-      <PlatformDiagram className="relative z-10 w-full max-w-3xl px-6 scale-90 lg:scale-100" />
+      <PlatformDiagram className="relative z-10 w-full px-8 py-12" />
 
-      {/* Bottom gradient fade */}
-      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-slate-50 to-transparent pointer-events-none" />
+      {/* Top/Bottom gradient fades */}
+      <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-slate-50 to-transparent pointer-events-none z-20" />
+      <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-slate-50 to-transparent pointer-events-none z-20" />
     </div>
   );
 }
