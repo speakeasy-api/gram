@@ -110,11 +110,11 @@ func (w *LogWriter) Enqueue(params LogParams) {
 func (w *LogWriter) Shutdown(ctx context.Context) error {
 	w.logger.InfoContext(ctx, "shutting down log writer")
 
-	// Signal that we're shutting down to prevent new enqueues
-	w.closeOnce.Do(func() { close(w.done) })
-
-	// Close the queue to signal workers to drain and exit
-	close(w.queue)
+	// Signal shutdown and close the queue (protected from double-close)
+	w.closeOnce.Do(func() {
+		close(w.done)
+		close(w.queue)
+	})
 
 	workersDone := make(chan struct{})
 	go func() {
