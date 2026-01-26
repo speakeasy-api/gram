@@ -3,7 +3,10 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn } from "@/lib/utils";
-import { useInfiniteListMCPCatalog, Server as CatalogServer } from "@/pages/catalog/hooks";
+import {
+  Server as CatalogServer,
+  useInfiniteListMCPCatalog,
+} from "@/pages/catalog/hooks";
 import { useDeploymentLogsSummary } from "@/pages/deployments/deployment/Deployment";
 import { useRoutes } from "@/routes";
 import {
@@ -11,7 +14,6 @@ import {
   useListAssets,
   useListTools,
 } from "@gram/client/react-query/index.js";
-// import { Dialog } from "@/components/ui/dialog";
 import {
   Button,
   Dialog,
@@ -25,7 +27,6 @@ import { ChevronDown, Code, FileCode, Plus, Server } from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { create } from "zustand";
-import { AttachEnvironmentDialogContent } from "./AttachEnvironmentDialogContent";
 import { RemoveSourceDialogContent } from "./RemoveSourceDialogContent";
 import { NamedAsset, SourceCard, SourceCardSkeleton } from "./SourceCard";
 import { SourcesEmptyState } from "./SourcesEmptyState";
@@ -36,14 +37,12 @@ type DialogState =
   | { type: "closed" }
   | { type: "remove-source"; asset: NamedAsset }
   | { type: "upload-openapi"; documentSlug: string }
-  | { type: "attach-environment"; asset: NamedAsset }
   | { type: "view-asset"; asset: NamedAsset };
 
 interface DialogStore {
   dialogState: DialogState;
   openRemoveSource: (asset: NamedAsset) => void;
   openUploadOpenApi: (documentSlug: string) => void;
-  openAttachEnvironment: (asset: NamedAsset) => void;
   openViewAsset: (asset: NamedAsset) => void;
   closeDialog: () => void;
 }
@@ -54,8 +53,6 @@ const useDialogStore = create<DialogStore>((set) => ({
     set({ dialogState: { type: "remove-source", asset } }),
   openUploadOpenApi: (documentSlug) =>
     set({ dialogState: { type: "upload-openapi", documentSlug } }),
-  openAttachEnvironment: (asset) =>
-    set({ dialogState: { type: "attach-environment", asset } }),
   openViewAsset: (asset) => set({ dialogState: { type: "view-asset", asset } }),
   closeDialog: () => set({ dialogState: { type: "closed" } }),
 }));
@@ -92,11 +89,13 @@ export default function Sources() {
   // Build a map of registry specifier -> icon URL for quick lookup
   const catalogIconMap = useMemo(() => {
     if (!catalogData?.pages) return new Map<string, string>();
-    const allServers = catalogData.pages.flatMap((page) => page.servers as CatalogServer[]);
+    const allServers = catalogData.pages.flatMap(
+      (page) => page.servers as CatalogServer[],
+    );
     return new Map(
       allServers
         .filter((s) => s.iconUrl)
-        .map((s) => [s.registrySpecifier, s.iconUrl!])
+        .map((s) => [s.registrySpecifier, s.iconUrl!]),
     );
   }, [catalogData]);
 
@@ -105,7 +104,6 @@ export default function Sources() {
     dialogState,
     openRemoveSource,
     openUploadOpenApi,
-    openAttachEnvironment,
     openViewAsset,
     closeDialog,
   } = useDialogStore();
@@ -274,7 +272,9 @@ export default function Sources() {
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <span className="font-medium">From your API</span>
-                  <span className="text-xs text-muted-foreground">Upload an OpenAPI spec to generate tools</span>
+                  <span className="text-xs text-muted-foreground">
+                    Upload an OpenAPI spec to generate tools
+                  </span>
                 </div>
               </DropdownMenuItem>
               {isFunctionsEnabled && (
@@ -287,7 +287,9 @@ export default function Sources() {
                   </div>
                   <div className="flex flex-col gap-0.5">
                     <span className="font-medium">Write custom code</span>
-                    <span className="text-xs text-muted-foreground">Create tools with TypeScript functions</span>
+                    <span className="text-xs text-muted-foreground">
+                      Create tools with TypeScript functions
+                    </span>
                   </div>
                 </DropdownMenuItem>
               )}
@@ -300,7 +302,9 @@ export default function Sources() {
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <span className="font-medium">Third party server</span>
-                  <span className="text-xs text-muted-foreground">Add pre-built servers from the catalog</span>
+                  <span className="text-xs text-muted-foreground">
+                    Add pre-built servers from the catalog
+                  </span>
                 </div>
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -323,7 +327,6 @@ export default function Sources() {
                     asset.deploymentAssetId,
                   )}
                   handleRemove={() => openRemoveSource(asset)}
-                  handleAttachEnvironment={() => openAttachEnvironment(asset)}
                   handleViewAsset={() => openViewAsset(asset)}
                   setChangeDocumentTargetSlug={openUploadOpenApi}
                 />
@@ -353,12 +356,6 @@ export default function Sources() {
                   documentSlug={dialogState.documentSlug}
                   onClose={closeDialog}
                   onSuccess={handleDialogSuccess}
-                />
-              )}
-              {dialogState.type === "attach-environment" && (
-                <AttachEnvironmentDialogContent
-                  asset={dialogState.asset}
-                  onClose={closeDialog}
                 />
               )}
               {dialogState.type === "view-asset" && (

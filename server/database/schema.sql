@@ -936,6 +936,7 @@ CREATE TABLE IF NOT EXISTS mcp_metadata (
   logo_id UUID,
   instructions TEXT,
   header_display_names JSONB NOT NULL DEFAULT '{}'::JSONB, -- maps security scheme key to user-friendly display name
+  attached_environment_variables TEXT[] DEFAULT ARRAY[]::TEXT[], -- list of environment variables that are automatically attached to the toolset
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

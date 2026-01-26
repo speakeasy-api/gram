@@ -9,14 +9,10 @@ import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components";
-import { GramError } from "@gram/client/models/errors/gramerror.js";
-import {
-  useGetSourceEnvironment,
-  useLatestDeployment,
-} from "@gram/client/react-query/index.js";
+import { useLatestDeployment } from "@gram/client/react-query/index.js";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
 import { Badge } from "@speakeasy-api/moonshine";
-import { CircleAlertIcon, Globe } from "lucide-react";
+import { CircleAlertIcon } from "lucide-react";
 import {
   ExternalMCPIllustration,
   FunctionIllustration,
@@ -56,14 +52,12 @@ export function SourceCard({
   asset,
   causingFailure,
   handleRemove,
-  handleAttachEnvironment,
   handleViewAsset,
   setChangeDocumentTargetSlug,
 }: {
   asset: NamedAsset;
   causingFailure?: boolean | undefined;
   handleRemove: (assetId: string) => void;
-  handleAttachEnvironment: (assetId: string) => void;
   handleViewAsset: (assetId: string) => void;
   setChangeDocumentTargetSlug: (slug: string) => void;
 }) {
@@ -77,28 +71,6 @@ export function SourceCard({
         ? "function"
         : "externalmcp";
 
-  // Check if environment is attached (not applicable for external MCPs)
-  const sourceEnvironment = useGetSourceEnvironment(
-    {
-      sourceKind: sourceKind as "http" | "function",
-      sourceSlug: asset.slug,
-    },
-    undefined,
-    {
-      enabled: asset.type !== "externalmcp",
-      retry: (_, err) => {
-        if (err instanceof GramError && err.statusCode === 404) {
-          return false;
-        }
-        return true;
-      },
-      throwOnError: false,
-    },
-  );
-
-  const hasEnvironment =
-    asset.type !== "externalmcp" && !!sourceEnvironment.data?.id;
-
   const actions = [
     ...(asset.type === "openapi"
       ? [
@@ -111,15 +83,6 @@ export function SourceCard({
             label: "Update",
             onClick: () => setChangeDocumentTargetSlug(asset.slug),
             icon: "upload" as const,
-          },
-        ]
-      : []),
-    ...(asset.type !== "externalmcp"
-      ? [
-          {
-            label: "Attach Environment",
-            onClick: () => handleAttachEnvironment(asset.id),
-            icon: "globe" as const,
           },
         ]
       : []),
@@ -156,10 +119,7 @@ export function SourceCard({
         return <FunctionIllustration />;
       case "externalmcp":
         return (
-          <ExternalMCPIllustration
-            logoUrl={asset.iconUrl}
-            name={asset.name}
-          />
+          <ExternalMCPIllustration logoUrl={asset.iconUrl} name={asset.name} />
         );
     }
   };
@@ -198,21 +158,9 @@ export function SourceCard({
         {/* Footer row with type badge and metadata */}
         <div className="flex items-center justify-between gap-2 mt-auto pt-2">
           <Badge variant="neutral">{config.label}</Badge>
-          <div className="flex items-center gap-2">
-            {hasEnvironment && (
-              <SimpleTooltip
-                tooltip={`Attached environment: ${sourceEnvironment.data?.name || "Unknown"}`}
-              >
-                <Badge className="flex items-center gap-1 text-xs">
-                  <Globe className="h-3 w-3" />
-                  Env
-                </Badge>
-              </SimpleTooltip>
-            )}
-            <Type small muted as="span">
-              {subtitle}
-            </Type>
-          </div>
+          <Type small muted as="span">
+            {subtitle}
+          </Type>
         </div>
       </div>
     </routes.sources.source.Link>
