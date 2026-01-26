@@ -17,7 +17,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/chatsessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -28,6 +30,7 @@ type Service struct {
 	db                  *pgxpool.Pool
 	auth                *auth.Auth
 	chatSessionsManager *chatsessions.Manager
+	repo                *repo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -41,6 +44,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		db:                  db,
 		auth:                auth.New(logger, db, sessions),
 		chatSessionsManager: chatSessionsManager,
+		repo:                repo.New(db),
 	}
 }
 
@@ -74,12 +78,24 @@ func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.Create
 		return nil, oops.C(oops.CodeUnauthorized).Log(ctx, s.logger)
 	}
 
+	// Create a database session record for credential storage
+	session, err := s.repo.CreateSession(ctx, repo.CreateSessionParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ExternalUserID: conv.PtrToPGText(p.UserIdentifier),
+		EmbedOrigin:    conv.ToPGText(p.EmbedOrigin),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create chat session record").Log(ctx, s.logger)
+	}
+
 	claims := chatsessions.ChatSessionClaims{
 		OrgID:            authCtx.ActiveOrganizationID,
 		ProjectID:        authCtx.ProjectID.String(),
 		OrganizationSlug: authCtx.OrganizationSlug,
 		ProjectSlug:      *authCtx.ProjectSlug,
 		ExternalUserID:   p.UserIdentifier,
+		SessionID:        session.ID.String(),
 		RegisteredClaims: jwt.RegisteredClaims{}, //nolint:exhaustruct // to be populated by chatSessionsManager
 	}
 
@@ -95,6 +111,7 @@ func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.Create
 
 	result := &gen.CreateResult{
 		ClientToken:    token,
+		SessionID:      session.ID.String(),
 		ExpiresAfter:   p.ExpiresAfter,
 		Status:         "active",
 		UserIdentifier: p.UserIdentifier,
@@ -104,6 +121,7 @@ func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.Create
 	s.logger.InfoContext(ctx, "created chat session",
 		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 		attr.SlogProjectID(authCtx.ProjectID.String()),
+		attr.SlogSessionID(session.ID.String()),
 	)
 
 	return result, nil

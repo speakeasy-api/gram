@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{if .Success}}Authorization Successful{{else}}Authorization Failed{{end}}</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background: #f5f5f5;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .container {
+        text-align: center;
+        padding: 2rem;
+      }
+      .icon {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1rem;
+      }
+      .icon.success {
+        background: #dcfce7;
+        border: 2px solid #86efac;
+      }
+      .icon.error {
+        background: #fee2e2;
+        border: 2px solid #fca5a5;
+      }
+      .title {
+        font-size: 1.5rem;
+        font-weight: 500;
+        margin: 0 0 0.5rem;
+        color: #111;
+      }
+      .description {
+        color: #666;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      {{if .Success}}
+      <div class="icon success">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M20 6L9 17L4 12" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <h1 class="title">Authorization Successful</h1>
+      <p class="description">You can close this window.</p>
+      {{else}}
+      <div class="icon error">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M18 6L6 18M6 6l12 12" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <h1 class="title">Authorization Failed</h1>
+      <p class="description">{{.Error}}</p>
+      {{end}}
+    </div>
+    <script>
+      (function() {
+        var origin = '{{.Origin}}';
+        var message = {
+          type: 'gram-oauth-complete',
+          success: {{.Success}},
+          toolsetSlug: '{{.ToolsetSlug}}',
+          {{if not .Success}}error: '{{.Error}}',{{end}}
+        };
+
+        if (window.opener) {
+          try {
+            window.opener.postMessage(message, origin);
+          } catch (e) {
+            console.error('Failed to send postMessage:', e);
+          }
+        }
+
+        // Auto-close after a short delay
+        setTimeout(function() {
+          window.close();
+        }, {{if .Success}}1500{{else}}3000{{end}});
+      })();
+    </script>
+  </body>
+</html>

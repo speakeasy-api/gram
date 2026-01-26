@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/metric/noop"
 
 	keys_gen "github.com/speakeasy-api/gram/server/gen/keys"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -27,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -100,7 +102,11 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	guardianPolicy := guardian.NewDefaultPolicy()
-	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager)
+
+	redisClient2, err2 := infra.NewRedisClient(t, 0)
+	require.NoError(t, err2)
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient2, "test-jwt-secret")
+	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager, chatSessionsManager, "test-jwt-secret", cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone))
 	billingStub := billing.NewStubClient(logger, tracerProvider)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
 	chatClient := openrouter.NewChatClient(logger, devProvisioner)
@@ -119,11 +125,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		temporalClient.Close()
 		require.NoError(t, devserver.Stop(), "shutdown temporal")
 	})
-
-	redisClient, err2 := infra.NewRedisClient(t, 0)
-	require.NoError(t, err2)
-	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, toolMetrics, featClient, vectorToolStore, temporalClient)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, toolMetrics, featClient, vectorToolStore, temporalClient, "test-jwt-secret")
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -203,7 +205,7 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthSvc, billingStub, billingStub, toolMetrics, featClient, vectorToolStore, temporalClient)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthSvc, billingStub, billingStub, toolMetrics, featClient, vectorToolStore, temporalClient, "test-jwt-secret")
 
 	return ctx, &testInstance{
 		service:        svc,

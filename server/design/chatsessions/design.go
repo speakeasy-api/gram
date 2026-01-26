@@ -36,11 +36,12 @@ var _ = Service("chatSessions", func() {
 
 		Result(func() {
 			Attribute("client_token", String, "JWT token for chat session")
+			Attribute("session_id", String, "Persistent session ID for credential storage")
 			Attribute("embed_origin", String, "The origin from which the token will be used")
 			Attribute("expires_after", Int, "Token expiration in seconds")
 			Attribute("user_identifier", String, "User identifier if provided")
 			Attribute("status", String, "Session status")
-			Required("embed_origin", "client_token", "expires_after", "status")
+			Required("embed_origin", "client_token", "expires_after", "status", "session_id")
 		})
 
 		HTTP(func() {

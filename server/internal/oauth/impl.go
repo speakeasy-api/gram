@@ -26,17 +26,22 @@ import (
 	_ "embed"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	chatsessions_pkg "github.com/speakeasy-api/gram/server/internal/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/providers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -50,6 +55,9 @@ var oauthFailurePageTmplData string
 //go:embed hosted_oauth_status_script.js
 var oauthSuccessScriptData []byte
 
+//go:embed session_oauth_result.html.tmpl
+var sessionOAuthResultTmplData string
+
 type gramOAuthResultPageData struct {
 	RedirectURL template.URL
 	ScriptHash  string
@@ -57,6 +65,13 @@ type gramOAuthResultPageData struct {
 	// Error fields for failure page
 	ErrorDescription string
 	ErrorCode        string
+}
+
+type sessionOAuthResultPageData struct {
+	Success     bool
+	ToolsetSlug string
+	Origin      string
+	Error       string
 }
 
 type Service struct {
@@ -75,15 +90,33 @@ type Service struct {
 	oauthRepo                 *repo.Queries
 	enc                       *encryption.Client
 	sessions                  *sessions.Manager
+	chatSessionsManager       *chatsessions.Manager
+	credentialStore           *chatsessions_pkg.CredentialStore
+	jwtSecret                 string
 	gramProvider              *providers.GramProvider
 	customProvider            *providers.CustomProvider
 	successPageTmpl           *template.Template
 	failurePageTmpl           *template.Template
+	sessionOAuthResultTmpl    *template.Template
 	oauthStatusPageScriptHash string
 	oauthStatusPageScriptData []byte
+	toolsetCache              cache.TypedCacheObject[mv.ToolsetBaseContents]
 }
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, serverURL *url.URL, cacheImpl cache.Cache, enc *encryption.Client, env *environments.EnvironmentEntries, sessions *sessions.Manager) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
+	db *pgxpool.Pool,
+	serverURL *url.URL,
+	cacheImpl cache.Cache,
+	enc *encryption.Client,
+	env *environments.EnvironmentEntries,
+	sessions *sessions.Manager,
+	chatSessionsManager *chatsessions.Manager,
+	jwtSecret string,
+	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents],
+) *Service {
 	logger = logger.With(attr.SlogComponent("oauth"))
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/oauth")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/oauth")
@@ -100,10 +133,14 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 	// Parse templates once during initialization
 	successPageTmpl := template.Must(template.New("oauth_success").Parse(oauthSuccessPageTmplData))
 	failurePageTmpl := template.Must(template.New("oauth_failure").Parse(oauthFailurePageTmplData))
+	sessionOAuthResultTmpl := template.Must(template.New("session_oauth_result").Parse(sessionOAuthResultTmplData))
 
 	// Calculate content hash for success script (for cache busting)
 	hash := sha256.Sum256(oauthSuccessScriptData)
 	scriptHash := hex.EncodeToString(hash[:])[:8] // Use first 8 chars like hosted page
+
+	// Initialize credential store for session-scoped OAuth
+	credentialStore := chatsessions_pkg.NewCredentialStore(db, enc)
 
 	return &Service{
 		logger:            logger,
@@ -124,13 +161,20 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		enc:                enc,
 		sessions:           sessions,
 
+		// Session-scoped OAuth support
+		chatSessionsManager: chatSessionsManager,
+		credentialStore:     credentialStore,
+		jwtSecret:           jwtSecret,
+		toolsetCache:        toolsetCache,
+
 		// OAuth providers
 		gramProvider:   gramProvider,
 		customProvider: customProvider,
 
 		// HTML templates
-		successPageTmpl: successPageTmpl,
-		failurePageTmpl: failurePageTmpl,
+		successPageTmpl:        successPageTmpl,
+		failurePageTmpl:        failurePageTmpl,
+		sessionOAuthResultTmpl: sessionOAuthResultTmpl,
 
 		// Success page script with hash for cache busting
 		oauthStatusPageScriptHash: scriptHash,
@@ -162,6 +206,17 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// OAuth success page script (with cache busting hash)
 	o11y.AttachHandler(mux, "GET", "/oauth/oauth_success-{hash}.js", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.serveSuccessScript).ServeHTTP(w, r)
+	})
+
+	// Session-scoped OAuth endpoints
+	// Get authorization URL for session OAuth (requires Gram-Chat-Session header)
+	o11y.AttachHandler(mux, "GET", "/oauth/{mcpSlug}/session-authorize-url", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.handleSessionAuthorizeURL).ServeHTTP(w, r)
+	})
+
+	// Session OAuth callback (stores credentials and sends postMessage)
+	o11y.AttachHandler(mux, "GET", "/oauth/session-callback", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.handleSessionCallback).ServeHTTP(w, r)
 	})
 }
 
@@ -709,4 +764,423 @@ func (s *Service) parseBasicAuth(authHeader string) (string, string, bool) {
 // ValidateAccessToken validates an OAuth access token
 func (s *Service) ValidateAccessToken(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*Token, error) {
 	return s.tokenService.ValidateAccessToken(ctx, toolsetId, accessToken)
+}
+
+// handleSessionAuthorizeURL returns the OAuth authorization URL for session-scoped OAuth.
+// This endpoint requires a valid Gram-Chat-Session token in the header.
+// It supports all OAuth types: OAuth proxy, external OAuth servers, and external MCP OAuth.
+//
+// The well-known endpoint provides a uniform interface for OAuth metadata regardless of type,
+// so we use that to get the authorization endpoint and build the URL with our session state.
+func (s *Service) handleSessionAuthorizeURL(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	mcpSlug := chi.URLParam(r, "mcpSlug")
+	if mcpSlug == "" {
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
+	}
+
+	// Validate the chat session token
+	sessionToken := r.Header.Get(constants.ChatSessionsTokenHeader)
+	if sessionToken == "" {
+		return oops.E(oops.CodeUnauthorized, nil, "chat session token required").Log(ctx, s.logger)
+	}
+
+	claims, err := s.chatSessionsManager.ValidateToken(ctx, sessionToken)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "invalid chat session token").Log(ctx, s.logger)
+	}
+
+	// Load toolset
+	toolset, _, err := s.loadToolsetFromCurrentURLContext(ctx, mcpSlug)
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
+	}
+
+	// Verify the session belongs to the same project
+	if claims.ProjectID != toolset.ProjectID.String() {
+		return oops.E(oops.CodeForbidden, nil, "session does not belong to this project").Log(ctx, s.logger)
+	}
+
+	// Build signed state for the OAuth flow
+	nonce, err := conv.GenerateRandomSlug(16)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to generate nonce").Log(ctx, s.logger)
+	}
+
+	// Get origin from request or use default
+	origin := r.URL.Query().Get("origin")
+	if origin == "" {
+		origin = s.serverURL.String()
+	}
+
+	state := &OAuthSessionState{
+		SessionID: claims.SessionID,
+		ToolsetID: toolset.ID.String(),
+		ProjectID: toolset.ProjectID.String(),
+		Origin:    origin,
+		Nonce:     nonce,
+	}
+
+	signedState, err := SignSessionState(state, s.jwtSecret)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to sign state").Log(ctx, s.logger)
+	}
+
+	// Use wellknown to resolve OAuth metadata uniformly for any OAuth type
+	oauthMetadata, err := wellknown.ResolveOAuthServerMetadataFromToolset(
+		ctx,
+		s.logger,
+		s.db,
+		s.oauthRepo,
+		&s.toolsetCache,
+		toolset,
+		s.serverURL.String(),
+		mcpSlug,
+	)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth metadata").Log(ctx, s.logger)
+	}
+	if oauthMetadata == nil {
+		return oops.E(oops.CodeBadRequest, nil, "toolset does not have OAuth configured").Log(ctx, s.logger)
+	}
+
+	// Extract OAuth endpoints from metadata (works uniformly for all OAuth types)
+	endpoints, err := extractOAuthEndpoints(oauthMetadata)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to extract OAuth endpoints").Log(ctx, s.logger)
+	}
+	if endpoints.AuthorizationEndpoint == "" {
+		return oops.E(oops.CodeBadRequest, nil, "OAuth metadata missing authorization_endpoint").Log(ctx, s.logger)
+	}
+
+	callbackURL := fmt.Sprintf("%s/oauth/session-callback", s.serverURL.String())
+
+	// Build the authorization URL
+	authURL, err := s.buildSessionAuthURL(ctx, toolset, endpoints.AuthorizationEndpoint, callbackURL, signedState)
+	if err != nil {
+		return err
+	}
+
+	response := map[string]string{
+		"authorization_url": authURL.String(),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		s.logger.ErrorContext(ctx, "failed to encode response", attr.SlogError(err))
+	}
+	return nil
+}
+
+// oauthEndpoints contains the OAuth endpoints extracted from metadata.
+type oauthEndpoints struct {
+	AuthorizationEndpoint string
+	TokenEndpoint         string
+}
+
+// extractOAuthEndpoints extracts the required OAuth endpoints from metadata.
+// Works uniformly regardless of whether metadata is static or raw.
+func extractOAuthEndpoints(metadata *wellknown.OAuthServerMetadataResult) (*oauthEndpoints, error) {
+	if metadata.Static != nil {
+		return &oauthEndpoints{
+			AuthorizationEndpoint: metadata.Static.AuthorizationEndpoint,
+			TokenEndpoint:         metadata.Static.TokenEndpoint,
+		}, nil
+	}
+
+	if metadata.Raw != nil {
+		var parsed struct {
+			AuthorizationEndpoint string `json:"authorization_endpoint"`
+			TokenEndpoint         string `json:"token_endpoint"`
+		}
+		if err := json.Unmarshal(metadata.Raw, &parsed); err != nil {
+			return nil, fmt.Errorf("failed to parse OAuth metadata: %w", err)
+		}
+		return &oauthEndpoints{
+			AuthorizationEndpoint: parsed.AuthorizationEndpoint,
+			TokenEndpoint:         parsed.TokenEndpoint,
+		}, nil
+	}
+
+	return nil, fmt.Errorf("OAuth metadata has no static or raw content")
+}
+
+// buildSessionAuthURL builds the authorization URL with session-specific parameters.
+// For OAuth proxy providers, it uses the internal provider mechanism.
+// For external OAuth, it builds a standard OAuth authorization URL.
+func (s *Service) buildSessionAuthURL(
+	ctx context.Context,
+	toolset *toolsets_repo.Toolset,
+	authorizationEndpoint, callbackURL, signedState string,
+) (*url.URL, error) {
+	// For OAuth proxy with Gram provider, use the special sessions manager
+	if toolset.OauthProxyServerID.Valid {
+		oauthProviders, err := s.oauthRepo.ListOAuthProxyProvidersByServer(ctx, repo.ListOAuthProxyProvidersByServerParams{
+			OauthProxyServerID: toolset.OauthProxyServerID.UUID,
+			ProjectID:          toolset.ProjectID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load OAuth providers").Log(ctx, s.logger)
+		}
+		if len(oauthProviders) == 0 {
+			return nil, oops.E(oops.CodeNotFound, nil, "no OAuth providers configured").Log(ctx, s.logger)
+		}
+
+		provider := oauthProviders[0]
+
+		// Gram provider uses special session-based authentication
+		if provider.ProviderType == string(OAuthProxyProviderTypeGram) {
+			authURL, err := s.sessions.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
+				CallbackURL:     callbackURL,
+				Scope:           strings.Join(provider.ScopesSupported, " "),
+				State:           signedState,
+				ScopesSupported: provider.ScopesSupported,
+				ClientID:        "",
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to build Gram authorization URL").Log(ctx, s.logger)
+			}
+			return authURL, nil
+		}
+
+		// Custom OAuth proxy provider - get client_id from secrets
+		var secrets map[string]string
+		if err := json.Unmarshal(provider.Secrets, &secrets); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "OAuth provider secrets invalid").Log(ctx, s.logger)
+		}
+
+		clientID := secrets["client_id"]
+		if clientID == "" && secrets["environment_slug"] != "" {
+			envMap, err := s.environments.Load(ctx, toolset.ProjectID, gateway.Slug(secrets["environment_slug"]))
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, s.logger)
+			}
+			for k, v := range envMap {
+				if strings.ToLower(k) == "client_id" {
+					clientID = v
+				}
+			}
+		}
+
+		if clientID == "" {
+			return nil, oops.E(oops.CodeUnexpected, nil, "OAuth provider client_id not configured").Log(ctx, s.logger)
+		}
+
+		authURL, err := url.Parse(authorizationEndpoint)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to parse OAuth authorization URL").Log(ctx, s.logger)
+		}
+
+		urlParams := url.Values{}
+		urlParams.Set("client_id", clientID)
+		urlParams.Set("redirect_uri", callbackURL)
+		urlParams.Set("response_type", "code")
+		urlParams.Set("state", signedState)
+
+		if len(provider.ScopesSupported) > 0 {
+			urlParams.Set("scope", strings.Join(provider.ScopesSupported, " "))
+		}
+
+		authURL.RawQuery = urlParams.Encode()
+		return authURL, nil
+	}
+
+	// For external OAuth servers and external MCP OAuth, build a standard authorization URL
+	// Client ID may need to be obtained via dynamic client registration or environment config
+	authURL, err := url.Parse(authorizationEndpoint)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse authorization endpoint").Log(ctx, s.logger)
+	}
+
+	urlParams := url.Values{}
+	urlParams.Set("redirect_uri", callbackURL)
+	urlParams.Set("response_type", "code")
+	urlParams.Set("state", signedState)
+
+	// Note: For external OAuth, client_id would typically come from:
+	// 1. Environment variables configured for the toolset
+	// 2. Dynamic client registration
+	// For now, we proceed without client_id and rely on the OAuth server to handle it
+
+	authURL.RawQuery = urlParams.Encode()
+	return authURL, nil
+}
+
+// handleSessionCallback handles the OAuth callback for session-scoped credentials.
+// It validates the signed state, exchanges the code for tokens, stores the credentials,
+// and returns an HTML page that sends a postMessage to the opener window.
+// Supports all OAuth types: OAuth proxy, external OAuth servers, and external MCP OAuth.
+func (s *Service) handleSessionCallback(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	// Validate signed state
+	stateParam := r.URL.Query().Get("state")
+	if stateParam == "" {
+		return s.renderSessionOAuthError(w, "Missing state parameter", "", "")
+	}
+
+	state, err := ValidateSessionState(stateParam, s.jwtSecret)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "invalid session state", attr.SlogError(err))
+		return s.renderSessionOAuthError(w, "Invalid state parameter", "", "")
+	}
+
+	// Parse IDs from state
+	sessionID, err := uuid.Parse(state.SessionID)
+	if err != nil {
+		return s.renderSessionOAuthError(w, "Invalid session ID", state.Origin, "")
+	}
+
+	toolsetID, err := uuid.Parse(state.ToolsetID)
+	if err != nil {
+		return s.renderSessionOAuthError(w, "Invalid toolset ID", state.Origin, "")
+	}
+
+	projectID, err := uuid.Parse(state.ProjectID)
+	if err != nil {
+		return s.renderSessionOAuthError(w, "Invalid project ID", state.Origin, "")
+	}
+
+	// Check for error response from OAuth provider
+	if errorCode := r.URL.Query().Get("error"); errorCode != "" {
+		errorDesc := r.URL.Query().Get("error_description")
+		if errorDesc == "" {
+			errorDesc = errorCode
+		}
+		return s.renderSessionOAuthError(w, errorDesc, state.Origin, "")
+	}
+
+	// Get the authorization code
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		return s.renderSessionOAuthError(w, "Missing authorization code", state.Origin, "")
+	}
+
+	// Load the toolset to get OAuth provider info
+	toolset, err := s.toolsetsRepo.GetToolsetByID(ctx, toolsets_repo.GetToolsetByIDParams{
+		ID:        toolsetID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to load toolset", attr.SlogError(err))
+		return s.renderSessionOAuthError(w, "Toolset not found", state.Origin, "")
+	}
+
+	callbackURL := fmt.Sprintf("%s/oauth/session-callback", s.serverURL.String())
+
+	// Exchange code for tokens
+	tokenResult, err := s.exchangeSessionToken(ctx, &toolset, projectID, code, callbackURL)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "token exchange failed", attr.SlogError(err))
+		return s.renderSessionOAuthError(w, "Failed to exchange authorization code", state.Origin, toolset.Slug)
+	}
+
+	// Store the credential
+	err = s.credentialStore.StoreCredential(ctx, chatsessions_pkg.StoreCredentialParams{
+		SessionID:    sessionID,
+		ProjectID:    projectID,
+		ToolsetID:    toolsetID,
+		AccessToken:  tokenResult.AccessToken,
+		RefreshToken: tokenResult.RefreshToken,
+		TokenType:    "Bearer",
+		Scope:        "",
+		ExpiresAt:    tokenResult.ExpiresAt,
+	})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to store credential", attr.SlogError(err))
+		return s.renderSessionOAuthError(w, "Failed to store credentials", state.Origin, toolset.Slug)
+	}
+
+	s.logger.InfoContext(ctx, "session OAuth completed successfully",
+		attr.SlogSessionID(sessionID.String()),
+		attr.SlogToolsetID(toolsetID.String()),
+	)
+
+	// Render success page with postMessage
+	return s.renderSessionOAuthSuccess(w, state.Origin, toolset.Slug)
+}
+
+// tokenExchangeResult holds the result of a token exchange operation.
+type tokenExchangeResult struct {
+	AccessToken  string
+	RefreshToken string
+	ExpiresAt    *time.Time
+}
+
+// exchangeSessionToken exchanges an authorization code for tokens.
+// For OAuth proxy providers, it uses the internal provider mechanism.
+// For external OAuth, it uses standard OAuth token exchange.
+func (s *Service) exchangeSessionToken(ctx context.Context, toolset *toolsets_repo.Toolset, projectID uuid.UUID, code, callbackURL string) (*tokenExchangeResult, error) {
+	// OAuth proxy providers use internal provider implementations
+	if toolset.OauthProxyServerID.Valid {
+		return s.exchangeOAuthProxyToken(ctx, toolset, projectID, code)
+	}
+
+	// For external OAuth (both external OAuth servers and external MCP OAuth),
+	// we need to get the token endpoint and exchange the code directly.
+	// This requires client credentials which aren't yet implemented.
+	return nil, fmt.Errorf("external OAuth token exchange not yet implemented - client credentials required")
+}
+
+// exchangeOAuthProxyToken exchanges the authorization code using OAuth proxy providers.
+func (s *Service) exchangeOAuthProxyToken(ctx context.Context, toolset *toolsets_repo.Toolset, projectID uuid.UUID, code string) (*tokenExchangeResult, error) {
+	oauthProviders, err := s.oauthRepo.ListOAuthProxyProvidersByServer(ctx, repo.ListOAuthProxyProvidersByServerParams{
+		OauthProxyServerID: toolset.OauthProxyServerID.UUID,
+		ProjectID:          projectID,
+	})
+	if err != nil || len(oauthProviders) == 0 {
+		return nil, fmt.Errorf("failed to load OAuth providers: %w", err)
+	}
+
+	provider := oauthProviders[0]
+
+	var oauthProvider providers.Provider
+	switch provider.ProviderType {
+	case string(OAuthProxyProviderTypeGram):
+		oauthProvider = s.gramProvider
+	default:
+		oauthProvider = s.customProvider
+	}
+
+	result, err := oauthProvider.ExchangeToken(ctx, code, provider, toolset, s.serverURL)
+	if err != nil {
+		return nil, fmt.Errorf("token exchange failed: %w", err)
+	}
+
+	return &tokenExchangeResult{
+		AccessToken:  result.AccessToken,
+		RefreshToken: "", // Not returned by current providers
+		ExpiresAt:    result.ExpiresAt,
+	}, nil
+}
+
+func (s *Service) renderSessionOAuthSuccess(w http.ResponseWriter, origin, toolsetSlug string) error {
+	data := sessionOAuthResultPageData{
+		Success:     true,
+		ToolsetSlug: toolsetSlug,
+		Origin:      origin,
+		Error:       "",
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.sessionOAuthResultTmpl.Execute(w, data); err != nil {
+		return fmt.Errorf("render session OAuth success: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) renderSessionOAuthError(w http.ResponseWriter, errorMsg, origin, toolsetSlug string) error {
+	data := sessionOAuthResultPageData{
+		Success:     false,
+		ToolsetSlug: toolsetSlug,
+		Origin:      origin,
+		Error:       errorMsg,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.sessionOAuthResultTmpl.Execute(w, data); err != nil {
+		return fmt.Errorf("render session OAuth error: %w", err)
+	}
+	return nil
 }

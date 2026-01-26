@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	chatsessions_pkg "github.com/speakeasy-api/gram/server/internal/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -85,6 +86,8 @@ type Service struct {
 	temporal            temporal_client.Client
 	sessions            *sessions.Manager
 	chatSessionsManager *chatsessions.Manager
+	credentialStore     *chatsessions_pkg.CredentialStore
+	jwtSecret           string
 	externalmcpRepo     *externalmcp_repo.Queries
 	deploymentsRepo     *deployments_repo.Queries
 }
@@ -133,6 +136,7 @@ func NewService(
 	features *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporal temporal_client.Client,
+	jwtSecret string,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -174,6 +178,8 @@ func NewService(
 		temporal:            temporal,
 		sessions:            sessions,
 		chatSessionsManager: chatSessionsManager,
+		credentialStore:     chatsessions_pkg.NewCredentialStore(db, enc),
+		jwtSecret:           jwtSecret,
 	}
 }
 
@@ -419,46 +425,120 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 	switch {
 	case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
-		// External OAuth server flow - only accept Authorization header
-		if authToken == "" {
-			s.logger.WarnContext(ctx, "No authorization token provided")
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
-			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
-		}
-
-		tokenInputs = append(tokenInputs, oauthTokenInputs{
-			securityKeys: []string{},
-			Token:        authToken,
-		})
-	case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
-		// Custom OAuth provider flow - only accept Authorization header
-		oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
-		if err != nil {
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
-			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
-		}
-		s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()))
-
-		for _, externalSecret := range oauthToken.ExternalSecrets {
+		// External OAuth server flow
+		// First try Authorization header
+		if authToken != "" {
 			tokenInputs = append(tokenInputs, oauthTokenInputs{
-				securityKeys: externalSecret.SecurityKeys,
-				Token:        externalSecret.Token,
+				securityKeys: []string{},
+				Token:        authToken,
 			})
+			break
 		}
+
+		// Try session-scoped credentials as fallback
+		if sessionToken != "" {
+			cred, sessionID, err := s.getSessionCredential(ctx, sessionToken, toolset.ID)
+			if err == nil && cred != nil {
+				s.logger.InfoContext(ctx, "Using session-scoped OAuth credential for external OAuth server",
+					attr.SlogToolsetID(toolset.ID.String()),
+					attr.SlogSessionID(sessionID.String()))
+				tokenInputs = append(tokenInputs, oauthTokenInputs{
+					securityKeys: []string{},
+					Token:        cred.AccessToken,
+				})
+				break
+			}
+
+			// Session exists but no credentials - return oauth_required
+			if sessionID != uuid.Nil {
+				return s.returnOAuthRequired(ctx, w, toolset, mcpSlug, sessionID.String())
+			}
+		}
+
+		// No valid token - return standard OAuth challenge
+		s.logger.WarnContext(ctx, "No authorization token provided")
+		w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
+		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+	case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
+		// Custom OAuth provider flow
+		// First try Authorization header
+		if authToken != "" {
+			oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
+			if err != nil {
+				w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
+				return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
+			}
+			s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()))
+
+			for _, externalSecret := range oauthToken.ExternalSecrets {
+				tokenInputs = append(tokenInputs, oauthTokenInputs{
+					securityKeys: externalSecret.SecurityKeys,
+					Token:        externalSecret.Token,
+				})
+			}
+			break
+		}
+
+		// Try session-scoped credentials as fallback
+		if sessionToken != "" {
+			cred, sessionID, err := s.getSessionCredential(ctx, sessionToken, toolset.ID)
+			if err == nil && cred != nil {
+				s.logger.InfoContext(ctx, "Using session-scoped OAuth credential",
+					attr.SlogToolsetID(toolset.ID.String()),
+					attr.SlogSessionID(sessionID.String()))
+				tokenInputs = append(tokenInputs, oauthTokenInputs{
+					securityKeys: oAuthProxyProvider.SecurityKeyNames,
+					Token:        cred.AccessToken,
+				})
+				break
+			}
+
+			// Session exists but no credentials - return oauth_required
+			if sessionID != uuid.Nil {
+				return s.returnOAuthRequired(ctx, w, toolset, mcpSlug, sessionID.String())
+			}
+		}
+
+		// No valid token - return standard OAuth challenge
+		w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
+		return oops.E(oops.CodeUnauthorized, nil, "no valid OAuth token or session credentials provided").Log(ctx, s.logger)
 	case toolset.McpIsPublic && hasExternalMCPOAuth:
-		// External MCP OAuth flow - only accept Authorization header
-		if authToken == "" {
-			w.Header().Set(
-				"WWW-Authenticate",
-				fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
-			)
-			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+		// External MCP OAuth flow
+		// First try Authorization header
+		if authToken != "" {
+			tokenInputs = append(tokenInputs, oauthTokenInputs{
+				securityKeys: []string{},
+				Token:        authToken,
+			})
+			break
 		}
-		// Token provided - pass it through as OAuth token for external MCP
-		tokenInputs = append(tokenInputs, oauthTokenInputs{
-			securityKeys: []string{},
-			Token:        authToken,
-		})
+
+		// Try session-scoped credentials as fallback
+		if sessionToken != "" {
+			cred, sessionID, err := s.getSessionCredential(ctx, sessionToken, toolset.ID)
+			if err == nil && cred != nil {
+				s.logger.InfoContext(ctx, "Using session-scoped OAuth credential for external MCP OAuth",
+					attr.SlogToolsetID(toolset.ID.String()),
+					attr.SlogSessionID(sessionID.String()))
+				tokenInputs = append(tokenInputs, oauthTokenInputs{
+					securityKeys: []string{},
+					Token:        cred.AccessToken,
+				})
+				break
+			}
+
+			// Session exists but no credentials - return oauth_required
+			if sessionID != uuid.Nil {
+				return s.returnOAuthRequired(ctx, w, toolset, mcpSlug, sessionID.String())
+			}
+		}
+
+		// No valid token - return standard OAuth challenge
+		w.Header().Set(
+			"WWW-Authenticate",
+			fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
+		)
+		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	case !toolset.McpIsPublic:
 		// Private MCP - always allow sessionToken fallback since private servers require user authentication
 		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
@@ -933,4 +1013,69 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 
 	// All strategies failed
 	return ctx, oops.E(oops.CodeUnauthorized, nil, "failed to authorize").Log(ctx, s.logger)
+}
+
+// getSessionCredential validates a session token and retrieves stored OAuth credentials for the toolset.
+// Returns the credential, session ID, and any error. If the session is valid but has no credentials,
+// returns nil credential with the session ID.
+func (s *Service) getSessionCredential(ctx context.Context, sessionToken string, toolsetID uuid.UUID) (*chatsessions_pkg.Credential, uuid.UUID, error) {
+	// Validate the session token
+	claims, err := s.chatSessionsManager.ValidateToken(ctx, sessionToken)
+	if err != nil {
+		return nil, uuid.Nil, fmt.Errorf("invalid session token: %w", err)
+	}
+
+	sessionID, err := uuid.Parse(claims.SessionID)
+	if err != nil {
+		return nil, uuid.Nil, fmt.Errorf("invalid session ID in token: %w", err)
+	}
+
+	// Try to get stored credentials
+	cred, err := s.credentialStore.GetCredential(ctx, sessionID, toolsetID)
+	if err != nil {
+		if errors.Is(err, chatsessions_pkg.ErrCredentialNotFound) {
+			return nil, sessionID, nil // Valid session, no credentials
+		}
+		if errors.Is(err, chatsessions_pkg.ErrCredentialExpired) {
+			s.logger.InfoContext(ctx, "Session credential expired",
+				attr.SlogSessionID(sessionID.String()),
+				attr.SlogToolsetID(toolsetID.String()))
+			return nil, sessionID, nil // Treat expired as no credentials
+		}
+		return nil, sessionID, fmt.Errorf("get credential: %w", err)
+	}
+
+	return cred, sessionID, nil
+}
+
+// oauthRequiredResponse represents the JSON response for oauth_required errors.
+type oauthRequiredResponse struct {
+	Error            string `json:"error"`
+	AuthorizationURL string `json:"authorization_url"`
+	ToolsetSlug      string `json:"toolset_slug"`
+}
+
+// returnOAuthRequired returns a JSON response indicating that OAuth authentication is required.
+// It includes the authorization URL that the client should use to initiate the OAuth flow.
+func (s *Service) returnOAuthRequired(ctx context.Context, w http.ResponseWriter, toolset *toolsets_repo.Toolset, mcpSlug, sessionID string) error {
+	// Build the authorization URL for session OAuth
+	authURL := fmt.Sprintf("%s/oauth/%s/session-authorize-url", s.serverURL.String(), mcpSlug)
+
+	response := oauthRequiredResponse{
+		Error:            "oauth_required",
+		AuthorizationURL: authURL,
+		ToolsetSlug:      toolset.Slug,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		s.logger.ErrorContext(ctx, "failed to encode oauth_required response", attr.SlogError(err))
+	}
+
+	s.logger.InfoContext(ctx, "Returning oauth_required response",
+		attr.SlogToolsetID(toolset.ID.String()),
+		attr.SlogSessionID(sessionID))
+
+	return nil
 }

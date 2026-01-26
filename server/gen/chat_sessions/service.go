@@ -61,6 +61,8 @@ type CreatePayload struct {
 type CreateResult struct {
 	// JWT token for chat session
 	ClientToken string
+	// Persistent session ID for credential storage
+	SessionID string
 	// The origin from which the token will be used
 	EmbedOrigin string
 	// Token expiration in seconds

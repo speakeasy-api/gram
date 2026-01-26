@@ -28,6 +28,8 @@ type CreateRequestBody struct {
 type CreateResponseBody struct {
 	// JWT token for chat session
 	ClientToken string `form:"client_token" json:"client_token" xml:"client_token"`
+	// Persistent session ID for credential storage
+	SessionID string `form:"session_id" json:"session_id" xml:"session_id"`
 	// The origin from which the token will be used
 	EmbedOrigin string `form:"embed_origin" json:"embed_origin" xml:"embed_origin"`
 	// Token expiration in seconds
@@ -405,6 +407,7 @@ type RevokeGatewayErrorResponseBody struct {
 func NewCreateResponseBody(res *chatsessions.CreateResult) *CreateResponseBody {
 	body := &CreateResponseBody{
 		ClientToken:    res.ClientToken,
+		SessionID:      res.SessionID,
 		EmbedOrigin:    res.EmbedOrigin,
 		ExpiresAfter:   res.ExpiresAfter,
 		UserIdentifier: res.UserIdentifier,

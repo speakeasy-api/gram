@@ -11636,6 +11636,9 @@ components:
                     type: integer
                     description: Token expiration in seconds
                     format: int64
+                session_id:
+                    type: string
+                    description: Persistent session ID for credential storage
                 status:
                     type: string
                     description: Session status
@@ -11647,6 +11650,7 @@ components:
                 - client_token
                 - expires_after
                 - status
+                - session_id
         CreateSignedChatAttachmentURLForm:
             type: object
             properties:

@@ -28,6 +28,8 @@ type CreateRequestBody struct {
 type CreateResponseBody struct {
 	// JWT token for chat session
 	ClientToken *string `form:"client_token,omitempty" json:"client_token,omitempty" xml:"client_token,omitempty"`
+	// Persistent session ID for credential storage
+	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
 	// The origin from which the token will be used
 	EmbedOrigin *string `form:"embed_origin,omitempty" json:"embed_origin,omitempty" xml:"embed_origin,omitempty"`
 	// Token expiration in seconds
@@ -422,6 +424,7 @@ func NewCreateRequestBody(p *chatsessions.CreatePayload) *CreateRequestBody {
 func NewCreateResultOK(body *CreateResponseBody) *chatsessions.CreateResult {
 	v := &chatsessions.CreateResult{
 		ClientToken:    *body.ClientToken,
+		SessionID:      *body.SessionID,
 		EmbedOrigin:    *body.EmbedOrigin,
 		ExpiresAfter:   *body.ExpiresAfter,
 		UserIdentifier: body.UserIdentifier,
@@ -742,6 +745,9 @@ func ValidateCreateResponseBody(body *CreateResponseBody) (err error) {
 	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.SessionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_id", "body"))
 	}
 	return
 }
