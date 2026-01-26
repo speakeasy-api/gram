@@ -55,6 +55,7 @@ type testInstance struct {
 	chClient       *repo.Queries
 	featClient     *productfeatures.Client
 	sessionManager *sessions.Manager
+	orgID          string
 }
 
 func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
@@ -98,7 +99,7 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 
 	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
-	svc := telemetry.NewService(logger, conn, sessionManager, chatSessionsManager, chClient, featClient, posthogClient)
+	svc := telemetry.NewService(logger, conn, chConn, sessionManager, chatSessionsManager, featClient, posthogClient)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -107,6 +108,7 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 		chClient:       chClient,
 		featClient:     featClient,
 		sessionManager: sessionManager,
+		orgID:          authCtx.ActiveOrganizationID,
 	}
 }
 

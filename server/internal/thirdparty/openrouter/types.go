@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	or "github.com/speakeasy-api/gram/openrouter/models/components"
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 

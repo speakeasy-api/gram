@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	telem_srv "github.com/speakeasy-api/gram/server/gen/http/telemetry/server"
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
@@ -28,9 +29,10 @@ import (
 type Service struct {
 	auth          *auth.Auth
 	db            *pgxpool.Pool
+	chConn        clickhouse.Conn
+	chRepo        *repo.Queries
 	featureClient *productfeatures.Client
 	logger        *slog.Logger
-	tcm           ToolMetricsProvider
 	tracer        trace.Tracer
 	posthog       PosthogClient
 	chatSessions  *chatsessions.Manager
@@ -39,15 +41,23 @@ type Service struct {
 var _ telem_gen.Service = (*Service)(nil)
 var _ telem_gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, chatSessions *chatsessions.Manager, tcm ToolMetricsProvider, features *productfeatures.Client, posthogClient PosthogClient) *Service {
+func NewService(
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	chConn clickhouse.Conn,
+	sessions *sessions.Manager,
+	chatSessions *chatsessions.Manager,
+	features *productfeatures.Client,
+	posthogClient PosthogClient) *Service {
 	logger = logger.With(attr.SlogComponent("logs"))
 
 	return &Service{
 		auth:          auth.New(logger, db, sessions),
 		db:            db,
+		chConn:        chConn,
+		chRepo:        repo.New(chConn),
 		logger:        logger,
 		featureClient: features,
-		tcm:           tcm,
 		tracer:        otel.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
 		posthog:       posthogClient,
 		chatSessions:  chatSessions,
@@ -108,7 +118,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 	}
 
 	// Query with limit+1 to detect if there are more results
-	items, err := s.tcm.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
+	items, err := s.chRepo.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
 		GramProjectID:          params.projectID,
 		TimeStart:              params.timeStart,
 		TimeEnd:                params.timeEnd,
@@ -178,7 +188,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	}
 
 	// Query with limit+1 to detect if there are more results
-	items, err := s.tcm.ListTraces(ctx, repo.ListTracesParams{
+	items, err := s.chRepo.ListTraces(ctx, repo.ListTracesParams{
 		GramProjectID:    params.projectID,
 		TimeStart:        params.timeStart,
 		TimeEnd:          params.timeEnd,

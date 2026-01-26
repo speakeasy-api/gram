@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
-	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric/noop"
@@ -111,13 +111,21 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
 	chatClient := openrouter.NewChatClient(logger, devProvisioner)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
-
+	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	featClient := productfeatures.NewClient(logger, conn, redisClient)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	toolMetrics := tm_repo.New(chConn)
+	telemService := telemetry.NewService(
+		logger,
+		conn,
+		chConn,
+		sessionManager,
+		chatSessions,
+		featClient,
+		posthog,
+	)
 
 	var temporalClient temporal_client.Client
 	temporalClient, devserver := infra.NewTemporalClient(t)
@@ -125,7 +133,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		temporalClient.Close()
 		require.NoError(t, devserver.Stop(), "shutdown temporal")
 	})
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, toolMetrics, featClient, vectorToolStore, temporalClient, "test-jwt-secret")
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemService, featClient, vectorToolStore, temporalClient, "test-jwt-secret")
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -193,8 +201,6 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	toolMetrics := tm_repo.New(chConn)
-
 	var temporalClient temporal_client.Client
 	temporalClient, devserver := infra.NewTemporalClient(t)
 	t.Cleanup(func() {
@@ -205,7 +211,17 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthSvc, billingStub, billingStub, toolMetrics, featClient, vectorToolStore, temporalClient, "test-jwt-secret")
+
+	telemService := telemetry.NewService(
+		logger,
+		conn,
+		chConn,
+		sessionManager,
+		chatSessionsManager,
+		featClient,
+		posthog,
+	)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthSvc, billingStub, billingStub, telemService, featClient, vectorToolStore, temporalClient, "test-jwt-secret")
 
 	return ctx, &testInstance{
 		service:        svc,

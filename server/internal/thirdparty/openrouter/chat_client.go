@@ -12,9 +12,9 @@ import (
 
 	"github.com/hashicorp/go-cleanhttp"
 
-	or_base "github.com/speakeasy-api/gram/openrouter"
-	or "github.com/speakeasy-api/gram/openrouter/models/components"
-	or_operations "github.com/speakeasy-api/gram/openrouter/models/operations"
+	or_base "github.com/OpenRouterTeam/go-sdk"
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
+	or_operations "github.com/OpenRouterTeam/go-sdk/models/operations"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 )
@@ -79,16 +79,13 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 		return nil, fmt.Errorf("create embeddings error: %w", err)
 	}
 
-	if result.HTTPMeta.Response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("OpenRouter API error: %s", result.HTTPMeta.Response.Status)
+	// The new SDK returns errors via err, not via HTTPMeta
+	// Check if we got a response body
+	if result == nil || result.CreateEmbeddingsResponseBody == nil {
+		return nil, fmt.Errorf("embedding response body missing")
 	}
 
-	inputSizes := make([]string, len(inputs))
-	for i, input := range inputs {
-		inputSizes[i] = fmt.Sprintf("%d", len(input))
-	}
-
-	embeddingsData := result.GetObject().GetData()
+	embeddingsData := result.CreateEmbeddingsResponseBody.Data
 
 	if len(embeddingsData) == 0 {
 		return nil, fmt.Errorf("embedding data missing in response")
@@ -104,10 +101,13 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 			return nil, fmt.Errorf("embedding index out of range: %d", index)
 		}
 
-		objEmbedding := data.GetEmbedding().ArrayOfNumber
+		embedding := data.GetEmbedding()
+		if embedding.ArrayOfNumber == nil {
+			return nil, fmt.Errorf("embedding vector missing for index %d", index)
+		}
 
-		vector := make([]float32, len(objEmbedding))
-		for i, v := range objEmbedding {
+		vector := make([]float32, len(embedding.ArrayOfNumber))
+		for i, v := range embedding.ArrayOfNumber {
 			vector[i] = float32(v)
 		}
 		results[index] = vector
