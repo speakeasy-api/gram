@@ -32,7 +32,7 @@ func (t ToolInfo) AsAttributes() map[attr.Key]any {
 	}
 
 	if t.FunctionID != nil {
-		attrs[attr.FunctionIDKey] = t.FunctionID
+		attrs[attr.FunctionIDKey] = *t.FunctionID
 	}
 
 	return attrs
