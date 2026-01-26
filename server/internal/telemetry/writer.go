@@ -23,6 +23,8 @@ const (
 // It provides bounded concurrency and graceful shutdown capabilities.
 type LogWriter struct {
 	queue         chan LogParams
+	done          chan struct{}
+	closeOnce     sync.Once
 	wg            sync.WaitGroup
 	logger        *slog.Logger
 	chRepo        *repo.Queries
@@ -62,6 +64,8 @@ func NewLogWriter(
 
 	w := &LogWriter{
 		queue:         make(chan LogParams, bufferSize),
+		done:          make(chan struct{}),
+		closeOnce:     sync.Once{},
 		wg:            sync.WaitGroup{},
 		logger:        logger.With(attr.SlogComponent("log-writer")),
 		chRepo:        chRepo,
@@ -81,11 +85,17 @@ func NewLogWriter(
 }
 
 // Enqueue adds a log to the processing queue.
-// If the queue is full, the log is dropped and a warning is logged.
+// If the queue is full or the writer is shut down, the log is dropped and a warning is logged.
 func (w *LogWriter) Enqueue(params LogParams) {
 	select {
 	case w.queue <- params:
 		// Successfully enqueued
+	case <-w.done:
+		w.logger.WarnContext(context.Background(),
+			"log writer is shut down, dropping log",
+			attr.SlogResourceURN(params.ToolInfo.URN),
+			attr.SlogProjectID(params.ToolInfo.ProjectID),
+		)
 	default:
 		w.logger.WarnContext(context.Background(),
 			"telemetry log queue full, dropping log",
@@ -100,16 +110,20 @@ func (w *LogWriter) Enqueue(params LogParams) {
 func (w *LogWriter) Shutdown(ctx context.Context) error {
 	w.logger.InfoContext(ctx, "shutting down log writer")
 
+	// Signal that we're shutting down to prevent new enqueues
+	w.closeOnce.Do(func() { close(w.done) })
+
+	// Close the queue to signal workers to drain and exit
 	close(w.queue)
 
-	done := make(chan struct{})
+	workersDone := make(chan struct{})
 	go func() {
 		w.wg.Wait()
-		close(done)
+		close(workersDone)
 	}()
 
 	select {
-	case <-done:
+	case <-workersDone:
 		w.logger.InfoContext(ctx, "log writer shutdown complete")
 		return nil
 	case <-ctx.Done():
