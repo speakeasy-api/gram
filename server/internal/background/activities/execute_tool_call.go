@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	or "github.com/speakeasy-api/gram/openrouter/models/components"
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )

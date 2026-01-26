@@ -1,9 +1,0 @@
-# ListModelsCountResponse
-
-
-## Fields
-
-| Field                                                                             | Type                                                                              | Required                                                                          | Description                                                                       | Example                                                                           |
-| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `HTTPMeta`                                                                        | [components.HTTPMetadata](../../models/components/httpmetadata.md)                | :heavy_check_mark:                                                                | N/A                                                                               |                                                                                   |
-| `ModelsCountResponse`                                                             | [*components.ModelsCountResponse](../../models/components/modelscountresponse.md) | :heavy_minus_sign:                                                                | Returns the total count of available models                                       | {<br/>"data": {<br/>"count": 150<br/>}<br/>}                                      |

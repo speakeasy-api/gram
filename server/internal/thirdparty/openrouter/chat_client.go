@@ -12,9 +12,9 @@ import (
 
 	"github.com/hashicorp/go-cleanhttp"
 
-	or_base "github.com/speakeasy-api/gram/openrouter"
-	or "github.com/speakeasy-api/gram/openrouter/models/components"
-	or_operations "github.com/speakeasy-api/gram/openrouter/models/operations"
+	or_base "github.com/OpenRouterTeam/go-sdk"
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
+	or_operations "github.com/OpenRouterTeam/go-sdk/models/operations"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 )

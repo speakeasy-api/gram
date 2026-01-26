@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	or "github.com/speakeasy-api/gram/openrouter/models/components"
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"

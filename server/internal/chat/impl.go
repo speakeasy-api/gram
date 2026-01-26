@@ -30,7 +30,7 @@ import (
 	"goa.design/goa/v3/security"
 	"golang.org/x/sync/errgroup"
 
-	or "github.com/speakeasy-api/gram/openrouter/models/components"
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
 	srv "github.com/speakeasy-api/gram/server/gen/http/chat/server"
 	"github.com/speakeasy-api/gram/server/internal/assets"
