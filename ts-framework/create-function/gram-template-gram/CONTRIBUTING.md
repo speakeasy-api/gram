@@ -392,6 +392,45 @@ const responsePromise = g.handleToolCall(
 setTimeout(() => controller.abort(), 5000);
 ```
 
+## OAuth / Authentication
+
+For tools that need to access OAuth-protected APIs, Gram Functions supports automatic OAuth token injection. Configure the `authInput` option when creating your Gram instance, and the OAuth access token will be available through `ctx.env`.
+
+For full setup instructions including configuring OAuth providers, see the [Add OAuth documentation](https://www.getgram.ai/docs/gram-functions/add-oauth).
+
+### Configuring OAuth
+
+Specify which environment variable should receive the OAuth access token:
+
+```typescript
+import { Gram } from "@gram-ai/functions";
+import * as z from "zod/mini";
+
+const gram = new Gram({
+  envSchema: {
+    OAUTH_TOKEN: z.string().describe("OAuth access token"),
+  },
+  authInput: {
+    oauthVariable: "OAUTH_TOKEN",
+  },
+}).tool({
+  name: "get_user_profile",
+  description: "Fetch the authenticated user's profile",
+  inputSchema: {},
+  async execute(ctx, input) {
+    const response = await fetch("https://api.example.com/me", {
+      headers: {
+        Authorization: `Bearer ${ctx.env.OAUTH_TOKEN}`,
+      },
+      signal: ctx.signal,
+    });
+    return ctx.json(await response.json());
+  },
+});
+```
+
+When deployed to Gram, the platform handles the OAuth flow with users and automatically injects the access token into the specified environment variable before each tool execution.
+
 ## Type Safety
 
 The framework provides full TypeScript type inference:
