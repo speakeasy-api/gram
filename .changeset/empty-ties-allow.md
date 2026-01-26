@@ -2,4 +2,4 @@
 "@gram-ai/create-function": patch
 ---
 
-Generated functions agents.md now includes documentation integrating OAuth into Gram Functions
+Generated `AGENTS.md` in each gram function tempalte now includes documentation on how to integrate OAuth into the function. 
