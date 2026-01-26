@@ -79,7 +79,7 @@ type ToolCallLogRoundTripper struct {
 	rt           http.RoundTripper
 	logger       *slog.Logger
 	tracer       trace.Tracer
-	toolInfo     *ToolInfo
+	toolInfo     ToolInfo
 }
 
 // NewToolCallLogRoundTripper creates a new RoundTripper that logs HTTP requests to ClickHouse
@@ -87,10 +87,8 @@ func NewToolCallLogRoundTripper(
 	rt http.RoundTripper,
 	logger *slog.Logger,
 	tracer trace.Tracer,
-	toolInfo *ToolInfo,
+	toolInfo ToolInfo,
 	recorder HTTPLogAttributes) *ToolCallLogRoundTripper {
-
-	
 
 	return &ToolCallLogRoundTripper{
 		AttrRecorder: recorder,
@@ -143,42 +141,9 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	h.AttrRecorder.RecordRequestHeaders(requestHeaders, false)
 
 	resp, err := base.RoundTrip(req)
-
+	// record duration before handling err
 	duration := time.Since(startTime).Seconds()
 	h.AttrRecorder.RecordDuration(duration)
-
-	logBody := fmt.Sprintf("%s %s -> %d (%.2fs)",
-		req.Method, req.URL.Path, resp.StatusCode, duration)
-
-	h.AttrRecorder.RecordMessageBody(logBody)
-
-	tool := h.toolInfo
-	if tool == nil {
-		noToolCtxErr := fmt.Errorf("no tool info")
-		span.RecordError(noToolCtxErr)
-		span.SetStatus(codes.Error, "missing tool context")
-		h.logger.WarnContext(ctx, "HTTP request missing tool context",
-			attr.SlogURLOriginal(req.URL.String()),
-			attr.SlogHTTPRequestMethod(req.Method),
-		)
-		if err != nil {
-			return resp, fmt.Errorf("%w: %w", noToolCtxErr, err)
-		}
-		return resp, noToolCtxErr
-	}
-
-	// Add tool attributes to span
-	span.SetAttributes(
-		attr.ToolID(tool.ID),
-		attr.ToolURN(tool.URN),
-		attr.ToolName(tool.Name),
-		attr.ProjectID(tool.ProjectID),
-		attr.DeploymentID(tool.DeploymentID),
-		attr.OrganizationID(tool.OrganizationID),
-		attr.HTTPRoute(req.URL.Path),
-	)
-
-	// If the request failed, wrap and return the error; E.g., request timeout, etc.
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "HTTP request failed")
@@ -186,61 +151,67 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			attr.SlogError(err),
 			attr.SlogURLOriginal(req.URL.String()),
 			attr.SlogHTTPRequestMethod(req.Method),
-			attr.SlogToolURN(tool.URN),
+			attr.SlogToolURN(h.toolInfo.URN),
 			attr.SlogHTTPClientRequestDuration(duration),
 		)
 
 		h.AttrRecorder.RecordStatusCode(0)
 
-		return resp, fmt.Errorf("roundtrip: %w", err)
+		return nil, fmt.Errorf("roundtrip: %w", err)
 	}
 
-	statusCode := 0
-	if resp != nil {
-		statusCode = resp.StatusCode
-		span.SetAttributes(
-			attr.HTTPResponseStatusCode(statusCode),
-			attr.HTTPClientRequestDuration(duration),
-		)
+	logBody := fmt.Sprintf("%s %s -> %d (%.2fs)",
+		req.Method, req.URL.Path, resp.StatusCode, duration)
 
-		// Set span status based on HTTP status code
-		if statusCode >= 500 {
-			span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", statusCode))
-		} else {
-			span.SetStatus(codes.Ok, "")
-		}
+	h.AttrRecorder.RecordMessageBody(logBody)
 
-		h.logger.DebugContext(ctx, "HTTP request completed",
-			attr.SlogHTTPRequestMethod(req.Method),
-			attr.SlogURLOriginal(req.URL.String()),
-			attr.SlogHTTPResponseStatusCode(statusCode),
-			attr.SlogHTTPClientRequestDuration(duration),
-			attr.SlogToolURN(tool.URN),
-		)
+	// Add tool attributes to span
+	span.SetAttributes(
+		attr.ToolID(h.toolInfo.ID),
+		attr.ToolURN(h.toolInfo.URN),
+		attr.ToolName(h.toolInfo.Name),
+		attr.ProjectID(h.toolInfo.ProjectID),
+		attr.DeploymentID(h.toolInfo.DeploymentID),
+		attr.OrganizationID(h.toolInfo.OrganizationID),
+		attr.HTTPRoute(req.URL.Path),
+	)
+
+	span.SetAttributes(
+		attr.HTTPResponseStatusCode(resp.StatusCode),
+		attr.HTTPClientRequestDuration(duration),
+	)
+
+	// Set span status based on HTTP status code
+	if resp.StatusCode >= 500 {
+		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", resp.StatusCode))
+	} else {
+		span.SetStatus(codes.Ok, "")
 	}
+
+	h.logger.DebugContext(ctx, "HTTP request completed",
+		attr.SlogHTTPRequestMethod(req.Method),
+		attr.SlogURLOriginal(req.URL.String()),
+		attr.SlogHTTPResponseStatusCode(resp.StatusCode),
+		attr.SlogHTTPClientRequestDuration(duration),
+		attr.SlogToolURN(h.toolInfo.ID),
+	)
 
 	// Get response headers and keep only allowed ones
 	responseHeaders := make(map[string]string)
-	if resp != nil {
-		for key, values := range resp.Header {
-			for _, value := range values {
-				responseHeaders[key] = value
-			}
+	for key, values := range resp.Header {
+		for _, value := range values {
+			responseHeaders[key] = value
 		}
-		responseHeaders = filterAllowedHeaders(responseHeaders)
 	}
+	responseHeaders = filterAllowedHeaders(responseHeaders)
 
-	h.AttrRecorder.RecordStatusCode(statusCode)
+	h.AttrRecorder.RecordStatusCode(resp.StatusCode)
 	h.AttrRecorder.RecordResponseHeaders(responseHeaders)
-
-	if resp == nil || resp.Body == nil {
-		return resp, nil
-	}
 
 	return resp, nil
 }
 
-// // reasonable redaction of tokens function for tool call logs
+// reasonable redaction of tokens function for tool call logs
 func redactToken(token string) string {
 	trimmed := strings.TrimSpace(token)
 	if trimmed == "" {

@@ -727,7 +727,7 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 
 	attrRecorder := opts.Attributes
 
-	toolInfo := &tm.ToolInfo{
+	toolInfo := tm.ToolInfo{
 		ID:             opts.ID,
 		URN:            opts.URN,
 		Name:           opts.Name,
