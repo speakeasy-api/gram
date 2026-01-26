@@ -1,5 +1,24 @@
 # dashboard
 
+## 0.26.18
+
+### Patch Changes
+
+- Updated dependencies [258b503]
+  - @gram-ai/elements@1.22.5
+
+## 0.26.17
+
+### Patch Changes
+
+- 156bc66: Fix logs page on dashboard and correct display issues in Elements library
+- f8a3eae: Show all envirnoment variables for basic auth in mcp details and install page
+- Updated dependencies [a57b307]
+- Updated dependencies [156bc66]
+- Updated dependencies [834a770]
+  - @gram-ai/elements@1.22.4
+  - @gram/client@0.27.0
+
 ## 0.26.16
 
 ### Patch Changes

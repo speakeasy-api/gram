@@ -2,6 +2,7 @@ package openrouter
 
 import (
 	"encoding/json"
+	"fmt"
 
 	or "github.com/speakeasy-api/gram/openrouter/models/components"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -21,6 +22,43 @@ func GetRole(msg or.Message) string {
 		return msg.UserMessage.GetRole()
 	default:
 		return ""
+	}
+}
+
+func GetContentJSON(msg or.Message) ([]byte, error) {
+	switch msg.Type {
+	case or.MessageTypeAssistant:
+		bs, err := json.Marshal(msg.AssistantMessage.Content)
+		if err != nil {
+			return nil, fmt.Errorf("marshal assistant message: %w", err)
+		}
+		return bs, nil
+	case or.MessageTypeDeveloper:
+		bs, err := json.Marshal(msg.MessageDeveloper.Content)
+		if err != nil {
+			return nil, fmt.Errorf("marshal developer message: %w", err)
+		}
+		return bs, nil
+	case or.MessageTypeSystem:
+		bs, err := json.Marshal(msg.SystemMessage.Content)
+		if err != nil {
+			return nil, fmt.Errorf("marshal system message: %w", err)
+		}
+		return bs, nil
+	case or.MessageTypeTool:
+		bs, err := json.Marshal(msg.ToolResponseMessage.Content)
+		if err != nil {
+			return nil, fmt.Errorf("marshal tool response message: %w", err)
+		}
+		return bs, nil
+	case or.MessageTypeUser:
+		bs, err := json.Marshal(msg.UserMessage.Content)
+		if err != nil {
+			return nil, fmt.Errorf("marshal user message: %w", err)
+		}
+		return bs, nil
+	default:
+		return nil, fmt.Errorf("unknown message type: %s", msg.Type)
 	}
 }
 

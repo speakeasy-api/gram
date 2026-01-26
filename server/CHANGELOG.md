@@ -1,5 +1,16 @@
 # server
 
+## 0.20.0
+
+### Minor Changes
+
+- 834a770: Removes old tool toolmetrics logs logic and endpoints.
+
+### Patch Changes
+
+- 4e50632: Adds clickhouse logging for GenAI events
+- f8a3eae: Show all envirnoment variables for basic auth in mcp details and install page
+
 ## 0.19.0
 
 ### Minor Changes
