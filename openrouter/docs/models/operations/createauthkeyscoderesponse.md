@@ -1,9 +1,0 @@
-# CreateAuthKeysCodeResponse
-
-
-## Fields
-
-| Field                                                                                                   | Type                                                                                                    | Required                                                                                                | Description                                                                                             |
-| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `HTTPMeta`                                                                                              | [components.HTTPMetadata](../../models/components/httpmetadata.md)                                      | :heavy_check_mark:                                                                                      | N/A                                                                                                     |
-| `Object`                                                                                                | [*operations.CreateAuthKeysCodeResponseBody](../../models/operations/createauthkeyscoderesponsebody.md) | :heavy_minus_sign:                                                                                      | Successfully created authorization code                                                                 |

@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/client"
 
-	or "github.com/speakeasy-api/gram/openrouter/models/components"
-	"github.com/speakeasy-api/gram/openrouter/optionalnullable"
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
+	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
