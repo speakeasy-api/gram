@@ -275,7 +275,7 @@ func (c *ChatClient) LoadToolsetTools(
 			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), gateway.ToolCallEnv{
 				SystemEnv:  systemConfig,
 				UserConfig: ciEnv,
-			}, plan, tm.NewNoopToolCallLogger())
+			}, plan, tm.HTTPLogAttributes{})
 			if err != nil {
 				return "", fmt.Errorf("tool proxy error: %w", err)
 			}

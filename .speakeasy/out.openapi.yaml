@@ -12364,6 +12364,11 @@ components:
         title:
           type: string
           description: Display name for the server
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalMCPTool'
+          description: Tools available on the server
         version:
           type: string
           description: Semantic version of the server
@@ -12374,12 +12379,36 @@ components:
         - version
         - description
         - registry_id
+    ExternalMCPTool:
+      type: object
+      properties:
+        annotations:
+          description: Annotations for the tool
+        description:
+          type: string
+          description: Description of the tool
+        input_schema:
+          description: Input schema for the tool
+        name:
+          type: string
+          description: Name of the tool
     ExternalMCPToolDefinition:
       type: object
       properties:
+        canonical:
+          $ref: '#/components/schemas/CanonicalToolAttributes'
+        canonical_name:
+          type: string
+          description: The canonical name of the tool. Will be the same as the name if there is no variation.
+        confirm:
+          type: string
+          description: Confirmation mode for the tool
+        confirm_prompt:
+          type: string
+          description: Prompt for the confirmation
         created_at:
           type: string
-          description: When the tool definition was created.
+          description: The creation date of the tool.
           format: date-time
         deployment_external_mcp_id:
           type: string
@@ -12387,12 +12416,15 @@ components:
         deployment_id:
           type: string
           description: The ID of the deployment
+        description:
+          type: string
+          description: Description of the tool
         id:
           type: string
-          description: The ID of the tool definition
+          description: The ID of the tool
         name:
           type: string
-          description: The reverse-DNS name of the external MCP server (e.g., ai.exa/exa)
+          description: The name of the tool
         oauth_authorization_endpoint:
           type: string
           description: The OAuth authorization endpoint URL
@@ -12410,39 +12442,61 @@ components:
         oauth_version:
           type: string
           description: 'OAuth version: ''2.1'' (MCP OAuth), ''2.0'' (legacy), or ''none'''
+        project_id:
+          type: string
+          description: The ID of the project
         registry_id:
           type: string
           description: The ID of the MCP registry
+        registry_server_name:
+          type: string
+          description: The name of the external MCP server (e.g., exa)
+        registry_specifier:
+          type: string
+          description: The specifier of the external MCP server (e.g., 'io.modelcontextprotocol.anonymous/exa')
         remote_url:
           type: string
           description: The URL to connect to the MCP server
         requires_oauth:
           type: boolean
           description: Whether the external MCP server requires OAuth authentication
+        schema:
+          type: string
+          description: JSON schema for the request
+        schema_version:
+          type: string
+          description: Version of the schema
         slug:
           type: string
           description: The slug used for tool prefixing (e.g., github)
+        summarizer:
+          type: string
+          description: Summarizer for the tool
         tool_urn:
           type: string
-          description: The URN of this tool (tools:externalmcp:<slug>:proxy)
+          description: The URN of this tool
         transport_type:
           type: string
           description: The transport type used to connect to the MCP server
           enum:
             - streamable-http
             - sse
+        type:
+          type: string
+          description: Whether or not the tool is a proxy tool
         updated_at:
           type: string
-          description: When the tool definition was last updated.
+          description: The last update date of the tool.
           format: date-time
+        variation:
+          $ref: '#/components/schemas/ToolVariation'
       description: A proxy tool that references an external MCP server
       required:
-        - id
-        - tool_urn
         - deployment_external_mcp_id
         - deployment_id
+        - registry_specifier
+        - registry_server_name
         - registry_id
-        - name
         - slug
         - remote_url
         - transport_type
@@ -12450,6 +12504,13 @@ components:
         - oauth_version
         - created_at
         - updated_at
+        - id
+        - project_id
+        - name
+        - canonical_name
+        - description
+        - schema
+        - tool_urn
     ExternalOAuthServer:
       type: object
       properties:

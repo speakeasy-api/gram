@@ -441,18 +441,19 @@ type PromptTemplateResponseBody struct {
 // ExternalMCPToolDefinitionResponseBody is used to define fields on response
 // body types.
 type ExternalMCPToolDefinitionResponseBody struct {
-	// The ID of the tool definition
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The URN of this tool (tools:externalmcp:<slug>:proxy)
-	ToolUrn *string `form:"tool_urn,omitempty" json:"tool_urn,omitempty" xml:"tool_urn,omitempty"`
+	// Whether or not the tool is a proxy tool
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
 	// The ID of the deployments_external_mcps record
 	DeploymentExternalMcpID *string `form:"deployment_external_mcp_id,omitempty" json:"deployment_external_mcp_id,omitempty" xml:"deployment_external_mcp_id,omitempty"`
 	// The ID of the deployment
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 	// The ID of the MCP registry
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// The reverse-DNS name of the external MCP server (e.g., ai.exa/exa)
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The specifier of the external MCP server (e.g.,
+	// 'io.modelcontextprotocol.anonymous/exa')
+	RegistrySpecifier *string `form:"registry_specifier,omitempty" json:"registry_specifier,omitempty" xml:"registry_specifier,omitempty"`
+	// The name of the external MCP server (e.g., exa)
+	RegistryServerName *string `form:"registry_server_name,omitempty" json:"registry_server_name,omitempty" xml:"registry_server_name,omitempty"`
 	// The slug used for tool prefixing (e.g., github)
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The URL to connect to the MCP server
@@ -471,10 +472,37 @@ type ExternalMCPToolDefinitionResponseBody struct {
 	OauthRegistrationEndpoint *string `form:"oauth_registration_endpoint,omitempty" json:"oauth_registration_endpoint,omitempty" xml:"oauth_registration_endpoint,omitempty"`
 	// The OAuth scopes supported by the server
 	OauthScopesSupported []string `form:"oauth_scopes_supported,omitempty" json:"oauth_scopes_supported,omitempty" xml:"oauth_scopes_supported,omitempty"`
-	// When the tool definition was created.
+	// The creation date of the tool.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// When the tool definition was last updated.
+	// The last update date of the tool.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The ID of the tool
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The URN of this tool
+	ToolUrn *string `form:"tool_urn,omitempty" json:"tool_urn,omitempty" xml:"tool_urn,omitempty"`
+	// The ID of the project
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The name of the tool
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The canonical name of the tool. Will be the same as the name if there is no
+	// variation.
+	CanonicalName *string `form:"canonical_name,omitempty" json:"canonical_name,omitempty" xml:"canonical_name,omitempty"`
+	// Description of the tool
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Version of the schema
+	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
+	// JSON schema for the request
+	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
+	// Confirmation mode for the tool
+	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
+	// Prompt for the confirmation
+	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
+	// Summarizer for the tool
+	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// The original details of a tool, excluding any variations
+	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
+	// The variation details of a tool. Only includes explicitly varied fields.
+	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
 }
 
 // SecurityVariableResponseBody is used to define fields on response body types.
@@ -1337,23 +1365,20 @@ func ValidatePromptTemplateResponseBody(body *PromptTemplateResponseBody) (err e
 // ValidateExternalMCPToolDefinitionResponseBody runs the validations defined
 // on ExternalMCPToolDefinitionResponseBody
 func ValidateExternalMCPToolDefinitionResponseBody(body *ExternalMCPToolDefinitionResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.ToolUrn == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urn", "body"))
-	}
 	if body.DeploymentExternalMcpID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_external_mcp_id", "body"))
 	}
 	if body.DeploymentID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_id", "body"))
 	}
+	if body.RegistrySpecifier == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("registry_specifier", "body"))
+	}
+	if body.RegistryServerName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("registry_server_name", "body"))
+	}
 	if body.RegistryID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("registry_id", "body"))
-	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
@@ -1376,6 +1401,27 @@ func ValidateExternalMCPToolDefinitionResponseBody(body *ExternalMCPToolDefiniti
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.CanonicalName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("canonical_name", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.Schema == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("schema", "body"))
+	}
+	if body.ToolUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urn", "body"))
+	}
 	if body.TransportType != nil {
 		if !(*body.TransportType == "streamable-http" || *body.TransportType == "sse") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.transport_type", *body.TransportType, []any{"streamable-http", "sse"}))
@@ -1386,6 +1432,16 @@ func ValidateExternalMCPToolDefinitionResponseBody(body *ExternalMCPToolDefiniti
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.Canonical != nil {
+		if err2 := ValidateCanonicalToolAttributesResponseBody(body.Canonical); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Variation != nil {
+		if err2 := ValidateToolVariationResponseBody(body.Variation); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }

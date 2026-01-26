@@ -8,6 +8,8 @@
 package client
 
 import (
+	"encoding/json"
+
 	chat "github.com/speakeasy-api/gram/server/gen/chat"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -811,7 +813,7 @@ type ChatMessageResponseBody struct {
 	// The role of the message
 	Role *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
 	// The content of the message
-	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+	Content json.RawMessage `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
 	// The model that generated the message
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// The tool call ID of the message

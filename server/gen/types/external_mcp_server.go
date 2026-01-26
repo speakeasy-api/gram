@@ -24,4 +24,6 @@ type ExternalMCPServer struct {
 	IconURL *string
 	// Opaque metadata from the registry
 	Meta any
+	// Tools available on the server
+	Tools []*ExternalMCPTool
 }

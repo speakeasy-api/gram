@@ -28,10 +28,6 @@ export type EnvironmentEntry = {
    * Redacted values of the environment variable
    */
   value: string;
-  /**
-   * Hash of the value to identify matching values across environments without exposing the actual value
-   */
-  valueHash: string;
 };
 
 /** @internal */
@@ -44,12 +40,10 @@ export const EnvironmentEntry$inboundSchema: z.ZodType<
   name: z.string(),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   value: z.string(),
-  value_hash: z.string(),
 }).transform((v) => {
   return remap$(v, {
     "created_at": "createdAt",
     "updated_at": "updatedAt",
-    "value_hash": "valueHash",
   });
 });
 

@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: c2575047af0c485a94ed85c275c2c766
+  docChecksum: 83c202998fc7b1363496dc40b67b52d3
   docVersion: 0.0.1
   speakeasyVersion: 1.691.0
   generationVersion: 2.797.1
@@ -282,7 +282,7 @@ trackedFiles:
     pristine_git_object: 5585cce945ae2b6af5ca11cc72c7163c2b57c2ba
   docs/models/components/environmententry.md:
     id: 69327583eb22
-    last_write_checksum: sha1:6b156efd88e4630d89983598ce1bab1f8c6a686d
+    last_write_checksum: sha1:dc976668fcb703eb3c6fd2053ff7b22d39a6c026
     pristine_git_object: 9859e1c1954bd2c3a909f6ad43a89682c1f638c3
   docs/models/components/environmententryinput.md:
     id: db85ebaad53f
@@ -298,11 +298,13 @@ trackedFiles:
     pristine_git_object: 9f7a67db3cb9a81074c3d8129dff1d62d5e9d7e7
   docs/models/components/externalmcpserver.md:
     id: 689aee8a6c61
-    last_write_checksum: sha1:a05fd0c08322ada0ad2ba9950198d0c95893f5bc
+    last_write_checksum: sha1:23c1574d9e893a531698eba5e803c045546a24df
     pristine_git_object: a46e4319546e7e86de76c0c637e8c2516cd8bca3
+  docs/models/components/externalmcptool.md:
+    last_write_checksum: sha1:719b8eb5236a84fd95fcc4c72d4f4eeaa77c065d
   docs/models/components/externalmcptooldefinition.md:
     id: 1c6ef7a5f6ea
-    last_write_checksum: sha1:59d7afe7e7fa2769369b4bab8ebfe0971aa392c7
+    last_write_checksum: sha1:cedcdd7bf458b1bdeb961ab54c52720652a2c98d
     pristine_git_object: f95a4450d1659f79de11d0d8ffd5d3169eb32770
   docs/models/components/externaloauthserver.md:
     id: 6a7d1d5ad044
@@ -438,7 +440,7 @@ trackedFiles:
     pristine_git_object: 76505e39419d036cc1396a8ab757a7c79e0113cc
   docs/models/components/listenvironmentsresult.md:
     id: 99918150423c
-    last_write_checksum: sha1:407469156fe816e6d51ea58346d03afc56129391
+    last_write_checksum: sha1:fe802f082c11ca85860a63497dad434d82cb687d
     pristine_git_object: 627eeb04096dbdb23553de5f0af7a3161b48a305
   docs/models/components/listintegrationsresult.md:
     id: 8d9c2af62f9c
@@ -3038,7 +3040,7 @@ trackedFiles:
     pristine_git_object: 41e576e2cb57fa2c48d6edc51e5c2dfe77757879
   src/models/components/environmententry.ts:
     id: bed976c96873
-    last_write_checksum: sha1:1636672c39b05566484a1f3028ad414d3c1d6767
+    last_write_checksum: sha1:20c4082eb7f74349e8058b29eae5aebbc38068bb
     pristine_git_object: 86a4207ee620354d5160a44206529741d1c8f210
   src/models/components/environmententryinput.ts:
     id: 74a7c2c7bdb7
@@ -3054,11 +3056,13 @@ trackedFiles:
     pristine_git_object: 13be4fd873c70891c53c299cc9058a1a580ccc39
   src/models/components/externalmcpserver.ts:
     id: 17ea92ac12e8
-    last_write_checksum: sha1:189e79f374bcecc6fd23daa2ffe821561d1bfe06
+    last_write_checksum: sha1:4468cfaa7125f96000e0962d0c81bb50949d6b14
     pristine_git_object: 2a5d08551bb3547337d6d0b692ee56f0f830e5e7
+  src/models/components/externalmcptool.ts:
+    last_write_checksum: sha1:0cfbec0404b0d5dfd65c03b4449917c3544dafe4
   src/models/components/externalmcptooldefinition.ts:
     id: 232f234ebbac
-    last_write_checksum: sha1:54426565676aa3b3b34ae51b85ad27515ddf1754
+    last_write_checksum: sha1:06be01058f8945745e6cbe20b43d5d413eb8b096
     pristine_git_object: bb9012a061a6caaba94c9bb5d89398600900f011
   src/models/components/externaloauthserver.ts:
     id: 19e382e414ba
@@ -3138,7 +3142,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:9a0196fda1497a35dd78113315538428b613ef0d
+    last_write_checksum: sha1:e44fda82784f1d718e646ccbf607c6e931b1f9cf
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -5648,7 +5652,7 @@ examples:
           toolset_id: "7003cb87-ab79-4484-b08e-a7afac2dc2b5"
       responses:
         "200":
-          application/json: {"created_at": "2023-10-12T00:52:32.537Z", "entries": [{"created_at": "2024-10-05T02:06:46.478Z", "name": "<value>", "updated_at": "2025-02-11T02:25:29.751Z", "value": "<value>", "value_hash": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-03-15T08:23:10.020Z"}
+          application/json: {"created_at": "2023-10-12T00:52:32.537Z", "entries": [{"created_at": "2024-10-05T02:06:46.478Z", "name": "<value>", "updated_at": "2025-02-11T02:25:29.751Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-03-15T08:23:10.020Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

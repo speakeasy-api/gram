@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ToolVariationBadge } from "../tool-variation-badge";
+import { McpIcon } from "../ui/mcp-icon";
 import { SimpleTooltip } from "../ui/tooltip";
 import { Type } from "../ui/type";
 import { MethodBadge } from "./MethodBadge";
@@ -44,8 +45,13 @@ interface ToolListProps {
 }
 
 interface ToolGroup {
-  type: "package" | "function" | "custom" | "higher_order";
-  icon: "file-code" | "square-function" | "square-stack" | "pencil-ruler";
+  type: "package" | "function" | "custom" | "higher_order" | "external-mcp";
+  icon:
+    | "file-code"
+    | "square-function"
+    | "square-stack"
+    | "pencil-ruler"
+    | "mcp";
   title: string;
   tools: Tool[];
   packageName?: string;
@@ -111,6 +117,7 @@ function groupTools(
   const groups: ToolGroup[] = [];
   const packageMap = new Map<string, Tool[]>();
   const functionMap = new Map<string, Tool[]>();
+  const registryServerNameToTools = new Map<string, Tool[]>();
   const functionTools: Tool[] = [];
   const customTools: Tool[] = [];
   const higherOrderTools: Tool[] = [];
@@ -148,6 +155,10 @@ function groupTools(
         // Function tools without a source go to the generic functions group
         functionTools.push(tool);
       }
+    } else if (tool.type === "external-mcp") {
+      const groupKey = tool.registryServerName;
+      const existing = registryServerNameToTools.get(groupKey) || [];
+      registryServerNameToTools.set(groupKey, [...existing, tool]);
     } else {
       // Everything else (prompts without higher order, etc.)
       customTools.push(tool);
@@ -186,6 +197,16 @@ function groupTools(
     });
   }
 
+  // Add external MCP tools group
+  registryServerNameToTools.forEach((tools, registryServerName) => {
+    groups.push({
+      type: "external-mcp",
+      icon: "mcp",
+      title: registryServerName,
+      tools: sortToolsByMethod(tools),
+    });
+  });
+
   // Add custom tools group with sorted tools
   if (customTools.length > 0) {
     groups.push({
@@ -219,6 +240,8 @@ function getIcon(icon: ToolGroup["icon"]) {
       return Layers;
     case "pencil-ruler":
       return PencilRuler;
+    case "mcp":
+      return McpIcon;
   }
 }
 

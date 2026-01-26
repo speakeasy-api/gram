@@ -20,8 +20,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -279,7 +279,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
 				SystemEnv:  NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.NewNoopToolCallLogger())
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 
 			if tt.expectedError {
 				require.Error(t, err)
@@ -408,7 +408,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
 				SystemEnv:  NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.NewNoopToolCallLogger())
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 
 			if tt.expectedError {
 				require.Error(t, err)
@@ -758,7 +758,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
 				SystemEnv:  NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.NewNoopToolCallLogger())
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 			require.NoError(t, err)
 			require.NotNil(t, capturedRequest)
 
@@ -978,7 +978,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 			err = proxy.Do(ctx, recorder, bytes.NewReader(toolCallBodyBytes), ToolCallEnv{
 				SystemEnv:  NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.NewNoopToolCallLogger())
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 			require.NoError(t, err)
 			require.NotNil(t, capturedRequest)
 
@@ -1318,7 +1318,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 			err = proxy.Do(ctx, recorder, bytes.NewReader([]byte(tt.toolCallBody)), ToolCallEnv{
 				SystemEnv:  NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.NewNoopToolCallLogger())
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -1419,7 +1419,7 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 	err = proxy.ReadResource(ctx, recorder, bytes.NewReader([]byte("{}")), ToolCallEnv{
 		SystemEnv:  NewCaseInsensitiveEnv(),
 		UserConfig: ciEnv,
-	}, resourcePlan, tm.NewNoopToolCallLogger())
+	}, resourcePlan, tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -1561,7 +1561,7 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
 		SystemEnv:  NewCaseInsensitiveEnv(),
 		UserConfig: ciEnv,
-	}, toolCallPlan, tm.NewNoopToolCallLogger())
+	}, toolCallPlan, tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
 
@@ -1661,7 +1661,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigVariablesSent(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
 		SystemEnv:  NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, NewHTTPToolCallPlan(tool, plan), tm.NewNoopToolCallLogger())
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -1747,7 +1747,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigNotInPlanNotSent(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
 		SystemEnv:  NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, NewHTTPToolCallPlan(tool, plan), tm.NewNoopToolCallLogger())
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -1858,7 +1858,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigNotInPlanNotSent(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
 		SystemEnv:  NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.NewNoopToolCallLogger())
+	}, toolCallPlan, tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -1953,7 +1953,7 @@ func TestToolProxy_Do_HTTPTool_SystemEnvSentWhenInPlan(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: NewCaseInsensitiveEnv(),
-	}, NewHTTPToolCallPlan(tool, plan), tm.NewNoopToolCallLogger())
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -2063,7 +2063,7 @@ func TestToolProxy_Do_FunctionTool_SystemEnvSentWhenInPlan(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: NewCaseInsensitiveEnv(),
-	}, toolCallPlan, tm.NewNoopToolCallLogger())
+	}, toolCallPlan, tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2162,7 +2162,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigPrefersOverSystemEnv(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: userConfig,
-	}, NewHTTPToolCallPlan(tool, plan), tm.NewNoopToolCallLogger())
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -2275,7 +2275,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigPrefersOverSystemEnv(t *testing.T) 
 	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.NewNoopToolCallLogger())
+	}, toolCallPlan, tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2387,7 +2387,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWhenInUserConfig(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
 		SystemEnv:  NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.NewNoopToolCallLogger())
+	}, toolCallPlan, tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2498,7 +2498,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputNotSentWhenNotInUserConfig(t *testin
 	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
 		SystemEnv:  NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.NewNoopToolCallLogger())
+	}, toolCallPlan, tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2612,7 +2612,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputPrefersUserConfigOverSystemEnv(t *te
 	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.NewNoopToolCallLogger())
+	}, toolCallPlan, tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2728,7 +2728,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWithRegularVariables(t *testing.
 	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
 		SystemEnv:  NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.NewNoopToolCallLogger())
+	}, toolCallPlan, tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2838,7 +2838,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputNilNotSent(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
 		SystemEnv:  NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.NewNoopToolCallLogger())
+	}, toolCallPlan, tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)

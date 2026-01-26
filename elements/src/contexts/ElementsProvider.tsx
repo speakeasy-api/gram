@@ -7,7 +7,6 @@ import {
 import { useMCPTools } from '@/hooks/useMCPTools'
 import { useToolApproval } from '@/hooks/useToolApproval'
 import { getApiUrl } from '@/lib/api'
-import { cn } from '@/lib/utils'
 import { initErrorTracking, trackError } from '@/lib/errorTracking'
 import { MODELS } from '@/lib/models'
 import {
@@ -19,6 +18,7 @@ import {
   type ApprovalHelpers,
   type FrontendTool,
 } from '@/lib/tools'
+import { cn } from '@/lib/utils'
 import { recommended } from '@/plugins'
 import { ElementsConfig, Model } from '@/types'
 import { Plugin } from '@/types/plugins'
@@ -26,6 +26,7 @@ import {
   AssistantRuntimeProvider,
   AssistantTool,
   unstable_useRemoteThreadListRuntime as useRemoteThreadListRuntime,
+  useAssistantState,
 } from '@assistant-ui/react'
 import {
   frontendTools as convertFrontendToolsToAISDKTools,
@@ -106,10 +107,7 @@ function cleanMessagesForModel(messages: UIMessage[]): UIMessage[] {
  * Main provider component that sets up auth, tools, and transport.
  * Delegates to either WithHistory or WithoutHistory based on config.
  */
-const ElementsProviderWithApproval = ({
-  children,
-  config,
-}: ElementsProviderProps) => {
+const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   const apiUrl = getApiUrl(config)
   const auth = useAuth({
     auth: config.api,
@@ -199,6 +197,11 @@ const ElementsProviderWithApproval = ({
   // Map to share local thread IDs to UUIDs between adapter and transport (for history mode)
   const localIdToUuidMapRef = useRef(new Map<string, string>())
 
+  // Ref to store the current thread's remoteId, synced from assistant-ui state.
+  // This is needed because the runtime object doesn't expose threadListItem.remoteId
+  // in a way that's accessible from the transport's sendMessages function.
+  const currentRemoteIdRef = useRef<string | null>(null)
+
   // Create chat transport configuration
   const transport = useMemo<ChatTransport<UIMessage>>(
     () => ({
@@ -209,29 +212,23 @@ const ElementsProviderWithApproval = ({
           throw new Error('Session is loading')
         }
 
-        // Get chat ID - try runtime's thread remoteId first (history mode),
+        // Get chat ID - use the synced remoteId ref first (history mode),
         // fall back to generated ID (non-history mode)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const runtimeAny = runtimeRef.current as any
+        let chatId = currentRemoteIdRef.current
 
-        // Try multiple paths to get thread info
-        const threadListItemState = runtimeAny?.threadListItem?.getState?.()
-        const threadsState = runtimeAny?.threads?.getState?.()
+        // If we have a valid remoteId (not a local ID), use it directly
+        if (chatId && !isLocalThreadId(chatId)) {
+          // chatId is already set correctly from the synced ref
+        } else if (isLocalThreadId(chatId) || !chatId) {
+          // For local thread IDs or no ID, check/generate UUID mapping
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const runtimeAny = runtimeRef.current as any
+          const threadsState = runtimeAny?.threads?.getState?.()
+          const localThreadId = (threadsState?.mainThreadId ??
+            threadsState?.threadIds?.[0]) as string | undefined
 
-        // Get the thread ID - try different sources
-        const threadRemoteId = threadListItemState?.remoteId as
-          | string
-          | undefined
-        const localThreadId = (threadListItemState?.id ??
-          threadsState?.mainThreadId ??
-          threadsState?.threadIds?.[0]) as string | undefined
-
-        let chatId = threadRemoteId
-
-        if (isLocalThreadId(chatId) || (!chatId && localThreadId)) {
           const lookupKey = chatId ?? localThreadId
           if (lookupKey) {
-            // For local thread IDs, check if we already have a UUID mapping
             const existingUuid = localIdToUuidMapRef.current.get(lookupKey)
             if (existingUuid) {
               chatId = existingUuid
@@ -261,6 +258,8 @@ const ElementsProviderWithApproval = ({
         const headersWithChatId = {
           ...auth.headers,
           'Gram-Chat-ID': chatId,
+          'X-Gram-Source': 'elements',
+          ...config.api?.headers, // We do this after X-Gram-Source so the playground can override it
           ...(config.gramEnvironment && {
             'Gram-Environment': config.gramEnvironment,
           }),
@@ -372,6 +371,7 @@ const ElementsProviderWithApproval = ({
         runtimeRef={runtimeRef}
         frontendTools={frontendTools}
         localIdToUuidMap={localIdToUuidMapRef.current}
+        currentRemoteIdRef={currentRemoteIdRef}
       >
         {children}
       </ElementsProviderWithHistory>
@@ -401,6 +401,25 @@ interface ElementsProviderWithHistoryProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   frontendTools: Record<string, AssistantTool | FrontendTool<any, any>>
   localIdToUuidMap: Map<string, string>
+  currentRemoteIdRef: React.RefObject<string | null>
+}
+
+/**
+ * Component that syncs the current thread's remoteId to a ref.
+ * Must be rendered inside AssistantRuntimeProvider to access the state.
+ */
+const ThreadIdSync = ({
+  remoteIdRef,
+}: {
+  remoteIdRef: React.RefObject<string | null>
+}) => {
+  const remoteId = useAssistantState(
+    ({ threadListItem }) => threadListItem.remoteId ?? null
+  )
+  useEffect(() => {
+    remoteIdRef.current = remoteId
+  }, [remoteId, remoteIdRef])
+  return null
 }
 
 const ElementsProviderWithHistory = ({
@@ -412,6 +431,7 @@ const ElementsProviderWithHistory = ({
   runtimeRef,
   frontendTools,
   localIdToUuidMap,
+  currentRemoteIdRef,
 }: ElementsProviderWithHistoryProps) => {
   const threadListAdapter = useGramThreadListAdapter({
     apiUrl,
@@ -457,6 +477,7 @@ const ElementsProviderWithHistory = ({
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
+      <ThreadIdSync remoteIdRef={currentRemoteIdRef} />
       <HistoryProvider>
         <ElementsContext.Provider value={contextValue}>
           <div
@@ -525,7 +546,7 @@ export const ElementsProvider = (props: ElementsProviderProps) => {
   return (
     <QueryClientProvider client={queryClient}>
       <ToolApprovalProvider>
-        <ElementsProviderWithApproval {...props} />
+        <ElementsProviderInner {...props} />
       </ToolApprovalProvider>
     </QueryClientProvider>
   )

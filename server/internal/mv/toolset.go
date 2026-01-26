@@ -754,12 +754,19 @@ func readToolsetTools(
 
 			tools = append(tools, &types.Tool{
 				ExternalMcpToolDefinition: &types.ExternalMCPToolDefinition{
-					ID:                         def.ID.String(),
-					ToolUrn:                    def.ToolUrn,
+					ID:          def.ID.String(),
+					ProjectID:   pid.String(),
+					ToolUrn:     def.ToolUrn,
+					Type:        conv.Ptr(def.Type),
+					Name:        def.Name.String,
+					Description: def.Description.String,
+					Schema:      string(def.Schema),
+
 					DeploymentExternalMcpID:    def.ExternalMcpAttachmentID.String(),
 					DeploymentID:               def.DeploymentID.String(),
 					RegistryID:                 def.RegistryID.String(),
-					Name:                       def.Name,
+					RegistryServerName:         def.RegistryServerName,
+					RegistrySpecifier:          def.RegistryServerSpecifier,
 					Slug:                       def.Slug,
 					RemoteURL:                  def.RemoteUrl,
 					TransportType:              def.TransportType.String(),
@@ -771,6 +778,13 @@ func readToolsetTools(
 					OauthScopesSupported:       def.OauthScopesSupported,
 					CreatedAt:                  def.CreatedAt.Time.Format(time.RFC3339),
 					UpdatedAt:                  def.UpdatedAt.Time.Format(time.RFC3339),
+					CanonicalName:              def.Name.String,
+					SchemaVersion:              nil,
+					Confirm:                    nil,
+					ConfirmPrompt:              nil,
+					Summarizer:                 nil,
+					Canonical:                  nil,
+					Variation:                  nil,
 				},
 			})
 		}

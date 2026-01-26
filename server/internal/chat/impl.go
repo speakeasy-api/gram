@@ -1,8 +1,11 @@
 package chat
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,14 +22,18 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-cleanhttp"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
+	"golang.org/x/sync/errgroup"
 
+	or "github.com/speakeasy-api/gram/openrouter/models/components"
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
 	srv "github.com/speakeasy-api/gram/server/gen/http/chat/server"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -59,6 +66,7 @@ type ChatTitleGenerator interface {
 
 type Service struct {
 	auth                 *auth.Auth
+	db                   *pgxpool.Pool
 	repo                 *repo.Queries
 	tracer               trace.Tracer
 	openRouter           openrouter.Provisioner
@@ -66,11 +74,12 @@ type Service struct {
 	logger               *slog.Logger
 	sessions             *sessions.Manager
 	chatSessions         *chatsessions.Manager
+	assetStorage         assets.BlobStore
 	proxyTransport       http.RoundTripper
 	fallbackUsageTracker FallbackModelUsageTracker
 	chatTitleGenerator   ChatTitleGenerator
 	posthog              *posthog.Posthog
-	telemetryProvider    telemetry.ToolMetricsProvider
+	telemetryService     *telemetry.Service
 }
 
 func NewService(
@@ -83,12 +92,14 @@ func NewService(
 	fallbackUsageTracker FallbackModelUsageTracker,
 	chatTitleGenerator ChatTitleGenerator,
 	posthog *posthog.Posthog,
-	telemetryProvider telemetry.ToolMetricsProvider,
+	telemetryService *telemetry.Service,
+	assetStorage assets.BlobStore,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
 		auth:                 auth.New(logger, db, sessions),
+		db:                   db,
 		sessions:             sessions,
 		chatSessions:         chatSessions,
 		logger:               logger,
@@ -96,11 +107,12 @@ func NewService(
 		tracer:               otel.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
 		openRouter:           openRouter,
 		chatClient:           chatClient,
+		assetStorage:         assetStorage,
 		proxyTransport:       cleanhttp.DefaultPooledTransport(),
 		fallbackUsageTracker: fallbackUsageTracker,
 		chatTitleGenerator:   chatTitleGenerator,
 		posthog:              posthog,
-		telemetryProvider:    telemetryProvider,
+		telemetryService:     telemetryService,
 	}
 }
 
@@ -308,13 +320,14 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	resultMessages := make([]*gen.ChatMessage, len(messages))
 	for i, msg := range messages {
 		toolCalls := string(msg.ToolCalls)
+		content := s.loadMessageContent(ctx, msg)
 		resultMessages[i] = &gen.ChatMessage{
 			ID:             msg.ID.String(),
 			Role:           msg.Role,
 			Model:          msg.Model.String,
 			UserID:         &msg.UserID.String,
 			ExternalUserID: &msg.ExternalUserID.String,
-			Content:        &msg.Content,
+			Content:        content,
 			ToolCalls:      &toolCalls,
 			ToolCallID:     &msg.ToolCallID.String,
 			FinishReason:   &msg.FinishReason.String,
@@ -334,12 +347,50 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	}, nil
 }
 
+// httpMetadata contains HTTP request metadata to be stored with chat messages.
+type httpMetadata struct {
+	Origin    string
+	UserAgent string
+	IPAddress string
+	Source    string
+}
+
+// extractHTTPMetadata extracts metadata from the HTTP request.
+func extractHTTPMetadata(r *http.Request) httpMetadata {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		origin = r.Header.Get("Referer")
+	}
+
+	userAgent := r.Header.Get("User-Agent")
+
+	ipAddress := r.Header.Get("X-Forwarded-For")
+	if ipAddress == "" {
+		ipAddress = r.Header.Get("X-Real-IP")
+	}
+	if ipAddress == "" {
+		ipAddress = r.RemoteAddr
+	}
+
+	source := r.Header.Get(constants.HeaderSource)
+
+	return httpMetadata{
+		Origin:    origin,
+		UserAgent: userAgent,
+		IPAddress: ipAddress,
+		Source:    source,
+	}
+}
+
 // HandleCompletion is a proxy to the OpenAI API that logs request and response data.
 func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error {
 	ctx, authCtx, err := s.directAuthorize(r.Context(), r)
 	if err != nil {
 		return err
 	}
+
+	// Extract HTTP metadata for message tracking
+	metadata := extractHTTPMetadata(r)
 
 	orgID := authCtx.ActiveOrganizationID
 	userID := authCtx.UserID
@@ -399,7 +450,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	respCaptor := w
 
 	if chatIDHeader != "" {
-		chatResult, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatIDHeader, chatRequest)
+		chatResult, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatIDHeader, chatRequest, metadata)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to start or resume chat").Log(ctx, s.logger)
 		}
@@ -435,14 +486,14 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			isFirstMessage:     chatResult.IsFirstMessage,
 			chatTitleGenerator: s.chatTitleGenerator,
 			// GenAI telemetry fields
-			telemetryProvider: s.telemetryProvider,
-			userID:            userID,
-			externalUserID:    authCtx.ExternalUserID,
-			startTime:         time.Now(),
+			telemetryService: s.telemetryService,
+			userID:           userID,
+			externalUserID:   authCtx.ExternalUserID,
+			startTime:        time.Now(),
+			httpMetadata:     metadata,
 		}
 	}
 
-	// Set up the proxy to OpenRouter
 	target, err := url.Parse(openrouter.OpenRouterBaseURL)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error parsing openrouter url").Log(ctx, s.logger)
@@ -596,7 +647,7 @@ type startOrResumeChatResult struct {
 	IsFirstMessage bool // True if this is the first assistant response for this chat
 }
 
-func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID uuid.UUID, userID string, externalUserID string, chatIDHeader string, request openrouter.OpenAIChatRequest) (*startOrResumeChatResult, error) {
+func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID uuid.UUID, userID string, externalUserID string, chatIDHeader string, request openrouter.OpenAIChatRequest, metadata httpMetadata) (*startOrResumeChatResult, error) {
 	chatID, err := uuid.Parse(chatIDHeader)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID in header")
@@ -631,27 +682,33 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 	// If the stored chat history is shorter than the request, insert the missing messages
 	// Most of the time, this just serves to store the new message the user just sent
 	if int(chatCount) < len(request.Messages) {
-		for _, msg := range request.Messages[int(chatCount):] {
-			_, err := s.repo.CreateChatMessage(ctx, []repo.CreateChatMessageParams{{
-				ChatID:           chatID,
-				ProjectID:        projectID,
-				Role:             openrouter.GetRole(msg),
-				Model:            conv.ToPGText(request.Model),
-				Content:          openrouter.GetText(msg),
-				UserID:           conv.ToPGText(userID),
-				ExternalUserID:   conv.ToPGText(externalUserID),
-				ToolCallID:       conv.PtrToPGText(openrouter.GetToolCallID(msg)),
-				ToolCalls:        nil,
-				FinishReason:     conv.ToPGTextEmpty(""),
-				MessageID:        conv.ToPGTextEmpty(""),
-				PromptTokens:     0,
-				CompletionTokens: 0,
-				TotalTokens:      0,
-			}})
-
-			if err != nil {
-				s.logger.ErrorContext(ctx, "failed to create chat message", attr.SlogError(err))
+		newMessages := request.Messages[int(chatCount):]
+		rows := make([]chatMessageRow, len(newMessages))
+		for i, msg := range newMessages {
+			var toolCallID string
+			if tc := openrouter.GetToolCallID(msg); tc != nil {
+				toolCallID = *tc
 			}
+			rows[i] = chatMessageRow{
+				projectID:        projectID,
+				chatID:           chatID,
+				userID:           userID,
+				externalUserID:   externalUserID,
+				messageID:        "",
+				toolCallID:       toolCallID,
+				role:             openrouter.GetRole(msg),
+				model:            request.Model,
+				content:          msg,
+				finishReason:     nil,
+				toolCalls:        nil,
+				promptTokens:     0,
+				completionTokens: 0,
+				totalTokens:      0,
+				metadata:         metadata,
+			}
+		}
+		if err := storeMessages(ctx, s.logger, s.db, s.assetStorage, rows); err != nil {
+			s.logger.ErrorContext(ctx, "failed to store chat messages", attr.SlogError(err))
 		}
 	}
 
@@ -690,10 +747,11 @@ type responseCaptor struct {
 	isFirstMessage     bool
 	chatTitleGenerator ChatTitleGenerator
 	// GenAI telemetry
-	telemetryProvider telemetry.ToolMetricsProvider
-	userID            string
-	externalUserID    string
-	startTime         time.Time // Track request start time for duration calculation
+	telemetryService *telemetry.Service
+	userID           string
+	externalUserID   string
+	startTime        time.Time // Track request start time for duration calculation
+	httpMetadata     httpMetadata
 }
 
 func (r *responseCaptor) WriteHeader(statusCode int) {
@@ -768,6 +826,9 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 			Role:             "assistant",
 			Model:            conv.ToPGText(r.model),
 			Content:          r.messageContent.String(),
+			ContentRaw:       nil,
+			ContentAssetUrl:  conv.ToPGTextEmpty(""),
+			StorageError:     conv.ToPGTextEmpty(""),
 			ToolCallID:       conv.ToPGText(r.toolCallID),
 			ToolCalls:        toolCallsJSON,
 			PromptTokens:     int64(r.usage.PromptTokens),
@@ -776,6 +837,10 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 			FinishReason:     conv.PtrToPGText(r.finishReason),
 			UserID:           conv.ToPGTextEmpty(""), // These are agent messages, not user messages
 			ExternalUserID:   conv.ToPGTextEmpty(""), // These are agent messages, not user messages
+			Origin:           conv.ToPGText(r.httpMetadata.Origin),
+			UserAgent:        conv.ToPGText(r.httpMetadata.UserAgent),
+			IpAddress:        conv.ToPGText(r.httpMetadata.IPAddress),
+			Source:           conv.ToPGText(r.httpMetadata.Source),
 		}})
 		if err != nil {
 			r.logger.ErrorContext(r.ctx, "failed to store chat message", attr.SlogError(err))
@@ -883,18 +948,12 @@ func (r *responseCaptor) processLine(line string) {
 
 // emitGenAITelemetry emits GenAI telemetry to ClickHouse for observability.
 func (r *responseCaptor) emitGenAITelemetry(toolCallsJSON []byte) {
-	if r.telemetryProvider == nil {
-		return
-	}
-
 	duration := float64(time.Since(r.startTime).Seconds())
 
 	// Build attributes map. Column-mapped keys are extracted to dedicated columns
 	// but remain in the attributes JSON. Resource attributes are auto-partitioned
 	// based on telemetry.ResourceAttributeKeys.
 	attrs := map[attr.Key]any{
-		// Column-mapped keys
-		attr.ProjectIDKey:   r.projectID.String(),
 		attr.ResourceURNKey: "agents:chat:completion",
 		attr.LogBodyKey: fmt.Sprintf("LLM chat completion: model=%s, input_tokens=%d, output_tokens=%d",
 			r.model, r.usage.PromptTokens, r.usage.CompletionTokens),
@@ -926,5 +985,227 @@ func (r *responseCaptor) emitGenAITelemetry(toolCallsJSON []byte) {
 		attrs[attr.ExternalUserIDKey] = r.externalUserID
 	}
 
-	telemetry.EmitTelemetryLog(r.ctx, r.logger, r.telemetryProvider, attrs)
+	toolInfo := telemetry.ToolInfo{
+		ID:             r.chatID.String(),
+		URN:            r.chatID.URN(),
+		Name:           "",
+		ProjectID:      r.projectID.String(),
+		DeploymentID:   "",
+		FunctionID:     nil,
+		OrganizationID: r.orgID,
+	}
+
+	r.telemetryService.CreateLog(r.ctx, telemetry.LogParams{
+		Timestamp:  time.Now(),
+		ToolInfo:   toolInfo,
+		Attributes: attrs,
+	})
+}
+
+// loadMessageContent retrieves the full message content using the precedence:
+// 1. ContentRaw (inline JSON for messages ≤128 KiB)
+// 2. ContentAssetUrl (fetch from asset storage)
+// 3. Content (plain text fallback)
+func (s *Service) loadMessageContent(ctx context.Context, msg repo.ChatMessage) json.RawMessage {
+	content, _ := json.Marshal(msg.Content)
+
+	// 1. Try ContentRaw first (inline JSON for small messages)
+	if len(msg.ContentRaw) > 0 {
+		return msg.ContentRaw
+	}
+
+	// 2. Try fetching from asset storage
+	if msg.ContentAssetUrl.Valid && msg.ContentAssetUrl.String != "" {
+		assetURL, err := url.Parse(msg.ContentAssetUrl.String)
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to parse message content asset URL",
+				attr.SlogError(err),
+				attr.SlogChatID(msg.ChatID.String()),
+			)
+			return content
+		}
+
+		reader, err := s.assetStorage.Read(ctx, assetURL)
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to open message content from asset storage",
+				attr.SlogError(err),
+				attr.SlogChatID(msg.ChatID.String()),
+			)
+			return content
+		}
+		defer func() { _ = reader.Close() }()
+
+		// Limit read size to prevent memory issues
+		limitedReader := io.LimitReader(reader, maxAssetReadSize)
+		data, err := io.ReadAll(limitedReader)
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to read message content from asset storage",
+				attr.SlogError(err),
+				attr.SlogChatID(msg.ChatID.String()),
+			)
+			return content
+		}
+
+		return data
+	}
+
+	// 3. Fallback to plain text content
+	return content
+}
+
+type chatMessageRow struct {
+	projectID      uuid.UUID
+	chatID         uuid.UUID
+	userID         string
+	externalUserID string
+	messageID      string
+	toolCallID     string
+
+	role             string
+	model            string
+	content          or.Message
+	finishReason     *string
+	toolCalls        []string
+	promptTokens     int64
+	completionTokens int64
+	totalTokens      int64
+
+	metadata httpMetadata
+}
+
+const (
+	// maxInlineContentSize is the maximum size of message content that will be
+	// stored inline in the database. Messages larger than this will only have
+	// their content stored in the asset storage.
+	maxInlineContentSize = 128 * 1024 // 128 KiB
+
+	// maxAssetReadSize is the maximum size of message content that will be
+	// read from asset storage to prevent memory issues.
+	maxAssetReadSize = 20 * 1024 * 1024 // 20 MiB
+)
+
+func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, assetStorage assets.BlobStore, rows []chatMessageRow) error {
+	if len(rows) == 0 {
+		return nil
+	}
+
+	// uploadResult holds the result of uploading a single message to asset storage.
+	type uploadResult struct {
+		assetURL string
+		jsonData []byte
+		err      error // non-nil if upload failed
+	}
+
+	results := make([]uploadResult, len(rows))
+
+	// Upload all messages to asset storage in parallel.
+	// We don't use errgroup's error propagation here because we want to
+	// continue even if some uploads fail - we'll record the errors and
+	// still insert the messages with their plain text content.
+	var wg errgroup.Group
+	for i, row := range rows {
+		wg.Go(func() error {
+			// Marshal the message content to JSON.
+			jsonData, err := openrouter.GetContentJSON(row.content)
+			if err != nil {
+				results[i] = uploadResult{assetURL: "", jsonData: nil, err: fmt.Errorf("marshal message content: %w", err)}
+				return nil // Don't abort other uploads
+			}
+
+			// Compute SHA256 hash for the content-addressable path.
+			hash := sha256.Sum256(jsonData)
+			hashHex := hex.EncodeToString(hash[:])
+
+			// Build asset path: <project_id>/chats/<chat_id>/<sha256_hex>.json
+			assetPath := path.Join(row.projectID.String(), "chats", row.chatID.String(), hashHex+".json")
+
+			// Upload to asset storage.
+			writer, assetURL, err := assetStorage.Write(ctx, assetPath, "application/json", int64(len(jsonData)))
+			if err != nil {
+				results[i] = uploadResult{assetURL: "", jsonData: jsonData, err: fmt.Errorf("create asset writer: %w", err)}
+				return nil
+			}
+
+			if _, err := io.Copy(writer, bytes.NewReader(jsonData)); err != nil {
+				_ = writer.Close()
+				results[i] = uploadResult{assetURL: "", jsonData: jsonData, err: fmt.Errorf("write asset content: %w", err)}
+				return nil
+			}
+
+			if err := writer.Close(); err != nil {
+				results[i] = uploadResult{assetURL: "", jsonData: jsonData, err: fmt.Errorf("finalize asset upload: %w", err)}
+				return nil
+			}
+
+			results[i] = uploadResult{
+				assetURL: assetURL.String(),
+				jsonData: jsonData,
+				err:      nil,
+			}
+			return nil
+		})
+	}
+
+	_ = wg.Wait() // Always succeeds since goroutines don't return errors
+
+	// Build database params from upload results.
+	dbrows := make([]repo.CreateChatMessageParams, len(rows))
+	for i, row := range rows {
+		res := results[i]
+
+		// Log storage errors but continue - we'll still store the message with plain text.
+		var storageError pgtype.Text
+		if res.err != nil {
+			logger.ErrorContext(ctx, "failed to upload message to asset storage",
+				attr.SlogError(res.err),
+				attr.SlogChatID(row.chatID.String()),
+				attr.SlogProjectID(row.projectID.String()),
+			)
+			storageError = conv.ToPGText(res.err.Error())
+		}
+
+		// Only store content inline if upload succeeded and it's within the size threshold.
+		var contentRaw []byte
+		if res.err == nil && len(res.jsonData) <= maxInlineContentSize {
+			contentRaw = res.jsonData
+		}
+
+		// Marshal tool calls to JSON if present.
+		var toolCallsJSON []byte
+		if len(row.toolCalls) > 0 {
+			toolCallsJSON, _ = json.Marshal(row.toolCalls)
+		}
+
+		dbrows[i] = repo.CreateChatMessageParams{
+			ChatID:           row.chatID,
+			ProjectID:        row.projectID,
+			Role:             row.role,
+			Content:          openrouter.GetText(row.content),
+			ContentRaw:       contentRaw,
+			ContentAssetUrl:  conv.ToPGText(res.assetURL),
+			StorageError:     storageError,
+			Model:            conv.ToPGText(row.model),
+			MessageID:        conv.ToPGText(row.messageID),
+			ToolCallID:       conv.ToPGText(row.toolCallID),
+			UserID:           conv.ToPGText(row.userID),
+			ExternalUserID:   conv.ToPGText(row.externalUserID),
+			FinishReason:     conv.PtrToPGText(row.finishReason),
+			ToolCalls:        toolCallsJSON,
+			PromptTokens:     row.promptTokens,
+			CompletionTokens: row.completionTokens,
+			TotalTokens:      row.totalTokens,
+			Origin:           conv.ToPGText(row.metadata.Origin),
+			UserAgent:        conv.ToPGText(row.metadata.UserAgent),
+			IpAddress:        conv.ToPGText(row.metadata.IPAddress),
+			Source:           conv.ToPGText(row.metadata.Source),
+		}
+	}
+
+	// Batch insert all messages.
+	crepo := repo.New(tx)
+	if _, err := crepo.CreateChatMessage(ctx, dbrows); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to insert chat messages").Log(ctx, logger)
+	}
+
+	return nil
 }
