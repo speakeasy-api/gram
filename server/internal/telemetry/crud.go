@@ -37,49 +37,8 @@ type LogParams struct {
 	Attributes map[attr.Key]any
 }
 
-func (s *Service) CreateLog(
-	ctx context.Context,
-	params LogParams) {
-	go func() {
-		logCtx := context.WithoutCancel(ctx)
-
-		enabled, err := s.isLogsEnabled(logCtx, params.ToolInfo.OrganizationID)
-		if err != nil {
-			s.logger.ErrorContext(logCtx,
-				"failed to check logs feature flag",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(params.ToolInfo.OrganizationID),
-			)
-			return
-		}
-		if !enabled {
-			return
-		}
-
-		logParams, err := buildTelemetryLogParams(params)
-		if err != nil {
-			s.logger.ErrorContext(logCtx,
-				"failed to build telemetry log params",
-				attr.SlogError(err),
-			)
-			return
-		}
-
-		if err := s.chRepo.InsertTelemetryLog(logCtx, *logParams); err != nil {
-			s.logger.ErrorContext(logCtx,
-				"failed to emit telemetry log to ClickHouse",
-				attr.SlogError(err),
-				attr.SlogResourceURN(logParams.GramURN),
-			)
-			return
-		}
-
-		s.logger.DebugContext(logCtx,
-			"emitted telemetry log",
-			attr.SlogResourceURN(logParams.GramURN),
-			attr.SlogProjectID(logParams.GramProjectID),
-		)
-	}()
+func (s *Service) CreateLog(params LogParams) {
+	s.logWriter.Enqueue(params)
 }
 
 // buildTelemetryLogParams constructs InsertTelemetryLogParams from attributes.

@@ -560,6 +560,7 @@ func newStartCommand() *cli.Command {
 			}
 
 			telemSvc := tm.NewService(logger, db, chDB, sessionManager, chatSessionsManager, productFeatures, posthogClient)
+			shutdownFuncs = append(shutdownFuncs, telemSvc.Shutdown)
 
 			mux := goahttp.NewMuxer()
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessionsManager))

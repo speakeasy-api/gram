@@ -429,7 +429,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			},
 			Attributes: attrRecorder,
 		}
-		s.telemService.CreateLog(ctx, logParams)
+		s.telemService.CreateLog(logParams)
 	}()
 
 	return nil

@@ -36,6 +36,7 @@ type Service struct {
 	tracer        trace.Tracer
 	posthog       PosthogClient
 	chatSessions  *chatsessions.Manager
+	logWriter     *LogWriter
 }
 
 var _ telem_gen.Service = (*Service)(nil)
@@ -51,16 +52,19 @@ func NewService(
 	posthogClient PosthogClient) *Service {
 	logger = logger.With(attr.SlogComponent("logs"))
 
+	chRepo := repo.New(chConn)
+
 	return &Service{
 		auth:          auth.New(logger, db, sessions),
 		db:            db,
 		chConn:        chConn,
-		chRepo:        repo.New(chConn),
+		chRepo:        chRepo,
 		logger:        logger,
 		featureClient: features,
 		tracer:        otel.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
 		posthog:       posthogClient,
 		chatSessions:  chatSessions,
+		logWriter:     NewLogWriter(logger, chRepo, features, nil),
 	}
 }
 
@@ -227,6 +231,11 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 		Enabled:    true,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// Shutdown gracefully stops the telemetry service, draining any pending logs.
+func (s *Service) Shutdown(ctx context.Context) error {
+	return s.logWriter.Shutdown(ctx)
 }
 
 // searchParams contains common validated parameters for telemetry search endpoints.
