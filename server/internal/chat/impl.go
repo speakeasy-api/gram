@@ -79,7 +79,7 @@ type Service struct {
 	fallbackUsageTracker FallbackModelUsageTracker
 	chatTitleGenerator   ChatTitleGenerator
 	posthog              *posthog.Posthog
-	telemetryProvider    telemetry.ToolMetricsProvider
+	telemetryService     *telemetry.Service
 }
 
 func NewService(
@@ -92,7 +92,7 @@ func NewService(
 	fallbackUsageTracker FallbackModelUsageTracker,
 	chatTitleGenerator ChatTitleGenerator,
 	posthog *posthog.Posthog,
-	telemetryProvider telemetry.ToolMetricsProvider,
+	telemetryService *telemetry.Service,
 	assetStorage assets.BlobStore,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
@@ -112,7 +112,7 @@ func NewService(
 		fallbackUsageTracker: fallbackUsageTracker,
 		chatTitleGenerator:   chatTitleGenerator,
 		posthog:              posthog,
-		telemetryProvider:    telemetryProvider,
+		telemetryService:     telemetryService,
 	}
 }
 
@@ -486,11 +486,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			isFirstMessage:     chatResult.IsFirstMessage,
 			chatTitleGenerator: s.chatTitleGenerator,
 			// GenAI telemetry fields
-			telemetryProvider: s.telemetryProvider,
-			userID:            userID,
-			externalUserID:    authCtx.ExternalUserID,
-			startTime:         time.Now(),
-			httpMetadata:      metadata,
+			telemetryService: s.telemetryService,
+			userID:           userID,
+			externalUserID:   authCtx.ExternalUserID,
+			startTime:        time.Now(),
+			httpMetadata:     metadata,
 		}
 	}
 
@@ -747,11 +747,11 @@ type responseCaptor struct {
 	isFirstMessage     bool
 	chatTitleGenerator ChatTitleGenerator
 	// GenAI telemetry
-	telemetryProvider telemetry.ToolMetricsProvider
-	userID            string
-	externalUserID    string
-	startTime         time.Time // Track request start time for duration calculation
-	httpMetadata      httpMetadata
+	telemetryService *telemetry.Service
+	userID           string
+	externalUserID   string
+	startTime        time.Time // Track request start time for duration calculation
+	httpMetadata     httpMetadata
 }
 
 func (r *responseCaptor) WriteHeader(statusCode int) {
@@ -948,18 +948,12 @@ func (r *responseCaptor) processLine(line string) {
 
 // emitGenAITelemetry emits GenAI telemetry to ClickHouse for observability.
 func (r *responseCaptor) emitGenAITelemetry(toolCallsJSON []byte) {
-	if r.telemetryProvider == nil {
-		return
-	}
-
 	duration := float64(time.Since(r.startTime).Seconds())
 
 	// Build attributes map. Column-mapped keys are extracted to dedicated columns
 	// but remain in the attributes JSON. Resource attributes are auto-partitioned
 	// based on telemetry.ResourceAttributeKeys.
 	attrs := map[attr.Key]any{
-		// Column-mapped keys
-		attr.ProjectIDKey:   r.projectID.String(),
 		attr.ResourceURNKey: "agents:chat:completion",
 		attr.LogBodyKey: fmt.Sprintf("LLM chat completion: model=%s, input_tokens=%d, output_tokens=%d",
 			r.model, r.usage.PromptTokens, r.usage.CompletionTokens),
@@ -991,7 +985,21 @@ func (r *responseCaptor) emitGenAITelemetry(toolCallsJSON []byte) {
 		attrs[attr.ExternalUserIDKey] = r.externalUserID
 	}
 
-	telemetry.EmitTelemetryLog(r.ctx, r.logger, r.telemetryProvider, attrs)
+	toolInfo := telemetry.ToolInfo{
+		ID:             r.chatID.String(),
+		URN:            r.chatID.URN(),
+		Name:           "",
+		ProjectID:      r.projectID.String(),
+		DeploymentID:   "",
+		FunctionID:     nil,
+		OrganizationID: r.orgID,
+	}
+
+	r.telemetryService.CreateLog(r.ctx, telemetry.LogParams{
+		Timestamp:  time.Now(),
+		ToolInfo:   toolInfo,
+		Attributes: attrs,
+	})
 }
 
 // loadMessageContent retrieves the full message content using the precedence:

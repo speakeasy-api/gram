@@ -46,9 +46,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
-	tm_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
@@ -67,7 +64,7 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 	return cfgLoader(c)
 }
 
-func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context, tracerProvider trace.TracerProvider, featureClient *productfeatures.Client) (tm.ToolMetricsProvider, func(context.Context) error, error) {
+func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
 	nilFunc := func(context.Context) error { return nil }
 
 	host := c.String("clickhouse-host")
@@ -146,17 +143,14 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 		return nil, nilFunc, fmt.Errorf("failed to ping clickhouse after %d attempts: %w", maxRetries+1, pingErr)
 	}
 
-	cc := tm_repo.New(conn)
-
 	shutdown := func(ctx context.Context) error {
 		if err := conn.Close(); err != nil {
-			logger.ErrorContext(ctx, "failed to close tool metrics client connection", attr.SlogError(err))
-			return fmt.Errorf("close tool metrics client: %w", err)
+			logger.ErrorContext(ctx, "failed to close clickhouse client connection", attr.SlogError(err))
+			return fmt.Errorf("close clickhouse client connection: %w", err)
 		}
 		return nil
 	}
-
-	return cc, shutdown, nil
+	return conn, shutdown, nil
 }
 
 type dbClientOptions struct {
