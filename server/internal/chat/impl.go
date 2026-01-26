@@ -990,9 +990,9 @@ func (r *responseCaptor) emitGenAITelemetry(toolCallsJSON []byte) {
 		URN:            r.chatID.URN(),
 		Name:           "",
 		ProjectID:      r.projectID.String(),
-		DeploymentID:   r.orgID,
+		DeploymentID:   "",
 		FunctionID:     nil,
-		OrganizationID: "",
+		OrganizationID: r.orgID,
 	}
 
 	r.telemetryService.CreateLog(r.ctx, telemetry.LogParams{
