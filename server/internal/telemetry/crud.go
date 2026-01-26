@@ -107,6 +107,11 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 		return nil, oops.E(oops.CodeUnexpected, err, "parse log attributes")
 	}
 
+	var deploymentID *string
+	if params.ToolInfo.DeploymentID != "" {
+		deploymentID = &params.ToolInfo.DeploymentID
+	}
+
 	return &repo.InsertTelemetryLogParams{
 		ID:                     id.String(),
 		TimeUnixNano:           params.Timestamp.UnixNano(),
@@ -118,7 +123,7 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 		Attributes:             spanAttrs,
 		ResourceAttributes:     resourceAttrs,
 		GramProjectID:          params.ToolInfo.ProjectID,
-		GramDeploymentID:       &params.ToolInfo.DeploymentID,
+		GramDeploymentID:       deploymentID,
 		GramFunctionID:         params.ToolInfo.FunctionID,
 		GramURN:                params.ToolInfo.URN,
 		ServiceName:            serviceName,

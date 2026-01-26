@@ -188,14 +188,6 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		span.SetStatus(codes.Ok, "")
 	}
 
-	h.logger.DebugContext(ctx, "HTTP request completed",
-		attr.SlogHTTPRequestMethod(req.Method),
-		attr.SlogURLOriginal(req.URL.String()),
-		attr.SlogHTTPResponseStatusCode(resp.StatusCode),
-		attr.SlogHTTPClientRequestDuration(duration),
-		attr.SlogToolURN(h.toolInfo.ID),
-	)
-
 	// Get response headers and keep only allowed ones
 	responseHeaders := make(map[string]string)
 	for key, values := range resp.Header {
