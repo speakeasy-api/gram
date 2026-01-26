@@ -1,7 +1,6 @@
 package telemetry
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
