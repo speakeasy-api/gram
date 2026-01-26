@@ -64,7 +64,9 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 	return cfgLoader(c)
 }
 
-func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, error) {
+func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
+	nilFunc := func(context.Context) error { return nil }
+
 	host := c.String("clickhouse-host")
 	database := c.String("clickhouse-database")
 	username := c.String("clickhouse-username")
@@ -81,7 +83,7 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 		"clickhouse native port must be set", nativePort != "",
 	)
 	if err != nil {
-		return nil, fmt.Errorf("invalid clickhouse config: %w", err)
+		return nil, nilFunc, fmt.Errorf("invalid clickhouse config: %w", err)
 	}
 
 	opts := &clickhouse.Options{
@@ -103,7 +105,7 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 
 	conn, err := clickhouse.Open(opts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open clickhouse connection: %w", err)
+		return nil, nilFunc, fmt.Errorf("failed to open clickhouse connection: %w", err)
 	}
 
 	// Retry ping with exponential backoff
@@ -138,10 +140,17 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 	}
 
 	if pingErr != nil {
-		return nil, fmt.Errorf("failed to ping clickhouse after %d attempts: %w", maxRetries+1, pingErr)
+		return nil, nilFunc, fmt.Errorf("failed to ping clickhouse after %d attempts: %w", maxRetries+1, pingErr)
 	}
 
-	return conn, nil
+	shutdown := func(ctx context.Context) error {
+		if err := conn.Close(); err != nil {
+			logger.ErrorContext(ctx, "failed to close clickhouse client connection", attr.SlogError(err))
+			return fmt.Errorf("close clickhouse client connection: %w", err)
+		}
+		return nil
+	}
+	return conn, shutdown, nil
 }
 
 type dbClientOptions struct {

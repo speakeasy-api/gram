@@ -384,13 +384,11 @@ func newStartCommand() *cli.Command {
 			}
 			defer db.Close()
 
-			chDB, err := newClickhouseClient(ctx, logger, c)
+			chDB, shutdown, err := newClickhouseClient(ctx, logger, c)
 			if err != nil {
 				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
 			}
-			defer func() {
-				_ = chDB.Close()
-			}()
+			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			err = o11y.StartObservers(meterProvider, db)
 			if err != nil {
