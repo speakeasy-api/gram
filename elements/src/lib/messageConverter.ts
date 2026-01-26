@@ -23,6 +23,7 @@ import type {
   Message,
   UserMessage,
   AssistantMessage,
+  ToolResponseMessage,
 } from '@openrouter/sdk/models'
 import { UIMessage } from 'ai'
 
@@ -314,6 +315,19 @@ export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
     return { messages: [], headId: null }
   }
 
+  const toolCallResults = new Map<string, ToolResponseMessage>()
+  for (const msg of messages) {
+    if (msg.role !== 'tool') {
+      continue
+    }
+    const id = (msg as any).tool_call_id
+    if (typeof id !== 'string') {
+      continue
+    }
+
+    toolCallResults.set(id, msg as ToolResponseMessage)
+  }
+
   const uiMessages: { parentId: string | null; message: UIMessage }[] = []
   let prevId: string | null = null
 
@@ -352,7 +366,10 @@ export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
           message: {
             id: msg.id,
             role: 'user',
-            parts: convertGramMessagePartsToUIMessageParts(msg),
+            parts: convertGramMessagePartsToUIMessageParts(
+              msg,
+              toolCallResults
+            ),
           },
         })
         break
@@ -363,7 +380,10 @@ export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
           message: {
             id: msg.id,
             role: 'assistant',
-            parts: convertGramMessagePartsToUIMessageParts(msg),
+            parts: convertGramMessagePartsToUIMessageParts(
+              msg,
+              toolCallResults
+            ),
           } satisfies UIMessage,
         }
         uiMessages.push(uiMessage)
@@ -382,7 +402,8 @@ export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
 }
 
 export function convertGramMessagePartsToUIMessageParts(
-  msg: UserMessage | AssistantMessage
+  msg: UserMessage | AssistantMessage,
+  toolResults: Map<string, ToolResponseMessage>
 ): UIMessage['parts'] {
   const uiparts: UIMessage['parts'] = []
 
@@ -459,13 +480,14 @@ export function convertGramMessagePartsToUIMessageParts(
     }
 
     for (const tc of toolCalls) {
+      const content = toolResults.get(tc.id)?.content
       uiparts.push({
         type: 'dynamic-tool',
         toolCallId: tc.id,
         toolName: tc.function?.name ?? '',
         state: 'output-available',
         input: tc.function?.arguments ?? {},
-        output: '',
+        output: typeof content === 'string' ? tryParseJSON(content) : '',
       })
     }
   }
