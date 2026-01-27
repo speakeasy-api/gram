@@ -20,6 +20,23 @@ if (IS_CHROMATIC) {
 }
 
 const preview: Preview = {
+  globalTypes: {
+    theme: {
+      description: 'Color theme for components',
+      toolbar: {
+        title: 'Theme',
+        icon: 'paintbrush',
+        items: [
+          { value: 'light', title: 'Light', icon: 'sun' },
+          { value: 'dark', title: 'Dark', icon: 'moon' },
+        ],
+        dynamicTitle: true,
+      },
+    },
+  },
+  initialGlobals: {
+    theme: 'dark',
+  },
   parameters: {
     layout: 'fullscreen',
     chromatic: {
@@ -64,27 +81,28 @@ const preview: Preview = {
     (Story, context) => {
       // Stories can override config via parameters.elements
       const elementsParams = context.parameters.elements ?? {}
-      const elementsConfig: Partial<ElementsConfig> =
-        elementsParams.config ?? {}
+      const baseConfig: Partial<ElementsConfig> = elementsParams.config ?? {}
 
-      // Storbook users control these args using the controls panel
+      // Storybook users control these args using the controls panel
       const projectSlugArg = context.args.projectSlug
       const mcpUrlArg = context.args.mcpUrl
 
-      elementsConfig.projectSlug ||= projectSlugArg
-      elementsConfig.mcp ||= mcpUrlArg
-
-      // Pass the Storybook theme to the elements config so shadow DOM gets the right color scheme
+      // Storybook theme from toolbar
       const storybookTheme = context.globals.theme as 'light' | 'dark' | undefined
-      if (storybookTheme && !elementsConfig.theme?.colorScheme) {
-        elementsConfig.theme = {
-          ...elementsConfig.theme,
-          colorScheme: storybookTheme,
-        }
+
+      // Create new config object (immutable) to ensure React detects changes
+      const elementsConfig: Partial<ElementsConfig> = {
+        ...baseConfig,
+        projectSlug: baseConfig.projectSlug || projectSlugArg,
+        mcp: baseConfig.mcp || mcpUrlArg,
+        theme: {
+          ...baseConfig.theme,
+          ...(storybookTheme && { colorScheme: storybookTheme }),
+        },
       }
 
       return (
-        <ElementsDecorator config={elementsConfig}>
+        <ElementsDecorator config={elementsConfig} key={storybookTheme}>
           <Story />
         </ElementsDecorator>
       )

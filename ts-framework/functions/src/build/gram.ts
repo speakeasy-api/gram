@@ -320,8 +320,9 @@ function logCLIOutput(logger: Logger, line: string) {
   try {
     obj = JSON.parse(line);
   } catch (e) {
-    logger.error(line);
-    return;
+    // We'll assume the line isn't a well-formed JSON log event. It will be
+    // logged as-is below.
+    obj = null;
   }
 
   if (obj == null) {
