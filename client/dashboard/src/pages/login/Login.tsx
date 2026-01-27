@@ -12,16 +12,15 @@ export default function Login() {
   const navigate = useNavigate();
 
   const redirectTo = searchParams.get("redirect");
-  const skipRedirect = searchParams.get("preview") === "true";
   useEffect(() => {
-    if (session.session !== "" && !skipRedirect) {
+    if (session.session !== "") {
       if (redirectTo) {
         navigate(redirectTo, { replace: true });
       } else {
         routes.home.goTo();
       }
     }
-  }, [session.session, searchParams, navigate, routes.home, skipRedirect]);
+  }, [session.session, searchParams, navigate, routes.home]);
 
   return (
     <main className="flex min-h-screen flex-col md:flex-row">
