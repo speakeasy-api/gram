@@ -17,6 +17,7 @@ type McpMetadatum struct {
 	LogoID                   uuid.NullUUID
 	Instructions             pgtype.Text
 	HeaderDisplayNames       []byte
+	DefaultEnvironmentID     uuid.NullUUID
 	CreatedAt                pgtype.Timestamptz
 	UpdatedAt                pgtype.Timestamptz
 }

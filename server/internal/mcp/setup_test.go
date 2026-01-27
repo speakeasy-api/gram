@@ -107,7 +107,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
 	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	featClient := productfeatures.NewClient(logger, conn, redisClient)
-
+	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
@@ -117,7 +117,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		chConn,
 		sessionManager,
 		chatSessions,
-		featClient,
+		logsEnabled,
 		posthog,
 	)
 
@@ -209,6 +209,7 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 
 	telemService := telemetry.NewService(
 		logger,
@@ -216,7 +217,7 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 		chConn,
 		sessionManager,
 		chatSessionsManager,
-		featClient,
+		logsEnabled,
 		posthog,
 	)
 	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthSvc, billingStub, billingStub, telemService, featClient, vectorToolStore, temporalClient)

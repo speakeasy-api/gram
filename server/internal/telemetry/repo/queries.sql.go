@@ -3,6 +3,8 @@ package repo
 import (
 	"context"
 	"fmt"
+
+	"github.com/ClickHouse/clickhouse-go/v2"
 )
 
 const insertTelemetryLog = `-- name: InsertTelemetryLog :exec
@@ -53,6 +55,9 @@ type InsertTelemetryLogParams struct {
 
 //nolint:wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLogParams) error {
+	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(false))
+
+	// Async insert is configured at the connection level in deps.go
 	return q.conn.Exec(ctx, insertTelemetryLog,
 		arg.ID,
 		arg.TimeUnixNano,
@@ -258,7 +263,6 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 		return nil, err
 	}
 	defer rows.Close()
-
 	var traces []TraceSummary
 	for rows.Next() {
 		var trace TraceSummary

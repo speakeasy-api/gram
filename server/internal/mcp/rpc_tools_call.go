@@ -223,7 +223,7 @@ func handleToolsCall(
 			},
 			Attributes: logAttrs,
 		}
-		telemSvc.CreateLog(ctx, params)
+		telemSvc.CreateLog(params)
 	}()
 
 	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), gateway.ToolCallEnv{
