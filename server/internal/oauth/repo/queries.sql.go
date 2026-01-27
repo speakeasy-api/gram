@@ -22,7 +22,7 @@ INSERT INTO external_oauth_server_metadata (
     $1,
     $2,
     $3
-) RETURNING id, project_id, slug, metadata, created_at, updated_at, deleted_at, deleted
+) RETURNING id, project_id, slug, metadata, secrets, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateExternalOAuthServerMetadataParams struct {
@@ -40,6 +40,7 @@ func (q *Queries) CreateExternalOAuthServerMetadata(ctx context.Context, arg Cre
 		&i.ProjectID,
 		&i.Slug,
 		&i.Metadata,
+		&i.Secrets,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -99,8 +100,31 @@ func (q *Queries) DeleteOAuthProxyServer(ctx context.Context, arg DeleteOAuthPro
 	return err
 }
 
+const getExternalMCPOAuthClient = `-- name: GetExternalMCPOAuthClient :one
+SELECT id, project_id, external_mcp_attachment_id, client_id_encrypted, client_secret_encrypted, client_id_expires_at, registration_access_token_encrypted, registration_client_uri, created_at, updated_at FROM external_mcp_oauth_clients
+WHERE external_mcp_attachment_id = $1
+`
+
+func (q *Queries) GetExternalMCPOAuthClient(ctx context.Context, externalMcpAttachmentID uuid.UUID) (ExternalMcpOauthClient, error) {
+	row := q.db.QueryRow(ctx, getExternalMCPOAuthClient, externalMcpAttachmentID)
+	var i ExternalMcpOauthClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.ExternalMcpAttachmentID,
+		&i.ClientIDEncrypted,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDExpiresAt,
+		&i.RegistrationAccessTokenEncrypted,
+		&i.RegistrationClientUri,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getExternalOAuthServerMetadata = `-- name: GetExternalOAuthServerMetadata :one
-SELECT id, project_id, slug, metadata, created_at, updated_at, deleted_at, deleted FROM external_oauth_server_metadata
+SELECT id, project_id, slug, metadata, secrets, created_at, updated_at, deleted_at, deleted FROM external_oauth_server_metadata
 WHERE project_id = $1 AND id = $2 AND deleted IS FALSE
 `
 
@@ -117,6 +141,36 @@ func (q *Queries) GetExternalOAuthServerMetadata(ctx context.Context, arg GetExt
 		&i.ProjectID,
 		&i.Slug,
 		&i.Metadata,
+		&i.Secrets,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getExternalOAuthServerWithSecrets = `-- name: GetExternalOAuthServerWithSecrets :one
+
+SELECT id, project_id, slug, metadata, secrets, created_at, updated_at, deleted_at, deleted FROM external_oauth_server_metadata
+WHERE project_id = $1 AND id = $2 AND deleted IS FALSE
+`
+
+type GetExternalOAuthServerWithSecretsParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+// External OAuth Server Secrets Queries
+func (q *Queries) GetExternalOAuthServerWithSecrets(ctx context.Context, arg GetExternalOAuthServerWithSecretsParams) (ExternalOauthServerMetadatum, error) {
+	row := q.db.QueryRow(ctx, getExternalOAuthServerWithSecrets, arg.ProjectID, arg.ID)
+	var i ExternalOauthServerMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Slug,
+		&i.Metadata,
+		&i.Secrets,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -200,6 +254,89 @@ func (q *Queries) ListOAuthProxyProvidersByServer(ctx context.Context, arg ListO
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateExternalOAuthServerSecrets = `-- name: UpdateExternalOAuthServerSecrets :exec
+UPDATE external_oauth_server_metadata SET
+    secrets = $1,
+    updated_at = clock_timestamp()
+WHERE project_id = $2 AND id = $3 AND deleted IS FALSE
+`
+
+type UpdateExternalOAuthServerSecretsParams struct {
+	Secrets   []byte
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) UpdateExternalOAuthServerSecrets(ctx context.Context, arg UpdateExternalOAuthServerSecretsParams) error {
+	_, err := q.db.Exec(ctx, updateExternalOAuthServerSecrets, arg.Secrets, arg.ProjectID, arg.ID)
+	return err
+}
+
+const upsertExternalMCPOAuthClient = `-- name: UpsertExternalMCPOAuthClient :one
+
+INSERT INTO external_mcp_oauth_clients (
+    project_id,
+    external_mcp_attachment_id,
+    client_id_encrypted,
+    client_secret_encrypted,
+    client_id_expires_at,
+    registration_access_token_encrypted,
+    registration_client_uri
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7
+) ON CONFLICT (external_mcp_attachment_id) DO UPDATE SET
+    client_id_encrypted = EXCLUDED.client_id_encrypted,
+    client_secret_encrypted = EXCLUDED.client_secret_encrypted,
+    client_id_expires_at = EXCLUDED.client_id_expires_at,
+    registration_access_token_encrypted = EXCLUDED.registration_access_token_encrypted,
+    registration_client_uri = EXCLUDED.registration_client_uri,
+    updated_at = clock_timestamp()
+RETURNING id, project_id, external_mcp_attachment_id, client_id_encrypted, client_secret_encrypted, client_id_expires_at, registration_access_token_encrypted, registration_client_uri, created_at, updated_at
+`
+
+type UpsertExternalMCPOAuthClientParams struct {
+	ProjectID                        uuid.UUID
+	ExternalMcpAttachmentID          uuid.UUID
+	ClientIDEncrypted                []byte
+	ClientSecretEncrypted            []byte
+	ClientIDExpiresAt                pgtype.Timestamptz
+	RegistrationAccessTokenEncrypted []byte
+	RegistrationClientUri            pgtype.Text
+}
+
+// External MCP OAuth Clients Queries (for dynamic client registration)
+func (q *Queries) UpsertExternalMCPOAuthClient(ctx context.Context, arg UpsertExternalMCPOAuthClientParams) (ExternalMcpOauthClient, error) {
+	row := q.db.QueryRow(ctx, upsertExternalMCPOAuthClient,
+		arg.ProjectID,
+		arg.ExternalMcpAttachmentID,
+		arg.ClientIDEncrypted,
+		arg.ClientSecretEncrypted,
+		arg.ClientIDExpiresAt,
+		arg.RegistrationAccessTokenEncrypted,
+		arg.RegistrationClientUri,
+	)
+	var i ExternalMcpOauthClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.ExternalMcpAttachmentID,
+		&i.ClientIDEncrypted,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDExpiresAt,
+		&i.RegistrationAccessTokenEncrypted,
+		&i.RegistrationClientUri,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const upsertOAuthProxyProvider = `-- name: UpsertOAuthProxyProvider :one

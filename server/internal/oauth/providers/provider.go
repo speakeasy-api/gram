@@ -11,8 +11,11 @@ import (
 
 // TokenExchangeResult contains the result of exchanging an authorization code
 type TokenExchangeResult struct {
-	AccessToken string
-	ExpiresAt   *time.Time
+	AccessToken  string
+	RefreshToken string
+	TokenType    string
+	Scope        string
+	ExpiresAt    *time.Time
 }
 
 // Provider defines the interface for OAuth provider implementations

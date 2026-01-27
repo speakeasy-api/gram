@@ -18,6 +18,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -36,6 +37,7 @@ import (
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -95,6 +97,8 @@ type Service struct {
 	jwtSecret                 string
 	gramProvider              *providers.GramProvider
 	customProvider            *providers.CustomProvider
+	externalProvider          *providers.ExternalOAuthProvider
+	mcpOAuthProvider          *providers.MCPOAuthProvider
 	successPageTmpl           *template.Template
 	failurePageTmpl           *template.Template
 	sessionOAuthResultTmpl    *template.Template
@@ -129,6 +133,8 @@ func NewService(
 	// Initialize OAuth providers
 	gramProvider := providers.NewGramProvider(logger, sessions)
 	customProvider := providers.NewCustomProvider(logger, env)
+	externalProvider := providers.NewExternalOAuthProvider(logger, enc)
+	mcpOAuthProvider := providers.NewMCPOAuthProvider(logger, enc)
 
 	// Parse templates once during initialization
 	successPageTmpl := template.Must(template.New("oauth_success").Parse(oauthSuccessPageTmplData))
@@ -168,8 +174,10 @@ func NewService(
 		toolsetCache:        toolsetCache,
 
 		// OAuth providers
-		gramProvider:   gramProvider,
-		customProvider: customProvider,
+		gramProvider:     gramProvider,
+		customProvider:   customProvider,
+		externalProvider: externalProvider,
+		mcpOAuthProvider: mcpOAuthProvider,
 
 		// HTML templates
 		successPageTmpl:        successPageTmpl,
@@ -986,8 +994,76 @@ func (s *Service) buildSessionAuthURL(
 		return authURL, nil
 	}
 
-	// For external OAuth servers and external MCP OAuth, build a standard authorization URL
-	// Client ID may need to be obtained via dynamic client registration or environment config
+	// For external OAuth servers, get client_id from encrypted secrets
+	if toolset.ExternalOauthServerID.Valid {
+		clientID, scopes, err := s.getExternalOAuthServerClientID(ctx, toolset)
+		if err != nil {
+			return nil, err
+		}
+
+		authURL, err := url.Parse(authorizationEndpoint)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to parse authorization endpoint").Log(ctx, s.logger)
+		}
+
+		urlParams := url.Values{}
+		urlParams.Set("client_id", clientID)
+		urlParams.Set("redirect_uri", callbackURL)
+		urlParams.Set("response_type", "code")
+		urlParams.Set("state", signedState)
+
+		if len(scopes) > 0 {
+			urlParams.Set("scope", strings.Join(scopes, " "))
+		}
+
+		authURL.RawQuery = urlParams.Encode()
+		return authURL, nil
+	}
+
+	// For external MCP OAuth, perform dynamic client registration if needed
+	// Load the full toolset to get external MCP OAuth configuration
+	fullToolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset").Log(ctx, s.logger)
+	}
+
+	oauthConfig := externalmcp.ResolveOAuthConfig(fullToolset)
+
+	if oauthConfig != nil && oauthConfig.OAuthVersion == externalmcp.OAuthVersion21 {
+		// This is external MCP OAuth - perform dynamic registration if needed
+		attachmentID, err := uuid.Parse(oauthConfig.AttachmentID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "invalid attachment ID").Log(ctx, s.logger)
+		}
+
+		clientID, _, err := s.getOrRegisterMCPOAuthClient(ctx, toolset.ProjectID, attachmentID, oauthConfig, callbackURL)
+		if err != nil {
+			return nil, err
+		}
+
+		authURL, err := url.Parse(authorizationEndpoint)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to parse authorization endpoint").Log(ctx, s.logger)
+		}
+
+		urlParams := url.Values{}
+		urlParams.Set("client_id", clientID)
+		urlParams.Set("redirect_uri", callbackURL)
+		urlParams.Set("response_type", "code")
+		urlParams.Set("state", signedState)
+
+		if len(oauthConfig.ScopesSupported) > 0 {
+			urlParams.Set("scope", strings.Join(oauthConfig.ScopesSupported, " "))
+		}
+
+		authURL.RawQuery = urlParams.Encode()
+		return authURL, nil
+	}
+
+	// Fallback: build authorization URL without client_id (some OAuth providers may still work)
+	s.logger.WarnContext(ctx, "building authorization URL without client_id - OAuth flow may fail",
+		attr.SlogToolsetID(toolset.ID.String()))
+
 	authURL, err := url.Parse(authorizationEndpoint)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse authorization endpoint").Log(ctx, s.logger)
@@ -998,13 +1074,46 @@ func (s *Service) buildSessionAuthURL(
 	urlParams.Set("response_type", "code")
 	urlParams.Set("state", signedState)
 
-	// Note: For external OAuth, client_id would typically come from:
-	// 1. Environment variables configured for the toolset
-	// 2. Dynamic client registration
-	// For now, we proceed without client_id and rely on the OAuth server to handle it
-
 	authURL.RawQuery = urlParams.Encode()
 	return authURL, nil
+}
+
+// getExternalOAuthServerClientID retrieves the client_id from external OAuth server secrets.
+func (s *Service) getExternalOAuthServerClientID(ctx context.Context, toolset *toolsets_repo.Toolset) (clientID string, scopes []string, err error) {
+	server, err := s.oauthRepo.GetExternalOAuthServerWithSecrets(ctx, repo.GetExternalOAuthServerWithSecretsParams{
+		ProjectID: toolset.ProjectID,
+		ID:        toolset.ExternalOauthServerID.UUID,
+	})
+	if err != nil {
+		return "", nil, oops.E(oops.CodeUnexpected, err, "failed to get external OAuth server").Log(ctx, s.logger)
+	}
+
+	if len(server.Secrets) == 0 {
+		return "", nil, oops.E(oops.CodeBadRequest, nil, "external OAuth server has no client credentials configured").Log(ctx, s.logger)
+	}
+
+	secrets, err := s.externalProvider.DecryptSecrets(server.Secrets)
+	if err != nil {
+		return "", nil, oops.E(oops.CodeUnexpected, err, "failed to decrypt external OAuth secrets").Log(ctx, s.logger)
+	}
+
+	if secrets.ClientID == "" {
+		return "", nil, oops.E(oops.CodeBadRequest, nil, "external OAuth server has no client_id configured").Log(ctx, s.logger)
+	}
+
+	// Parse scopes from metadata
+	var metadata map[string]interface{}
+	if err := json.Unmarshal(server.Metadata, &metadata); err == nil {
+		if scopesRaw, ok := metadata["scopes_supported"].([]interface{}); ok {
+			for _, s := range scopesRaw {
+				if str, ok := s.(string); ok {
+					scopes = append(scopes, str)
+				}
+			}
+		}
+	}
+
+	return secrets.ClientID, scopes, nil
 }
 
 // handleSessionCallback handles the OAuth callback for session-scoped credentials.
@@ -1117,10 +1226,215 @@ func (s *Service) exchangeSessionToken(ctx context.Context, toolset *toolsets_re
 		return s.exchangeOAuthProxyToken(ctx, toolset, projectID, code)
 	}
 
-	// For external OAuth (both external OAuth servers and external MCP OAuth),
-	// we need to get the token endpoint and exchange the code directly.
-	// This requires client credentials which aren't yet implemented.
-	return nil, fmt.Errorf("external OAuth token exchange not yet implemented - client credentials required")
+	// External OAuth server (manually configured credentials)
+	if toolset.ExternalOauthServerID.Valid {
+		return s.exchangeExternalOAuthServerToken(ctx, toolset, projectID, code, callbackURL)
+	}
+
+	// External MCP OAuth (dynamic client registration)
+	// Load full toolset to check for external MCP OAuth config
+	fullToolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(projectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache)
+	if err != nil {
+		return nil, fmt.Errorf("load toolset for external MCP OAuth: %w", err)
+	}
+
+	oauthConfig := externalmcp.ResolveOAuthConfig(fullToolset)
+	if oauthConfig != nil {
+		return s.exchangeExternalMCPOAuthToken(ctx, toolset, projectID, oauthConfig, code, callbackURL)
+	}
+
+	return nil, fmt.Errorf("no OAuth configuration found for toolset")
+}
+
+// exchangeExternalOAuthServerToken exchanges the authorization code using external OAuth server credentials.
+func (s *Service) exchangeExternalOAuthServerToken(ctx context.Context, toolset *toolsets_repo.Toolset, projectID uuid.UUID, code, callbackURL string) (*tokenExchangeResult, error) {
+	// Load external OAuth server metadata with secrets
+	serverMeta, err := s.oauthRepo.GetExternalOAuthServerWithSecrets(ctx, repo.GetExternalOAuthServerWithSecretsParams{
+		ProjectID: projectID,
+		ID:        toolset.ExternalOauthServerID.UUID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("load external OAuth server metadata: %w", err)
+	}
+
+	// Check if secrets are configured
+	if len(serverMeta.Secrets) == 0 {
+		return nil, fmt.Errorf("external OAuth server credentials not configured - please configure client_id and client_secret")
+	}
+
+	// Decrypt secrets
+	secrets, err := s.externalProvider.DecryptSecrets(serverMeta.Secrets)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt external OAuth secrets: %w", err)
+	}
+
+	// Parse the metadata to get token endpoint
+	var metadata wellknown.OAuthServerMetadata
+	if err := json.Unmarshal(serverMeta.Metadata, &metadata); err != nil {
+		return nil, fmt.Errorf("parse external OAuth server metadata: %w", err)
+	}
+
+	if metadata.TokenEndpoint == "" {
+		return nil, fmt.Errorf("external OAuth server has no token endpoint configured")
+	}
+
+	// Exchange the code
+	result, err := s.externalProvider.ExchangeToken(ctx, providers.ExternalTokenExchangeParams{
+		Code:          code,
+		TokenEndpoint: metadata.TokenEndpoint,
+		ClientID:      secrets.ClientID,
+		ClientSecret:  secrets.ClientSecret,
+		RedirectURI:   callbackURL,
+		AuthMethods:   nil, // Will use default (client_secret_post)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("external OAuth token exchange failed: %w", err)
+	}
+
+	return &tokenExchangeResult{
+		AccessToken:  result.AccessToken,
+		RefreshToken: result.RefreshToken,
+		ExpiresAt:    result.ExpiresAt,
+	}, nil
+}
+
+// exchangeExternalMCPOAuthToken exchanges the authorization code using external MCP OAuth.
+// This uses dynamic client registration if no client credentials are stored.
+func (s *Service) exchangeExternalMCPOAuthToken(ctx context.Context, toolset *toolsets_repo.Toolset, projectID uuid.UUID, oauthConfig *externalmcp.ExternalMCPOAuthConfig, code, callbackURL string) (*tokenExchangeResult, error) {
+	if oauthConfig.TokenEndpoint == "" {
+		return nil, fmt.Errorf("external MCP OAuth has no token endpoint")
+	}
+
+	if oauthConfig.AttachmentID == "" {
+		return nil, fmt.Errorf("external MCP OAuth has no attachment ID")
+	}
+
+	attachmentID, err := uuid.Parse(oauthConfig.AttachmentID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid external MCP attachment ID: %w", err)
+	}
+
+	// Try to get existing client registration
+	clientID, clientSecret, err := s.getOrRegisterMCPOAuthClient(ctx, projectID, attachmentID, oauthConfig, callbackURL)
+	if err != nil {
+		return nil, fmt.Errorf("get or register MCP OAuth client: %w", err)
+	}
+
+	// Exchange the authorization code
+	result, err := s.externalProvider.ExchangeToken(ctx, providers.ExternalTokenExchangeParams{
+		Code:          code,
+		TokenEndpoint: oauthConfig.TokenEndpoint,
+		ClientID:      clientID,
+		ClientSecret:  clientSecret,
+		RedirectURI:   callbackURL,
+		AuthMethods:   nil, // Use default (client_secret_post)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("external MCP OAuth token exchange failed: %w", err)
+	}
+
+	return &tokenExchangeResult{
+		AccessToken:  result.AccessToken,
+		RefreshToken: result.RefreshToken,
+		ExpiresAt:    result.ExpiresAt,
+	}, nil
+}
+
+// getOrRegisterMCPOAuthClient retrieves existing OAuth client credentials or performs dynamic registration.
+func (s *Service) getOrRegisterMCPOAuthClient(ctx context.Context, projectID, attachmentID uuid.UUID, oauthConfig *externalmcp.ExternalMCPOAuthConfig, redirectURI string) (clientID, clientSecret string, err error) {
+	// Try to get existing client registration
+	existingClient, err := s.oauthRepo.GetExternalMCPOAuthClient(ctx, attachmentID)
+	if err == nil {
+		// Check if client ID has expired
+		if existingClient.ClientIDExpiresAt.Valid && existingClient.ClientIDExpiresAt.Time.Before(time.Now()) {
+			s.logger.InfoContext(ctx, "External MCP OAuth client expired, re-registering",
+				attr.SlogToolsetID(attachmentID.String()))
+		} else {
+			// Decrypt and return existing credentials
+			clientID, err = s.enc.Decrypt(string(existingClient.ClientIDEncrypted))
+			if err != nil {
+				return "", "", fmt.Errorf("decrypt client ID: %w", err)
+			}
+
+			if len(existingClient.ClientSecretEncrypted) > 0 {
+				clientSecret, err = s.enc.Decrypt(string(existingClient.ClientSecretEncrypted))
+				if err != nil {
+					return "", "", fmt.Errorf("decrypt client secret: %w", err)
+				}
+			}
+
+			s.logger.InfoContext(ctx, "Using existing external MCP OAuth client",
+				attr.SlogToolsetID(attachmentID.String()))
+			return clientID, clientSecret, nil
+		}
+	}
+
+	// No valid existing client - perform dynamic registration
+	if oauthConfig.RegistrationEndpoint == "" {
+		return "", "", fmt.Errorf("external MCP OAuth requires dynamic client registration but no registration endpoint is available")
+	}
+
+	s.logger.InfoContext(ctx, "Performing dynamic client registration for external MCP OAuth",
+		attr.SlogToolsetID(attachmentID.String()))
+
+	reg, err := s.mcpOAuthProvider.RegisterClient(ctx, providers.MCPDynamicRegistrationParams{
+		RegistrationEndpoint: oauthConfig.RegistrationEndpoint,
+		ClientName:           "Gram",
+		RedirectURIs:         []string{redirectURI},
+		TokenEndpointAuth:    "client_secret_post",
+		GrantTypes:           []string{"authorization_code", "refresh_token"},
+		ResponseTypes:        []string{"code"},
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("dynamic client registration failed: %w", err)
+	}
+
+	// Encrypt and store the registration
+	clientIDEncrypted, err := s.enc.Encrypt([]byte(reg.ClientID))
+	if err != nil {
+		return "", "", fmt.Errorf("encrypt client ID: %w", err)
+	}
+
+	var clientSecretEncrypted []byte
+	if reg.ClientSecret != "" {
+		encrypted, err := s.enc.Encrypt([]byte(reg.ClientSecret))
+		if err != nil {
+			return "", "", fmt.Errorf("encrypt client secret: %w", err)
+		}
+		clientSecretEncrypted = []byte(encrypted)
+	}
+
+	var registrationAccessTokenEncrypted []byte
+	if reg.RegistrationAccessToken != "" {
+		encrypted, err := s.enc.Encrypt([]byte(reg.RegistrationAccessToken))
+		if err != nil {
+			return "", "", fmt.Errorf("encrypt registration access token: %w", err)
+		}
+		registrationAccessTokenEncrypted = []byte(encrypted)
+	}
+
+	var expiresAt pgtype.Timestamptz
+	if reg.ClientIDExpiresAt != nil {
+		expiresAt = pgtype.Timestamptz{Time: *reg.ClientIDExpiresAt, Valid: true, InfinityModifier: 0}
+	}
+
+	_, err = s.oauthRepo.UpsertExternalMCPOAuthClient(ctx, repo.UpsertExternalMCPOAuthClientParams{
+		ProjectID:                        projectID,
+		ExternalMcpAttachmentID:          attachmentID,
+		ClientIDEncrypted:                []byte(clientIDEncrypted),
+		ClientSecretEncrypted:            clientSecretEncrypted,
+		ClientIDExpiresAt:                expiresAt,
+		RegistrationAccessTokenEncrypted: registrationAccessTokenEncrypted,
+		RegistrationClientUri:            conv.ToPGText(reg.RegistrationClientURI),
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("store client registration: %w", err)
+	}
+
+	s.logger.InfoContext(ctx, "Successfully registered and stored external MCP OAuth client",
+		attr.SlogToolsetID(attachmentID.String()))
+
+	return reg.ClientID, reg.ClientSecret, nil
 }
 
 // exchangeOAuthProxyToken exchanges the authorization code using OAuth proxy providers.

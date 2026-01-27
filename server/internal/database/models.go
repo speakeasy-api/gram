@@ -99,6 +99,32 @@ type ChatMessage struct {
 	CreatedAt        pgtype.Timestamptz
 }
 
+type ChatSession struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	ExternalUserID pgtype.Text
+	EmbedOrigin    pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+type ChatSessionCredential struct {
+	ID                    uuid.UUID
+	ChatSessionID         uuid.UUID
+	ProjectID             uuid.UUID
+	ToolsetID             uuid.UUID
+	AccessTokenEncrypted  []byte
+	RefreshTokenEncrypted []byte
+	TokenType             string
+	Scope                 pgtype.Text
+	ExpiresAt             pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}
+
 type CustomDomain struct {
 	ID             uuid.UUID
 	OrganizationID string
@@ -211,6 +237,19 @@ type ExternalMcpAttachment struct {
 	Deleted                 bool
 }
 
+type ExternalMcpOauthClient struct {
+	ID                               uuid.UUID
+	ProjectID                        uuid.UUID
+	ExternalMcpAttachmentID          uuid.UUID
+	ClientIDEncrypted                []byte
+	ClientSecretEncrypted            []byte
+	ClientIDExpiresAt                pgtype.Timestamptz
+	RegistrationAccessTokenEncrypted []byte
+	RegistrationClientUri            pgtype.Text
+	CreatedAt                        pgtype.Timestamptz
+	UpdatedAt                        pgtype.Timestamptz
+}
+
 type ExternalMcpToolDefinition struct {
 	ID                         uuid.UUID
 	ExternalMcpAttachmentID    uuid.UUID
@@ -238,6 +277,7 @@ type ExternalOauthServerMetadatum struct {
 	ProjectID uuid.UUID
 	Slug      string
 	Metadata  []byte
+	Secrets   []byte
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 	DeletedAt pgtype.Timestamptz

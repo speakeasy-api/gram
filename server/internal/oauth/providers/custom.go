@@ -185,7 +185,10 @@ func (p *CustomProvider) ExchangeToken(
 	}
 
 	return &TokenExchangeResult{
-		AccessToken: accessToken,
-		ExpiresAt:   expiresAt,
+		AccessToken:  accessToken,
+		RefreshToken: "",
+		TokenType:    "Bearer",
+		Scope:        "",
+		ExpiresAt:    expiresAt,
 	}, nil
 }

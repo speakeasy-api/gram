@@ -9,11 +9,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ExternalMcpOauthClient struct {
+	ID                               uuid.UUID
+	ProjectID                        uuid.UUID
+	ExternalMcpAttachmentID          uuid.UUID
+	ClientIDEncrypted                []byte
+	ClientSecretEncrypted            []byte
+	ClientIDExpiresAt                pgtype.Timestamptz
+	RegistrationAccessTokenEncrypted []byte
+	RegistrationClientUri            pgtype.Text
+	CreatedAt                        pgtype.Timestamptz
+	UpdatedAt                        pgtype.Timestamptz
+}
+
 type ExternalOauthServerMetadatum struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID
 	Slug      string
 	Metadata  []byte
+	Secrets   []byte
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 	DeletedAt pgtype.Timestamptz

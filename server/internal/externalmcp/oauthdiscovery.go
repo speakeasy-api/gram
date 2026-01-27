@@ -44,6 +44,8 @@ type ExternalMCPOAuthConfig struct {
 	Slug string
 	// Name is the reverse-DNS server name (e.g., "ai.exa/exa")
 	Name string
+	// AttachmentID is the external_mcp_attachment_id for looking up/storing OAuth client registrations
+	AttachmentID string
 
 	// OAuth metadata from the external server
 	OAuthVersion          string   // "2.1", "2.0", or "none"
@@ -72,6 +74,7 @@ func ResolveOAuthConfig(toolset *types.Toolset) *ExternalMCPOAuthConfig {
 			RegistryID:            def.RegistryID,
 			Slug:                  def.Slug,
 			Name:                  def.Name,
+			AttachmentID:          def.DeploymentExternalMcpID,
 			OAuthVersion:          def.OauthVersion,
 			AuthorizationEndpoint: conv.PtrValOr(def.OauthAuthorizationEndpoint, ""),
 			TokenEndpoint:         conv.PtrValOr(def.OauthTokenEndpoint, ""),

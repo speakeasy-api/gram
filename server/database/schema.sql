@@ -532,6 +532,10 @@ CREATE TABLE IF NOT EXISTS external_oauth_server_metadata (
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
   metadata JSONB NOT NULL,
 
+  -- Encrypted client credentials for token exchange
+  -- JSON format: {"client_id": "...", "client_secret": "..."}
+  secrets BYTEA,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -1168,6 +1172,34 @@ CREATE TABLE IF NOT EXISTS external_mcp_tool_definitions (
 CREATE INDEX IF NOT EXISTS external_mcp_tool_definitions_external_mcp_attachment_id_idx
 ON external_mcp_tool_definitions (external_mcp_attachment_id)
 WHERE deleted IS FALSE;
+
+-- Dynamically registered OAuth clients for external MCP servers (RFC 7591)
+-- When an external MCP server supports dynamic client registration, we store the
+-- registered credentials here to enable session-scoped OAuth token exchange.
+CREATE TABLE IF NOT EXISTS external_mcp_oauth_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  external_mcp_attachment_id uuid NOT NULL,
+
+  -- Dynamically registered client credentials (encrypted)
+  client_id_encrypted BYTEA NOT NULL,
+  client_secret_encrypted BYTEA,
+  client_id_expires_at timestamptz,
+
+  -- Registration metadata (for client management endpoints)
+  registration_access_token_encrypted BYTEA,
+  registration_client_uri TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT external_mcp_oauth_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT external_mcp_oauth_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT external_mcp_oauth_clients_attachment_fkey FOREIGN KEY (external_mcp_attachment_id) REFERENCES external_mcp_attachments (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS external_mcp_oauth_clients_attachment_key
+ON external_mcp_oauth_clients (external_mcp_attachment_id);
 
 -- Allowed origins, primarily used for Elements
 CREATE TABLE IF NOT EXISTS project_allowed_origins (

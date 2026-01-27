@@ -104,3 +104,47 @@ WHERE project_id = @project_id AND id = @id;
 SELECT * FROM oauth_proxy_providers
 WHERE oauth_proxy_server_id = @oauth_proxy_server_id AND project_id = @project_id AND deleted IS FALSE
 ORDER BY created_at ASC;
+
+-- External OAuth Server Secrets Queries
+
+-- name: GetExternalOAuthServerWithSecrets :one
+SELECT * FROM external_oauth_server_metadata
+WHERE project_id = @project_id AND id = @id AND deleted IS FALSE;
+
+-- name: UpdateExternalOAuthServerSecrets :exec
+UPDATE external_oauth_server_metadata SET
+    secrets = @secrets,
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id AND id = @id AND deleted IS FALSE;
+
+-- External MCP OAuth Clients Queries (for dynamic client registration)
+
+-- name: UpsertExternalMCPOAuthClient :one
+INSERT INTO external_mcp_oauth_clients (
+    project_id,
+    external_mcp_attachment_id,
+    client_id_encrypted,
+    client_secret_encrypted,
+    client_id_expires_at,
+    registration_access_token_encrypted,
+    registration_client_uri
+) VALUES (
+    @project_id,
+    @external_mcp_attachment_id,
+    @client_id_encrypted,
+    @client_secret_encrypted,
+    @client_id_expires_at,
+    @registration_access_token_encrypted,
+    @registration_client_uri
+) ON CONFLICT (external_mcp_attachment_id) DO UPDATE SET
+    client_id_encrypted = EXCLUDED.client_id_encrypted,
+    client_secret_encrypted = EXCLUDED.client_secret_encrypted,
+    client_id_expires_at = EXCLUDED.client_id_expires_at,
+    registration_access_token_encrypted = EXCLUDED.registration_access_token_encrypted,
+    registration_client_uri = EXCLUDED.registration_client_uri,
+    updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: GetExternalMCPOAuthClient :one
+SELECT * FROM external_mcp_oauth_clients
+WHERE external_mcp_attachment_id = @external_mcp_attachment_id;
