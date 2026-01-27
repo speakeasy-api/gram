@@ -19,7 +19,7 @@ import {
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Plus } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AddVariableSheet } from "./AddVariableSheet";
 import { EnvironmentSwitcher } from "./EnvironmentSwitcher";
@@ -32,13 +32,17 @@ import {
 } from "./environmentVariableUtils";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
 
+// Empty array constant to avoid creating new references
+const EMPTY_ENVIRONMENTS: never[] = [];
+
 export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const session = useSession();
 
   const { data: environmentsData } = useListEnvironments();
-  const environments = environmentsData?.environments ?? [];
+  // Use stable reference for empty array to prevent infinite loops
+  const environments = environmentsData?.environments ?? EMPTY_ENVIRONMENTS;
   const { data: mcpMetadataData } = useGetMcpMetadata(
     {
       toolsetSlug: toolset.slug,
@@ -50,11 +54,12 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     },
   );
   const mcpMetadata = mcpMetadataData?.metadata;
-  const mcpAttachedEnvironmentSlug =
-    environments.find((e) => e.id === mcpMetadata?.defaultEnvironmentId)
-      ?.slug || null;
-
-  console.log("mcpMetadata", mcpMetadata);
+  const mcpAttachedEnvironmentSlug = useMemo(
+    () =>
+      environments.find((e) => e.id === mcpMetadata?.defaultEnvironmentId)
+        ?.slug || null,
+    [environments, mcpMetadata?.defaultEnvironmentId],
+  );
 
   // Load environment variables using custom hook
   const loadedEnvVars = useEnvironmentVariables(
@@ -69,9 +74,26 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   const [selectedEnvironmentView, setSelectedEnvironmentView] =
     useState<string>(toolset.defaultEnvironmentSlug || "default");
 
-  // Sync loaded variables with local state
+  // Track if we've initialized from loaded vars to prevent re-syncing on every change
+  const hasInitialized = useRef(false);
+  const prevLoadedVarsRef = useRef<EnvironmentVariable[]>([]);
+
+  // Sync loaded variables with local state only when they actually change
   useEffect(() => {
-    setEnvVars(loadedEnvVars);
+    // Skip if no vars loaded yet
+    if (loadedEnvVars.length === 0 && !hasInitialized.current) {
+      return;
+    }
+
+    // Check if the loaded vars actually changed (compare by key and state)
+    const prevKeys = prevLoadedVarsRef.current.map((v) => `${v.key}:${v.state}`).join(",");
+    const newKeys = loadedEnvVars.map((v) => `${v.key}:${v.state}`).join(",");
+
+    if (prevKeys !== newKeys || !hasInitialized.current) {
+      setEnvVars(loadedEnvVars);
+      prevLoadedVarsRef.current = loadedEnvVars;
+      hasInitialized.current = true;
+    }
   }, [loadedEnvVars]);
 
   // Clear editing state when environment view changes
@@ -79,8 +101,14 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     setEditingState(new Map());
   }, [selectedEnvironmentView]);
 
+  // Track previous mcpAttachedEnvironmentSlug to only update when it actually changes
+  const prevAttachedSlugRef = useRef<string | null>(null);
   useEffect(() => {
-    if (mcpAttachedEnvironmentSlug) {
+    if (
+      mcpAttachedEnvironmentSlug &&
+      mcpAttachedEnvironmentSlug !== prevAttachedSlugRef.current
+    ) {
+      prevAttachedSlugRef.current = mcpAttachedEnvironmentSlug;
       setSelectedEnvironmentView(mcpAttachedEnvironmentSlug);
     }
   }, [mcpAttachedEnvironmentSlug]);
