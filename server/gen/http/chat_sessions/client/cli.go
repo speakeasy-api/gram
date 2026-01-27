@@ -23,7 +23,7 @@ func BuildCreatePayload(chatSessionsCreateBody string, chatSessionsCreateSession
 	{
 		err = json.Unmarshal([]byte(chatSessionsCreateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"embed_origin\": \"Omnis dolores.\",\n      \"expires_after\": 1460,\n      \"user_identifier\": \"Cum esse officia.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"embed_origin\": \"Minus ea cum esse officia.\",\n      \"expires_after\": 3539,\n      \"user_identifier\": \"Est quia.\"\n   }'")
 		}
 		if body.ExpiresAfter < 1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expires_after", body.ExpiresAfter, 1, true))

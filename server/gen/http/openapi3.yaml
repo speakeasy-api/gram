@@ -12947,10 +12947,6 @@ components:
                     type: string
                     description: Chat/conversation ID (required when scope=chat)
                     format: uuid
-                deployment_id:
-                    type: string
-                    description: Optional deployment filter
-                    format: uuid
                 from:
                     type: string
                     description: Start time in ISO 8601 format
@@ -13610,6 +13606,11 @@ components:
                     type: integer
                     description: Requests that resulted in tool calls
                     format: int64
+                models:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ModelUsage'
+                    description: List of models used with call counts
                 tool_call_failure:
                     type: integer
                     description: Failed tool calls (4xx/5xx status)
@@ -13618,6 +13619,11 @@ components:
                     type: integer
                     description: Successful tool calls (2xx status)
                     format: int64
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsage'
+                    description: List of tools used with success/failure counts
                 total_chat_requests:
                     type: integer
                     description: Total number of chat requests
@@ -13659,6 +13665,22 @@ components:
                 - total_chats
                 - distinct_models
                 - distinct_providers
+                - models
+                - tools
+        ModelUsage:
+            type: object
+            properties:
+                count:
+                    type: integer
+                    description: Number of times used
+                    format: int64
+                name:
+                    type: string
+                    description: Model name
+            description: Model usage statistics
+            required:
+                - name
+                - count
         NotModified:
             type: object
             properties:
@@ -14956,6 +14978,30 @@ components:
                 - id
                 - name
                 - tool_urn
+        ToolUsage:
+            type: object
+            properties:
+                count:
+                    type: integer
+                    description: Total call count
+                    format: int64
+                failure_count:
+                    type: integer
+                    description: Failed calls (4xx/5xx status)
+                    format: int64
+                success_count:
+                    type: integer
+                    description: Successful calls (2xx status)
+                    format: int64
+                urn:
+                    type: string
+                    description: Tool URN
+            description: Tool usage statistics
+            required:
+                - urn
+                - count
+                - success_count
+                - failure_count
         ToolVariation:
             type: object
             properties:

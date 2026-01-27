@@ -63,8 +63,6 @@ type GetMetricsSummaryRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Chat/conversation ID (required when scope=chat)
 	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
-	// Optional deployment filter
-	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 }
 
 // SearchLogsResponseBody is the type of the "telemetry" service "searchLogs"
@@ -921,6 +919,30 @@ type MetricsResponseBody struct {
 	DistinctModels int64 `form:"distinct_models" json:"distinct_models" xml:"distinct_models"`
 	// Number of distinct providers used (project scope only)
 	DistinctProviders int64 `form:"distinct_providers" json:"distinct_providers" xml:"distinct_providers"`
+	// List of models used with call counts
+	Models []*ModelUsageResponseBody `form:"models" json:"models" xml:"models"`
+	// List of tools used with success/failure counts
+	Tools []*ToolUsageResponseBody `form:"tools" json:"tools" xml:"tools"`
+}
+
+// ModelUsageResponseBody is used to define fields on response body types.
+type ModelUsageResponseBody struct {
+	// Model name
+	Name string `form:"name" json:"name" xml:"name"`
+	// Number of times used
+	Count int64 `form:"count" json:"count" xml:"count"`
+}
+
+// ToolUsageResponseBody is used to define fields on response body types.
+type ToolUsageResponseBody struct {
+	// Tool URN
+	Urn string `form:"urn" json:"urn" xml:"urn"`
+	// Total call count
+	Count int64 `form:"count" json:"count" xml:"count"`
+	// Successful calls (2xx status)
+	SuccessCount int64 `form:"success_count" json:"success_count" xml:"success_count"`
+	// Failed calls (4xx/5xx status)
+	FailureCount int64 `form:"failure_count" json:"failure_count" xml:"failure_count"`
 }
 
 // SearchLogsFilterRequestBody is used to define fields on request body types.
@@ -1681,11 +1703,10 @@ func NewCaptureEventPayload(body *CaptureEventRequestBody, apikeyToken *string, 
 // endpoint payload.
 func NewGetMetricsSummaryPayload(body *GetMetricsSummaryRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetMetricsSummaryPayload {
 	v := &telemetry.GetMetricsSummaryPayload{
-		Scope:        telemetry.MetricsScope(*body.Scope),
-		From:         *body.From,
-		To:           *body.To,
-		ChatID:       body.ChatID,
-		DeploymentID: body.DeploymentID,
+		Scope:  telemetry.MetricsScope(*body.Scope),
+		From:   *body.From,
+		To:     *body.To,
+		ChatID: body.ChatID,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -1790,9 +1811,6 @@ func ValidateGetMetricsSummaryRequestBody(body *GetMetricsSummaryRequestBody) (e
 	}
 	if body.ChatID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", *body.ChatID, goa.FormatUUID))
-	}
-	if body.DeploymentID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.deployment_id", *body.DeploymentID, goa.FormatUUID))
 	}
 	return
 }

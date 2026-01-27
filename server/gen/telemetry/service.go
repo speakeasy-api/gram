@@ -87,8 +87,6 @@ type GetMetricsSummaryPayload struct {
 	To string
 	// Chat/conversation ID (required when scope=chat)
 	ChatID *string
-	// Optional deployment filter
-	DeploymentID *string
 }
 
 // GetMetricsSummaryResult is the result type of the telemetry service
@@ -134,10 +132,22 @@ type Metrics struct {
 	DistinctModels int64
 	// Number of distinct providers used (project scope only)
 	DistinctProviders int64
+	// List of models used with call counts
+	Models []*ModelUsage
+	// List of tools used with success/failure counts
+	Tools []*ToolUsage
 }
 
 // Aggregation scope for metrics
 type MetricsScope string
+
+// Model usage statistics
+type ModelUsage struct {
+	// Model name
+	Name string
+	// Number of times used
+	Count int64
+}
 
 // Filter criteria for searching logs
 type SearchLogsFilter struct {
@@ -279,6 +289,18 @@ type ToolCallSummary struct {
 	HTTPStatusCode *int32
 	// Gram URN associated with this tool call
 	GramUrn string
+}
+
+// Tool usage statistics
+type ToolUsage struct {
+	// Tool URN
+	Urn string
+	// Total call count
+	Count int64
+	// Successful calls (2xx status)
+	SuccessCount int64
+	// Failed calls (4xx/5xx status)
+	FailureCount int64
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

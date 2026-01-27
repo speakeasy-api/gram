@@ -61,8 +61,6 @@ type GetMetricsSummaryRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 	// Chat/conversation ID (required when scope=chat)
 	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
-	// Optional deployment filter
-	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 }
 
 // SearchLogsResponseBody is the type of the "telemetry" service "searchLogs"
@@ -962,6 +960,30 @@ type MetricsResponseBody struct {
 	DistinctModels *int64 `form:"distinct_models,omitempty" json:"distinct_models,omitempty" xml:"distinct_models,omitempty"`
 	// Number of distinct providers used (project scope only)
 	DistinctProviders *int64 `form:"distinct_providers,omitempty" json:"distinct_providers,omitempty" xml:"distinct_providers,omitempty"`
+	// List of models used with call counts
+	Models []*ModelUsageResponseBody `form:"models,omitempty" json:"models,omitempty" xml:"models,omitempty"`
+	// List of tools used with success/failure counts
+	Tools []*ToolUsageResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+}
+
+// ModelUsageResponseBody is used to define fields on response body types.
+type ModelUsageResponseBody struct {
+	// Model name
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Number of times used
+	Count *int64 `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
+}
+
+// ToolUsageResponseBody is used to define fields on response body types.
+type ToolUsageResponseBody struct {
+	// Tool URN
+	Urn *string `form:"urn,omitempty" json:"urn,omitempty" xml:"urn,omitempty"`
+	// Total call count
+	Count *int64 `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
+	// Successful calls (2xx status)
+	SuccessCount *int64 `form:"success_count,omitempty" json:"success_count,omitempty" xml:"success_count,omitempty"`
+	// Failed calls (4xx/5xx status)
+	FailureCount *int64 `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
 }
 
 // NewSearchLogsRequestBody builds the HTTP request body from the payload of
@@ -1038,11 +1060,10 @@ func NewCaptureEventRequestBody(p *telemetry.CaptureEventPayload) *CaptureEventR
 // payload of the "getMetricsSummary" endpoint of the "telemetry" service.
 func NewGetMetricsSummaryRequestBody(p *telemetry.GetMetricsSummaryPayload) *GetMetricsSummaryRequestBody {
 	body := &GetMetricsSummaryRequestBody{
-		Scope:        string(p.Scope),
-		From:         p.From,
-		To:           p.To,
-		ChatID:       p.ChatID,
-		DeploymentID: p.DeploymentID,
+		Scope:  string(p.Scope),
+		From:   p.From,
+		To:     p.To,
+		ChatID: p.ChatID,
 	}
 	return body
 }
@@ -2900,6 +2921,56 @@ func ValidateMetricsResponseBody(body *MetricsResponseBody) (err error) {
 	}
 	if body.DistinctProviders == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("distinct_providers", "body"))
+	}
+	if body.Models == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("models", "body"))
+	}
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	}
+	for _, e := range body.Models {
+		if e != nil {
+			if err2 := ValidateModelUsageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Tools {
+		if e != nil {
+			if err2 := ValidateToolUsageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateModelUsageResponseBody runs the validations defined on
+// ModelUsageResponseBody
+func ValidateModelUsageResponseBody(body *ModelUsageResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Count == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
+	}
+	return
+}
+
+// ValidateToolUsageResponseBody runs the validations defined on
+// ToolUsageResponseBody
+func ValidateToolUsageResponseBody(body *ToolUsageResponseBody) (err error) {
+	if body.Urn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("urn", "body"))
+	}
+	if body.Count == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
+	}
+	if body.SuccessCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("success_count", "body"))
+	}
+	if body.FailureCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failure_count", "body"))
 	}
 	return
 }

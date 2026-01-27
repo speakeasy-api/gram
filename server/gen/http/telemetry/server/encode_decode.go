@@ -1091,6 +1091,54 @@ func marshalTelemetryMetricsToMetricsResponseBody(v *telemetry.Metrics) *Metrics
 		DistinctModels:        v.DistinctModels,
 		DistinctProviders:     v.DistinctProviders,
 	}
+	if v.Models != nil {
+		res.Models = make([]*ModelUsageResponseBody, len(v.Models))
+		for i, val := range v.Models {
+			if val == nil {
+				res.Models[i] = nil
+				continue
+			}
+			res.Models[i] = marshalTelemetryModelUsageToModelUsageResponseBody(val)
+		}
+	} else {
+		res.Models = []*ModelUsageResponseBody{}
+	}
+	if v.Tools != nil {
+		res.Tools = make([]*ToolUsageResponseBody, len(v.Tools))
+		for i, val := range v.Tools {
+			if val == nil {
+				res.Tools[i] = nil
+				continue
+			}
+			res.Tools[i] = marshalTelemetryToolUsageToToolUsageResponseBody(val)
+		}
+	} else {
+		res.Tools = []*ToolUsageResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTelemetryModelUsageToModelUsageResponseBody builds a value of type
+// *ModelUsageResponseBody from a value of type *telemetry.ModelUsage.
+func marshalTelemetryModelUsageToModelUsageResponseBody(v *telemetry.ModelUsage) *ModelUsageResponseBody {
+	res := &ModelUsageResponseBody{
+		Name:  v.Name,
+		Count: v.Count,
+	}
+
+	return res
+}
+
+// marshalTelemetryToolUsageToToolUsageResponseBody builds a value of type
+// *ToolUsageResponseBody from a value of type *telemetry.ToolUsage.
+func marshalTelemetryToolUsageToToolUsageResponseBody(v *telemetry.ToolUsage) *ToolUsageResponseBody {
+	res := &ToolUsageResponseBody{
+		Urn:          v.Urn,
+		Count:        v.Count,
+		SuccessCount: v.SuccessCount,
+		FailureCount: v.FailureCount,
+	}
 
 	return res
 }
