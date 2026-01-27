@@ -43,6 +43,7 @@ export * from "./getdomain.js";
 export * from "./getinstance.js";
 export * from "./getlatestdeployment.js";
 export * from "./getmcpmetadata.js";
+export * from "./getmetricssummary.js";
 export * from "./getperiodusage.js";
 export * from "./getproject.js";
 export * from "./getslackconnection.js";

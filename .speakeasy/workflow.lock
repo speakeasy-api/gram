@@ -1,4 +1,4 @@
-speakeasyVersion: 1.691.0
+speakeasyVersion: 1.700.1
 sources:
     Gram-Internal:
         sourceNamespace: gram-api-description
@@ -36,12 +36,6 @@ workflow:
             output: .speakeasy/openapi-public.yaml
             registry:
                 location: registry.speakeasyapi.dev/gram/gram/gram-public-api-description
-        OpenRouter:
-            inputs:
-                - location: https://raw.githubusercontent.com/OpenRouterTeam/typescript-sdk/refs/heads/main/.speakeasy/out.openapi.yaml
-            output: .speakeasy/openrouter.yaml
-            registry:
-                location: registry.speakeasyapi.dev/gram/gram/openrouter
     targets:
         gram-internal:
             target: typescript
@@ -53,7 +47,3 @@ workflow:
                 labelOverride:
                     fixedValue: Typescript (SDK)
                 blocking: false
-        openrouter:
-            target: go
-            source: OpenRouter
-            output: openrouter
