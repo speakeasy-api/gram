@@ -286,7 +286,7 @@ const components: Record<string, FC<Record<string, unknown>>> = {
 
           // Notify the LLM of the action result so it can respond
           if (runtime) {
-            runtime.append({
+            await runtime.append({
               role: 'user',
               content: [
                 {
@@ -301,7 +301,7 @@ const components: Record<string, FC<Record<string, unknown>>> = {
 
           // Also notify on failure so LLM can help
           if (runtime) {
-            runtime.append({
+            await runtime.append({
               role: 'user',
               content: [
                 {
