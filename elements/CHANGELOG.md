@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.22.5
+
+### Patch Changes
+
+- 258b503: Updated the message conversion logic to properly rehydrate assistant messages that include tool call results.
+
 ## 1.22.4
 
 ### Patch Changes

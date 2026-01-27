@@ -155,7 +155,9 @@ var Chat = Type("Chat", func() {
 var ChatMessage = Type("ChatMessage", func() {
 	Attribute("id", String, "The ID of the message")
 	Attribute("role", String, "The role of the message")
-	Attribute("content", String, "The content of the message")
+	Attribute("content", Bytes, "The content of the message", func() {
+		Meta("struct:field:type", "json.RawMessage", "encoding/json")
+	})
 	Attribute("model", String, "The model that generated the message")
 	Attribute("tool_call_id", String, "The tool call ID of the message")
 	Attribute("tool_calls", String, "The tool calls in the message as a JSON blob")

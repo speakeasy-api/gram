@@ -18664,7 +18664,23 @@ definitions:
                     $ref: '#/definitions/ChatMessage'
                 description: The list of messages in the chat
                 example:
-                    - content: Qui deserunt et.
+                    - content:
+                        - 81
+                        - 117
+                        - 105
+                        - 32
+                        - 100
+                        - 101
+                        - 115
+                        - 101
+                        - 114
+                        - 117
+                        - 110
+                        - 116
+                        - 32
+                        - 101
+                        - 116
+                        - 46
                       created_at: "2003-09-28T04:21:39Z"
                       external_user_id: Voluptatem dolor aliquid accusamus quia.
                       finish_reason: Et temporibus in officia sequi.
@@ -18674,7 +18690,23 @@ definitions:
                       tool_call_id: Debitis eum.
                       tool_calls: Qui repellat rerum sed.
                       user_id: Modi ut voluptatem harum iste.
-                    - content: Qui deserunt et.
+                    - content:
+                        - 81
+                        - 117
+                        - 105
+                        - 32
+                        - 100
+                        - 101
+                        - 115
+                        - 101
+                        - 114
+                        - 117
+                        - 110
+                        - 116
+                        - 32
+                        - 101
+                        - 116
+                        - 46
                       created_at: "2003-09-28T04:21:39Z"
                       external_user_id: Voluptatem dolor aliquid accusamus quia.
                       finish_reason: Et temporibus in officia sequi.
@@ -18684,7 +18716,23 @@ definitions:
                       tool_call_id: Debitis eum.
                       tool_calls: Qui repellat rerum sed.
                       user_id: Modi ut voluptatem harum iste.
-                    - content: Qui deserunt et.
+                    - content:
+                        - 81
+                        - 117
+                        - 105
+                        - 32
+                        - 100
+                        - 101
+                        - 115
+                        - 101
+                        - 114
+                        - 117
+                        - 110
+                        - 116
+                        - 32
+                        - 101
+                        - 116
+                        - 46
                       created_at: "2003-09-28T04:21:39Z"
                       external_user_id: Voluptatem dolor aliquid accusamus quia.
                       finish_reason: Et temporibus in officia sequi.
@@ -18717,7 +18765,23 @@ definitions:
             external_user_id: Sint et earum tempora non.
             id: Est non.
             messages:
-                - content: Qui deserunt et.
+                - content:
+                    - 81
+                    - 117
+                    - 105
+                    - 32
+                    - 100
+                    - 101
+                    - 115
+                    - 101
+                    - 114
+                    - 117
+                    - 110
+                    - 116
+                    - 32
+                    - 101
+                    - 116
+                    - 46
                   created_at: "2003-09-28T04:21:39Z"
                   external_user_id: Voluptatem dolor aliquid accusamus quia.
                   finish_reason: Et temporibus in officia sequi.
@@ -18727,7 +18791,23 @@ definitions:
                   tool_call_id: Debitis eum.
                   tool_calls: Qui repellat rerum sed.
                   user_id: Modi ut voluptatem harum iste.
-                - content: Qui deserunt et.
+                - content:
+                    - 81
+                    - 117
+                    - 105
+                    - 32
+                    - 100
+                    - 101
+                    - 115
+                    - 101
+                    - 114
+                    - 117
+                    - 110
+                    - 116
+                    - 32
+                    - 101
+                    - 116
+                    - 46
                   created_at: "2003-09-28T04:21:39Z"
                   external_user_id: Voluptatem dolor aliquid accusamus quia.
                   finish_reason: Et temporibus in officia sequi.
@@ -18737,7 +18817,23 @@ definitions:
                   tool_call_id: Debitis eum.
                   tool_calls: Qui repellat rerum sed.
                   user_id: Modi ut voluptatem harum iste.
-                - content: Qui deserunt et.
+                - content:
+                    - 81
+                    - 117
+                    - 105
+                    - 32
+                    - 100
+                    - 101
+                    - 115
+                    - 101
+                    - 114
+                    - 117
+                    - 110
+                    - 116
+                    - 32
+                    - 101
+                    - 116
+                    - 46
                   created_at: "2003-09-28T04:21:39Z"
                   external_user_id: Voluptatem dolor aliquid accusamus quia.
                   finish_reason: Et temporibus in officia sequi.
@@ -20529,7 +20625,27 @@ definitions:
             content:
                 type: string
                 description: The content of the message
-                example: Nihil aliquam ipsa.
+                example:
+                    - 78
+                    - 105
+                    - 104
+                    - 105
+                    - 108
+                    - 32
+                    - 97
+                    - 108
+                    - 105
+                    - 113
+                    - 117
+                    - 97
+                    - 109
+                    - 32
+                    - 105
+                    - 112
+                    - 115
+                    - 97
+                    - 46
+                format: byte
             created_at:
                 type: string
                 description: When the message was created.
@@ -20568,7 +20684,35 @@ definitions:
                 description: The ID of the user who created the message
                 example: Voluptatem pariatur enim quos.
         example:
-            content: Aspernatur facilis in earum.
+            content:
+                - 65
+                - 115
+                - 112
+                - 101
+                - 114
+                - 110
+                - 97
+                - 116
+                - 117
+                - 114
+                - 32
+                - 102
+                - 97
+                - 99
+                - 105
+                - 108
+                - 105
+                - 115
+                - 32
+                - 105
+                - 110
+                - 32
+                - 101
+                - 97
+                - 114
+                - 117
+                - 109
+                - 46
             created_at: "2000-09-02T02:11:54Z"
             external_user_id: Optio nostrum pariatur possimus maiores ut.
             finish_reason: Quas nam velit dicta et.

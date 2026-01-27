@@ -2,7 +2,6 @@ package repo
 
 import (
 	"fmt"
-	"time"
 )
 
 // ToolType represents the type of tool.
@@ -32,58 +31,6 @@ func (t *ToolType) Scan(src any) error {
 	}
 }
 
-// ToolHTTPRequest represents an HTTP request/response log entry.
-type ToolHTTPRequest struct {
-	ID string    `ch:"id"` // UUID
-	Ts time.Time `ch:"ts"` // DateTime64(3, 'UTC')
-
-	// required multi-tenant keys
-	OrganizationID string   `ch:"organization_id"` // UUID
-	ProjectID      string   `ch:"project_id"`      // UUID
-	DeploymentID   string   `ch:"deployment_id"`   // UUID
-	ToolID         string   `ch:"tool_id"`         // UUID
-	ToolURN        string   `ch:"tool_urn"`        // String
-	ToolType       ToolType `ch:"tool_type"`       // LowCardinality(String)
-
-	// correlation
-	TraceID string `ch:"trace_id"` // FixedString(32)
-	SpanID  string `ch:"span_id"`  // FixedString(16)
-
-	// request metadata
-	HTTPMethod    string  `ch:"http_method"`     // LowCardinality(String)
-	HTTPServerURL string  `ch:"http_server_url"` // String
-	HTTPRoute     string  `ch:"http_route"`      // String
-	StatusCode    int64   `ch:"status_code"`     // Int64
-	DurationMs    float64 `ch:"duration_ms"`     // Float64
-	UserAgent     string  `ch:"user_agent"`      // LowCardinality(String)
-
-	// request payload
-	RequestHeaders   map[string]string `ch:"request_headers"`    // Map(String, String)
-	RequestBodyBytes int64             `ch:"request_body_bytes"` // Int64
-
-	// response payload
-	ResponseHeaders   map[string]string `ch:"response_headers"`    // Map(String, String)
-	ResponseBodyBytes int64             `ch:"response_body_bytes"` // Int64
-}
-
-// WithStatusCode sets the HTTP status code on the log entry.
-func (t *ToolHTTPRequest) WithStatusCode(code int64) *ToolHTTPRequest {
-	t.StatusCode = code
-	return t
-}
-
-// WithHTTPMethod sets the HTTP method on the log entry.
-func (t *ToolHTTPRequest) WithHTTPMethod(method string) *ToolHTTPRequest {
-	t.HTTPMethod = method
-	return t
-}
-
-// WithHTTPRoute sets the HTTP route on the log entry.
-func (t *ToolHTTPRequest) WithHTTPRoute(route string) *ToolHTTPRequest {
-	t.HTTPRoute = route
-	return t
-}
-
 // TelemetryLog represents a unified telemetry log entry (HTTP requests, function logs, etc.).
 type TelemetryLog struct {
 	// OTel Log Record Identity
@@ -110,26 +57,26 @@ type TelemetryLog struct {
 	ResourceAttributes string `ch:"resource_attributes"` // JSON (stringified)
 
 	// Denormalized Gram Fields (for fast filtering)
-	GramProjectID    string  `ch:"gram_project_id"`     // UUID
-	GramDeploymentID *string `ch:"gram_deployment_id"`  // Nullable(UUID)
-	GramFunctionID   *string `ch:"gram_function_id"`    // Nullable(UUID)
-	GramURN          string  `ch:"gram_urn"`            // String
-	ServiceName      string  `ch:"service_name"`        // LowCardinality(String)
-	ServiceVersion   *string `ch:"service_version"`     // Nullable(String)
+	GramProjectID    string  `ch:"gram_project_id"`    // UUID
+	GramDeploymentID *string `ch:"gram_deployment_id"` // Nullable(UUID)
+	GramFunctionID   *string `ch:"gram_function_id"`   // Nullable(UUID)
+	GramURN          string  `ch:"gram_urn"`           // String
+	ServiceName      string  `ch:"service_name"`       // LowCardinality(String)
+	ServiceVersion   *string `ch:"service_version"`    // Nullable(String)
 
 	// Denormalized HTTP Fields (Wide Event Pattern - for HTTP logs only, NULL for function logs)
-	HTTPRequestMethod       *string `ch:"http_request_method"`        // LowCardinality(Nullable(String))
-	HTTPResponseStatusCode  *int32  `ch:"http_response_status_code"`  // Nullable(Int32)
-	HTTPRoute               *string `ch:"http_route"`                 // Nullable(String)
-	HTTPServerURL           *string `ch:"http_server_url"`            // Nullable(String)
+	HTTPRequestMethod      *string `ch:"http_request_method"`       // LowCardinality(Nullable(String))
+	HTTPResponseStatusCode *int32  `ch:"http_response_status_code"` // Nullable(Int32)
+	HTTPRoute              *string `ch:"http_route"`                // Nullable(String)
+	HTTPServerURL          *string `ch:"http_server_url"`           // Nullable(String)
 }
 
 // TraceSummary represents an aggregated view of a trace (one row per trace).
 // Used for displaying a list of logs grouped by trace in the UI.
 type TraceSummary struct {
-	TraceID           string  `ch:"trace_id"`             // FixedString(32)
-	StartTimeUnixNano int64   `ch:"start_time_unix_nano"` // Int64 - earliest log timestamp
-	LogCount          uint64  `ch:"log_count"`            // UInt64 - total logs in trace
-	HTTPStatusCode    *int32  `ch:"http_status_code"`     // Nullable(Int32) - any HTTP status code
-	GramURN           string  `ch:"gram_urn"`             // String - any gram_urn from the trace
+	TraceID           string `ch:"trace_id"`             // FixedString(32)
+	StartTimeUnixNano int64  `ch:"start_time_unix_nano"` // Int64 - earliest log timestamp
+	LogCount          uint64 `ch:"log_count"`            // UInt64 - total logs in trace
+	HTTPStatusCode    *int32 `ch:"http_status_code"`     // Nullable(Int32) - any HTTP status code
+	GramURN           string `ch:"gram_urn"`             // String - any gram_urn from the trace
 }

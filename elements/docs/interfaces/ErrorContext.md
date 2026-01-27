@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.22.3**](../README.md)
+[**@gram-ai/elements v1.22.5**](../README.md)
 
 ***
 
@@ -14,7 +14,7 @@
 
 ### source
 
-> **source**: `"custom"` \| `"error-boundary"` \| `"streaming"` \| `"stream-creation"`
+> **source**: `"custom"` \| `"streaming"` \| `"error-boundary"` \| `"stream-creation"`
 
 ***
 

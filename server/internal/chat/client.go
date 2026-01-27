@@ -18,7 +18,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	or "github.com/speakeasy-api/gram/openrouter/models/components"
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -275,7 +275,7 @@ func (c *ChatClient) LoadToolsetTools(
 			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), gateway.ToolCallEnv{
 				SystemEnv:  systemConfig,
 				UserConfig: ciEnv,
-			}, plan, tm.NewNoopToolCallLogger())
+			}, plan, tm.HTTPLogAttributes{})
 			if err != nil {
 				return "", fmt.Errorf("tool proxy error: %w", err)
 			}

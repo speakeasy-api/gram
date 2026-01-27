@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@gram-ai/functions",
-  "version": "0.12.1",
+  "version": "0.12.3",
   "description": "",
   "author": "Georges Haidar <georges@speakeasyapi.dev>",
   "main": "dist/index.js",
