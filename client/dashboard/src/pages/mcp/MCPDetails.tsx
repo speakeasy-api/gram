@@ -252,7 +252,10 @@ export function MCPDetailPage() {
       <Page.Body fullWidth noPadding>
         {/* Hero Header with Animation - full width */}
         <div className="relative w-full h-64 overflow-hidden">
-          <MCPHeroIllustration toolsetSlug={toolset.slug} className="saturate-[.3]" />
+          <MCPHeroIllustration
+            toolsetSlug={toolset.slug}
+            className="saturate-[.3]"
+          />
 
           {/* Overlay for text readability */}
           <div className="absolute inset-0 bg-gradient-to-t from-foreground/50 via-foreground/20 to-transparent" />

@@ -75,7 +75,8 @@ export function EnvironmentVariableRow({
   // Check if there's a value - use editing state if actively editing, otherwise saved state
   const savedHasValue = environmentHasValue(envVar, selectedEnvironmentView);
   const isActivelyEditing = editingState.has(envVar.id);
-  const editingHasValue = isActivelyEditing && !!editingState.get(envVar.id)!.value;
+  const editingHasValue =
+    isActivelyEditing && !!editingState.get(envVar.id)!.value;
   // When actively editing, use editing value to determine indicator; otherwise use saved
   const hasValue = isActivelyEditing ? editingHasValue : savedHasValue;
 
