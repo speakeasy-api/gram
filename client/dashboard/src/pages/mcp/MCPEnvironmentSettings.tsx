@@ -636,8 +636,8 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       },
     });
 
-    // Clear all editing state
-    setEditingState(new Map());
+    // Note: Don't clear editing state here - let it persist until queries refetch
+    // This keeps the indicator green during the refetch period
 
     toast.success(`Saved ${varsToSave.length} variable(s)`);
 
