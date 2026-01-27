@@ -115,7 +115,7 @@ export function EnvironmentVariableRow({
       </div>
 
       {/* Variable Info */}
-      <div className="min-w-0">
+      <div className="min-w-0" onClick={(e) => e.stopPropagation()}>
         {isEditing ? (
           <input
             type="text"
@@ -142,9 +142,9 @@ export function EnvironmentVariableRow({
                 envVar.state === "omitted" && "text-muted-foreground/50",
               )}
             >
-              {showHeaderName ? headerName : envVar.key}
+              {showHeaderName && headerName ? headerName : envVar.key}
             </div>
-            {showHeaderName ? (
+            {showHeaderName && headerName ? (
               <SimpleTooltip tooltip={`Variable name: ${envVar.key}`}>
                 <button
                   onClick={() => onEditHeaderName(envVar.id)}
