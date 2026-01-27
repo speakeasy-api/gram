@@ -169,7 +169,7 @@ export function EnvironmentVariableRow({
       </div>
 
       {/* Right side: State Button + Value */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
         {/* State cycle button */}
         <Button
           size="xs"
