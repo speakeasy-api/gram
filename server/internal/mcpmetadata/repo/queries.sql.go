@@ -26,15 +26,7 @@ func (q *Queries) GetHeaderDisplayNames(ctx context.Context, toolsetID uuid.UUID
 }
 
 const getMetadataForToolset = `-- name: GetMetadataForToolset :one
-SELECT id,
-       toolset_id,
-       project_id,
-       external_documentation_url,
-       logo_id,
-       instructions,
-       header_display_names,
-       created_at,
-       updated_at
+SELECT id, toolset_id, project_id, external_documentation_url, logo_id, instructions, header_display_names, default_environment_id, created_at, updated_at
 FROM mcp_metadata
 WHERE toolset_id = $1
 ORDER BY updated_at DESC
@@ -52,6 +44,7 @@ func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID
 		&i.LogoID,
 		&i.Instructions,
 		&i.HeaderDisplayNames,
+		&i.DefaultEnvironmentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -84,16 +77,28 @@ type UpdateHeaderDisplayNameParams struct {
 	ProjectID   uuid.UUID
 }
 
+type UpdateHeaderDisplayNameRow struct {
+	ID                       uuid.UUID
+	ToolsetID                uuid.UUID
+	ProjectID                uuid.UUID
+	ExternalDocumentationUrl pgtype.Text
+	LogoID                   uuid.NullUUID
+	Instructions             pgtype.Text
+	HeaderDisplayNames       []byte
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+}
+
 // Updates a single header display name in the JSONB field.
 // If display_name is empty, removes the key from the map.
-func (q *Queries) UpdateHeaderDisplayName(ctx context.Context, arg UpdateHeaderDisplayNameParams) (McpMetadatum, error) {
+func (q *Queries) UpdateHeaderDisplayName(ctx context.Context, arg UpdateHeaderDisplayNameParams) (UpdateHeaderDisplayNameRow, error) {
 	row := q.db.QueryRow(ctx, updateHeaderDisplayName,
 		arg.DisplayName,
 		arg.SecurityKey,
 		arg.ToolsetID,
 		arg.ProjectID,
 	)
-	var i McpMetadatum
+	var i UpdateHeaderDisplayNameRow
 	err := row.Scan(
 		&i.ID,
 		&i.ToolsetID,
@@ -122,15 +127,7 @@ DO UPDATE SET project_id = EXCLUDED.project_id,
               logo_id = EXCLUDED.logo_id,
               instructions = EXCLUDED.instructions,
               updated_at = clock_timestamp()
-RETURNING id,
-          toolset_id,
-          project_id,
-          external_documentation_url,
-          logo_id,
-          instructions,
-          header_display_names,
-          created_at,
-          updated_at
+RETURNING id, toolset_id, project_id, external_documentation_url, logo_id, instructions, header_display_names, default_environment_id, created_at, updated_at
 `
 
 type UpsertMetadataParams struct {
@@ -158,6 +155,7 @@ func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) 
 		&i.LogoID,
 		&i.Instructions,
 		&i.HeaderDisplayNames,
+		&i.DefaultEnvironmentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

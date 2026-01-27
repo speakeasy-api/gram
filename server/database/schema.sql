@@ -945,7 +945,8 @@ CREATE TABLE IF NOT EXISTS mcp_metadata (
   external_documentation_url TEXT,
   logo_id UUID,
   instructions TEXT,
-  header_display_names JSONB NOT NULL DEFAULT '{}'::JSONB, -- maps security scheme key to user-friendly display name
+  header_display_names JSONB NOT NULL DEFAULT '{}'::JSONB, -- DEPRECATED: use mcp_environment_configs table instead
+  default_environment_id UUID, -- Informs mcp_environment_configs which environment to load from by default
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -954,7 +955,25 @@ CREATE TABLE IF NOT EXISTS mcp_metadata (
   CONSTRAINT mcp_metadata_logo_id FOREIGN KEY (logo_id) REFERENCES assets (id) ON DELETE SET NULL,
   CONSTRAINT mcp_metadata_toolset_id FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
   CONSTRAINT mcp_metadata_project_id FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT mcp_metadata_toolset_id_key UNIQUE (toolset_id)
+  CONSTRAINT mcp_metadata_toolset_id_key UNIQUE (toolset_id),
+  CONSTRAINT mcp_metadata_default_environment_id_fkey FOREIGN KEY (default_environment_id) REFERENCES environments (id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS mcp_environment_configs (
+  id UUID NOT NULL DEFAULT generate_uuidv7(),
+  project_id UUID NOT NULL,
+  mcp_metadata_id UUID NOT NULL,
+  variable_name TEXT NOT NULL,
+  header_display_name TEXT,
+  provided_by TEXT NOT NULL DEFAULT 'user', -- 'user', 'system', 'none'
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT mcp_environment_configs_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_environment_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_environment_configs_mcp_metadata_id_fkey FOREIGN KEY (mcp_metadata_id) REFERENCES mcp_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_environment_configs_mcp_metadata_id_variable_name_key UNIQUE (mcp_metadata_id, variable_name)
 );
 
 CREATE TABLE IF NOT EXISTS users (
