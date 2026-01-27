@@ -182,32 +182,32 @@ GenerativeUI.parameters = {
     config: {
       variant: 'standalone',
       welcome: {
-        title: 'Generative UI Demo',
-        subtitle: 'Ask for data and see it rendered as dynamic widgets',
+        title: 'Data Explorer',
+        subtitle: 'Ask questions about your data',
         suggestions: [
           {
-            title: 'Sales dashboard',
-            label: 'metrics & charts',
+            title: 'Sales metrics',
+            label: 'This month',
             prompt:
-              'Show me a sales dashboard with revenue, conversion rate, and order metrics',
+              'What are our sales numbers this month? Revenue is $125,000, conversion rate is 3.2%, and we have 1,420 orders.',
           },
           {
-            title: 'User directory',
-            label: 'table view',
+            title: 'Team members',
+            label: 'Directory',
             prompt:
-              'Show me a table of users with their name, email, role, and status',
+              'List our team members: Alice (alice@co.com, Admin, Active), Bob (bob@co.com, Editor, Active), Charlie (charlie@co.com, Viewer, Pending)',
           },
           {
             title: 'Project status',
-            label: 'progress tracking',
+            label: 'Sprint progress',
             prompt:
-              'Show me a project status board with task completion progress and team stats',
+              'How is our current sprint going? We have 12 tasks total, 8 completed, 3 in progress, and 1 blocked. The team has 4 developers.',
           },
           {
-            title: 'Analytics overview',
-            label: 'KPIs & trends',
+            title: 'Website analytics',
+            label: 'Last 7 days',
             prompt:
-              'Show me an analytics overview with page views, bounce rate, session duration, and top pages',
+              "Show me last week's website stats: 45,000 page views, 2.1% bounce rate, 3m 24s average session, top pages are /home, /pricing, /docs",
           },
         ],
       },
@@ -258,7 +258,7 @@ const actionTools = {
  * Demonstrates ActionButton in generative UI that triggers tool calls.
  *
  * The LLM generates UI with ActionButton components that, when clicked,
- * send a structured message to invoke the specified tool.
+ * directly execute the tool without an LLM roundtrip.
  */
 export const GenerativeUIWithActions: Story = () => <Chat />
 GenerativeUIWithActions.parameters = {
@@ -266,20 +266,19 @@ GenerativeUIWithActions.parameters = {
     config: {
       variant: 'standalone',
       welcome: {
-        title: 'Generative UI with Actions',
-        subtitle: 'Interactive widgets that trigger tool calls',
+        title: 'Expense Approvals',
+        subtitle: 'Review and process pending requests',
         suggestions: [
           {
-            title: 'Pending requests',
-            label: 'approval workflow',
-            prompt:
-              'Show me a list of 3 pending expense requests with approve/reject buttons. Each request should have an ID, employee name, amount, and description.',
-          },
-          {
-            title: 'Task manager',
-            label: 'with actions',
-            prompt:
-              'Show me a task board with 2 tasks. Each task should have a complete button that calls approve_request with the task ID.',
+            title: 'Pending expenses',
+            label: 'Needs review',
+            prompt: `I need to review these pending expense requests:
+
+Request #1247: Sarah Chen submitted $450 for conference registration
+Request #1248: Mike Johnson submitted $89 for software subscription
+Request #1249: Lisa Park submitted $1,200 for client dinner
+
+I need to be able to approve or reject each one.`,
           },
         ],
       },

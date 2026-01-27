@@ -1,11 +1,17 @@
 'use client'
 
+import { useToolExecution } from '@/contexts/ToolExecutionContext'
 import { useDensity } from '@/hooks/useDensity'
 import { useRadius } from '@/hooks/useRadius'
 import { cn } from '@/lib/utils'
 import { isJsonRenderTree, type JsonRenderNode } from '@/lib/generative-ui'
 import { useThreadRuntime } from '@assistant-ui/react'
-import { AlertCircleIcon, Loader2Icon } from 'lucide-react'
+import {
+  AlertCircleIcon,
+  CheckCircleIcon,
+  Loader2Icon,
+  XCircleIcon,
+} from 'lucide-react'
 import { FC, useMemo, useState, useCallback } from 'react'
 
 interface GenerativeUIProps {
@@ -234,29 +240,89 @@ const components: Record<string, FC<Record<string, unknown>>> = {
 
   ActionButton: ({ label, action, args, variant = 'default', className }) => {
     const r = useRadius()
+    const { executeTool, isToolAvailable } = useToolExecution()
     const runtime = useThreadRuntime({ optional: true })
     const [isLoading, setIsLoading] = useState(false)
+    const [result, setResult] = useState<{
+      success: boolean
+      message?: string
+    } | null>(null)
+
+    const toolAvailable = action ? isToolAvailable(action as string) : false
 
     const handleClick = useCallback(async () => {
-      if (!runtime || !action) return
+      if (!action) return
 
       setIsLoading(true)
+      setResult(null)
+
       try {
-        // Send a structured message that instructs the LLM to call the tool
-        const argsJson = args ? JSON.stringify(args) : '{}'
-        runtime.append({
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `[Action: ${action}] ${argsJson}`,
-            },
-          ],
+        const toolResult = await executeTool(
+          action as string,
+          (args as Record<string, unknown>) ?? {}
+        )
+
+        if (toolResult.success) {
+          // Format the result message
+          let message = 'Done'
+          if (toolResult.result) {
+            if (typeof toolResult.result === 'string') {
+              message = toolResult.result
+            } else if (
+              typeof toolResult.result === 'object' &&
+              toolResult.result !== null &&
+              'content' in toolResult.result
+            ) {
+              // Handle MCP tool result format
+              const content = (
+                toolResult.result as { content: Array<{ text?: string }> }
+              ).content
+              if (Array.isArray(content) && content[0]?.text) {
+                message = content[0].text
+              }
+            }
+          }
+          setResult({ success: true, message })
+
+          // Notify the LLM of the action result so it can respond
+          if (runtime) {
+            runtime.append({
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: `[Action completed] ${action}: ${message}`,
+                },
+              ],
+            })
+          }
+        } else {
+          setResult({ success: false, message: toolResult.error })
+
+          // Also notify on failure so LLM can help
+          if (runtime) {
+            runtime.append({
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: `[Action failed] ${action}: ${toolResult.error}`,
+                },
+              ],
+            })
+          }
+        }
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : 'Unknown error'
+        setResult({
+          success: false,
+          message: errorMessage,
         })
       } finally {
         setIsLoading(false)
       }
-    }, [runtime, action, args])
+    }, [action, args, executeTool, runtime])
 
     const variantClasses: Record<string, string> = {
       default: 'bg-primary text-primary-foreground hover:bg-primary/90',
@@ -267,10 +333,36 @@ const components: Record<string, FC<Record<string, unknown>>> = {
         'bg-destructive text-destructive-foreground hover:bg-destructive/90',
     }
 
+    // Show result state if we have one
+    if (result) {
+      return (
+        <div
+          className={cn(
+            'inline-flex items-center gap-2 px-4 py-2 text-sm',
+            r('md'),
+            result.success
+              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100'
+              : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100',
+            className as string
+          )}
+        >
+          {result.success ? (
+            <CheckCircleIcon className="size-4" />
+          ) : (
+            <XCircleIcon className="size-4" />
+          )}
+          <span className="max-w-[200px] truncate">
+            {result.message ?? (result.success ? 'Success' : 'Failed')}
+          </span>
+        </div>
+      )
+    }
+
     return (
       <button
         onClick={handleClick}
-        disabled={isLoading || !runtime}
+        disabled={isLoading || !toolAvailable}
+        title={!toolAvailable ? `Tool "${action}" not available` : undefined}
         className={cn(
           'inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors',
           'disabled:pointer-events-none disabled:opacity-50',

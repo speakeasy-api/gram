@@ -138,7 +138,6 @@ export const ConnectionStatusProvider = ({
   )
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export const useConnectionStatus = () => {
   const context = useContext(ConnectionStatusContext)
   if (!context) {
@@ -153,7 +152,7 @@ export const useConnectionStatus = () => {
  * Hook that returns connection status helpers for use in sendMessages.
  * Returns null if not within a ConnectionStatusProvider (for backwards compatibility).
  */
-// eslint-disable-next-line react-refresh/only-export-components
+
 export const useConnectionStatusOptional = () => {
   return useContext(ConnectionStatusContext)
 }

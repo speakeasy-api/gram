@@ -60,5 +60,12 @@ export default tseslint.config(
         },
       ],
     },
+  },
+  // Context files commonly export both providers and hooks
+  {
+    files: ['src/contexts/**/*.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
   }
 )

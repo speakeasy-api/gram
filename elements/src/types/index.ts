@@ -535,7 +535,6 @@ export type ToolsFilter =
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type FrontendTools = Record<string, FrontendTool<any, any>>
 
-
 /**
  * ToolsConfig is used to configure tool support in the Elements library.
  * At the moment, you can override the default React components used by
@@ -662,7 +661,6 @@ export interface ToolsConfig {
    * }
    */
   toolsToInclude?: ToolsFilter
-
 }
 
 export interface WelcomeConfig {

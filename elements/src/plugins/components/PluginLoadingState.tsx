@@ -22,7 +22,7 @@ export const PluginLoadingState: FC<PluginLoadingStateProps> = ({
   return (
     <div
       className={cn(
-        'border-border bg-card relative min-h-[400px] w-fit min-w-[400px] max-w-full overflow-hidden border after:hidden',
+        'border-border bg-card relative min-h-[400px] w-fit max-w-full min-w-[400px] overflow-hidden border after:hidden',
         r('lg'),
         className
       )}

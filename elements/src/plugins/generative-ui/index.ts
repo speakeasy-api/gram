@@ -7,7 +7,17 @@ import { GenerativeUIRenderer } from './component'
  */
 export const generativeUI: Plugin = {
   language: 'ui',
-  prompt: `When a user requests data visualization, dashboards, or structured information display, respond with a json-render UI specification in a code block annotated with the language identifier 'ui'.
+  prompt: `WHEN TO USE UI VISUALIZATION:
+Proactively render tool results and structured data as visual UI components whenever it would improve comprehension. Use the 'ui' code block format for:
+- Tool results that return structured data (lists, objects, metrics)
+- Data that benefits from visual hierarchy (dashboards, summaries)
+- Information with multiple related fields (user profiles, order details)
+- Anything with numbers, statuses, or progress that can be visualized
+- Results that would otherwise be displayed as raw JSON or verbose text
+
+Do NOT use UI for: simple text responses, single values, error messages, or when the user explicitly asks for raw data.
+
+To render UI, output a json-render specification in a code block with the language identifier 'ui'.
 
 CRITICAL JSON REQUIREMENTS:
 - The code block MUST contain ONLY valid, parseable JSON
@@ -132,8 +142,12 @@ CONTENT GUIDELINES:
 - Do not describe technical implementation details
 - Focus on what the data means, not how it's displayed
 
-ACTION HANDLING:
-When you receive a message in the format "[Action: tool_name] {args}", immediately call the specified tool with the provided arguments. Do not ask for confirmation - the user has already clicked the button to initiate this action. After the tool executes, provide a brief confirmation of what happened.`,
+ACTION RESULT HANDLING:
+When you receive a message starting with "[Action completed]" or "[Action failed]", the user clicked an action button and the tool has already been executed. Provide a brief, friendly acknowledgment of what happened. Keep your response concise - one sentence is usually enough. Do not re-execute the action or ask if they want to do something they just did.
+
+Examples:
+- "[Action completed] approve_request: Request #123 approved" → "Done! Request #123 has been approved."
+- "[Action failed] delete_task: Permission denied" → "I couldn't delete that task - looks like you don't have permission."`,
   Component: GenerativeUIRenderer,
   Header: undefined,
 }
