@@ -4,31 +4,32 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
+	"sync/atomic"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
 	// DefaultLogWriterBufferSize is the default size of the log queue buffer.
 	DefaultLogWriterBufferSize = 1000
 
-	// DefaultLogWriterWorkers is the default number of worker goroutines.
+	// DefaultLogWriterWorkers is the default number of concurrent log writes.
 	DefaultLogWriterWorkers = 5
 )
 
-// LogWriter manages a pool of workers that write telemetry logs to ClickHouse.
-// It provides bounded concurrency and graceful shutdown capabilities.
+// LogWriter manages concurrent writes of telemetry logs to ClickHouse.
+// It uses a buffered channel for burst absorption and an errgroup to
+// bound the number of concurrent workers processing the queue.
 type LogWriter struct {
-	queue     chan LogParams
-	done      chan struct{}
-	closeOnce sync.Once
-	wg        sync.WaitGroup
-	logger    *slog.Logger
-	repo      *repo.Queries
-	enabled   LogsEnabled
+	queue   chan LogParams
+	eg      *errgroup.Group
+	closed  atomic.Bool
+	logger  *slog.Logger
+	repo    *repo.Queries
+	enabled LogsEnabled
 }
 
 // LogWriterOptions configures the LogWriter.
@@ -55,68 +56,63 @@ func NewLogWriter(
 		workers = DefaultLogWriterWorkers
 	}
 
+	eg := new(errgroup.Group)
+
 	w := &LogWriter{
-		queue:     make(chan LogParams, bufferSize),
-		done:      make(chan struct{}),
-		closeOnce: sync.Once{},
-		wg:        sync.WaitGroup{},
-		logger:    logger.With(attr.SlogComponent("log-writer")),
-		repo:      repo.New(chConn),
-		enabled:   logsEnabled,
+		queue:   make(chan LogParams, bufferSize),
+		eg:      eg,
+		closed:  atomic.Bool{},
+		logger:  logger.With(attr.SlogComponent("log-writer")),
+		repo:    repo.New(chConn),
+		enabled: logsEnabled,
 	}
 
+	// Start workers that drain the queue
 	for i := 0; i < workers; i++ {
-		w.wg.Add(1)
-		go w.worker()
+		eg.Go(func() error {
+			for params := range w.queue {
+				w.processLog(params)
+			}
+			return nil
+		})
 	}
 
-	w.logger.InfoContext(context.Background(),
-		fmt.Sprintf("log writer started with %d workers and buffer size %d", workers, bufferSize),
-	)
+	w.logger.InfoContext(context.Background(), "log writer started")
 
 	return w
 }
 
-// Enqueue adds a log to the processing queue.
-// If the queue is full or the writer is shut down, the log is dropped and a warning is logged.
+// Enqueue schedules a log to be written to ClickHouse.
+// This is non-blocking until the buffer is full, then blocks until space is available.
+// If the writer is shut down, the log is dropped.
 func (w *LogWriter) Enqueue(params LogParams) {
-	select {
-	case w.queue <- params:
-		// Successfully enqueued
-	case <-w.done:
+	if w.closed.Load() {
 		w.logger.WarnContext(context.Background(),
 			"log writer is shut down, dropping log",
 			attr.SlogResourceURN(params.ToolInfo.URN),
 			attr.SlogProjectID(params.ToolInfo.ProjectID),
 		)
-	default:
-		w.logger.WarnContext(context.Background(),
-			"telemetry log queue full, dropping log",
-			attr.SlogResourceURN(params.ToolInfo.URN),
-			attr.SlogProjectID(params.ToolInfo.ProjectID),
-		)
+		return
 	}
+
+	w.queue <- params
 }
 
 // Shutdown gracefully stops the LogWriter by closing the queue and waiting
-// for all workers to finish processing. It respects the context deadline.
+// for all workers to drain remaining logs. It respects the context deadline.
 func (w *LogWriter) Shutdown(ctx context.Context) error {
 	w.logger.InfoContext(ctx, "shutting down log writer")
 
-	// Signal shutdown and close the queue (protected from double-close)
-	w.closeOnce.Do(func() {
-		close(w.done)
-		close(w.queue)
-	})
+	w.closed.Store(true)
+	close(w.queue)
 
-	workersDone := make(chan struct{})
+	done := make(chan error, 1)
 	go func() {
-		w.wg.Wait()
-		close(workersDone)
+		done <- w.eg.Wait()
 	}()
 
 	select {
-	case <-workersDone:
+	case <-done:
 		w.logger.InfoContext(ctx, "log writer shutdown complete")
 		return nil
 	case <-ctx.Done():
@@ -125,21 +121,10 @@ func (w *LogWriter) Shutdown(ctx context.Context) error {
 	}
 }
 
-// worker processes logs from the queue until the channel is closed.
-func (w *LogWriter) worker() {
-	defer w.wg.Done()
-
-	for params := range w.queue {
-		w.processLog(params)
-	}
-}
-
 // processLog checks the feature flag and writes the log to ClickHouse.
 func (w *LogWriter) processLog(params LogParams) {
 	ctx := context.Background()
 
-	// if an error happens we just return as this is async.
-	// errors are logged upstream
 	enabled, err := w.enabled(ctx, params.ToolInfo.OrganizationID)
 	if err != nil || !enabled {
 		return
