@@ -54,6 +54,39 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { ElementsContext } from './contexts'
 import { ToolApprovalProvider } from './ToolApprovalContext'
+import {
+  ConnectionStatusProvider,
+  useConnectionStatusOptional,
+} from './ConnectionStatusContext'
+import { ToolExecutionProvider } from './ToolExecutionContext'
+
+/**
+ * Extracts executable tools from frontend tool definitions.
+ * Frontend tools created via defineFrontendTool have an unstable_tool property
+ * that contains the tool definition with execute function.
+ */
+function extractExecutableTools(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  frontendTools: Record<string, FrontendTool<any, any>> | undefined
+): Record<
+  string,
+  { execute?: (args: unknown, options?: unknown) => Promise<unknown> }
+> {
+  if (!frontendTools) return {}
+
+  return Object.fromEntries(
+    Object.entries(frontendTools).map(([name, tool]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const toolDef = (tool as any).unstable_tool
+      return [
+        name,
+        {
+          execute: toolDef?.execute,
+        },
+      ]
+    })
+  )
+}
 
 export interface ElementsProviderProps {
   children: ReactNode
@@ -158,6 +191,9 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     isToolApproved: toolApproval.isToolApproved,
     whitelistTool: toolApproval.whitelistTool,
   })
+
+  // Connection status for tracking network failures
+  const connectionStatus = useConnectionStatusOptional()
 
   approvalHelpersRef.current = {
     requestApproval: toolApproval.requestApproval,
@@ -312,13 +348,47 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
             onError: ({ error }) => {
               console.error('Stream error in onError callback:', error)
               trackError(error, { source: 'streaming' })
+
+              // Check if this is a network/connection error
+              const isNetworkError =
+                error instanceof TypeError ||
+                (error instanceof Error &&
+                  (error.message.includes('fetch') ||
+                    error.message.includes('network') ||
+                    error.message.includes('Failed to fetch') ||
+                    error.message.includes('NetworkError') ||
+                    error.message.includes('ECONNREFUSED') ||
+                    error.message.includes('ETIMEDOUT')))
+
+              if (isNetworkError) {
+                connectionStatus?.markDisconnected()
+              }
             },
           })
+
+          // Mark as connected when stream starts successfully
+          connectionStatus?.markConnected()
 
           return result.toUIMessageStream()
         } catch (error) {
           console.error('Error creating stream:', error)
           trackError(error, { source: 'stream-creation' })
+
+          // Check if this is a network/connection error
+          const isNetworkError =
+            error instanceof TypeError ||
+            (error instanceof Error &&
+              (error.message.includes('fetch') ||
+                error.message.includes('network') ||
+                error.message.includes('Failed to fetch') ||
+                error.message.includes('NetworkError') ||
+                error.message.includes('ECONNREFUSED') ||
+                error.message.includes('ETIMEDOUT')))
+
+          if (isNetworkError) {
+            connectionStatus?.markDisconnected()
+          }
+
           throw error
         }
       },
@@ -336,6 +406,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       apiUrl,
       auth.headers,
       auth.isLoading,
+      connectionStatus,
     ]
   )
 
@@ -359,6 +430,24 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
 
   const frontendTools = config.tools?.frontendTools ?? {}
 
+  // Create combined executable tools for direct tool execution (ActionButton)
+  // Uses a simplified type that focuses on the execute function
+  type ExecutableToolSet = Record<
+    string,
+    | { execute?: (args: unknown, options?: unknown) => Promise<unknown> }
+    | undefined
+  >
+  const executableTools = useMemo<ExecutableToolSet>(() => {
+    const extractedFrontendTools = extractExecutableTools(
+      config.tools?.frontendTools
+    )
+    // MCP tools and extracted frontend tools both have execute functions
+    return {
+      ...mcpTools,
+      ...extractedFrontendTools,
+    } as ExecutableToolSet
+  }, [mcpTools, config.tools?.frontendTools])
+
   // Render the appropriate runtime provider based on history config.
   // We use separate components to avoid conditional hook calls.
   if (historyEnabled && !auth.isLoading) {
@@ -372,6 +461,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
         frontendTools={frontendTools}
         localIdToUuidMap={localIdToUuidMapRef.current}
         currentRemoteIdRef={currentRemoteIdRef}
+        executableTools={executableTools}
       >
         {children}
       </ElementsProviderWithHistory>
@@ -384,11 +474,19 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       contextValue={contextValue}
       runtimeRef={runtimeRef}
       frontendTools={frontendTools}
+      executableTools={executableTools}
     >
       {children}
     </ElementsProviderWithoutHistory>
   )
 }
+
+// Shared type for executable tools
+type ExecutableToolSet = Record<
+  string,
+  | { execute?: (args: unknown, options?: unknown) => Promise<unknown> }
+  | undefined
+>
 
 // Separate component for history-enabled mode to avoid conditional hook calls
 interface ElementsProviderWithHistoryProps {
@@ -402,6 +500,7 @@ interface ElementsProviderWithHistoryProps {
   frontendTools: Record<string, AssistantTool | FrontendTool<any, any>>
   localIdToUuidMap: Map<string, string>
   currentRemoteIdRef: React.RefObject<string | null>
+  executableTools: ExecutableToolSet
 }
 
 /**
@@ -432,6 +531,7 @@ const ElementsProviderWithHistory = ({
   frontendTools,
   localIdToUuidMap,
   currentRemoteIdRef,
+  executableTools,
 }: ElementsProviderWithHistoryProps) => {
   const threadListAdapter = useGramThreadListAdapter({
     apiUrl,
@@ -480,17 +580,19 @@ const ElementsProviderWithHistory = ({
       <ThreadIdSync remoteIdRef={currentRemoteIdRef} />
       <HistoryProvider>
         <ElementsContext.Provider value={contextValue}>
-          <div
-            className={cn(
-              ROOT_SELECTOR,
-              (contextValue?.config.variant === 'standalone' ||
-                contextValue?.config.variant === 'sidecar') &&
-                'h-full'
-            )}
-          >
-            {children}
-          </div>
-          <FrontendTools tools={frontendTools} />
+          <ToolExecutionProvider tools={executableTools}>
+            <div
+              className={cn(
+                ROOT_SELECTOR,
+                (contextValue?.config.variant === 'standalone' ||
+                  contextValue?.config.variant === 'sidecar') &&
+                  'h-full'
+              )}
+            >
+              {children}
+            </div>
+            <FrontendTools tools={frontendTools} />
+          </ToolExecutionProvider>
         </ElementsContext.Provider>
       </HistoryProvider>
     </AssistantRuntimeProvider>
@@ -505,6 +607,7 @@ interface ElementsProviderWithoutHistoryProps {
   runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   frontendTools: Record<string, AssistantTool | FrontendTool<any, any>>
+  executableTools: ExecutableToolSet
 }
 
 const ElementsProviderWithoutHistory = ({
@@ -513,6 +616,7 @@ const ElementsProviderWithoutHistory = ({
   contextValue,
   runtimeRef,
   frontendTools,
+  executableTools,
 }: ElementsProviderWithoutHistoryProps) => {
   const runtime = useChatRuntime({ transport })
 
@@ -524,17 +628,19 @@ const ElementsProviderWithoutHistory = ({
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ElementsContext.Provider value={contextValue}>
-        <div
-          className={cn(
-            ROOT_SELECTOR,
-            (contextValue?.config.variant === 'standalone' ||
-              contextValue?.config.variant === 'sidecar') &&
-              'h-full'
-          )}
-        >
-          {children}
-        </div>
-        <FrontendTools tools={frontendTools} />
+        <ToolExecutionProvider tools={executableTools}>
+          <div
+            className={cn(
+              ROOT_SELECTOR,
+              (contextValue?.config.variant === 'standalone' ||
+                contextValue?.config.variant === 'sidecar') &&
+                'h-full'
+            )}
+          >
+            {children}
+          </div>
+          <FrontendTools tools={frontendTools} />
+        </ToolExecutionProvider>
       </ElementsContext.Provider>
     </AssistantRuntimeProvider>
   )
@@ -545,9 +651,11 @@ const queryClient = new QueryClient()
 export const ElementsProvider = (props: ElementsProviderProps) => {
   return (
     <QueryClientProvider client={queryClient}>
-      <ToolApprovalProvider>
-        <ElementsProviderInner {...props} />
-      </ToolApprovalProvider>
+      <ConnectionStatusProvider>
+        <ToolApprovalProvider>
+          <ElementsProviderInner {...props} />
+        </ToolApprovalProvider>
+      </ConnectionStatusProvider>
     </QueryClientProvider>
   )
 }

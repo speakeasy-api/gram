@@ -60,9 +60,11 @@ export const ElementsDecorator: React.FC<ElementsDecoratorProps> = ({
   children,
   config,
 }) => {
+  // Include colorScheme in deps to ensure theme changes trigger re-render
+  const colorScheme = config?.theme?.colorScheme
   const finalConfig = useMemo(
     () => merge({}, DEFAULT_ELEMENTS_CONFIG, config ?? {}),
-    [config]
+    [config, colorScheme]
   )
 
   if (!finalConfig.projectSlug || !finalConfig.mcp) {
