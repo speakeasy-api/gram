@@ -1,0 +1,1870 @@
+time=2026-01-07T12:36:23.675-08:00 level=INFO msg="Daemon started (interval: %v, auto-commit: %v, auto-push: %v)" !BADKEY=5s !BADKEY=false !BADKEY=false
+time=2026-01-07T12:36:23.675-08:00 level=INFO msg="using database" path=/Users/quinn/src/gram/.beads/beads.db
+time=2026-01-07T12:36:23.680-08:00 level=INFO msg="database opened" path=/Users/quinn/src/gram/.beads/beads.db freshness_checking=true
+time=2026-01-07T12:36:23.680-08:00 level=INFO msg="upgrading .beads/.gitignore"
+time=2026-01-07T12:36:23.680-08:00 level=WARN msg="failed to upgrade .gitignore" error="open .beads/.gitignore: no such file or directory"
+time=2026-01-07T12:36:23.689-08:00 level=INFO msg="Repository fingerprint validated: %s" !BADKEY=e053e5f3
+time=2026-01-07T12:36:23.690-08:00 level=INFO msg="starting RPC server" socket=/Users/quinn/src/gram/.beads/bd.sock
+time=2026-01-07T12:36:23.690-08:00 level=INFO msg="RPC server ready (socket listening)"
+time=2026-01-07T12:36:23.694-08:00 level=INFO msg="registered in global registry"
+time=2026-01-07T12:36:23.694-08:00 level=INFO msg="Starting %s..." !BADKEY="sync cycle"
+time=2026-01-07T12:36:23.695-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-07T12:36:25.083-08:00 level=INFO msg="Pull failed: %v" !BADKEY="git pull failed: exit status 1\nfatal: couldn't find remote ref external-mcp/add-header-configuration\n"
+time=2026-01-07T12:36:25.083-08:00 level=INFO msg="monitoring parent process" pid=0
+time=2026-01-07T12:36:25.083-08:00 level=INFO msg="using event-driven mode"
+time=2026-01-07T12:36:25.085-08:00 level=INFO msg="Auto-pull disabled: use 'git pull' manually to sync remote changes"
+time=2026-01-07T12:39:53.023-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-07T12:39:53.074-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-07T12:39:53.075-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-07T12:39:54.076-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-07T12:39:54.077-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-07T12:39:54.079-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-07T12:52:54.422-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-07T12:52:54.473-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-07T12:52:54.473-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-07T12:52:55.475-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-07T12:52:55.475-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-07T12:52:55.476-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-07T12:55:26.184-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-07T12:55:26.675-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-07T12:55:26.777-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-07T12:55:27.779-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-07T12:55:27.782-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-07T12:55:27.782-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-07T12:55:51.416-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-07T12:55:51.459-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-07T12:55:52.461-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-07T12:55:52.463-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-07T12:55:52.464-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-07T13:54:47.852-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-07T13:54:47.903-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-07T13:54:47.903-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-07T13:54:48.905-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-07T13:54:48.906-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-07T13:54:48.910-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-07T14:20:03.042-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-07T14:20:03.093-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-07T14:20:03.093-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-07T14:20:04.095-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-07T14:20:04.095-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-07T14:20:04.097-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-07T15:05:53.524-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-07T15:05:53.575-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-07T15:05:53.575-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-07T15:05:54.577-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-07T15:05:54.577-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-07T15:05:54.579-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-12T10:27:35.778-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-12T10:27:35.829-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-12T10:27:35.829-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-12T10:27:36.831-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T10:27:36.831-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-12T10:27:36.835-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-12T10:28:34.135-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-12T10:28:35.137-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T10:28:35.138-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-12T10:28:35.139-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-12T10:28:38.674-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-12T10:28:38.706-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-12T10:28:39.709-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T10:28:39.709-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-12T10:28:39.711-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-12T10:31:14.610-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-12T10:31:15.613-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T10:31:15.614-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-12T10:31:15.615-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-12T10:38:58.276-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-9r1
+time=2026-01-12T10:38:58.777-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-12T10:38:58.777-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-12T10:38:58.786-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-12T10:38:58.786-08:00 level=INFO msg="Export complete"
+time=2026-01-12T10:38:58.786-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-12T10:38:58.837-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-12T10:38:58.838-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-12T10:38:59.840-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T10:38:59.841-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-12T10:38:59.842-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-12T10:39:01.105-08:00 level=INFO msg="Pull failed: %v (backoff: %v)" !BADKEY="git pull failed: exit status 1\nfatal: couldn't find remote ref quinn/fivetran-vibez\n" !BADKEY=30s
+time=2026-01-12T10:39:57.149-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-9vk
+time=2026-01-12T10:39:57.650-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-12T10:39:57.650-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-12T10:39:57.657-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-12T10:39:57.657-08:00 level=INFO msg="Export complete"
+time=2026-01-12T10:39:57.657-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-12T10:39:57.708-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-12T10:39:57.708-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-12T10:39:58.711-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T10:39:58.712-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-12T10:39:58.713-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-12T10:40:00.020-08:00 level=INFO msg="Pull failed: %v (backoff: %v)" !BADKEY="git pull failed: exit status 1\nfatal: couldn't find remote ref quinn/fivetran-vibez\n" !BADKEY=1m0s
+time=2026-01-12T10:40:01.304-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-zui
+time=2026-01-12T10:40:01.498-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-60v
+time=2026-01-12T10:40:01.691-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-six
+time=2026-01-12T10:40:01.883-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-9zk
+time=2026-01-12T10:40:02.385-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-12T10:40:02.385-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-12T10:40:02.397-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-12T10:40:02.397-08:00 level=INFO msg="Export complete"
+time=2026-01-12T10:40:02.397-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-12T10:40:02.448-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-12T10:40:02.448-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-12T10:40:03.451-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T10:40:03.451-08:00 level=INFO msg="Skipping %s: in backoff period" !BADKEY=auto-import
+time=2026-01-12T10:41:25.694-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-9vk
+time=2026-01-12T10:41:25.748-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-zui
+time=2026-01-12T10:41:25.800-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-60v
+time=2026-01-12T10:41:25.854-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-six
+time=2026-01-12T10:41:25.910-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-9zk
+time=2026-01-12T10:41:26.411-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-12T10:41:26.411-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-12T10:41:26.417-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-12T10:41:26.417-08:00 level=INFO msg="Export complete"
+time=2026-01-12T10:41:26.417-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-12T10:41:26.468-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-12T10:41:26.468-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-12T10:41:27.470-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T10:41:27.471-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-12T10:41:27.472-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-12T10:41:28.777-08:00 level=INFO msg="Pull failed: %v (backoff: %v)" !BADKEY="git pull failed: exit status 1\nfatal: couldn't find remote ref quinn/fivetran-vibez\n" !BADKEY=2m0s
+time=2026-01-12T10:41:34.605-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-zui
+time=2026-01-12T10:41:34.659-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-60v
+time=2026-01-12T10:41:34.712-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-six
+time=2026-01-12T10:41:34.765-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-9zk
+time=2026-01-12T10:41:35.266-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-12T10:41:35.266-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-12T10:41:35.276-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-12T10:41:35.276-08:00 level=INFO msg="Export complete"
+time=2026-01-12T10:41:35.276-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-12T10:41:35.327-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-12T10:41:35.327-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-12T10:41:36.329-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T10:41:36.330-08:00 level=INFO msg="Skipping %s: in backoff period" !BADKEY=auto-import
+time=2026-01-12T10:43:36.175-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-9r1
+time=2026-01-12T10:43:36.676-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-12T10:43:36.676-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-12T10:43:36.683-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-12T10:43:36.683-08:00 level=INFO msg="Export complete"
+time=2026-01-12T10:43:36.683-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-12T10:43:36.734-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-12T10:43:36.734-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-12T10:43:37.735-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T10:43:37.736-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-12T10:43:37.738-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-12T10:43:39.055-08:00 level=INFO msg="Pull failed: %v (backoff: %v)" !BADKEY="git pull failed: exit status 1\nfatal: couldn't find remote ref quinn/fivetran-vibez\n" !BADKEY=5m0s
+time=2026-01-12T10:48:25.751-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-9vk
+time=2026-01-12T10:48:26.252-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-12T10:48:26.252-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-12T10:48:26.262-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-12T10:48:26.262-08:00 level=INFO msg="Export complete"
+time=2026-01-12T10:48:26.263-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-12T10:48:26.314-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-12T10:48:26.314-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-12T10:48:27.316-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T10:48:27.318-08:00 level=INFO msg="Skipping %s: in backoff period" !BADKEY=auto-import
+time=2026-01-12T15:26:52.220-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-12T15:26:52.270-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-12T15:26:52.270-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-12T15:26:53.272-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T15:26:53.276-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-12T15:26:53.279-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-12T15:27:29.978-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-12T15:27:30.981-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T15:27:30.981-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-12T15:27:30.981-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-12T16:40:11.001-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-12T16:40:12.004-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T16:40:12.004-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-12T16:40:12.004-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-12T17:45:03.317-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-12T17:45:04.319-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T17:45:04.321-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-12T17:45:04.321-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-12T17:45:30.671-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-12T17:45:30.722-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-12T17:45:30.722-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-12T17:45:31.724-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T17:45:31.726-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-12T17:45:31.729-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-12T17:45:40.104-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-12T17:45:41.106-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T17:45:41.107-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-12T17:45:41.109-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-12T17:45:45.383-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-12T17:45:45.434-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-12T17:45:45.434-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-12T17:45:46.436-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T17:45:46.437-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-12T17:45:46.442-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-12T17:48:05.882-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-12T17:48:05.933-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-12T17:48:05.933-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-12T17:48:06.934-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T17:48:06.935-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-12T17:48:06.936-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-12T17:48:10.869-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-12T17:48:10.920-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-12T17:48:10.920-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-12T17:48:11.922-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-12T17:48:11.923-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-12T17:48:11.925-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-13T10:03:08.085-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-13T10:03:08.136-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-13T10:03:08.136-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-13T10:03:09.139-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-13T10:03:09.141-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-13T10:03:09.145-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-13T10:03:27.495-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-13T10:03:27.597-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-13T10:03:27.642-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-13T10:03:27.643-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-13T10:03:28.645-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-13T10:03:28.645-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-13T10:03:28.645-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-13T10:03:31.334-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-13T10:03:31.385-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-13T10:03:31.385-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-13T10:03:32.387-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-13T10:03:32.388-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-13T10:03:32.394-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-13T10:05:03.738-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-13T10:05:03.788-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-13T10:05:03.788-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-13T10:05:04.791-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-13T10:05:04.791-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-13T10:05:04.793-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-13T10:05:06.724-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-13T10:05:06.775-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-13T10:05:06.775-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-13T10:05:07.777-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-13T10:05:07.777-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-13T10:05:07.779-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-13T15:13:36.724-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-13T15:13:37.726-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-13T15:13:37.727-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-13T15:13:37.727-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-13T21:18:59.695-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-03i
+time=2026-01-13T21:19:00.197-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-13T21:19:00.197-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-13T21:19:00.201-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-13T21:19:00.201-08:00 level=INFO msg="Export complete"
+time=2026-01-13T21:19:00.201-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-13T21:19:00.252-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-13T21:19:00.252-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-13T21:19:01.254-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-13T21:19:01.255-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-13T21:19:01.255-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-13T21:19:02.559-08:00 level=INFO msg="Pull failed: %v (backoff: %v)" !BADKEY="git pull failed: exit status 1\nfatal: couldn't find remote ref external-mcp/add-header-configuration\n" !BADKEY=30s
+time=2026-01-13T21:19:09.372-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-mbw
+time=2026-01-13T21:19:09.873-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-13T21:19:09.873-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-13T21:19:09.891-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-13T21:19:09.891-08:00 level=INFO msg="Export complete"
+time=2026-01-13T21:19:09.891-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-13T21:19:09.942-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-13T21:19:09.942-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-13T21:19:10.946-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-13T21:19:10.947-08:00 level=INFO msg="Skipping %s: in backoff period" !BADKEY=auto-import
+time=2026-01-13T21:19:20.725-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-mbw
+time=2026-01-13T21:19:21.226-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-13T21:19:21.226-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-13T21:19:21.232-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-13T21:19:21.232-08:00 level=INFO msg="Export complete"
+time=2026-01-13T21:19:21.232-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-13T21:19:21.283-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-13T21:19:21.283-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-13T21:19:22.285-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-13T21:19:22.286-08:00 level=INFO msg="Skipping %s: in backoff period" !BADKEY=auto-import
+time=2026-01-13T21:20:00.029-08:00 level=INFO msg="Mutation detected: %s %s" update=""
+time=2026-01-13T21:20:00.530-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-13T21:20:00.530-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-13T21:20:00.538-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-13T21:20:00.539-08:00 level=INFO msg="Export complete"
+time=2026-01-13T21:20:00.539-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-13T21:20:00.590-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-13T21:20:00.590-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-13T21:20:01.592-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-13T21:20:01.593-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-13T21:20:01.593-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-13T21:20:02.785-08:00 level=INFO msg="Pull failed: %v (backoff: %v)" !BADKEY="git pull failed: exit status 1\nfatal: couldn't find remote ref external-mcp/add-header-configuration\n" !BADKEY=1m0s
+time=2026-01-13T21:20:29.231-08:00 level=INFO msg="Mutation detected: %s %s" update=""
+time=2026-01-13T21:20:29.284-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-03i
+time=2026-01-13T21:20:29.785-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-13T21:20:29.785-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-13T21:20:29.797-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-13T21:20:29.797-08:00 level=INFO msg="Export complete"
+time=2026-01-13T21:20:29.797-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-13T21:20:29.848-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-13T21:20:29.848-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-13T21:20:30.850-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-13T21:20:30.851-08:00 level=INFO msg="Skipping %s: in backoff period" !BADKEY=auto-import
+time=2026-01-13T21:22:15.326-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-13T21:22:15.377-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-13T21:22:15.377-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-13T21:22:16.379-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-13T21:22:16.380-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-13T21:22:16.384-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-13T21:22:22.298-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-13T21:22:23.299-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-13T21:22:23.299-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-13T21:22:23.299-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-13T21:22:27.522-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-13T21:22:27.559-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-13T21:22:28.561-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-13T21:22:28.561-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-13T21:22:28.562-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-13T22:02:54.339-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-13T22:02:55.342-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-13T22:02:55.344-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-13T22:02:55.346-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-13T22:36:34.792-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-13T22:36:34.842-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-13T22:36:34.842-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-13T22:36:35.845-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-13T22:36:35.846-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-13T22:36:35.849-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-13T22:37:15.313-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-13T22:37:15.364-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-13T22:37:15.365-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-13T22:37:16.367-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-13T22:37:16.367-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-13T22:37:16.371-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-14T15:39:01.431-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-14T15:39:02.433-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-14T15:39:02.433-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-14T15:39:02.433-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-14T20:11:14.072-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-14T20:11:14.237-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-14T20:11:15.239-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-14T20:11:15.239-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-14T20:11:15.240-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-14T20:11:24.383-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-14T20:11:25.384-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-14T20:11:25.385-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-14T20:11:25.385-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-14T20:11:28.161-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-14T20:11:29.163-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-14T20:11:29.163-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-14T20:11:29.164-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-14T20:11:30.827-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-14T20:11:30.874-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-14T20:11:31.875-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-14T20:11:31.876-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-14T20:11:31.877-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-14T20:47:48.055-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-14T20:47:49.057-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-14T20:47:49.058-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-14T20:47:49.059-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-14T20:47:56.978-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-14T20:47:57.028-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-14T20:47:57.028-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-14T20:47:58.030-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-14T20:47:58.031-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-14T20:47:58.036-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-14T20:48:25.624-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-14T20:48:25.676-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-14T20:48:25.676-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-14T20:48:26.677-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-14T20:48:26.677-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-14T20:48:26.679-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-14T20:57:45.748-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-14T20:57:45.800-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-14T20:57:45.800-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-14T20:57:46.801-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-14T20:57:46.801-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-14T20:57:46.802-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-14T20:57:48.927-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-14T20:57:48.978-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-14T20:57:48.978-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-14T20:57:49.980-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-14T20:57:49.981-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-14T20:57:49.982-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-14T21:00:51.497-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-14T21:00:51.548-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-14T21:00:51.548-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-14T21:00:52.549-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-14T21:00:52.550-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-14T21:00:52.554-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-14T21:01:01.130-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-14T21:01:01.181-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-14T21:01:01.181-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-14T21:01:02.183-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-14T21:01:02.184-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-14T21:01:02.188-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-15T13:19:35.527-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-15T13:19:36.529-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-15T13:19:36.530-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-15T13:19:36.530-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-15T13:19:39.071-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-15T13:19:39.114-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-15T13:19:40.115-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-15T13:19:40.115-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-15T13:19:40.115-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-16T09:02:19.486-08:00 level=INFO msg="Received signal %v, shutting down..." !BADKEY=terminated
+time=2026-01-16T09:30:14.457-08:00 level=INFO msg="Daemon started (interval: %v, auto-commit: %v, auto-push: %v)" !BADKEY=5s !BADKEY=false !BADKEY=false
+time=2026-01-16T09:30:14.458-08:00 level=INFO msg="using database" path=/Users/quinn/src/gram/.beads/beads.db
+time=2026-01-16T09:30:14.463-08:00 level=INFO msg="database opened" path=/Users/quinn/src/gram/.beads/beads.db freshness_checking=true
+time=2026-01-16T09:30:14.463-08:00 level=INFO msg="upgrading .beads/.gitignore"
+time=2026-01-16T09:30:14.463-08:00 level=WARN msg="failed to upgrade .gitignore" error="open .beads/.gitignore: no such file or directory"
+time=2026-01-16T09:30:14.474-08:00 level=INFO msg="Repository fingerprint validated: %s" !BADKEY=e053e5f3
+time=2026-01-16T09:30:14.474-08:00 level=INFO msg="starting RPC server" socket=/Users/quinn/src/gram/.beads/bd.sock
+time=2026-01-16T09:30:14.475-08:00 level=INFO msg="RPC server ready (socket listening)"
+time=2026-01-16T09:30:14.482-08:00 level=INFO msg="registered in global registry"
+time=2026-01-16T09:30:14.482-08:00 level=INFO msg="Starting %s..." !BADKEY="sync cycle"
+time=2026-01-16T09:30:14.485-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-16T09:30:16.421-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-16T09:30:16.449-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-16T09:30:16.468-08:00 level=INFO msg="Sync cycle complete"
+time=2026-01-16T09:30:16.468-08:00 level=INFO msg="monitoring parent process" pid=0
+time=2026-01-16T09:30:16.468-08:00 level=INFO msg="using event-driven mode"
+time=2026-01-16T09:30:16.468-08:00 level=INFO msg="Auto-pull disabled: use 'git pull' manually to sync remote changes"
+time=2026-01-16T09:38:43.223-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-cpz
+time=2026-01-16T09:38:43.225-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-fl4
+time=2026-01-16T09:38:43.226-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-kjk
+time=2026-01-16T09:38:43.727-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-16T09:38:43.727-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-16T09:38:43.731-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-16T09:38:43.731-08:00 level=INFO msg="Export complete"
+time=2026-01-16T09:38:43.731-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-16T09:38:43.782-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-16T09:38:43.782-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-16T09:38:44.784-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-16T09:38:44.784-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-16T09:38:44.784-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-16T09:38:45.598-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-3k4
+time=2026-01-16T09:38:46.052-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-16T09:38:46.057-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-16T09:38:46.061-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-16T09:38:46.099-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-16T09:38:46.099-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-16T09:38:46.102-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-16T09:38:46.102-08:00 level=INFO msg="Export complete"
+time=2026-01-16T09:38:46.102-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-16T09:38:46.153-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-16T09:38:46.153-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-16T09:38:47.154-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-16T09:38:47.155-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-16T09:38:47.155-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-16T09:38:47.971-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-w2s
+time=2026-01-16T09:38:47.973-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-21w
+time=2026-01-16T09:38:47.974-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-511
+time=2026-01-16T09:38:48.475-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-16T09:38:48.475-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-16T09:38:48.478-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-16T09:38:48.478-08:00 level=INFO msg="Export complete"
+time=2026-01-16T09:38:48.478-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-16T09:38:48.528-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-16T09:38:48.528-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-16T09:38:48.572-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-16T09:38:48.577-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-16T09:38:48.579-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-16T09:38:49.212-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-03i
+time=2026-01-16T09:38:49.530-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-16T09:38:49.531-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-16T09:38:49.531-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-16T09:38:49.713-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-16T09:38:49.714-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-16T09:38:49.723-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-16T09:38:49.723-08:00 level=INFO msg="Export complete"
+time=2026-01-16T09:38:49.723-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-16T09:38:49.774-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-16T09:38:49.774-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-16T09:38:50.776-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-16T09:38:50.777-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-16T09:38:50.778-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-16T09:38:51.967-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-16T09:38:51.972-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-16T09:38:51.974-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-16T09:57:07.638-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-9r1
+time=2026-01-16T09:57:08.139-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-16T09:57:08.139-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-16T09:57:08.145-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-16T09:57:08.145-08:00 level=INFO msg="Export complete"
+time=2026-01-16T09:57:08.145-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-16T09:57:08.196-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-16T09:57:08.197-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-16T09:57:09.199-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-16T09:57:09.199-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-16T09:57:09.200-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-16T09:57:10.635-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-16T09:57:10.640-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-16T09:57:10.643-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:16:14.110-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-20T10:16:14.155-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-20T10:16:15.158-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:16:15.159-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:16:15.159-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-20T10:32:08.271-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-9r1
+time=2026-01-20T10:32:08.773-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:32:08.773-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:32:08.776-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:32:08.776-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:32:08.776-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:32:08.827-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:32:08.827-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:32:09.830-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:32:09.830-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:32:09.830-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:32:11.233-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:32:11.239-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:32:11.243-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:32:22.771-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-cpz
+time=2026-01-20T10:32:22.772-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-fl4
+time=2026-01-20T10:32:22.774-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-kjk
+time=2026-01-20T10:32:23.275-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:32:23.275-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:32:23.278-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:32:23.278-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:32:23.278-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:32:23.330-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:32:23.330-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:32:24.331-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:32:24.332-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:32:24.332-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:32:25.679-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:32:25.685-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:32:25.689-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:32:33.107-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-3k4
+time=2026-01-20T10:32:33.108-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-w2s
+time=2026-01-20T10:32:33.110-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-21w
+time=2026-01-20T10:32:33.111-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-511
+time=2026-01-20T10:32:33.612-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:32:33.612-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:32:33.616-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:32:33.616-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:32:33.617-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:32:33.668-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:32:33.668-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:32:34.670-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:32:34.670-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:32:34.671-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:32:36.022-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:32:36.027-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:32:36.030-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:32:52.227-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-z7p
+time=2026-01-20T10:32:52.728-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:32:52.728-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:32:52.732-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:32:52.732-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:32:52.732-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:32:52.783-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:32:52.784-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:32:53.786-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:32:53.786-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:32:53.786-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:32:55.078-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:32:55.084-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:32:55.086-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:32:57.615-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-1x1
+time=2026-01-20T10:32:58.116-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:32:58.116-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:32:58.120-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:32:58.120-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:32:58.120-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:32:58.172-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:32:58.172-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:32:59.173-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:32:59.174-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:32:59.174-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:33:00.554-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:33:00.560-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:33:00.562-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:33:03.495-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-3bn
+time=2026-01-20T10:33:03.996-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:33:03.996-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:33:04.000-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:33:04.000-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:33:04.000-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:33:04.051-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:33:04.051-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:33:05.054-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:33:05.054-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:33:05.054-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:33:06.380-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:33:06.386-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:33:06.388-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:33:10.406-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-1e2
+time=2026-01-20T10:33:10.907-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:33:10.907-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:33:10.911-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:33:10.911-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:33:10.912-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:33:10.963-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:33:10.963-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:33:11.965-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:33:11.965-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:33:11.966-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:33:13.301-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:33:13.307-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:33:13.309-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:33:15.490-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-y9k
+time=2026-01-20T10:33:15.991-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:33:15.991-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:33:15.994-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:33:15.994-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:33:15.994-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:33:16.045-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:33:16.045-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:33:17.047-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:33:17.048-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:33:17.048-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:33:18.351-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:33:18.358-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:33:18.360-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:33:19.790-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-juu
+time=2026-01-20T10:33:20.291-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:33:20.291-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:33:20.295-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:33:20.295-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:33:20.295-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:33:20.347-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:33:20.347-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:33:21.349-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:33:21.349-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:33:21.350-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:33:22.797-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:33:22.803-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:33:22.805-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:33:24.295-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-2ij
+time=2026-01-20T10:33:24.796-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:33:24.796-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:33:24.800-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:33:24.800-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:33:24.800-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:33:24.851-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:33:24.852-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:33:25.854-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:33:25.854-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:33:25.855-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:33:27.194-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:33:27.200-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:33:27.201-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:33:28.625-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-e4x
+time=2026-01-20T10:33:29.127-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:33:29.127-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:33:29.132-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:33:29.132-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:33:29.132-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:33:29.182-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:33:29.182-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:33:30.185-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:33:30.185-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:33:30.185-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:33:31.732-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:33:31.738-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:33:31.739-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:33:33.198-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-jbl
+time=2026-01-20T10:33:33.698-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:33:33.698-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:33:33.702-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:33:33.702-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:33:33.702-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:33:33.754-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:33:33.754-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:33:34.756-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:33:34.756-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:33:34.757-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:33:36.070-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:33:36.077-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:33:36.078-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:33:38.376-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-u1o
+time=2026-01-20T10:33:38.877-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:33:38.877-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:33:38.882-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:33:38.883-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:33:38.883-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:33:38.934-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:33:38.934-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:33:39.936-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:33:39.936-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:33:39.937-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:33:41.422-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:33:41.428-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:33:41.430-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:34:25.576-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-juu
+time=2026-01-20T10:34:26.077-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:34:26.077-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:34:26.082-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:34:26.082-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:34:26.082-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:34:26.134-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:34:26.134-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:34:27.136-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:34:27.136-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:34:27.137-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:34:28.461-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:34:28.467-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:34:28.469-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:34:36.623-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-9r1
+time=2026-01-20T10:34:36.687-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-9r1
+time=2026-01-20T10:34:36.740-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-9r1
+time=2026-01-20T10:34:36.795-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-9r1
+time=2026-01-20T10:34:37.296-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:34:37.296-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:34:37.301-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:34:37.301-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:34:37.301-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:34:37.352-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:34:37.352-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:34:38.354-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:34:38.354-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:34:38.355-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:34:39.842-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:34:39.848-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:34:39.849-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:34:47.036-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-9r1
+time=2026-01-20T10:34:47.097-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-9r1
+time=2026-01-20T10:34:47.153-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-9r1
+time=2026-01-20T10:34:47.212-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-9r1
+time=2026-01-20T10:34:47.265-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-9r1
+time=2026-01-20T10:34:47.318-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-9r1
+time=2026-01-20T10:34:47.819-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:34:47.819-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:34:47.824-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:34:47.824-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:34:47.824-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:34:47.875-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:34:47.875-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:34:48.877-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:34:48.877-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:34:48.878-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:34:50.369-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:34:50.376-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:34:50.378-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:41:44.351-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-zey
+time=2026-01-20T10:41:44.852-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:41:44.852-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:41:44.857-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:41:44.857-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:41:44.857-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:41:44.908-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:41:44.909-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:41:45.911-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:41:45.911-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:41:45.911-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:41:47.350-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:41:47.356-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:41:47.359-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:43:19.409-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-zey
+time=2026-01-20T10:43:19.467-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-z7p
+time=2026-01-20T10:43:19.522-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-1x1
+time=2026-01-20T10:43:19.574-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-3bn
+time=2026-01-20T10:43:19.624-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-1e2
+time=2026-01-20T10:43:19.675-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-y9k
+time=2026-01-20T10:43:19.727-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-juu
+time=2026-01-20T10:43:19.779-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-2ij
+time=2026-01-20T10:43:19.829-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-e4x
+time=2026-01-20T10:43:19.879-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-jbl
+time=2026-01-20T10:43:19.929-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-u1o
+time=2026-01-20T10:43:20.430-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:43:20.430-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:43:20.434-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:43:20.434-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:43:20.434-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:43:20.485-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:43:20.485-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:43:21.486-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:43:21.486-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:43:21.487-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:43:22.746-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:43:22.753-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:43:22.756-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:48:22.728-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-z7p
+time=2026-01-20T10:48:22.788-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-3bn
+time=2026-01-20T10:48:22.842-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-1x1
+time=2026-01-20T10:48:22.895-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-1e2
+time=2026-01-20T10:48:22.949-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-y9k
+time=2026-01-20T10:48:23.000-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-juu
+time=2026-01-20T10:48:23.052-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-2ij
+time=2026-01-20T10:48:23.104-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-e4x
+time=2026-01-20T10:48:23.158-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-jbl
+time=2026-01-20T10:48:23.209-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-u1o
+time=2026-01-20T10:48:23.710-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:48:23.711-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:48:23.715-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:48:23.715-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:48:23.715-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:48:23.766-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:48:23.766-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:48:24.768-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:48:24.768-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:48:24.769-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:48:26.277-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:48:26.286-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:48:26.287-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:50:44.741-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-9r1
+time=2026-01-20T10:50:45.242-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:50:45.242-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:50:45.246-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:50:45.246-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:50:45.246-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:50:45.297-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:50:45.297-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:50:46.299-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:50:46.299-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:50:46.300-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:50:47.807-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:50:47.814-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:50:47.817-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:51:44.894-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-ph4
+time=2026-01-20T10:51:45.396-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:51:45.396-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:51:45.408-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:51:45.408-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:51:45.408-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:51:45.459-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:51:45.459-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:51:46.462-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:51:46.462-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:51:46.463-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:51:47.957-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:51:47.964-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:51:47.966-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T10:56:08.491-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-ph4
+time=2026-01-20T10:56:08.992-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T10:56:08.992-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T10:56:09.001-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T10:56:09.001-08:00 level=INFO msg="Export complete"
+time=2026-01-20T10:56:09.002-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T10:56:09.053-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T10:56:09.053-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T10:56:10.056-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T10:56:10.056-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T10:56:10.057-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T10:56:11.601-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T10:56:11.609-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T10:56:11.610-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T11:36:34.758-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-d3x
+time=2026-01-20T11:36:35.259-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T11:36:35.259-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T11:36:35.269-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T11:36:35.269-08:00 level=INFO msg="Export complete"
+time=2026-01-20T11:36:35.269-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T11:36:35.320-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T11:36:35.320-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T11:36:36.322-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T11:36:36.325-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T11:36:36.326-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T11:36:38.079-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T11:36:38.085-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T11:36:38.089-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T11:40:52.050-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-d3x
+time=2026-01-20T11:40:52.551-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T11:40:52.552-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T11:40:52.561-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T11:40:52.561-08:00 level=INFO msg="Export complete"
+time=2026-01-20T11:40:52.561-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T11:40:52.612-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T11:40:52.613-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T11:40:53.614-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T11:40:53.615-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T11:40:53.616-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T11:40:54.969-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-20T11:40:54.979-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-20T11:40:54.981-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-20T11:41:02.255-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T11:41:02.306-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T11:41:02.306-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T11:41:03.309-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T11:41:03.309-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T11:41:03.310-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-20T11:41:04.059-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T11:41:04.110-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T11:41:04.110-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T11:41:05.112-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T11:41:05.112-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T11:41:05.112-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-20T11:57:18.649-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-20T11:57:19.652-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T11:57:19.652-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T11:57:19.653-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-20T11:57:25.728-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T11:57:25.779-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T11:57:25.779-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T11:57:26.780-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T11:57:26.781-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T11:57:26.784-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-20T11:59:35.911-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-20T11:59:36.913-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T11:59:36.914-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T11:59:36.915-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-20T11:59:39.115-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T11:59:39.166-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T11:59:39.166-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T11:59:40.168-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T11:59:40.168-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T11:59:40.169-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-20T12:13:11.418-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T12:13:11.470-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T12:13:11.470-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T12:13:12.471-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T12:13:12.472-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T12:13:12.475-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-20T12:19:58.634-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T12:19:58.684-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T12:19:58.684-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T12:19:59.687-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T12:19:59.688-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T12:19:59.690-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-20T12:20:15.019-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-20T12:20:15.111-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-20T12:20:15.154-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-20T12:20:15.155-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-20T12:20:16.156-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T12:20:16.157-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T12:20:16.158-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-20T12:20:20.977-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T12:20:21.029-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T12:20:21.029-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T12:20:22.031-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T12:20:22.032-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T12:20:22.035-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-20T14:10:16.550-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-5h2.1
+time=2026-01-20T14:10:17.051-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T14:10:17.051-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T14:10:17.060-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T14:10:17.060-08:00 level=INFO msg="Export complete"
+time=2026-01-20T14:10:17.060-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T14:10:17.112-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T14:10:17.112-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T14:10:18.114-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T14:10:18.114-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T14:10:18.115-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T14:10:19.564-08:00 level=INFO msg="Pull failed: %v (backoff: %v)" !BADKEY="git pull failed: exit status 1\nfatal: couldn't find remote ref age-1206/connect-to-gram-domain\n" !BADKEY=30s
+time=2026-01-20T14:29:56.784-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-20T14:29:57.787-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T14:29:57.788-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T14:29:57.788-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-20T14:30:52.555-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-20T14:30:53.556-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T14:30:53.559-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T14:30:53.560-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-20T14:33:38.538-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T14:33:38.589-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T14:33:38.589-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T14:33:39.591-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T14:33:39.593-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T14:33:39.595-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-20T14:36:28.252-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T14:36:28.303-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T14:36:28.303-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T14:36:29.305-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T14:36:29.305-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T14:36:29.306-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-20T14:36:31.961-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T14:36:32.012-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T14:36:32.012-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T14:36:33.014-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T14:36:33.015-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T14:36:33.016-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-20T14:48:05.682-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T14:48:05.733-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T14:48:05.733-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T14:48:06.735-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T14:48:06.735-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T14:48:06.736-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-20T14:48:10.308-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T14:48:10.359-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T14:48:10.359-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T14:48:11.361-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T14:48:11.361-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T14:48:11.363-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-20T16:51:11.627-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-z7p
+time=2026-01-20T16:51:12.128-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T16:51:12.128-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T16:51:12.133-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T16:51:12.133-08:00 level=INFO msg="Export complete"
+time=2026-01-20T16:51:12.134-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T16:51:12.185-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T16:51:12.185-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T16:51:13.186-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T16:51:13.187-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T16:51:13.187-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-20T16:51:14.497-08:00 level=INFO msg="Pull failed: %v (backoff: %v)" !BADKEY="git pull failed: exit status 1\nfatal: couldn't find remote ref quinn/fully-proxy-auth-server-metadtat\n" !BADKEY=1m0s
+time=2026-01-20T16:54:09.855-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-z7p
+time=2026-01-20T16:54:10.033-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T16:54:10.084-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T16:54:10.084-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T16:54:10.355-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-20T16:54:10.355-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-20T16:54:10.363-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-20T16:54:10.363-08:00 level=INFO msg="Export complete"
+time=2026-01-20T16:54:10.363-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-20T16:54:10.414-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-20T16:54:10.414-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-20T16:54:11.416-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T16:54:11.417-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T16:54:11.418-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-20T17:03:58.338-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-20T17:03:59.340-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-20T17:03:59.340-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-20T17:03:59.341-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-21T10:09:27.338-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-21T10:09:28.340-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-21T10:09:28.341-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-21T10:09:28.343-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-21T10:09:46.719-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-21T10:09:47.721-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-21T10:09:47.723-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-21T10:09:47.733-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-21T10:14:48.859-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-21T10:14:48.910-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-21T10:14:48.910-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-21T10:14:49.912-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-21T10:14:49.916-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-21T10:14:49.918-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-21T10:15:01.805-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-21T10:15:01.856-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-21T10:15:01.856-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-21T10:15:02.858-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-21T10:15:02.858-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-21T10:15:02.859-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-21T10:15:36.407-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-21T10:15:37.410-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-21T10:15:37.410-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-21T10:15:37.411-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-21T10:32:55.298-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-pri
+time=2026-01-21T10:32:55.800-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-21T10:32:55.801-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-21T10:32:55.809-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-21T10:32:55.809-08:00 level=INFO msg="Export complete"
+time=2026-01-21T10:32:55.809-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-21T10:32:55.860-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-21T10:32:55.860-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-21T10:32:56.863-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-21T10:32:56.863-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-21T10:32:56.863-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-21T10:32:58.125-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-21T10:32:58.132-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-21T10:32:58.133-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-21T10:55:04.624-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-1x1
+time=2026-01-21T10:55:05.125-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-21T10:55:05.125-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-21T10:55:05.130-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-21T10:55:05.130-08:00 level=INFO msg="Export complete"
+time=2026-01-21T10:55:05.130-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-21T10:55:05.181-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-21T10:55:05.181-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-21T10:55:06.183-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-21T10:55:06.183-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-21T10:55:06.184-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-21T10:55:07.465-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-21T10:55:07.472-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-21T10:55:07.474-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-21T10:55:45.822-08:00 level=INFO msg="Received signal %v, shutting down..." !BADKEY=terminated
+time=2026-01-21T11:07:15.391-08:00 level=INFO msg="Daemon started (interval: %v, auto-commit: %v, auto-push: %v)" !BADKEY=5s !BADKEY=false !BADKEY=false
+time=2026-01-21T11:07:15.392-08:00 level=INFO msg="using database" path=/Users/quinn/src/gram/.beads/beads.db
+time=2026-01-21T11:07:15.399-08:00 level=INFO msg="database opened" path=/Users/quinn/src/gram/.beads/beads.db freshness_checking=true
+time=2026-01-21T11:07:15.399-08:00 level=INFO msg="upgrading .beads/.gitignore"
+time=2026-01-21T11:07:15.399-08:00 level=WARN msg="failed to upgrade .gitignore" error="open .beads/.gitignore: no such file or directory"
+time=2026-01-21T11:07:15.410-08:00 level=INFO msg="Repository fingerprint validated: %s" !BADKEY=e053e5f3
+time=2026-01-21T11:07:15.411-08:00 level=INFO msg="starting RPC server" socket=/Users/quinn/src/gram/.beads/bd.sock
+time=2026-01-21T11:07:15.412-08:00 level=INFO msg="RPC server ready (socket listening)"
+time=2026-01-21T11:07:15.417-08:00 level=INFO msg="registered in global registry"
+time=2026-01-21T11:07:15.417-08:00 level=INFO msg="Starting %s..." !BADKEY="sync cycle"
+time=2026-01-21T11:07:15.422-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-21T11:07:16.704-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-21T11:07:16.729-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-21T11:07:16.748-08:00 level=INFO msg="Sync cycle complete"
+time=2026-01-21T11:07:16.748-08:00 level=INFO msg="monitoring parent process" pid=0
+time=2026-01-21T11:07:16.748-08:00 level=INFO msg="using event-driven mode"
+time=2026-01-21T11:07:16.749-08:00 level=INFO msg="Auto-pull disabled: use 'git pull' manually to sync remote changes"
+time=2026-01-21T11:07:16.749-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-e4x
+time=2026-01-21T11:07:17.250-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-21T11:07:17.251-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-21T11:07:17.256-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-21T11:07:17.256-08:00 level=INFO msg="Export complete"
+time=2026-01-21T11:07:17.256-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-21T11:07:17.306-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-21T11:07:17.306-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-21T11:07:18.308-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-21T11:07:18.309-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-21T11:07:18.309-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-21T11:07:19.644-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-21T11:07:19.654-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-21T11:07:19.654-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-22T09:26:44.242-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-22T09:26:45.246-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T09:26:45.247-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T09:26:45.247-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T09:33:35.652-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T09:33:35.704-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T09:33:35.704-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T09:33:36.706-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T09:33:36.706-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T09:33:36.707-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T09:33:45.571-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T09:33:45.622-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T09:33:45.622-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T09:33:46.624-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T09:33:46.625-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T09:33:46.626-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T09:48:33.845-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-22T09:48:34.848-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T09:48:34.848-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T09:48:34.849-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T09:49:34.637-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-22T09:49:35.640-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T09:49:35.640-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T09:49:35.642-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T14:05:30.920-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-2ij
+time=2026-01-22T14:05:31.421-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-22T14:05:31.421-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-22T14:05:31.427-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-22T14:05:31.427-08:00 level=INFO msg="Export complete"
+time=2026-01-22T14:05:31.428-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T14:05:31.479-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T14:05:31.479-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T14:05:32.481-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T14:05:32.481-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T14:05:32.481-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-22T14:05:34.192-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-22T14:05:34.201-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-22T14:05:34.204-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-22T14:06:06.881-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-e4x
+time=2026-01-22T14:06:07.382-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-22T14:06:07.382-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-22T14:06:07.388-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-22T14:06:07.388-08:00 level=INFO msg="Export complete"
+time=2026-01-22T14:06:07.389-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T14:06:07.440-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T14:06:07.440-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T14:06:08.442-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T14:06:08.442-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T14:06:08.443-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-22T14:06:10.091-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-22T14:06:10.099-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-22T14:06:10.101-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-22T14:06:20.445-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-q0p
+time=2026-01-22T14:06:20.946-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-22T14:06:20.946-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-22T14:06:20.953-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-22T14:06:20.953-08:00 level=INFO msg="Export complete"
+time=2026-01-22T14:06:20.953-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T14:06:21.004-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T14:06:21.004-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T14:06:22.006-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T14:06:22.007-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T14:06:22.007-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-22T14:06:23.758-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-22T14:06:23.766-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-22T14:06:23.768-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-22T14:06:28.055-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-q0p
+time=2026-01-22T14:06:28.556-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-22T14:06:28.556-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-22T14:06:28.564-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-22T14:06:28.564-08:00 level=INFO msg="Export complete"
+time=2026-01-22T14:06:28.564-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T14:06:28.615-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T14:06:28.615-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T14:06:29.617-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T14:06:29.617-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T14:06:29.618-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-22T14:06:31.195-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-22T14:06:31.203-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-22T14:06:31.205-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-22T14:06:34.671-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-9r1
+time=2026-01-22T14:06:35.172-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-22T14:06:35.172-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-22T14:06:35.179-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-22T14:06:35.179-08:00 level=INFO msg="Export complete"
+time=2026-01-22T14:06:35.180-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T14:06:35.231-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T14:06:35.231-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T14:06:36.233-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T14:06:36.233-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T14:06:36.234-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-22T14:06:37.925-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-22T14:06:37.934-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-22T14:06:37.936-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-22T14:06:51.785-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T14:06:51.836-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T14:06:51.836-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T14:06:51.901-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T14:06:51.952-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T14:06:51.952-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T14:06:52.954-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T14:06:52.955-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T14:06:52.955-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-22T14:06:54.457-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-22T14:06:54.466-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-22T14:06:54.468-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-22T14:51:15.843-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-22T14:51:16.844-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T14:51:16.844-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T14:51:16.845-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T15:03:01.248-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-22T15:03:01.659-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-22T15:03:02.671-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T15:03:02.677-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T15:03:02.678-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T15:18:24.459-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-22T15:18:25.461-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T15:18:25.462-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T15:18:25.462-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T15:18:46.265-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-22T15:18:47.268-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T15:18:47.268-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T15:18:47.268-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T15:28:31.554-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-22T15:28:32.555-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T15:28:32.556-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T15:28:32.556-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T15:29:16.620-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-22T15:29:17.621-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T15:29:17.621-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T15:29:17.622-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T15:44:00.219-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-22T15:44:01.221-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T15:44:01.222-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T15:44:01.224-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T15:46:45.236-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-22T15:46:45.251-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-22T15:46:46.253-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T15:46:46.254-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T15:46:46.255-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T16:00:38.119-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-01o
+time=2026-01-22T16:00:38.619-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-22T16:00:38.619-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-22T16:00:38.629-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-22T16:00:38.629-08:00 level=INFO msg="Export complete"
+time=2026-01-22T16:00:38.629-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T16:00:38.680-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T16:00:38.680-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T16:00:39.681-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T16:00:39.681-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T16:00:39.681-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-22T16:00:41.424-08:00 level=INFO msg="Pull failed: %v (backoff: %v)" !BADKEY="git pull failed: exit status 1\nfatal: couldn't find remote ref external-mcp/add-header-configuration\n" !BADKEY=30s
+time=2026-01-22T16:02:48.540-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-2ij
+time=2026-01-22T16:02:48.623-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-01o
+time=2026-01-22T16:02:48.715-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-2ij
+time=2026-01-22T16:02:49.216-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-22T16:02:49.217-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-22T16:02:49.225-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-22T16:02:49.225-08:00 level=INFO msg="Export complete"
+time=2026-01-22T16:02:49.225-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T16:02:49.277-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T16:02:49.277-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T16:02:50.278-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T16:02:50.279-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T16:02:50.280-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-22T16:02:51.880-08:00 level=INFO msg="Pull failed: %v (backoff: %v)" !BADKEY="git pull failed: exit status 1\nfatal: couldn't find remote ref external-mcp/add-header-configuration\n" !BADKEY=1m0s
+time=2026-01-22T16:19:12.125-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-01o
+time=2026-01-22T16:19:12.626-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-22T16:19:12.626-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-22T16:19:12.632-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-22T16:19:12.632-08:00 level=INFO msg="Export complete"
+time=2026-01-22T16:19:12.633-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T16:19:12.683-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T16:19:12.683-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T16:19:13.684-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T16:19:13.685-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T16:19:13.686-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-22T16:19:15.471-08:00 level=INFO msg="Pull failed: %v (backoff: %v)" !BADKEY="git pull failed: exit status 1\nfatal: couldn't find remote ref external-mcp/add-header-configuration\n" !BADKEY=2m0s
+time=2026-01-22T16:26:02.179-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-c2g
+time=2026-01-22T16:26:02.680-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-22T16:26:02.680-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-22T16:26:02.689-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-22T16:26:02.689-08:00 level=INFO msg="Export complete"
+time=2026-01-22T16:26:02.689-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T16:26:02.740-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T16:26:02.740-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T16:26:03.742-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T16:26:03.743-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T16:26:03.744-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-22T16:26:05.166-08:00 level=INFO msg="Pull failed: %v (backoff: %v)" !BADKEY="git pull failed: exit status 1\nfatal: couldn't find remote ref external-mcp/add-header-configuration\n" !BADKEY=5m0s
+time=2026-01-22T16:27:45.915-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-c2g
+time=2026-01-22T16:27:46.293-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T16:27:46.416-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-22T16:27:46.417-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-22T16:27:46.421-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-22T16:27:46.421-08:00 level=INFO msg="Export complete"
+time=2026-01-22T16:27:46.421-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T16:27:46.471-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T16:27:46.471-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T16:27:47.472-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T16:27:47.473-08:00 level=INFO msg="Skipping %s: in backoff period" !BADKEY=auto-import
+time=2026-01-22T16:27:56.310-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T16:27:56.475-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T16:27:56.526-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T16:27:56.526-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T16:27:57.770-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T16:27:57.770-08:00 level=INFO msg="Skipping %s: in backoff period" !BADKEY=auto-import
+time=2026-01-22T16:29:13.761-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T16:29:13.812-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T16:29:13.812-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T16:29:13.931-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T16:29:14.932-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T16:29:14.932-08:00 level=INFO msg="Skipping %s: in backoff period" !BADKEY=auto-import
+time=2026-01-22T16:29:15.596-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T16:29:16.737-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T16:29:16.738-08:00 level=INFO msg="Skipping %s: in backoff period" !BADKEY=auto-import
+time=2026-01-22T16:29:42.365-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T16:29:43.367-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T16:29:43.369-08:00 level=INFO msg="Skipping %s: in backoff period" !BADKEY=auto-import
+time=2026-01-22T17:03:47.953-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T17:03:48.004-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T17:03:48.005-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:03:48.113-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:03:49.226-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T17:03:49.226-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T17:03:49.227-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T17:04:21.816-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:04:22.818-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T17:04:22.818-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T17:04:22.818-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T17:52:52.939-08:00 level=INFO msg="Daemon started (interval: %v, auto-commit: %v, auto-push: %v)" !BADKEY=5s !BADKEY=false !BADKEY=false
+time=2026-01-22T17:52:52.940-08:00 level=INFO msg="using database" path=/Users/quinn/src/gram/.beads/beads.db
+time=2026-01-22T17:52:52.946-08:00 level=INFO msg="database opened" path=/Users/quinn/src/gram/.beads/beads.db freshness_checking=true
+time=2026-01-22T17:52:52.946-08:00 level=INFO msg="upgrading .beads/.gitignore"
+time=2026-01-22T17:52:52.946-08:00 level=WARN msg="failed to upgrade .gitignore" error="open .beads/.gitignore: no such file or directory"
+time=2026-01-22T17:52:52.956-08:00 level=INFO msg="Repository fingerprint validated: %s" !BADKEY=e053e5f3
+time=2026-01-22T17:52:52.956-08:00 level=INFO msg="starting RPC server" socket=/Users/quinn/src/gram/.beads/bd.sock
+time=2026-01-22T17:52:52.956-08:00 level=INFO msg="RPC server ready (socket listening)"
+time=2026-01-22T17:52:52.962-08:00 level=INFO msg="registered in global registry"
+time=2026-01-22T17:52:52.962-08:00 level=INFO msg="Starting %s..." !BADKEY="sync cycle"
+time=2026-01-22T17:52:52.966-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-22T17:52:54.294-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-22T17:52:54.318-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-22T17:52:54.337-08:00 level=INFO msg="Sync cycle complete"
+time=2026-01-22T17:52:54.337-08:00 level=INFO msg="monitoring parent process" pid=0
+time=2026-01-22T17:52:54.337-08:00 level=INFO msg="using event-driven mode"
+time=2026-01-22T17:52:54.337-08:00 level=INFO msg="Auto-pull disabled: use 'git pull' manually to sync remote changes"
+time=2026-01-22T17:52:54.364-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:52:55.463-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T17:52:55.464-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T17:52:55.465-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T17:53:45.787-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:53:46.789-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T17:53:46.790-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T17:53:46.790-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T17:56:09.114-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T17:56:09.165-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T17:56:09.165-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:56:09.172-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:56:10.295-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T17:56:10.296-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T17:56:10.298-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T17:56:40.439-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-01o
+time=2026-01-22T17:56:40.940-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-22T17:56:40.940-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-22T17:56:40.948-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-22T17:56:40.948-08:00 level=INFO msg="Export complete"
+time=2026-01-22T17:56:40.948-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T17:56:40.999-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T17:56:40.999-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:56:42.001-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T17:56:42.002-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T17:56:42.002-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-22T17:56:42.027-08:00 level=INFO msg="⚠️  WARNING: Uncommitted local changes detected in %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:56:42.027-08:00 level=INFO msg="   Pulling from remote may overwrite local unpushed changes."
+time=2026-01-22T17:56:42.027-08:00 level=INFO msg="   Consider running 'bd sync' to commit and push your changes first."
+time=2026-01-22T17:56:43.259-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-22T17:56:43.268-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-22T17:56:43.271-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-22T17:57:30.968-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T17:57:31.019-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T17:57:31.019-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:57:32.022-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T17:57:32.022-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T17:57:32.023-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T17:57:32.469-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T17:57:32.520-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T17:57:32.520-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:57:32.579-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T17:57:32.630-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T17:57:32.630-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:57:32.667-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:57:33.786-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T17:57:33.787-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T17:57:33.787-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-22T17:57:33.806-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:57:33.811-08:00 level=INFO msg="⚠️  WARNING: Uncommitted local changes detected in %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:57:33.811-08:00 level=INFO msg="   Pulling from remote may overwrite local unpushed changes."
+time=2026-01-22T17:57:33.811-08:00 level=INFO msg="   Consider running 'bd sync' to commit and push your changes first."
+time=2026-01-22T17:57:34.808-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T17:57:34.809-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T17:57:34.809-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-22T17:57:34.830-08:00 level=INFO msg="⚠️  WARNING: Uncommitted local changes detected in %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:57:34.830-08:00 level=INFO msg="   Pulling from remote may overwrite local unpushed changes."
+time=2026-01-22T17:57:34.830-08:00 level=INFO msg="   Consider running 'bd sync' to commit and push your changes first."
+time=2026-01-22T17:57:35.183-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-22T17:57:35.190-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-22T17:57:35.191-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-22T17:57:36.181-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-22T17:57:36.189-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-22T17:57:36.189-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-22T17:57:38.782-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T17:57:38.833-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T17:57:38.834-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:57:39.000-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:57:40.002-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T17:57:40.003-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T17:57:40.003-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T17:57:40.216-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:57:40.242-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T17:57:40.293-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T17:57:40.293-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:57:40.353-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T17:57:40.404-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T17:57:40.404-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:57:41.579-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T17:57:41.579-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T17:57:41.579-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-22T17:57:41.597-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:57:41.602-08:00 level=INFO msg="⚠️  WARNING: Uncommitted local changes detected in %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:57:41.602-08:00 level=INFO msg="   Pulling from remote may overwrite local unpushed changes."
+time=2026-01-22T17:57:41.602-08:00 level=INFO msg="   Consider running 'bd sync' to commit and push your changes first."
+time=2026-01-22T17:57:42.599-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T17:57:42.600-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T17:57:42.600-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-22T17:57:42.621-08:00 level=INFO msg="⚠️  WARNING: Uncommitted local changes detected in %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:57:42.621-08:00 level=INFO msg="   Pulling from remote may overwrite local unpushed changes."
+time=2026-01-22T17:57:42.621-08:00 level=INFO msg="   Consider running 'bd sync' to commit and push your changes first."
+time=2026-01-22T17:57:42.903-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-22T17:57:42.912-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-22T17:57:42.912-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-22T17:57:43.883-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-22T17:57:43.891-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-22T17:57:43.891-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-22T17:57:47.666-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T17:57:47.717-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T17:57:47.717-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:57:47.736-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:57:48.809-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T17:57:48.809-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T17:57:48.811-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T17:59:11.550-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T17:59:11.601-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T17:59:11.601-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:59:11.749-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:59:13.160-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T17:59:13.161-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T17:59:13.166-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T17:59:42.024-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:59:43.026-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T17:59:43.026-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T17:59:43.028-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T17:59:43.603-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T17:59:43.654-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T17:59:43.654-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:59:43.711-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T17:59:43.762-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T17:59:43.762-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:59:43.843-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:59:44.845-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T17:59:44.846-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T17:59:44.846-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-22T17:59:44.864-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T17:59:45.867-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T17:59:45.867-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T17:59:45.868-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-22T17:59:46.166-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-22T17:59:46.173-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-22T17:59:46.174-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-22T17:59:47.206-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-22T17:59:47.213-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-22T17:59:47.213-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-22T22:21:43.244-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T22:21:44.246-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T22:21:44.247-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T22:21:44.248-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-22T22:21:45.581-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-22T22:21:45.589-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-22T22:21:45.589-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-22T22:23:59.528-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-22T22:24:00.530-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T22:24:00.531-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T22:24:00.532-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T22:27:43.569-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T22:27:43.620-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T22:27:43.620-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T22:27:44.621-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T22:27:44.621-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T22:27:44.623-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T22:28:21.065-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T22:28:21.116-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T22:28:21.116-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T22:28:22.118-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T22:28:22.119-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T22:28:22.120-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T22:36:46.999-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T22:36:47.050-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T22:36:47.050-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T22:36:48.052-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T22:36:48.053-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T22:36:48.055-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T22:38:26.243-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-6tq
+time=2026-01-22T22:38:26.744-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-22T22:38:26.744-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-22T22:38:26.763-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-22T22:38:26.763-08:00 level=INFO msg="Export complete"
+time=2026-01-22T22:38:26.763-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T22:38:26.814-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T22:38:26.814-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T22:38:27.816-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T22:38:27.817-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T22:38:27.817-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-22T22:38:29.161-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-22T22:38:29.169-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-22T22:38:29.170-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-22T22:39:40.958-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-22T22:39:41.958-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T22:39:41.959-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T22:39:41.961-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T22:42:21.043-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-22T22:42:22.046-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T22:42:22.046-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T22:42:22.048-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T22:57:13.569-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T22:57:13.620-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T22:57:13.620-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T22:57:14.622-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T22:57:14.623-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T22:57:14.627-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-22T22:57:20.811-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-22T22:57:20.862-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-22T22:57:20.862-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-22T22:57:21.865-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-22T22:57:21.865-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-22T22:57:21.866-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-23T09:15:21.835-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-23T09:15:21.886-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-23T09:15:21.886-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-23T09:15:22.888-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T09:15:22.889-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T09:15:22.893-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-23T09:15:24.856-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-23T09:15:24.907-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-23T09:15:24.907-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-23T09:15:25.909-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T09:15:25.910-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T09:15:25.911-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-23T10:49:13.536-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-uwr
+time=2026-01-23T10:49:14.038-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-23T10:49:14.038-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-23T10:49:14.045-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-23T10:49:14.045-08:00 level=INFO msg="Export complete"
+time=2026-01-23T10:49:14.045-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-23T10:49:14.097-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-23T10:49:14.097-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-23T10:49:15.099-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T10:49:15.099-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T10:49:15.099-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-23T10:49:17.107-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-23T10:49:17.116-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-23T10:49:17.116-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-23T10:49:26.318-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-uwr
+time=2026-01-23T10:49:26.818-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-23T10:49:26.818-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-23T10:49:26.824-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-23T10:49:26.824-08:00 level=INFO msg="Export complete"
+time=2026-01-23T10:49:26.824-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-23T10:49:26.875-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-23T10:49:26.875-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-23T10:49:27.878-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T10:49:27.878-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T10:49:27.878-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-23T10:49:29.242-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-23T10:49:29.249-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-23T10:49:29.251-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-23T10:49:38.677-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-23T10:49:38.728-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-23T10:49:38.728-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-23T10:49:38.788-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-23T10:49:38.839-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-23T10:49:38.839-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-23T10:49:39.841-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T10:49:39.842-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T10:49:39.842-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-23T10:49:41.301-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-23T10:49:41.310-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-23T10:49:41.312-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-23T13:08:23.359-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-23T13:08:24.361-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T13:08:24.361-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T13:08:24.364-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-23T13:08:45.740-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-23T13:08:45.791-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-23T13:08:45.791-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-23T13:08:46.793-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T13:08:46.794-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T13:08:46.795-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-23T13:09:46.687-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-23T13:09:46.843-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-23T13:09:47.845-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T13:09:47.846-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T13:09:47.847-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-23T13:43:19.163-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-23T13:43:20.165-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T13:43:20.165-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T13:43:20.166-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-23T13:43:38.991-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-23T13:43:39.091-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-23T13:43:40.093-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T13:43:40.093-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T13:43:40.094-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-23T13:44:02.694-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-23T13:44:03.697-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T13:44:03.697-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T13:44:03.698-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-23T13:47:18.192-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-23T13:47:19.194-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T13:47:19.195-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T13:47:19.196-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-23T13:48:12.963-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-23T13:48:13.035-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-23T13:48:14.036-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T13:48:14.037-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T13:48:14.037-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-23T13:49:25.907-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-23T13:49:26.909-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T13:49:26.909-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T13:49:26.910-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-23T14:04:37.320-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-23T14:04:37.331-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-23T14:04:38.333-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T14:04:38.334-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T14:04:38.334-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-23T16:35:31.256-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-23T16:35:31.308-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-23T16:35:31.308-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-23T16:35:32.310-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T16:35:32.310-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T16:35:32.311-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-23T16:35:32.800-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-23T16:35:32.850-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-23T16:35:32.850-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-23T16:35:33.852-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T16:35:33.852-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T16:35:33.853-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-23T16:37:38.899-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-23T16:37:38.949-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-23T16:37:38.949-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-23T16:37:39.951-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T16:37:39.951-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T16:37:39.952-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-23T16:37:41.869-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-23T16:37:41.920-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-23T16:37:41.920-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-23T16:37:42.921-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T16:37:42.922-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T16:37:42.925-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-23T16:38:23.858-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-23T16:38:23.909-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-23T16:38:23.909-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-23T16:38:24.911-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-23T16:38:24.911-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-23T16:38:24.913-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-25T15:24:09.211-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-u3e
+time=2026-01-25T15:24:09.713-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-25T15:24:09.713-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-25T15:24:09.717-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-25T15:24:09.717-08:00 level=INFO msg="Export complete"
+time=2026-01-25T15:24:09.717-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-25T15:24:09.770-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-25T15:24:09.770-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-25T15:24:10.774-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-25T15:24:10.774-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-25T15:24:10.774-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-25T15:24:12.193-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-25T15:24:12.200-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-25T15:24:12.202-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-25T15:50:20.691-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-3gg
+time=2026-01-25T15:50:21.192-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-25T15:50:21.192-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-25T15:50:21.197-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-25T15:50:21.197-08:00 level=INFO msg="Export complete"
+time=2026-01-25T15:50:21.197-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-25T15:50:21.248-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-25T15:50:21.248-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-25T15:50:22.250-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-25T15:50:22.250-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-25T15:50:22.250-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-25T15:50:23.572-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-25T15:50:23.581-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-25T15:50:23.583-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-25T15:50:31.810-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-2ij
+time=2026-01-25T15:50:32.311-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-25T15:50:32.311-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-25T15:50:32.316-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-25T15:50:32.316-08:00 level=INFO msg="Export complete"
+time=2026-01-25T15:50:32.316-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-25T15:50:32.367-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-25T15:50:32.367-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-25T15:50:33.368-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-25T15:50:33.369-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-25T15:50:33.369-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-25T15:50:34.729-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-25T15:50:34.738-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-25T15:50:34.740-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-25T16:16:34.326-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-u3e
+time=2026-01-25T16:16:34.827-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-25T16:16:34.827-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-25T16:16:34.833-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-25T16:16:34.833-08:00 level=INFO msg="Export complete"
+time=2026-01-25T16:16:34.833-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-25T16:16:34.885-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-25T16:16:34.885-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-25T16:16:35.887-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-25T16:16:35.887-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-25T16:16:35.888-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-25T16:16:37.196-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-25T16:16:37.205-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-25T16:16:37.207-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-26T11:47:10.351-08:00 level=INFO msg="Mutation detected: %s %s" create=gram-5uo
+time=2026-01-26T11:47:10.852-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-26T11:47:10.852-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-26T11:47:10.858-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-26T11:47:10.858-08:00 level=INFO msg="Export complete"
+time=2026-01-26T11:47:10.858-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-26T11:47:10.909-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-26T11:47:10.909-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-26T11:47:11.911-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-26T11:47:11.911-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-26T11:47:11.912-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-26T11:47:13.163-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-26T11:47:13.171-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-26T11:47:13.175-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-26T11:49:05.929-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-5uo
+time=2026-01-26T11:49:06.430-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-26T11:49:06.430-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-26T11:49:06.435-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-26T11:49:06.435-08:00 level=INFO msg="Export complete"
+time=2026-01-26T11:49:06.435-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-26T11:49:06.486-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-26T11:49:06.486-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-26T11:49:07.488-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-26T11:49:07.488-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-26T11:49:07.489-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-26T11:49:08.922-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-26T11:49:08.932-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-26T11:49:08.934-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-26T11:49:20.938-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-5uo
+time=2026-01-26T11:49:21.440-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-26T11:49:21.440-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-26T11:49:21.445-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-26T11:49:21.445-08:00 level=INFO msg="Export complete"
+time=2026-01-26T11:49:21.445-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-26T11:49:21.496-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-26T11:49:21.496-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-26T11:49:22.498-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-26T11:49:22.498-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-26T11:49:22.499-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-26T11:49:23.832-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-26T11:49:23.842-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-26T11:49:23.843-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-26T11:50:40.137-08:00 level=INFO msg="Mutation detected: %s %s" update=""
+time=2026-01-26T11:50:40.219-08:00 level=INFO msg="Mutation detected: %s %s" update=gram-u3e
+time=2026-01-26T11:50:40.720-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-26T11:50:40.720-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-26T11:50:40.724-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-26T11:50:40.724-08:00 level=INFO msg="Export complete"
+time=2026-01-26T11:50:40.726-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-26T11:50:40.777-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-26T11:50:40.777-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-26T11:50:41.778-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-26T11:50:41.779-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-26T11:50:41.779-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-26T11:50:43.221-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-26T11:50:43.232-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-26T11:50:43.235-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-26T11:56:33.978-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-5uo
+time=2026-01-26T11:56:34.480-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-26T11:56:34.480-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-26T11:56:34.488-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-26T11:56:34.488-08:00 level=INFO msg="Export complete"
+time=2026-01-26T11:56:34.488-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-26T11:56:34.539-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-26T11:56:34.539-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-26T11:56:35.541-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-26T11:56:35.542-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-26T11:56:35.542-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-26T11:56:36.862-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-26T11:56:36.871-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-26T11:56:36.875-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-26T12:05:06.976-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-26T12:05:07.027-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-26T12:05:07.027-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-26T12:05:08.029-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-26T12:05:08.030-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-26T12:05:08.031-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-26T14:30:50.747-08:00 level=INFO msg="Mutation detected: %s %s" status=gram-5uo
+time=2026-01-26T14:30:51.248-08:00 level=INFO msg="Export triggered by mutation events"
+time=2026-01-26T14:30:51.248-08:00 level=INFO msg="Starting %s..." !BADKEY=export
+time=2026-01-26T14:30:51.253-08:00 level=INFO msg="Exported to JSONL"
+time=2026-01-26T14:30:51.253-08:00 level=INFO msg="Export complete"
+time=2026-01-26T14:30:51.253-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-26T14:30:51.304-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-26T14:30:51.304-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-26T14:30:52.306-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-26T14:30:52.307-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-26T14:30:52.307-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-26T14:30:53.688-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-26T14:30:53.696-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-26T14:30:53.700-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-26T14:31:11.915-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-26T14:31:11.966-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-26T14:31:11.966-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-26T14:31:12.028-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-26T14:31:12.079-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-26T14:31:12.079-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-26T14:31:13.081-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-26T14:31:13.081-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-26T14:31:13.082-08:00 level=INFO msg="JSONL content changed, proceeding with %s..." !BADKEY=auto-import
+time=2026-01-26T14:31:14.827-08:00 level=INFO msg="Pulled from remote"
+time=2026-01-26T14:31:14.836-08:00 level=INFO msg="Imported from JSONL"
+time=2026-01-26T14:31:14.839-08:00 level=INFO msg="Auto-import complete"
+time=2026-01-26T14:31:15.984-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-26T14:31:16.035-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-26T14:31:16.035-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-26T14:31:17.037-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-26T14:31:17.038-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-26T14:31:17.039-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-26T14:32:16.609-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-26T14:32:16.659-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-26T14:32:16.659-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-26T14:32:17.661-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-26T14:32:17.661-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-26T14:32:17.662-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-26T14:32:34.800-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-26T14:32:34.851-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-26T14:32:34.851-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-26T14:32:35.852-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-26T14:32:35.853-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-26T14:32:35.854-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-26T16:09:38.650-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-26T16:09:38.702-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-26T16:09:38.702-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-26T16:09:39.704-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-26T16:09:39.705-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-26T16:09:39.707-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-26T16:09:50.968-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-26T16:09:51.019-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-26T16:09:51.019-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-26T16:09:52.020-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-26T16:09:52.020-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-26T16:09:52.022-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-26T16:24:44.612-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-26T16:24:44.663-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-26T16:24:44.663-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-26T16:24:45.664-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-26T16:24:45.664-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-26T16:24:45.666-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-26T16:24:51.470-08:00 level=INFO msg="JSONL removed/renamed, re-establishing watch"
+time=2026-01-26T16:24:51.520-08:00 level=INFO msg="Successfully re-established JSONL watch after %v" !BADKEY=50ms
+time=2026-01-26T16:24:51.520-08:00 level=INFO msg="JSONL file created: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-26T16:24:52.522-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-26T16:24:52.522-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-26T16:24:52.523-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-26T16:25:36.193-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-26T16:25:37.193-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-26T16:25:37.194-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-26T16:25:37.195-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-26T16:25:48.818-08:00 level=INFO msg="Git HEAD change detected: %s" !BADKEY=/Users/quinn/src/gram/.git/HEAD
+time=2026-01-26T16:25:49.820-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-26T16:25:49.820-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-26T16:25:49.821-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
+time=2026-01-26T16:26:22.304-08:00 level=INFO msg="File change detected: %s" !BADKEY=/Users/quinn/src/gram/.beads/issues.jsonl
+time=2026-01-26T16:26:23.306-08:00 level=INFO msg="Import triggered by file change"
+time=2026-01-26T16:26:23.307-08:00 level=INFO msg="Starting %s..." !BADKEY=auto-import
+time=2026-01-26T16:26:23.311-08:00 level=INFO msg="Skipping %s: JSONL content unchanged" !BADKEY=auto-import
