@@ -134,10 +134,7 @@ export function EnvironmentVariableRow({
             className="w-full h-5 px-1.5 py-0 rounded border border-input bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           />
         ) : (
-          <button
-            onClick={() => onEditHeaderName(envVar.id)}
-            className="w-full h-6 text-left flex items-center gap-2 group/header-edit"
-          >
+          <div className="w-full h-6 flex items-center gap-2 group/header-edit">
             <div
               className={cn(
                 "font-medium text-sm truncate",
@@ -149,12 +146,22 @@ export function EnvironmentVariableRow({
             </div>
             {showHeaderName ? (
               <SimpleTooltip tooltip={`Variable name: ${envVar.key}`}>
-                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                <button
+                  onClick={() => onEditHeaderName(envVar.id)}
+                  className="flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
               </SimpleTooltip>
             ) : (
-              <Pencil className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover/header-edit:opacity-100 transition-opacity" />
+              <button
+                onClick={() => onEditHeaderName(envVar.id)}
+                className="flex items-center justify-center text-muted-foreground hover:text-foreground opacity-0 group-hover/header-edit:opacity-100 transition-opacity"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
             )}
-          </button>
+          </div>
         )}
         {envVar.description && (
           <div
