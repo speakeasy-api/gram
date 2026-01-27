@@ -191,3 +191,48 @@ func BuildCaptureEventPayload(telemetryCaptureEventBody string, telemetryCapture
 
 	return v, nil
 }
+
+// BuildGetProjectMetricsSummaryPayload builds the payload for the telemetry
+// getProjectMetricsSummary endpoint from CLI flags.
+func BuildGetProjectMetricsSummaryPayload(telemetryGetProjectMetricsSummaryBody string, telemetryGetProjectMetricsSummaryApikeyToken string, telemetryGetProjectMetricsSummarySessionToken string, telemetryGetProjectMetricsSummaryProjectSlugInput string) (*telemetry.GetProjectMetricsSummaryPayload, error) {
+	var err error
+	var body GetProjectMetricsSummaryRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetProjectMetricsSummaryBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetProjectMetricsSummaryApikeyToken != "" {
+			apikeyToken = &telemetryGetProjectMetricsSummaryApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetProjectMetricsSummarySessionToken != "" {
+			sessionToken = &telemetryGetProjectMetricsSummarySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetProjectMetricsSummaryProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetProjectMetricsSummaryProjectSlugInput
+		}
+	}
+	v := &telemetry.GetProjectMetricsSummaryPayload{
+		From: body.From,
+		To:   body.To,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

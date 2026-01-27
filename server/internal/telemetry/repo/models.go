@@ -80,3 +80,40 @@ type TraceSummary struct {
 	HTTPStatusCode    *int32 `ch:"http_status_code"`     // Nullable(Int32) - any HTTP status code
 	GramURN           string `ch:"gram_urn"`             // String - any gram_urn from the trace
 }
+
+// MetricsSummaryRow represents aggregated AI metrics from ClickHouse.
+// Used for the getAIMetrics endpoint.
+type MetricsSummaryRow struct {
+	// Cardinality metrics (project scope only)
+	TotalChats        uint64 `ch:"total_chats"`
+	DistinctModels    uint64 `ch:"distinct_models"`
+	DistinctProviders uint64 `ch:"distinct_providers"`
+
+	// Token metrics
+	TotalInputTokens  int64   `ch:"total_input_tokens"`
+	TotalOutputTokens int64   `ch:"total_output_tokens"`
+	TotalTokens       int64   `ch:"total_tokens"`
+	AvgTokensPerReq   float64 `ch:"avg_tokens_per_request"`
+
+	// Chat request metrics
+	TotalChatRequests uint64  `ch:"total_chat_requests"`
+	AvgChatDurationMs float64 `ch:"avg_chat_duration_ms"`
+
+	// Resolution status
+	FinishReasonStop      uint64 `ch:"finish_reason_stop"`
+	FinishReasonToolCalls uint64 `ch:"finish_reason_tool_calls"`
+
+	// Tool call metrics
+	TotalToolCalls    uint64  `ch:"total_tool_calls"`
+	ToolCallSuccess   uint64  `ch:"tool_call_success"`
+	ToolCallFailure   uint64  `ch:"tool_call_failure"`
+	AvgToolDurationMs float64 `ch:"avg_tool_duration_ms"`
+
+	// Model breakdown (map of model name -> count)
+	Models map[string]uint64 `ch:"models"`
+
+	// Tool breakdowns (maps of tool URN -> count)
+	ToolCounts        map[string]uint64 `ch:"tool_counts"`
+	ToolSuccessCounts map[string]uint64 `ch:"tool_success_counts"`
+	ToolFailureCounts map[string]uint64 `ch:"tool_failure_counts"`
+}
