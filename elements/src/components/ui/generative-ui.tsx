@@ -311,7 +311,7 @@ function renderNode(node: JsonRenderNode, key?: number): React.ReactNode {
 
 /**
  * GenerativeUI component renders json-render compatible JSON as dynamic UI widgets.
- * This is used when tools.generativeUI.enabled is true in the Elements config.
+ * This is used by the generativeUI plugin to render `ui` code blocks.
  */
 export const GenerativeUI: FC<GenerativeUIProps> = ({ content, className }) => {
   const d = useDensity()

@@ -1,22 +1,19 @@
 'use client'
 
 import { GenerativeUI } from '@/components/ui/generative-ui'
-import { useRadius } from '@/hooks/useRadius'
-import { cn } from '@/lib/utils'
 import { SyntaxHighlighterProps } from '@assistant-ui/react-markdown'
 import { FC, useMemo } from 'react'
+import { PluginLoadingState } from '../components/PluginLoadingState'
 
 const loadingMessages = [
-  'Crafting your dashboard...',
-  'Arranging the widgets...',
-  'Painting pixels...',
-  'Summoning components...',
-  'Assembling the view...',
-  'Weaving the interface...',
-  'Brewing your UI...',
-  'Conjuring layouts...',
-  'Materializing widgets...',
-  'Composing the experience...',
+  'Preparing your data...',
+  'Building your view...',
+  'Generating results...',
+  'Loading content...',
+  'Fetching information...',
+  'Processing your request...',
+  'Almost ready...',
+  'Setting things up...',
 ]
 
 function getRandomLoadingMessage() {
@@ -24,8 +21,6 @@ function getRandomLoadingMessage() {
 }
 
 export const GenerativeUIRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
-  const r = useRadius()
-
   // Parse JSON - returns null if invalid (still streaming)
   const content = useMemo(() => {
     const trimmedCode = code.trim()
@@ -49,18 +44,7 @@ export const GenerativeUIRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
 
   // Show loading shimmer while JSON is incomplete/streaming
   if (!content) {
-    return (
-      <div
-        className={cn(
-          'border-border bg-card relative h-[450px] w-[600px] overflow-hidden border after:hidden',
-          r('lg')
-        )}
-      >
-        <div className="shimmer text-muted-foreground absolute inset-0 flex items-center justify-center">
-          {loadingMessage}
-        </div>
-      </div>
-    )
+    return <PluginLoadingState text={loadingMessage} />
   }
 
   // Render without outer border - the Card component inside provides the border

@@ -4,14 +4,11 @@ import {
   type ToolCallMessagePartComponent,
 } from '@assistant-ui/react'
 import { useToolApproval } from '@/hooks/useToolApproval'
-import { useElements } from '@/hooks/useElements'
 import {
   ToolUI,
   type ToolStatus,
   type ContentItem,
 } from '@/components/ui/tool-ui'
-import { GenerativeUI } from '@/components/ui/generative-ui'
-import { isJsonRenderTree } from '@/lib/generative-ui'
 
 export const ToolFallback: ToolCallMessagePartComponent = ({
   toolName,
@@ -20,7 +17,6 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
   result,
   args,
 }) => {
-  const { config } = useElements()
   const {
     pendingApprovals,
     whitelistTool,
@@ -87,29 +83,6 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
     // Otherwise return as-is (string or object)
     if (typeof result === 'string') return result
     return result as Record<string, unknown>
-  }
-
-  // Check if generativeUI is enabled and result is a json-render tree
-  const useGenerativeUI =
-    config.tools?.generativeUI?.enabled &&
-    status.type === 'complete' &&
-    isJsonRenderTree(result)
-
-  // When generativeUI is enabled and result is a json-render tree,
-  // render the result directly using GenerativeUI instead of ToolUI
-  if (useGenerativeUI) {
-    return (
-      <div
-        className={cn(
-          'aui-tool-fallback-root flex w-full flex-col',
-          matchingMessagePartIndex !== -1 &&
-            matchingMessagePartIndex !== toolParts.length - 1 &&
-            'border-b'
-        )}
-      >
-        <GenerativeUI content={result} />
-      </div>
-    )
   }
 
   return (

@@ -535,18 +535,6 @@ export type ToolsFilter =
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type FrontendTools = Record<string, FrontendTool<any, any>>
 
-/**
- * Configuration for generative UI rendering of tool results using json-render.
- * When enabled, tool results that contain json-render compatible JSON will be
- * rendered as dynamic UI components instead of raw JSON.
- */
-export interface GenerativeUIConfig {
-  /**
-   * Enable json-render for dynamic widget generation from tool results.
-   * @default false
-   */
-  enabled: boolean
-}
 
 /**
  * ToolsConfig is used to configure tool support in the Elements library.
@@ -675,23 +663,6 @@ export interface ToolsConfig {
    */
   toolsToInclude?: ToolsFilter
 
-  /**
-   * Configuration for generative UI rendering of tool results.
-   * When enabled, tool results containing json-render compatible JSON structures
-   * will be rendered as dynamic UI widgets instead of raw JSON.
-   *
-   * Requires `@json-render/react` to be installed as a peer dependency.
-   *
-   * @example
-   * ```ts
-   * tools: {
-   *   generativeUI: {
-   *     enabled: true,
-   *   },
-   * }
-   * ```
-   */
-  generativeUI?: GenerativeUIConfig
 }
 
 export interface WelcomeConfig {
