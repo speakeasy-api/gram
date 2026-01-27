@@ -227,6 +227,7 @@ type ExternalMcpToolDefinition struct {
 	OauthTokenEndpoint         pgtype.Text
 	OauthRegistrationEndpoint  pgtype.Text
 	OauthScopesSupported       []string
+	HeaderDefinitions          []byte
 	CreatedAt                  pgtype.Timestamptz
 	UpdatedAt                  pgtype.Timestamptz
 	DeletedAt                  pgtype.Timestamptz

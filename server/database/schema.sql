@@ -1174,6 +1174,7 @@ CREATE TABLE IF NOT EXISTS external_mcp_tool_definitions (
   oauth_token_endpoint TEXT,
   oauth_registration_endpoint TEXT,
   oauth_scopes_supported TEXT[],
+  header_definitions JSONB,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
