@@ -115,7 +115,7 @@ export function EnvironmentVariableRow({
       </div>
 
       {/* Variable Info */}
-      <div className="min-w-0" onClick={(e) => e.stopPropagation()}>
+      <div className="min-w-0">
         {isEditing ? (
           <input
             type="text"
@@ -176,15 +176,12 @@ export function EnvironmentVariableRow({
       </div>
 
       {/* Right side: State Button + Value */}
-      <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center gap-4">
         {/* State cycle button */}
         <Button
           size="xs"
           variant="secondary"
-          onClick={(e: React.MouseEvent) => {
-            e.stopPropagation();
-            onToggleState(envVar.id);
-          }}
+          onClick={() => onToggleState(envVar.id)}
           disabled={
             selectedEnvironmentView !==
             (mcpAttachedEnvironmentSlug || defaultEnvironmentSlug || "default")
