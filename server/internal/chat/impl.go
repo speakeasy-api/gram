@@ -995,7 +995,7 @@ func (r *responseCaptor) emitGenAITelemetry(toolCallsJSON []byte) {
 		OrganizationID: r.orgID,
 	}
 
-	r.telemetryService.CreateLog(r.ctx, telemetry.LogParams{
+	r.telemetryService.CreateLog(telemetry.LogParams{
 		Timestamp:  time.Now(),
 		ToolInfo:   toolInfo,
 		Attributes: attrs,

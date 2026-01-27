@@ -178,7 +178,7 @@ func handleResourcesRead(
 			},
 			Attributes: logAttrs,
 		}
-		telemSvc.CreateLog(context.WithoutCancel(ctx), params)
+		telemSvc.CreateLog(params)
 	}()
 
 	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), gateway.ToolCallEnv{

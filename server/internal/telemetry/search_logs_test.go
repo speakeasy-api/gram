@@ -16,7 +16,7 @@ func TestSearchLogs_LogsDisabled(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 
-	ctx = switchOrganizationInCtx(t, ctx)
+	ctx = switchOrganizationInCtx(t, ctx, ti.disabledLogsOrgID)
 
 	now := time.Now().UTC()
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
@@ -606,7 +606,7 @@ func TestSearchToolCalls_LogsDisabled(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
-	ctx = switchOrganizationInCtx(t, ctx)
+	ctx = switchOrganizationInCtx(t, ctx, ti.disabledLogsOrgID)
 
 	now := time.Now().UTC()
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
