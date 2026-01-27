@@ -25,6 +25,8 @@ import (
 	"goa.design/goa/v3/security"
 )
 
+const logsDisabledMsg = "logs are not enabled for this organization"
+
 type Service struct {
 	auth         *auth.Auth
 	db           *pgxpool.Pool
@@ -103,7 +105,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 	}
 
 	if !params.enabled {
-		return &telem_gen.SearchLogsResult{Logs: []*telem_gen.TelemetryLogRecord{}, Enabled: false, NextCursor: nil}, nil
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
 	}
 
 	// Extract SearchLogs-specific filter fields
@@ -182,7 +184,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	}
 
 	if !params.enabled {
-		return &telem_gen.SearchToolCallsResult{ToolCalls: []*telem_gen.ToolCallSummary{}, Enabled: false, NextCursor: nil}, nil
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
 	}
 
 	// Extract SearchToolCalls-specific filter fields
@@ -248,7 +250,7 @@ func (s *Service) GetMetricsSummary(ctx context.Context, payload *telem_gen.GetM
 	}
 
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeForbidden, nil, "telemetry is not enabled for this organization")
+		return nil, oops.E(oops.CodeForbidden, nil, logsDisabledMsg)
 	}
 
 	if payload.Scope != MetricsScopeProject && payload.Scope != MetricsScopeChat {
@@ -269,11 +271,11 @@ func (s *Service) GetMetricsSummary(ctx context.Context, payload *telem_gen.GetM
 	}
 
 	metrics, err := s.chRepo.GetMetricsSummary(ctx, repo.GetMetricsSummaryParams{
-		Scope:            string(payload.Scope),
-		GramProjectID:    authCtx.ProjectID.String(),
-		TimeStart:        timeStart,
-		TimeEnd:          timeEnd,
-		ChatID:           chatID,
+		Scope:         string(payload.Scope),
+		GramProjectID: authCtx.ProjectID.String(),
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+		ChatID:        chatID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving AI metrics")
@@ -293,7 +295,7 @@ func (s *Service) GetMetricsSummary(ctx context.Context, payload *telem_gen.GetM
 	for urn, count := range metrics.ToolCounts {
 		tools = append(tools, &telem_gen.ToolUsage{
 			Urn:          urn,
-			Count:        int64(count),                        //nolint:gosec // Bounded count
+			Count:        int64(count),                          //nolint:gosec // Bounded count
 			SuccessCount: int64(metrics.ToolSuccessCounts[urn]), //nolint:gosec // Bounded count
 			FailureCount: int64(metrics.ToolFailureCounts[urn]), //nolint:gosec // Bounded count
 		})
