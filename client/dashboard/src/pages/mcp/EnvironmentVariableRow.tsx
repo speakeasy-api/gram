@@ -174,7 +174,10 @@ export function EnvironmentVariableRow({
         <Button
           size="xs"
           variant="secondary"
-          onClick={() => onToggleState(envVar.id)}
+          onClick={(e: React.MouseEvent) => {
+            e.stopPropagation();
+            onToggleState(envVar.id);
+          }}
           disabled={
             selectedEnvironmentView !==
             (mcpAttachedEnvironmentSlug || defaultEnvironmentSlug || "default")
