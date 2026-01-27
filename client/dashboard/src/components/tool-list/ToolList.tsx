@@ -456,7 +456,7 @@ function ToolRow({
             {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
           <Dialog.Footer>
-            <Button variant="tertiary" onClick={() => setEditDialogOpen(false)}>
+            <Button variant="ghost" onClick={() => setEditDialogOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleSave}>Save</Button>

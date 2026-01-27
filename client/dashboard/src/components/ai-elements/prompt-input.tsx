@@ -306,7 +306,7 @@ export function PromptInputAttachment({
                 attachments.remove(data.id);
               }}
               type="button"
-              variant="tertiary"
+              variant="ghost"
             >
               <XIcon />
               <span className="sr-only">Remove</span>

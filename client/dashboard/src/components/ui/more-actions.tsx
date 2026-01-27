@@ -44,11 +44,7 @@ export function MoreActions({
             <Icon name="chevron-down" className="size-4 ml-1" />
           </Button>
         ) : (
-          <Button
-            variant="tertiary"
-            size="sm"
-            className="h-8 w-8 p-0 mx-[-4px]"
-          >
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 mx-[-4px]">
             <Icon name="ellipsis-vertical" className="size-4" />
             <span className="sr-only">Open menu</span>
           </Button>

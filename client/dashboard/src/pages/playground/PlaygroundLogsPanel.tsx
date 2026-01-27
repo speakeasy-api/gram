@@ -130,7 +130,7 @@ export function PlaygroundLogsPanel({
         <div className="flex items-center gap-1">
           <Button
             size="sm"
-            variant="tertiary"
+            variant="ghost"
             onClick={() => fetchLogs()}
             disabled={isPending}
             className="h-7 w-7 p-0"
@@ -141,7 +141,7 @@ export function PlaygroundLogsPanel({
           </Button>
           <Button
             size="sm"
-            variant="tertiary"
+            variant="ghost"
             onClick={onClose}
             className="h-7 w-7 p-0"
           >
@@ -224,7 +224,7 @@ export function PlaygroundLogsPanel({
             </span>
             <Button
               size="sm"
-              variant="tertiary"
+              variant="ghost"
               onClick={() => setSelectedLog(null)}
               className="h-6 w-6 p-0"
             >

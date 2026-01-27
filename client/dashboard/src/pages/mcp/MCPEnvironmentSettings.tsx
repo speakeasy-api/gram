@@ -19,7 +19,7 @@ import {
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Plus } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AddVariableSheet } from "./AddVariableSheet";
 import { EnvironmentSwitcher } from "./EnvironmentSwitcher";
@@ -86,7 +86,9 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     }
 
     // Check if the loaded vars actually changed (compare by key and state)
-    const prevKeys = prevLoadedVarsRef.current.map((v) => `${v.key}:${v.state}`).join(",");
+    const prevKeys = prevLoadedVarsRef.current
+      .map((v) => `${v.key}:${v.state}`)
+      .join(",");
     const newKeys = loadedEnvVars.map((v) => `${v.key}:${v.state}`).join(",");
 
     if (prevKeys !== newKeys || !hasInitialized.current) {

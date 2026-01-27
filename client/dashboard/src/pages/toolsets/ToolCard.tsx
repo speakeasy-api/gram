@@ -104,7 +104,7 @@ export function ToolCard({
   let tags = (
     <>
       <Badge
-        variant="neutral"
+        variant="secondary"
         className="text-sm capitalize"
         tooltip={
           <span>
@@ -117,13 +117,13 @@ export function ToolCard({
       </Badge>
       {tool.type === "http" &&
         tool.tags.map((tag) => (
-          <Badge key={tag} variant="neutral" className="text-sm capitalize">
+          <Badge key={tag} variant="secondary" className="text-sm capitalize">
             {tag}
           </Badge>
         ))}
       {isPromptTool(tool) && (
         <Badge
-          variant="neutral"
+          variant="secondary"
           className="text-sm capitalize"
           tooltip={`Subtools: ${tool.toolsHint.join(", ")}`}
         >
@@ -136,7 +136,7 @@ export function ToolCard({
   if (tool.type === "prompt") {
     tags = (
       <Badge
-        variant="neutral"
+        variant="secondary"
         className="text-sm capitalize"
         tooltip={<span>This is a custom tool</span>}
       >
@@ -149,7 +149,7 @@ export function ToolCard({
   if (tool.type === "function") {
     tags = (
       <Badge
-        variant="neutral"
+        variant="secondary"
         className="text-sm capitalize"
         tooltip={<span>This is a function tool</span>}
       >
