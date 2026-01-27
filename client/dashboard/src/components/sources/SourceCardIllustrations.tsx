@@ -538,16 +538,11 @@ export function ExternalMCPIllustration({
 }: IllustrationProps & { logoUrl?: string; name?: string }) {
   if (logoUrl) {
     return (
-      <div
-        className={cn(
-          "w-full h-full bg-violet-500/5 flex items-center justify-center",
-          className,
-        )}
-      >
+      <div className="w-full h-full bg-violet-500/5 flex items-center justify-center">
         <img
           src={logoUrl}
           alt={name || "MCP Server"}
-          className="w-16 h-16 object-contain"
+          className={cn("w-16 h-16 object-contain", className)}
         />
       </div>
     );

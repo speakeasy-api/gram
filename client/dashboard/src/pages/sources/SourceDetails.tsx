@@ -1,5 +1,5 @@
 import { Page } from "@/components/page-layout";
-import { Button, Badge, Dialog } from "@speakeasy-api/moonshine";
+import { Button, Badge, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { Type } from "@/components/ui/type";
 import { Heading } from "@/components/ui/heading";
 import { useProject } from "@/contexts/Auth";
@@ -10,11 +10,16 @@ import {
 } from "@gram/client/react-query/index.js";
 import { useParams, Navigate } from "react-router";
 import { useRoutes } from "@/routes";
-import { Download, Calendar, Eye } from "lucide-react";
+import { Download, Eye, FileCode, Tag, Package, Clock } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useMemo, useState } from "react";
 import { ViewSourceDialogContent } from "@/components/sources/ViewSourceDialogContent";
 import ExternalMCPDetails from "./external-mcp/ExternalMCPDetails";
+import {
+  OpenAPIIllustration,
+  FunctionIllustration,
+} from "@/components/sources/SourceCardIllustrations";
+import { InfoField } from "@/components/sources/InfoField";
 
 export default function SourceDetails() {
   const { sourceKind, sourceSlug } = useParams<{
@@ -99,83 +104,122 @@ export default function SourceDetails() {
         />
       </Page.Header>
 
-      <Page.Body>
-        {/* Header Section with Title and Actions */}
-        <div className="flex items-center justify-between mb-4 h-10">
-          <div className="flex items-center gap-2">
-            <Heading variant="h2" className="normal-case">
-              {source?.name || sourceSlug}
-            </Heading>
-            <Badge variant="neutral">{sourceType}</Badge>
+      <Page.Body fullWidth noPadding>
+        {/* Hero Header with Illustration - full width */}
+        <div className="relative w-full h-64 overflow-hidden">
+          {isOpenAPI ? (
+            <OpenAPIIllustration className="saturate-[.3]" />
+          ) : (
+            <FunctionIllustration className="saturate-[.3]" />
+          )}
+
+          {/* Overlay for text readability */}
+          <div className="absolute inset-0 bg-linear-to-t from-foreground/50 via-foreground/20 to-transparent" />
+          <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
+            <Stack gap={2}>
+              <div className="flex items-center gap-3 ml-1">
+                <Heading variant="h1" className="text-background">
+                  {source?.name || sourceSlug}
+                </Heading>
+                <Badge variant="neutral">
+                  <Badge.Text>{sourceType}</Badge.Text>
+                </Badge>
+              </div>
+              <div className="flex items-center gap-2 ml-1">
+                <Type className="max-w-2xl truncate text-background/70!">
+                  {source?.slug}
+                </Type>
+              </div>
+            </Stack>
           </div>
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setIsModalOpen(true)}
-            >
-              <Eye className="h-4 w-4" />
-              View {isOpenAPI ? "Spec" : "Manifest"}
-            </Button>
-            <Button variant="secondary" size="sm" onClick={handleDownload}>
-              <Download className="h-4 w-4" />
-              Download
-            </Button>
+
+          {/* Action buttons */}
+          <div className="absolute top-6 left-0 right-0 px-8 max-w-[1270px] mx-auto w-full">
+            <Stack direction="horizontal" gap={2} className="justify-end">
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={() => setIsModalOpen(true)}
+              >
+                <Button.LeftIcon>
+                  <Eye className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>View {isOpenAPI ? "Spec" : "Manifest"}</Button.Text>
+              </Button>
+              <Button variant="secondary" size="md" onClick={handleDownload}>
+                <Button.LeftIcon>
+                  <Download className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Download</Button.Text>
+              </Button>
+            </Stack>
           </div>
         </div>
 
-        <div className="space-y-6">
+        {/* Content Section */}
+        <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
+          <div className="space-y-6">
           {/* Source Metadata Card */}
-          <div className="rounded-lg border bg-card p-6">
-            <Type as="h2" className="text-lg font-semibold mb-4">
-              Source Information
-            </Type>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Type className="text-sm text-muted-foreground mb-1">Name</Type>
-                <Type className="font-medium">{source?.name}</Type>
-              </div>
-              <div>
-                <Type className="text-sm text-muted-foreground mb-1">Slug</Type>
-                <Type className="font-medium">{source?.slug}</Type>
-              </div>
-              <div>
-                <Type className="text-sm text-muted-foreground mb-1">Type</Type>
-                <Type className="font-medium">{sourceType}</Type>
-              </div>
-              {!isOpenAPI && source && "runtime" in source && (
-                <div>
-                  <Type className="text-sm text-muted-foreground mb-1">
-                    Runtime
-                  </Type>
-                  <Type className="font-medium">{String(source.runtime)}</Type>
-                </div>
-              )}
-              <div>
-                <Type className="text-sm text-muted-foreground mb-1">
-                  Last Updated
-                </Type>
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <Type className="font-medium">{lastUpdated}</Type>
-                </div>
-              </div>
-              <div>
-                <Type className="text-sm text-muted-foreground mb-1">
-                  Deployment
-                </Type>
-                {deployment?.deployment?.id ? (
-                  <routes.deployments.deployment.Link
-                    params={[deployment.deployment.id]}
-                    className="font-medium hover:underline"
-                  >
-                    {deployment.deployment.id.slice(0, 8)}
-                  </routes.deployments.deployment.Link>
-                ) : (
-                  <Type className="font-medium">None</Type>
+          <div className="rounded-lg border bg-card overflow-hidden">
+            <div className="border-b bg-surface-secondary/30 px-6 py-4">
+              <Type as="h2" className="text-lg flex items-center gap-2">
+                <FileCode className="h-5 w-5 text-muted-foreground" />
+                Source Information
+              </Type>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <InfoField
+                  icon={Tag}
+                  label="Name"
+                  value={source?.name}
+                />
+
+                <InfoField
+                  icon={Tag}
+                  label="Slug"
+                  value={<Type className="font-mono text-sm">{source?.slug}</Type>}
+                />
+
+                <InfoField
+                  icon={Package}
+                  label="Type"
+                  value={sourceType}
+                />
+
+                {!isOpenAPI && source && "runtime" in source && (
+                  <InfoField
+                    icon={Package}
+                    label="Runtime"
+                    value={String(source.runtime)}
+                  />
                 )}
+
+                <InfoField
+                  icon={Clock}
+                  label="Last Updated"
+                  value={lastUpdated}
+                />
+
+                <InfoField
+                  icon={Package}
+                  label="Deployment"
+                  value={
+                    deployment?.deployment?.id ? (
+                      <routes.deployments.deployment.Link
+                        params={[deployment.deployment.id]}
+                        className="hover:underline text-primary"
+                      >
+                        {deployment.deployment.id.slice(0, 8)}
+                      </routes.deployments.deployment.Link>
+                    ) : (
+                      <Type className="text-muted-foreground">None</Type>
+                    )
+                  }
+                />
               </div>
             </div>
+          </div>
           </div>
         </div>
 

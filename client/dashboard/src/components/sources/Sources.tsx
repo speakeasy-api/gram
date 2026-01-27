@@ -4,8 +4,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn } from "@/lib/utils";
 import {
-  Server as CatalogServer,
-  useInfiniteListMCPCatalog,
+  useInfiniteListMCPCatalog
 } from "@/pages/catalog/hooks";
 import { useDeploymentLogsSummary } from "@/pages/deployments/deployment/Deployment";
 import { useRoutes } from "@/routes";
@@ -74,6 +73,20 @@ export function useDeploymentIsEmpty() {
   );
 }
 
+export const useCatalogIconMap = () => {
+  const { data: catalogData } = useInfiniteListMCPCatalog();
+  return useMemo(() => {
+    if (!catalogData?.pages) {
+      return new Map<string, string>();
+    }
+    return new Map(
+      catalogData.pages.flatMap((page) =>
+        page.servers.map((s) => [s.registrySpecifier, s.iconUrl!]),
+      ),
+    );
+  }, [catalogData]);
+};
+
 export default function Sources() {
   const client = useSdkClient();
   const routes = useRoutes();
@@ -83,21 +96,8 @@ export default function Sources() {
 
   const { data: deploymentResult, refetch, isLoading } = useLatestDeployment();
   const { data: assets, refetch: refetchAssets } = useListAssets();
-  const { data: catalogData } = useInfiniteListMCPCatalog();
+  const catalogIconMap = useCatalogIconMap();
   const deployment = deploymentResult?.deployment;
-
-  // Build a map of registry specifier -> icon URL for quick lookup
-  const catalogIconMap = useMemo(() => {
-    if (!catalogData?.pages) return new Map<string, string>();
-    const allServers = catalogData.pages.flatMap(
-      (page) => page.servers as CatalogServer[],
-    );
-    return new Map(
-      allServers
-        .filter((s) => s.iconUrl)
-        .map((s) => [s.registrySpecifier, s.iconUrl!]),
-    );
-  }, [catalogData]);
 
   const assetsCausingFailure = useUnusedAssetIds();
   const {

@@ -127,6 +127,9 @@ func (e *EnvironmentEntries) LoadMCPAttachedEnvironment(
 ) (map[string]string, error) {
 	mcpMetadata, err := e.mcpMetadataRepo.GetMetadataForToolset(ctx, toolsetID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return map[string]string{}, nil
+		}
 		return nil, fmt.Errorf("get metadata for toolset: %w", err)
 	}
 
