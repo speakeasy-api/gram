@@ -93,7 +93,7 @@ export function EnvironmentVariableRow({
         <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-amber-500" />
       )}
       {/* Status indicator / Delete button */}
-      <div className="relative w-6 h-6 flex items-center justify-center">
+      <div className="relative w-6 h-6 flex items-center">
         {/* Status indicator - visible by default, hidden on hover for non-required */}
         <div
           className={cn(
