@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -22,13 +22,13 @@ const (
 // LogWriter manages a pool of workers that write telemetry logs to ClickHouse.
 // It provides bounded concurrency and graceful shutdown capabilities.
 type LogWriter struct {
-	queue         chan LogParams
-	done          chan struct{}
-	closeOnce     sync.Once
-	wg            sync.WaitGroup
-	logger        *slog.Logger
-	chRepo        *repo.Queries
-	featureClient *productfeatures.Client
+	queue     chan LogParams
+	done      chan struct{}
+	closeOnce sync.Once
+	wg        sync.WaitGroup
+	logger    *slog.Logger
+	repo      *repo.Queries
+	enabled   LogsEnabled
 }
 
 // LogWriterOptions configures the LogWriter.
@@ -41,17 +41,10 @@ type LogWriterOptions struct {
 // It starts worker goroutines that process logs from the queue.
 func NewLogWriter(
 	logger *slog.Logger,
-	chRepo *repo.Queries,
-	featureClient *productfeatures.Client,
-	opts *LogWriterOptions,
+	chConn clickhouse.Conn,
+	logsEnabled LogsEnabled,
+	opts LogWriterOptions,
 ) *LogWriter {
-	if opts == nil {
-		opts = &LogWriterOptions{
-			BufferSize: 0,
-			Workers:    0,
-		}
-	}
-
 	bufferSize := opts.BufferSize
 	if bufferSize <= 0 {
 		bufferSize = DefaultLogWriterBufferSize
@@ -63,13 +56,13 @@ func NewLogWriter(
 	}
 
 	w := &LogWriter{
-		queue:         make(chan LogParams, bufferSize),
-		done:          make(chan struct{}),
-		closeOnce:     sync.Once{},
-		wg:            sync.WaitGroup{},
-		logger:        logger.With(attr.SlogComponent("log-writer")),
-		chRepo:        chRepo,
-		featureClient: featureClient,
+		queue:     make(chan LogParams, bufferSize),
+		done:      make(chan struct{}),
+		closeOnce: sync.Once{},
+		wg:        sync.WaitGroup{},
+		logger:    logger.With(attr.SlogComponent("log-writer")),
+		repo:      repo.New(chConn),
+		enabled:   logsEnabled,
 	}
 
 	for i := 0; i < workers; i++ {
@@ -145,16 +138,10 @@ func (w *LogWriter) worker() {
 func (w *LogWriter) processLog(params LogParams) {
 	ctx := context.Background()
 
-	enabled, err := w.featureClient.IsFeatureEnabled(ctx, params.ToolInfo.OrganizationID, productfeatures.FeatureLogs)
-	if err != nil {
-		w.logger.ErrorContext(ctx,
-			"failed to check logs feature flag",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(params.ToolInfo.OrganizationID),
-		)
-		return
-	}
-	if !enabled {
+	// if an error happens we just return as this is async.
+	// errors are logged upstream
+	enabled, err := w.enabled(ctx, params.ToolInfo.OrganizationID)
+	if err != nil || !enabled {
 		return
 	}
 
@@ -167,7 +154,7 @@ func (w *LogWriter) processLog(params LogParams) {
 		return
 	}
 
-	if err := w.chRepo.InsertTelemetryLog(ctx, *logParams); err != nil {
+	if err := w.repo.InsertTelemetryLog(ctx, *logParams); err != nil {
 		w.logger.ErrorContext(ctx,
 			"failed to emit telemetry log to ClickHouse",
 			attr.SlogError(err),

@@ -278,8 +278,7 @@ func TestCreateLog_NoOpWhenFeatureDisabled(t *testing.T) {
 	attrs.RecordStatusCode(200)
 
 	// Use an org ID that doesn't have logs enabled
-	disabledOrgID := uuid.New().String()
-	toolInfo := newTestToolInfo(disabledOrgID)
+	toolInfo := newTestToolInfo(ti.disabledLogsOrgID)
 	timestamp := time.Now().UTC()
 
 	ti.service.CreateLog(telemetry.LogParams{

@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -27,16 +26,16 @@ import (
 )
 
 type Service struct {
-	auth          *auth.Auth
-	db            *pgxpool.Pool
-	chConn        clickhouse.Conn
-	chRepo        *repo.Queries
-	featureClient *productfeatures.Client
-	logger        *slog.Logger
-	tracer        trace.Tracer
-	posthog       PosthogClient
-	chatSessions  *chatsessions.Manager
-	logWriter     *LogWriter
+	auth         *auth.Auth
+	db           *pgxpool.Pool
+	chConn       clickhouse.Conn
+	chRepo       *repo.Queries
+	logger       *slog.Logger
+	tracer       trace.Tracer
+	posthog      PosthogClient
+	chatSessions *chatsessions.Manager
+	logWriter    *LogWriter
+	logsEnabled  LogsEnabled
 }
 
 var _ telem_gen.Service = (*Service)(nil)
@@ -48,23 +47,24 @@ func NewService(
 	chConn clickhouse.Conn,
 	sessions *sessions.Manager,
 	chatSessions *chatsessions.Manager,
-	features *productfeatures.Client,
+	logsEnabled LogsEnabled,
+	logWriter *LogWriter,
 	posthogClient PosthogClient) *Service {
 	logger = logger.With(attr.SlogComponent("logs"))
 
 	chRepo := repo.New(chConn)
 
 	return &Service{
-		auth:          auth.New(logger, db, sessions),
-		db:            db,
-		chConn:        chConn,
-		chRepo:        chRepo,
-		logger:        logger,
-		featureClient: features,
-		tracer:        otel.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
-		posthog:       posthogClient,
-		chatSessions:  chatSessions,
-		logWriter:     NewLogWriter(logger, chRepo, features, nil),
+		auth:         auth.New(logger, db, sessions),
+		db:           db,
+		chConn:       chConn,
+		chRepo:       chRepo,
+		logger:       logger,
+		logsEnabled:  logsEnabled,
+		tracer:       otel.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
+		posthog:      posthogClient,
+		chatSessions: chatSessions,
+		logWriter:    logWriter,
 	}
 }
 
@@ -233,11 +233,6 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	}, nil
 }
 
-// Shutdown gracefully stops the telemetry service, draining any pending logs.
-func (s *Service) Shutdown(ctx context.Context) error {
-	return s.logWriter.Shutdown(ctx)
-}
-
 // searchParams contains common validated parameters for telemetry search endpoints.
 type searchParams struct {
 	projectID string
@@ -256,9 +251,9 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort st
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	logsEnabled, err := s.isLogsEnabled(ctx, authCtx.ActiveOrganizationID)
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+		return nil, oops.E(oops.CodeUnexpected, err, "checking if logs enabled")
 	}
 
 	if limit < 1 || limit > 1000 {
@@ -292,16 +287,6 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort st
 		timeStart: timeStart,
 		timeEnd:   timeEnd,
 	}, nil
-}
-
-func (s *Service) isLogsEnabled(ctx context.Context, orgID string) (bool, error) {
-	logsEnabled, err := s.featureClient.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureLogs)
-	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled").
-			Log(ctx, s.logger, attr.SlogError(err), attr.SlogOrganizationID(orgID))
-	}
-
-	return logsEnabled, nil
 }
 
 // parseTimeRange extracts and parses the time range from a telemetry filter.
