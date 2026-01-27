@@ -83,7 +83,7 @@ export function EnvironmentVariableRow({
   return (
     <div
       className={cn(
-        "group grid grid-cols-[auto_1fr_auto] gap-4 items-center px-5 py-4 transition-colors relative",
+        "group grid grid-cols-[auto_1fr_auto] gap-4 items-center px-4 py-4 transition-colors relative",
         index !== totalCount - 1 && "border-b",
         hasUnsavedChanges && "bg-amber-50/50 dark:bg-amber-950/20",
       )}
