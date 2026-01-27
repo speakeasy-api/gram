@@ -97,6 +97,8 @@ export * from "./listtoolsetsresult.js";
 export * from "./listtoolsresult.js";
 export * from "./listvariationsresult.js";
 export * from "./listversionsresult.js";
+export * from "./mcpenvironmententry.js";
+export * from "./mcpenvironmententryinput.js";
 export * from "./mcpmetadata.js";
 export * from "./notmodified.js";
 export * from "./oauthenablementmetadata.js";

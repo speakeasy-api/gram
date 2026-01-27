@@ -1,61 +1,35 @@
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { InputAndMultiselect } from "@/components/ui/InputAndMultiselect";
 import { Label } from "@/components/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Sheet,
-  SheetContent,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useEnvironmentVariables";
 import { Toolset } from "@/lib/toolTypes";
-import { cn } from "@/lib/utils";
 import {
+  invalidateAllGetMcpMetadata,
   invalidateAllListEnvironments,
+  invalidateAllToolset,
   useCreateEnvironmentMutation,
+  useGetMcpMetadata,
   useListEnvironments,
-  useUpdateEnvironmentMutation
+  useMcpMetadataSetMutation,
+  useUpdateEnvironmentMutation,
 } from "@gram/client/react-query";
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  Check,
-  CheckCircleIcon,
-  ChevronDown,
-  Eye,
-  EyeOff,
-  Plus,
-  Trash2
-} from "lucide-react";
+import { AlertTriangle, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
-interface EnvironmentVariable {
-  id: string;
-  key: string;
-  // Track multiple values per variable - each value can be in different environments
-  valueGroups: Array<{
-    valueHash: string;
-    value: string; // Redacted value for display
-    environments: string[]; // Environment slugs that have this value
-  }>;
-  isUserProvided: boolean;
-  isRequired: boolean; // True for advertised vars from toolset, false for custom user-added
-  description?: string; // Optional description for required vars
-  createdAt?: Date;
-  updatedAt?: Date;
-}
+import { AddVariableSheet } from "./AddVariableSheet";
+import { EnvironmentSwitcher } from "./EnvironmentSwitcher";
+import { EnvironmentVariableRow } from "./EnvironmentVariableRow";
+import {
+  EnvVarState,
+  EnvironmentVariable,
+  getAllEnvironments,
+  getValueForEnvironment,
+} from "./environmentVariableUtils";
+import { useEnvironmentVariables } from "./useEnvironmentVariables";
 
 export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   const queryClient = useQueryClient();
@@ -64,40 +38,71 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
 
   const { data: environmentsData } = useListEnvironments();
   const environments = environmentsData?.environments ?? [];
+  const { data: mcpMetadataData } = useGetMcpMetadata(
+    {
+      toolsetSlug: toolset.slug,
+    },
+    undefined,
+    {
+      throwOnError: false,
+      retry: false,
+    },
+  );
+  const mcpMetadata = mcpMetadataData?.metadata;
+  const mcpAttachedEnvironmentSlug =
+    environments.find((e) => e.id === mcpMetadata?.defaultEnvironmentId)
+      ?.slug || null;
 
-  // State for the list of environment variables
+  // Load environment variables using custom hook
+  const loadedEnvVars = useEnvironmentVariables(
+    toolset,
+    environments,
+    mcpMetadata,
+  );
+
+  // State for the list of environment variables (managed locally for UI updates)
   const [envVars, setEnvVars] = useState<EnvironmentVariable[]>([]);
   const [isAddingNew, setIsAddingNew] = useState(false);
-  const [selectedEnvironmentView, setSelectedEnvironmentView] = useState<string>(
-    toolset.defaultEnvironmentSlug || "default"
-  );
+  const [selectedEnvironmentView, setSelectedEnvironmentView] =
+    useState<string>(toolset.defaultEnvironmentSlug || "default");
+
+  // Sync loaded variables with local state
+  useEffect(() => {
+    setEnvVars(loadedEnvVars);
+  }, [loadedEnvVars]);
 
   // Clear editing state when environment view changes
   useEffect(() => {
     setEditingState(new Map());
   }, [selectedEnvironmentView]);
 
-  // New variable form state
-  const [newKey, setNewKey] = useState("");
-  const [newValue, setNewValue] = useState("");
-  const [newTargetEnvironments, setNewTargetEnvironments] = useState<string[]>(
-    [],
-  );
-  const [newIsUserProvided, setNewIsUserProvided] = useState(false);
-  const [newValueVisible, setNewValueVisible] = useState(false);
+  useEffect(() => {
+    if (mcpAttachedEnvironmentSlug) {
+      setSelectedEnvironmentView(mcpAttachedEnvironmentSlug);
+    }
+  }, [mcpAttachedEnvironmentSlug]);
 
-  // Edit variable state
-  const [editingVar, setEditingVar] = useState<EnvironmentVariable | null>(
-    null,
-  );
-  const [editValue, setEditValue] = useState("");
-  const [editTargetEnvironments, setEditTargetEnvironments] = useState<
-    string[]
-  >([]);
-  const [editValueVisible, setEditValueVisible] = useState(false);
+  // Get attached environment and its available variables
+  const attachedEnvironment = mcpMetadata?.defaultEnvironmentId
+    ? environments.find((e) => e.id === mcpMetadata.defaultEnvironmentId)
+    : environments.find((e) => e.slug === "default") || null;
 
-  // Track editing state for required variables (value and target environments)
-  type EditingState = { value: string; targetEnvironments: string[] };
+  const environmentEntries = mcpMetadata?.environmentEntries || [];
+  const availableEnvVarsFromAttached =
+    attachedEnvironment?.entries
+      .map((entry) => entry.name)
+      .filter(
+        (name) => !environmentEntries.some((e) => e.variableName === name),
+      ) || [];
+
+  // Track which variable's header name is being edited
+  const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
+
+  // Track editing state for required variables (value and header display name)
+  type EditingState = {
+    value: string;
+    headerDisplayName?: string;
+  };
   const [editingState, setEditingState] = useState<Map<string, EditingState>>(
     new Map(),
   );
@@ -131,191 +136,31 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       });
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to create environment");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create environment",
+      );
     },
   });
 
-  // Load existing environment variables from toolset
-  useEffect(() => {
-    const existingVars: EnvironmentVariable[] = [];
-    const envMap = new Map<string, string[]>();
-    const requiredVarNames = new Set<string>();
-
-    // Helper to build value groups for a variable across all environments
-    const getValueGroups = (varName: string) => {
-      const valueHashMap = new Map<
-        string,
-        { value: string; environments: string[] }
-      >();
-
-      environments.forEach((env) => {
-        const entry = env.entries.find((e) => e.name === varName);
-        if (entry) {
-          if (!valueHashMap.has(entry.valueHash)) {
-            valueHashMap.set(entry.valueHash, {
-              value: entry.value,
-              environments: [env.slug],
-            });
-          } else {
-            valueHashMap.get(entry.valueHash)!.environments.push(env.slug);
-          }
-        }
+  // Set toolset environment link mutation (for making an environment the default)
+  const setMcpMetadataMutation = useMcpMetadataSetMutation({
+    onSuccess: () => {
+      invalidateAllToolset(queryClient);
+      invalidateAllGetMcpMetadata(queryClient);
+      toast.success("MCP metadata updated");
+      telemetry.capture("mcp_event", {
+        action: "mcp_metadata_updated",
+        toolset_slug: toolset.slug,
       });
-
-      return Array.from(valueHashMap.entries()).map(
-        ([valueHash, { value, environments }]) => ({
-          valueHash,
-          value,
-          environments,
-        }),
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update default environment",
       );
-    };
-
-    // Get env vars from security variables (these are required auth credentials)
-    toolset.securityVariables?.forEach((secVar) => {
-      secVar.envVariables.forEach((envVar) => {
-        if (!envVar.toLowerCase().includes("token_url")) {
-          requiredVarNames.add(envVar);
-          const valueGroups = getValueGroups(envVar);
-          const id = `sec-${secVar.id}-${envVar}`;
-          existingVars.push({
-            id,
-            key: envVar,
-            valueGroups,
-            isUserProvided: true,
-            isRequired: true,
-            description: `Authentication credential for ${secVar.name || "API access"}`,
-            createdAt: new Date(),
-          });
-          // Initialize the environments map with the most common value's environments
-          if (valueGroups.length > 0) {
-            const mostCommonGroup = valueGroups.reduce((prev, current) =>
-              current.environments.length > prev.environments.length
-                ? current
-                : prev,
-            );
-            envMap.set(id, mostCommonGroup.environments);
-          }
-        }
-      });
-    });
-
-    // Get env vars from server variables (these are required server config)
-    toolset.serverVariables?.forEach((serverVar) => {
-      serverVar.envVariables.forEach((envVar) => {
-        requiredVarNames.add(envVar);
-        const valueGroups = getValueGroups(envVar);
-        const id = `srv-${envVar}`;
-        existingVars.push({
-          id,
-          key: envVar,
-          valueGroups,
-          isUserProvided: false,
-          isRequired: true,
-          description: "Server configuration variable",
-          createdAt: new Date(),
-        });
-        // Initialize the environments map with the most common value's environments
-        if (valueGroups.length > 0) {
-          const mostCommonGroup = valueGroups.reduce((prev, current) =>
-            current.environments.length > prev.environments.length
-              ? current
-              : prev,
-          );
-          envMap.set(id, mostCommonGroup.environments);
-        }
-      });
-    });
-
-    // Get env vars from function environment variables (these are required for functions)
-    toolset.functionEnvironmentVariables?.forEach((funcVar) => {
-      requiredVarNames.add(funcVar.name);
-      const valueGroups = getValueGroups(funcVar.name);
-      const id = `func-${funcVar.name}`;
-      existingVars.push({
-        id,
-        key: funcVar.name,
-        valueGroups,
-        isUserProvided: false,
-        isRequired: true,
-        description: funcVar.description || "Function environment variable",
-        createdAt: new Date(),
-      });
-      // Initialize the environments map with the most common value's environments
-      if (valueGroups.length > 0) {
-        const mostCommonGroup = valueGroups.reduce((prev, current) =>
-          current.environments.length > prev.environments.length
-            ? current
-            : prev,
-        );
-        envMap.set(id, mostCommonGroup.environments);
-      }
-    });
-
-    // Load custom variables from environments (variables not in the required list)
-    const customVarMap = new Map<
-      string,
-      {
-        valueGroups: Map<string, { value: string; environments: Set<string> }>;
-        createdAt: Date;
-      }
-    >();
-
-    environments.forEach((env) => {
-      env.entries.forEach((entry) => {
-        // Skip if this is a required variable or a token_url
-        if (
-          !requiredVarNames.has(entry.name) &&
-          !entry.name.toLowerCase().includes("token_url")
-        ) {
-          if (!customVarMap.has(entry.name)) {
-            customVarMap.set(entry.name, {
-              valueGroups: new Map([
-                [
-                  entry.valueHash,
-                  { value: entry.value, environments: new Set([env.slug]) },
-                ],
-              ]),
-              createdAt: entry.createdAt,
-            });
-          } else {
-            const varData = customVarMap.get(entry.name)!;
-            if (!varData.valueGroups.has(entry.valueHash)) {
-              varData.valueGroups.set(entry.valueHash, {
-                value: entry.value,
-                environments: new Set([env.slug]),
-              });
-            } else {
-              varData.valueGroups.get(entry.valueHash)!.environments.add(env.slug);
-            }
-          }
-        }
-      });
-    });
-
-    // Add custom variables to the list
-    customVarMap.forEach((info, varName) => {
-      const id = `custom-${varName}`;
-      const valueGroups = Array.from(info.valueGroups.entries()).map(
-        ([valueHash, { value, environments }]) => ({
-          valueHash,
-          value,
-          environments: Array.from(environments),
-        }),
-      );
-      existingVars.push({
-        id,
-        key: varName,
-        valueGroups,
-        isUserProvided: false,
-        isRequired: false,
-        description: "Custom environment variable",
-        createdAt: info.createdAt,
-      });
-    });
-
-    setEnvVars(existingVars);
-  }, [toolset.slug, environments]);
+    },
+  });
 
   const handleCreateEnvironment = () => {
     if (!newEnvironmentName.trim()) {
@@ -339,42 +184,102 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     });
   };
 
-  const handleAddVariable = () => {
-    if (!newKey.trim()) return;
-
-    // If no environments are explicitly selected, use all environments
-    const targetEnvs =
-      newTargetEnvironments.length > 0
-        ? newTargetEnvironments
-        : environments.map((e) => e.slug);
-
-    // Save to selected environments
-    // Don't add to envVars state - it will be reloaded from environments after save
-    const varKey = newKey.toUpperCase().replace(/\s+/g, "_");
-    if (!newIsUserProvided && newValue && targetEnvs.length > 0) {
-      targetEnvs.forEach((envSlug) => {
-        updateEnvironmentMutation.mutate({
-          request: {
-            slug: envSlug,
-            updateEnvironmentRequestBody: {
-              entriesToUpdate: [{ name: varKey, value: newValue }],
-              entriesToRemove: [],
-            },
-          },
-        });
-      });
+  const handleLoadFromEnvironment = (varKey: string) => {
+    if (!attachedEnvironment) {
+      toast.error(
+        "No attached environment found. Please configure an environment first.",
+      );
+      return;
     }
-    setNewKey("");
-    setNewValue("");
-    setNewTargetEnvironments([]);
-    setNewIsUserProvided(false);
-    setNewValueVisible(false);
-    setIsAddingNew(false);
+
+    // Create environment entry for this variable
+    const existingEntries = mcpMetadata?.environmentEntries || [];
+    if (!existingEntries.some((e) => e.variableName === varKey)) {
+      const newEntries = [
+        ...existingEntries,
+        {
+          variableName: varKey,
+          providedBy: "system",
+        },
+      ];
+
+      setMcpMetadataMutation.mutate({
+        request: {
+          setMcpMetadataRequestBody: {
+            toolsetSlug: toolset.slug,
+            defaultEnvironmentId:
+              mcpMetadata?.defaultEnvironmentId || attachedEnvironment.id,
+            environmentEntries: newEntries,
+            externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
+            instructions: mcpMetadata?.instructions,
+            logoAssetId: mcpMetadata?.logoAssetId,
+          },
+        },
+      });
+      toast.success(`Added ${varKey} from ${attachedEnvironment.name}`);
+      setIsAddingNew(false);
+
+      telemetry.capture("environment_event", {
+        action: "environment_variable_loaded_from_environment",
+        toolset_slug: toolset.slug,
+      });
+    } else {
+      toast.error(`${varKey} is already attached`);
+    }
+  };
+
+  const handleAddVariable = (
+    varKey: string,
+    newValue: string,
+    newState: EnvVarState,
+  ) => {
+    if (newState === "system" && newValue) {
+      updateEnvironmentMutation.mutate({
+        request: {
+          slug: selectedEnvironmentView,
+          updateEnvironmentRequestBody: {
+            entriesToUpdate: [{ name: varKey, value: newValue }],
+            entriesToRemove: [],
+          },
+        },
+      });
+
+      // Create environment entry for custom variables
+      const existingEntries = mcpMetadata?.environmentEntries || [];
+      if (!existingEntries.some((e) => e.variableName === varKey)) {
+        const targetEnv = environments.find(
+          (e) => e.slug === selectedEnvironmentView,
+        );
+        if (targetEnv) {
+          const newEntries = [
+            ...existingEntries,
+            {
+              variableName: varKey,
+              providedBy: "system",
+            },
+          ];
+
+          setMcpMetadataMutation.mutate({
+            request: {
+              setMcpMetadataRequestBody: {
+                toolsetSlug: toolset.slug,
+                defaultEnvironmentId:
+                  mcpMetadata?.defaultEnvironmentId || targetEnv.id,
+                environmentEntries: newEntries,
+                externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
+                instructions: mcpMetadata?.instructions,
+                logoAssetId: mcpMetadata?.logoAssetId,
+              },
+            },
+          });
+        }
+      }
+    }
 
     telemetry.capture("environment_event", {
       action: "environment_variable_added",
       toolset_slug: toolset.slug,
-      is_user_provided: newIsUserProvided,
+      state: newState,
     });
   };
 
@@ -396,49 +301,54 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       });
     });
 
+    // If this is a custom variable (not required), also remove its environment entry
+    if (!envVar.isRequired) {
+      const existingEntries = mcpMetadata?.environmentEntries || [];
+      const updatedEntries = existingEntries.filter(
+        (e) => e.variableName !== envVar.key,
+      );
+
+      if (updatedEntries.length !== existingEntries.length) {
+        setMcpMetadataMutation.mutate({
+          request: {
+            setMcpMetadataRequestBody: {
+              toolsetSlug: toolset.slug,
+              defaultEnvironmentId: mcpMetadata?.defaultEnvironmentId,
+              environmentEntries: updatedEntries,
+              externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
+              instructions: mcpMetadata?.instructions,
+              logoAssetId: mcpMetadata?.logoAssetId,
+            },
+          },
+        });
+      }
+    }
+
     telemetry.capture("environment_event", {
       action: "environment_variable_deleted",
       toolset_slug: toolset.slug,
     });
   };
 
-  // Helper functions for working with valueGroups
-  const getAllEnvironments = (envVar: EnvironmentVariable): string[] => {
-    const allEnvs = new Set<string>();
-    envVar.valueGroups.forEach((group) => {
-      group.environments.forEach((env) => allEnvs.add(env));
+  // Separate required and custom variables, sort omitted to the bottom
+  const requiredVars = envVars
+    .filter((v) => v.isRequired)
+    .sort((a, b) => {
+      // Sort omitted vars to the bottom
+      if (a.state === "omitted" && b.state !== "omitted") return 1;
+      if (a.state !== "omitted" && b.state === "omitted") return -1;
+      return 0;
     });
-    return Array.from(allEnvs);
-  };
-
-  // Check if an environment has a value for a specific variable
-  const environmentHasValue = (envVar: EnvironmentVariable, environmentSlug: string): boolean => {
-    if (envVar.isUserProvided) return true;
-    return envVar.valueGroups.some(group => group.environments.includes(environmentSlug));
-  };
-
-  // Get the value for a variable in a specific environment
-  const getValueForEnvironment = (envVar: EnvironmentVariable, environmentSlug: string): string => {
-    const group = envVar.valueGroups.find(g => g.environments.includes(environmentSlug));
-    return group?.value || "";
-  };
-
-  // Separate required and custom variables
-  const requiredVars = envVars.filter((v) => v.isRequired);
-
-  // Check if an environment has all required variables configured
-  const environmentHasAllRequiredVariables = (environmentSlug: string): boolean => {
-    return requiredVars.every(v => environmentHasValue(v, environmentSlug));
-  };
 
   // Count missing required variables (user-provided ones count as configured)
   const missingRequiredCount = useMissingRequiredEnvVars(
     toolset,
     environments,
-    selectedEnvironmentView
+    selectedEnvironmentView,
+    mcpMetadata,
   );
 
-  // Handle value change for required variables
+  // Handle value change for variables
   const handleValueChange = (id: string, newValue: string) => {
     const envVar = envVars.find((v) => v.id === id);
     if (!envVar) return;
@@ -451,44 +361,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       return;
     }
 
-    // Get current or default target environments (only when user starts typing)
-    let targetEnvironments: string[];
-    if (editingState.has(id)) {
-      targetEnvironments = editingState.get(id)!.targetEnvironments;
-    } else {
-      // Check if the currently viewed environment has a value
-      const currentEnvHasValue = envVar.valueGroups.some(g =>
-        g.environments.includes(selectedEnvironmentView)
-      );
-
-      // If viewing environment doesn't have a value
-      if (!currentEnvHasValue) {
-        // If completely unset (no values anywhere), default to all environments
-        if (envVar.valueGroups.length === 0) {
-          targetEnvironments = environments.map((e) => e.slug);
-        } else {
-          // Has values in some environments, default to only environments without values
-          targetEnvironments = environments
-            .filter(env => !getValueForEnvironment(envVar, env.slug))
-            .map(env => env.slug);
-        }
-      } else if (envVar.valueGroups.length > 0) {
-        // If variable has values, use the most common group
-        const mostCommonGroup = envVar.valueGroups.reduce((prev, current) =>
-          current.environments.length > prev.environments.length
-            ? current
-            : prev,
-        );
-        targetEnvironments = mostCommonGroup.environments;
-      } else {
-        // If completely unset, use all environments
-        targetEnvironments = environments.map((e) => e.slug);
-      }
-    }
-
-    setEditingState(
-      new Map(editingState.set(id, { value: newValue, targetEnvironments })),
-    );
+    setEditingState(new Map(editingState.set(id, { value: newValue })));
   };
 
   // Get editing value for a variable (either from editing state or from valueGroups)
@@ -500,113 +373,307 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     return getValueForEnvironment(envVar, selectedEnvironmentView);
   };
 
-  // Get selected environments for a variable
-  const getSelectedEnvironments = (id: string): string[] => {
-    // If actively editing, use the editing state
-    if (editingState.has(id)) {
-      return editingState.get(id)!.targetEnvironments;
+  // Get header display name for a variable
+  const getHeaderDisplayName = (envVar: EnvironmentVariable): string => {
+    if (
+      editingState.has(envVar.id) &&
+      editingState.get(envVar.id)!.headerDisplayName !== undefined
+    ) {
+      return editingState.get(envVar.id)!.headerDisplayName!;
     }
-
-    // Otherwise, show which environments have the currently displayed value
-    const envVar = envVars.find(v => v.id === id);
-    if (!envVar) return environments.map((e) => e.slug);
-
-    // If completely unset (no value groups), show no environments selected
-    if (envVar.valueGroups.length === 0) {
-      return [];
-    }
-
-    // Find which environments have the same value as the currently viewed environment
-    const viewedValue = getValueForEnvironment(envVar, selectedEnvironmentView);
-    if (viewedValue) {
-      const matchingGroup = envVar.valueGroups.find(g => g.value === viewedValue);
-      if (matchingGroup) {
-        return matchingGroup.environments;
-      }
-    }
-
-    // If the current environment has no value (viewing empty), return empty array
-    // This reflects the actual state - no environments are selected for empty value
-    return [];
+    const entry = environmentEntries.find((e) => e.variableName === envVar.key);
+    return entry?.headerDisplayName || "";
   };
 
-  // Update selected environments for a variable
-  const setSelectedEnvironments = (id: string, envs: string[]) => {
+  // Handle header display name change
+  const handleHeaderDisplayNameChange = (id: string, newName: string) => {
     const current = editingState.get(id);
     if (current) {
       setEditingState(
-        new Map(editingState.set(id, { ...current, targetEnvironments: envs })),
+        new Map(
+          editingState.set(id, { ...current, headerDisplayName: newName }),
+        ),
       );
     } else {
-      // Initialize editing state with current value and new environments
-      const envVar = envVars.find(v => v.id === id);
-      const value = envVar ? getEditingValue(envVar) : "";
+      // Initialize editing state with current values
+      const envVar = envVars.find((v) => v.id === id);
+      if (!envVar) return;
+
+      const value = getEditingValue(envVar);
+
       setEditingState(
-        new Map(editingState.set(id, { value, targetEnvironments: envs })),
+        new Map(
+          editingState.set(id, {
+            value,
+            headerDisplayName: newName,
+          }),
+        ),
       );
     }
   };
 
-  // Get environments with different values (for indeterminate checkbox state)
-  const getIndeterminateEnvironments = (id: string): string[] => {
-    const envVar = envVars.find(v => v.id === id);
-    if (!envVar) return [];
+  // Check if a variable has unsaved changes or has no environment entry (unmapped)
+  const hasUnsavedChanges = (envVar: EnvironmentVariable): boolean => {
+    // Find existing environment entry
+    const entry = environmentEntries.find((e) => e.variableName === envVar.key);
 
-    const currentValue = getEditingValue(envVar);
-    const selectedEnvs = getSelectedEnvironments(id);
+    // If no entry exists, this is an unmapped required variable that needs to be saved
+    if (!entry && envVar.isRequired) {
+      return true;
+    }
 
-    // Find environments that have a value different from the current value
-    // and are not already selected
-    return environments
-      .filter(env => {
-        // Skip if already selected
-        if (selectedEnvs.includes(env.slug)) return false;
+    // Determine the original state based on environment entry
+    const originalState: EnvVarState =
+      entry?.providedBy === "user"
+        ? "user-provided"
+        : entry?.providedBy === "none"
+          ? "omitted"
+          : "system";
 
-        // Get the value for this environment
-        const envValue = getValueForEnvironment(envVar, env.slug);
+    // Check if state has changed
+    if (envVar.state !== originalState) {
+      return true;
+    }
 
-        // Include if this environment has a value and it's different from current
-        return envValue && envValue !== currentValue;
-      })
-      .map(env => env.slug);
+    // If state is system, check if value changed
+    if (envVar.state === "system" && editingState.has(envVar.id)) {
+      const editing = editingState.get(envVar.id)!;
+      const currentValue = getValueForEnvironment(
+        envVar,
+        selectedEnvironmentView,
+      );
+
+      // Check if value changed (only if a value is provided)
+      if (editing.value && editing.value !== currentValue) {
+        return true;
+      }
+    }
+
+    // Check if header display name changed
+    if (editingState.has(envVar.id)) {
+      const editing = editingState.get(envVar.id)!;
+      const originalHeaderName = entry?.headerDisplayName || "";
+      if (
+        editing.headerDisplayName !== undefined &&
+        editing.headerDisplayName !== originalHeaderName
+      ) {
+        return true;
+      }
+    }
+
+    return false;
   };
 
-  // Toggle user-provided state for a variable
-  const handleToggleUserProvided = (id: string) => {
+  // Check if there are any unsaved changes across all variables
+  const hasAnyUnsavedChanges = useMemo(() => {
+    return envVars.some(hasUnsavedChanges);
+  }, [envVars, editingState, environmentEntries, selectedEnvironmentView]);
+
+  // Save all variables with unsaved changes
+  const handleSaveAll = async () => {
+    const varsToSave = envVars.filter(hasUnsavedChanges);
+    for (const envVar of varsToSave) {
+      await handleSaveVariable(envVar);
+    }
+  };
+
+  // Cancel all changes and reset editing state
+  const handleCancelAll = () => {
+    setEditingState(new Map());
+    // Reset state changes by reloading from hook
+    setEnvVars(loadedEnvVars);
+  };
+
+  // Cycle between user-provided, system, and omitted states
+  const handleToggleState = (id: string) => {
+    const envVar = envVars.find((v) => v.id === id);
+    if (!envVar) return;
+
+    const nextState: EnvVarState =
+      envVar.state === "user-provided"
+        ? "system"
+        : envVar.state === "system"
+          ? "omitted"
+          : "user-provided";
+
+    // Update local state
     setEnvVars(
-      envVars.map((v) =>
-        v.id === id ? { ...v, isUserProvided: !v.isUserProvided } : v,
-      ),
+      envVars.map((v) => {
+        if (v.id !== id) return v;
+        return { ...v, state: nextState };
+      }),
     );
-    // Clear editing state when toggling
+
+    // Initialize or update editing state to track the state change
     const newEditingState = new Map(editingState);
-    newEditingState.delete(id);
+    const currentValue = getValueForEnvironment(
+      envVar,
+      selectedEnvironmentView,
+    );
+    const currentHeaderName = getHeaderDisplayName(envVar);
+
+    newEditingState.set(id, {
+      value: currentValue,
+      headerDisplayName: currentHeaderName,
+    });
+
     setEditingState(newEditingState);
   };
 
   // Save a required variable
-  const handleSaveVariable = (envVar: EnvironmentVariable) => {
-    const value = getEditingValue(envVar);
-    if (!value) return;
+  const handleSaveVariable = async (envVar: EnvironmentVariable) => {
+    const existingEntries = mcpMetadata?.environmentEntries || [];
+    const currentDefaultEnvId = mcpMetadata?.defaultEnvironmentId;
 
-    // Use selected environments from state
-    const targetEnvs = getSelectedEnvironments(envVar.id);
+    // Get editing state
+    const editing = editingState.get(envVar.id);
 
-    if (targetEnvs.length === 0) {
-      toast.error("No environments selected");
+    // Only update headerDisplayName if it's explicitly being edited
+    const isHeaderNameBeingEdited = editing?.headerDisplayName !== undefined;
+    const newHeaderName = isHeaderNameBeingEdited
+      ? editing.headerDisplayName
+      : undefined;
+
+    // Handle user-provided and omitted states (no value needed)
+    if (envVar.state === "user-provided" || envVar.state === "omitted") {
+      // Create or update environment entry
+      const entryIndex = existingEntries.findIndex(
+        (e) => e.variableName === envVar.key,
+      );
+      let updatedEntries;
+
+      const providedByValue =
+        envVar.state === "user-provided" ? "user" : "none";
+
+      if (entryIndex >= 0) {
+        // Update existing entry - preserve headerDisplayName unless explicitly changed
+        updatedEntries = [...existingEntries];
+        updatedEntries[entryIndex] = {
+          ...existingEntries[entryIndex],
+          variableName: envVar.key,
+          providedBy: providedByValue,
+          // Only update headerDisplayName if it's explicitly being edited
+          ...(isHeaderNameBeingEdited
+            ? { headerDisplayName: newHeaderName || undefined }
+            : {}),
+        };
+      } else {
+        // Create new entry
+        updatedEntries = [
+          ...existingEntries,
+          {
+            variableName: envVar.key,
+            providedBy: providedByValue,
+            ...(isHeaderNameBeingEdited
+              ? { headerDisplayName: newHeaderName || undefined }
+              : {}),
+          },
+        ];
+      }
+
+      setMcpMetadataMutation.mutate({
+        request: {
+          setMcpMetadataRequestBody: {
+            toolsetSlug: toolset.slug,
+            defaultEnvironmentId: currentDefaultEnvId,
+            environmentEntries: updatedEntries,
+            externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
+            instructions: mcpMetadata?.instructions,
+            logoAssetId: mcpMetadata?.logoAssetId,
+          },
+        },
+      });
+
+      // Clear editing state after save
+      const newEditingState = new Map(editingState);
+      newEditingState.delete(envVar.id);
+      setEditingState(newEditingState);
+
+      const actionMessage =
+        envVar.state === "user-provided"
+          ? "set to user-provided"
+          : "set to omitted";
+      toast.success(`${envVar.key} ${actionMessage}`);
+      telemetry.capture("environment_event", {
+        action:
+          envVar.state === "user-provided"
+            ? "variable_set_user_provided"
+            : "variable_set_omitted",
+        toolset_slug: toolset.slug,
+        variable_key: envVar.key,
+      });
       return;
     }
 
-    targetEnvs.forEach((envSlug) => {
+    // Handle system state
+    const value = getEditingValue(envVar);
+
+    // Save to the currently selected environment
+    const targetEnv = environments.find(
+      (e) => e.slug === selectedEnvironmentView,
+    );
+
+    if (!targetEnv) {
+      toast.error("Target environment not found");
+      return;
+    }
+
+    // Update environment variable only if there's a value
+    if (value) {
       updateEnvironmentMutation.mutate({
         request: {
-          slug: envSlug,
+          slug: selectedEnvironmentView,
           updateEnvironmentRequestBody: {
             entriesToUpdate: [{ name: envVar.key, value }],
             entriesToRemove: [],
           },
         },
       });
+    }
+
+    // Create or update environment entry
+    const entryIndex = existingEntries.findIndex(
+      (e) => e.variableName === envVar.key,
+    );
+    let updatedEntries;
+
+    if (entryIndex >= 0) {
+      // Update existing entry - preserve headerDisplayName unless explicitly changed
+      updatedEntries = [...existingEntries];
+      updatedEntries[entryIndex] = {
+        ...existingEntries[entryIndex],
+        variableName: envVar.key,
+        providedBy: "system",
+        // Only update headerDisplayName if it's explicitly being edited
+        ...(isHeaderNameBeingEdited
+          ? { headerDisplayName: newHeaderName || undefined }
+          : {}),
+      };
+    } else {
+      // Create new entry
+      updatedEntries = [
+        ...existingEntries,
+        {
+          variableName: envVar.key,
+          providedBy: "system",
+          ...(isHeaderNameBeingEdited
+            ? { headerDisplayName: newHeaderName || undefined }
+            : {}),
+        },
+      ];
+    }
+
+    setMcpMetadataMutation.mutate({
+      request: {
+        setMcpMetadataRequestBody: {
+          toolsetSlug: toolset.slug,
+          defaultEnvironmentId: currentDefaultEnvId || targetEnv.id,
+          environmentEntries: updatedEntries,
+          externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
+          instructions: mcpMetadata?.instructions,
+          logoAssetId: mcpMetadata?.logoAssetId,
+        },
+      },
     });
 
     // Clear editing state after save
@@ -614,7 +681,11 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     newEditingState.delete(envVar.id);
     setEditingState(newEditingState);
 
-    toast.success(`Saved ${envVar.key} to ${targetEnvs.length} environment${targetEnvs.length > 1 ? "s" : ""}`);
+    if (value) {
+      toast.success(`Saved ${envVar.key} to ${targetEnv.name}`);
+    } else {
+      toast.success(`Updated state for ${envVar.key}`);
+    }
 
     telemetry.capture("environment_event", {
       action: "required_variable_configured",
@@ -623,53 +694,28 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     });
   };
 
-  const environmentSwitcher = useMemo(() => {
-    // Sort environments with "default" first
-    const sortedEnvironments = [...environments].sort((a, b) => {
-      if (a.slug === "default") return -1;
-      if (b.slug === "default") return 1;
-      return 0;
+  const handleSetDefaultEnvironment = () => {
+    const targetEnv = environments.find(
+      (e) => e.slug === selectedEnvironmentView,
+    );
+    if (!targetEnv) return;
+
+    // Set this environment as the default
+    setMcpMetadataMutation.mutate({
+      request: {
+        setMcpMetadataRequestBody: {
+          toolsetSlug: toolset.slug,
+          defaultEnvironmentId: targetEnv.id,
+          environmentEntries: mcpMetadata?.environmentEntries || [],
+          externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
+          instructions: mcpMetadata?.instructions,
+          logoAssetId: mcpMetadata?.logoAssetId,
+        },
+      },
     });
 
-    return environments.length > 0 ? (
-      <div className="flex items-center gap-1 border-b">
-        {sortedEnvironments.map(env => {
-          const isSelected = selectedEnvironmentView === env.slug;
-          const hasAllRequired = environmentHasAllRequiredVariables(env.slug);
-
-          return (
-            <button
-              key={env.slug}
-              onClick={() => setSelectedEnvironmentView(env.slug)}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors relative",
-                isSelected
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {hasAllRequired ? (
-                <CheckCircleIcon className="w-4 h-4 text-green-600" />
-              ) : (
-                <AlertTriangle className="w-4 h-4 text-yellow-600" />
-              )}
-              {env.name}
-              {isSelected && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-              )}
-            </button>
-          );
-        })}
-        <button
-          onClick={() => setIsCreateEnvDialogOpen(true)}
-          className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors ml-auto"
-        >
-          <Plus className="w-4 h-4" />
-          New Environment
-        </button>
-      </div>
-    ) : null;
-  }, [environments, selectedEnvironmentView, requiredVars, envVars]);
+    toast.success(`Set ${targetEnv.name} as default environment`);
+  };
 
   return (
     <div className="space-y-6">
@@ -681,8 +727,12 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
           </h2>
           {missingRequiredCount > 0 && (
             <Badge variant="warning">
-              <Badge.LeftIcon><AlertTriangle className="h-3.5 w-3.5" /></Badge.LeftIcon>
-              <Badge.Text>{missingRequiredCount} required not configured</Badge.Text>
+              <Badge.LeftIcon>
+                <AlertTriangle className="h-3.5 w-3.5" />
+              </Badge.LeftIcon>
+              <Badge.Text>
+                {missingRequiredCount} required not configured
+              </Badge.Text>
             </Badge>
           )}
         </div>
@@ -691,111 +741,53 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
         </Button>
       </div>
       <p className="text-sm text-muted-foreground">
-        Configure required credentials and add custom variables. Required variables are indicated with a warning dot when unset.
+        Configure required credentials and add custom variables. Click the state
+        button to cycle between User Provided (set at runtime), System (set
+        here), and Omitted (not included).
       </p>
 
       {/* All Variables Section */}
       <div className="space-y-4">
-
         {/* Variables List */}
         {envVars.length > 0 ? (
           <div className="border rounded-lg overflow-hidden">
             {/* Environment Switcher Tabs */}
-            {environmentSwitcher}
+            <EnvironmentSwitcher
+              environments={environments}
+              selectedEnvironmentView={selectedEnvironmentView}
+              mcpAttachedEnvironmentSlug={mcpAttachedEnvironmentSlug}
+              defaultEnvironmentSlug={
+                toolset.defaultEnvironmentSlug || "default"
+              }
+              requiredVars={requiredVars}
+              hasAnyUnsavedChanges={hasAnyUnsavedChanges}
+              onEnvironmentSelect={setSelectedEnvironmentView}
+              onSaveAll={handleSaveAll}
+              onCancelAll={handleCancelAll}
+              onSetDefaultEnvironment={handleSetDefaultEnvironment}
+              onCreateEnvironment={() => setIsCreateEnvDialogOpen(true)}
+            />
             {envVars.map((envVar, index) => (
-              <div
+              <EnvironmentVariableRow
                 key={envVar.id}
-                className={cn(
-                  "group grid grid-cols-[auto_1fr_auto] gap-4 items-center px-5 py-4 transition-colors",
-                  index !== envVars.length - 1 && "border-b",
-                )}
-              >
-                {/* Status indicator / Delete button - status shows by default, delete button replaces it on hover for non-required */}
-                <div className="relative w-6 h-6 flex items-center justify-center">
-                  {/* Status indicator - visible by default, hidden on hover for non-required */}
-                  <div className={cn(!envVar.isRequired && "group-hover:opacity-0 transition-opacity")}>
-                    {environmentHasValue(envVar, selectedEnvironmentView) ? (
-                      <div className="w-2 h-2 rounded-full bg-green-500" />
-                    ) : envVar.isRequired ? (
-                      <div className="w-2 h-2 rounded-full bg-yellow-500" />
-                    ) : (
-                      <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />
-                    )}
-                  </div>
-
-                  {/* Delete button - hidden by default, visible on hover for non-required */}
-                  {!envVar.isRequired && (
-                    <button
-                      onClick={() => handleDeleteVariable(envVar.id)}
-                      className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-muted-foreground hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-
-                {/* Variable Info */}
-                <div className="min-w-0">
-                  <div className="font-medium font-mono text-sm truncate">
-                    {envVar.key}
-                  </div>
-                  {envVar.description && (
-                    <div className="text-xs text-muted-foreground mt-0.5 truncate">
-                      {envVar.description}
-                    </div>
-                  )}
-                </div>
-
-                {/* Right side: Toggle + Value + Environments + Save */}
-                <div className="flex items-center gap-4">
-                  {/* User provided toggle */}
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <Switch
-                      checked={envVar.isUserProvided}
-                      onCheckedChange={() => handleToggleUserProvided(envVar.id)}
-                    />
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      User provided
-                    </span>
-                  </label>
-
-                  {/* Value Input or Runtime badge with dropdown */}
-                  <div className="w-56">
-                    {envVar.isUserProvided ? (
-                      <div className="h-9 flex items-center px-3 rounded-md bg-muted text-xs text-muted-foreground font-mono">
-                        Set at runtime
-                      </div>
-                    ) : (
-                      <InputAndMultiselect
-                        value={getEditingValue(envVar)}
-                        onChange={(value) => handleValueChange(envVar.id, value)}
-                        selectedOptions={getSelectedEnvironments(envVar.id)}
-                        indeterminateOptions={getIndeterminateEnvironments(envVar.id)}
-                        onSelectedOptionsChange={(selected) =>
-                          setSelectedEnvironments(envVar.id, selected)
-                        }
-                        options={environments.map((env) => ({
-                          value: env.slug,
-                          label: env.name,
-                        }))}
-                        placeholder="Enter value..."
-                        type="password"
-                      />
-                    )}
-                  </div>
-
-                  {/* Save button - always visible for consistent width */}
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => handleSaveVariable(envVar)}
-                    disabled={!editingState.has(envVar.id) || !editingState.get(envVar.id)?.value || envVar.isUserProvided}
-                    className={envVar.isUserProvided ? "invisible" : ""}
-                  >
-                    Save
-                  </Button>
-                </div>
-              </div>
+                envVar={envVar}
+                index={index}
+                totalCount={envVars.length}
+                selectedEnvironmentView={selectedEnvironmentView}
+                mcpAttachedEnvironmentSlug={mcpAttachedEnvironmentSlug}
+                defaultEnvironmentSlug={
+                  toolset.defaultEnvironmentSlug || "default"
+                }
+                environmentEntries={environmentEntries}
+                editingState={editingState}
+                editingHeaderId={editingHeaderId}
+                onToggleState={handleToggleState}
+                onValueChange={handleValueChange}
+                onDelete={handleDeleteVariable}
+                onEditHeaderName={setEditingHeaderId}
+                onHeaderDisplayNameChange={handleHeaderDisplayNameChange}
+                onHeaderBlur={() => setEditingHeaderId(null)}
+              />
             ))}
           </div>
         ) : (
@@ -815,458 +807,20 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       </div>
 
       {/* Add New Variable Sheet */}
-      <Sheet open={isAddingNew} onOpenChange={setIsAddingNew}>
-        <SheetContent
-          side="right"
-          className="w-[500px] sm:max-w-[500px] flex flex-col"
-        >
-          <SheetHeader className="px-6 pt-6 pb-0">
-            <SheetTitle className="text-lg font-semibold">
-              Add Environment Variable
-            </SheetTitle>
-          </SheetHeader>
-
-          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-            {/* Key and Value inputs side by side */}
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <Label className="text-xs text-muted-foreground mb-1.5 block">
-                  Key
-                </Label>
-                <input
-                  type="text"
-                  value={newKey}
-                  onChange={(e) => setNewKey(e.target.value.toUpperCase())}
-                  placeholder="CLIENT_KEY..."
-                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-              <div className="flex-1">
-                <Label className="text-xs text-muted-foreground mb-1.5 block">
-                  Value
-                </Label>
-                <input
-                  type={newValueVisible ? "text" : "password"}
-                  value={newValue}
-                  onChange={(e) => setNewValue(e.target.value)}
-                  placeholder=""
-                  disabled={newIsUserProvided}
-                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:bg-muted disabled:cursor-not-allowed"
-                />
-              </div>
-            </div>
-
-            {/* Add Note link */}
-            <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              Add Note
-            </button>
-
-            {/* Add Another button */}
-            <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-              <Plus className="h-4 w-4" />
-              Add Another
-            </button>
-
-            {/* Environments section */}
-            <div className="pt-4 border-t">
-              <Label className="text-xs text-muted-foreground mb-2 block">
-                Environments
-              </Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm flex items-center justify-between hover:bg-accent transition-colors">
-                    <div className="flex items-center gap-2">
-                      <svg
-                        className="h-4 w-4 text-muted-foreground"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        strokeWidth="2"
-                      >
-                        <rect x="3" y="3" width="18" height="6" rx="1" />
-                        <rect
-                          x="3"
-                          y="11"
-                          width="18"
-                          height="6"
-                          rx="1"
-                          opacity="0.5"
-                        />
-                      </svg>
-                      <span>
-                        {newTargetEnvironments.length === 0 ||
-                        newTargetEnvironments.length === environments.length
-                          ? "All Environments"
-                          : newTargetEnvironments.length === 1
-                            ? environments.find(
-                                (e) => e.slug === newTargetEnvironments[0],
-                              )?.name || newTargetEnvironments[0]
-                            : `${newTargetEnvironments.length} Environments`}
-                      </span>
-                    </div>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-[352px] p-1">
-                  <div
-                    className="px-3 py-2 text-sm rounded-sm cursor-pointer hover:bg-accent flex items-center gap-2"
-                    onClick={() =>
-                      setNewTargetEnvironments(environments.map((e) => e.slug))
-                    }
-                  >
-                    <div
-                      className={cn(
-                        "w-4 h-4 rounded-sm border flex items-center justify-center",
-                        newTargetEnvironments.length === 0 ||
-                          newTargetEnvironments.length === environments.length
-                          ? "bg-primary border-primary text-primary-foreground"
-                          : "border-border",
-                      )}
-                    >
-                      {(newTargetEnvironments.length === 0 ||
-                        newTargetEnvironments.length === environments.length) && (
-                        <Check className="h-3 w-3" />
-                      )}
-                    </div>
-                    All Environments
-                  </div>
-                  {environments.map((env) => {
-                    const isAllSelected = newTargetEnvironments.length === 0 || newTargetEnvironments.length === environments.length;
-                    const isEnvSelected = isAllSelected || newTargetEnvironments.includes(env.slug);
-
-                    return (
-                      <div
-                        key={env.slug}
-                        className="px-3 py-2 text-sm rounded-sm cursor-pointer hover:bg-accent flex items-center gap-2"
-                        onClick={() => {
-                          if (newTargetEnvironments.includes(env.slug)) {
-                            setNewTargetEnvironments(
-                              newTargetEnvironments.filter((s) => s !== env.slug),
-                            );
-                          } else {
-                            setNewTargetEnvironments([
-                              ...newTargetEnvironments,
-                              env.slug,
-                            ]);
-                          }
-                        }}
-                      >
-                        <div
-                          className={cn(
-                            "w-4 h-4 rounded-sm border flex items-center justify-center",
-                            isEnvSelected
-                              ? "bg-primary border-primary text-primary-foreground"
-                              : "border-border",
-                          )}
-                        >
-                          {isEnvSelected && (
-                            <Check className="h-3 w-3" />
-                          )}
-                        </div>
-                        {env.name}
-                      </div>
-                    );
-                  })}
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            {/* Sensitive toggle */}
-            <div className="flex items-center justify-between pt-4">
-              <div className="flex items-center gap-3">
-                <Switch
-                  checked={newIsUserProvided}
-                  onCheckedChange={setNewIsUserProvided}
-                />
-                <div>
-                  <span className="text-sm font-medium">Sensitive</span>
-                  <span className="text-xs text-yellow-600 ml-2">⚡</span>
-                  <p className="text-xs text-muted-foreground">
-                    Available for Production and Preview only
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <SheetFooter className="px-6 py-4 border-t flex-row justify-between items-center">
-            <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                strokeWidth="2"
-              >
-                <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-              </svg>
-              Import .env
-            </button>
-            <span className="text-xs text-muted-foreground">
-              or paste .env contents in Key input
-            </span>
-            <Button
-              onClick={() => {
-                handleAddVariable();
-                setIsAddingNew(false);
-              }}
-              disabled={!newKey.trim()}
-            >
-              Save
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
-
-      {/* Edit Variable Sheet */}
-      <Sheet
-        open={editingVar !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setEditingVar(null);
-            setEditValue("");
-            setEditTargetEnvironments([]);
-            setEditValueVisible(false);
-          }
-        }}
-      >
-        <SheetContent
-          side="right"
-          className="w-[500px] sm:max-w-[500px] flex flex-col"
-        >
-          <SheetHeader className="px-6 pt-6 pb-0">
-            <SheetTitle className="text-lg font-semibold">
-              Edit Environment Variable
-            </SheetTitle>
-          </SheetHeader>
-
-          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-            {/* Key (read-only) and Value inputs side by side */}
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <Label className="text-xs text-muted-foreground mb-1.5 block">
-                  Key
-                </Label>
-                <input
-                  type="text"
-                  value={editingVar?.key || ""}
-                  disabled
-                  className="w-full h-10 px-3 rounded-md border border-input bg-muted text-sm font-mono cursor-not-allowed"
-                />
-              </div>
-              <div className="flex-1">
-                <Label className="text-xs text-muted-foreground mb-1.5 block">
-                  Value
-                </Label>
-                <div className="relative">
-                  <input
-                    type={editValueVisible ? "text" : "password"}
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    placeholder="Enter value..."
-                    disabled={editingVar?.isUserProvided}
-                    className="w-full h-10 px-3 pr-10 rounded-md border border-input bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:bg-muted disabled:cursor-not-allowed"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setEditValueVisible(!editValueVisible)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {editValueVisible ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Environments section */}
-            <div className="pt-4 border-t">
-              <Label className="text-xs text-muted-foreground mb-2 block">
-                Environments
-              </Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm flex items-center justify-between hover:bg-accent transition-colors">
-                    <div className="flex items-center gap-2">
-                      <svg
-                        className="h-4 w-4 text-muted-foreground"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        strokeWidth="2"
-                      >
-                        <rect x="3" y="3" width="18" height="6" rx="1" />
-                        <rect
-                          x="3"
-                          y="11"
-                          width="18"
-                          height="6"
-                          rx="1"
-                          opacity="0.5"
-                        />
-                      </svg>
-                      <span>
-                        {editTargetEnvironments.length === 0
-                          ? "Select Environments"
-                          : editTargetEnvironments.length === environments.length
-                            ? "All Environments"
-                            : editTargetEnvironments.length === 1
-                              ? environments.find(
-                                  (e) => e.slug === editTargetEnvironments[0],
-                                )?.name || editTargetEnvironments[0]
-                              : `${editTargetEnvironments.length} Environments`}
-                      </span>
-                    </div>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-[352px] p-1">
-                  <div
-                    className="px-3 py-2 text-sm rounded-sm cursor-pointer hover:bg-accent flex items-center gap-2"
-                    onClick={() =>
-                      setEditTargetEnvironments(environments.map((e) => e.slug))
-                    }
-                  >
-                    <div
-                      className={cn(
-                        "w-4 h-4 rounded-sm border flex items-center justify-center",
-                        editTargetEnvironments.length === environments.length
-                          ? "bg-primary border-primary text-primary-foreground"
-                          : "border-border",
-                      )}
-                    >
-                      {editTargetEnvironments.length === environments.length && (
-                        <Check className="h-3 w-3" />
-                      )}
-                    </div>
-                    All Environments
-                  </div>
-                  {environments.map((env) => (
-                    <div
-                      key={env.slug}
-                      className="px-3 py-2 text-sm rounded-sm cursor-pointer hover:bg-accent flex items-center gap-2"
-                      onClick={() => {
-                        if (editTargetEnvironments.includes(env.slug)) {
-                          setEditTargetEnvironments(
-                            editTargetEnvironments.filter((s) => s !== env.slug),
-                          );
-                        } else {
-                          setEditTargetEnvironments([
-                            ...editTargetEnvironments,
-                            env.slug,
-                          ]);
-                        }
-                      }}
-                    >
-                      <div
-                        className={cn(
-                          "w-4 h-4 rounded-sm border flex items-center justify-center",
-                          editTargetEnvironments.includes(env.slug)
-                            ? "bg-primary border-primary text-primary-foreground"
-                            : "border-border",
-                        )}
-                      >
-                        {editTargetEnvironments.includes(env.slug) && (
-                          <Check className="h-3 w-3" />
-                        )}
-                      </div>
-                      {env.name}
-                    </div>
-                  ))}
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            {editingVar?.isUserProvided && (
-              <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900 rounded-md p-3">
-                <p className="text-xs text-yellow-800 dark:text-yellow-200">
-                  This is a sensitive variable. Values are provided at runtime.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <SheetFooter className="px-6 py-4 border-t flex-row justify-end items-center gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setEditingVar(null);
-                setEditValue("");
-                setEditTargetEnvironments([]);
-                setEditValueVisible(false);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                if (!editingVar || (!editValue && !editingVar.isUserProvided))
-                  return;
-
-                // Save to selected environments
-                if (
-                  !editingVar.isUserProvided &&
-                  editValue &&
-                  editTargetEnvironments.length > 0
-                ) {
-                  editTargetEnvironments.forEach((envSlug) => {
-                    updateEnvironmentMutation.mutate({
-                      request: {
-                        slug: envSlug,
-                        updateEnvironmentRequestBody: {
-                          entriesToUpdate: [
-                            { name: editingVar.key, value: editValue },
-                          ],
-                          entriesToRemove: [],
-                        },
-                      },
-                    });
-                  });
-
-                  // Update the local state
-                  setEnvVars(
-                    envVars.map((v) =>
-                      v.id === editingVar.id
-                        ? {
-                            ...v,
-                            value: editValue,
-                            targetEnvironments: editTargetEnvironments,
-                            updatedAt: new Date(),
-                          }
-                        : v,
-                    ),
-                  );
-
-                  toast.success(`Updated ${editingVar.key}`);
-
-                  telemetry.capture("environment_event", {
-                    action: "environment_variable_updated",
-                    toolset_slug: toolset.slug,
-                  });
-                }
-
-                // Close the sheet
-                setEditingVar(null);
-                setEditValue("");
-                setEditTargetEnvironments([]);
-                setEditValueVisible(false);
-              }}
-              disabled={
-                !editValue && !editingVar?.isUserProvided ||
-                editTargetEnvironments.length === 0
-              }
-            >
-              Save
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+      <AddVariableSheet
+        open={isAddingNew}
+        onOpenChange={setIsAddingNew}
+        attachedEnvironment={attachedEnvironment}
+        availableEnvVarsFromAttached={availableEnvVarsFromAttached}
+        onAddVariable={handleAddVariable}
+        onLoadFromEnvironment={handleLoadFromEnvironment}
+      />
 
       {/* Create Environment Dialog */}
-      <Dialog open={isCreateEnvDialogOpen} onOpenChange={setIsCreateEnvDialogOpen}>
+      <Dialog
+        open={isCreateEnvDialogOpen}
+        onOpenChange={setIsCreateEnvDialogOpen}
+      >
         <Dialog.Content className="max-w-md">
           <Dialog.Header>
             <Dialog.Title>Create New Environment</Dialog.Title>
@@ -1301,14 +855,16 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
             </Button>
             <Button
               onClick={handleCreateEnvironment}
-              disabled={!newEnvironmentName.trim() || createEnvironmentMutation.isPending}
+              disabled={
+                !newEnvironmentName.trim() ||
+                createEnvironmentMutation.isPending
+              }
             >
               {createEnvironmentMutation.isPending ? "Creating..." : "Create"}
             </Button>
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
-
     </div>
   );
 }

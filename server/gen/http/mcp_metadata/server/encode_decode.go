@@ -474,16 +474,54 @@ func marshalTypesMcpMetadataToMcpMetadataResponseBody(v *types.McpMetadata) *Mcp
 		LogoAssetID:              v.LogoAssetID,
 		ExternalDocumentationURL: v.ExternalDocumentationURL,
 		Instructions:             v.Instructions,
+		DefaultEnvironmentID:     v.DefaultEnvironmentID,
 		CreatedAt:                v.CreatedAt,
 		UpdatedAt:                v.UpdatedAt,
 	}
-	if v.HeaderDisplayNames != nil {
-		res.HeaderDisplayNames = make(map[string]string, len(v.HeaderDisplayNames))
-		for key, val := range v.HeaderDisplayNames {
-			tk := key
-			tv := val
-			res.HeaderDisplayNames[tk] = tv
+	if v.EnvironmentEntries != nil {
+		res.EnvironmentEntries = make([]*McpEnvironmentEntryResponseBody, len(v.EnvironmentEntries))
+		for i, val := range v.EnvironmentEntries {
+			if val == nil {
+				res.EnvironmentEntries[i] = nil
+				continue
+			}
+			res.EnvironmentEntries[i] = marshalTypesMcpEnvironmentEntryToMcpEnvironmentEntryResponseBody(val)
 		}
+	}
+
+	return res
+}
+
+// marshalTypesMcpEnvironmentEntryToMcpEnvironmentEntryResponseBody builds a
+// value of type *McpEnvironmentEntryResponseBody from a value of type
+// *types.McpEnvironmentEntry.
+func marshalTypesMcpEnvironmentEntryToMcpEnvironmentEntryResponseBody(v *types.McpEnvironmentEntry) *McpEnvironmentEntryResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &McpEnvironmentEntryResponseBody{
+		ID:                v.ID,
+		VariableName:      v.VariableName,
+		HeaderDisplayName: v.HeaderDisplayName,
+		ProvidedBy:        v.ProvidedBy,
+		CreatedAt:         v.CreatedAt,
+		UpdatedAt:         v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalMcpEnvironmentEntryInputRequestBodyToTypesMcpEnvironmentEntryInput
+// builds a value of type *types.McpEnvironmentEntryInput from a value of type
+// *McpEnvironmentEntryInputRequestBody.
+func unmarshalMcpEnvironmentEntryInputRequestBodyToTypesMcpEnvironmentEntryInput(v *McpEnvironmentEntryInputRequestBody) *types.McpEnvironmentEntryInput {
+	if v == nil {
+		return nil
+	}
+	res := &types.McpEnvironmentEntryInput{
+		VariableName:      *v.VariableName,
+		HeaderDisplayName: v.HeaderDisplayName,
+		ProvidedBy:        *v.ProvidedBy,
 	}
 
 	return res

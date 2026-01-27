@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments/repo"
+	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -45,6 +46,7 @@ var _ gen.Service = (*Service)(nil)
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Client) *Service {
 	logger = logger.With(attr.SlogComponent("environments"))
 	envRepo := repo.New(db)
+	mcpMetadataRepo := mcpmetadata_repo.New(db)
 
 	return &Service{
 		tracer:  otel.Tracer("github.com/speakeasy-api/gram/server/internal/environments"),
@@ -52,7 +54,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		db:      db,
 		repo:    envRepo,
 		auth:    auth.New(logger, db, sessions),
-		entries: NewEnvironmentEntries(logger, db, enc),
+		entries: NewEnvironmentEntries(logger, db, enc, mcpMetadataRepo),
 	}
 }
 

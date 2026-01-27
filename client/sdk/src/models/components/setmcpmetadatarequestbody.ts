@@ -4,8 +4,21 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
+import {
+  McpEnvironmentEntryInput,
+  McpEnvironmentEntryInput$Outbound,
+  McpEnvironmentEntryInput$outboundSchema,
+} from "./mcpenvironmententryinput.js";
 
 export type SetMcpMetadataRequestBody = {
+  /**
+   * The default environment to load variables from
+   */
+  defaultEnvironmentId?: string | undefined;
+  /**
+   * The list of environment variables to configure for this MCP
+   */
+  environmentEntries?: Array<McpEnvironmentEntryInput> | undefined;
   /**
    * A link to external documentation for the MCP install page
    */
@@ -26,6 +39,8 @@ export type SetMcpMetadataRequestBody = {
 
 /** @internal */
 export type SetMcpMetadataRequestBody$Outbound = {
+  default_environment_id?: string | undefined;
+  environment_entries?: Array<McpEnvironmentEntryInput$Outbound> | undefined;
   external_documentation_url?: string | undefined;
   instructions?: string | undefined;
   logo_asset_id?: string | undefined;
@@ -38,12 +53,17 @@ export const SetMcpMetadataRequestBody$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   SetMcpMetadataRequestBody
 > = z.object({
+  defaultEnvironmentId: z.string().optional(),
+  environmentEntries: z.array(McpEnvironmentEntryInput$outboundSchema)
+    .optional(),
   externalDocumentationUrl: z.string().optional(),
   instructions: z.string().optional(),
   logoAssetId: z.string().optional(),
   toolsetSlug: z.string(),
 }).transform((v) => {
   return remap$(v, {
+    defaultEnvironmentId: "default_environment_id",
+    environmentEntries: "environment_entries",
     externalDocumentationUrl: "external_documentation_url",
     logoAssetId: "logo_asset_id",
     toolsetSlug: "toolset_slug",

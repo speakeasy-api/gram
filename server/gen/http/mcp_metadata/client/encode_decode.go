@@ -506,16 +506,70 @@ func unmarshalMcpMetadataResponseBodyToTypesMcpMetadata(v *McpMetadataResponseBo
 		LogoAssetID:              v.LogoAssetID,
 		ExternalDocumentationURL: v.ExternalDocumentationURL,
 		Instructions:             v.Instructions,
+		DefaultEnvironmentID:     v.DefaultEnvironmentID,
 		CreatedAt:                *v.CreatedAt,
 		UpdatedAt:                *v.UpdatedAt,
 	}
-	if v.HeaderDisplayNames != nil {
-		res.HeaderDisplayNames = make(map[string]string, len(v.HeaderDisplayNames))
-		for key, val := range v.HeaderDisplayNames {
-			tk := key
-			tv := val
-			res.HeaderDisplayNames[tk] = tv
+	if v.EnvironmentEntries != nil {
+		res.EnvironmentEntries = make([]*types.McpEnvironmentEntry, len(v.EnvironmentEntries))
+		for i, val := range v.EnvironmentEntries {
+			if val == nil {
+				res.EnvironmentEntries[i] = nil
+				continue
+			}
+			res.EnvironmentEntries[i] = unmarshalMcpEnvironmentEntryResponseBodyToTypesMcpEnvironmentEntry(val)
 		}
+	}
+
+	return res
+}
+
+// unmarshalMcpEnvironmentEntryResponseBodyToTypesMcpEnvironmentEntry builds a
+// value of type *types.McpEnvironmentEntry from a value of type
+// *McpEnvironmentEntryResponseBody.
+func unmarshalMcpEnvironmentEntryResponseBodyToTypesMcpEnvironmentEntry(v *McpEnvironmentEntryResponseBody) *types.McpEnvironmentEntry {
+	if v == nil {
+		return nil
+	}
+	res := &types.McpEnvironmentEntry{
+		ID:                *v.ID,
+		VariableName:      *v.VariableName,
+		HeaderDisplayName: v.HeaderDisplayName,
+		ProvidedBy:        *v.ProvidedBy,
+		CreatedAt:         *v.CreatedAt,
+		UpdatedAt:         *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// marshalTypesMcpEnvironmentEntryInputToMcpEnvironmentEntryInputRequestBody
+// builds a value of type *McpEnvironmentEntryInputRequestBody from a value of
+// type *types.McpEnvironmentEntryInput.
+func marshalTypesMcpEnvironmentEntryInputToMcpEnvironmentEntryInputRequestBody(v *types.McpEnvironmentEntryInput) *McpEnvironmentEntryInputRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &McpEnvironmentEntryInputRequestBody{
+		VariableName:      v.VariableName,
+		HeaderDisplayName: v.HeaderDisplayName,
+		ProvidedBy:        v.ProvidedBy,
+	}
+
+	return res
+}
+
+// marshalMcpEnvironmentEntryInputRequestBodyToTypesMcpEnvironmentEntryInput
+// builds a value of type *types.McpEnvironmentEntryInput from a value of type
+// *McpEnvironmentEntryInputRequestBody.
+func marshalMcpEnvironmentEntryInputRequestBodyToTypesMcpEnvironmentEntryInput(v *McpEnvironmentEntryInputRequestBody) *types.McpEnvironmentEntryInput {
+	if v == nil {
+		return nil
+	}
+	res := &types.McpEnvironmentEntryInput{
+		VariableName:      v.VariableName,
+		HeaderDisplayName: v.HeaderDisplayName,
+		ProvidedBy:        v.ProvidedBy,
 	}
 
 	return res

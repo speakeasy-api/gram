@@ -24,6 +24,10 @@ type SetMcpMetadataRequestBody struct {
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// The default environment to load variables from
+	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
+	// The list of environment variables to configure for this MCP
+	EnvironmentEntries []*McpEnvironmentEntryInputRequestBody `form:"environment_entries,omitempty" json:"environment_entries,omitempty" xml:"environment_entries,omitempty"`
 }
 
 // GetMcpMetadataResponseBody is the type of the "mcpMetadata" service
@@ -46,8 +50,10 @@ type SetMcpMetadataResponseBody struct {
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Maps security scheme keys to user-friendly display names
-	HeaderDisplayNames map[string]string `form:"header_display_names,omitempty" json:"header_display_names,omitempty" xml:"header_display_names,omitempty"`
+	// The default environment to load variables from
+	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
+	// The list of environment variables configured for this MCP
+	EnvironmentEntries []*McpEnvironmentEntryResponseBody `form:"environment_entries,omitempty" json:"environment_entries,omitempty" xml:"environment_entries,omitempty"`
 	// When the metadata entry was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the metadata entry was last updated
@@ -438,12 +444,42 @@ type McpMetadataResponseBody struct {
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Maps security scheme keys to user-friendly display names
-	HeaderDisplayNames map[string]string `form:"header_display_names,omitempty" json:"header_display_names,omitempty" xml:"header_display_names,omitempty"`
+	// The default environment to load variables from
+	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
+	// The list of environment variables configured for this MCP
+	EnvironmentEntries []*McpEnvironmentEntryResponseBody `form:"environment_entries,omitempty" json:"environment_entries,omitempty" xml:"environment_entries,omitempty"`
 	// When the metadata entry was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the metadata entry was last updated
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// McpEnvironmentEntryResponseBody is used to define fields on response body
+// types.
+type McpEnvironmentEntryResponseBody struct {
+	// The ID of the environment entry
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The name of the environment variable
+	VariableName *string `form:"variable_name,omitempty" json:"variable_name,omitempty" xml:"variable_name,omitempty"`
+	// Custom display name for the variable in MCP headers
+	HeaderDisplayName *string `form:"header_display_name,omitempty" json:"header_display_name,omitempty" xml:"header_display_name,omitempty"`
+	// How the variable is provided: 'user', 'system', or 'none'
+	ProvidedBy *string `form:"provided_by,omitempty" json:"provided_by,omitempty" xml:"provided_by,omitempty"`
+	// When the entry was created
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the entry was last updated
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// McpEnvironmentEntryInputRequestBody is used to define fields on request body
+// types.
+type McpEnvironmentEntryInputRequestBody struct {
+	// The name of the environment variable
+	VariableName string `form:"variable_name" json:"variable_name" xml:"variable_name"`
+	// Custom display name for the variable in MCP headers
+	HeaderDisplayName *string `form:"header_display_name,omitempty" json:"header_display_name,omitempty" xml:"header_display_name,omitempty"`
+	// How the variable is provided: 'user', 'system', or 'none'
+	ProvidedBy string `form:"provided_by" json:"provided_by" xml:"provided_by"`
 }
 
 // NewSetMcpMetadataRequestBody builds the HTTP request body from the payload
@@ -454,6 +490,17 @@ func NewSetMcpMetadataRequestBody(p *mcpmetadata.SetMcpMetadataPayload) *SetMcpM
 		LogoAssetID:              p.LogoAssetID,
 		ExternalDocumentationURL: p.ExternalDocumentationURL,
 		Instructions:             p.Instructions,
+		DefaultEnvironmentID:     p.DefaultEnvironmentID,
+	}
+	if p.EnvironmentEntries != nil {
+		body.EnvironmentEntries = make([]*McpEnvironmentEntryInputRequestBody, len(p.EnvironmentEntries))
+		for i, val := range p.EnvironmentEntries {
+			if val == nil {
+				body.EnvironmentEntries[i] = nil
+				continue
+			}
+			body.EnvironmentEntries[i] = marshalTypesMcpEnvironmentEntryInputToMcpEnvironmentEntryInputRequestBody(val)
+		}
 	}
 	return body
 }
@@ -628,15 +675,18 @@ func NewSetMcpMetadataMcpMetadataOK(body *SetMcpMetadataResponseBody) *types.Mcp
 		LogoAssetID:              body.LogoAssetID,
 		ExternalDocumentationURL: body.ExternalDocumentationURL,
 		Instructions:             body.Instructions,
+		DefaultEnvironmentID:     body.DefaultEnvironmentID,
 		CreatedAt:                *body.CreatedAt,
 		UpdatedAt:                *body.UpdatedAt,
 	}
-	if body.HeaderDisplayNames != nil {
-		v.HeaderDisplayNames = make(map[string]string, len(body.HeaderDisplayNames))
-		for key, val := range body.HeaderDisplayNames {
-			tk := key
-			tv := val
-			v.HeaderDisplayNames[tk] = tv
+	if body.EnvironmentEntries != nil {
+		v.EnvironmentEntries = make([]*types.McpEnvironmentEntry, len(body.EnvironmentEntries))
+		for i, val := range body.EnvironmentEntries {
+			if val == nil {
+				v.EnvironmentEntries[i] = nil
+				continue
+			}
+			v.EnvironmentEntries[i] = unmarshalMcpEnvironmentEntryResponseBodyToTypesMcpEnvironmentEntry(val)
 		}
 	}
 
@@ -827,6 +877,16 @@ func ValidateSetMcpMetadataResponseBody(body *SetMcpMetadataResponseBody) (err e
 	}
 	if body.ExternalDocumentationURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_documentation_url", *body.ExternalDocumentationURL, goa.FormatURI))
+	}
+	if body.DefaultEnvironmentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.default_environment_id", *body.DefaultEnvironmentID, goa.FormatUUID))
+	}
+	for _, e := range body.EnvironmentEntries {
+		if e != nil {
+			if err2 := ValidateMcpEnvironmentEntryResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -1340,6 +1400,43 @@ func ValidateMcpMetadataResponseBody(body *McpMetadataResponseBody) (err error) 
 	}
 	if body.ExternalDocumentationURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_documentation_url", *body.ExternalDocumentationURL, goa.FormatURI))
+	}
+	if body.DefaultEnvironmentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.default_environment_id", *body.DefaultEnvironmentID, goa.FormatUUID))
+	}
+	for _, e := range body.EnvironmentEntries {
+		if e != nil {
+			if err2 := ValidateMcpEnvironmentEntryResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateMcpEnvironmentEntryResponseBody runs the validations defined on
+// McpEnvironmentEntryResponseBody
+func ValidateMcpEnvironmentEntryResponseBody(body *McpEnvironmentEntryResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.VariableName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("variable_name", "body"))
+	}
+	if body.ProvidedBy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provided_by", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

@@ -1015,6 +1015,7 @@ func (s *Service) UpdateSecurityVariableDisplayName(ctx context.Context, payload
 			ExternalDocumentationUrl: pgtype.Text{String: "", Valid: false},
 			LogoID:                   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			Instructions:             pgtype.Text{String: "", Valid: false},
+			DefaultEnvironmentID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to create MCP metadata").Log(ctx, logger)
 		}

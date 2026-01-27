@@ -60,11 +60,14 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 	{
 		err = json.Unmarshal([]byte(mcpMetadataSetMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_documentation_url\": \"Quidem dolorum fugiat magni placeat aut autem.\",\n      \"instructions\": \"Aliquid ut magnam.\",\n      \"logo_asset_id\": \"Facere tempora consectetur ea.\",\n      \"toolset_slug\": \"ify\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"37a12009-119a-4d85-b4e0-bb69191d97e0\",\n      \"environment_entries\": [\n         {\n            \"header_display_name\": \"Pariatur quod ea dolores odit labore velit.\",\n            \"provided_by\": \"Reiciendis dolores.\",\n            \"variable_name\": \"Quia quis autem minima perferendis.\"\n         },\n         {\n            \"header_display_name\": \"Pariatur quod ea dolores odit labore velit.\",\n            \"provided_by\": \"Reiciendis dolores.\",\n            \"variable_name\": \"Quia quis autem minima perferendis.\"\n         }\n      ],\n      \"external_documentation_url\": \"Excepturi itaque vel hic et adipisci.\",\n      \"instructions\": \"Minus reprehenderit dolor magni id voluptatem voluptatem.\",\n      \"logo_asset_id\": \"Quia occaecati voluptatem eveniet.\",\n      \"toolset_slug\": \"tai\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.ToolsetSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.toolset_slug", body.ToolsetSlug, utf8.RuneCountInString(body.ToolsetSlug), 40, false))
+		}
+		if body.DefaultEnvironmentID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.default_environment_id", *body.DefaultEnvironmentID, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -87,6 +90,17 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 		LogoAssetID:              body.LogoAssetID,
 		ExternalDocumentationURL: body.ExternalDocumentationURL,
 		Instructions:             body.Instructions,
+		DefaultEnvironmentID:     body.DefaultEnvironmentID,
+	}
+	if body.EnvironmentEntries != nil {
+		v.EnvironmentEntries = make([]*types.McpEnvironmentEntryInput, len(body.EnvironmentEntries))
+		for i, val := range body.EnvironmentEntries {
+			if val == nil {
+				v.EnvironmentEntries[i] = nil
+				continue
+			}
+			v.EnvironmentEntries[i] = marshalMcpEnvironmentEntryInputRequestBodyToTypesMcpEnvironmentEntryInput(val)
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

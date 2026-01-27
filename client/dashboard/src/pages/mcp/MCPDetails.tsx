@@ -56,9 +56,9 @@ import {
   Pencil,
   Trash2,
   X,
-  XCircleIcon
+  XCircleIcon,
 } from "lucide-react";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
@@ -88,12 +88,48 @@ export function MCPDetailPage() {
   const { data: environmentsData } = useListEnvironments();
   const environments = environmentsData?.environments ?? [];
 
+  // Fetch MCP metadata early to use in useMissingRequiredEnvVars
+  const { data: mcpMetadataData } = useGetMcpMetadata(
+    { toolsetSlug: toolset?.slug || "" },
+    undefined,
+    { enabled: !!toolset?.slug, throwOnError: false },
+  );
+  const mcpMetadataForBadge = mcpMetadataData?.metadata;
+
   const isOAuthConnected = !!(
     toolset?.oauthProxyServer || toolset?.externalOauthServer
   );
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
+
+  // Tab state controlled by URL hash - initialize directly from hash
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    const hash = window.location.hash.slice(1); // Remove the '#'
+    const validTabs = ["overview", "tools", "settings", "authentication"];
+    return hash && validTabs.includes(hash) ? hash : "overview";
+  });
+
+  // Update URL hash when tab changes
+  useEffect(() => {
+    if (activeTab) {
+      window.location.hash = activeTab;
+    }
+  }, [activeTab]);
+
+  // Listen for hash changes (e.g., browser back/forward)
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.slice(1);
+      const validTabs = ["overview", "tools", "settings", "authentication"];
+      if (hash && validTabs.includes(hash)) {
+        setActiveTab(hash);
+      }
+    };
+
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
 
   const handleDeleteMcpServer = async () => {
     if (!toolset) return;
@@ -171,7 +207,8 @@ export function MCPDetailPage() {
   const missingRequiredEnvVars = useMissingRequiredEnvVars(
     toolset,
     environments,
-    toolset?.defaultEnvironmentSlug || "default"
+    toolset?.defaultEnvironmentSlug || "default",
+    mcpMetadataForBadge,
   );
 
   // TODO: better loading state
@@ -334,7 +371,11 @@ export function MCPDetailPage() {
         </div>
 
         {/* Sub-navigation tabs */}
-        <Tabs defaultValue="overview" className="w-full flex-1 flex flex-col">
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="w-full flex-1 flex flex-col"
+        >
           <div className="border-b">
             <div className="max-w-[1270px] mx-auto px-8">
               <TabsList className="h-auto bg-transparent p-0 gap-6 rounded-none">
@@ -693,25 +734,6 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
       )}
     </Stack>
   );
-}
-
-/**
- * Environment Variable type for the Environments tab
- */
-interface EnvironmentVariable {
-  id: string;
-  key: string;
-  // Track multiple values per variable - each value can be in different environments
-  valueGroups: Array<{
-    valueHash: string;
-    value: string; // Redacted value for display
-    environments: string[]; // Environment slugs that have this value
-  }>;
-  isUserProvided: boolean;
-  isRequired: boolean; // True for advertised vars from toolset, false for custom user-added
-  description?: string; // Optional description for required vars
-  createdAt?: Date;
-  updatedAt?: Date;
 }
 
 /**

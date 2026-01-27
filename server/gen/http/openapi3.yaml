@@ -13386,6 +13386,52 @@ components:
             required:
                 - package
                 - versions
+        McpEnvironmentEntry:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the entry was created
+                    format: date-time
+                header_display_name:
+                    type: string
+                    description: Custom display name for the variable in MCP headers
+                id:
+                    type: string
+                    description: The ID of the environment entry
+                provided_by:
+                    type: string
+                    description: 'How the variable is provided: ''user'', ''system'', or ''none'''
+                updated_at:
+                    type: string
+                    description: When the entry was last updated
+                    format: date-time
+                variable_name:
+                    type: string
+                    description: The name of the environment variable
+            description: Represents an environment variable configured for an MCP server.
+            required:
+                - id
+                - variable_name
+                - provided_by
+                - created_at
+                - updated_at
+        McpEnvironmentEntryInput:
+            type: object
+            properties:
+                header_display_name:
+                    type: string
+                    description: Custom display name for the variable in MCP headers
+                provided_by:
+                    type: string
+                    description: 'How the variable is provided: ''user'', ''system'', or ''none'''
+                variable_name:
+                    type: string
+                    description: The name of the environment variable
+            description: Input for configuring an environment variable for an MCP server.
+            required:
+                - variable_name
+                - provided_by
         McpMetadata:
             type: object
             properties:
@@ -13393,15 +13439,19 @@ components:
                     type: string
                     description: When the metadata entry was created
                     format: date-time
+                default_environment_id:
+                    type: string
+                    description: The default environment to load variables from
+                    format: uuid
+                environment_entries:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/McpEnvironmentEntry'
+                    description: The list of environment variables configured for this MCP
                 external_documentation_url:
                     type: string
                     description: A link to external documentation for the MCP install page
                     format: uri
-                header_display_names:
-                    type: object
-                    description: Maps security scheme keys to user-friendly display names
-                    additionalProperties:
-                        type: string
                 id:
                     type: string
                     description: The ID of the metadata record
@@ -14435,6 +14485,15 @@ components:
         SetMcpMetadataRequestBody:
             type: object
             properties:
+                default_environment_id:
+                    type: string
+                    description: The default environment to load variables from
+                    format: uuid
+                environment_entries:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/McpEnvironmentEntryInput'
+                    description: The list of environment variables to configure for this MCP
                 external_documentation_url:
                     type: string
                     description: A link to external documentation for the MCP install page
