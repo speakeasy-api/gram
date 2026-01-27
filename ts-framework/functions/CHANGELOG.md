@@ -1,5 +1,11 @@
 # @gram-ai/functions
 
+## 0.12.3
+
+### Patch Changes
+
+- 0420d41: Treat non-JSON log lines from underlying Gram golang CLI as regular info level logs instead of errors.
+
 ## 0.12.2
 
 ## 0.12.1
