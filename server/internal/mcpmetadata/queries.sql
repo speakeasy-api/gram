@@ -1,13 +1,5 @@
 -- name: GetMetadataForToolset :one
-SELECT id,
-       toolset_id,
-       project_id,
-       external_documentation_url,
-       logo_id,
-       instructions,
-       header_display_names,
-       created_at,
-       updated_at
+SELECT *
 FROM mcp_metadata
 WHERE toolset_id = @toolset_id
 ORDER BY updated_at DESC
@@ -27,15 +19,7 @@ DO UPDATE SET project_id = EXCLUDED.project_id,
               logo_id = EXCLUDED.logo_id,
               instructions = EXCLUDED.instructions,
               updated_at = clock_timestamp()
-RETURNING id,
-          toolset_id,
-          project_id,
-          external_documentation_url,
-          logo_id,
-          instructions,
-          header_display_names,
-          created_at,
-          updated_at;
+RETURNING *;
 
 -- name: UpdateHeaderDisplayName :one
 -- Updates a single header display name in the JSONB field.
