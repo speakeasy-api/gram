@@ -286,7 +286,6 @@ run();
 * [list](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 * [removeOAuthServer](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
 * [updateBySlug](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
-* [updateSecurityVariableDisplayName](docs/sdks/toolsets/README.md#updatesecurityvariabledisplayname) - updateSecurityVariableDisplayName toolsets
 
 ### [Usage](docs/sdks/usage/README.md)
 
@@ -416,7 +415,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`toolsetsList`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`toolsetsRemoveOAuthServer`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
 - [`toolsetsUpdateBySlug`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
-- [`toolsetsUpdateSecurityVariableDisplayName`](docs/sdks/toolsets/README.md#updatesecurityvariabledisplayname) - updateSecurityVariableDisplayName toolsets
 - [`toolsList`](docs/sdks/tools/README.md#list) - listTools tools
 - [`usageCreateCheckout`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`usageCreateCustomerSession`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
@@ -542,7 +540,6 @@ To learn about this feature and how to get started, check
 - [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages
-- [`useUpdateSecurityVariableDisplayNameMutation`](docs/sdks/toolsets/README.md#updatesecurityvariabledisplayname) - updateSecurityVariableDisplayName toolsets
 - [`useUpdateSlackConnectionMutation`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets

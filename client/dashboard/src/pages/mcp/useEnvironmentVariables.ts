@@ -16,7 +16,7 @@ interface Environment {
 
 interface McpMetadata {
   defaultEnvironmentId?: string;
-  environmentEntries?: Array<{
+  environmentConfigs?: Array<{
     variableName: string;
     providedBy: string;
     headerDisplayName?: string;
@@ -36,7 +36,7 @@ export function useEnvironmentVariables(
     const requiredVarNames = new Set<string>();
 
     // Get environment entries from MCP metadata
-    const envEntries = mcpMetadata?.environmentEntries || [];
+    const envEntries = mcpMetadata?.environmentConfigs || [];
 
     // Helper to find environment entry for a variable
     const findEnvEntry = (varName: string) => {

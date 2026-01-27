@@ -246,28 +246,28 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	}
 
 	// Update environment entries
-	if payload.EnvironmentEntries != nil {
+	if payload.EnvironmentConfigs != nil {
 		// Delete all existing entries
 		if err := s.repo.DeleteAllEnvironmentConfigs(ctx, result.ID); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to delete existing environment entries").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to delete existing environment configs").Log(ctx, s.logger)
 		}
 
 		// Insert new entries
-		for _, entry := range payload.EnvironmentEntries {
+		for _, config := range payload.EnvironmentConfigs {
 			var headerDisplayName pgtype.Text
-			if entry.HeaderDisplayName != nil {
-				headerDisplayName = conv.ToPGText(*entry.HeaderDisplayName)
+			if config.HeaderDisplayName != nil {
+				headerDisplayName = conv.ToPGText(*config.HeaderDisplayName)
 			}
 
 			_, err := s.repo.UpsertEnvironmentConfig(ctx, repo.UpsertEnvironmentConfigParams{
 				ProjectID:         *authCtx.ProjectID,
 				McpMetadataID:     result.ID,
-				VariableName:      entry.VariableName,
+				VariableName:      config.VariableName,
 				HeaderDisplayName: headerDisplayName,
-				ProvidedBy:        entry.ProvidedBy,
+				ProvidedBy:        config.ProvidedBy,
 			})
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert environment entry").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert environment config").Log(ctx, s.logger)
 			}
 		}
 	}
@@ -299,7 +299,7 @@ func toMcpMetadata(ctx context.Context, queries *repo.Queries, record repo.McpMe
 	}
 
 	// Merge: start with entries from the new table, then add any from deprecated column that don't exist
-	environmentEntries := make([]*types.McpEnvironmentEntry, 0, len(envEntries)+len(headerDisplayNames))
+	environmentConfigs := make([]*types.McpEnvironmentConfig, 0, len(envEntries)+len(headerDisplayNames))
 
 	// Add all entries from the new table
 	for _, entry := range envEntries {
@@ -311,7 +311,7 @@ func toMcpMetadata(ctx context.Context, queries *repo.Queries, record repo.McpMe
 			headerDisplayName = &deprecatedName
 		}
 
-		apiEntry := &types.McpEnvironmentEntry{
+		apiEntry := &types.McpEnvironmentConfig{
 			ID:                entry.ID.String(),
 			VariableName:      entry.VariableName,
 			HeaderDisplayName: headerDisplayName,
@@ -320,14 +320,14 @@ func toMcpMetadata(ctx context.Context, queries *repo.Queries, record repo.McpMe
 			UpdatedAt:         entry.UpdatedAt.Time.Format(time.RFC3339),
 		}
 
-		environmentEntries = append(environmentEntries, apiEntry)
+		environmentConfigs = append(environmentConfigs, apiEntry)
 	}
 
 	// Add entries that only exist in the deprecated column (for backwards compatibility)
 	for varName, displayName := range headerDisplayNames {
 		if _, exists := existingEntries[varName]; !exists {
 			// Create a synthetic entry for backwards compatibility
-			apiEntry := &types.McpEnvironmentEntry{
+			apiEntry := &types.McpEnvironmentConfig{
 				ID:                uuid.Nil.String(), // No ID since it's not in the new table
 				VariableName:      varName,
 				HeaderDisplayName: &displayName,
@@ -335,7 +335,7 @@ func toMcpMetadata(ctx context.Context, queries *repo.Queries, record repo.McpMe
 				CreatedAt:         record.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:         record.UpdatedAt.Time.Format(time.RFC3339),
 			}
-			environmentEntries = append(environmentEntries, apiEntry)
+			environmentConfigs = append(environmentConfigs, apiEntry)
 		}
 	}
 
@@ -348,7 +348,7 @@ func toMcpMetadata(ctx context.Context, queries *repo.Queries, record repo.McpMe
 		LogoAssetID:              conv.FromNullableUUID(record.LogoID),
 		Instructions:             conv.FromPGText[string](record.Instructions),
 		DefaultEnvironmentID:     conv.FromNullableUUID(record.DefaultEnvironmentID),
-		EnvironmentEntries:       environmentEntries,
+		EnvironmentConfigs:       environmentConfigs,
 	}
 	return metadata, nil
 }
@@ -498,13 +498,13 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 			s.logger.WarnContext(ctx, "failed to convert metadata to get header display names", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(err))
 		} else {
 			// Build maps of header display names and omitted variables
-			for _, entry := range metadata.EnvironmentEntries {
-				if entry.ProvidedBy == "none" {
+			for _, config := range metadata.EnvironmentConfigs {
+				if config.ProvidedBy == "none" {
 					// Mark as omitted - should not appear in install page
-					omittedVariables[entry.VariableName] = true
-				} else if entry.HeaderDisplayName != nil {
+					omittedVariables[config.VariableName] = true
+				} else if config.HeaderDisplayName != nil {
 					// User-provided with custom display name
-					headerDisplayNames[entry.VariableName] = *entry.HeaderDisplayName
+					headerDisplayNames[config.VariableName] = *config.HeaderDisplayName
 				}
 			}
 		}

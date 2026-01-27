@@ -8,7 +8,7 @@
 package types
 
 // Input for configuring an environment variable for an MCP server.
-type McpEnvironmentEntryInput struct {
+type McpEnvironmentConfigInput struct {
 	// The name of the environment variable
 	VariableName string
 	// Custom display name for the variable in MCP headers

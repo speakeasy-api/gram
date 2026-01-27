@@ -96,7 +96,6 @@ export * from "./slacklogin.js";
 export * from "./switchauthscopes.js";
 export * from "./updateenvironment.js";
 export * from "./updatepackage.js";
-export * from "./updatesecurityvariabledisplayname.js";
 export * from "./updateslackconnection.js";
 export * from "./updatetemplate.js";
 export * from "./updatetoolset.js";

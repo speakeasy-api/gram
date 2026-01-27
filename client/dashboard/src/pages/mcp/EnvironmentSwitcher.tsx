@@ -20,6 +20,7 @@ interface EnvironmentSwitcherProps {
   defaultEnvironmentSlug: string;
   requiredVars: EnvironmentVariable[];
   hasAnyUnsavedChanges: boolean;
+  hasExistingConfigs: boolean;
   onEnvironmentSelect: (slug: string) => void;
   onSaveAll: () => void;
   onCancelAll: () => void;
@@ -34,6 +35,7 @@ export function EnvironmentSwitcher({
   defaultEnvironmentSlug,
   requiredVars,
   hasAnyUnsavedChanges,
+  hasExistingConfigs,
   onEnvironmentSelect,
   onSaveAll,
   onCancelAll,
@@ -98,16 +100,20 @@ export function EnvironmentSwitcher({
       <div className="ml-auto flex items-center gap-2 mr-1">
         {hasAnyUnsavedChanges ? (
           <>
-            <Button onClick={onCancelAll} variant="tertiary" size="xs">
-              <Button.Text>Cancel</Button.Text>
-            </Button>
+            {hasExistingConfigs && (
+              <Button onClick={onCancelAll} variant="tertiary" size="xs">
+                <Button.Text>Cancel</Button.Text>
+              </Button>
+            )}
             <Button
               onClick={onSaveAll}
               variant="primary"
               size="xs"
               className="mr-4"
             >
-              <Button.Text>Save All</Button.Text>
+              <Button.Text>
+                {hasExistingConfigs ? "Save All" : "Publish Configuration"}
+              </Button.Text>
             </Button>
           </>
         ) : isViewingNonDefault ? (

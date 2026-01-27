@@ -8,7 +8,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 /**
  * Input for configuring an environment variable for an MCP server.
  */
-export type McpEnvironmentEntryInput = {
+export type McpEnvironmentConfigInput = {
   /**
    * Custom display name for the variable in MCP headers
    */
@@ -24,17 +24,17 @@ export type McpEnvironmentEntryInput = {
 };
 
 /** @internal */
-export type McpEnvironmentEntryInput$Outbound = {
+export type McpEnvironmentConfigInput$Outbound = {
   header_display_name?: string | undefined;
   provided_by: string;
   variable_name: string;
 };
 
 /** @internal */
-export const McpEnvironmentEntryInput$outboundSchema: z.ZodType<
-  McpEnvironmentEntryInput$Outbound,
+export const McpEnvironmentConfigInput$outboundSchema: z.ZodType<
+  McpEnvironmentConfigInput$Outbound,
   z.ZodTypeDef,
-  McpEnvironmentEntryInput
+  McpEnvironmentConfigInput
 > = z.object({
   headerDisplayName: z.string().optional(),
   providedBy: z.string(),
@@ -47,10 +47,10 @@ export const McpEnvironmentEntryInput$outboundSchema: z.ZodType<
   });
 });
 
-export function mcpEnvironmentEntryInputToJSON(
-  mcpEnvironmentEntryInput: McpEnvironmentEntryInput,
+export function mcpEnvironmentConfigInputToJSON(
+  mcpEnvironmentConfigInput: McpEnvironmentConfigInput,
 ): string {
   return JSON.stringify(
-    McpEnvironmentEntryInput$outboundSchema.parse(mcpEnvironmentEntryInput),
+    McpEnvironmentConfigInput$outboundSchema.parse(mcpEnvironmentConfigInput),
   );
 }

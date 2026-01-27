@@ -75,7 +75,7 @@ type SetMcpMetadataPayload struct {
 	// The default environment to load variables from
 	DefaultEnvironmentID *string
 	// The list of environment variables to configure for this MCP
-	EnvironmentEntries []*types.McpEnvironmentEntryInput
+	EnvironmentConfigs []*types.McpEnvironmentConfigInput
 	SessionToken       *string
 	ProjectSlugInput   *string
 }

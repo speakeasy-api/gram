@@ -131,13 +131,13 @@ func (e *EnvironmentEntries) LoadMCPAttachedEnvironment(
 	}
 
 	// Get the list of variables configured for this MCP
-	mcpEnvEntries, err := e.mcpMetadataRepo.ListEnvironmentEntries(ctx, mcpMetadata.ID)
+	mcpEnvConfigs, err := e.mcpMetadataRepo.ListEnvironmentConfigs(ctx, mcpMetadata.ID)
 	if err != nil {
-		return nil, fmt.Errorf("list mcp environment entries: %w", err)
+		return nil, fmt.Errorf("list mcp environment configs: %w", err)
 	}
 
 	// If no default environment is set, or no entries are configured, return empty map
-	if !mcpMetadata.DefaultEnvironmentID.Valid || len(mcpEnvEntries) == 0 {
+	if !mcpMetadata.DefaultEnvironmentID.Valid || len(mcpEnvConfigs) == 0 {
 		return map[string]string{}, nil
 	}
 
@@ -148,9 +148,9 @@ func (e *EnvironmentEntries) LoadMCPAttachedEnvironment(
 	}
 
 	// Create a set of variable names that should be included
-	includeVars := make(map[string]bool, len(mcpEnvEntries))
-	for _, mcpEntry := range mcpEnvEntries {
-		includeVars[mcpEntry.VariableName] = true
+	includeVars := make(map[string]bool, len(mcpEnvConfigs))
+	for _, mcpConfig := range mcpEnvConfigs {
+		includeVars[mcpConfig.VariableName] = true
 	}
 
 	// Build the environment map with only the variables configured for this MCP

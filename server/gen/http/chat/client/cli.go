@@ -85,7 +85,7 @@ func BuildGenerateTitlePayload(chatGenerateTitleBody string, chatGenerateTitleSe
 	{
 		err = json.Unmarshal([]byte(chatGenerateTitleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"Dignissimos sequi placeat voluptatem a aut.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"Est dicta nihil ad debitis.\"\n   }'")
 		}
 	}
 	var sessionToken *string

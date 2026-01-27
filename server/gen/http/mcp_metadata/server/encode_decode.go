@@ -478,28 +478,28 @@ func marshalTypesMcpMetadataToMcpMetadataResponseBody(v *types.McpMetadata) *Mcp
 		CreatedAt:                v.CreatedAt,
 		UpdatedAt:                v.UpdatedAt,
 	}
-	if v.EnvironmentEntries != nil {
-		res.EnvironmentEntries = make([]*McpEnvironmentEntryResponseBody, len(v.EnvironmentEntries))
-		for i, val := range v.EnvironmentEntries {
+	if v.EnvironmentConfigs != nil {
+		res.EnvironmentConfigs = make([]*McpEnvironmentConfigResponseBody, len(v.EnvironmentConfigs))
+		for i, val := range v.EnvironmentConfigs {
 			if val == nil {
-				res.EnvironmentEntries[i] = nil
+				res.EnvironmentConfigs[i] = nil
 				continue
 			}
-			res.EnvironmentEntries[i] = marshalTypesMcpEnvironmentEntryToMcpEnvironmentEntryResponseBody(val)
+			res.EnvironmentConfigs[i] = marshalTypesMcpEnvironmentConfigToMcpEnvironmentConfigResponseBody(val)
 		}
 	}
 
 	return res
 }
 
-// marshalTypesMcpEnvironmentEntryToMcpEnvironmentEntryResponseBody builds a
-// value of type *McpEnvironmentEntryResponseBody from a value of type
-// *types.McpEnvironmentEntry.
-func marshalTypesMcpEnvironmentEntryToMcpEnvironmentEntryResponseBody(v *types.McpEnvironmentEntry) *McpEnvironmentEntryResponseBody {
+// marshalTypesMcpEnvironmentConfigToMcpEnvironmentConfigResponseBody builds a
+// value of type *McpEnvironmentConfigResponseBody from a value of type
+// *types.McpEnvironmentConfig.
+func marshalTypesMcpEnvironmentConfigToMcpEnvironmentConfigResponseBody(v *types.McpEnvironmentConfig) *McpEnvironmentConfigResponseBody {
 	if v == nil {
 		return nil
 	}
-	res := &McpEnvironmentEntryResponseBody{
+	res := &McpEnvironmentConfigResponseBody{
 		ID:                v.ID,
 		VariableName:      v.VariableName,
 		HeaderDisplayName: v.HeaderDisplayName,
@@ -511,14 +511,14 @@ func marshalTypesMcpEnvironmentEntryToMcpEnvironmentEntryResponseBody(v *types.M
 	return res
 }
 
-// unmarshalMcpEnvironmentEntryInputRequestBodyToTypesMcpEnvironmentEntryInput
-// builds a value of type *types.McpEnvironmentEntryInput from a value of type
-// *McpEnvironmentEntryInputRequestBody.
-func unmarshalMcpEnvironmentEntryInputRequestBodyToTypesMcpEnvironmentEntryInput(v *McpEnvironmentEntryInputRequestBody) *types.McpEnvironmentEntryInput {
+// unmarshalMcpEnvironmentConfigInputRequestBodyToTypesMcpEnvironmentConfigInput
+// builds a value of type *types.McpEnvironmentConfigInput from a value of type
+// *McpEnvironmentConfigInputRequestBody.
+func unmarshalMcpEnvironmentConfigInputRequestBodyToTypesMcpEnvironmentConfigInput(v *McpEnvironmentConfigInputRequestBody) *types.McpEnvironmentConfigInput {
 	if v == nil {
 		return nil
 	}
-	res := &types.McpEnvironmentEntryInput{
+	res := &types.McpEnvironmentConfigInput{
 		VariableName:      *v.VariableName,
 		HeaderDisplayName: v.HeaderDisplayName,
 		ProvidedBy:        *v.ProvidedBy,

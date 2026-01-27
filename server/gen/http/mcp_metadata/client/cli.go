@@ -60,7 +60,7 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 	{
 		err = json.Unmarshal([]byte(mcpMetadataSetMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"37a12009-119a-4d85-b4e0-bb69191d97e0\",\n      \"environment_entries\": [\n         {\n            \"header_display_name\": \"Pariatur quod ea dolores odit labore velit.\",\n            \"provided_by\": \"Reiciendis dolores.\",\n            \"variable_name\": \"Quia quis autem minima perferendis.\"\n         },\n         {\n            \"header_display_name\": \"Pariatur quod ea dolores odit labore velit.\",\n            \"provided_by\": \"Reiciendis dolores.\",\n            \"variable_name\": \"Quia quis autem minima perferendis.\"\n         }\n      ],\n      \"external_documentation_url\": \"Excepturi itaque vel hic et adipisci.\",\n      \"instructions\": \"Minus reprehenderit dolor magni id voluptatem voluptatem.\",\n      \"logo_asset_id\": \"Quia occaecati voluptatem eveniet.\",\n      \"toolset_slug\": \"tai\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"c9398d23-24d9-4a13-8a8a-5bbe9b3f0048\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"Reprehenderit dolor magni id.\",\n            \"provided_by\": \"Voluptatem molestiae minus consequuntur sapiente et et.\",\n            \"variable_name\": \"Itaque vel hic et adipisci blanditiis.\"\n         },\n         {\n            \"header_display_name\": \"Reprehenderit dolor magni id.\",\n            \"provided_by\": \"Voluptatem molestiae minus consequuntur sapiente et et.\",\n            \"variable_name\": \"Itaque vel hic et adipisci blanditiis.\"\n         },\n         {\n            \"header_display_name\": \"Reprehenderit dolor magni id.\",\n            \"provided_by\": \"Voluptatem molestiae minus consequuntur sapiente et et.\",\n            \"variable_name\": \"Itaque vel hic et adipisci blanditiis.\"\n         },\n         {\n            \"header_display_name\": \"Reprehenderit dolor magni id.\",\n            \"provided_by\": \"Voluptatem molestiae minus consequuntur sapiente et et.\",\n            \"variable_name\": \"Itaque vel hic et adipisci blanditiis.\"\n         }\n      ],\n      \"external_documentation_url\": \"Veritatis fugit.\",\n      \"instructions\": \"Modi accusamus sint et.\",\n      \"logo_asset_id\": \"Eaque quisquam.\",\n      \"toolset_slug\": \"9vy\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.ToolsetSlug) > 40 {
@@ -92,14 +92,14 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 		Instructions:             body.Instructions,
 		DefaultEnvironmentID:     body.DefaultEnvironmentID,
 	}
-	if body.EnvironmentEntries != nil {
-		v.EnvironmentEntries = make([]*types.McpEnvironmentEntryInput, len(body.EnvironmentEntries))
-		for i, val := range body.EnvironmentEntries {
+	if body.EnvironmentConfigs != nil {
+		v.EnvironmentConfigs = make([]*types.McpEnvironmentConfigInput, len(body.EnvironmentConfigs))
+		for i, val := range body.EnvironmentConfigs {
 			if val == nil {
-				v.EnvironmentEntries[i] = nil
+				v.EnvironmentConfigs[i] = nil
 				continue
 			}
-			v.EnvironmentEntries[i] = marshalMcpEnvironmentEntryInputRequestBodyToTypesMcpEnvironmentEntryInput(val)
+			v.EnvironmentConfigs[i] = marshalMcpEnvironmentConfigInputRequestBodyToTypesMcpEnvironmentConfigInput(val)
 		}
 	}
 	v.SessionToken = sessionToken

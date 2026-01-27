@@ -32,7 +32,7 @@ export function useMissingRequiredEnvVars(
     if (!environment) return 0;
 
     // Get the list of variables marked as "system" (in attachedEnvironmentVariables)
-    const attachedEnvVars = mcpMetadata?.environmentEntries || [];
+    const attachedEnvVars = mcpMetadata?.environmentConfigs || [];
 
     // Collect all required variable names
     const requiredVarNames = new Set<string>();

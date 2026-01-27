@@ -8,8 +8,8 @@
 package types
 
 // Represents an environment variable configured for an MCP server.
-type McpEnvironmentEntry struct {
-	// The ID of the environment entry
+type McpEnvironmentConfig struct {
+	// The ID of the environment config
 	ID string
 	// The name of the environment variable
 	VariableName string
@@ -17,8 +17,8 @@ type McpEnvironmentEntry struct {
 	HeaderDisplayName *string
 	// How the variable is provided: 'user', 'system', or 'none'
 	ProvidedBy string
-	// When the entry was created
+	// When the config was created
 	CreatedAt string
-	// When the entry was last updated
+	// When the config was last updated
 	UpdatedAt string
 }

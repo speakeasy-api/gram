@@ -5,10 +5,10 @@
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  McpEnvironmentEntryInput,
-  McpEnvironmentEntryInput$Outbound,
-  McpEnvironmentEntryInput$outboundSchema,
-} from "./mcpenvironmententryinput.js";
+  McpEnvironmentConfigInput,
+  McpEnvironmentConfigInput$Outbound,
+  McpEnvironmentConfigInput$outboundSchema,
+} from "./mcpenvironmentconfiginput.js";
 
 export type SetMcpMetadataRequestBody = {
   /**
@@ -18,7 +18,7 @@ export type SetMcpMetadataRequestBody = {
   /**
    * The list of environment variables to configure for this MCP
    */
-  environmentEntries?: Array<McpEnvironmentEntryInput> | undefined;
+  environmentConfigs?: Array<McpEnvironmentConfigInput> | undefined;
   /**
    * A link to external documentation for the MCP install page
    */
@@ -40,7 +40,7 @@ export type SetMcpMetadataRequestBody = {
 /** @internal */
 export type SetMcpMetadataRequestBody$Outbound = {
   default_environment_id?: string | undefined;
-  environment_entries?: Array<McpEnvironmentEntryInput$Outbound> | undefined;
+  environment_configs?: Array<McpEnvironmentConfigInput$Outbound> | undefined;
   external_documentation_url?: string | undefined;
   instructions?: string | undefined;
   logo_asset_id?: string | undefined;
@@ -54,7 +54,7 @@ export const SetMcpMetadataRequestBody$outboundSchema: z.ZodType<
   SetMcpMetadataRequestBody
 > = z.object({
   defaultEnvironmentId: z.string().optional(),
-  environmentEntries: z.array(McpEnvironmentEntryInput$outboundSchema)
+  environmentConfigs: z.array(McpEnvironmentConfigInput$outboundSchema)
     .optional(),
   externalDocumentationUrl: z.string().optional(),
   instructions: z.string().optional(),
@@ -63,7 +63,7 @@ export const SetMcpMetadataRequestBody$outboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     defaultEnvironmentId: "default_environment_id",
-    environmentEntries: "environment_entries",
+    environmentConfigs: "environment_configs",
     externalDocumentationUrl: "external_documentation_url",
     logoAssetId: "logo_asset_id",
     toolsetSlug: "toolset_slug",

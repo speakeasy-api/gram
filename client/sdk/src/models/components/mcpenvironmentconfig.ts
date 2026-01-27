@@ -11,9 +11,9 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Represents an environment variable configured for an MCP server.
  */
-export type McpEnvironmentEntry = {
+export type McpEnvironmentConfig = {
   /**
-   * When the entry was created
+   * When the config was created
    */
   createdAt: Date;
   /**
@@ -21,7 +21,7 @@ export type McpEnvironmentEntry = {
    */
   headerDisplayName?: string | undefined;
   /**
-   * The ID of the environment entry
+   * The ID of the environment config
    */
   id: string;
   /**
@@ -29,7 +29,7 @@ export type McpEnvironmentEntry = {
    */
   providedBy: string;
   /**
-   * When the entry was last updated
+   * When the config was last updated
    */
   updatedAt: Date;
   /**
@@ -39,8 +39,8 @@ export type McpEnvironmentEntry = {
 };
 
 /** @internal */
-export const McpEnvironmentEntry$inboundSchema: z.ZodType<
-  McpEnvironmentEntry,
+export const McpEnvironmentConfig$inboundSchema: z.ZodType<
+  McpEnvironmentConfig,
   z.ZodTypeDef,
   unknown
 > = z.object({
@@ -60,12 +60,12 @@ export const McpEnvironmentEntry$inboundSchema: z.ZodType<
   });
 });
 
-export function mcpEnvironmentEntryFromJSON(
+export function mcpEnvironmentConfigFromJSON(
   jsonString: string,
-): SafeParseResult<McpEnvironmentEntry, SDKValidationError> {
+): SafeParseResult<McpEnvironmentConfig, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => McpEnvironmentEntry$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'McpEnvironmentEntry' from JSON`,
+    (x) => McpEnvironmentConfig$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'McpEnvironmentConfig' from JSON`,
   );
 }

@@ -18,7 +18,7 @@ interface EnvironmentVariableRowProps {
   selectedEnvironmentView: string;
   mcpAttachedEnvironmentSlug: string | null;
   defaultEnvironmentSlug: string;
-  environmentEntries: Array<{
+  environmentConfigs: Array<{
     variableName: string;
     providedBy: string;
     headerDisplayName?: string;
@@ -40,7 +40,7 @@ export function EnvironmentVariableRow({
   selectedEnvironmentView,
   mcpAttachedEnvironmentSlug,
   defaultEnvironmentSlug,
-  environmentEntries,
+  environmentConfigs,
   editingState,
   editingHeaderId,
   onToggleState,
@@ -54,7 +54,7 @@ export function EnvironmentVariableRow({
   const isEditing = editingHeaderId === envVar.id;
   const headerName = getHeaderDisplayName(
     envVar,
-    environmentEntries,
+    environmentConfigs,
     editingState,
   );
   const editingValue = getEditingValue(
@@ -62,9 +62,13 @@ export function EnvironmentVariableRow({
     editingState,
     selectedEnvironmentView,
   );
-  const hasOverride = hasHeaderOverride(envVar, environmentEntries);
+  const hasOverride = hasHeaderOverride(envVar, environmentConfigs);
+  // Check if there's an unsaved header name edit
+  const hasUnsavedHeaderEdit = editingState.has(envVar.id) &&
+    editingState.get(envVar.id)!.headerDisplayName !== undefined;
+  const showHeaderName = hasOverride || hasUnsavedHeaderEdit;
   const hasValue = environmentHasValue(envVar, selectedEnvironmentView);
-  const hasEntry = environmentEntries.some(
+  const hasEntry = environmentConfigs.some(
     (e) => e.variableName === envVar.key,
   );
 
@@ -137,13 +141,13 @@ export function EnvironmentVariableRow({
             <div
               className={cn(
                 "font-medium text-sm truncate",
-                !hasOverride && "font-mono",
+                !showHeaderName && "font-mono",
                 envVar.state === "omitted" && "text-muted-foreground/50",
               )}
             >
-              {hasOverride ? headerName : envVar.key}
+              {showHeaderName ? headerName : envVar.key}
             </div>
-            {hasOverride ? (
+            {showHeaderName ? (
               <SimpleTooltip tooltip={`Variable name: ${envVar.key}`}>
                 <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
               </SimpleTooltip>

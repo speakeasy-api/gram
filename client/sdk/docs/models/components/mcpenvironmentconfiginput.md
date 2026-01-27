@@ -1,13 +1,13 @@
-# McpEnvironmentEntryInput
+# McpEnvironmentConfigInput
 
 Input for configuring an environment variable for an MCP server.
 
 ## Example Usage
 
 ```typescript
-import { McpEnvironmentEntryInput } from "@gram/client/models/components";
+import { McpEnvironmentConfigInput } from "@gram/client/models/components";
 
-let value: McpEnvironmentEntryInput = {
+let value: McpEnvironmentConfigInput = {
   providedBy: "<value>",
   variableName: "<value>",
 };

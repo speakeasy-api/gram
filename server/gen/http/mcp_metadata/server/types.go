@@ -29,7 +29,7 @@ type SetMcpMetadataRequestBody struct {
 	// The default environment to load variables from
 	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
 	// The list of environment variables to configure for this MCP
-	EnvironmentEntries []*McpEnvironmentEntryInputRequestBody `form:"environment_entries,omitempty" json:"environment_entries,omitempty" xml:"environment_entries,omitempty"`
+	EnvironmentConfigs []*McpEnvironmentConfigInputRequestBody `form:"environment_configs,omitempty" json:"environment_configs,omitempty" xml:"environment_configs,omitempty"`
 }
 
 // GetMcpMetadataResponseBody is the type of the "mcpMetadata" service
@@ -55,7 +55,7 @@ type SetMcpMetadataResponseBody struct {
 	// The default environment to load variables from
 	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
 	// The list of environment variables configured for this MCP
-	EnvironmentEntries []*McpEnvironmentEntryResponseBody `form:"environment_entries,omitempty" json:"environment_entries,omitempty" xml:"environment_entries,omitempty"`
+	EnvironmentConfigs []*McpEnvironmentConfigResponseBody `form:"environment_configs,omitempty" json:"environment_configs,omitempty" xml:"environment_configs,omitempty"`
 	// When the metadata entry was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the metadata entry was last updated
@@ -449,17 +449,17 @@ type McpMetadataResponseBody struct {
 	// The default environment to load variables from
 	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
 	// The list of environment variables configured for this MCP
-	EnvironmentEntries []*McpEnvironmentEntryResponseBody `form:"environment_entries,omitempty" json:"environment_entries,omitempty" xml:"environment_entries,omitempty"`
+	EnvironmentConfigs []*McpEnvironmentConfigResponseBody `form:"environment_configs,omitempty" json:"environment_configs,omitempty" xml:"environment_configs,omitempty"`
 	// When the metadata entry was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the metadata entry was last updated
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// McpEnvironmentEntryResponseBody is used to define fields on response body
+// McpEnvironmentConfigResponseBody is used to define fields on response body
 // types.
-type McpEnvironmentEntryResponseBody struct {
-	// The ID of the environment entry
+type McpEnvironmentConfigResponseBody struct {
+	// The ID of the environment config
 	ID string `form:"id" json:"id" xml:"id"`
 	// The name of the environment variable
 	VariableName string `form:"variable_name" json:"variable_name" xml:"variable_name"`
@@ -467,15 +467,15 @@ type McpEnvironmentEntryResponseBody struct {
 	HeaderDisplayName *string `form:"header_display_name,omitempty" json:"header_display_name,omitempty" xml:"header_display_name,omitempty"`
 	// How the variable is provided: 'user', 'system', or 'none'
 	ProvidedBy string `form:"provided_by" json:"provided_by" xml:"provided_by"`
-	// When the entry was created
+	// When the config was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// When the entry was last updated
+	// When the config was last updated
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// McpEnvironmentEntryInputRequestBody is used to define fields on request body
-// types.
-type McpEnvironmentEntryInputRequestBody struct {
+// McpEnvironmentConfigInputRequestBody is used to define fields on request
+// body types.
+type McpEnvironmentConfigInputRequestBody struct {
 	// The name of the environment variable
 	VariableName *string `form:"variable_name,omitempty" json:"variable_name,omitempty" xml:"variable_name,omitempty"`
 	// Custom display name for the variable in MCP headers
@@ -507,14 +507,14 @@ func NewSetMcpMetadataResponseBody(res *types.McpMetadata) *SetMcpMetadataRespon
 		CreatedAt:                res.CreatedAt,
 		UpdatedAt:                res.UpdatedAt,
 	}
-	if res.EnvironmentEntries != nil {
-		body.EnvironmentEntries = make([]*McpEnvironmentEntryResponseBody, len(res.EnvironmentEntries))
-		for i, val := range res.EnvironmentEntries {
+	if res.EnvironmentConfigs != nil {
+		body.EnvironmentConfigs = make([]*McpEnvironmentConfigResponseBody, len(res.EnvironmentConfigs))
+		for i, val := range res.EnvironmentConfigs {
 			if val == nil {
-				body.EnvironmentEntries[i] = nil
+				body.EnvironmentConfigs[i] = nil
 				continue
 			}
-			body.EnvironmentEntries[i] = marshalTypesMcpEnvironmentEntryToMcpEnvironmentEntryResponseBody(val)
+			body.EnvironmentConfigs[i] = marshalTypesMcpEnvironmentConfigToMcpEnvironmentConfigResponseBody(val)
 		}
 	}
 	return body
@@ -825,14 +825,14 @@ func NewSetMcpMetadataPayload(body *SetMcpMetadataRequestBody, sessionToken *str
 		Instructions:             body.Instructions,
 		DefaultEnvironmentID:     body.DefaultEnvironmentID,
 	}
-	if body.EnvironmentEntries != nil {
-		v.EnvironmentEntries = make([]*types.McpEnvironmentEntryInput, len(body.EnvironmentEntries))
-		for i, val := range body.EnvironmentEntries {
+	if body.EnvironmentConfigs != nil {
+		v.EnvironmentConfigs = make([]*types.McpEnvironmentConfigInput, len(body.EnvironmentConfigs))
+		for i, val := range body.EnvironmentConfigs {
 			if val == nil {
-				v.EnvironmentEntries[i] = nil
+				v.EnvironmentConfigs[i] = nil
 				continue
 			}
-			v.EnvironmentEntries[i] = unmarshalMcpEnvironmentEntryInputRequestBodyToTypesMcpEnvironmentEntryInput(val)
+			v.EnvironmentConfigs[i] = unmarshalMcpEnvironmentConfigInputRequestBodyToTypesMcpEnvironmentConfigInput(val)
 		}
 	}
 	v.SessionToken = sessionToken
@@ -858,9 +858,9 @@ func ValidateSetMcpMetadataRequestBody(body *SetMcpMetadataRequestBody) (err err
 	if body.DefaultEnvironmentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.default_environment_id", *body.DefaultEnvironmentID, goa.FormatUUID))
 	}
-	for _, e := range body.EnvironmentEntries {
+	for _, e := range body.EnvironmentConfigs {
 		if e != nil {
-			if err2 := ValidateMcpEnvironmentEntryInputRequestBody(e); err2 != nil {
+			if err2 := ValidateMcpEnvironmentConfigInputRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -868,9 +868,9 @@ func ValidateSetMcpMetadataRequestBody(body *SetMcpMetadataRequestBody) (err err
 	return
 }
 
-// ValidateMcpEnvironmentEntryInputRequestBody runs the validations defined on
-// McpEnvironmentEntryInputRequestBody
-func ValidateMcpEnvironmentEntryInputRequestBody(body *McpEnvironmentEntryInputRequestBody) (err error) {
+// ValidateMcpEnvironmentConfigInputRequestBody runs the validations defined on
+// McpEnvironmentConfigInputRequestBody
+func ValidateMcpEnvironmentConfigInputRequestBody(body *McpEnvironmentConfigInputRequestBody) (err error) {
 	if body.VariableName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("variable_name", "body"))
 	}

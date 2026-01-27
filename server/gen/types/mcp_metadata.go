@@ -23,7 +23,7 @@ type McpMetadata struct {
 	// The default environment to load variables from
 	DefaultEnvironmentID *string
 	// The list of environment variables configured for this MCP
-	EnvironmentEntries []*McpEnvironmentEntry
+	EnvironmentConfigs []*McpEnvironmentConfig
 	// When the metadata entry was created
 	CreatedAt string
 	// When the metadata entry was last updated

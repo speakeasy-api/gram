@@ -5,6 +5,7 @@ import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useEnvironmentVariables";
 import { Toolset } from "@/lib/toolTypes";
+import type { McpEnvironmentConfigInput } from "@gram/client/models/components";
 import {
   invalidateAllGetMcpMetadata,
   invalidateAllListEnvironments,
@@ -53,6 +54,9 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     environments.find((e) => e.id === mcpMetadata?.defaultEnvironmentId)
       ?.slug || null;
 
+
+      console.log("mcpMetadata", mcpMetadata);
+      
   // Load environment variables using custom hook
   const loadedEnvVars = useEnvironmentVariables(
     toolset,
@@ -87,12 +91,12 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     ? environments.find((e) => e.id === mcpMetadata.defaultEnvironmentId)
     : environments.find((e) => e.slug === "default") || null;
 
-  const environmentEntries = mcpMetadata?.environmentEntries || [];
+  const environmentConfigs = mcpMetadata?.environmentConfigs || [];
   const availableEnvVarsFromAttached =
     attachedEnvironment?.entries
       .map((entry) => entry.name)
       .filter(
-        (name) => !environmentEntries.some((e) => e.variableName === name),
+        (name) => !environmentConfigs.some((e) => e.variableName === name),
       ) || [];
 
   // Track which variable's header name is being edited
@@ -193,7 +197,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     }
 
     // Create environment entry for this variable
-    const existingEntries = mcpMetadata?.environmentEntries || [];
+    const existingEntries = mcpMetadata?.environmentConfigs || [];
     if (!existingEntries.some((e) => e.variableName === varKey)) {
       const newEntries = [
         ...existingEntries,
@@ -209,7 +213,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
             toolsetSlug: toolset.slug,
             defaultEnvironmentId:
               mcpMetadata?.defaultEnvironmentId || attachedEnvironment.id,
-            environmentEntries: newEntries,
+            environmentConfigs: newEntries,
             externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
             instructions: mcpMetadata?.instructions,
             logoAssetId: mcpMetadata?.logoAssetId,
@@ -245,7 +249,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       });
 
       // Create environment entry for custom variables
-      const existingEntries = mcpMetadata?.environmentEntries || [];
+      const existingEntries = mcpMetadata?.environmentConfigs || [];
       if (!existingEntries.some((e) => e.variableName === varKey)) {
         const targetEnv = environments.find(
           (e) => e.slug === selectedEnvironmentView,
@@ -265,7 +269,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
                 toolsetSlug: toolset.slug,
                 defaultEnvironmentId:
                   mcpMetadata?.defaultEnvironmentId || targetEnv.id,
-                environmentEntries: newEntries,
+                environmentConfigs: newEntries,
                 externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
                 instructions: mcpMetadata?.instructions,
                 logoAssetId: mcpMetadata?.logoAssetId,
@@ -303,7 +307,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
 
     // If this is a custom variable (not required), also remove its environment entry
     if (!envVar.isRequired) {
-      const existingEntries = mcpMetadata?.environmentEntries || [];
+      const existingEntries = mcpMetadata?.environmentConfigs || [];
       const updatedEntries = existingEntries.filter(
         (e) => e.variableName !== envVar.key,
       );
@@ -314,7 +318,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
             setMcpMetadataRequestBody: {
               toolsetSlug: toolset.slug,
               defaultEnvironmentId: mcpMetadata?.defaultEnvironmentId,
-              environmentEntries: updatedEntries,
+              environmentConfigs: updatedEntries,
               externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
               instructions: mcpMetadata?.instructions,
               logoAssetId: mcpMetadata?.logoAssetId,
@@ -353,15 +357,21 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     const envVar = envVars.find((v) => v.id === id);
     if (!envVar) return;
 
+    const newEditingState = new Map(editingState);
+
     // If value is empty, clear editing state to reflect current state
     if (!newValue) {
-      const newEditingState = new Map(editingState);
       newEditingState.delete(id);
       setEditingState(newEditingState);
       return;
     }
 
-    setEditingState(new Map(editingState.set(id, { value: newValue })));
+    const current = editingState.get(id);
+    newEditingState.set(id, {
+      value: newValue,
+      headerDisplayName: current?.headerDisplayName
+    });
+    setEditingState(newEditingState);
   };
 
   // Get editing value for a variable (either from editing state or from valueGroups)
@@ -381,41 +391,36 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     ) {
       return editingState.get(envVar.id)!.headerDisplayName!;
     }
-    const entry = environmentEntries.find((e) => e.variableName === envVar.key);
+    const entry = environmentConfigs.find((e) => e.variableName === envVar.key);
     return entry?.headerDisplayName || "";
   };
 
   // Handle header display name change
   const handleHeaderDisplayNameChange = (id: string, newName: string) => {
     const current = editingState.get(id);
+    const newEditingState = new Map(editingState);
+
     if (current) {
-      setEditingState(
-        new Map(
-          editingState.set(id, { ...current, headerDisplayName: newName }),
-        ),
-      );
+      newEditingState.set(id, { ...current, headerDisplayName: newName });
     } else {
       // Initialize editing state with current values
       const envVar = envVars.find((v) => v.id === id);
       if (!envVar) return;
 
       const value = getEditingValue(envVar);
-
-      setEditingState(
-        new Map(
-          editingState.set(id, {
-            value,
-            headerDisplayName: newName,
-          }),
-        ),
-      );
+      newEditingState.set(id, {
+        value,
+        headerDisplayName: newName,
+      });
     }
+
+    setEditingState(newEditingState);
   };
 
   // Check if a variable has unsaved changes or has no environment entry (unmapped)
   const hasUnsavedChanges = (envVar: EnvironmentVariable): boolean => {
     // Find existing environment entry
-    const entry = environmentEntries.find((e) => e.variableName === envVar.key);
+    const entry = environmentConfigs.find((e) => e.variableName === envVar.key);
 
     // If no entry exists, this is an unmapped required variable that needs to be saved
     if (!entry && envVar.isRequired) {
@@ -467,14 +472,109 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   // Check if there are any unsaved changes across all variables
   const hasAnyUnsavedChanges = useMemo(() => {
     return envVars.some(hasUnsavedChanges);
-  }, [envVars, editingState, environmentEntries, selectedEnvironmentView]);
+  }, [envVars, editingState, environmentConfigs, selectedEnvironmentView]);
 
   // Save all variables with unsaved changes
   const handleSaveAll = async () => {
     const varsToSave = envVars.filter(hasUnsavedChanges);
+    if (varsToSave.length === 0) return;
+
+    const existingEntries = mcpMetadata?.environmentConfigs || [];
+    // Convert existing entries to input format
+    const updatedEntriesMap = new Map<string, McpEnvironmentConfigInput>(
+      existingEntries.map((e) => [
+        e.variableName,
+        {
+          variableName: e.variableName,
+          providedBy: e.providedBy,
+          headerDisplayName: e.headerDisplayName,
+        },
+      ]),
+    );
+    const entriesToUpdate: Array<{ name: string; value: string }> = [];
+
+    // Process all variables and collect updates
     for (const envVar of varsToSave) {
-      await handleSaveVariable(envVar);
+      const editing = editingState.get(envVar.id);
+      const isHeaderNameBeingEdited = editing?.headerDisplayName !== undefined;
+      const newHeaderName = isHeaderNameBeingEdited
+        ? editing.headerDisplayName
+        : undefined;
+
+      const providedByValue =
+        envVar.state === "user-provided"
+          ? "user"
+          : envVar.state === "omitted"
+            ? "none"
+            : "system";
+
+      // Update or create entry
+      const existingEntry = updatedEntriesMap.get(envVar.key);
+      updatedEntriesMap.set(envVar.key, {
+        variableName: envVar.key,
+        providedBy: providedByValue,
+        headerDisplayName: isHeaderNameBeingEdited
+          ? newHeaderName
+          : existingEntry?.headerDisplayName,
+      });
+
+      // Collect environment variable values for system state
+      if (envVar.state === "system") {
+        const value = getEditingValue(envVar);
+        if (value) {
+          entriesToUpdate.push({ name: envVar.key, value });
+        }
+      }
     }
+
+    // Get target environment
+    const targetEnv = environments.find(
+      (e) => e.slug === selectedEnvironmentView,
+    );
+
+    if (!targetEnv) {
+      toast.error("Target environment not found");
+      return;
+    }
+
+    // Update environment variables if there are any
+    if (entriesToUpdate.length > 0) {
+      updateEnvironmentMutation.mutate({
+        request: {
+          slug: selectedEnvironmentView,
+          updateEnvironmentRequestBody: {
+            entriesToUpdate,
+            entriesToRemove: [],
+          },
+        },
+      });
+    }
+
+    // Update MCP metadata with all environment entries
+    setMcpMetadataMutation.mutate({
+      request: {
+        setMcpMetadataRequestBody: {
+          toolsetSlug: toolset.slug,
+          defaultEnvironmentId:
+            mcpMetadata?.defaultEnvironmentId || targetEnv.id,
+          environmentConfigs: Array.from(updatedEntriesMap.values()),
+          externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
+          instructions: mcpMetadata?.instructions,
+          logoAssetId: mcpMetadata?.logoAssetId,
+        },
+      },
+    });
+
+    // Clear all editing state
+    setEditingState(new Map());
+
+    toast.success(`Saved ${varsToSave.length} variable(s)`);
+
+    telemetry.capture("environment_event", {
+      action: "bulk_save_variables",
+      toolset_slug: toolset.slug,
+      variable_count: varsToSave.length,
+    });
   };
 
   // Cancel all changes and reset editing state
@@ -520,180 +620,6 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     setEditingState(newEditingState);
   };
 
-  // Save a required variable
-  const handleSaveVariable = async (envVar: EnvironmentVariable) => {
-    const existingEntries = mcpMetadata?.environmentEntries || [];
-    const currentDefaultEnvId = mcpMetadata?.defaultEnvironmentId;
-
-    // Get editing state
-    const editing = editingState.get(envVar.id);
-
-    // Only update headerDisplayName if it's explicitly being edited
-    const isHeaderNameBeingEdited = editing?.headerDisplayName !== undefined;
-    const newHeaderName = isHeaderNameBeingEdited
-      ? editing.headerDisplayName
-      : undefined;
-
-    // Handle user-provided and omitted states (no value needed)
-    if (envVar.state === "user-provided" || envVar.state === "omitted") {
-      // Create or update environment entry
-      const entryIndex = existingEntries.findIndex(
-        (e) => e.variableName === envVar.key,
-      );
-      let updatedEntries;
-
-      const providedByValue =
-        envVar.state === "user-provided" ? "user" : "none";
-
-      if (entryIndex >= 0) {
-        // Update existing entry - preserve headerDisplayName unless explicitly changed
-        updatedEntries = [...existingEntries];
-        updatedEntries[entryIndex] = {
-          ...existingEntries[entryIndex],
-          variableName: envVar.key,
-          providedBy: providedByValue,
-          // Only update headerDisplayName if it's explicitly being edited
-          ...(isHeaderNameBeingEdited
-            ? { headerDisplayName: newHeaderName || undefined }
-            : {}),
-        };
-      } else {
-        // Create new entry
-        updatedEntries = [
-          ...existingEntries,
-          {
-            variableName: envVar.key,
-            providedBy: providedByValue,
-            ...(isHeaderNameBeingEdited
-              ? { headerDisplayName: newHeaderName || undefined }
-              : {}),
-          },
-        ];
-      }
-
-      setMcpMetadataMutation.mutate({
-        request: {
-          setMcpMetadataRequestBody: {
-            toolsetSlug: toolset.slug,
-            defaultEnvironmentId: currentDefaultEnvId,
-            environmentEntries: updatedEntries,
-            externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
-            instructions: mcpMetadata?.instructions,
-            logoAssetId: mcpMetadata?.logoAssetId,
-          },
-        },
-      });
-
-      // Clear editing state after save
-      const newEditingState = new Map(editingState);
-      newEditingState.delete(envVar.id);
-      setEditingState(newEditingState);
-
-      const actionMessage =
-        envVar.state === "user-provided"
-          ? "set to user-provided"
-          : "set to omitted";
-      toast.success(`${envVar.key} ${actionMessage}`);
-      telemetry.capture("environment_event", {
-        action:
-          envVar.state === "user-provided"
-            ? "variable_set_user_provided"
-            : "variable_set_omitted",
-        toolset_slug: toolset.slug,
-        variable_key: envVar.key,
-      });
-      return;
-    }
-
-    // Handle system state
-    const value = getEditingValue(envVar);
-
-    // Save to the currently selected environment
-    const targetEnv = environments.find(
-      (e) => e.slug === selectedEnvironmentView,
-    );
-
-    if (!targetEnv) {
-      toast.error("Target environment not found");
-      return;
-    }
-
-    // Update environment variable only if there's a value
-    if (value) {
-      updateEnvironmentMutation.mutate({
-        request: {
-          slug: selectedEnvironmentView,
-          updateEnvironmentRequestBody: {
-            entriesToUpdate: [{ name: envVar.key, value }],
-            entriesToRemove: [],
-          },
-        },
-      });
-    }
-
-    // Create or update environment entry
-    const entryIndex = existingEntries.findIndex(
-      (e) => e.variableName === envVar.key,
-    );
-    let updatedEntries;
-
-    if (entryIndex >= 0) {
-      // Update existing entry - preserve headerDisplayName unless explicitly changed
-      updatedEntries = [...existingEntries];
-      updatedEntries[entryIndex] = {
-        ...existingEntries[entryIndex],
-        variableName: envVar.key,
-        providedBy: "system",
-        // Only update headerDisplayName if it's explicitly being edited
-        ...(isHeaderNameBeingEdited
-          ? { headerDisplayName: newHeaderName || undefined }
-          : {}),
-      };
-    } else {
-      // Create new entry
-      updatedEntries = [
-        ...existingEntries,
-        {
-          variableName: envVar.key,
-          providedBy: "system",
-          ...(isHeaderNameBeingEdited
-            ? { headerDisplayName: newHeaderName || undefined }
-            : {}),
-        },
-      ];
-    }
-
-    setMcpMetadataMutation.mutate({
-      request: {
-        setMcpMetadataRequestBody: {
-          toolsetSlug: toolset.slug,
-          defaultEnvironmentId: currentDefaultEnvId || targetEnv.id,
-          environmentEntries: updatedEntries,
-          externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
-          instructions: mcpMetadata?.instructions,
-          logoAssetId: mcpMetadata?.logoAssetId,
-        },
-      },
-    });
-
-    // Clear editing state after save
-    const newEditingState = new Map(editingState);
-    newEditingState.delete(envVar.id);
-    setEditingState(newEditingState);
-
-    if (value) {
-      toast.success(`Saved ${envVar.key} to ${targetEnv.name}`);
-    } else {
-      toast.success(`Updated state for ${envVar.key}`);
-    }
-
-    telemetry.capture("environment_event", {
-      action: "required_variable_configured",
-      toolset_slug: toolset.slug,
-      variable_key: envVar.key,
-    });
-  };
-
   const handleSetDefaultEnvironment = () => {
     const targetEnv = environments.find(
       (e) => e.slug === selectedEnvironmentView,
@@ -706,7 +632,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
         setMcpMetadataRequestBody: {
           toolsetSlug: toolset.slug,
           defaultEnvironmentId: targetEnv.id,
-          environmentEntries: mcpMetadata?.environmentEntries || [],
+          environmentConfigs: mcpMetadata?.environmentConfigs || [],
           externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
           instructions: mcpMetadata?.instructions,
           logoAssetId: mcpMetadata?.logoAssetId,
@@ -761,6 +687,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
               }
               requiredVars={requiredVars}
               hasAnyUnsavedChanges={hasAnyUnsavedChanges}
+              hasExistingConfigs={environmentConfigs.length > 0}
               onEnvironmentSelect={setSelectedEnvironmentView}
               onSaveAll={handleSaveAll}
               onCancelAll={handleCancelAll}
@@ -778,7 +705,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
                 defaultEnvironmentSlug={
                   toolset.defaultEnvironmentSlug || "default"
                 }
-                environmentEntries={environmentEntries}
+                environmentConfigs={environmentConfigs}
                 editingState={editingState}
                 editingHeaderId={editingHeaderId}
                 onToggleState={handleToggleState}
@@ -810,7 +737,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       <AddVariableSheet
         open={isAddingNew}
         onOpenChange={setIsAddingNew}
-        attachedEnvironment={attachedEnvironment}
+        attachedEnvironment={attachedEnvironment || null}
         availableEnvVarsFromAttached={availableEnvVarsFromAttached}
         onAddVariable={handleAddVariable}
         onLoadFromEnvironment={handleLoadFromEnvironment}

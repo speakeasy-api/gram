@@ -8,9 +8,9 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  McpEnvironmentEntry,
-  McpEnvironmentEntry$inboundSchema,
-} from "./mcpenvironmententry.js";
+  McpEnvironmentConfig,
+  McpEnvironmentConfig$inboundSchema,
+} from "./mcpenvironmentconfig.js";
 
 /**
  * Metadata used to configure the MCP install page.
@@ -27,7 +27,7 @@ export type McpMetadata = {
   /**
    * The list of environment variables configured for this MCP
    */
-  environmentEntries?: Array<McpEnvironmentEntry> | undefined;
+  environmentConfigs?: Array<McpEnvironmentConfig> | undefined;
   /**
    * A link to external documentation for the MCP install page
    */
@@ -62,7 +62,7 @@ export const McpMetadata$inboundSchema: z.ZodType<
 > = z.object({
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   default_environment_id: z.string().optional(),
-  environment_entries: z.array(McpEnvironmentEntry$inboundSchema).optional(),
+  environment_configs: z.array(McpEnvironmentConfig$inboundSchema).optional(),
   external_documentation_url: z.string().optional(),
   id: z.string(),
   instructions: z.string().optional(),
@@ -73,7 +73,7 @@ export const McpMetadata$inboundSchema: z.ZodType<
   return remap$(v, {
     "created_at": "createdAt",
     "default_environment_id": "defaultEnvironmentId",
-    "environment_entries": "environmentEntries",
+    "environment_configs": "environmentConfigs",
     "external_documentation_url": "externalDocumentationUrl",
     "logo_asset_id": "logoAssetId",
     "toolset_id": "toolsetId",
