@@ -1,5 +1,11 @@
 # server
 
+## 0.20.1
+
+### Patch Changes
+
+- f3f6c82: Add machinery for tracking mcp header / environemnt configuration
+
 ## 0.20.0
 
 ### Minor Changes

@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.23.0
+
+### Minor Changes
+
+- 6744e5d: Add generative UI plugin for dynamic widget rendering. The plugin renders `ui` code blocks as interactive widgets including Card, Grid, Metric, Table, Badge, Progress, List, and ActionButton components. ActionButton enables triggering tool calls directly from generated UI.
+
 ## 1.22.5
 
 ### Patch Changes
