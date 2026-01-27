@@ -8,10 +8,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools } from "@/hooks/toolTypes";
 import { slugify } from "@/lib/constants";
 import { useRoutes } from "@/routes";
-import {
-  Deployment,
-  DeploymentLogEvent,
-} from "@gram/client/models/components";
+import { Deployment, DeploymentLogEvent } from "@gram/client/models/components";
 import {
   useDeploymentLogs,
   useLatestDeployment,
@@ -135,7 +132,10 @@ export default function DeployStep() {
       stepper.setState("completed");
 
       telemetry.capture("onboarding_event", {
-        action: result.status === "failed" ? "deployment_failed" : "deployment_created",
+        action:
+          result.status === "failed"
+            ? "deployment_failed"
+            : "deployment_created",
         num_tools: result?.openapiv3ToolCount,
         deployment_status: result.status,
       });
@@ -181,7 +181,6 @@ function DeployCompletedMessage({
   toolsLoading: boolean;
   deploymentLogs?: DeploymentLogEvent[];
 }) {
-  const routes = useRoutes();
   const stepper = useStepper();
   const [logsOpen, setLogsOpen] = React.useState(false);
 

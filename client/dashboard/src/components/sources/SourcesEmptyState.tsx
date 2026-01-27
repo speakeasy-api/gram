@@ -8,9 +8,15 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Stack,
 } from "@speakeasy-api/moonshine";
-import { ChevronDown, Code, Database, FileCode, Plus, Server } from "lucide-react";
+import {
+  ChevronDown,
+  Code,
+  Database,
+  FileCode,
+  Plus,
+  Server,
+} from "lucide-react";
 
 export function SourcesEmptyState() {
   const routes = useRoutes();
@@ -31,9 +37,12 @@ export function SourcesEmptyState() {
           <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mb-4">
             <Database className="w-6 h-6 text-muted-foreground" />
           </div>
-          <Type variant="subheading" className="mb-1">No sources yet</Type>
+          <Type variant="subheading" className="mb-1">
+            No sources yet
+          </Type>
           <Type small muted className="text-center mb-4 max-w-md">
-            Add an OpenAPI spec, custom function, or third-party server to generate tools for your MCP server.
+            Add an OpenAPI spec, custom function, or third-party server to
+            generate tools for your MCP server.
           </Type>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -55,7 +64,9 @@ export function SourcesEmptyState() {
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <span className="font-medium">From your API</span>
-                  <span className="text-xs text-muted-foreground">Upload an OpenAPI spec to generate tools</span>
+                  <span className="text-xs text-muted-foreground">
+                    Upload an OpenAPI spec to generate tools
+                  </span>
                 </div>
               </DropdownMenuItem>
               {isFunctionsEnabled && (
@@ -68,7 +79,9 @@ export function SourcesEmptyState() {
                   </div>
                   <div className="flex flex-col gap-0.5">
                     <span className="font-medium">Write custom code</span>
-                    <span className="text-xs text-muted-foreground">Create tools with TypeScript functions</span>
+                    <span className="text-xs text-muted-foreground">
+                      Create tools with TypeScript functions
+                    </span>
                   </div>
                 </DropdownMenuItem>
               )}
@@ -81,7 +94,9 @@ export function SourcesEmptyState() {
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <span className="font-medium">Third party server</span>
-                  <span className="text-xs text-muted-foreground">Add pre-built servers from the catalog</span>
+                  <span className="text-xs text-muted-foreground">
+                    Add pre-built servers from the catalog
+                  </span>
                 </div>
               </DropdownMenuItem>
             </DropdownMenuContent>

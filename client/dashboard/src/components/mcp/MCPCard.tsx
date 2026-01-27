@@ -6,13 +6,9 @@ import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { MCPRobotIllustration } from "../sources/SourceCardIllustrations";
 
-export function MCPCard({
-  toolset,
-}: {
-  toolset: ToolsetEntry;
-}) {
+export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
   const routes = useRoutes();
-  const { url: mcpUrl } = useMcpUrl(toolset);
+  const { url: _mcpUrl } = useMcpUrl(toolset);
 
   // Pulse indicator for status
   const getStatusConfig = () => {
@@ -39,14 +35,14 @@ export function MCPCard({
           <span
             className={cn(
               "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
-              status.pulseColor
+              status.pulseColor,
             )}
           />
         )}
         <span
           className={cn(
             "relative inline-flex rounded-full h-2.5 w-2.5",
-            status.color
+            status.color,
           )}
         />
       </div>

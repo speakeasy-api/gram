@@ -11,7 +11,14 @@ import {
   DropdownMenuTrigger,
 } from "@speakeasy-api/moonshine";
 import { ThemeSwitcher } from "@speakeasy-api/moonshine";
-import { CheckIcon, ChevronsUpDown, LogOutIcon, PlusIcon, SettingsIcon, CreditCardIcon } from "lucide-react";
+import {
+  CheckIcon,
+  ChevronsUpDown,
+  LogOutIcon,
+  PlusIcon,
+  SettingsIcon,
+  CreditCardIcon,
+} from "lucide-react";
 import { useState } from "react";
 import { GramLogo } from "./gram-logo";
 import { InputDialog } from "./input-dialog";
@@ -39,12 +46,15 @@ export function TopHeader() {
   const [newProjectName, setNewProjectName] = useState("");
   const client = useSdkClient();
 
-  const userInitials = user.displayName
-    ?.split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2) || user.email?.slice(0, 2).toUpperCase() || "?";
+  const userInitials =
+    user.displayName
+      ?.split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2) ||
+    user.email?.slice(0, 2).toUpperCase() ||
+    "?";
 
   const handleProjectSelect = (slug: string) => {
     if (slug === "new-project") {
@@ -77,13 +87,21 @@ export function TopHeader() {
           </routes.home.Link>
 
           {/* Separator */}
-          <span className="text-muted-foreground/50 text-xl select-none">/</span>
+          <span className="text-muted-foreground/50 text-xl select-none">
+            /
+          </span>
 
           {/* Org/Project Switcher */}
           <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-              <Button variant="ghost" className="h-8 !px-2 gap-2 relative -left-1">
-                <ProjectAvatar project={project} className="h-5 w-5 rounded shrink-0" />
+              <Button
+                variant="ghost"
+                className="h-8 !px-2 gap-2 relative -left-1"
+              >
+                <ProjectAvatar
+                  project={project}
+                  className="h-5 w-5 rounded shrink-0"
+                />
                 <span className="text-base font-medium">
                   {project?.slug || projectSlug || "Select"}
                 </span>
@@ -93,7 +111,10 @@ export function TopHeader() {
             <PopoverContent className="w-[240px] p-0" align="start">
               <Command className="border-none">
                 <div className="border-b">
-                  <CommandInput placeholder="Find Project..." className="h-10" />
+                  <CommandInput
+                    placeholder="Find Project..."
+                    className="h-10"
+                  />
                 </div>
                 <CommandList className="max-h-[250px] !p-1">
                   <CommandEmpty>No projects found.</CommandEmpty>
@@ -105,7 +126,10 @@ export function TopHeader() {
                         onSelect={() => handleProjectSelect(p.slug)}
                         className="flex items-center gap-2 cursor-pointer"
                       >
-                        <ProjectAvatar project={p} className="h-5 w-5 rounded shrink-0" />
+                        <ProjectAvatar
+                          project={p}
+                          className="h-5 w-5 rounded shrink-0"
+                        />
                         <span className="flex-1 truncate">{p.slug}</span>
                         {p.id === project.id && (
                           <CheckIcon className="w-4 h-4 shrink-0" />
@@ -131,18 +155,30 @@ export function TopHeader() {
           <ThemeSwitcher />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="size-9 rounded-full p-0 border border-[#dbdbdb] dark:border-[#333]/30">
+              <Button
+                variant="ghost"
+                className="size-9 rounded-full p-0 border border-[#dbdbdb] dark:border-[#333]/30"
+              >
                 <Avatar className="size-9">
-                  <AvatarImage src={user.photoUrl} alt={user.displayName || user.email} />
-                  <AvatarFallback className="text-xs">{userInitials}</AvatarFallback>
+                  <AvatarImage
+                    src={user.photoUrl}
+                    alt={user.displayName || user.email}
+                  />
+                  <AvatarFallback className="text-xs">
+                    {userInitials}
+                  </AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{user.displayName || "User"}</p>
-                  <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+                  <p className="text-sm font-medium leading-none">
+                    {user.displayName || "User"}
+                  </p>
+                  <p className="text-xs leading-none text-muted-foreground">
+                    {user.email}
+                  </p>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
@@ -157,7 +193,9 @@ export function TopHeader() {
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => window.location.href = "/logout"}>
+              <DropdownMenuItem
+                onClick={() => (window.location.href = "/logout")}
+              >
                 <LogOutIcon className="mr-2 h-4 w-4" />
                 Log out
               </DropdownMenuItem>

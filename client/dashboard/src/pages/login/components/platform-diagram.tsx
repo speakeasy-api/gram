@@ -18,17 +18,26 @@ const GitHubLogo = () => (
 
 const FigmaLogo = () => (
   <svg viewBox="0 0 24 24" className="w-5 h-5">
-    <path d="M8 24c2.2 0 4-1.8 4-4v-4H8c-2.2 0-4 1.8-4 4s1.8 4 4 4z" fill="#0ACF83" />
+    <path
+      d="M8 24c2.2 0 4-1.8 4-4v-4H8c-2.2 0-4 1.8-4 4s1.8 4 4 4z"
+      fill="#0ACF83"
+    />
     <path d="M4 12c0-2.2 1.8-4 4-4h4v8H8c-2.2 0-4-1.8-4-4z" fill="#A259FF" />
     <path d="M4 4c0-2.2 1.8-4 4-4h4v8H8C5.8 8 4 6.2 4 4z" fill="#F24E1E" />
     <path d="M12 0h4c2.2 0 4 1.8 4 4s-1.8 4-4 4h-4V0z" fill="#FF7262" />
-    <path d="M20 12c0 2.2-1.8 4-4 4s-4-1.8-4-4 1.8-4 4-4 4 1.8 4 4z" fill="#1ABCFE" />
+    <path
+      d="M20 12c0 2.2-1.8 4-4 4s-4-1.8-4-4 1.8-4 4-4 4 1.8 4 4z"
+      fill="#1ABCFE"
+    />
   </svg>
 );
 
 const SlackLogo = () => (
   <svg viewBox="0 0 24 24" className="w-5 h-5">
-    <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z" fill="#E01E5A" />
+    <path
+      d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"
+      fill="#E01E5A"
+    />
   </svg>
 );
 
@@ -40,13 +49,19 @@ const NotionLogo = () => (
 
 const LinearLogo = () => (
   <svg viewBox="0 0 24 24" className="w-5 h-5">
-    <path d="M3.152 14.192c-.166-.164-.166-.428 0-.592l7.048-6.956c.166-.164.434-.164.6 0l6.952 6.956c.166.164.166.428 0 .592l-7.048 6.956c-.166.164-.434.164-.6 0z" fill="#5E6AD2" />
+    <path
+      d="M3.152 14.192c-.166-.164-.166-.428 0-.592l7.048-6.956c.166-.164.434-.164.6 0l6.952 6.956c.166.164.166.428 0 .592l-7.048 6.956c-.166.164-.434.164-.6 0z"
+      fill="#5E6AD2"
+    />
   </svg>
 );
 
 const JiraLogo = () => (
   <svg viewBox="0 0 24 24" className="w-5 h-5">
-    <path d="M12.005 0C8.41 0 5.705 3.105 5.705 6.523c0 .105 0 .21.007.315h-.007v10.639l6.3 6.523 6.295-6.523V6.838h-.007c.007-.105.007-.21.007-.315C18.3 3.105 15.596 0 12.005 0zm0 2.526c2.108 0 3.818 1.79 3.818 4 0 2.206-1.71 4-3.818 4s-3.818-1.794-3.818-4c0-2.21 1.71-4 3.818-4z" fill="#2684FF" />
+    <path
+      d="M12.005 0C8.41 0 5.705 3.105 5.705 6.523c0 .105 0 .21.007.315h-.007v10.639l6.3 6.523 6.295-6.523V6.838h-.007c.007-.105.007-.21.007-.315C18.3 3.105 15.596 0 12.005 0zm0 2.526c2.108 0 3.818 1.79 3.818 4 0 2.206-1.71 4-3.818 4s-3.818-1.794-3.818-4c0-2.21 1.71-4 3.818-4z"
+      fill="#2684FF"
+    />
   </svg>
 );
 
@@ -60,7 +75,12 @@ const CursorLogo = () => (
 const ClaudeCodeLogo = () => (
   <svg viewBox="0 0 24 24" className="w-4 h-4">
     <circle cx="12" cy="12" r="10" fill="#D97706" />
-    <path d="M8 12h8M12 8v8" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+    <path
+      d="M8 12h8M12 8v8"
+      stroke="#fff"
+      strokeWidth="2"
+      strokeLinecap="round"
+    />
   </svg>
 );
 
@@ -80,7 +100,12 @@ const OpenAILogo = () => (
 const LangChainLogo = () => (
   <svg viewBox="0 0 24 24" className="w-4 h-4">
     <path d="M12 2a10 10 0 100 20 10 10 0 000-20z" fill="#1C3C3C" />
-    <path d="M8 12h8M12 8v8" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+    <path
+      d="M8 12h8M12 8v8"
+      stroke="#fff"
+      strokeWidth="2"
+      strokeLinecap="round"
+    />
   </svg>
 );
 
@@ -125,11 +150,19 @@ function ProductWithChat({ delay }: { delay: number }) {
         <div className="w-36 bg-slate-50 flex flex-col">
           <div className="px-2 py-1.5 border-b border-slate-200 flex items-center gap-1.5">
             <div className="w-4 h-4 rounded bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center">
-              <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+              <svg
+                className="w-2.5 h-2.5 text-white"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3"
+              >
                 <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
               </svg>
             </div>
-            <span className="text-[9px] font-medium text-slate-600">AI Assistant</span>
+            <span className="text-[9px] font-medium text-slate-600">
+              AI Assistant
+            </span>
           </div>
           <div className="flex-1 p-2 flex flex-col gap-1.5 overflow-hidden">
             <div className="bg-slate-200 rounded-lg px-2 py-1 text-[8px] text-slate-600 self-start max-w-[90%]">
@@ -147,7 +180,11 @@ function ProductWithChat({ delay }: { delay: number }) {
               <motion.span
                 initial={{ opacity: 0 }}
                 animate={{ opacity: [0, 1, 0] }}
-                transition={{ delay: delay + 0.8, duration: 1.2, repeat: Infinity }}
+                transition={{
+                  delay: delay + 0.8,
+                  duration: 1.2,
+                  repeat: Infinity,
+                }}
               >
                 ●●●
               </motion.span>
@@ -168,7 +205,7 @@ function ProductWithChat({ delay }: { delay: number }) {
 function FeatureBar({
   icon,
   label,
-  delay
+  delay,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -193,9 +230,13 @@ interface PlatformDiagramProps {
 
 export function PlatformDiagram({ className }: PlatformDiagramProps) {
   return (
-    <div className={cn("relative w-full h-full flex flex-col justify-center", className)}>
+    <div
+      className={cn(
+        "relative w-full h-full flex flex-col justify-center",
+        className,
+      )}
+    >
       <div className="flex flex-col items-center gap-4 max-w-md mx-auto py-6">
-
         {/* Top - Product with embedded chat */}
         <div className="w-full">
           <motion.div
@@ -226,22 +267,57 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
         >
           <div className="flex items-center mb-3">
             <GramLogo variant="horizontal" className="w-16" />
-            <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider ml-2">Chat Backend</span>
+            <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider ml-2">
+              Chat Backend
+            </span>
           </div>
           <div className="flex flex-col gap-1.5">
             <FeatureBar
               delay={0.7}
-              icon={<svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>}
+              icon={
+                <svg
+                  className="w-3.5 h-3.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                </svg>
+              }
               label="Chat logs and resolution"
             />
             <FeatureBar
               delay={0.75}
-              icon={<svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3" /><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4" /></svg>}
+              icon={
+                <svg
+                  className="w-3.5 h-3.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4" />
+                </svg>
+              }
               label="Agent orchestration"
             />
             <FeatureBar
               delay={0.8}
-              icon={<svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" /></svg>}
+              icon={
+                <svg
+                  className="w-3.5 h-3.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+                </svg>
+              }
               label="Session management"
             />
           </div>
@@ -272,22 +348,56 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
           <div className="relative bg-white rounded-lg p-3">
             <div className="flex items-center mb-3">
               <GramLogo variant="horizontal" className="w-16" />
-              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider ml-2">Tool Management</span>
+              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider ml-2">
+                Tool Management
+              </span>
             </div>
             <div className="flex flex-col gap-1.5">
               <FeatureBar
                 delay={1.0}
-                icon={<svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7v10l10 5 10-5V7L12 2z" /></svg>}
+                icon={
+                  <svg
+                    className="w-3.5 h-3.5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M12 2L2 7v10l10 5 10-5V7L12 2z" />
+                  </svg>
+                }
                 label="MCP server management"
               />
               <FeatureBar
                 delay={1.05}
-                icon={<svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>}
+                icon={
+                  <svg
+                    className="w-3.5 h-3.5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <rect x="3" y="11" width="18" height="11" rx="2" />
+                    <path d="M7 11V7a5 5 0 0110 0v4" />
+                  </svg>
+                }
                 label="Authentication & authorization"
               />
               <FeatureBar
                 delay={1.1}
-                icon={<svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 19l7-7 3 3-7 7-3-3z" /><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /></svg>}
+                icon={
+                  <svg
+                    className="w-3.5 h-3.5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                    <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                  </svg>
+                }
                 label="Tool curation & design"
               />
             </div>
@@ -316,11 +426,28 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-xs text-slate-600 flex items-center gap-1.5">
-                <svg className="w-3 h-3 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4" /></svg>
+                <svg
+                  className="w-3 h-3 text-slate-400"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
                 APIs
               </span>
               <span className="text-xs text-slate-600 flex items-center gap-1.5">
-                <svg className="w-3 h-3 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><ellipse cx="12" cy="6" rx="8" ry="3" /><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" /></svg>
+                <svg
+                  className="w-3 h-3 text-slate-400"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <ellipse cx="12" cy="6" rx="8" ry="3" />
+                  <path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" />
+                </svg>
                 Databases
               </span>
             </div>
@@ -337,12 +464,24 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
               Your SaaS
             </div>
             <div className="grid grid-cols-3 gap-1.5">
-              <div className="flex items-center justify-center p-1 bg-slate-50 rounded"><GitHubLogo /></div>
-              <div className="flex items-center justify-center p-1 bg-slate-50 rounded"><FigmaLogo /></div>
-              <div className="flex items-center justify-center p-1 bg-slate-50 rounded"><SlackLogo /></div>
-              <div className="flex items-center justify-center p-1 bg-slate-50 rounded"><NotionLogo /></div>
-              <div className="flex items-center justify-center p-1 bg-slate-50 rounded"><LinearLogo /></div>
-              <div className="flex items-center justify-center p-1 bg-slate-50 rounded"><JiraLogo /></div>
+              <div className="flex items-center justify-center p-1 bg-slate-50 rounded">
+                <GitHubLogo />
+              </div>
+              <div className="flex items-center justify-center p-1 bg-slate-50 rounded">
+                <FigmaLogo />
+              </div>
+              <div className="flex items-center justify-center p-1 bg-slate-50 rounded">
+                <SlackLogo />
+              </div>
+              <div className="flex items-center justify-center p-1 bg-slate-50 rounded">
+                <NotionLogo />
+              </div>
+              <div className="flex items-center justify-center p-1 bg-slate-50 rounded">
+                <LinearLogo />
+              </div>
+              <div className="flex items-center justify-center p-1 bg-slate-50 rounded">
+                <JiraLogo />
+              </div>
             </div>
           </motion.div>
         </div>
@@ -355,23 +494,36 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
           className="flex items-center justify-center gap-6 pt-2"
         >
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider">Clients</span>
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider">
+              Clients
+            </span>
             <div className="flex items-center gap-1">
-              <div className="p-1 bg-slate-100 rounded"><CursorLogo /></div>
-              <div className="p-1 bg-slate-100 rounded"><ClaudeCodeLogo /></div>
-              <div className="p-1 bg-slate-100 rounded"><WindsurfLogo /></div>
+              <div className="p-1 bg-slate-100 rounded">
+                <CursorLogo />
+              </div>
+              <div className="p-1 bg-slate-100 rounded">
+                <ClaudeCodeLogo />
+              </div>
+              <div className="p-1 bg-slate-100 rounded">
+                <WindsurfLogo />
+              </div>
             </div>
           </div>
           <div className="w-px h-4 bg-slate-200" />
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider">Agents</span>
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider">
+              Agents
+            </span>
             <div className="flex items-center gap-1">
-              <div className="p-1 bg-slate-100 rounded"><OpenAILogo /></div>
-              <div className="p-1 bg-slate-100 rounded"><LangChainLogo /></div>
+              <div className="p-1 bg-slate-100 rounded">
+                <OpenAILogo />
+              </div>
+              <div className="p-1 bg-slate-100 rounded">
+                <LangChainLogo />
+              </div>
             </div>
           </div>
         </motion.div>
-
       </div>
     </div>
   );

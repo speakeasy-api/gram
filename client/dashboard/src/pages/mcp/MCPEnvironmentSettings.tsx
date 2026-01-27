@@ -54,9 +54,8 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     environments.find((e) => e.id === mcpMetadata?.defaultEnvironmentId)
       ?.slug || null;
 
+  console.log("mcpMetadata", mcpMetadata);
 
-      console.log("mcpMetadata", mcpMetadata);
-      
   // Load environment variables using custom hook
   const loadedEnvVars = useEnvironmentVariables(
     toolset,
@@ -369,7 +368,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     const current = editingState.get(id);
     newEditingState.set(id, {
       value: newValue,
-      headerDisplayName: current?.headerDisplayName
+      headerDisplayName: current?.headerDisplayName,
     });
     setEditingState(newEditingState);
   };

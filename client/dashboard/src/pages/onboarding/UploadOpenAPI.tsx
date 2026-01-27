@@ -69,45 +69,45 @@ export default function UploadOpenAPI() {
 
           {/* Stepper */}
           <UploadAssetStepper.Provider step={1}>
-              <UploadAssetStepper.Frame>
-                <UploadAssetStep step={1}>
-                  <UploadAssetStep.Indicator />
-                  <UploadAssetStep.Header
-                    title="Upload OpenAPI Specification"
-                    description="Upload your OpenAPI specification to get started."
-                  />
-                  <UploadAssetStep.Content>
-                    <UploadFileStep />
-                  </UploadAssetStep.Content>
-                </UploadAssetStep>
+            <UploadAssetStepper.Frame>
+              <UploadAssetStep step={1}>
+                <UploadAssetStep.Indicator />
+                <UploadAssetStep.Header
+                  title="Upload OpenAPI Specification"
+                  description="Upload your OpenAPI specification to get started."
+                />
+                <UploadAssetStep.Content>
+                  <UploadFileStep />
+                </UploadAssetStep.Content>
+              </UploadAssetStep>
 
-                <UploadAssetStep step={2}>
-                  <UploadAssetStep.Indicator />
-                  <UploadAssetStep.Header
-                    title="Name Your API"
-                    description="The tools generated will be scoped under this name."
-                  />
-                  <UploadAssetStep.Content>
-                    <NameDeploymentStep />
-                  </UploadAssetStep.Content>
-                </UploadAssetStep>
+              <UploadAssetStep step={2}>
+                <UploadAssetStep.Indicator />
+                <UploadAssetStep.Header
+                  title="Name Your API"
+                  description="The tools generated will be scoped under this name."
+                />
+                <UploadAssetStep.Content>
+                  <NameDeploymentStep />
+                </UploadAssetStep.Content>
+              </UploadAssetStep>
 
-                <UploadAssetStep step={3}>
-                  <UploadAssetStep.Indicator />
-                  <UploadAssetStep.Header
-                    title="Generate Tools"
-                    description="Gram will generate tools for your API."
-                  />
-                  <UploadAssetStep.Content>
-                    <DeployStep />
-                  </UploadAssetStep.Content>
-                </UploadAssetStep>
+              <UploadAssetStep step={3}>
+                <UploadAssetStep.Indicator />
+                <UploadAssetStep.Header
+                  title="Generate Tools"
+                  description="Gram will generate tools for your API."
+                />
+                <UploadAssetStep.Content>
+                  <DeployStep />
+                </UploadAssetStep.Content>
+              </UploadAssetStep>
 
-                <Stack direction="horizontal" justify="start">
-                  <FooterActions />
-                </Stack>
-              </UploadAssetStepper.Frame>
-            </UploadAssetStepper.Provider>
+              <Stack direction="horizontal" justify="start">
+                <FooterActions />
+              </Stack>
+            </UploadAssetStepper.Frame>
+          </UploadAssetStepper.Provider>
 
           {/* Help text */}
           <Type small muted className="mt-6">

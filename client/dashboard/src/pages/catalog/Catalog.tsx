@@ -32,7 +32,8 @@ export default function Catalog() {
   const [serverToAdd, setServerToAdd] = useState<Server | null>(null);
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteListMCPCatalog(searchQuery);
-  const { data: deploymentResult, refetch: refetchDeployment } = useLatestDeployment();
+  const { data: deploymentResult, refetch: refetchDeployment } =
+    useLatestDeployment();
   const deployment = deploymentResult?.deployment;
   const externalMcps = deployment?.externalMcps ?? [];
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -43,15 +44,14 @@ export default function Catalog() {
 
       // Find and delete any toolsets that use this external MCP
       const toolsets = await client.toolsets.list();
-      const matchingToolsets = toolsets.toolsets?.filter(
-        (ts) => ts.toolUrns?.includes(toolUrn)
-      ) ?? [];
+      const matchingToolsets =
+        toolsets.toolsets?.filter((ts) => ts.toolUrns?.includes(toolUrn)) ?? [];
 
       // Delete matching toolsets
       await Promise.all(
         matchingToolsets.map((ts) =>
-          client.toolsets.deleteBySlug({ slug: ts.slug })
-        )
+          client.toolsets.deleteBySlug({ slug: ts.slug }),
+        ),
       );
 
       // Remove the external MCP from the deployment
@@ -285,7 +285,9 @@ function MCPServerCard({
                     <Minus className="w-3.5 h-3.5" />
                   )}
                 </Button.LeftIcon>
-                <Button.Text>{isRemoving ? "Removing..." : "Remove"}</Button.Text>
+                <Button.Text>
+                  {isRemoving ? "Removing..." : "Remove"}
+                </Button.Text>
               </Button>
             ) : (
               <Button

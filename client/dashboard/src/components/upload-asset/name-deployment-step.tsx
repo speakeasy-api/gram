@@ -31,7 +31,8 @@ export default function NameDeploymentStep() {
     if (!latestDeployment.data) return "The deployment name can't be validated";
 
     // If there's no deployment or no assets, the name is unique by default
-    const existingAssets = latestDeployment.data.deployment?.openapiv3Assets ?? [];
+    const existingAssets =
+      latestDeployment.data.deployment?.openapiv3Assets ?? [];
     const isUnique = existingAssets.every((asset) => asset.slug !== value);
 
     if (!isUnique) return "API name must be unique";

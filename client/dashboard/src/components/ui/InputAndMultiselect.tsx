@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Eye, EyeOff, Minus } from "lucide-react";
+import { Check, Eye, EyeOff, Minus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
@@ -33,7 +33,11 @@ export function InputAndMultiselect({
 }: InputAndMultiselectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showValue, setShowValue] = useState(false);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
+  const [dropdownPosition, setDropdownPosition] = useState({
+    top: 0,
+    left: 0,
+    width: 0,
+  });
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -53,7 +57,8 @@ export function InputAndMultiselect({
 
     if (isOpen) {
       document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
+      return () =>
+        document.removeEventListener("mousedown", handleClickOutside);
     }
   }, [isOpen]);
 
@@ -112,7 +117,11 @@ export function InputAndMultiselect({
             className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
             type="button"
           >
-            {showValue ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {showValue ? (
+              <EyeOff className="h-4 w-4" />
+            ) : (
+              <Eye className="h-4 w-4" />
+            )}
           </button>
         )}
       </div>
@@ -132,7 +141,8 @@ export function InputAndMultiselect({
           >
             {options.map((option) => {
               const isSelected = selectedOptions.includes(option.value);
-              const isIndeterminate = !isSelected && indeterminateOptions.includes(option.value);
+              const isIndeterminate =
+                !isSelected && indeterminateOptions.includes(option.value);
 
               return (
                 <div
@@ -146,8 +156,8 @@ export function InputAndMultiselect({
                       isSelected
                         ? "bg-primary border-primary text-primary-foreground"
                         : isIndeterminate
-                        ? "bg-muted border-border text-muted-foreground"
-                        : "border-border",
+                          ? "bg-muted border-border text-muted-foreground"
+                          : "border-border",
                     )}
                   >
                     {isSelected && <Check className="h-3 w-3" />}

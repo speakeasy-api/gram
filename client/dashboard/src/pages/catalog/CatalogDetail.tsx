@@ -44,7 +44,8 @@ export default function CatalogDetail() {
   const { data, isLoading } = useInfiniteListMCPCatalog();
   const [showAddDialog, setShowAddDialog] = useState(false);
 
-  const { data: deploymentResult, refetch: refetchDeployment } = useLatestDeployment();
+  const { data: deploymentResult, refetch: refetchDeployment } =
+    useLatestDeployment();
   const deployment = deploymentResult?.deployment;
 
   const server = useMemo(() => {
@@ -52,7 +53,9 @@ export default function CatalogDetail() {
     const allServers = data.pages.flatMap((page) => page.servers as Server[]);
     // The specifier is URL encoded, so we need to decode it
     const decodedSpecifier = decodeURIComponent(serverSpecifier);
-    return allServers.find((s) => s.registrySpecifier === decodedSpecifier) ?? null;
+    return (
+      allServers.find((s) => s.registrySpecifier === decodedSpecifier) ?? null
+    );
   }, [data, serverSpecifier]);
 
   const removeServerMutation = useMutation({
@@ -61,15 +64,14 @@ export default function CatalogDetail() {
 
       // Find and delete any toolsets that use this external MCP
       const toolsets = await client.toolsets.list();
-      const matchingToolsets = toolsets.toolsets?.filter(
-        (ts) => ts.toolUrns?.includes(toolUrn)
-      ) ?? [];
+      const matchingToolsets =
+        toolsets.toolsets?.filter((ts) => ts.toolUrns?.includes(toolUrn)) ?? [];
 
       // Delete matching toolsets
       await Promise.all(
         matchingToolsets.map((ts) =>
-          client.toolsets.deleteBySlug({ slug: ts.slug })
-        )
+          client.toolsets.deleteBySlug({ slug: ts.slug }),
+        ),
       );
 
       // Remove the external MCP from the deployment
@@ -89,14 +91,19 @@ export default function CatalogDetail() {
   const versionMeta = server?.meta["com.pulsemcp/server-version"];
   const isOfficial = meta?.isOfficial;
   const visitorsTotal = meta?.visitorsEstimateLastFourWeeks;
-  const decodedSpecifier = serverSpecifier ? decodeURIComponent(serverSpecifier) : "";
-  const displayName = server?.title ?? server?.registrySpecifier?.split("/").pop() ?? decodedSpecifier.split("/").pop();
+  const decodedSpecifier = serverSpecifier
+    ? decodeURIComponent(serverSpecifier)
+    : "";
+  const displayName =
+    server?.title ??
+    server?.registrySpecifier?.split("/").pop() ??
+    decodedSpecifier.split("/").pop();
 
   // Check if this server is already added to the project
   const existingExternalMcp = useMemo(() => {
     if (!deployment?.externalMcps || !server) return null;
     return deployment.externalMcps.find(
-      (mcp) => mcp.registryServerSpecifier === server.registrySpecifier
+      (mcp) => mcp.registryServerSpecifier === server.registrySpecifier,
     );
   }, [deployment?.externalMcps, server]);
 
@@ -105,7 +112,9 @@ export default function CatalogDetail() {
       <Page>
         <Page.Header>
           <Page.Header.Breadcrumbs
-            substitutions={{ [encodeURIComponent(serverSpecifier || "")]: displayName }}
+            substitutions={{
+              [encodeURIComponent(serverSpecifier || "")]: displayName,
+            }}
           />
         </Page.Header>
         <Page.Body>
@@ -127,7 +136,9 @@ export default function CatalogDetail() {
       <Page>
         <Page.Header>
           <Page.Header.Breadcrumbs
-            substitutions={{ [encodeURIComponent(serverSpecifier || "")]: displayName }}
+            substitutions={{
+              [encodeURIComponent(serverSpecifier || "")]: displayName,
+            }}
           />
         </Page.Header>
         <Page.Body>
@@ -157,8 +168,10 @@ export default function CatalogDetail() {
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs
-            substitutions={{ [encodeURIComponent(serverSpecifier || "")]: displayName }}
-          />
+          substitutions={{
+            [encodeURIComponent(serverSpecifier || "")]: displayName,
+          }}
+        />
       </Page.Header>
       <Page.Body>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -178,10 +191,17 @@ export default function CatalogDetail() {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <Stack direction="horizontal" gap={3} align="center" className="mb-2">
+                <Stack
+                  direction="horizontal"
+                  gap={3}
+                  align="center"
+                  className="mb-2"
+                >
                   <h1 className="text-2xl font-bold">{displayName}</h1>
                   {isOfficial && <Badge>Official</Badge>}
-                  {versionMeta?.isLatest && <Badge variant="neutral">Latest</Badge>}
+                  {versionMeta?.isLatest && (
+                    <Badge variant="neutral">Latest</Badge>
+                  )}
                 </Stack>
                 {SERVER_WEBSITE_MAP[server.registrySpecifier] ? (
                   <a
@@ -202,7 +222,9 @@ export default function CatalogDetail() {
                     <Button
                       variant="secondary"
                       size="md"
-                      onClick={() => removeServerMutation.mutate(existingExternalMcp.slug)}
+                      onClick={() =>
+                        removeServerMutation.mutate(existingExternalMcp.slug)
+                      }
                       disabled={removeServerMutation.isPending}
                     >
                       {removeServerMutation.isPending ? (
@@ -240,9 +262,10 @@ export default function CatalogDetail() {
             </Card>
 
             {/* Available Tools */}
-            {versionMeta?.["remotes[0]"]?.tools && versionMeta["remotes[0]"].tools.length > 0 && (
-              <ToolsSection tools={versionMeta["remotes[0]"].tools} />
-            )}
+            {versionMeta?.["remotes[0]"]?.tools &&
+              versionMeta["remotes[0]"].tools.length > 0 && (
+                <ToolsSection tools={versionMeta["remotes[0]"].tools} />
+              )}
           </div>
 
           {/* Right Column - Info */}
@@ -337,12 +360,18 @@ export default function CatalogDetail() {
                         Source
                       </Type>
                       <a
-                        href={versionMeta.source.startsWith("http") ? versionMeta.source : `https://${versionMeta.source}`}
+                        href={
+                          versionMeta.source.startsWith("http")
+                            ? versionMeta.source
+                            : `https://${versionMeta.source}`
+                        }
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-1 text-primary hover:underline"
                       >
-                        <Type className="text-right truncate max-w-[150px]">{versionMeta.source}</Type>
+                        <Type className="text-right truncate max-w-[150px]">
+                          {versionMeta.source}
+                        </Type>
                         <ExternalLink className="w-3 h-3 shrink-0" />
                       </a>
                     </div>
@@ -413,8 +442,11 @@ function getFirstSentence(text: string): string {
 function ToolCard({ tool }: { tool: Tool }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const hasDescription = !!tool.description;
-  const firstSentence = tool.description ? getFirstSentence(tool.description) : "";
-  const hasMoreContent = tool.description && tool.description.length > firstSentence.length;
+  const firstSentence = tool.description
+    ? getFirstSentence(tool.description)
+    : "";
+  const hasMoreContent =
+    tool.description && tool.description.length > firstSentence.length;
 
   return (
     <div className="flex flex-col gap-1 p-3 rounded-lg bg-muted/50 overflow-hidden">
@@ -422,11 +454,19 @@ function ToolCard({ tool }: { tool: Tool }) {
         onClick={() => hasMoreContent && setIsExpanded(!isExpanded)}
         className={`flex flex-col gap-1 text-left w-full ${hasMoreContent ? "cursor-pointer" : "cursor-default"}`}
       >
-        <Stack direction="horizontal" gap={2} align="center" justify="space-between" className="w-full">
+        <Stack
+          direction="horizontal"
+          gap={2}
+          align="center"
+          justify="space-between"
+          className="w-full"
+        >
           <Stack direction="horizontal" gap={2} align="center">
             <Type className="font-mono text-sm font-medium">{tool.name}</Type>
             {tool.annotations?.readOnlyHint && (
-              <Badge variant="neutral" className="text-xs">Read-only</Badge>
+              <Badge variant="neutral" className="text-xs">
+                Read-only
+              </Badge>
             )}
           </Stack>
           {hasMoreContent && (
@@ -464,7 +504,10 @@ function ToolCard({ tool }: { tool: Tool }) {
             className="overflow-hidden"
           >
             <div className="mt-2 pt-2 border-t">
-              <Type small className="whitespace-pre-wrap prose prose-sm max-w-none">
+              <Type
+                small
+                className="whitespace-pre-wrap prose prose-sm max-w-none"
+              >
                 {tool.description}
               </Type>
             </div>
@@ -507,7 +550,8 @@ function ToolsSection({ tools }: { tools: Tool[] }) {
               </>
             ) : (
               <>
-                Show {tools.length - INITIAL_TOOLS_SHOWN} more tools <ChevronDown className="w-4 h-4" />
+                Show {tools.length - INITIAL_TOOLS_SHOWN} more tools{" "}
+                <ChevronDown className="w-4 h-4" />
               </>
             )}
           </button>

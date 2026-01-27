@@ -16,6 +16,8 @@ export const GramLogo = ({
     icon: GramIcon,
   };
   return (
-    <div className={cn("dark:invert flex items-center", className)}>{variantsMap[variant]()}</div>
+    <div className={cn("dark:invert flex items-center", className)}>
+      {variantsMap[variant]()}
+    </div>
   );
 };

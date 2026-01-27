@@ -25,18 +25,50 @@ export default function MCPEmptyGraphic() {
         aria-hidden="true"
       >
         {/* Robot thinking pose */}
-        <g className="stroke-slate-700 dark:stroke-slate-300" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <g
+          className="stroke-slate-700 dark:stroke-slate-300"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           {/* Robot head - slightly tilted for thinking pose */}
-          <rect x="65" y="45" width="50" height="45" rx="5" fill="none" transform="rotate(-5 90 67)" />
+          <rect
+            x="65"
+            y="45"
+            width="50"
+            height="45"
+            rx="5"
+            fill="none"
+            transform="rotate(-5 90 67)"
+          />
           {/* Antenna */}
           <line x1="88" y1="42" x2="85" y2="28" />
           <circle cx="84" cy="24" r="4" fill="none" />
 
           {/* Screen face with curious expression */}
-          <rect x="73" y="55" width="34" height="22" rx="3" className="fill-slate-200 dark:fill-slate-700" strokeWidth="1" transform="rotate(-5 90 66)" />
+          <rect
+            x="73"
+            y="55"
+            width="34"
+            height="22"
+            rx="3"
+            className="fill-slate-200 dark:fill-slate-700"
+            strokeWidth="1"
+            transform="rotate(-5 90 66)"
+          />
           {/* Eyes - looking up thoughtfully */}
-          <circle cx="82" cy="64" r="3" className="fill-slate-600 dark:fill-slate-400" />
-          <circle cx="98" cy="63" r="3" className="fill-slate-600 dark:fill-slate-400" />
+          <circle
+            cx="82"
+            cy="64"
+            r="3"
+            className="fill-slate-600 dark:fill-slate-400"
+          />
+          <circle
+            cx="98"
+            cy="63"
+            r="3"
+            className="fill-slate-600 dark:fill-slate-400"
+          />
           {/* Eye glints */}
           <circle cx="81" cy="63" r="1" className="fill-white" />
           <circle cx="97" cy="62" r="1" className="fill-white" />
@@ -44,10 +76,33 @@ export default function MCPEmptyGraphic() {
           {/* Robot body */}
           <rect x="72" y="95" width="36" height="35" rx="4" fill="none" />
           {/* Body details */}
-          <circle cx="82" cy="105" r="2.5" className="fill-slate-400 dark:fill-slate-500" />
-          <circle cx="90" cy="105" r="2.5" className="fill-slate-400 dark:fill-slate-500" />
-          <circle cx="98" cy="105" r="2.5" className="fill-slate-400 dark:fill-slate-500" />
-          <rect x="78" y="113" width="24" height="8" rx="2" className="fill-slate-200 dark:fill-slate-700" strokeWidth="0.8" />
+          <circle
+            cx="82"
+            cy="105"
+            r="2.5"
+            className="fill-slate-400 dark:fill-slate-500"
+          />
+          <circle
+            cx="90"
+            cy="105"
+            r="2.5"
+            className="fill-slate-400 dark:fill-slate-500"
+          />
+          <circle
+            cx="98"
+            cy="105"
+            r="2.5"
+            className="fill-slate-400 dark:fill-slate-500"
+          />
+          <rect
+            x="78"
+            y="113"
+            width="24"
+            height="8"
+            rx="2"
+            className="fill-slate-200 dark:fill-slate-700"
+            strokeWidth="0.8"
+          />
 
           {/* Left arm - hand on chin thinking pose */}
           <path d="M72 105 L55 100 L50 85" fill="none" />
@@ -68,9 +123,19 @@ export default function MCPEmptyGraphic() {
         </g>
 
         {/* Question mark - floating above robot */}
-        <g className="stroke-slate-500 dark:stroke-slate-400" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <g
+          className="stroke-slate-500 dark:stroke-slate-400"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M135 35 Q145 25 145 40 Q145 50 135 55" fill="none" />
-          <circle cx="135" cy="65" r="2" className="fill-slate-500 dark:fill-slate-400" />
+          <circle
+            cx="135"
+            cy="65"
+            r="2"
+            className="fill-slate-500 dark:fill-slate-400"
+          />
         </g>
 
         {/* Thought bubbles leading to question mark */}
@@ -80,7 +145,12 @@ export default function MCPEmptyGraphic() {
         </g>
 
         {/* Small decorative elements - tools waiting to be connected */}
-        <g className="stroke-slate-400 dark:stroke-slate-500" strokeWidth="1" fill="none" strokeLinecap="round">
+        <g
+          className="stroke-slate-400 dark:stroke-slate-500"
+          strokeWidth="1"
+          fill="none"
+          strokeLinecap="round"
+        >
           {/* Small plug icon */}
           <g transform="translate(25, 110)">
             <rect x="0" y="2" width="12" height="8" rx="1" />
@@ -99,7 +169,12 @@ export default function MCPEmptyGraphic() {
             <rect x="0" y="0" width="16" height="20" rx="2" />
             <line x1="3" y1="5" x2="13" y2="5" />
             <line x1="3" y1="10" x2="13" y2="10" />
-            <circle cx="5" cy="16" r="1.5" className="fill-slate-400 dark:fill-slate-500" />
+            <circle
+              cx="5"
+              cy="16"
+              r="1.5"
+              className="fill-slate-400 dark:fill-slate-500"
+            />
           </g>
         </g>
       </svg>

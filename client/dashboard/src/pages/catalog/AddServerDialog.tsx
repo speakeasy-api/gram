@@ -104,7 +104,10 @@ export function AddServerDialog({
 }: AddServerDialogProps) {
   const routes = useRoutes();
   const [desiredToolsetName, setDesiredToolsetName] = useState("");
-  const [createdServer, setCreatedServer] = useState<{ slug: string; mcpSlug: string } | null>(null);
+  const [createdServer, setCreatedServer] = useState<{
+    slug: string;
+    mcpSlug: string;
+  } | null>(null);
   const { mutation: addServerMutation, refetchDeployment } =
     useAddServerMutation();
 
@@ -126,7 +129,10 @@ export function AddServerDialog({
     }
   }, [server]);
 
-  const handleSuccess = async (result: { slug: string; mcpSlug: string | undefined }) => {
+  const handleSuccess = async (result: {
+    slug: string;
+    mcpSlug: string | undefined;
+  }) => {
     await refetchDeployment();
     onServerAdded?.();
     if (result.mcpSlug) {
@@ -142,9 +148,7 @@ export function AddServerDialog({
         <Dialog.Header>
           <Dialog.Title>Add to Project</Dialog.Title>
           <Dialog.Description>
-            {createdServer
-              ? ""
-              : "Add this MCP server to your project."}
+            {createdServer ? "" : "Add this MCP server to your project."}
           </Dialog.Description>
         </Dialog.Header>
         {createdServer ? (
@@ -168,7 +172,10 @@ export function AddServerDialog({
                   <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
               </routes.sources.Link>
-              <routes.elements.Link className="no-underline hover:no-underline" queryParams={{ toolset: createdServer.slug }}>
+              <routes.elements.Link
+                className="no-underline hover:no-underline"
+                queryParams={{ toolset: createdServer.slug }}
+              >
                 <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline h-full">
                   <div className="w-8 h-8 rounded-md bg-violet-500/10 dark:bg-violet-500/20 flex items-center justify-center shrink-0">
                     <MessageCircle className="w-4 h-4 text-violet-600 dark:text-violet-400" />
@@ -245,7 +252,13 @@ function AddServerForm({
   server: Server;
   desiredToolsetName: string;
   setDesiredToolsetName: (name: string) => void;
-  addServerMutation: ReturnType<typeof useMutation<AddServerResult, Error, { server: Server; toolsetName: string }>>;
+  addServerMutation: ReturnType<
+    typeof useMutation<
+      AddServerResult,
+      Error,
+      { server: Server; toolsetName: string }
+    >
+  >;
   onCancel: () => void;
   onSuccess: (result: AddServerResult) => void;
 }) {

@@ -76,7 +76,9 @@ export default function Home() {
   // Get the first public MCP toolset slug to pass to elements page
   const firstPublicToolsetSlug = useMemo(() => {
     if (!toolsetsResult?.toolsets) return undefined;
-    const publicToolset = toolsetsResult.toolsets.find((t) => t.mcpIsPublic && t.mcpEnabled);
+    const publicToolset = toolsetsResult.toolsets.find(
+      (t) => t.mcpIsPublic && t.mcpEnabled,
+    );
     return publicToolset?.slug;
   }, [toolsetsResult]);
 
@@ -173,7 +175,14 @@ export default function Home() {
               </div>
             </div>
             <div className="mt-auto flex justify-end">
-              <routes.elements.Link className="no-underline" queryParams={firstPublicToolsetSlug ? { toolset: firstPublicToolsetSlug } : {}}>
+              <routes.elements.Link
+                className="no-underline"
+                queryParams={
+                  firstPublicToolsetSlug
+                    ? { toolset: firstPublicToolsetSlug }
+                    : {}
+                }
+              >
                 <Button size="sm">
                   <Button.Text>Get started</Button.Text>
                 </Button>

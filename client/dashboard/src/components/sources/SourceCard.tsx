@@ -4,7 +4,6 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { MoreActions } from "@/components/ui/more-actions";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
@@ -94,7 +93,7 @@ export function SourceCard({
     },
   ];
 
-  let displayName = asset.name;
+  const displayName = asset.name;
   let subtitle: React.ReactNode = null;
 
   if (asset.type === "externalmcp") {

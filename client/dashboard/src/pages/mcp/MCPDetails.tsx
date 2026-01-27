@@ -41,7 +41,7 @@ import {
   useLatestDeployment,
   useListEnvironments,
   useRemoveOAuthServerMutation,
-  useUpdateToolsetMutation
+  useUpdateToolsetMutation,
 } from "@gram/client/react-query";
 import { Badge, Button, Grid, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
@@ -51,7 +51,7 @@ import {
   Globe,
   LockIcon,
   Trash2,
-  XCircleIcon
+  XCircleIcon,
 } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router";
@@ -252,9 +252,7 @@ export function MCPDetailPage() {
       <Page.Body fullWidth noPadding>
         {/* Hero Header with Animation - full width */}
         <div className="relative w-full h-64 overflow-hidden">
-          <MCPRobotHeroIllustration
-            toolsetSlug={toolset.slug}
-          />
+          <MCPRobotHeroIllustration toolsetSlug={toolset.slug} />
 
           {/* Overlay for text readability */}
           <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent" />

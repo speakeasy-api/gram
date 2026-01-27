@@ -23,7 +23,15 @@ import { useRegisterDomainMutation } from "@gram/client/react-query/registerDoma
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 import { Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, CheckCircle2, Copy, Globe, Loader2, ShieldAlert, X } from "lucide-react";
+import {
+  Check,
+  CheckCircle2,
+  Copy,
+  Globe,
+  Loader2,
+  ShieldAlert,
+  X,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useCustomDomain } from "@/hooks/useToolsetUrl";
@@ -656,7 +664,12 @@ export default function Settings() {
 
         {isAdmin && (
           <div className="mt-12 p-4 rounded-lg bg-red-500/5 border border-red-500/20">
-            <Stack direction="horizontal" align="center" gap={2} className="mb-3">
+            <Stack
+              direction="horizontal"
+              align="center"
+              gap={2}
+              className="mb-3"
+            >
               <ShieldAlert className="w-5 h-5 text-red-500" />
               <Heading variant="h4" className="text-red-600 dark:text-red-400">
                 Admin Only
