@@ -160,6 +160,31 @@ func TestGetMetricsSummary_ProjectScope(t *testing.T) {
 	require.Equal(t, int64(2), m.TotalChats)        // 2 distinct chat IDs
 	require.Equal(t, int64(2), m.DistinctModels)    // gpt-4, claude-3
 	require.Equal(t, int64(2), m.DistinctProviders) // openai, anthropic
+
+	// Model breakdown
+	require.Len(t, m.Models, 2)
+	modelCounts := make(map[string]int64)
+	for _, model := range m.Models {
+		modelCounts[model.Name] = model.Count
+	}
+	require.Equal(t, int64(2), modelCounts["gpt-4"])   // 2 chat completions with gpt-4
+	require.Equal(t, int64(1), modelCounts["claude-3"]) // 1 chat completion with claude-3
+
+	// Tool breakdown
+	require.Len(t, m.Tools, 3)
+	toolStats := make(map[string]*gen.ToolUsage)
+	for _, tool := range m.Tools {
+		toolStats[tool.Urn] = tool
+	}
+	require.Equal(t, int64(1), toolStats["tools:http:petstore:listPets"].Count)
+	require.Equal(t, int64(1), toolStats["tools:http:petstore:listPets"].SuccessCount)
+	require.Equal(t, int64(0), toolStats["tools:http:petstore:listPets"].FailureCount)
+	require.Equal(t, int64(1), toolStats["tools:http:petstore:getPet"].Count)
+	require.Equal(t, int64(0), toolStats["tools:http:petstore:getPet"].SuccessCount)
+	require.Equal(t, int64(1), toolStats["tools:http:petstore:getPet"].FailureCount) // status 500
+	require.Equal(t, int64(1), toolStats["tools:http:weather:forecast"].Count)
+	require.Equal(t, int64(1), toolStats["tools:http:weather:forecast"].SuccessCount)
+	require.Equal(t, int64(0), toolStats["tools:http:weather:forecast"].FailureCount)
 }
 
 func TestGetMetricsSummary_ChatScope(t *testing.T) {

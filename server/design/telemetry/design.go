@@ -15,7 +15,6 @@ var _ = Service("telemetry", func() {
 	Security(security.Session, security.ProjectSlug)
 	shared.DeclareErrorResponses()
 
-
 	Method("searchLogs", func() {
 		Description("Search and list telemetry logs that match a search filter")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -258,7 +257,6 @@ var SearchToolCallsFilter = Type("SearchToolCallsFilter", func() {
 	Extend(TelemetryFilter)
 })
 
-
 var SearchToolCallsPayload = Type("SearchToolCallsPayload", func() {
 	Description("Payload for searching tool call summaries")
 
@@ -339,6 +337,26 @@ var MetricsScope = Type("MetricsScope", String, func() {
 	Enum("project", "chat")
 })
 
+var ModelUsage = Type("ModelUsage", func() {
+	Description("Model usage statistics")
+
+	Attribute("name", String, "Model name")
+	Attribute("count", Int64, "Number of times used")
+
+	Required("name", "count")
+})
+
+var ToolUsage = Type("ToolUsage", func() {
+	Description("Tool usage statistics")
+
+	Attribute("urn", String, "Tool URN")
+	Attribute("count", Int64, "Total call count")
+	Attribute("success_count", Int64, "Successful calls (2xx status)")
+	Attribute("failure_count", Int64, "Failed calls (4xx/5xx status)")
+
+	Required("urn", "count", "success_count", "failure_count")
+})
+
 var Metrics = Type("Metrics", func() {
 	Description("Aggregated metrics")
 
@@ -367,6 +385,10 @@ var Metrics = Type("Metrics", func() {
 	Attribute("distinct_models", Int64, "Number of distinct models used (project scope only)")
 	Attribute("distinct_providers", Int64, "Number of distinct providers used (project scope only)")
 
+	// Detailed breakdowns
+	Attribute("models", ArrayOf(ModelUsage), "List of models used with call counts")
+	Attribute("tools", ArrayOf(ToolUsage), "List of tools used with success/failure counts")
+
 	Required(
 		"total_input_tokens",
 		"total_output_tokens",
@@ -383,6 +405,8 @@ var Metrics = Type("Metrics", func() {
 		"total_chats",
 		"distinct_models",
 		"distinct_providers",
+		"models",
+		"tools",
 	)
 })
 
@@ -399,9 +423,6 @@ var GetMetricsSummaryPayload = Type("GetMetricsSummaryPayload", func() {
 		Example("2025-12-19T11:00:00Z")
 	})
 	Attribute("chat_id", String, "Chat/conversation ID (required when scope=chat)", func() {
-		Format(FormatUUID)
-	})
-	Attribute("deployment_id", String, "Optional deployment filter", func() {
 		Format(FormatUUID)
 	})
 

@@ -308,7 +308,28 @@ SELECT
     countIf(startsWith(toString(attributes.` + "`gram.tool.urn`" + `), 'tools:')
             AND http_response_status_code >= 400) AS tool_call_failure,
     avgIf(toFloat64OrZero(toString(attributes.` + "`http.server.request.duration`" + `)) * 1000,
-          startsWith(toString(attributes.` + "`gram.tool.urn`" + `), 'tools:')) AS avg_tool_duration_ms
+          startsWith(toString(attributes.` + "`gram.tool.urn`" + `), 'tools:')) AS avg_tool_duration_ms,
+
+    -- Model breakdown (map of model name -> count)
+    sumMapIf(
+        map(toString(attributes.` + "`gen_ai.response.model`" + `), toUInt64(1)),
+        toString(attributes.` + "`gram.resource.urn`" + `) = 'agents:chat:completion'
+        AND toString(attributes.` + "`gen_ai.response.model`" + `) != ''
+    ) AS models,
+
+    -- Tool breakdowns (maps of tool URN -> count)
+    sumMapIf(
+        map(gram_urn, toUInt64(1)),
+        startsWith(gram_urn, 'tools:')
+    ) AS tool_counts,
+    sumMapIf(
+        map(gram_urn, toUInt64(1)),
+        startsWith(gram_urn, 'tools:') AND http_response_status_code >= 200 AND http_response_status_code < 300
+    ) AS tool_success_counts,
+    sumMapIf(
+        map(gram_urn, toUInt64(1)),
+        startsWith(gram_urn, 'tools:') AND http_response_status_code >= 400
+    ) AS tool_failure_counts
 
 FROM telemetry_logs
 WHERE gram_project_id = ?
@@ -360,6 +381,10 @@ func (q *Queries) GetMetricsSummary(ctx context.Context, arg GetMetricsSummaryPa
 			ToolCallSuccess:       0,
 			ToolCallFailure:       0,
 			AvgToolDurationMs:     0,
+			Models:                make(map[string]uint64),
+			ToolCounts:            make(map[string]uint64),
+			ToolSuccessCounts:     make(map[string]uint64),
+			ToolFailureCounts:     make(map[string]uint64),
 		}, nil
 	}
 

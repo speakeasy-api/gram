@@ -108,4 +108,12 @@ type MetricsSummaryRow struct {
 	ToolCallSuccess   uint64  `ch:"tool_call_success"`
 	ToolCallFailure   uint64  `ch:"tool_call_failure"`
 	AvgToolDurationMs float64 `ch:"avg_tool_duration_ms"`
+
+	// Model breakdown (map of model name -> count)
+	Models map[string]uint64 `ch:"models"`
+
+	// Tool breakdowns (maps of tool URN -> count)
+	ToolCounts        map[string]uint64 `ch:"tool_counts"`
+	ToolSuccessCounts map[string]uint64 `ch:"tool_success_counts"`
+	ToolFailureCounts map[string]uint64 `ch:"tool_failure_counts"`
 }

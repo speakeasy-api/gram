@@ -279,6 +279,26 @@ func (s *Service) GetMetricsSummary(ctx context.Context, payload *telem_gen.GetM
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving AI metrics")
 	}
 
+	// Convert models map to ModelUsage slice
+	models := make([]*telem_gen.ModelUsage, 0, len(metrics.Models))
+	for name, count := range metrics.Models {
+		models = append(models, &telem_gen.ModelUsage{
+			Name:  name,
+			Count: int64(count), //nolint:gosec // Bounded count
+		})
+	}
+
+	// Convert tool maps to ToolUsage slice
+	tools := make([]*telem_gen.ToolUsage, 0, len(metrics.ToolCounts))
+	for urn, count := range metrics.ToolCounts {
+		tools = append(tools, &telem_gen.ToolUsage{
+			Urn:          urn,
+			Count:        int64(count),                        //nolint:gosec // Bounded count
+			SuccessCount: int64(metrics.ToolSuccessCounts[urn]), //nolint:gosec // Bounded count
+			FailureCount: int64(metrics.ToolFailureCounts[urn]), //nolint:gosec // Bounded count
+		})
+	}
+
 	//nolint:gosec // Values are bounded counts that won't overflow int64
 	return &telem_gen.GetMetricsSummaryResult{
 		Metrics: &telem_gen.Metrics{
@@ -297,6 +317,8 @@ func (s *Service) GetMetricsSummary(ctx context.Context, payload *telem_gen.GetM
 			TotalChats:            int64(metrics.TotalChats),
 			DistinctModels:        int64(metrics.DistinctModels),
 			DistinctProviders:     int64(metrics.DistinctProviders),
+			Models:                models,
+			Tools:                 tools,
 		},
 		Scope:   payload.Scope,
 		Enabled: true,
